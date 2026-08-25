@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { safeKeySegment } from '@/lib/storage-key'
 import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createClient } from '@supabase/supabase-js'
@@ -36,8 +37,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Upload PDF to Supabase Storage so Twilio can access it
-    const fileName = `supplier-documents/${documentNumber}-${Date.now()}.pdf`
+    // Upload PDF to Supabase Storage so Twilio can access it.
+    // documentNumber comes straight off the request body and is checked against
+    // nothing — it was the only key here built from arbitrary caller text. The
+    // `documents` bucket is public, so a key of the caller's choosing is a file
+    // of the caller's choosing at a URL of the caller's choosing.
+    const fileName = `supplier-documents/${safeKeySegment(documentNumber, 'document')}-${Date.now()}.pdf`
     const pdfBuffer = Buffer.from(pdfBase64, 'base64')
 
     const { error: uploadError } = await supabase.storage

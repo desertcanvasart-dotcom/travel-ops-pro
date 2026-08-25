@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUserId } from '@/lib/auth/current-org'
+import { safeExtension, safeKeySegment } from '@/lib/storage-key'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,20 +10,36 @@ const supabase = createClient(
 
 export async function POST(request: NextRequest) {
   try {
+    // WHOSE avatar this is comes from the SESSION, never from the request.
+    //
+    // It used to be `formData.get('userId')`. This route runs on the
+    // service-role client and finishes by writing
+    // `user_profiles.avatar_url` WHERE id = that value, so any signed-in
+    // account could hand over somebody else's id and replace their avatar with
+    // an image of its choosing — a stranger's face on a colleague's profile,
+    // and nothing in the request that looked wrong. It is also, deliberately,
+    // one of the self-service routes the middleware leaves ungated, which is
+    // correct only for a route that acts on the caller.
+    //
+    // lib/auth/current-org.ts exists for exactly this: "a logged-in user could
+    // otherwise pass someone else's id and act on their data (IDOR)".
+    //
+    // app/settings/page.tsx no longer sends a userId field, and one arriving
+    // from anywhere else is ignored rather than trusted.
+    const userId = await getCurrentUserId()
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'Not signed in' },
+        { status: 401 }
+      )
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const userId = formData.get('userId') as string
 
     if (!file) {
       return NextResponse.json(
         { success: false, error: 'No file provided' },
-        { status: 400 }
-      )
-    }
-
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'User ID is required' },
         { status: 400 }
       )
     }
@@ -44,9 +62,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate unique filename
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${userId}-${Date.now()}.${fileExt}`
+    // Generate unique filename. Both halves are sanitised even though userId is
+    // now a session-derived uuid and the extension cannot contain a `..` — the
+    // guarantee should hold at the point the key is built, not depend on
+    // remembering where each value came from.
+    const fileExt = safeExtension(file.name, 'png')
+    const fileName = `${safeKeySegment(userId)}-${Date.now()}.${fileExt}`
     const filePath = `avatars/${fileName}`
 
     // Convert file to buffer

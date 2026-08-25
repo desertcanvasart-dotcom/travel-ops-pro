@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { safeKeySegment } from '@/lib/storage-key'
 import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createServerClient } from '@/lib/supabase-server'
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
     
     // Upload to Supabase Storage
     console.log('📤 Uploading PDF to storage...')
-    const fileName = `contracts/contract-${itineraryId}-${Date.now()}.pdf`
+    const fileName = `contracts/contract-${safeKeySegment(itineraryId, 'trip')}-${Date.now()}.pdf`
     
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('documents')
