@@ -100,6 +100,11 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   // /reminders page gates. A viewer is a read-only role and must not be able
   // to create or delete a customer, a trip or a booking by calling the API.
   { prefix: '/api/clients', roles: ['admin', 'manager', 'agent'] },
+  // B2B quotes are customer-facing pricing. This prefix was MISSING from the
+  // sweep that built this list, so every b2b route stayed open to any session:
+  // a viewer could PUT a quote, and bulk-delete a page of them.
+  { prefix: '/api/b2b', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/b2c', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/itineraries', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/bookings', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/tours', roles: ['admin', 'manager', 'agent'] },

@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError, getUserEmail } from '@/lib/gmail'
 import type { EmailSyncOptions, EmailSyncResult } from '@/types/unified'
 import { createCopilotInboxEntry } from '@/lib/copilot-intake'
+import { getCurrentUserId } from '@/lib/auth/current-org'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -25,14 +26,17 @@ function getDirection(from: string | undefined | null, userEmail: string): 'inbo
   return fromEmail === userEmail.toLowerCase() ? 'outbound' : 'inbound'
 }
 
-// GET /api/email/sync - Get sync status
-export async function GET(request: NextRequest) {
+// GET /api/email/sync - Get sync status for the SIGNED-IN user.
+//
+// `user_id` used to come from the query string and was never checked against
+// the session, so any authenticated account could read anyone's mailbox sync
+// state. GET is not a mutating method, so the middleware role gate never
+// applied either — a viewer could ask about anybody.
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('user_id')
-
+    const userId = await getCurrentUserId()
     if (!userId) {
-      return NextResponse.json({ error: 'User ID required', success: false }, { status: 400 })
+      return NextResponse.json({ error: 'Not signed in', success: false }, { status: 401 })
     }
 
     const { data: syncState, error } = await supabase
@@ -64,13 +68,25 @@ export async function POST(request: NextRequest) {
   let userId: string | undefined
 
   try {
-    const body: EmailSyncOptions = await request.json()
-    const { user_id, full_sync = false, max_results = 100, days_back = 30 } = body
-    userId = user_id // Store for error handler
-
-    if (!user_id) {
-      return NextResponse.json({ error: 'User ID required', success: false }, { status: 400 })
+    // WHOSE mailbox this syncs comes from the SESSION, never from the body.
+    //
+    // `user_id` used to be taken straight off the request. Two lines later it
+    // reaches getAuthenticatedGmail(user_id), which loads THAT user's stored
+    // OAuth token — so any authenticated account could name a colleague and
+    // pull their Gmail into the shared inbox. Not a permissions bug at the edge
+    // of the app: it hands over somebody else's mail.
+    //
+    // Same failure as the avatar route (#171), same fix. See
+    // lib/auth/current-org.ts, which exists precisely for this.
+    const sessionUserId = await getCurrentUserId()
+    if (!sessionUserId) {
+      return NextResponse.json({ error: 'Not signed in', success: false }, { status: 401 })
     }
+
+    const body: EmailSyncOptions = await request.json()
+    const { full_sync = false, max_results = 100, days_back = 30 } = body
+    const user_id = sessionUserId
+    userId = user_id // Store for error handler
 
     console.log('[Email Sync] Starting sync for user:', user_id)
 

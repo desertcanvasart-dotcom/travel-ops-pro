@@ -68,6 +68,12 @@ describe('API mutation gate — coverage', () => {
     '/api/itineraries',
     '/api/bookings',
     '/api/whatsapp/send-quote',
+    // Missed by the original sweep: a viewer could PUT a quote and bulk-delete
+    // a page of them.
+    '/api/b2b/quotes',
+    '/api/b2b/quotes/abc-123',
+    '/api/b2b/quotes/bulk-delete',
+    '/api/b2c/quotes',
   ])('%s is agent-and-above', path => {
     const roles = rolesFor(path)
     expect(roles, `${path} has no entry in API_MUTATION_PERMISSIONS`).not.toBeNull()
@@ -129,15 +135,31 @@ describe('routes that act on "me" resolve me from the session', () => {
   // request body and then wrote user_profiles.avatar_url for that id on the
   // service-role client, so any signed-in account could replace anyone's
   // avatar — the ungated route plus a trusted body field.
-  const selfService = [
+  //
+  // The same shape turned up three times, each worse than the last: overwriting
+  // someone's avatar, reading their mailbox, and sending mail AS them. All three
+  // took an id from the request and handed it to a service-role client or an
+  // OAuth token lookup.
+  const actOnCaller = [
     'app/api/avatar/upload/route.ts',
+    'app/api/email/sync/route.ts',
+    'app/api/copilot/drafts/[id]/send/route.ts',
   ]
 
-  it.each(selfService)('%s never trusts a userId from the request', file => {
+  it.each(actOnCaller)('%s never trusts a user id from the request', file => {
     const src = readFileSync(join(process.cwd(), file), 'utf8')
     const code = src.split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
-    expect(code, `${file} reads a userId out of the request body`).not.toMatch(
-      /(formData|body|searchParams)\s*\.\s*get\(\s*['"]userId['"]/
+
+    // Both spellings: userId off formData/searchParams, and user_id destructured
+    // from a JSON body or read off it directly.
+    expect(code, `${file} reads a user id out of the request`).not.toMatch(
+      /(formData|searchParams|body)\s*\.\s*get\(\s*['"]user_?[Ii]d['"]/
+    )
+    expect(code, `${file} reads user_id off the request body`).not.toMatch(
+      /=\s*body\.user_id\b/
+    )
+    expect(code, `${file} destructures user_id out of the request body`).not.toMatch(
+      /const\s*\{[^}]*\buser_id\b[^}]*\}\s*=\s*body\b/
     )
     expect(code, `${file} should resolve the caller via getCurrentUserId()`).toContain('getCurrentUserId')
   })
