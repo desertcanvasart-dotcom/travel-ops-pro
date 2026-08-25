@@ -49,8 +49,35 @@ if (!URL_ || !KEY) {
   process.exit(1)
 }
 
+// PRODUCTION GUARD.
+// This script fills any missing var from .env.local — which holds production
+// credentials — so a single typo in the target URL could seed the live
+// customer database. Read the .env.local URL from the FILE directly (not the
+// merged env, which the caller may have overridden) and refuse to run if the
+// target matches it, unless the operator says so out loud.
+let envFileUrl = null
+try {
+  for (const line of fs.readFileSync(ENV_PATH, 'utf8').split('\n')) {
+    const m = line.match(/^\s*NEXT_PUBLIC_SUPABASE_URL\s*=\s*["']?([^"'\s]+)/)
+    if (m) { envFileUrl = m[1]; break }
+  }
+} catch { /* no .env.local — nothing to protect against */ }
+
+const projectRef = u => { try { return new URL(u).hostname.split('.')[0] } catch { return u } }
+if (envFileUrl && projectRef(URL_) === projectRef(envFileUrl) && !env.SEED_ALLOW_ENV_LOCAL_TARGET) {
+  console.error('\n🛑 REFUSING TO SEED.')
+  console.error(`   Target project (${projectRef(URL_)}) is the one in .env.local — i.e. PRODUCTION.`)
+  console.error('   This script seeds test fixtures; it must point at the throwaway CI project.')
+  console.error('   Set NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY to the CI project,')
+  console.error('   or, if you REALLY mean this project, re-run with SEED_ALLOW_ENV_LOCAL_TARGET=1.\n')
+  process.exit(1)
+}
+
+console.log(`Seeding project: ${projectRef(URL_)}  (${URL_})`)
+
 const ORG_NAME = 'E2E Smoke Org'
 const ITIN_CODE = 'E2E-SMOKE-001'
+const TEMPLATE_CODE = 'E2E-TMPL-001'
 const DEFAULT_EMAIL = 'e2e-smoke@travelops.test'
 
 const headers = {
@@ -114,6 +141,36 @@ async function seed() {
     }
   }
 
+  // 1b. Profile row.
+  //
+  // In production a trigger on auth.users creates the user_profiles row on
+  // signup (the standard Supabase handle_new_user pattern). That trigger lives
+  // in the AUTH schema, which a `pg_dump --schema=public` cannot carry — so on a
+  // freshly-copied CI project the auth user exists with no profile, and the
+  // app's AuthContext.fetchProfile throws PGRST116 (0 rows) right after login,
+  // bouncing every test back to /login.
+  //
+  // Creating the row here makes the fixture self-contained: it does not depend
+  // on an auth-schema trigger being present, so it works on any project the
+  // schema was copied into. Upserted, so re-running the seed is a no-op.
+  await rest(
+    'POST',
+    `/rest/v1/user_profiles`,
+    {
+      id: user.id,
+      email,
+      full_name: 'E2E Smoke User',
+      // user_profiles.role is the DISPLAY MIRROR, and its CHECK predates the
+      // one-role migration — it allows admin|manager|agent|viewer but NOT
+      // 'owner'. The real owner access comes from the organization_members row
+      // below; this value only has to satisfy the constraint.
+      role: 'admin',
+      is_active: true,
+    },
+    { Prefer: 'resolution=merge-duplicates' }
+  )
+  console.log('✓ user profile ensured')
+
   // 2. Organization
   let [org] = await select('organizations', `name=eq.${encodeURIComponent(ORG_NAME)}&select=id,name`)
   if (!org) {
@@ -146,6 +203,53 @@ async function seed() {
   if (staleClients?.length) {
     await del('clients', `email=eq.${encodeURIComponent(email)}`)
     console.log('✓ removed the old permanent client (specs now mint their own)')
+  }
+
+  // 4a. Departments + their service-type ownership.
+  //
+  // /api/departments/routing reports every service type present in the data
+  // that no department owns, and a spec asserts that list is empty — an
+  // unrouted type becomes an unassignable task that looks like one nobody
+  // picked up. Departments carry no org_id (they are global), so these mirror
+  // production's four exactly; their service_types partition the full set.
+  const DEPARTMENTS = [
+    { name: 'Reservation', service_types: ['accommodation', 'cruise', 'meal', 'transportation'] },
+    { name: 'Aviation', service_types: ['flight'] },
+    { name: 'Execution', service_types: ['guide', 'entrance', 'activity', 'airport_service', 'airport_services', 'hotel_service', 'hotel_services', 'tips', 'supplies'] },
+    { name: 'Accounting', service_types: ['invoice', 'payment', 'commission'] },
+  ]
+  for (const dept of DEPARTMENTS) {
+    const [existing] = await select('departments', `name=eq.${encodeURIComponent(dept.name)}&select=id`)
+    if (existing) {
+      // Enforce ownership — a drifted service_types set would leave a type
+      // unrouted and fail the routing spec.
+      await rest('PATCH', `/rest/v1/departments?id=eq.${existing.id}`, { service_types: dept.service_types, is_active: true })
+    } else {
+      await insert('departments', { ...dept, is_active: true })
+    }
+  }
+  console.log(`✓ ${DEPARTMENTS.length} departments ensured`)
+
+  // 4b. A tour template.
+  //
+  // The programme picker on the edit page is populated from
+  // /api/tours/templates?slim=1; a spec asserts the list arrives with more than
+  // the empty option. tour_templates carries no org_id (a template is shared),
+  // so one active row is enough. In production these come from the importer; the
+  // CI project's schema was copied without data, so the harness supplies its own.
+  const [tmpl] = await select('tour_templates', `template_code=eq.${TEMPLATE_CODE}&select=id`)
+  if (!tmpl) {
+    await insert('tour_templates', {
+      template_code: TEMPLATE_CODE,
+      template_name: 'E2E Smoke Programme',
+      tour_type: 'land',
+      duration_days: 1,
+      hotels: [],
+      is_active: true,
+    })
+    console.log('✓ tour template created')
+  } else {
+    console.log('= tour template exists')
   }
 
   // 5. Itinerary in the E2E org (+ Day 1)
