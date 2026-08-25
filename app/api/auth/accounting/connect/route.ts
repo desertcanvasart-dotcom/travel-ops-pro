@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { newNonce, setNonceCookie } from '@/lib/oauth/csrf-nonce'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { getAccountingProvider, AccountingProviderType } from '@/lib/accounting'
 import { getAuthenticatedUser } from '@/lib/supabase-secure'
@@ -34,10 +35,14 @@ export async function POST(request: NextRequest) {
     // rather than to the user's oldest membership.
     const orgId = await getCurrentOrgId()
     const accountingProvider = getAccountingProvider(provider as AccountingProviderType)
-    const state = signState(`${user.id}:${provider}${orgId ? `:${orgId}` : ''}`)
+    // CSRF nonce is the LAST state segment (see the callback).
+    const nonce = newNonce()
+    const state = signState(`${user.id}:${provider}:${orgId || ''}:${nonce}`)
     const authUrl = accountingProvider.getAuthUrl(state)
 
-    return NextResponse.json({ authUrl })
+    const res = NextResponse.json({ authUrl })
+    setNonceCookie(res, nonce)
+    return res
   } catch (error) {
     console.error('Accounting connect error:', error)
     return NextResponse.json(

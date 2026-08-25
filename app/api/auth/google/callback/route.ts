@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { nonceMatches, clearNonceCookie } from '@/lib/oauth/csrf-nonce'
 import { encryptToken } from '@/lib/crypto/token-cipher'
 import { createClient } from '@supabase/supabase-js'
 import { getTokensFromCode, getUserEmail } from '@/lib/gmail'
@@ -53,11 +54,21 @@ export async function GET(request: NextRequest) {
 
   // Verify the signed state and recover the user id — never trust a raw user id
   // from the URL (an attacker could otherwise write tokens to any account).
-  const userId = verifyState(state)
+  // The signed payload is `${userId}:${nonce}` since P4b-2.
+  const [userId, stateNonce] = (verifyState(state) || '').split(':')
   if (!userId) {
     return NextResponse.redirect(
       new URL('/settings/email?error=invalid_state', baseUrl)
     )
+  }
+
+  // CSRF: the nonce in the state must match the httpOnly cookie set when THIS
+  // browser started the flow. Without this, a signed state the attacker minted
+  // could complete against a victim's Google consent.
+  if (!nonceMatches(request, stateNonce)) {
+    const res = NextResponse.redirect(new URL('/settings/email?error=invalid_state', baseUrl))
+    clearNonceCookie(res)
+    return res
   }
 
   try {
