@@ -17,6 +17,27 @@ const ALLOWED_TYPES = [
   'image/webp',
 ]
 
+// The stored extension is derived from the VALIDATED MIME type, never from the
+// caller-supplied filename — file.name and file.type are both attacker-set, and
+// a mismatched extension is how a script gets served with an image content-type
+// or vice versa.
+const EXT_FOR_TYPE: Record<string, string> = {
+  'application/pdf': 'pdf',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+}
+
+// First bytes of each accepted type — a cheap sniff so a caller cannot upload an
+// executable under an image content-type. Checked against the real bytes below.
+function sniffType(buf: Buffer): string | null {
+  if (buf.length >= 4 && buf.toString('ascii', 0, 4) === '%PDF') return 'application/pdf'
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg'
+  if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png'
+  if (buf.length >= 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'image/webp'
+  return null
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -61,12 +82,23 @@ export async function POST(
       )
     }
 
-    const fileExt = safeExtension(file.name, 'pdf')
-    const fileName = `${safeKeySegment(id)}-${Date.now()}.${fileExt}`
-    const filePath = `documents/${fileName}`
-
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
+
+    // The actual bytes must match the claimed type — reject a spoofed
+    // content-type (e.g. a script announced as image/png).
+    const sniffed = sniffType(buffer)
+    if (sniffed !== file.type) {
+      return NextResponse.json(
+        { error: 'File content does not match its declared type.' },
+        { status: 400 }
+      )
+    }
+
+    // Extension from the validated type; filename never reaches the storage key.
+    const fileExt = EXT_FOR_TYPE[file.type] || 'bin'
+    const fileName = `${safeKeySegment(id)}-${Date.now()}.${fileExt}`
+    const filePath = `documents/${fileName}`
 
     // Upload to Supabase Storage (auto-create bucket if needed)
     let uploadResult = await supabase.storage
@@ -74,8 +106,10 @@ export async function POST(
       .upload(filePath, buffer, { contentType: file.type, upsert: true })
 
     if (uploadResult.error?.message?.includes('Bucket not found')) {
+      // PRIVATE — the document is served through a signed URL
+      // (app/api/supplier-invoices/[id]/document), never a public link.
       const { error: bucketError } = await supabase.storage.createBucket(BUCKET, {
-        public: true,
+        public: false,
         fileSizeLimit: MAX_SIZE,
       })
 
@@ -90,16 +124,12 @@ export async function POST(
 
     if (uploadResult.error) throw uploadResult.error
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from(BUCKET)
-      .getPublicUrl(filePath)
-
-    // Update supplier invoice
+    // document_url points at the app's own signed-URL route, not the object —
+    // the bucket is private, so a raw storage link would 403.
     const { error: updateError } = await supabase
       .from('supplier_invoices')
       .update({
-        document_url: urlData.publicUrl,
+        document_url: `/api/supplier-invoices/${id}/document`,
         document_filename: file.name,
         document_storage_path: filePath,
         updated_at: new Date().toISOString(),
@@ -113,7 +143,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      url: urlData.publicUrl,
+      url: `/api/supplier-invoices/${id}/document`,
       filename: file.name,
     })
   } catch (error) {
