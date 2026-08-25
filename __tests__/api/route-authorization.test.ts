@@ -54,6 +54,11 @@ describe('API mutation gate — coverage', () => {
     '/api/suppliers',
     '/api/team-members',
     '/api/team-members/abc-123',
+    // P2: b2b pricing config is manager+, not the blanket /api/b2b agent+.
+    '/api/b2b/pricing-rules',
+    '/api/b2b/pricing-rules/abc',
+    '/api/b2b/transport-packages',
+    '/api/b2b/transport-packages/abc',
   ])('%s is manager-and-above', path => {
     const roles = rolesFor(path)
     expect(roles, `${path} has no entry in API_MUTATION_PERMISSIONS`).not.toBeNull()
@@ -97,6 +102,27 @@ describe('API mutation gate — coverage', () => {
     for (const entry of mutationPermissions()) {
       expect(roleAllows('owner', entry.roles), `owner must pass ${entry.prefix}`).toBe(true)
     }
+  })
+})
+
+describe('P2 — deactivated accounts and financial reads', () => {
+  it('the middleware denies ALL API access to a deactivated account (reads included)', () => {
+    // The old is_active check lived only inside the mutation block, so GETs
+    // skipped it. This must run before the route-specific gates.
+    expect(source).toMatch(/isAccountActive/)
+    expect(source).toMatch(/isApiRoute && user && !\(await isAccountActive/)
+  })
+
+  it('accounting is under the financial read gate', () => {
+    const block = source.match(/const FINANCIAL_API_PREFIXES = \[([\s\S]*?)\]/)![1]
+    expect(block).toContain("'/api/accounting'")
+  })
+
+  it('the specific pricing/transport gates precede the general /api/b2b entry', () => {
+    const idx = (s: string) => source.indexOf(s)
+    expect(idx("prefix: '/api/b2b/pricing-rules'")).toBeGreaterThan(-1)
+    expect(idx("prefix: '/api/b2b/pricing-rules'")).toBeLessThan(idx("prefix: '/api/b2b',"))
+    expect(idx("prefix: '/api/b2b/transport-packages'")).toBeLessThan(idx("prefix: '/api/b2b',"))
   })
 })
 
