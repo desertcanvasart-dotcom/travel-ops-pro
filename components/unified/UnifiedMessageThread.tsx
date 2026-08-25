@@ -523,17 +523,11 @@ export function UnifiedMessageThread({
           onConversationDeleted(conversation.id)
         }
       } else {
-        // Email: Move to trash via Gmail API
-        if (!user) return
-        const res = await fetch('/api/gmail/actions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.id,
-            messageIds: [conversation.identifier], // thread_id for email
-            action: 'delete'
-          }),
-        })
+        // Email: soft-hide from the unified inbox (mirrors the WhatsApp path).
+        // This removes it from the box without touching the actual Gmail mailbox.
+        // The previous Gmail-trash call never removed the row from our DB (so the
+        // conversation kept reappearing) and passed a thread_id to a messages API.
+        const res = await fetch(`/api/email/conversations?id=${conversation.id}`, { method: 'DELETE' })
         if (res.ok && onConversationDeleted) {
           onConversationDeleted(conversation.id)
         }
