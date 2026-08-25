@@ -17,26 +17,30 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get('error')
   const realmId = searchParams.get('realmId') // QuickBooks passes this
 
-  const baseUrl = BASE_URL || (request.headers.get('x-forwarded-host')
-    ? `https://${request.headers.get('x-forwarded-host')}`
-    : request.url)
+  // Redirect target is the CONFIGURED app URL only. It used to fall back to the
+  // caller-controlled x-forwarded-host, so an attacker could craft a callback
+  // that redirected (with the ?error/?realmId params) to a host of their
+  // choosing. A relative path is the safe fallback when BASE_URL is unset.
+  const baseUrl = BASE_URL || new URL(request.url).origin
+  const redirectTo = (qs: string) =>
+    BASE_URL
+      ? NextResponse.redirect(new URL(`/settings?tab=integrations&${qs}`, baseUrl))
+      : NextResponse.redirect(new URL(`/settings?tab=integrations&${qs}`, request.url))
 
   if (error) {
-    return NextResponse.redirect(
-      new URL(`/settings?tab=integrations&error=${error}`, baseUrl)
-    )
+    // Reflect only a constrained code, never the raw provider string.
+    const safe = /^[a-z_]{1,40}$/.test(error) ? error : 'provider_error'
+    return redirectTo(`error=${encodeURIComponent(safe)}`)
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(
-      new URL('/settings?tab=integrations&error=missing_params', baseUrl)
-    )
+    return redirectTo('error=missing_params')
   }
 
   // Verify the signed state before trusting the embedded user id / provider —
   // otherwise an attacker could attach their accounting tokens to any account.
   const verified = verifyState(state)
-  const [userId, providerName] = (verified || '').split(':')
+  const [userId, providerName, stateOrgId] = (verified || '').split(':')
   if (!verified || !userId || !providerName) {
     return NextResponse.redirect(
       new URL('/settings?tab=integrations&error=invalid_state', baseUrl)
@@ -59,14 +63,31 @@ export async function GET(request: NextRequest) {
     // 20260624_organizations_phase1.sql. The migration's backfill made
     // every existing user_profiles row an owner of the default org, so
     // there's always at least one membership to find here.
-    const { data: membership } = await supabase
-      .from('organization_members')
-      .select('org_id')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle()
-    const orgId = (membership as { org_id?: string } | null)?.org_id ?? null
+    // The org the user had ACTIVE when they started the connect flow, carried
+    // in the signed state — not "their oldest membership", which bound a
+    // multi-org user's accounting tokens to the wrong tenant. Verified to be a
+    // real membership before use; fall back to the oldest only for states minted
+    // before this field existed.
+    let orgId: string | null = null
+    if (stateOrgId) {
+      const { data: m } = await supabase
+        .from('organization_members')
+        .select('org_id')
+        .eq('user_id', userId)
+        .eq('org_id', stateOrgId)
+        .maybeSingle()
+      orgId = (m as { org_id?: string } | null)?.org_id ?? null
+    }
+    if (!orgId) {
+      const { data: membership } = await supabase
+        .from('organization_members')
+        .select('org_id')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      orgId = (membership as { org_id?: string } | null)?.org_id ?? null
+    }
 
     if (!orgId) {
       // Hard-fail rather than silently inserting a NULL org_id — without an

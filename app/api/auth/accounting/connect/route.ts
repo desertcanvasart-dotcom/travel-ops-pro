@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { getAccountingProvider, AccountingProviderType } from '@/lib/accounting'
 import { getAuthenticatedUser } from '@/lib/supabase-secure'
 import { signState } from '@/lib/oauth-state'
@@ -28,8 +29,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Bind the connection to the org the user is ACTING IN, carried through the
+    // signed state so the callback attaches the tokens to the right tenant
+    // rather than to the user's oldest membership.
+    const orgId = await getCurrentOrgId()
     const accountingProvider = getAccountingProvider(provider as AccountingProviderType)
-    const state = signState(`${user.id}:${provider}`)
+    const state = signState(`${user.id}:${provider}${orgId ? `:${orgId}` : ''}`)
     const authUrl = accountingProvider.getAuthUrl(state)
 
     return NextResponse.json({ authUrl })

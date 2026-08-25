@@ -1,10 +1,21 @@
 import { google } from 'googleapis'
+import { headerSafe, safeEmailAddress } from '@/lib/http/safe-header'
 
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
-)
+// A FRESH OAuth2 client per call — never a shared, mutated singleton.
+//
+// This used to be one module-level client that every function reconfigured with
+// setCredentials(). Two requests overlapping (which is the normal case on a
+// server) meant user A could call setCredentials, user B could overwrite it
+// before A's request fired, and A's Gmail call would run with B's tokens —
+// reading or sending from the wrong mailbox. A per-call client has no shared
+// mutable state to race on.
+function newOAuthClient() {
+  return new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  )
+}
 
 // Supabase admin client for token management
 import { createClient } from '@supabase/supabase-js'
@@ -89,7 +100,7 @@ export const GMAIL_SCOPES = [
 
 // Generate OAuth URL for user consent
 export function getAuthUrl(state?: string) {
-  return oauth2Client.generateAuthUrl({
+  return newOAuthClient().generateAuthUrl({
     access_type: 'offline',
     scope: GMAIL_SCOPES,
     prompt: 'consent',
@@ -99,30 +110,33 @@ export function getAuthUrl(state?: string) {
 
 // Exchange authorization code for tokens
 export async function getTokensFromCode(code: string) {
-  const { tokens } = await oauth2Client.getToken(code)
+  const { tokens } = await newOAuthClient().getToken(code)
   return tokens
 }
 
 // Refresh access token using refresh token
 export async function refreshAccessToken(refreshToken: string) {
-  oauth2Client.setCredentials({ refresh_token: refreshToken })
-  const { credentials } = await oauth2Client.refreshAccessToken()
+  const client = newOAuthClient()
+  client.setCredentials({ refresh_token: refreshToken })
+  const { credentials } = await client.refreshAccessToken()
   return credentials
 }
 
 // Get Gmail client with tokens
 export function getGmailClient(accessToken: string, refreshToken: string) {
-  oauth2Client.setCredentials({
+  const client = newOAuthClient()
+  client.setCredentials({
     access_token: accessToken,
     refresh_token: refreshToken,
   })
-  return google.gmail({ version: 'v1', auth: oauth2Client })
+  return google.gmail({ version: 'v1', auth: client })
 }
 
 // Get user's email address
 export async function getUserEmail(accessToken: string) {
-  oauth2Client.setCredentials({ access_token: accessToken })
-  const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client })
+  const client = newOAuthClient()
+  client.setCredentials({ access_token: accessToken })
+  const oauth2 = google.oauth2({ version: 'v2', auth: client })
   const { data } = await oauth2.userinfo.get()
   return data.email
 }
@@ -189,8 +203,8 @@ export async function sendEmail(
 
   // Create email in RFC 2822 format
   const emailLines = [
-    `To: ${to}`,
-    `Subject: ${subject}`,
+    `To: ${safeEmailAddress(to)}`,
+    `Subject: ${headerSafe(subject)}`,
     'Content-Type: text/html; charset=utf-8',
     'MIME-Version: 1.0',
     '',
