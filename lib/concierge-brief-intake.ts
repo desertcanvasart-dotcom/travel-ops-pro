@@ -38,21 +38,33 @@ interface IngestMeta {
 const PG_UNIQUE_VIOLATION = '23505'
 
 // ---- clients ----
-async function findOrCreateClient(mapped: MappedBrief, supabase: SupabaseClient): Promise<string | null> {
+async function findOrCreateClient(
+  mapped: MappedBrief,
+  supabase: SupabaseClient,
+  orgId: string | null
+): Promise<string | null> {
   const { email, phone } = mapped.clientMatch
 
+  // Matched WITHIN the org. clients is org-scoped as of
+  // migrations/20260825_clients_org_id.sql, and an unscoped match on email or
+  // phone would hand a brief to another operator's customer.
+  const scoped = <T>(q: T): T =>
+    orgId ? (q as { eq: (c: string, v: string) => T }).eq('org_id', orgId) : q
+
   if (email) {
-    const { data } = await supabase.from('clients').select('id').eq('email', email).limit(1).maybeSingle()
+    const { data } = await scoped(supabase.from('clients').select('id').eq('email', email)).limit(1).maybeSingle()
     if (data?.id) return data.id
   }
   if (phone) {
-    const { data } = await supabase.from('clients').select('id').eq('phone', phone).limit(1).maybeSingle()
+    const { data } = await scoped(supabase.from('clients').select('id').eq('phone', phone)).limit(1).maybeSingle()
     if (data?.id) return data.id
   }
 
   const { data: created, error } = await supabase
     .from('clients')
-    .insert(mapped.client)
+    // org_id is NOT NULL: the webhook has no operator session, so it resolves
+    // to the same default org the brief row itself is stamped with.
+    .insert({ ...mapped.client, org_id: orgId })
     .select('id')
     .single()
 
@@ -144,9 +156,16 @@ export async function ingestBrief(
   const conversationId = String(mapped.briefRow.conversation_id)
   const incomingRevision = mapped.briefRevision
 
+  // Phase 2 — intake-side org stamping. Webhook has no operator session, so
+  // we resolve to a default org. When the G1 gate flips (DEFERRED_GATES.md),
+  // this becomes per-webhook-secret resolution and commit reads thread.org_id.
+  // Resolved BEFORE the client write, which now needs it too (clients.org_id
+  // is NOT NULL).
+  const orgId = await getDefaultOrgId(supabase)
+
   // 1. Client (find-or-create). Best-effort: a brief is still stored even
   //    if the client write fails, so we never lose a lead.
-  const clientId = await findOrCreateClient(mapped, supabase)
+  const clientId = await findOrCreateClient(mapped, supabase, orgId)
 
   // 2. Look up the current brief row for this conversation.
   const { data: current } = await supabase
@@ -154,11 +173,6 @@ export async function ingestBrief(
     .select('id, brief_revision')
     .eq('conversation_id', conversationId)
     .maybeSingle()
-
-  // Phase 2 — intake-side org stamping. Webhook has no operator session, so
-  // we resolve to a default org. When the G1 gate flips (DEFERRED_GATES.md),
-  // this becomes per-webhook-secret resolution and commit reads thread.org_id.
-  const orgId = await getDefaultOrgId(supabase)
 
   // ---- FIRST TIME: no current row ----
   if (!current) {

@@ -91,11 +91,20 @@ export interface TestItinerary {
  * deposit-plus-balance path; inside sixty days it collapses to a single
  * payment, which silently changes what a booking assertion is testing.
  */
-export async function createTestItinerary(suffix: string): Promise<TestItinerary> {
+/**
+ * The E2E org, read off the seeded itinerary. Every fixture row belongs to it,
+ * so nothing the suite creates can appear in the operator's real data.
+ */
+async function seededOrgId(): Promise<string> {
   const [seed] = await rest(
     `itineraries?itinerary_code=eq.${SEEDED_ITINERARY_CODE}&select=org_id`
   )
   expect(seed, `seeded org missing — run npm run seed:e2e`).toBeTruthy()
+  return seed.org_id
+}
+
+export async function createTestItinerary(suffix: string): Promise<TestItinerary> {
+  const orgId = await seededOrgId()
 
   const start = new Date(Date.now() + 120 * 86_400_000).toISOString().slice(0, 10)
   const end = new Date(Date.now() + 121 * 86_400_000).toISOString().slice(0, 10)
@@ -105,7 +114,7 @@ export async function createTestItinerary(suffix: string): Promise<TestItinerary
     method: 'POST',
     body: JSON.stringify({
       itinerary_code: code,
-      org_id: seed.org_id,
+      org_id: orgId,
       client_name: 'Smoke Tester',
       trip_name: `E2E ${suffix} (${RUN_ID})`,
       start_date: start,
@@ -119,7 +128,7 @@ export async function createTestItinerary(suffix: string): Promise<TestItinerary
     }),
   })
 
-  return { id: itin.id, orgId: seed.org_id, code, startDate: start, endDate: end }
+  return { id: itin.id, orgId, code, startDate: start, endDate: end }
 }
 
 /** Remove the itinerary and everything hanging off it, deepest first. */
@@ -140,14 +149,15 @@ export async function destroyTestItinerary(itin: TestItinerary | null): Promise<
 // ---------------------------------------------------------------------------
 // A disposable client
 // ---------------------------------------------------------------------------
-// `clients` has no org_id (the deferred G1 gate), so a client fixture cannot be
-// hidden inside the E2E org the way an itinerary can — it shows up in the
-// operator's real clients list. A PERMANENT one there is an invitation to tidy
-// it away, and tidying it away breaks the two specs that assert on it: that is
-// exactly what happened, and CI stayed red across two merges before anyone
-// tied the deletion to the failure.
+// `clients` IS org-scoped as of migrations/20260825_clients_org_id.sql, so this
+// fixture now lives inside the E2E org like every other one and never appears in
+// the operator's real clients list. That removes the original hazard: a
+// permanent test client sitting in the operator's list was an invitation to tidy
+// away, and tidying it away broke the two specs asserting on it — CI stayed red
+// across two merges before anyone tied the deletion to the failure.
 //
-// So the client the smoke suite asserts on is created and destroyed per run.
+// It is still created and destroyed per run, which is the right shape anyway:
+// no cross-run state, and an abandoned row is unmistakably labelled.
 // The operator's list is only ever transiently polluted, and a stray row from
 // an abandoned run is unmistakably labelled and blocks nothing.
 
@@ -160,10 +170,13 @@ export interface TestClient {
 export async function createTestClient(suffix: string): Promise<TestClient> {
   // A DB trigger assigns client_code and a CHECK constrains status, so neither
   // is set here — see scripts/seed-e2e.mjs, which learned the same lesson.
+  // org_id IS set: it is NOT NULL, and without it this insert fails 23502.
+  const orgId = await seededOrgId()
   const last = `Tester-${RUN_ID}`
   const [client] = await rest('clients', {
     method: 'POST',
     body: JSON.stringify({
+      org_id: orgId,
       first_name: 'Smoke',
       last_name: last,
       email: `e2e-${RUN_ID}-${suffix}@travelops.test`,

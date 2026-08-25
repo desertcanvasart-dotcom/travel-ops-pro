@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -7,11 +8,33 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// Every query below ran on the service-role client with no org filter and no
+// error check: `.data || []`. Two separate ways to be quietly wrong, and this
+// route was both at once.
+//
+// UNSCOPED: on a deployment with more than one organisation, one operator's
+// dashboard summed another's trips and customers.
+//
+// UNCHECKED: a failed query is indistinguishable from an empty one after
+// `|| []`, so the page rendered zeros and confident-looking growth percentages
+// instead of an error. That was not hypothetical — it was the live state. The
+// revenue queries selected `itineraries.total_price`, a column that does not
+// exist (it is `total_cost`), and the pipeline count read `follow_ups`, a table
+// that does not exist (it is `client_followups`). Both errors were discarded, so
+// total revenue and follow-up count have been reported as 0 for every range.
+// The names are corrected here; more importantly, a query that fails now says so.
+function firstError(...results: Array<{ error: unknown }>): unknown {
+  return results.map(r => r.error).find(Boolean) ?? null
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const range = searchParams.get('range') || '30d'
 
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     // Calculate date range
     const now = new Date()
     let startDate: Date
@@ -46,35 +69,58 @@ export async function GET(request: NextRequest) {
       // Itineraries (bookings) in date range
       supabase
         .from('itineraries')
-        .select('id, status, total_price, start_date, cities, created_at')
+        .select('id, status, total_cost, start_date, destinations, created_at')
+        .eq('org_id', orgId)
         .gte('created_at', startDateStr),
-      
+
       // All clients with status
       supabase
         .from('clients')
         .select('id, status, created_at')
+        .eq('org_id', orgId)
         .gte('created_at', startDateStr),
-      
+
       // Leads count (clients with status = 'lead')
       supabase
         .from('clients')
-        .select('id', { count: 'exact' })
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
         .eq('status', 'lead'),
-      
-      // Follow-ups count
+
+      // Follow-ups count. client_followups carries no org_id of its own, so it
+      // is scoped through the customer it belongs to.
       supabase
-        .from('follow_ups')
-        .select('id', { count: 'exact' })
+        .from('client_followups')
+        .select('id, clients!inner(org_id)', { count: 'exact', head: true })
+        .eq('clients.org_id', orgId)
         .eq('status', 'pending'),
-      
+
       // Revenue by week for trend chart
       supabase
         .from('itineraries')
-        .select('total_price, created_at')
+        .select('total_cost, created_at')
+        .eq('org_id', orgId)
         .in('status', ['confirmed', 'completed'])
         .gte('created_at', startDateStr)
         .order('created_at', { ascending: true })
     ])
+
+    // Fail loudly. A dashboard that cannot read its own numbers must not print
+    // a confident zero.
+    const queryError = firstError(
+      itinerariesResult,
+      clientsResult,
+      leadsResult,
+      followUpsResult,
+      revenueByWeekResult
+    )
+    if (queryError) {
+      console.error('Analytics query failed:', queryError)
+      return NextResponse.json(
+        { success: false, error: clientMessage(queryError, 'Could not load analytics') },
+        { status: 500 }
+      )
+    }
 
     const itineraries = itinerariesResult.data || []
     const clients = clientsResult.data || []
@@ -95,8 +141,8 @@ export async function GET(request: NextRequest) {
     const confirmedItineraries = itineraries.filter(i => 
       i.status === 'confirmed' || i.status === 'completed'
     )
-    const totalRevenue = confirmedItineraries.reduce((sum, i) => 
-      sum + (parseFloat(i.total_price) || 0), 0
+    const totalRevenue = confirmedItineraries.reduce((sum, i) =>
+      sum + (parseFloat(i.total_cost) || 0), 0
     )
 
     // Calculate client stats
@@ -117,19 +163,28 @@ export async function GET(request: NextRequest) {
     // Group revenue by week for trend chart
     const weeklyRevenue = groupByWeek(revenueData, range)
 
-    // Calculate destination stats from itineraries
+    // Calculate destination stats from itineraries.
+    // The column is `destinations`, and it is TEXT — a comma-separated list, not
+    // an array. This read `itinerary.cities`, a column that does not exist, and
+    // then guarded it with Array.isArray, so the condition was false for every
+    // row and the "top destinations" panel has always been empty.
     const destinationMap = new Map<string, { bookings: number; revenue: number }>()
     itineraries.forEach(itinerary => {
-      if (itinerary.cities && Array.isArray(itinerary.cities)) {
-        itinerary.cities.forEach((city: string) => {
-          const existing = destinationMap.get(city) || { bookings: 0, revenue: 0 }
-          existing.bookings += 1
-          if (itinerary.status === 'confirmed' || itinerary.status === 'completed') {
-            existing.revenue += parseFloat(itinerary.total_price) || 0
-          }
-          destinationMap.set(city, existing)
-        })
-      }
+      const raw = itinerary.destinations
+      const cities: string[] = Array.isArray(raw)
+        ? raw.map(String)
+        : typeof raw === 'string'
+          ? raw.split(',').map(c => c.trim()).filter(Boolean)
+          : []
+
+      cities.forEach(city => {
+        const existing = destinationMap.get(city) || { bookings: 0, revenue: 0 }
+        existing.bookings += 1
+        if (itinerary.status === 'confirmed' || itinerary.status === 'completed') {
+          existing.revenue += parseFloat(itinerary.total_cost) || 0
+        }
+        destinationMap.set(city, existing)
+      })
     })
 
     const destinations = Array.from(destinationMap.entries())
@@ -139,15 +194,24 @@ export async function GET(request: NextRequest) {
 
     // Calculate growth (compare to previous period)
     const previousStartDate = new Date(startDate.getTime() - (now.getTime() - startDate.getTime()))
-    const { data: previousItineraries } = await supabase
+    const { data: previousItineraries, error: previousError } = await supabase
       .from('itineraries')
-      .select('total_price, status')
+      .select('total_cost, status')
+      .eq('org_id', orgId)
       .gte('created_at', previousStartDate.toISOString())
       .lt('created_at', startDateStr)
       .in('status', ['confirmed', 'completed'])
 
-    const previousRevenue = (previousItineraries || []).reduce((sum, i) => 
-      sum + (parseFloat(i.total_price) || 0), 0
+    if (previousError) {
+      console.error('Analytics comparison query failed:', previousError)
+      return NextResponse.json(
+        { success: false, error: clientMessage(previousError, 'Could not load analytics') },
+        { status: 500 }
+      )
+    }
+
+    const previousRevenue = (previousItineraries || []).reduce((sum, i) =>
+      sum + (parseFloat(i.total_cost) || 0), 0
     )
     
     const revenueGrowth = previousRevenue > 0 

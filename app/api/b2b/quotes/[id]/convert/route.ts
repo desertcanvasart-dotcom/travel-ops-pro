@@ -138,19 +138,24 @@ export async function POST(
     // Create or find client
     let clientId = null
     if (quote.client_email) {
+      // Scoped: matching on email alone would attach this quote to another
+      // organisation's customer, and clients is org-scoped as of
+      // migrations/20260825_clients_org_id.sql.
       const { data: existingClient } = await supabaseAdmin
         .from('clients')
         .select('id')
         .eq('email', quote.client_email)
-        .single()
+        .eq('org_id', orgId)
+        .maybeSingle()
 
       if (existingClient) {
         clientId = existingClient.id
       } else {
         const nameParts = (quote.client_name || '').split(' ')
-        const { data: newClient } = await supabaseAdmin
+        const { data: newClient, error: clientError } = await supabaseAdmin
           .from('clients')
           .insert({
+            org_id: orgId,
             first_name: nameParts[0] || 'Unknown',
             last_name: nameParts.slice(1).join(' ') || '',
             email: quote.client_email,
@@ -162,6 +167,9 @@ export async function POST(
           .select()
           .single()
 
+        if (clientError) {
+          console.error('B2B convert: client insert failed:', clientError)
+        }
         if (newClient) clientId = newClient.id
       }
     }

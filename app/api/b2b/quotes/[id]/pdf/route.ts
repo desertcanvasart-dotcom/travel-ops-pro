@@ -724,13 +724,15 @@ export async function GET(
       ]
     })
     
+    try {
     const page = await browser.newPage()
-    
-    // Set content and wait for fonts to load
-    await page.setContent(html, { 
-      waitUntil: ['networkidle0', 'domcontentloaded'] 
-    })
-    
+
+    // NOT networkidle0 — puppeteer 25 dropped it from setContent, and it was
+    // the wrong signal anyway: this template inlines its fonts, so there is no
+    // network to go idle. document.fonts.ready is the settled signal that
+    // matters (the same conclusion lib/documents/render.ts reached in prod).
+    await page.setContent(html, { waitUntil: 'domcontentloaded' })
+
     // Wait for fonts to fully load
     await page.evaluateHandle('document.fonts.ready')
     
@@ -753,15 +755,20 @@ export async function GET(
       `
     })
     
-    await browser.close()
-
     // Return PDF
+    const safeName = String(finalQuote.quote_number ?? 'quote').replace(/[^A-Za-z0-9._-]/g, '_')
     return new NextResponse(Buffer.from(pdf), {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${finalQuote.quote_number}.pdf"`,
+        'Content-Disposition': `attachment; filename="${safeName}.pdf"`,
       },
     })
+    } finally {
+      // ALWAYS. This close used to sit on the success path, so any throw in
+      // setContent or page.pdf leaked a Chromium process for the life of the
+      // container.
+      await browser.close()
+    }
 
   } catch (error: any) {
     console.error('PDF generation error:', error)

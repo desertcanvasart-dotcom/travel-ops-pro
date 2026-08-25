@@ -8,8 +8,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import twilio from 'twilio'
 import { createCopilotInboxEntry } from '@/lib/copilot-intake'
+import { verifyTwilioSignature, formDataToParams } from '@/lib/twilio-signature'
 
 // Use service role key to bypass RLS — webhooks have no user session
 const supabase = createClient(
@@ -19,41 +19,8 @@ const supabase = createClient(
 
 // SECURITY: this endpoint is on the middleware self-auth allowlist (no session),
 // uses the RLS-bypassing service-role client, and creates clients/conversations/
-// Copilot inbox entries. Without verifying Twilio's HMAC signature, anyone on the
-// internet could forge inbound messages. Twilio signs the exact webhook URL it was
-// configured with; behind Railway/proxies the host can arrive via x-forwarded-*,
-// so we accept either the proxy-derived URL or the configured NEXT_PUBLIC_APP_URL.
-// Fails CLOSED: missing token/signature → rejected.
-export function verifyTwilioSignature(
-  request: Pick<NextRequest, 'headers' | 'url'>,
-  params: Record<string, string>
-): boolean {
-  const authToken = process.env.TWILIO_AUTH_TOKEN
-  if (!authToken) {
-    console.error('🚫 TWILIO_AUTH_TOKEN not set — rejecting WhatsApp webhook (fail closed)')
-    return false
-  }
-  const signature = request.headers.get('x-twilio-signature')
-  if (!signature) {
-    console.error('🚫 Missing X-Twilio-Signature header on WhatsApp webhook')
-    return false
-  }
-  const { pathname, search } = new URL(request.url)
-  const proto = request.headers.get('x-forwarded-proto') || 'https'
-  const host = request.headers.get('x-forwarded-host') || request.headers.get('host')
-  const candidateUrls = [
-    host ? `${proto}://${host}${pathname}${search}` : null,
-    process.env.NEXT_PUBLIC_APP_URL
-      ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')}${pathname}${search}`
-      : null,
-  ].filter((u): u is string => !!u)
-
-  const ok = candidateUrls.some(url => twilio.validateRequest(authToken, signature, url, params))
-  if (!ok) {
-    console.error('🚫 Invalid Twilio signature on WhatsApp webhook', { triedUrls: candidateUrls })
-  }
-  return ok
-}
+// Copilot inbox entries. The X-Twilio-Signature check that protects it now lives
+// in lib/twilio-signature.ts, shared with the status callback.
 
 export async function POST(request: NextRequest) {
   try {
@@ -61,11 +28,10 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
 
     // Build a plain params object for signature verification + field access.
-    const params: Record<string, string> = {}
-    formData.forEach((value, key) => { params[key] = typeof value === 'string' ? value : '' })
+    const params = formDataToParams(formData)
 
     // SECURITY: verify the request genuinely came from Twilio BEFORE any DB writes.
-    if (!verifyTwilioSignature(request, params)) {
+    if (!verifyTwilioSignature(request, params, 'WhatsApp inbound webhook')) {
       return NextResponse.json({ error: 'Invalid Twilio signature' }, { status: 403 })
     }
 
@@ -95,15 +61,26 @@ export async function POST(request: NextRequest) {
     let clientId = null
     let clientName = null
     
-    const { data: existingClient } = await supabase
+    // `full_name` is not a column on clients (it is first_name / last_name), so
+    // this query returned 42703 every time. The error was discarded, so
+    // existingClient was permanently null: NO inbound WhatsApp message has ever
+    // been matched to the customer who sent it. Found while fixing the swallowed
+    // errors below — the same failure mode, one step earlier in the handler.
+    const { data: existingClient, error: clientLookupError } = await supabase
       .from('clients')
-      .select('id, full_name')
+      .select('id, first_name, last_name')
       .eq('phone', phoneNumber)
-      .single()
+      .maybeSingle()
+
+    if (clientLookupError) {
+      // Not fatal: an unmatched message is still worth storing, and the inbox
+      // shows it against the phone number. Just never again in silence.
+      console.error('⚠️ Client lookup failed for', phoneNumber, clientLookupError)
+    }
 
     if (existingClient) {
       clientId = existingClient.id
-      clientName = existingClient.full_name
+      clientName = `${existingClient.first_name || ''} ${existingClient.last_name || ''}`.trim() || null
     }
 
     // ============================================
@@ -115,7 +92,7 @@ export async function POST(request: NextRequest) {
       .from('whatsapp_conversations')
       .select('id')
       .eq('phone_number', phoneNumber)
-      .single()
+      .maybeSingle()
 
     if (existingConversation) {
       conversationId = existingConversation.id
@@ -146,11 +123,13 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (convError) {
+        // A customer's message with nowhere to be filed. This used to be logged
+        // and then swallowed by the 200 below; ask Twilio to send it again.
         console.error('❌ Error creating conversation:', convError)
-      } else {
-        conversationId = newConversation.id
-        console.log('✅ Created new conversation:', conversationId)
+        return retryable('could not create conversation')
       }
+      conversationId = newConversation.id
+      console.log('✅ Created new conversation:', conversationId)
     }
 
     // ============================================
@@ -170,40 +149,40 @@ export async function POST(request: NextRequest) {
       })
 
     if (msgError) {
+      // 23505 = unique violation on message_sid. That is Twilio redelivering a
+      // message we already stored, which is the SUCCESS case for a retry, not a
+      // failure: acknowledge it and stop, or we would loop forever. Any other
+      // error is a real write failure and must be retried.
+      if (msgError.code === '23505') {
+        console.log('↩️ Duplicate delivery for', messageSid, '— already stored, acknowledging')
+        return twilioAck()
+      }
       console.error('❌ Error storing message:', msgError)
-    } else {
-      console.log('✅ Message stored successfully')
+      return retryable('could not store message')
+    }
 
-      // Update conversation metadata (last_message, last_message_at, unread_count)
-      // This ensures the Unified Inbox shows the latest message snippet and timestamp
-      if (conversationId) {
-        const messageSnippet = body || (numMedia > 0 ? '📎 Media' : '')
-        const now = new Date().toISOString()
+    console.log('✅ Message stored successfully')
 
-        // First, get current unread_count to increment it
-        const { data: currentConv } = await supabase
-          .from('whatsapp_conversations')
-          .select('unread_count')
-          .eq('id', conversationId)
-          .single()
+    // Update conversation metadata (last_message, last_message_at, unread_count)
+    // so the Unified Inbox shows the latest snippet and an accurate badge.
+    if (conversationId) {
+      const messageSnippet = body || (numMedia > 0 ? '📎 Media' : '')
 
-        const currentUnread = currentConv?.unread_count || 0
+      // ATOMIC. This was a read of unread_count, a +1 in JavaScript, and a write
+      // back — two messages arriving together both read the same number and both
+      // wrote the same number, so one of the increments simply vanished and the
+      // badge under-counted. The increment now happens inside the database, in
+      // one statement, under the row lock the UPDATE takes anyway.
+      const { error: bumpError } = await supabase.rpc('bump_whatsapp_conversation', {
+        p_conversation_id: conversationId,
+        p_last_message: messageSnippet,
+      })
 
-        const { error: updateError } = await supabase
-          .from('whatsapp_conversations')
-          .update({
-            last_message: messageSnippet,
-            last_message_at: now,
-            unread_count: currentUnread + 1,
-            updated_at: now
-          })
-          .eq('id', conversationId)
-
-        if (updateError) {
-          console.error('❌ Error updating conversation metadata:', updateError)
-        } else {
-          console.log('✅ Conversation metadata updated (unread:', currentUnread + 1, ')')
-        }
+      if (bumpError) {
+        // The badge is cosmetic and the message is already safely stored — do
+        // NOT ask Twilio to redeliver over this, or a missing function would
+        // turn into an infinite retry loop that duplicates nothing but load.
+        console.error('❌ Error updating conversation metadata (non-blocking):', bumpError)
       }
     }
 
@@ -286,19 +265,29 @@ export async function POST(request: NextRequest) {
       console.log('💬 Greeting prepared (not sent):', greetingResponse.substring(0, 100) + '...')
     }
 
-    // Respond to Twilio with 200 OK
-    return new NextResponse(
-      '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
-      { status: 200, headers: { 'Content-Type': 'text/xml' } }
-    )
+    return twilioAck()
 
   } catch (error: any) {
     console.error('❌ Error processing WhatsApp webhook:', error)
-    // Still return 200 to Twilio to avoid retries
-    return new NextResponse(
-      '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
-      { status: 200, headers: { 'Content-Type': 'text/xml' } }
-    )  }
+    return retryable('unhandled error')
+  }
+}
+
+// Empty TwiML, HTTP 200: "received and dealt with, send nothing back".
+function twilioAck() {
+  return new NextResponse(
+    '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+    { status: 200, headers: { 'Content-Type': 'text/xml' } }
+  )
+}
+
+// A 5xx is how you tell Twilio to try again. The handler used to answer 200 no
+// matter what went wrong, which reads as "stored" — so a database failure threw
+// a real customer's message away silently and permanently, with nothing but a
+// container log to say it ever arrived.
+function retryable(reason: string) {
+  console.error('↩️ Asking Twilio to retry:', reason)
+  return NextResponse.json({ error: reason }, { status: 503 })
 }
 
 // ============================================

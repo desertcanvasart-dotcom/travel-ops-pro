@@ -81,9 +81,19 @@ export default function NewClientPage() {
         date_of_birth: formData.date_of_birth || null,
       }
 
+      // clients.org_id is NOT NULL (migrations/20260825_clients_org_id.sql) —
+      // this form writes to the table directly, so it has to supply the owning
+      // organisation. /api/auth/role is the existing browser-side window onto
+      // the caller's membership.
+      const membershipRes = await fetch('/api/auth/role')
+      const membership = await membershipRes.json().catch(() => null)
+      if (!membershipRes.ok || !membership?.orgId) {
+        throw new Error('Could not determine your organisation — please sign in again.')
+      }
+
       const { data, error: insertError } = await supabase
         .from('clients')
-        .insert([cleanedData])
+        .insert([{ ...cleanedData, org_id: membership.orgId }])
         .select()
         .single()
 
