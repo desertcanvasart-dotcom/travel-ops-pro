@@ -7,6 +7,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { guardAiRate } from '@/lib/rate-limit/ai-limit'
 import { createClient } from '@supabase/supabase-js'
 import { generateReplyOptions } from '@/lib/ai/reply-suggestions'
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
@@ -22,6 +23,9 @@ export async function POST(
   { params }: { params: Promise<{ draftId: string }> }
 ) {
   try {
+    const limited = await guardAiRate()
+    if (limited) return limited
+
     const { draftId } = await params
     const body = await request.json().catch(() => ({}))
 
