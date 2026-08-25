@@ -49,6 +49,32 @@ if (!URL_ || !KEY) {
   process.exit(1)
 }
 
+// PRODUCTION GUARD.
+// This script fills any missing var from .env.local — which holds production
+// credentials — so a single typo in the target URL could seed the live
+// customer database. Read the .env.local URL from the FILE directly (not the
+// merged env, which the caller may have overridden) and refuse to run if the
+// target matches it, unless the operator says so out loud.
+let envFileUrl = null
+try {
+  for (const line of fs.readFileSync(ENV_PATH, 'utf8').split('\n')) {
+    const m = line.match(/^\s*NEXT_PUBLIC_SUPABASE_URL\s*=\s*["']?([^"'\s]+)/)
+    if (m) { envFileUrl = m[1]; break }
+  }
+} catch { /* no .env.local — nothing to protect against */ }
+
+const projectRef = u => { try { return new URL(u).hostname.split('.')[0] } catch { return u } }
+if (envFileUrl && projectRef(URL_) === projectRef(envFileUrl) && !env.SEED_ALLOW_ENV_LOCAL_TARGET) {
+  console.error('\n🛑 REFUSING TO SEED.')
+  console.error(`   Target project (${projectRef(URL_)}) is the one in .env.local — i.e. PRODUCTION.`)
+  console.error('   This script seeds test fixtures; it must point at the throwaway CI project.')
+  console.error('   Set NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY to the CI project,')
+  console.error('   or, if you REALLY mean this project, re-run with SEED_ALLOW_ENV_LOCAL_TARGET=1.\n')
+  process.exit(1)
+}
+
+console.log(`Seeding project: ${projectRef(URL_)}  (${URL_})`)
+
 const ORG_NAME = 'E2E Smoke Org'
 const ITIN_CODE = 'E2E-SMOKE-001'
 const DEFAULT_EMAIL = 'e2e-smoke@travelops.test'
