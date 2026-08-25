@@ -444,8 +444,8 @@ export default function SupplierInvoicesPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Supplier Invoices</h1>
-          <p className="text-sm text-gray-500 mt-1">Three-way matching: supplier invoice → expense → payment</p>
+          <h1 className="text-2xl font-bold text-gray-900">Bills</h1>
+          <p className="text-sm text-gray-500 mt-1">Invoices received from suppliers — matched to expenses, then approved and paid</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
