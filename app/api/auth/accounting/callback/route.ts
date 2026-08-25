@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { nonceMatches, clearNonceCookie } from '@/lib/oauth/csrf-nonce'
 import { encryptToken } from '@/lib/crypto/token-cipher'
 import { createClient } from '@supabase/supabase-js'
 import { getAccountingProvider, AccountingProviderType } from '@/lib/accounting'
@@ -41,11 +42,20 @@ export async function GET(request: NextRequest) {
   // Verify the signed state before trusting the embedded user id / provider —
   // otherwise an attacker could attach their accounting tokens to any account.
   const verified = verifyState(state)
-  const [userId, providerName, stateOrgId] = (verified || '').split(':')
+  // `${userId}:${provider}:${orgId||''}:${nonce}` since P4b-2.
+  const [userId, providerName, stateOrgId, stateNonce] = (verified || '').split(':')
   if (!verified || !userId || !providerName) {
     return NextResponse.redirect(
       new URL('/settings?tab=integrations&error=invalid_state', baseUrl)
     )
+  }
+
+  // CSRF: the state nonce must match the httpOnly cookie set when this browser
+  // began the flow — a signed state alone does not prove the victim started it.
+  if (!nonceMatches(request, stateNonce)) {
+    const res = redirectTo('error=invalid_state')
+    clearNonceCookie(res)
+    return res
   }
 
   try {
