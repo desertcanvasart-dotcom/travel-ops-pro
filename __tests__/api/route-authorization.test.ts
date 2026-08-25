@@ -121,3 +121,24 @@ describe('self-auth allowlist', () => {
     }
   })
 })
+
+describe('routes that act on "me" resolve me from the session', () => {
+  // The middleware deliberately leaves the self-service routes ungated so a
+  // viewer can still edit their own profile. That is only safe while those
+  // routes act on the CALLER. /api/avatar/upload took its userId from the
+  // request body and then wrote user_profiles.avatar_url for that id on the
+  // service-role client, so any signed-in account could replace anyone's
+  // avatar — the ungated route plus a trusted body field.
+  const selfService = [
+    'app/api/avatar/upload/route.ts',
+  ]
+
+  it.each(selfService)('%s never trusts a userId from the request', file => {
+    const src = readFileSync(join(process.cwd(), file), 'utf8')
+    const code = src.split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
+    expect(code, `${file} reads a userId out of the request body`).not.toMatch(
+      /(formData|body|searchParams)\s*\.\s*get\(\s*['"]userId['"]/
+    )
+    expect(code, `${file} should resolve the caller via getCurrentUserId()`).toContain('getCurrentUserId')
+  })
+})

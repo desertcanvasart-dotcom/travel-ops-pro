@@ -555,7 +555,8 @@ function SettingsContent() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('userId', profile.id)
+      // No userId: the route takes it from the session. Sending it was how any
+      // signed-in account could overwrite somebody else's avatar.
 
       console.log('Uploading to /api/avatar/upload...')
       const response = await fetch('/api/avatar/upload', {

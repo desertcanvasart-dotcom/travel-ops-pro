@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { safeExtension, safeKeySegment } from '@/lib/storage-key'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
@@ -60,8 +61,8 @@ export async function POST(
       )
     }
 
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${id}-${Date.now()}.${fileExt}`
+    const fileExt = safeExtension(file.name, 'pdf')
+    const fileName = `${safeKeySegment(id)}-${Date.now()}.${fileExt}`
     const filePath = `documents/${fileName}`
 
     const arrayBuffer = await file.arrayBuffer()
