@@ -72,6 +72,12 @@ interface AnalyticsData {
     confirmed: number
     completed: number
   }
+  /** The currency the API converted every figure INTO. Trust this, not a guess. */
+  reporting_currency?: string
+  /** Trips excluded from the money because no exchange rate was on file. */
+  fx_holes?: { reference: string; message: string }[]
+  /** False when at least one trip is missing from the totals. */
+  complete?: boolean
 }
 
 // Helper function to format numbers
@@ -125,14 +131,20 @@ const emptyData: AnalyticsData = {
 }
 
 export default function AnalyticsPage() {
-  const { currency: reportCurrency } = useCurrency()
-  const formatCurrency = (num: number) => formatCurrencyIn(num, reportCurrency)
+  const { currency: orgCurrency } = useCurrency()
   const t = useTranslations('analytics')
   const [loading, setLoading] = useState(true)
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | '1y'>('30d')
   const [destinationFilter, setDestinationFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+
+  // Format in the currency the API actually CONVERTED into, falling back to the
+  // org's billing currency only before the first response lands. The page used
+  // to stamp the org symbol on whatever number came back, which was fine while
+  // the API returned a single currency and a lie the moment it summed several.
+  const reportCurrency = analytics?.reporting_currency || orgCurrency
+  const formatCurrency = (num: number) => formatCurrencyIn(num, reportCurrency)
 
   useEffect(() => {
     fetchAnalytics()
@@ -292,6 +304,40 @@ export default function AnalyticsPage() {
           ))}
         </div>
       </div>
+
+      {/* FX shortfall — trips left OUT of the money figures.
+          An excluded trip that says nothing is just a wrong total with better
+          manners, so when the API reports holes the operator sees exactly which
+          trips are missing and why. */}
+      {analytics?.complete === false && (analytics?.fx_holes?.length ?? 0) > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-semibold text-amber-800">
+              {analytics.fx_holes!.length === 1
+                ? '1 trip is not included in these figures'
+                : `${analytics.fx_holes!.length} trips are not included in these figures`}
+            </h3>
+            <p className="text-sm text-amber-700 mt-1">
+              No exchange rate was on file to state them in {reportCurrency}. They are
+              excluded rather than added at face value, so the totals below are
+              understated — not wrong.
+            </p>
+            <ul className="mt-2 space-y-0.5">
+              {analytics.fx_holes!.slice(0, 5).map((hole, i) => (
+                <li key={i} className="text-xs text-amber-700">
+                  <span className="font-medium">{hole.reference}</span> — {hole.message}
+                </li>
+              ))}
+              {analytics.fx_holes!.length > 5 && (
+                <li className="text-xs text-amber-700">
+                  …and {analytics.fx_holes!.length - 5} more
+                </li>
+              )}
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* Empty State Banner - shown when no data */}
       {!hasAnyData && (
