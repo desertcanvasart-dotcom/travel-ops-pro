@@ -7,7 +7,7 @@ vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({ from: () => ({ select: () => ({}) }) }),
 }))
 
-import { verifyTwilioSignature } from '@/app/api/whatsapp/webhook/route'
+import { verifyTwilioSignature } from '@/lib/twilio-signature'
 
 const URL_STR = 'https://www.autoura.net/api/whatsapp/webhook'
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -22,9 +23,17 @@ export async function GET(request: NextRequest) {
     const page = Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1
     const from = (page - 1) * limit
 
+    // TENANT BOUNDARY. This route runs on the service-role client, which bypasses
+    // RLS, so this filter is the only thing separating one operator's customer
+    // list from another's — and until clients.org_id existed there was nothing
+    // to filter on at all (see migrations/20260825_clients_org_id.sql).
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     let query = supabase
       .from('clients')
       .select('id, first_name, last_name, email, phone, status, nationality, preferred_language, internal_notes')
+      .eq('org_id', orgId)
       // Secondary sort on id keeps page boundaries stable when names tie.
       .order('first_name', { ascending: true })
       .order('id', { ascending: true })
@@ -73,8 +82,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     // Create client
     const clientData = {
+      org_id: orgId,
       first_name: body.first_name,
       last_name: body.last_name || body.first_name,
       email: body.email || null,
@@ -106,10 +119,35 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Client created:', newClient.id)
 
-    // Save preferences if provided
-    if (body.preferences) {
+    // ============================================
+    // Optional companion records
+    // ============================================
+    // Each of these was wrapped in try/catch and awaited without ever reading
+    // the result. supabase-js REPORTS a failed write by resolving with `{error}`
+    // — it does not throw — so the catch could never fire, every one of them
+    // logged "✅ saved" unconditionally, and the route returned 201 for a client
+    // whose preferences, notes and WhatsApp link had all silently gone nowhere.
+    // The error is read now, and what actually failed is reported to the caller.
+    const failures: string[] = []
+
+    const attempt = async (label: string, run: () => PromiseLike<{ error: unknown }>) => {
       try {
-        await supabase
+        const { error } = await run()
+        if (error) {
+          console.error(`❌ Could not save ${label}:`, error)
+          failures.push(label)
+          return
+        }
+        console.log(`✅ ${label} saved`)
+      } catch (e) {
+        console.error(`❌ Could not save ${label}:`, e)
+        failures.push(label)
+      }
+    }
+
+    if (body.preferences) {
+      await attempt('preferences', () =>
+        supabase
           .from('client_preferences')
           .insert({
             client_id: newClient.id,
@@ -119,16 +157,12 @@ export async function POST(request: NextRequest) {
             special_needs: body.preferences.special_needs || null,
             preferred_tier: body.preferences.tier || 'standard'
           })
-        console.log('✅ Client preferences saved')
-      } catch (e) {
-        console.warn('⚠️ Could not save preferences:', e)
-      }
+      )
     }
 
-    // Save note if provided
     if (body.note) {
-      try {
-        await supabase
+      await attempt('note', () =>
+        supabase
           .from('client_notes')
           .insert({
             client_id: newClient.id,
@@ -136,31 +170,30 @@ export async function POST(request: NextRequest) {
             note_type: 'general',
             is_internal: true
           })
-        console.log('✅ Client note saved')
-      } catch (e) {
-        console.warn('⚠️ Could not save note:', e)
-      }
+      )
     }
 
-    // Link WhatsApp conversation if phone provided
     if (body.link_whatsapp_phone) {
-      try {
-        await supabase
+      await attempt('whatsapp_link', () =>
+        supabase
           .from('whatsapp_conversations')
           .update({
             client_id: newClient.id,
             client_name: `${clientData.first_name} ${clientData.last_name}`.trim()
           })
           .eq('phone_number', body.link_whatsapp_phone)
-        console.log('✅ WhatsApp conversation linked')
-      } catch (e) {
-        console.warn('⚠️ Could not link WhatsApp:', e)
-      }
+      )
     }
 
+    // The client itself was created, so this is still a 201 — but a caller that
+    // sent notes and got back "success" with no mention of them would have no
+    // way to know they were lost.
     return NextResponse.json({
       success: true,
-      data: newClient
+      data: newClient,
+      ...(failures.length
+        ? { partial: true, failed_to_save: failures }
+        : {}),
     }, { status: 201 })
 
   } catch (error: any) {

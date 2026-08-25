@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { NextRequest, NextResponse } from 'next/server'
 
 // Admin client that bypasses RLS
@@ -8,6 +9,27 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// TENANT BOUNDARY for every handler in this file.
+//
+// The client id is a UUID in the URL and this file runs on the service-role
+// client, so before clients.org_id existed there was nothing at all stopping one
+// organisation from reading, editing or deleting another's customer by id. Each
+// handler now confirms the row belongs to the caller's org first, and answers a
+// plain 404 when it does not — a 403 would confirm the id exists.
+async function ownedClientId(id: string, orgId: string): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from('clients')
+    .select('id')
+    .eq('id', id)
+    .eq('org_id', orgId)
+    .maybeSingle()
+  return !!data
+}
+
+function notFound() {
+  return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+}
+
 // GET single client
 export async function GET(
   request: NextRequest,
@@ -15,12 +37,15 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
 
     const { data, error } = await supabaseAdmin
       .from('clients')
       .select('*')
       .eq('id', id)
-      .single()
+      .eq('org_id', orgId)
+      .maybeSingle()
 
     if (error) {
       console.error('Error fetching client:', error)
@@ -28,7 +53,7 @@ export async function GET(
     }
 
     if (!data) {
-      return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+      return notFound()
     }
 
     return NextResponse.json(data)
@@ -45,21 +70,30 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
 
-    // Remove id from body to prevent update conflicts
-    const { id: _, ...updateData } = body
+    // Drop `id` (update conflicts) and `org_id` — a caller must not be able to
+    // hand their customer to another organisation, or claim one from it.
+    const { id: _, org_id: __, ...updateData } = body
 
     const { data, error } = await supabaseAdmin
       .from('clients')
       .update(updateData)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) {
       console.error('Error updating client:', error)
       return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
+    }
+
+    if (!data) {
+      return notFound()
     }
 
     return NextResponse.json(data)
@@ -76,21 +110,30 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
 
-    // Remove id from body to prevent update conflicts
-    const { id: _, ...updateData } = body
+    // Drop `id` (update conflicts) and `org_id` — a caller must not be able to
+    // hand their customer to another organisation, or claim one from it.
+    const { id: _, org_id: __, ...updateData } = body
 
     const { data, error } = await supabaseAdmin
       .from('clients')
       .update(updateData)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) {
       console.error('Error updating client:', error)
       return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
+    }
+
+    if (!data) {
+      return notFound()
     }
 
     return NextResponse.json(data)
@@ -141,6 +184,13 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
+    // Ownership FIRST: everything below this point deletes, and it used to run
+    // on nothing but an id from the URL.
+    if (!(await ownedClientId(id, orgId))) return notFound()
+
     const { searchParams } = new URL(request.url)
     const force = searchParams.get('force') === 'true'
 
@@ -261,6 +311,7 @@ export async function DELETE(
       .from('clients')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
 
     if (error) {
       console.error('Error deleting client:', error)

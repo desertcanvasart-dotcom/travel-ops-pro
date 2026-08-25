@@ -7,7 +7,7 @@
 // on the user_profiles display mirror.
 
 import { NextResponse } from 'next/server'
-import { getCurrentUserRole } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserRole } from '@/lib/auth/current-org'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,5 +16,10 @@ export async function GET() {
   if (!role) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
   }
-  return NextResponse.json({ success: true, role })
+  // orgId travels with the role because browser-side writes need it too: the
+  // new-client form inserts directly and clients.org_id is NOT NULL. It is an
+  // identifier, not a secret — every itinerary the browser already reads
+  // carries it.
+  const orgId = await getCurrentOrgId()
+  return NextResponse.json({ success: true, role, orgId })
 }

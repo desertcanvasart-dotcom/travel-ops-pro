@@ -59,6 +59,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
 // restricts to admin/manager. GET stays session-only so lower roles can still
 // read. Matched by path prefix; mirrors the page-level permissions above.
 const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
+  // ---- Money (unchanged) ----
   { prefix: '/api/invoices', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/payments', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/commissions', roles: ['admin', 'manager'] },
@@ -67,7 +68,64 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   // The season calendar sets what customers are charged on the operator's own
   // high dates — a pricing decision, same audience as the rate tables.
   { prefix: '/api/pricing', roles: ['admin', 'manager'] },
+
+  // ---- Cost base (manager and above) ----
+  // These mirror the /rates, /hotels, /guides, /transportation and /attractions
+  // PAGE gates above. They were missing, and the page gate alone is theatre:
+  // every one of these routes runs on the RLS-bypassing service-role client, so
+  // a viewer who never sees the screen could still POST/PUT/DELETE the rate
+  // tables the whole pricing engine reads from.
+  { prefix: '/api/rates', roles: ['admin', 'manager'] },
+  { prefix: '/api/supplier-rates', roles: ['admin', 'manager'] },
+  { prefix: '/api/pricing-grid', roles: ['admin', 'manager'] },
+  { prefix: '/api/suppliers', roles: ['admin', 'manager'] },
+  { prefix: '/api/vehicles', roles: ['admin', 'manager'] },
+  { prefix: '/api/guides', roles: ['admin', 'manager'] },
+  { prefix: '/api/cruises', roles: ['admin', 'manager'] },
+  { prefix: '/api/exchange-rates', roles: ['admin', 'manager'] },
+
+  // ---- Org / staff administration ----
+  // team_members is the operating roster (who guides a trip, who meets a
+  // flight). Editing it is a manager act; it was open to any session.
+  { prefix: '/api/team-members', roles: ['admin', 'manager'] },
+  { prefix: '/api/departments', roles: ['admin', 'manager'] },
+  { prefix: '/api/organization', roles: ['admin'] },
+  { prefix: '/api/invitations', roles: ['admin'] },
+  { prefix: '/api/settings', roles: ['admin'] },
+  { prefix: '/api/integrations', roles: ['admin'] },
+  { prefix: '/api/partners', roles: ['admin', 'manager'] },
+
+  // ---- Customer-facing operations (agent and above) ----
+  // Mirrors the /clients, /itineraries, /tours, /tasks, /followups and
+  // /reminders page gates. A viewer is a read-only role and must not be able
+  // to create or delete a customer, a trip or a booking by calling the API.
+  { prefix: '/api/clients', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/itineraries', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/bookings', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/tours', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/templates', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/tasks', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/reminders', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/content-library', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/itinerary-resources', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/capacity', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/departures', roles: ['admin', 'manager', 'agent'] },
+
+  // ---- Outbound messaging (agent and above) ----
+  // Anything that puts a message in front of a real customer, supplier or
+  // partner. Not viewer-safe: a send cannot be taken back.
+  { prefix: '/api/whatsapp', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/send-email', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/send-supplier-document', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/email', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/gmail', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/copilot', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/supplier-documents', roles: ['admin', 'manager', 'agent'] },
 ]
+// Deliberately NOT listed, and therefore session-only for every role: the
+// self-service routes (/api/profile, /api/user, /api/user-preferences,
+// /api/avatar, /api/notifications) — a viewer must still be able to edit their
+// own profile and dismiss their own notifications.
 // NOTE: this gate matches by path PREFIX, so financial mutations on NESTED
 // action routes (e.g. /api/itineraries/[id]/generate-commissions, which creates
 // commission rows) are NOT covered here — those guard themselves in-route via
@@ -211,7 +269,14 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     '/api/cron/',
     '/api/tours/recalculate-prices',
     '/api/whatsapp/webhook',
-    '/api/whatsapp/status',
+    // EXACT route, not the '/api/whatsapp/status' prefix it used to be. That
+    // prefix also matched '/api/whatsapp/status-callback', which is how an
+    // unauthenticated, unsigned endpoint ended up writing to whatsapp_messages
+    // with the service role. Both Twilio routes now verify the X-Twilio-
+    // Signature themselves (lib/twilio-signature.ts); '/api/whatsapp/status'
+    // — which reports whether Twilio credentials are configured — is NOT a
+    // Twilio endpoint and goes back behind the session gate.
+    '/api/whatsapp/status-callback',
     '/api/auth/google/callback',
     '/api/auth/accounting/callback',
     // Deploy-verification probe: public by design, returns only the build

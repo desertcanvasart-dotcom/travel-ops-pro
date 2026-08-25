@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { loadFxIndex, convertLine, buildFxMeta, emptyFxSummary, type FxHole } from '@/lib/fx-report'
 import { SUPPORTED_CURRENCIES } from '@/lib/exchange-rate-api'
 
@@ -62,6 +63,15 @@ interface CommissionData {
 
 export async function GET(request: NextRequest) {
   try {
+    // TENANT BOUNDARY. supabaseAdmin is the service-role client and bypasses
+    // RLS, so without this filter the P&L, cashflow, tax and commission reports
+    // summed every organisation on the deployment into one set of totals and
+    // handed them to whichever manager asked. invoices, expenses and itineraries
+    // all carry org_id and are scoped everywhere else in the app; this route
+    // simply never applied it.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const searchParams = request.nextUrl.searchParams
     const reportType = searchParams.get('type') || 'overview' // overview, revenue, cashflow, tax, commission
     const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString())
@@ -91,33 +101,40 @@ export async function GET(request: NextRequest) {
     const { data: invoices, error: invError } = await supabaseAdmin
       .from('invoices')
       .select('invoice_number, issue_date, total_amount, amount_paid, balance_due, currency')
+      .eq('org_id', orgId)
       .gte('issue_date', rangeStart)
       .lte('issue_date', rangeEnd)
       .order('issue_date', { ascending: true })
 
-    if (invError) {
-      console.error('Error fetching invoices:', invError)
-    }
-
     const { data: expenses, error: expError } = await supabaseAdmin
       .from('expenses')
       .select('expense_number, expense_date, amount, status, category, supplier_name, currency')
+      .eq('org_id', orgId)
       .gte('expense_date', rangeStart)
       .lte('expense_date', rangeEnd)
       .order('expense_date', { ascending: true })
 
-    if (expError) {
-      console.error('Error fetching expenses:', expError)
-    }
-
     const { data: itineraries, error: itinError } = await supabaseAdmin
       .from('itineraries')
       .select('id, start_date, status, total_cost, currency')
+      .eq('org_id', orgId)
       .gte('start_date', rangeStart)
       .lte('start_date', rangeEnd)
 
-    if (itinError) {
-      console.error('Error fetching itineraries:', itinError)
+    // These three used to be logged and then stepped over, and the report was
+    // built from `invoices || []`. A failed expenses query therefore did not
+    // produce an error — it produced a P&L with no costs in it and a net profit
+    // equal to revenue, presented with the same authority as a correct one.
+    // This route already refuses to publish a number it cannot state honestly
+    // when an FX rate is missing (see fx_holes / complete:false below); a
+    // missing QUERY is strictly worse than a missing rate.
+    const loadError = invError || expError || itinError
+    if (loadError) {
+      console.error('Financial report source query failed:', { invError, expError, itinError })
+      return NextResponse.json(
+        { error: 'Could not load financial data', detail: loadError.message },
+        { status: 500 }
+      )
     }
 
     // ---------- FX normalisation ----------
@@ -203,10 +220,10 @@ export async function GET(request: NextRequest) {
     // Cheap min/max probe — replaces the full-table scan that produced
     // availableYears in the old code. Two tiny queries per table.
     const [invMinRes, invMaxRes, expMinRes, expMaxRes] = await Promise.all([
-      supabaseAdmin.from('invoices').select('issue_date').order('issue_date', { ascending: true }).limit(1).maybeSingle(),
-      supabaseAdmin.from('invoices').select('issue_date').order('issue_date', { ascending: false }).limit(1).maybeSingle(),
-      supabaseAdmin.from('expenses').select('expense_date').order('expense_date', { ascending: true }).limit(1).maybeSingle(),
-      supabaseAdmin.from('expenses').select('expense_date').order('expense_date', { ascending: false }).limit(1).maybeSingle(),
+      supabaseAdmin.from('invoices').select('issue_date').eq('org_id', orgId).order('issue_date', { ascending: true }).limit(1).maybeSingle(),
+      supabaseAdmin.from('invoices').select('issue_date').eq('org_id', orgId).order('issue_date', { ascending: false }).limit(1).maybeSingle(),
+      supabaseAdmin.from('expenses').select('expense_date').eq('org_id', orgId).order('expense_date', { ascending: true }).limit(1).maybeSingle(),
+      supabaseAdmin.from('expenses').select('expense_date').eq('org_id', orgId).order('expense_date', { ascending: false }).limit(1).maybeSingle(),
     ])
     const dateCandidates: (string | undefined | null)[] = [
       invMinRes.data?.issue_date,

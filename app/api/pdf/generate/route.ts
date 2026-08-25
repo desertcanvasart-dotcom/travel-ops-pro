@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import puppeteer from 'puppeteer'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
+import { escapeHtml as esc, money } from '@/lib/html-escape'
+
+// Fonts are the only thing this document legitimately fetches. Everything else
+// requested by the page is refused — see blockOffsiteRequests below.
+const ALLOWED_HOSTS = new Set(['fonts.googleapis.com', 'fonts.gstatic.com'])
 
 interface Itinerary {
   itinerary_code: string
@@ -115,7 +120,7 @@ function generateHTML(itinerary: Itinerary, days: Day[]): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${itinerary.itinerary_code} - Itinerary</title>
+  <title>${esc(itinerary.itinerary_code)} - Itinerary</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -494,10 +499,10 @@ function generateHTML(itinerary: Itinerary, days: Day[]): string {
         </div>
       </div>
       <div class="quote-box">
-        <div class="quote-number">${itinerary.itinerary_code}</div>
+        <div class="quote-number">${esc(itinerary.itinerary_code)}</div>
         <div class="quote-dates">
-          Issued: ${today}<br>
-          Valid until: ${validUntil}
+          Issued: ${esc(today)}<br>
+          Valid until: ${esc(validUntil)}
         </div>
       </div>
     </header>
@@ -506,20 +511,20 @@ function generateHTML(itinerary: Itinerary, days: Day[]): string {
     <div class="section-header">Client Information</div>
     <div class="client-card">
       <div class="client-info">
-        <h3>${itinerary.client_name}</h3>
-        <p>${itinerary.client_email}</p>
-        ${itinerary.client_phone ? `<p>${itinerary.client_phone}</p>` : ''}
+        <h3>${esc(itinerary.client_name)}</h3>
+        <p>${esc(itinerary.client_email)}</p>
+        ${itinerary.client_phone ? `<p>${esc(itinerary.client_phone)}</p>` : ''}
       </div>
       <div class="travel-info">
-        <p><strong>Travel Date:</strong> ${formatDate(itinerary.start_date)}</p>
-        <p><strong>Group:</strong> ${itinerary.num_adults} Adult${itinerary.num_adults !== 1 ? 's' : ''}${itinerary.num_children > 0 ? `, ${itinerary.num_children} Child${itinerary.num_children !== 1 ? 'ren' : ''}` : ''}</p>
-        <p><strong>Duration:</strong> ${itinerary.total_days} Day${itinerary.total_days !== 1 ? 's' : ''}</p>
+        <p><strong>Travel Date:</strong> ${esc(formatDate(itinerary.start_date))}</p>
+        <p><strong>Group:</strong> ${esc(itinerary.num_adults)} Adult${itinerary.num_adults !== 1 ? 's' : ''}${itinerary.num_children > 0 ? `, ${esc(itinerary.num_children)} Child${itinerary.num_children !== 1 ? 'ren' : ''}` : ''}</p>
+        <p><strong>Duration:</strong> ${esc(itinerary.total_days)} Day${itinerary.total_days !== 1 ? 's' : ''}</p>
       </div>
     </div>
     
     <!-- Tour Banner -->
     <div class="tour-banner">
-      <h2>${itinerary.trip_name.toUpperCase()}</h2>
+      <h2>${esc(String(itinerary.trip_name ?? '').toUpperCase())}</h2>
     </div>
     
     <!-- Detailed Itinerary -->
@@ -527,12 +532,12 @@ function generateHTML(itinerary: Itinerary, days: Day[]): string {
     ${days.map(day => `
       <div class="day-card">
         <div class="day-header">
-          <span class="day-badge">DAY ${day.day_number}</span>
-          <span class="day-title">${cleanDayTitle(day.title, day.day_number, day.city)}</span>
-          ${day.city ? `<span class="day-city">${day.city}</span>` : ''}
+          <span class="day-badge">DAY ${esc(day.day_number)}</span>
+          <span class="day-title">${esc(cleanDayTitle(day.title, day.day_number, day.city))}</span>
+          ${day.city ? `<span class="day-city">${esc(day.city)}</span>` : ''}
         </div>
-        ${day.description ? `<div class="day-description">${day.description}</div>` : ''}
-        ${day.overnight_city ? `<div class="overnight">Overnight: ${day.overnight_city}</div>` : ''}
+        ${day.description ? `<div class="day-description">${esc(day.description)}</div>` : ''}
+        ${day.overnight_city ? `<div class="overnight">Overnight: ${esc(day.overnight_city)}</div>` : ''}
       </div>
     `).join('')}
     
@@ -551,10 +556,10 @@ function generateHTML(itinerary: Itinerary, days: Day[]): string {
         <tbody>
           ${allServices.map(service => `
             <tr>
-              <td>${service.name}</td>
-              <td>${service.quantity}</td>
-              <td>${itinerary.currency} ${service.rate.toFixed(2)}</td>
-              <td><strong>${itinerary.currency} ${service.total.toFixed(2)}</strong></td>
+              <td>${esc(service.name)}</td>
+              <td>${esc(service.quantity)}</td>
+              <td>${esc(itinerary.currency)} ${money(service.rate)}</td>
+              <td><strong>${esc(itinerary.currency)} ${money(service.total)}</strong></td>
             </tr>
           `).join('')}
         </tbody>
@@ -564,10 +569,10 @@ function generateHTML(itinerary: Itinerary, days: Day[]): string {
     <div class="total-section">
       <div class="total-box">
         <div class="total-label">TOTAL PRICE</div>
-        <div class="total-amount">${itinerary.currency} ${itinerary.total_cost.toFixed(2)}</div>
+        <div class="total-amount">${esc(itinerary.currency)} ${money(itinerary.total_cost)}</div>
       </div>
     </div>
-    <div class="per-person">Per person: ${itinerary.currency} ${perPerson.toFixed(2)}</div>
+    <div class="per-person">Per person: ${esc(itinerary.currency)} ${money(perPerson)}</div>
     
     <!-- Payment & Cancellation -->
     <div class="section-header">Payment & Cancellation</div>
@@ -638,29 +643,91 @@ export async function POST(request: NextRequest) {
     // Generate HTML
     const html = generateHTML(itinerary, days || [])
 
-    // Launch Puppeteer
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--font-render-hinting=none'
-      ]
+    const pdf = await renderPdf(html)
+
+    // Return PDF. The filename goes into a response header, so it is stripped
+    // to characters that cannot terminate the quoted string or inject a header.
+    const safeName = String(itinerary.itinerary_code ?? 'itinerary').replace(/[^A-Za-z0-9._-]/g, '_')
+    return new NextResponse(Buffer.from(pdf), {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${safeName}.pdf"`,
+      },
     })
-    
+  } catch (error: any) {
+    console.error('PDF generation error:', error)
+    return NextResponse.json(
+      { error: 'Failed to generate PDF' },
+      { status: 500 }
+    )
+  }
+}
+
+// ============================================
+// RENDERING
+// ============================================
+// Two things used to go wrong here.
+//
+// 1. LEAKED BROWSERS. `browser.close()` sat on the success path with no finally,
+//    so any throw in setContent or page.pdf left a Chromium process running for
+//    the life of the container. A handful of failures and the container is out
+//    of memory — and the failure that starts it is the easiest thing in the
+//    world to trigger from the request body.
+//
+// 2. UNRESTRICTED NETWORK. The page is built from caller-supplied text and then
+//    handed to a real browser with the network open, so markup smuggled into a
+//    trip description could make the SERVER fetch a URL of the caller's
+//    choosing — a cloud metadata endpoint, an internal admin service — and, via
+//    an <img>, render the answer into the PDF it gets back. Only the font hosts
+//    the template actually uses are allowed through now; everything else is
+//    aborted before a connection is opened.
+async function renderPdf(html: string): Promise<Uint8Array> {
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: [
+      // Required in the container: it runs as an unprivileged user with no
+      // user-namespace support, and Chromium will not start otherwise. It is
+      // safe only because the page has no network reach and no local file
+      // access — which is what the interception below is for.
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--font-render-hinting=none'
+    ]
+  })
+
+  try {
     const page = await browser.newPage()
-    
-    // Set content and wait for fonts to load
-    await page.setContent(html, { 
-      waitUntil: ['networkidle0', 'domcontentloaded'] 
+
+    await page.setRequestInterception(true)
+    page.on('request', request => {
+      // The document itself is the HTML we just built and is served from
+      // memory by setContent — never a network fetch.
+      if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+        void request.continue()
+        return
+      }
+      let host = ''
+      try {
+        host = new URL(request.url()).hostname
+      } catch {
+        /* data: / about: URLs have no host — fall through to the check below */
+      }
+      const scheme = request.url().split(':', 1)[0]
+      if (scheme === 'data' || ALLOWED_HOSTS.has(host)) {
+        void request.continue()
+      } else {
+        console.warn('🚫 Blocked off-site request from PDF template:', request.url().slice(0, 200))
+        void request.abort()
+      }
     })
-    
-    // Wait a bit for fonts to fully load
+
+    // Bounded, so a page that never settles cannot hold the request open
+    // indefinitely.
+    await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 30_000 })
     await page.evaluateHandle('document.fonts.ready')
-    
-    // Generate PDF
-    const pdf = await page.pdf({
+
+    return await page.pdf({
       format: 'A4',
       printBackground: true,
       margin: {
@@ -677,21 +744,7 @@ export async function POST(request: NextRequest) {
         </div>
       `
     })
-    
+  } finally {
     await browser.close()
-
-    // Return PDF
-    return new NextResponse(Buffer.from(pdf), {
-      headers: {
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${itinerary.itinerary_code}.pdf"`,
-      },
-    })
-  } catch (error: any) {
-    console.error('PDF generation error:', error)
-    return NextResponse.json(
-      { error: 'Failed to generate PDF' },
-      { status: 500 }
-    )
   }
 }

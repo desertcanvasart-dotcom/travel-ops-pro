@@ -7,33 +7,66 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { timingSafeEqual } from 'node:crypto'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getTemplatePriceRange } from '@/lib/auto-pricing-service'
+import { requireRole } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// ============================================
+// WHO MAY RUN THIS
+// ============================================
+// This route is on the middleware self-auth allowlist, so middleware performs NO
+// session check on it — whatever guard exists has to be here. What was here did
+// not guard anything:
+//
+//   if (cronSecret && secret !== cronSecret) {
+//     const authHeader = request.headers.get('authorization')
+//     if (!authHeader) return 401
+//   }
+//
+// The header was tested for EXISTENCE, so `Authorization: x` with a wrong
+// ?secret= passed; and with CRON_SECRET unset the whole block was skipped and
+// the endpoint was simply public. Either way an anonymous caller could rewrite
+// the cached "from" price on every tour in the catalogue, repeatedly, each run
+// walking the entire pricing engine.
+//
+// Two ways in now, and nothing else:
+//   1. the scheduler, proving it holds CRON_SECRET (constant-time compare);
+//   2. a signed-in manager or above, the same audience as the rate tables.
+// With no CRON_SECRET configured the machine path is simply CLOSED rather than
+// open to everyone — an unset secret must never be the thing that unlocks it.
+
+function presentedSecret(request: NextRequest): string | null {
+  const bearer = request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
+  if (bearer) return bearer
+  return new URL(request.url).searchParams.get('secret')
+}
+
+function secretMatches(presented: string | null): boolean {
+  const expected = process.env.CRON_SECRET
+  if (!expected || !presented) return false
+  const a = Buffer.from(presented)
+  const b = Buffer.from(expected)
+  // timingSafeEqual throws on a length mismatch, which would itself leak length.
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
+/** null = allowed; a NextResponse = the refusal to return. */
+async function authorize(request: NextRequest): Promise<NextResponse | null> {
+  if (secretMatches(presentedSecret(request))) return null
+  return requireRole(['admin', 'manager'])
+}
+
 export async function POST(request: NextRequest) {
   try {
-    // Optional: verify cron secret for automated calls
-    const { searchParams } = new URL(request.url)
-    const secret = searchParams.get('secret')
-    const cronSecret = process.env.CRON_SECRET
-
-    // Allow if no secret is configured, or if it matches
-    if (cronSecret && secret !== cronSecret) {
-      // Also check authorization header for manual calls
-      const authHeader = request.headers.get('authorization')
-      if (!authHeader) {
-        return NextResponse.json(
-          { success: false, error: 'Unauthorized' },
-          { status: 401 }
-        )
-      }
-    }
+    const denied = await authorize(request)
+    if (denied) return denied
 
     // Parse request body for optional template ID
     let templateId: string | null = null
@@ -186,9 +219,14 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET endpoint to check status or trigger recalculation
+// GET endpoint to check recalculation status.
+// Gated too: it used to be wide open and returned the id and name of every
+// active tour template, which is the operator's product catalogue.
 export async function GET(request: NextRequest) {
   try {
+    const denied = await authorize(request)
+    if (denied) return denied
+
     // Check how many templates need price updates
     const { data: templates, error } = await supabaseAdmin
       .from('tour_templates')
