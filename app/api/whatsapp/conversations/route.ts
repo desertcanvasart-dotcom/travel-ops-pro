@@ -2,23 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createServerClient } from '@/lib/supabase-server'
-import { createClient } from '@supabase/supabase-js'
-
-// Service-role client for the DB work. This route is gated by middleware (an
-// authenticated session is required) and whatsapp_conversations has RLS policies
-// that do NOT permit the authenticated cookie client to UPDATE it — which is why
-// the soft-delete (hide) and the assign/unhide writes were silently matching 0
-// rows and the delete "did nothing". The list route (/api/unified/conversations)
-// already uses the service role for exactly this reason.
-const admin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 // GET /api/whatsapp/conversations - List all conversations
 export async function GET(request: NextRequest) {
   try {
-    const supabase = admin
+    const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || 'active'
     const search = sanitizeSearchTerm(searchParams.get('search')) || ''
@@ -90,7 +78,7 @@ export async function GET(request: NextRequest) {
 // POST /api/whatsapp/conversations - Create or get conversation
 export async function POST(request: NextRequest) {
   try {
-    const supabase = admin
+    const supabase = createServerClient()
     const body = await request.json()
     const { phone_number, client_name, client_id, auto_assign } = body
 
@@ -217,7 +205,7 @@ export async function POST(request: NextRequest) {
 // PATCH /api/whatsapp/conversations - Update conversation (archive, mark read, etc.)
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = admin
+    const supabase = createServerClient()
     const body = await request.json()
     const { conversation_id, action, agent_id, ...updates } = body
 
@@ -283,13 +271,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Conversation ID required' }, { status: 400 })
     }
 
-    // Attribute the action to the signed-in user (cookie client, read-only here).
-    const { data: { user } } = await createServerClient().auth.getUser()
+    const supabase = createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
 
-    // Soft delete — hide the conversation. Written via the service-role client:
-    // the authenticated cookie client is blocked by RLS from updating this table,
-    // so this used to match 0 rows and fail silently.
-    const { data, error } = await admin
+    // Soft delete — hide the conversation. maybeSingle() + an explicit 404 so a
+    // stale/unknown id returns "not found" instead of a 500.
+    const { data, error } = await supabase
       .from('whatsapp_conversations')
       .update({
         is_hidden: true,
