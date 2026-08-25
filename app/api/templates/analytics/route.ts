@@ -10,6 +10,7 @@
 // ============================================
 
 import { NextResponse } from 'next/server'
+import { requireRole } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -19,6 +20,11 @@ const supabaseAdmin = createClient(
 
 export async function GET() {
   try {
+    // Send analytics is operational reporting, not something a read-only viewer
+    // needs — manager and above, matching the other analytics surfaces.
+    const denied = await requireRole(['admin', 'manager'])
+    if (denied) return denied
+
     // Top templates by usage
     const { data: topTemplates } = await supabaseAdmin
       .from('message_templates')

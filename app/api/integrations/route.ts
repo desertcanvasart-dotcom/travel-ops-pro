@@ -21,6 +21,11 @@ const SAFE_COLUMNS =
 
 export async function GET() {
   try {
+    // Integration configuration (which providers are connected, their metadata)
+    // is an administrative surface — manager and above, mirroring the POST gate.
+    const denied = await requireRole(['admin', 'manager'])
+    if (denied) return denied
+
     const auth = await orgAuth()
     if (auth.error) {
       return NextResponse.json({ success: false, error: auth.error }, { status: auth.status })

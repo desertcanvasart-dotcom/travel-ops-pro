@@ -103,6 +103,10 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   // B2B quotes are customer-facing pricing. This prefix was MISSING from the
   // sweep that built this list, so every b2b route stayed open to any session:
   // a viewer could PUT a quote, and bulk-delete a page of them.
+  // Pricing config is manager-and-above (like the rate tables). MUST precede
+  // the general '/api/b2b' entry below — .find() takes the first match.
+  { prefix: '/api/b2b/pricing-rules', roles: ['admin', 'manager'] },
+  { prefix: '/api/b2b/transport-packages', roles: ['admin', 'manager'] },
   { prefix: '/api/b2b', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/b2c', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/itineraries', roles: ['admin', 'manager', 'agent'] },
@@ -149,12 +153,38 @@ const FINANCIAL_API_PREFIXES = [
   '/api/accounts-receivable',
   '/api/accounts-payable',
   '/api/analytics',
+  // The accounting integration's chart of accounts and sync status are
+  // financial data — manager and above, reads included.
+  '/api/accounting',
 ]
 
 export async function middleware(request: NextRequest, event: NextFetchEvent) {
   // The caller's role in their organisation — organization_members is the one
   // authority (see lib/auth/roles.ts). Resolved at most once per request and
   // shared by every gate below, since a request crosses two of them at most.
+  // Resolved at most once per request, shared by every gate below.
+  let isActivePromise: Promise<boolean> | null = null
+  const isAccountActive = async (userId: string): Promise<boolean> => {
+    if (!isActivePromise) {
+      isActivePromise = (async () => {
+        const { data } = await createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          { auth: { persistSession: false } }
+        )
+          .from('user_profiles')
+          .select('is_active')
+          .eq('id', userId)
+          .single()
+        // Absent profile → treat as active (do not lock out a brand-new account
+        // whose profile row has not been created yet); only an explicit false
+        // deactivates.
+        return (data as { is_active?: boolean } | null)?.is_active !== false
+      })()
+    }
+    return isActivePromise
+  }
+
   let membershipRolePromise: Promise<string | null> | null = null
   const membershipRole = async (userId: string): Promise<string | null> => {
     if (!membershipRolePromise) {
@@ -305,6 +335,15 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
   // bypasses RLS), leaving them callable by anonymous internet clients.
   if (isApiRoute && !isSelfAuthApi && !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // DEACTIVATED ACCOUNTS get nothing from the API — reads included. The
+  // is_active check used to live only inside the mutation block below, so a
+  // deactivated user could still GET analytics, accounts-receivable, the
+  // accounting chart and so on. is_active is account-level: deactivated here is
+  // deactivated everywhere.
+  if (isApiRoute && user && !(await isAccountActive(user.id))) {
+    return NextResponse.json({ error: 'Account inactive' }, { status: 403 })
   }
 
   // Role-gate financial API MUTATIONS (the routes use the RLS-bypassing
