@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getTieredActivityRate, applyActivityTiers } from '@/lib/rates/activity-tiers'
+import { makeDayTourVehicleFinder } from '@/lib/rates/day-tour-vehicle'
 import { calculateAutoPricing, calculatePricingWithPassengerBreakdown, ServiceTier, CHILD_DISCOUNT_PERCENT, loadSeasonWindows } from '@/lib/auto-pricing-service'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
@@ -135,43 +136,6 @@ function selectVehicleFromPackage(pkg: any, numPax: number): { rate: number; veh
     return { rate: pkg.minibus_rate, vehicle: 'Minibus' }
   } else {
     return { rate: pkg.bus_rate || pkg.minibus_rate, vehicle: 'Bus' }
-  }
-}
-
-// Select appropriate vehicle from vehicles table based on pax count and tier
-async function selectVehicleFromB2CTable(numPax: number, tier: string = 'standard'): Promise<{ rate: number; vehicle: string; id: string } | null> {
-  const { data: vehicles, error } = await supabaseAdmin
-    .from('vehicles')
-    .select('id, vehicle_type, name, daily_rate, passenger_capacity, tier, is_preferred')
-    .eq('is_active', true)
-    .order('is_preferred', { ascending: false })
-
-  if (error || !vehicles || vehicles.length === 0) return null
-
-  // First try to find a vehicle matching tier and capacity
-  let selectedVehicle = vehicles.find((v: any) => 
-    v.tier === tier && 
-    numPax <= (v.passenger_capacity || 99)
-  )
-
-  // Fallback: any vehicle that fits capacity
-  if (!selectedVehicle) {
-    selectedVehicle = vehicles.find((v: any) => 
-      numPax <= (v.passenger_capacity || 99)
-    )
-  }
-
-  // Final fallback: largest vehicle
-  if (!selectedVehicle) {
-    selectedVehicle = vehicles[vehicles.length - 1]
-  }
-
-  if (!selectedVehicle) return null
-
-  return {
-    rate: selectedVehicle.daily_rate || 0,
-    vehicle: selectedVehicle.vehicle_type || selectedVehicle.name || 'Vehicle',
-    id: selectedVehicle.id
   }
 }
 
@@ -624,6 +588,11 @@ export async function POST(request: NextRequest) {
     let optionalTotal = 0
 
     // Process each service
+    // Day-tour vehicle rates come from transportation_rates (the operator's
+    // catalog with their own capacity bands) — NOT the `vehicles` fleet list,
+    // which has no rates and priced these lines at 0. Cache built once per request.
+    const findDayTourVehicle = makeDayTourVehicleFinder()
+
     for (const service of (services || [])) {
       let unitCost = 0
       let lineTotal = 0
@@ -690,14 +659,14 @@ export async function POST(request: NextRequest) {
 
         switch (rateType) {
           case 'transportation': {
-            const vehicle = await selectVehicleFromB2CTable(num_pax, effectiveTier)
+            const vehicle = await findDayTourVehicle(service.city, num_pax, is_eur_passport)
             if (vehicle) {
               unitCost = vehicle.rate
               lineTotal = vehicle.rate
               effectiveQuantityMode = 'fixed'
               pricingNote = `${vehicle.vehicle}: ${rateSym}${vehicle.rate}/day`
-              rateSource = 'vehicles'
-              console.log(`✅ Vehicle from B2C: ${vehicle.vehicle} -> ${rateSym}${vehicle.rate}`)
+              rateSource = 'transportation_rates'
+              console.log(`✅ Vehicle from transportation_rates: ${vehicle.vehicle} -> ${rateSym}${vehicle.rate}`)
             }
             break
           }
