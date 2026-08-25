@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -14,9 +15,13 @@ const supabaseAdmin = createClient(
 
 export async function GET() {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { data, error } = await supabaseAdmin
       .from('b2b_transport_packages')
       .select('*')
+      .eq('org_id', orgId)
       .order('package_name')
 
     if (error) {
@@ -35,9 +40,13 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { data, error } = await supabaseAdmin
       .from('b2b_transport_packages')
       .insert({
+        org_id: orgId,
         package_code: body.package_code || `PKG-${Date.now()}`,
         package_name: body.package_name,
         package_type: body.package_type || 'cruise_sightseeing',

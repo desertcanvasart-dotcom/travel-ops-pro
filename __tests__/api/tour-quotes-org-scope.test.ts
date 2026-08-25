@@ -42,10 +42,10 @@ const touching = walk(join(ROOT, 'app'))
   .sort()
 
 // Files where an unscoped query is a deliberate, documented decision.
-const DELIBERATE: Record<string, string> = {
-  'app/api/b2b/partners/[id]/route.ts':
-    'refusal, not disclosure — blocks partner deletion while ANY org still quotes them',
-}
+// b2b/partners/[id] used to be a deliberate exception (partners were global);
+// P1b gave b2b_partners an org_id, so it is now scoped like everything else and
+// no longer belongs here.
+const DELIBERATE: Record<string, string> = {}
 
 describe('tour_quotes — insert paths', () => {
   const inserts = touching.filter(f => {

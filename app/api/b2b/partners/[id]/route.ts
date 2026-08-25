@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -18,6 +20,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
 
     const { data, error } = await supabaseAdmin
       .from('b2b_partners')
@@ -30,6 +34,7 @@ export async function GET(
         tour_quotes (id, quote_number, status, selling_price, created_at)
       `)
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (error) {
@@ -52,15 +57,22 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
-    const { id: _, created_at, ...updateData } = body
+    // Strip org_id too — a partner cannot be re-homed to another organisation.
+    const { id: _, org_id: _dropOrg, created_at, ...updateData } = body
 
     const { data, error } = await supabaseAdmin
       .from('b2b_partners')
       .update(updateData)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
-      .single()
+      .maybeSingle()
+
+    if (!error && !data) return notFoundInOrg('Partner')
 
     if (error) {
       return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -78,19 +90,30 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
 
-    // DELIBERATELY UNSCOPED. b2b_partners carries no org_id, so a partner is
-    // shared across organisations — and this is a refusal, not a disclosure: it
-    // blocks the delete if ANY organisation still has quotes against this
-    // partner. Narrowing it to our own org would let one operator delete a
-    // partner another is still quoting against. The safe direction here is the
-    // broader query.
-    const { data: quotes } = await supabaseAdmin
+    // Ownership first — b2b_partners is org-scoped as of
+    // 20260825_b2b_partner_pricing_transport_org_id.sql, so a partner belongs to
+    // exactly one organisation and this check is now both correct and safe.
+    if (!(await rowInOrg(supabaseAdmin, 'b2b_partners', id, orgId))) return notFoundInOrg('Partner')
+
+    // FAIL CLOSED. This reference check used to ignore its own error, so a
+    // failed lookup left `quotes` null and the delete proceeded — deleting a
+    // partner that quotes still referenced. A lookup error now blocks the
+    // delete rather than waving it through.
+    const { data: quotes, error: refErr } = await supabaseAdmin
       .from('tour_quotes')
       .select('id')
       .eq('partner_id', id)
       .limit(1)
 
+    if (refErr) {
+      return NextResponse.json(
+        { error: 'Could not verify partner references — delete refused.' },
+        { status: 500 }
+      )
+    }
     if (quotes && quotes.length > 0) {
       return NextResponse.json(
         { error: 'Cannot delete partner with existing quotes. Deactivate instead.' },
@@ -100,7 +123,7 @@ export async function DELETE(
 
     await supabaseAdmin.from('b2b_partner_pricing').delete().eq('partner_id', id)
 
-    const { error } = await supabaseAdmin.from('b2b_partners').delete().eq('id', id)
+    const { error } = await supabaseAdmin.from('b2b_partners').delete().eq('id', id).eq('org_id', orgId)
 
     if (error) {
       return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
