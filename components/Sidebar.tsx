@@ -169,9 +169,8 @@ const navigationConfig: NavConfig[] = [
     roles: ['admin', 'manager'],
     items: [
       { labelKey: 'pricingGrid', href: '/pricing-grid', icon: Calculator },
-      { labelKey: 'quotes', href: '/b2b/quotes', icon: FileText },
+      { labelKey: 'b2bQuotes', href: '/b2b/quotes', icon: FileText },
       { labelKey: 'b2cQuotes', href: '/b2c/quotes', icon: FileText },
-      { labelKey: 'pricingRules', href: '/b2b/pricing-rules', icon: Tags },
       { labelKey: 'partners', href: '/b2b/partners', icon: Handshake },
     ]
   },
@@ -197,6 +196,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'fixedCosts', href: '/rates/fixed-costs', icon: Droplets },
       { labelKey: 'commissionRates', href: '/rates/commissions', icon: Percent },
       { labelKey: 'seasonalPremiums', href: '/rates/seasons', icon: CalendarRange },
+      { labelKey: 'pricingRules', href: '/b2b/pricing-rules', icon: Tags },
     ]
   },
   {
