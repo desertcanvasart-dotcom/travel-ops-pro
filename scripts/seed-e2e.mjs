@@ -140,6 +140,32 @@ async function seed() {
     }
   }
 
+  // 1b. Profile row.
+  //
+  // In production a trigger on auth.users creates the user_profiles row on
+  // signup (the standard Supabase handle_new_user pattern). That trigger lives
+  // in the AUTH schema, which a `pg_dump --schema=public` cannot carry — so on a
+  // freshly-copied CI project the auth user exists with no profile, and the
+  // app's AuthContext.fetchProfile throws PGRST116 (0 rows) right after login,
+  // bouncing every test back to /login.
+  //
+  // Creating the row here makes the fixture self-contained: it does not depend
+  // on an auth-schema trigger being present, so it works on any project the
+  // schema was copied into. Upserted, so re-running the seed is a no-op.
+  await rest(
+    'POST',
+    `/rest/v1/user_profiles`,
+    {
+      id: user.id,
+      email,
+      full_name: 'E2E Smoke User',
+      role: 'owner',
+      is_active: true,
+    },
+    { Prefer: 'resolution=merge-duplicates' }
+  )
+  console.log('✓ user profile ensured')
+
   // 2. Organization
   let [org] = await select('organizations', `name=eq.${encodeURIComponent(ORG_NAME)}&select=id,name`)
   if (!org) {
