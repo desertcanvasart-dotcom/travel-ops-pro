@@ -94,8 +94,18 @@ const DURATIONS = [
 const PRICING_TYPES = [
   { value: 'per_person', label: 'Per Person', description: 'Rate multiplied by number of travelers', icon: PersonStanding },
   { value: 'per_unit', label: 'Per Unit', description: 'Flat rate per boat/vehicle/ride', icon: Ship },
-  { value: 'flat', label: 'Flat Rate', description: 'Single price regardless of group size', icon: Banknote }
+  { value: 'flat', label: 'Flat Rate', description: 'Single price regardless of group size', icon: Banknote },
+  { value: 'tiered', label: 'Tiered (Volume Discount)', description: 'Per-person rate decreases with group size', icon: Users }
 ]
+
+// A pax band for tiered pricing (mirrors lib/rates/activity-tiers.ts)
+interface TierRow {
+  min_pax: number
+  max_pax: number
+  rate_eur: number
+  rate_non_eur: number | null
+  label: string
+}
 
 // NEW: Common unit labels
 const UNIT_LABELS = [
@@ -128,8 +138,9 @@ interface ActivityRate {
   base_rate_eur: number
   base_rate_non_eur: number
   // NEW: Add-on pricing fields
-  pricing_type?: 'per_person' | 'per_unit' | 'flat'
+  pricing_type?: 'per_person' | 'per_unit' | 'flat' | 'tiered'
   unit_label?: string
+  tiers?: TierRow[] | null
   min_capacity?: number
   max_capacity?: number
   // Existing fields
@@ -155,6 +166,15 @@ export default function ActivityRatesContent() {
   // Currency conversion
   const { currency, formatWithConversion, rateCurrency } = useCurrency()
   const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
+  // Tiered rows keep base_rate at 0 — their price lives in the bands, so the
+  // list shows the cheapest per-person band instead of a misleading 0.
+  const displayRate = (rate: ActivityRate) => {
+    if (rate.pricing_type === 'tiered' && rate.tiers?.length) {
+      const lowest = Math.min(...rate.tiers.map(t => t.rate_eur))
+      return `${formatRate(lowest)}+`
+    }
+    return formatRate(rate.base_rate_eur)
+  }
 
   const [rates, setRates] = useState<ActivityRate[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -216,8 +236,9 @@ export default function ActivityRatesContent() {
     base_rate_eur: 0,
     base_rate_non_eur: 0,
     // NEW: Add-on pricing fields
-    pricing_type: 'per_person' as 'per_person' | 'per_unit' | 'flat',
+    pricing_type: 'per_person' as 'per_person' | 'per_unit' | 'flat' | 'tiered',
     unit_label: '',
+    tiers: [] as TierRow[],
     min_capacity: 1,
     max_capacity: 99,
     // Existing fields
@@ -282,6 +303,42 @@ export default function ActivityRatesContent() {
     }))
   }
 
+  // Tier-band handlers (pricing_type === 'tiered')
+  const addTier = () => {
+    setFormData(prev => {
+      const last = prev.tiers[prev.tiers.length - 1]
+      const min = last ? last.max_pax + 1 : 1
+      return { ...prev, tiers: [...prev.tiers, { min_pax: min, max_pax: min + 3, rate_eur: 0, rate_non_eur: null, label: '' }] }
+    })
+  }
+  const updateTier = (index: number, patch: Partial<TierRow>) => {
+    setFormData(prev => ({
+      ...prev,
+      tiers: prev.tiers.map((tier, i) => (i === index ? { ...tier, ...patch } : tier))
+    }))
+  }
+  const removeTier = (index: number) => {
+    setFormData(prev => ({ ...prev, tiers: prev.tiers.filter((_, i) => i !== index) }))
+  }
+
+  // A tiered rate must have coherent bands BEFORE it reaches the engine: at
+  // least one band, every rate positive (a 0 is an unpriced hole, not a free
+  // ride), and bands ascending without overlap.
+  const tierValidationError = (): string | null => {
+    if (formData.pricing_type !== 'tiered') return null
+    if (formData.tiers.length === 0) return 'Add at least one pricing tier.'
+    const sorted = [...formData.tiers].sort((a, b) => a.max_pax - b.max_pax)
+    for (const tier of sorted) {
+      if (tier.min_pax < 1 || tier.max_pax < tier.min_pax) return 'Each tier needs Min Pax ≥ 1 and Max Pax ≥ Min Pax.'
+      if (!(tier.rate_eur > 0)) return 'Each tier needs a rate above 0 — a blank or 0 rate is an unpriced hole.'
+      if (tier.rate_non_eur !== null && !(tier.rate_non_eur > 0)) return 'Non-EUR tier rates must be above 0 (or left empty).'
+    }
+    for (let i = 1; i < sorted.length; i++) {
+      if (sorted[i].min_pax <= sorted[i - 1].max_pax) return 'Tier pax bands must not overlap.'
+    }
+    return null
+  }
+
   const handleSupplierChange = (supplierId: string) => {
     const supplier = suppliers.find(s => s.id === supplierId)
     setFormData(prev => ({
@@ -303,8 +360,9 @@ export default function ActivityRatesContent() {
       city: '',
       base_rate_eur: 0,
       base_rate_non_eur: 0,
-      pricing_type: 'per_person',
+      pricing_type: 'per_person' as const,
       unit_label: '',
+      tiers: [] as TierRow[],
       min_capacity: 1,
       max_capacity: 99,
       season: '',
@@ -331,6 +389,7 @@ export default function ActivityRatesContent() {
       base_rate_non_eur: rate.base_rate_non_eur || 0,
       pricing_type: rate.pricing_type || 'per_person',
       unit_label: rate.unit_label || '',
+      tiers: rate.tiers || [],
       min_capacity: rate.min_capacity || 1,
       max_capacity: rate.max_capacity || 99,
       season: rate.season || '',
@@ -352,6 +411,12 @@ export default function ActivityRatesContent() {
     const invalid = firstInvalidMessage(e.currentTarget)
     if (invalid) {
       showNotification('error', 'Error', invalid)
+      return
+    }
+
+    const tierError = tierValidationError()
+    if (tierError) {
+      showNotification('error', 'Error', tierError)
       return
     }
 
@@ -451,6 +516,8 @@ export default function ActivityRatesContent() {
         return <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">{t('perUnit')}</span>
       case 'flat':
         return <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium">{t('flatRate')}</span>
+      case 'tiered':
+        return <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">Tiered</span>
       default:
         return <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">{t('perPerson')}</span>
     }
@@ -688,6 +755,7 @@ export default function ActivityRatesContent() {
             <option value="per_person">{t('pricingTypes.per_person')}</option>
             <option value="per_unit">{t('pricingTypes.per_unit')}</option>
             <option value="flat">{t('pricingTypes.flat')}</option>
+            <option value="tiered">Tiered</option>
           </select>
 
           {/* Category Filter */}
@@ -847,7 +915,7 @@ export default function ActivityRatesContent() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm font-bold text-green-600">{formatRate(rate.base_rate_eur)}</span>
+                      <span className="text-sm font-bold text-green-600">{displayRate(rate)}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm text-gray-600">{formatRate(rate.base_rate_non_eur)}</span>
@@ -921,7 +989,7 @@ export default function ActivityRatesContent() {
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                   <div>
                     <p className="text-xs text-gray-500">Rate</p>
-                    <p className="text-lg font-bold text-green-600">{formatRate(rate.base_rate_eur)}</p>
+                    <p className="text-lg font-bold text-green-600">{displayRate(rate)}</p>
                   </div>
                   <div className="flex gap-1">
                     <button
@@ -957,7 +1025,7 @@ export default function ActivityRatesContent() {
                   )}
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="text-sm font-bold text-green-600">{formatRate(rate.base_rate_eur)}</span>
+                  <span className="text-sm font-bold text-green-600">{displayRate(rate)}</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>
@@ -1155,7 +1223,7 @@ export default function ActivityRatesContent() {
                 </h3>
                 
                 {/* Pricing Type Selection */}
-                <div className="grid grid-cols-3 gap-3 mb-4">
+                <div className="grid grid-cols-2 gap-3 mb-4">
                   {PRICING_TYPES.map((type) => {
                     const Icon = type.icon
                     return (
@@ -1231,9 +1299,82 @@ export default function ActivityRatesContent() {
                     </p>
                   </div>
                 )}
+
+                {/* Tiered Settings - Only show when tiered is selected */}
+                {formData.pricing_type === 'tiered' && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                    <p className="text-xs font-medium text-purple-800 flex items-center gap-2">
+                      <Users className="w-4 h-4" />
+                      Volume-discount bands — per-person rate by group size. Groups larger than the last band use its rate.
+                    </p>
+                    {formData.tiers.map((tier, i) => (
+                      <div key={i} className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] gap-2 items-end">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Min Pax</label>
+                          <input
+                            type="number" min="1" required value={tier.min_pax || ''}
+                            onChange={(e) => updateTier(i, { min_pax: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Max Pax</label>
+                          <input
+                            type="number" min="1" required value={tier.max_pax || ''}
+                            onChange={(e) => updateTier(i, { max_pax: parseInt(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.eurRate')} <span className="text-gray-400 font-normal">/pax</span></label>
+                          <input
+                            type="number" min="0.01" step="0.01" required value={tier.rate_eur || ''}
+                            onChange={(e) => updateTier(i, { rate_eur: parseFloat(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.nonEurRate')} <span className="text-gray-400 font-normal">/pax</span></label>
+                          <input
+                            type="number" min="0.01" step="0.01" value={tier.rate_non_eur ?? ''}
+                            onChange={(e) => updateTier(i, { rate_non_eur: e.target.value === '' ? null : parseFloat(e.target.value) || 0 })}
+                            className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Label</label>
+                          <input
+                            type="text" value={tier.label} placeholder={`${tier.min_pax || 1}-${tier.max_pax || '?'}`}
+                            onChange={(e) => updateTier(i, { label: e.target.value })}
+                            className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeTier(i)}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                          title="Remove tier"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={addTier}
+                      className="flex items-center gap-1 text-sm text-purple-700 hover:text-purple-900 font-medium"
+                    >
+                      <Plus className="w-4 h-4" /> Add tier
+                    </button>
+                    <p className="text-xs text-purple-600">
+                      💡 Example: Felucca — 1-4 pax at 30/person, 5-15 pax at 20/person
+                    </p>
+                  </div>
+                )}
               </div>
 
-              {/* Rates */}
+              {/* Rates — for tiered pricing the rates live in the bands above */}
+              {formData.pricing_type !== 'tiered' && (
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">3</span>
@@ -1281,6 +1422,7 @@ export default function ActivityRatesContent() {
                   </div>
                 </div>
               </div>
+              )}
 
               {/* Link to Supplier */}
               <div className="mb-4">

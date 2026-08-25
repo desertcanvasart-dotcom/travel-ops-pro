@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
+import { getTieredActivityRate, applyActivityTiers } from '@/lib/rates/activity-tiers'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { loadSeasonWindows } from '@/lib/auto-pricing-service'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
@@ -25,93 +26,6 @@ const supabaseAdmin = createClient(
 // ============================================
 // HELPER FUNCTIONS (same as calculate-price/route.ts)
 // ============================================
-
-async function getB2BPricingRule(serviceName: string): Promise<any | null> {
-  const { data, error } = await supabaseAdmin
-    .from('b2b_pricing_rules')
-    .select('*')
-    .eq('is_active', true)
-    .ilike('service_name', `%${serviceName.split(' ')[0]}%`)
-    .limit(1)
-
-  if (error || !data || data.length === 0) return null
-  return data[0]
-}
-
-function applyB2BPricingRule(
-  rule: any,
-  numPax: number
-, rateSym: string): { unitCost: number; lineTotal: number; pricingNote: string; quantityMode: string } {
-  const model = rule.pricing_model
-
-  switch (model) {
-    case 'per_unit': {
-      let rate: number
-      let label: string
-
-      if (numPax <= (rule.tier1_max_pax || 999)) {
-        rate = rule.tier1_rate_eur
-        label = rule.tier1_label || 'Small'
-      } else if (rule.tier2_max_pax && numPax <= rule.tier2_max_pax) {
-        rate = rule.tier2_rate_eur
-        label = rule.tier2_label || 'Large'
-      } else {
-        const largeCapacity = rule.tier2_max_pax || rule.tier1_max_pax || 8
-        const largeRate = rule.tier2_rate_eur || rule.tier1_rate_eur
-        const unitsNeeded = Math.ceil(numPax / largeCapacity)
-        const totalCost = largeRate * unitsNeeded
-
-        return {
-          unitCost: totalCost,
-          lineTotal: totalCost,
-          pricingNote: `${unitsNeeded}x ${rule.tier2_label || rule.unit_type} @ ${rateSym}${largeRate} = ${rateSym}${totalCost}`,
-          quantityMode: 'fixed'
-        }
-      }
-
-      return {
-        unitCost: rate,
-        lineTotal: rate,
-        pricingNote: `${label}: ${rateSym}${rate} flat`,
-        quantityMode: 'fixed'
-      }
-    }
-
-    case 'tiered': {
-      let rate: number
-      let label: string
-
-      if (numPax <= (rule.tier1_max_pax || 2)) {
-        rate = rule.tier1_rate_eur
-        label = rule.tier1_label || `1-${rule.tier1_max_pax}`
-      } else if (numPax <= (rule.tier2_max_pax || 10)) {
-        rate = rule.tier2_rate_eur
-        label = rule.tier2_label || `${rule.tier1_max_pax + 1}-${rule.tier2_max_pax}`
-      } else if (numPax <= (rule.tier3_max_pax || 20)) {
-        rate = rule.tier3_rate_eur
-        label = rule.tier3_label || `${rule.tier2_max_pax + 1}-${rule.tier3_max_pax}`
-      } else {
-        rate = rule.tier4_rate_eur || rule.tier3_rate_eur
-        label = rule.tier4_label || `${rule.tier3_max_pax + 1}+`
-      }
-
-      return {
-        unitCost: rate,
-        lineTotal: rate * numPax,
-        pricingNote: `${label}: ${rateSym}${rate}/pax × ${numPax} = ${rateSym}${rate * numPax}`,
-        quantityMode: 'per_pax'
-      }
-    }
-
-    default:
-      return {
-        unitCost: rule.tier1_rate_eur || 0,
-        lineTotal: (rule.tier1_rate_eur || 0) * numPax,
-        pricingNote: 'Per person',
-        quantityMode: 'per_pax'
-      }
-  }
-}
 
 async function selectVehicleFromB2CTable(numPax: number, tier: string = 'standard'): Promise<{ rate: number; vehicle: string; id: string } | null> {
   const { data: vehicles, error } = await supabaseAdmin
@@ -431,16 +345,18 @@ export async function POST(request: NextRequest) {
         //
         // Try B2B-specific pricing for activities/entrance fees
         if (serviceType === 'entrance' || serviceType === 'activity') {
-          // Check B2B pricing rules first (tiered pricing like felucca)
-          const b2bRule = await getB2BPricingRule(serviceName)
-          const ruleResult = b2bRule ? applyB2BPricingRule(b2bRule, numPax, rateSym) : null
+          // Tiered activity pricing from the catalog first (volume discounts
+          // like felucca) — lives on activity_rates.tiers, not the old (always
+          // empty) b2b_pricing_rules table.
+          const tiered = await getTieredActivityRate(supabaseAdmin, serviceName)
+          const ruleResult = tiered ? applyActivityTiers(tiered.tiers, numPax, is_eur_passport, rateSym) : null
           if (ruleResult && usableRate(ruleResult.lineTotal) !== null) {
             const priceResult = ruleResult
             unitCost = priceResult.unitCost
             lineTotal = priceResult.lineTotal
             quantityMode = priceResult.quantityMode
             pricingNote = priceResult.pricingNote
-            rateSource = 'b2b_rule'
+            rateSource = 'activity_tiers'
           } else {
             // Try entrance_fees table
             const fee = await getEntranceFee(serviceName, is_eur_passport)
