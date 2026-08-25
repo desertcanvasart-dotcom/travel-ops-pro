@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { encryptToken } from '@/lib/crypto/token-cipher'
 import { createClient } from '@supabase/supabase-js'
 import { getAccountingProvider, AccountingProviderType } from '@/lib/accounting'
 import { verifyState } from '@/lib/oauth-state'
@@ -106,8 +107,8 @@ export async function GET(request: NextRequest) {
         user_id: userId,
         org_id: orgId,
         provider: providerName,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
+        access_token: encryptToken(tokens.access_token),
+        refresh_token: encryptToken(tokens.refresh_token),
         token_expiry: new Date(tokens.expiry_date).toISOString(),
         tenant_id: tokens.tenant_id || null,
         realm_id: tokens.realm_id || null,

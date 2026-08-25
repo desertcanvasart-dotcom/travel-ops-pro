@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { decryptToken, encryptToken } from '@/lib/crypto/token-cipher'
 import { clientMessage } from '@/lib/api-errors'
 import { google } from 'googleapis'
 import { createClient } from '@supabase/supabase-js'
@@ -52,8 +53,8 @@ export async function GET(request: NextRequest) {
     )
 
     oauth2Client.setCredentials({
-      access_token: tokenData.access_token,
-      refresh_token: tokenData.refresh_token,
+      access_token: decryptToken(tokenData.access_token),
+      refresh_token: decryptToken(tokenData.refresh_token),
     })
 
     // Check if token needs refresh
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
       await supabase
         .from('gmail_tokens')
         .update({
-          access_token: credentials.access_token,
+          access_token: encryptToken(credentials.access_token),
           token_expiry: new Date(credentials.expiry_date!).toISOString(),
           updated_at: new Date().toISOString(),
         })
