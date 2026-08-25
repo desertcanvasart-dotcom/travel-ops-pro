@@ -283,23 +283,24 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Conversation ID required', success: false }, { status: 400 })
     }
 
-    // Get current user for audit trail
-    const { data: { user } } = await supabase.auth.getUser()
-
-    // Soft delete - just hide the conversation
+    // Soft delete — hide the conversation. NOTE: email_conversations has only an
+    // is_hidden column (no hidden_at/hidden_by, unlike whatsapp_conversations).
+    // Writing those non-existent columns made PostgREST reject the whole UPDATE
+    // with PGRST204, so this endpoint always 500'd and the delete did nothing.
     const { data, error } = await supabase
       .from('email_conversations')
       .update({
         is_hidden: true,
-        hidden_at: new Date().toISOString(),
-        hidden_by: user?.id || null,
         updated_at: new Date().toISOString()
       })
       .eq('id', conversationId)
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) throw error
+    if (!data) {
+      return NextResponse.json({ error: 'Conversation not found', success: false }, { status: 404 })
+    }
 
     return NextResponse.json({
       success: true,
