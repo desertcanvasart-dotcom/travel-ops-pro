@@ -31,13 +31,22 @@ export async function POST(
     // matched against, and to verify the parent before touching the junction.
     const { data: invoice, error: invoiceError } = await supabaseAdmin
       .from('supplier_invoices')
-      .select('amount')
+      .select('amount, status')
       .eq('id', id)
       .eq('org_id', orgId)
       .single()
 
     if (invoiceError || !invoice) {
       return NextResponse.json({ error: 'Supplier invoice not found' }, { status: 404 })
+    }
+
+    // A paid or cancelled invoice is settled — re-running the match would flip
+    // its match_status and let the approve/pay flow act on it again.
+    if (invoice.status === 'paid' || invoice.status === 'cancelled') {
+      return NextResponse.json(
+        { error: `Cannot match an invoice with status '${invoice.status}'` },
+        { status: 409 }
+      )
     }
 
     // Fetch selected expenses — org-scoped so a caller can't link expenses

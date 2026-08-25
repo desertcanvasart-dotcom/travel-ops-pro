@@ -74,6 +74,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     // Validate required fields (use explicit null check for amount since 0 is falsy but valid)
+    if (Number(body.amount) < 0 || (body.amount !== '' && body.amount != null && !Number.isFinite(Number(body.amount)))) {
+      return NextResponse.json(
+        { error: 'amount must be a non-negative number' },
+        { status: 400 }
+      )
+    }
+
     if (!body.category || (body.amount == null || body.amount === '') || !body.expense_date) {
       return NextResponse.json(
         { error: 'Category, amount, and expense date are required' },
