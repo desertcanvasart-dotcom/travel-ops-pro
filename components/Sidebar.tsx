@@ -125,13 +125,12 @@ const navigationConfig: NavConfig[] = [
     ]
   },
   {
-    titleKey: 'communicationPricing',
+    titleKey: 'communications',
     key: 'communication',
     roles: ['admin', 'manager', 'agent'],
     items: [
       { labelKey: 'unifiedInbox', href: '/communications', icon: MessageSquare },
       { labelKey: 'emailInbox', href: '/inbox', icon: Mail },
-      { labelKey: 'pricingGrid', href: '/pricing-grid', icon: Calculator },
       { labelKey: 'messageTemplates', href: '/templates', icon: FileText },
       { labelKey: 'aiCopilot', href: '/copilot', icon: Sparkles },
       { labelKey: 'copilotKnowledge', href: '/copilot-knowledge', icon: BookOpen },
@@ -156,16 +155,24 @@ const navigationConfig: NavConfig[] = [
     ]
   },
   {
-    titleKey: 'b2b',
-    key: 'b2b',
+    titleKey: 'tours',
+    key: 'tours',
     roles: ['admin', 'manager'],
     items: [
-      { labelKey: 'tourBuilder', href: '/tours/manage', icon: LayoutTemplate },
+      { labelKey: 'tourTemplates', href: '/tours/manage', icon: LayoutTemplate },
       { labelKey: 'readyMadePackages', href: '/tours', icon: Package },
-      { labelKey: 'partners', href: '/b2b/partners', icon: Handshake },
+    ]
+  },
+  {
+    titleKey: 'salesPricing',
+    key: 'salesPricing',
+    roles: ['admin', 'manager'],
+    items: [
+      { labelKey: 'pricingGrid', href: '/pricing-grid', icon: Calculator },
       { labelKey: 'quotes', href: '/b2b/quotes', icon: FileText },
       { labelKey: 'b2cQuotes', href: '/b2c/quotes', icon: FileText },
       { labelKey: 'pricingRules', href: '/b2b/pricing-rules', icon: Tags },
+      { labelKey: 'partners', href: '/b2b/partners', icon: Handshake },
     ]
   },
   {
@@ -206,6 +213,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'expenses', href: '/expenses', icon: Receipt },
       { labelKey: 'commissions', href: '/commissions', icon: Handshake },
       { labelKey: 'profitLoss', href: '/profit-loss', icon: TrendingUp },
+      { labelKey: 'financialReports', href: '/financial-reports', icon: BarChart3 },
     ]
   },
   {
@@ -218,20 +226,11 @@ const navigationConfig: NavConfig[] = [
     ]
   },
   {
-    titleKey: 'reports',
-    key: 'reports',
-    roles: ['admin', 'manager'],
-    items: [
-      { labelKey: 'reports', href: '/financial-reports', icon: BarChart3 },
-    ]
-  },
-  {
     titleKey: 'settings',
     key: 'settings',
     roles: ['admin'],
     items: [
       { labelKey: 'settings', href: '/settings', icon: Settings },
-      { labelKey: 'integrations', href: '/settings/integrations', icon: Plug },
       { labelKey: 'userManagement', href: '/users', icon: Shield },
       { labelKey: 'activityLog', href: '/activity', icon: ScrollText },
     ]

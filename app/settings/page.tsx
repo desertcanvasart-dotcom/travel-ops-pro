@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
+import { PartnerIntegrationsPanel } from '@/components/settings/PartnerIntegrationsPanel'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { createClient } from '@/app/supabase'
@@ -26,6 +27,7 @@ import {
   Clock,
   Camera,
   Link as LinkIcon,
+  Plug,
   CheckCircle,
   AlertCircle,
   FileText,
@@ -85,13 +87,14 @@ interface UserPreferences {
 // TAB CONFIGURATION
 // ============================================
 
-const TAB_IDS = ['profile', 'email', 'notifications', 'preferences', 'integrations', 'organization'] as const
+const TAB_IDS = ['profile', 'email', 'notifications', 'preferences', 'integrations', 'partners', 'organization'] as const
 const TAB_ICONS = {
   profile: User,
   email: Mail,
   notifications: Bell,
   preferences: Settings,
   integrations: LinkIcon,
+  partners: Plug,
   organization: Building2,
 }
 
@@ -1383,6 +1386,7 @@ function SettingsContent() {
               {activeTab === 'notifications' && renderNotificationsTab()}
               {activeTab === 'preferences' && renderPreferencesTab()}
               {activeTab === 'integrations' && renderIntegrationsTab()}
+              {activeTab === 'partners' && <PartnerIntegrationsPanel />}
               {activeTab === 'organization' && (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                   <div className="flex items-start gap-4">
