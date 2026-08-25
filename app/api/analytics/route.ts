@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { loadFxIndex, convertLine, buildFxMeta, emptyFxSummary, type FxHole } from '@/lib/fx-report'
+import { SUPPORTED_CURRENCIES } from '@/lib/exchange-rate-api'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -34,6 +36,29 @@ export async function GET(request: NextRequest) {
   try {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
+
+    // ---------- Reporting currency ----------
+    // This dashboard is org-wide, so it has no single natural currency: this
+    // org holds JPY, EUR and USD trips. It used to SUM total_cost raw across
+    // all of them and the page then stamped the org's billing symbol on the
+    // result — ¥ on a number that was part euros. Same policy as
+    // /api/financial-reports now: pick one currency, convert every line at the
+    // rate on its own date, and exclude what cannot be converted rather than
+    // adding it at face value.
+    //
+    // Default is the ORG's billing currency, which is what the page displays,
+    // and the response states which currency it used so the two can never
+    // disagree.
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('default_currency')
+      .eq('id', orgId)
+      .maybeSingle()
+
+    const requested = (searchParams.get('currency') || org?.default_currency || 'EUR').toUpperCase()
+    const reportingCurrency = (SUPPORTED_CURRENCIES as readonly string[]).includes(requested)
+      ? requested
+      : 'EUR'
 
     // Calculate date range
     const now = new Date()
@@ -69,7 +94,7 @@ export async function GET(request: NextRequest) {
       // Itineraries (bookings) in date range
       supabase
         .from('itineraries')
-        .select('id, status, total_cost, start_date, destinations, created_at')
+        .select('id, status, total_cost, currency, start_date, destinations, created_at')
         .eq('org_id', orgId)
         .gte('created_at', startDateStr),
 
@@ -98,7 +123,7 @@ export async function GET(request: NextRequest) {
       // Revenue by week for trend chart
       supabase
         .from('itineraries')
-        .select('total_cost, created_at')
+        .select('total_cost, currency, start_date, created_at')
         .eq('org_id', orgId)
         .in('status', ['confirmed', 'completed'])
         .gte('created_at', startDateStr)
@@ -126,7 +151,51 @@ export async function GET(request: NextRequest) {
     const clients = clientsResult.data || []
     const leadsCount = leadsResult.count || 0
     const followUpsCount = followUpsResult.count || 0
-    const revenueData = revenueByWeekResult.data || []
+
+    // ---------- FX normalisation ----------
+    // A trip's money date is its START date, matching /api/financial-reports —
+    // so the same trip converts identically in both, and the dashboard cannot
+    // disagree with the P&L.
+    //
+    // COUNTS are deliberately NOT affected: a trip whose rate is missing is
+    // still a booking and still belongs in the pipeline. Only its MONEY is
+    // withheld, and the response says so via fx_holes / complete:false.
+    const fxIndex = await loadFxIndex(supabase)
+    const fx = emptyFxSummary()
+    const fxHoles: FxHole[] = []
+
+    const toReporting = (row: {
+      total_cost?: unknown
+      currency?: string | null
+      start_date?: string | null
+      created_at?: string | null
+      itinerary_code?: string | null
+      id?: string
+    }): number | null => {
+      const converted = convertLine(fxIndex, fx, {
+        amount: row.total_cost,
+        fromCurrency: row.currency,
+        toCurrency: reportingCurrency,
+        date: row.start_date ?? row.created_at ?? null,
+        kind: 'trip',
+        reference: row.itinerary_code || row.id || 'trip',
+      })
+      if (converted.hole) {
+        fxHoles.push(converted.hole)
+        return null
+      }
+      return converted.amount ?? 0
+    }
+
+    // One converted amount per trip, reused by the revenue total and the
+    // destination breakdown so they can never disagree.
+    const revenueById = new Map<string, number | null>()
+    for (const itin of itineraries) revenueById.set(itin.id, toReporting(itin))
+
+    const revenueData = (revenueByWeekResult.data || []).map(row => ({
+      ...row,
+      total_cost: toReporting(row),
+    }))
 
     // Calculate booking stats
     const bookingStats = {
@@ -141,8 +210,10 @@ export async function GET(request: NextRequest) {
     const confirmedItineraries = itineraries.filter(i => 
       i.status === 'confirmed' || i.status === 'completed'
     )
-    const totalRevenue = confirmedItineraries.reduce((sum, i) =>
-      sum + (parseFloat(i.total_cost) || 0), 0
+    // null = no usable rate; it is already recorded as a hole and must not be
+    // folded in at face value.
+    const totalRevenue = confirmedItineraries.reduce(
+      (sum, i) => sum + (revenueById.get(i.id) ?? 0), 0
     )
 
     // Calculate client stats
@@ -181,7 +252,7 @@ export async function GET(request: NextRequest) {
         const existing = destinationMap.get(city) || { bookings: 0, revenue: 0 }
         existing.bookings += 1
         if (itinerary.status === 'confirmed' || itinerary.status === 'completed') {
-          existing.revenue += parseFloat(itinerary.total_cost) || 0
+          existing.revenue += revenueById.get(itinerary.id) ?? 0
         }
         destinationMap.set(city, existing)
       })
@@ -196,7 +267,7 @@ export async function GET(request: NextRequest) {
     const previousStartDate = new Date(startDate.getTime() - (now.getTime() - startDate.getTime()))
     const { data: previousItineraries, error: previousError } = await supabase
       .from('itineraries')
-      .select('total_cost, status')
+      .select('total_cost, currency, start_date, status')
       .eq('org_id', orgId)
       .gte('created_at', previousStartDate.toISOString())
       .lt('created_at', startDateStr)
@@ -210,8 +281,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const previousRevenue = (previousItineraries || []).reduce((sum, i) =>
-      sum + (parseFloat(i.total_cost) || 0), 0
+    // Converted too — comparing a raw mixed-currency sum against a converted
+    // one would invent growth out of nothing but exchange rates.
+    const previousRevenue = (previousItineraries || []).reduce(
+      (sum, i) => sum + (toReporting(i) ?? 0), 0
     )
     
     const revenueGrowth = previousRevenue > 0 
@@ -234,6 +307,10 @@ export async function GET(request: NextRequest) {
       destinations,
       conversionRate,
       avgDealSize,
+      // Which currency these figures are stated in, plus what had to be left
+      // out to state them honestly. The page formats with reporting_currency
+      // rather than guessing, so the symbol always matches the arithmetic.
+      ...buildFxMeta(reportingCurrency, fx, fxHoles),
       // Pipeline specific data
       pipeline: {
         leads: leadsCount,
