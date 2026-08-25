@@ -6805,7 +6805,9 @@
     "packageDeleted": "パッケージが削除されました！",
     "failedToDeletePackage": "パッケージの削除に失敗しました",
     "deletePackageConfirm": "輸送パッケージ「{packageName}」を削除しますか？",
-    "leaveZeroUnlimited": "無制限の場合は0のまま"
+    "leaveZeroUnlimited": "無制限の場合は0のまま",
+    "vehicleRatesHint": "運行しない車両は料金を空欄にしてください — その車両は料金計算に使われず、次に大きい車両がそのグループを担当します。定員は自由に設定できます。",
+    "vehicleNotUsed": "未使用（料金なし）"
   },
   "b2bPartners": {
     "title": "B2Bパートナー",

@@ -137,6 +137,26 @@ export default function B2BPricingRulesPage() {
   // TRANSPORT PACKAGES HANDLERS
   // ============================================
 
+  // Mirror of the engine's vehicle selection (selectVehicleFromPackage): a
+  // vehicle with NO rate is skipped, so the next priced vehicle takes the group
+  // from the previous PRICED vehicle's capacity. The band starts shown here
+  // follow the same rule — what the operator sees is what the engine does.
+  // (Same model as the Transportation Rates screen: blank rate = vehicle not run.)
+  const pkgBandStart = (vehicle: 'minivan' | 'van' | 'minibus' | 'bus'): number => {
+    const chain = [
+      ['sedan', packageForm.sedan_rate, packageForm.sedan_capacity],
+      ['minivan', packageForm.minivan_rate, packageForm.minivan_capacity],
+      ['van', packageForm.van_rate, packageForm.van_capacity],
+      ['minibus', packageForm.minibus_rate, packageForm.minibus_capacity],
+    ] as const
+    const upto = { minivan: 1, van: 2, minibus: 3, bus: 4 }[vehicle]
+    let start = 1
+    for (const [, rate, capacity] of chain.slice(0, upto)) {
+      if (rate) start = capacity + 1
+    }
+    return start
+  }
+
   const handleAddPackage = () => {
     setEditingPackage(null)
     setPackageForm(DEFAULT_PACKAGE_FORM)
@@ -455,7 +475,8 @@ export default function B2BPricingRulesPage() {
               </div>
 
               <div>
-                <h4 className="font-medium text-gray-900 mb-3">{t('vehicleRates', { currency: rateCurrency })}</h4>
+                <h4 className="font-medium text-gray-900 mb-1">{t('vehicleRates', { currency: rateCurrency })}</h4>
+                <p className="text-xs text-gray-500 mb-3">{t('vehicleRatesHint')}</p>
                 <div className="grid grid-cols-5 gap-3">
                   <div className="p-3 bg-gray-50 rounded-lg">
                     <label className="block text-xs font-medium text-gray-600 mb-2">{t('sedan')}</label>
@@ -466,6 +487,7 @@ export default function B2BPricingRulesPage() {
                       className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-2"
                       placeholder={rateSymbol}
                     />
+                    {packageForm.sedan_rate ? (
                     <div className="flex items-center gap-1 text-xs text-gray-500">
                       <span>1-</span>
                       <input
@@ -476,6 +498,9 @@ export default function B2BPricingRulesPage() {
                       />
                       <span>pax</span>
                     </div>
+                    ) : (
+                    <div className="text-xs text-gray-400 italic">{t('vehicleNotUsed')}</div>
+                    )}
                   </div>
                   
                   <div className="p-3 bg-gray-50 rounded-lg">
@@ -487,8 +512,9 @@ export default function B2BPricingRulesPage() {
                       className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-2"
                       placeholder={rateSymbol}
                     />
+                    {packageForm.minivan_rate ? (
                     <div className="flex items-center gap-1 text-xs text-gray-500">
-                      <span>{packageForm.sedan_capacity + 1}-</span>
+                      <span>{pkgBandStart('minivan')}-</span>
                       <input
                         type="number"
                         value={packageForm.minivan_capacity}
@@ -497,6 +523,9 @@ export default function B2BPricingRulesPage() {
                       />
                       <span>pax</span>
                     </div>
+                    ) : (
+                    <div className="text-xs text-gray-400 italic">{t('vehicleNotUsed')}</div>
+                    )}
                   </div>
 
                   <div className="p-3 bg-gray-50 rounded-lg">
@@ -508,8 +537,9 @@ export default function B2BPricingRulesPage() {
                       className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-2"
                       placeholder={rateSymbol}
                     />
+                    {packageForm.van_rate ? (
                     <div className="flex items-center gap-1 text-xs text-gray-500">
-                      <span>{packageForm.minivan_capacity + 1}-</span>
+                      <span>{pkgBandStart('van')}-</span>
                       <input
                         type="number"
                         value={packageForm.van_capacity}
@@ -518,6 +548,9 @@ export default function B2BPricingRulesPage() {
                       />
                       <span>pax</span>
                     </div>
+                    ) : (
+                    <div className="text-xs text-gray-400 italic">{t('vehicleNotUsed')}</div>
+                    )}
                   </div>
 
                   <div className="p-3 bg-gray-50 rounded-lg">
@@ -529,8 +562,9 @@ export default function B2BPricingRulesPage() {
                       className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-2"
                       placeholder={rateSymbol}
                     />
+                    {packageForm.minibus_rate ? (
                     <div className="flex items-center gap-1 text-xs text-gray-500">
-                      <span>{packageForm.van_capacity + 1}-</span>
+                      <span>{pkgBandStart('minibus')}-</span>
                       <input
                         type="number"
                         value={packageForm.minibus_capacity}
@@ -539,6 +573,9 @@ export default function B2BPricingRulesPage() {
                       />
                       <span>pax</span>
                     </div>
+                    ) : (
+                    <div className="text-xs text-gray-400 italic">{t('vehicleNotUsed')}</div>
+                    )}
                   </div>
 
                   <div className="p-3 bg-gray-50 rounded-lg">
@@ -550,9 +587,13 @@ export default function B2BPricingRulesPage() {
                       className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-2"
                       placeholder={rateSymbol}
                     />
+                    {packageForm.bus_rate ? (
                     <div className="text-xs text-gray-500">
-                      {packageForm.minibus_capacity + 1}+ pax
+                      {pkgBandStart('bus')}+ pax
                     </div>
+                    ) : (
+                    <div className="text-xs text-gray-400 italic">{t('vehicleNotUsed')}</div>
+                    )}
                   </div>
                 </div>
               </div>

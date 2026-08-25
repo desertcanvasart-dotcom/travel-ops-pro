@@ -6219,7 +6219,9 @@
     "packageDeleted": "Package deleted!",
     "failedToDeletePackage": "Failed to delete package",
     "deletePackageConfirm": "Delete transport package \"{packageName}\"?",
-    "leaveZeroUnlimited": "Leave 0 for unlimited"
+    "leaveZeroUnlimited": "Leave 0 for unlimited",
+    "vehicleRatesHint": "Leave the rate empty for a vehicle you do not run — it is never used to price a trip, and the next vehicle up takes the group. Capacity is yours to set.",
+    "vehicleNotUsed": "Not used (no rate)"
   },
   "b2bPartners": {
     "title": "B2B Partners",

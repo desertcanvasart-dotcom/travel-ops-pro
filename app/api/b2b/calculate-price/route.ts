@@ -124,8 +124,11 @@ async function getTransportPackage(packageType: string, originCity: string, dest
   return data[0]
 }
 
-// Select vehicle from transport package based on group size
-function selectVehicleFromPackage(pkg: any, numPax: number): { rate: number; vehicle: string } {
+// Select vehicle from transport package based on group size. A vehicle with no
+// rate is one the operator does not run — skipped, the next size up takes the
+// group. Returns null (caller keeps the line's existing cost) rather than ever
+// pricing at 0 when the package has no usable rate at all.
+function selectVehicleFromPackage(pkg: any, numPax: number): { rate: number; vehicle: string } | null {
   if (numPax <= pkg.sedan_capacity && pkg.sedan_rate) {
     return { rate: pkg.sedan_rate, vehicle: 'Sedan' }
   } else if (numPax <= pkg.minivan_capacity && pkg.minivan_rate) {
@@ -134,9 +137,9 @@ function selectVehicleFromPackage(pkg: any, numPax: number): { rate: number; veh
     return { rate: pkg.van_rate, vehicle: 'Van' }
   } else if (numPax <= pkg.minibus_capacity && pkg.minibus_rate) {
     return { rate: pkg.minibus_rate, vehicle: 'Minibus' }
-  } else {
-    return { rate: pkg.bus_rate || pkg.minibus_rate, vehicle: 'Bus' }
   }
+  const overflow = pkg.bus_rate || pkg.minibus_rate || pkg.van_rate || pkg.minivan_rate || pkg.sedan_rate
+  return overflow ? { rate: overflow, vehicle: 'Bus' } : null
 }
 
 // Select guide from guides table based on language and tier
@@ -627,8 +630,8 @@ export async function POST(request: NextRequest) {
       if (rateSource === 'manual' && service.service_category === 'transportation') {
         if (service.service_name?.toLowerCase().includes('sightseeing')) {
           const pkg = await getTransportPackage('cruise_sightseeing', 'Luxor', 'Aswan')
-          if (pkg) {
-            const vehicle = selectVehicleFromPackage(pkg, num_pax)
+          const vehicle = pkg ? selectVehicleFromPackage(pkg, num_pax) : null
+          if (vehicle) {
             unitCost = vehicle.rate
             lineTotal = vehicle.rate
             effectiveQuantityMode = 'fixed'
@@ -640,8 +643,8 @@ export async function POST(request: NextRequest) {
         else if (service.service_name?.toLowerCase().includes('transfer') || 
                  service.service_name?.toLowerCase().includes('airport')) {
           const pkg = await getTransportPackage('cruise_transfer', 'Luxor', 'Aswan')
-          if (pkg) {
-            const vehicle = selectVehicleFromPackage(pkg, num_pax)
+          const vehicle = pkg ? selectVehicleFromPackage(pkg, num_pax) : null
+          if (vehicle) {
             unitCost = vehicle.rate
             lineTotal = vehicle.rate
             effectiveQuantityMode = 'fixed'
