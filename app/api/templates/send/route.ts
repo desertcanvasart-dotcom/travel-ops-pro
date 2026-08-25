@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentUserId } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError, sendEmail as gmailSendEmail } from '@/lib/gmail'
@@ -21,7 +22,8 @@ export async function POST(request: NextRequest) {
       recipient,
       subject,
       body: messageBody,
-      userId,        // Required for email channel
+      // NOTE: any `userId` in the body is IGNORED — the sender is the signed-in
+      // user (below), never a caller-supplied id.
     } = body
 
     if (!messageBody || !recipient) {
@@ -31,10 +33,21 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    // WHO sends comes from the session. templates/send used to take `userId`
+    // from the body and hand it to getAuthenticatedGmail — so any caller could
+    // send email FROM another user's connected Gmail account. And when no
+    // userId was given it fell back to "the first connected account in the
+    // table", a cross-tenant sender. Both are closed: the sender is the
+    // signed-in user, or the send fails.
+    const sessionUserId = await getCurrentUserId()
+    if (channel === 'email' && !sessionUserId) {
+      return NextResponse.json({ success: false, error: 'Not signed in' }, { status: 401 })
+    }
+
     let result
 
     if (channel === 'email') {
-      result = await sendEmail(recipient, subject, messageBody, userId)
+      result = await sendEmail(recipient, subject, messageBody, sessionUserId!)
     } else if (channel === 'whatsapp') {
       result = await sendWhatsApp(recipient, messageBody)
     } else {
@@ -121,29 +134,13 @@ async function sendEmail(
   to: string,
   subject: string,
   body: string,
-  userId?: string
+  userId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // If no userId provided, look up the first connected Gmail account
-    let effectiveUserId = userId
-    if (!effectiveUserId) {
-      const { data: tokens } = await supabase
-        .from('gmail_tokens')
-        .select('user_id')
-        .limit(1)
-        .single()
-
-      if (!tokens) {
-        return {
-          success: false,
-          error: 'Gmail not connected. Please connect your Gmail account in Settings.'
-        }
-      }
-      effectiveUserId = tokens.user_id
-    }
-
-    // Use the centralized Gmail auth helper
-    const { accessToken, refreshToken } = await getAuthenticatedGmail(effectiveUserId!)
+    // Sends from the SIGNED-IN user's own Gmail. The former "first connected
+    // account" fallback is gone: it sent from whichever account happened to be
+    // first in the table, regardless of tenant.
+    const { accessToken, refreshToken } = await getAuthenticatedGmail(userId)
     await gmailSendEmail(accessToken, refreshToken, to, subject, body)
 
     return { success: true }

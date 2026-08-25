@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { quoteInOrg, quoteNotFound } from '@/lib/b2b/quote-scope'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -129,14 +129,19 @@ export async function PUT(
     if (!(await quoteInOrg(supabaseAdmin, id, orgId))) return quoteNotFound()
     const body = await request.json()
 
-    // Remove id from body if present to avoid conflicts
-    const { id: _, ...updates } = body
+    // Strip id, org_id and the authorship fields from the update: a caller must
+    // not re-home the quote to another org, nor stamp who last touched it. The
+    // actor is the signed-in user.
+    const { id: _, org_id: _dropOrg, changed_by: _c, last_modified_by: _l, created_by: _cb, ...updates } = body
+    const actor = await getCurrentUserId()
     updates.updated_at = new Date().toISOString()
+    updates.last_modified_by = actor
 
     const { data, error } = await supabaseAdmin
       .from('tour_quotes')
       .update(updates)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
       .single()
 
@@ -150,7 +155,8 @@ export async function PUT(
     try {
       await supabaseAdmin.rpc('create_quote_revision', {
         p_quote_id: id,
-        p_changed_by: body.changed_by ?? null,
+        // Authorship is the signed-in user — never a client-supplied changed_by.
+        p_changed_by: actor,
         p_change_reason: body.change_reason ?? 'Quote updated',
       })
     } catch (revErr) {

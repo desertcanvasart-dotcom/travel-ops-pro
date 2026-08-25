@@ -105,6 +105,20 @@ describe('API mutation gate — coverage', () => {
   })
 })
 
+describe('P3 — audit authorship comes from the session, not the body', () => {
+  it.each([
+    ['app/api/b2b/quotes/[id]/route.ts', 'create_quote_revision'],
+    ['app/api/b2c/quotes/[id]/route.ts', 'create_b2c_quote_revision'],
+    ['app/api/supplier-invoices/[id]/approve/route.ts', 'approved_by'],
+  ])('%s does not stamp authorship from a client-supplied field', file => {
+    const code = readFileSync(join(process.cwd(), file), 'utf8')
+      .split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
+    expect(code, `${file} passes a body-supplied changed_by`).not.toMatch(/p_changed_by:\s*body\.changed_by/)
+    expect(code, `${file} attributes approval to body.userId`).not.toMatch(/approved_by:\s*body\.userId/)
+    expect(code, `${file} should derive the actor from getCurrentUserId`).toContain('getCurrentUserId')
+  })
+})
+
 describe('P2 — deactivated accounts and financial reads', () => {
   it('the middleware denies ALL API access to a deactivated account (reads included)', () => {
     // The old is_active check lived only inside the mutation block, so GETs
@@ -170,6 +184,8 @@ describe('routes that act on "me" resolve me from the session', () => {
     'app/api/avatar/upload/route.ts',
     'app/api/email/sync/route.ts',
     'app/api/copilot/drafts/[id]/send/route.ts',
+    // P3: send/attribution routes that used to trust a client-supplied user id.
+    'app/api/templates/send/route.ts',
   ]
 
   it.each(actOnCaller)('%s never trusts a user id from the request', file => {
