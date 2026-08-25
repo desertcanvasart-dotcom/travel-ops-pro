@@ -1,5 +1,7 @@
 // GET /api/b2c/quotes/[id]/revisions — revision history of a B2C offer.
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { parentQuoteInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -14,6 +16,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    // quote_revisions carries no org_id; scope through the parent b2c quote.
+    if (!(await parentQuoteInOrg(supabaseAdmin, 'b2c', id, orgId))) return notFoundInOrg('Quote')
+
     const { data: revisions, error } = await supabaseAdmin
       .from('quote_revisions')
       .select('id, version_number, is_current, changed_by, changed_at, change_reason, change_summary, changes_diff')

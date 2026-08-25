@@ -7,6 +7,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { generateReplyOptions } from '@/lib/ai/reply-suggestions'
@@ -17,11 +18,15 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-async function resolveThread(conversationId: string) {
+async function resolveThread(conversationId: string, orgId: string) {
+  // Scoped to the caller's org: communication_threads carries org_id, so a
+  // conversation id belonging to another organisation resolves to nothing
+  // rather than exposing (POST) or mutating its drafts.
   const { data } = await supabase
     .from('communication_threads')
     .select('id')
     .eq('email_conversation_id', conversationId)
+    .eq('org_id', orgId)
     .maybeSingle()
   return data?.id ?? null
 }
@@ -48,7 +53,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const threadId = await resolveThread(conversationId)
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
+    const threadId = await resolveThread(conversationId, orgId)
     if (!threadId) {
       return NextResponse.json({ success: false, error: 'No thread for this conversation' }, { status: 404 })
     }
@@ -64,7 +72,8 @@ export async function POST(request: NextRequest) {
       channel: 'email',
       count: body.count,
       instruction: body.instruction ?? null,
-      reviewerUserId: body.user_id ?? null,
+      // The reviewer is the signed-in user — never a client-supplied id.
+      reviewerUserId: await getCurrentUserId(),
       skipIfPendingExists: body.skip_if_pending_exists === true,
     })
 
@@ -89,7 +98,10 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       )
     }
-    const threadId = await resolveThread(conversationId)
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
+    const threadId = await resolveThread(conversationId, orgId)
     if (!threadId) return NextResponse.json({ success: true, drafts: [] })
 
     const { data, error } = await supabase

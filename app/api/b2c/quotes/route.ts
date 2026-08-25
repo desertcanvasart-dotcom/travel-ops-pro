@@ -12,7 +12,7 @@ import { loadSeasonWindows } from '@/lib/auto-pricing-service'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { NextRequest, NextResponse } from 'next/server'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,14 +21,23 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    // TENANT BOUNDARY — the service-role client bypasses RLS, so this filter is
+    // all that separates one operator's B2C quotes from another's.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
     const itineraryId = searchParams.get('itinerary_id')
-    const limit = parseInt(searchParams.get('limit') || '100', 10)
+    // Clamp the caller-supplied limit; an unbounded ?limit extracts the whole
+    // table and exhausts memory.
+    const rawLimit = parseInt(searchParams.get('limit') || '100', 10)
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 100
 
     let query = supabaseAdmin
       .from('b2c_quotes')
       .select('*, itineraries (id, trip_name, itinerary_code, client_name, client_email)')
+      .eq('org_id', orgId)
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -65,11 +74,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'itinerary_id is required' }, { status: 400 })
     }
 
-    // The itinerary is the source of truth for cost + org + client.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
+    // The itinerary is the source of truth for cost + org + client — and it is
+    // fetched WITHIN the caller's org, so a quote cannot be built against
+    // another organisation's trip.
     const { data: itinerary, error: itinErr } = await supabaseAdmin
       .from('itineraries')
       .select('id, org_id, start_date, total_cost, supplier_cost, currency, client_name, client_email')
       .eq('id', itinerary_id)
+      .eq('org_id', orgId)
       .single()
 
     if (itinErr || !itinerary) {

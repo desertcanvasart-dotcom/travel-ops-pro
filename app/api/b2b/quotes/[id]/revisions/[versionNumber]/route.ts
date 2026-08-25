@@ -4,6 +4,8 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { quoteInOrg, quoteNotFound } from '@/lib/b2b/quote-scope'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -18,6 +20,13 @@ export async function GET(
 ) {
   try {
     const { id, versionNumber } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    // The revision snapshot carries the full quote_data (pricing, margins,
+    // customer contacts); scope through the parent quote's org. #174 guarded the
+    // sibling revision routes but not this detail endpoint.
+    if (!(await quoteInOrg(supabaseAdmin, id, orgId))) return quoteNotFound()
+
     const versionNum = parseInt(versionNumber, 10)
     if (isNaN(versionNum) || versionNum < 1) {
       return NextResponse.json({ success: false, error: 'Invalid version number' }, { status: 400 })

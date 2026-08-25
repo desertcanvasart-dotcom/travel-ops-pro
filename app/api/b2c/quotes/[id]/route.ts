@@ -7,6 +7,8 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabaseAdmin = createClient(
@@ -20,10 +22,14 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { data, error } = await supabaseAdmin
       .from('b2c_quotes')
       .select('*, itineraries (id, trip_name, itinerary_code, client_name, client_email, total_cost)')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (error) return NextResponse.json({ success: false, error: 'Quote not found' }, { status: 404 })
@@ -39,8 +45,16 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await rowInOrg(supabaseAdmin, 'b2c_quotes', id, orgId))) return notFoundInOrg('Quote')
+
     const body = await request.json()
-    const { id: _drop, change_reason, changed_by, ...updates } = body
+    // `org_id` is stripped: a caller must not be able to move their quote to
+    // another organisation. `changed_by` is IGNORED — the audit actor is the
+    // signed-in user, not a client-supplied field (forgeable authorship).
+    const { id: _drop, org_id: _dropOrg, change_reason, changed_by: _dropActor, ...updates } = body
+    const actor = await getCurrentUserId()
 
     // If margin/travelers/total_cost change, recompute the derived prices so the
     // offer stays internally consistent.
@@ -66,6 +80,7 @@ export async function PUT(
       .from('b2c_quotes')
       .update(updates)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
       .single()
 
@@ -74,7 +89,7 @@ export async function PUT(
     try {
       await supabaseAdmin.rpc('create_b2c_quote_revision', {
         p_quote_id: id,
-        p_changed_by: changed_by ?? null,
+        p_changed_by: actor,
         p_change_reason: change_reason ?? 'Quote updated',
       })
     } catch (revErr) {
@@ -93,8 +108,17 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    const { error } = await supabaseAdmin.from('b2c_quotes').delete().eq('id', id)
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
+    const { data, error } = await supabaseAdmin
+      .from('b2c_quotes')
+      .delete()
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .select('id')
     if (error) return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
+    if (!data?.length) return notFoundInOrg('Quote')
     return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
