@@ -23,7 +23,8 @@ import {
   CheckCircle,
   Package,
   CalendarDays,
-  Layers
+  Layers,
+  AlertTriangle,
 } from 'lucide-react'
 
 const supabase = createClient()
@@ -77,6 +78,7 @@ export default function DashboardPage() {
     todayBookingsCreated: 0,
     todayPaymentsReceived: 0
   })
+  const [attention, setAttention] = useState<any[]>([])
   const [recentClients, setRecentClients] = useState<any[]>([])
   const [upcomingFollowups, setUpcomingFollowups] = useState<any[]>([])
   const [recentQuotes, setRecentQuotes] = useState<any[]>([])
@@ -93,8 +95,13 @@ export default function DashboardPage() {
     try {
       // One computed summary from the server (ops row, pipeline, today) —
       // every number here is calculated, none are hardcoded strings.
-      const summaryRes = await fetch('/api/dashboard/summary')
+      const [summaryRes, attentionRes] = await Promise.all([
+        fetch('/api/dashboard/summary'),
+        fetch('/api/dashboard/attention'),
+      ])
       const summary = summaryRes.ok ? (await summaryRes.json()).data : null
+      const attentionData = attentionRes.ok ? (await attentionRes.json()).data : null
+      setAttention(attentionData?.items || [])
 
       // Recent clients (side panel)
       const { data: clients } = await supabase
@@ -361,6 +368,54 @@ export default function DashboardPage() {
             startNowLabel={t('startNow')}
           />
         </div>
+      </div>
+
+      {/* Needs Attention — departures with a problem to fix before the group flies */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <AlertTriangle className={`w-4 h-4 ${attention.length > 0 ? 'text-amber-500' : 'text-gray-300'}`} />
+          <h3 className="text-base font-semibold text-gray-900">{t('needsAttention')}</h3>
+          {attention.length > 0 && (
+            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
+              {attention.length}
+            </span>
+          )}
+        </div>
+        {attention.length === 0 ? (
+          <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
+            <CheckCircle className="w-4 h-4 text-success" />
+            {t('allClear')}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {attention.map((item, i) => (
+              <Link
+                key={`${item.type}-${item.bookingId}-${i}`}
+                href={item.href}
+                className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <span
+                  className={`w-2 h-2 rounded-full flex-shrink-0 ${item.severity === 'urgent' ? 'bg-red-500' : 'bg-amber-400'}`}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {item.type === 'balance_due' && (item.detail.overdue
+                      ? t('attnBalanceOverdue', { amount: Number(item.detail.balanceDue).toLocaleString() })
+                      : t('attnBalanceDue', { amount: Number(item.detail.balanceDue).toLocaleString(), date: item.detail.dueDate || '' }))}
+                    {item.type === 'forms_incomplete' && t('attnForms', { submitted: item.detail.submitted, total: item.detail.total })}
+                    {item.type === 'no_guide' && t('attnNoGuide')}
+                    {item.type === 'change_request' && t('attnChangeRequest')}
+                  </p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {[item.bookingCode, item.tripName || item.clientName, item.startDate ? t('departsOn', { date: item.startDate }) : null]
+                      .filter(Boolean).join(' · ')}
+                  </p>
+                </div>
+                <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Main Content Grid */}
