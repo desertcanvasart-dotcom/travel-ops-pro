@@ -102,6 +102,104 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Query portal conversations — the traveller writing from their own
+    // booking page. Unlike the other two these are keyed on a BOOKING rather
+    // than a phone number or an address, so the same person's portal thread and
+    // WhatsApp chat stay separate. That is deliberate: one is tied to a trip.
+    if (channel === 'all' || channel === 'portal') {
+      let portalQuery = supabase
+        .from('portal_message_threads')
+        .select(`
+          id,
+          booking_id,
+          passenger_id,
+          last_message_at,
+          last_message_snippet,
+          last_sender,
+          staff_last_read_at,
+          created_at,
+          updated_at,
+          booking:bookings (
+            id,
+            booking_code,
+            trip_name,
+            client_name,
+            client_email
+          ),
+          passenger:booking_passengers (
+            first_name,
+            last_name,
+            family_name_kanji,
+            given_name_kanji
+          )
+        `)
+        .order('last_message_at', { ascending: false, nullsFirst: false })
+
+      // No client filter: bookings carry the client's details inline and have
+      // no client_id, so a portal thread cannot be narrowed to one client the
+      // way a WhatsApp or email conversation can. Filtering by client simply
+      // returns no portal rows rather than the wrong ones.
+      if (clientId) portalQuery = portalQuery.limit(0)
+
+      const { data: portalData, error: portalError } = await portalQuery.limit(limit)
+      if (portalError) throw portalError
+
+      for (const thread of portalData || []) {
+        const booking = Array.isArray(thread.booking) ? thread.booking[0] : thread.booking
+        const pax = Array.isArray(thread.passenger) ? thread.passenger[0] : thread.passenger
+
+        // A conversation nobody has written in yet is not a conversation.
+        if (!thread.last_message_at) continue
+
+        // Unread is derived, never stored: a message from the traveller newer
+        // than the last time staff read the thread.
+        const unread =
+          thread.last_sender === 'customer' &&
+          (!thread.staff_last_read_at || thread.last_message_at > thread.staff_last_read_at)
+            ? 1
+            : 0
+
+        if (hasUnread && unread === 0) continue
+
+        const travellerName = pax
+          ? [pax.family_name_kanji, pax.given_name_kanji].filter(Boolean).join(' ')
+            || [pax.last_name, pax.first_name].filter(Boolean).join(' ')
+          : null
+
+        const who = travellerName || booking?.client_name || 'Traveller'
+        if (search && !`${who} ${booking?.booking_code ?? ''}`.toLowerCase().includes(search.toLowerCase())) {
+          continue
+        }
+
+        conversations.push({
+          id: thread.id,
+          channel: 'portal',
+          identifier: booking?.booking_code || thread.booking_id,
+          client_id: null,
+          client_name: who,
+          client_email: booking?.client_email || null,
+          contact_info: booking?.booking_code || null,
+          // Saying WHICH conversation this is matters here in a way it does not
+          // for the other channels: one booking can hold a shared thread and a
+          // private thread per traveller.
+          subject: thread.passenger_id
+            ? `${booking?.trip_name || 'Trip'} — ${travellerName || 'traveller'} (private)`
+            : `${booking?.trip_name || 'Trip'} — whole party`,
+          last_message_snippet: thread.last_message_snippet,
+          last_message_at: thread.last_message_at,
+          unread_count: unread,
+          status: 'active',
+          assigned_team_member_id: null,
+          assigned_at: null,
+          created_at: thread.created_at,
+          updated_at: thread.updated_at,
+          is_hidden: false,
+          client: null,
+          assigned_agent: null,
+        })
+      }
+    }
+
     // Query Email conversations
     if (channel === 'all' || channel === 'email') {
       let emailQuery = supabase

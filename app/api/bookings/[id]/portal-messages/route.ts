@@ -16,11 +16,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
-import { sendEmailInternal } from '@/lib/email-send'
+import { sendStaffReply, MAX_MESSAGE_LENGTH } from '@/lib/portal/chat-reply'
 
 export const dynamic = 'force-dynamic'
-
-const MAX_BODY = 4000
 
 function admin() {
   return createClient(
@@ -159,95 +157,22 @@ export async function POST(
     }
 
     if (!body) return NextResponse.json({ error: 'Message is required' }, { status: 400 })
-    if (body.length > MAX_BODY) return NextResponse.json({ error: 'Message is too long' }, { status: 413 })
+    if (body.length > MAX_MESSAGE_LENGTH) return NextResponse.json({ error: 'Message is too long' }, { status: 413 })
 
-    const userId = await getCurrentUserId()
-    const { data: member } = await db
-      .from('team_members')
-      .select('name')
-      .eq('user_id', userId)
-      .maybeSingle()
-
-    const { data: message, error } = await db
-      .from('portal_messages')
-      .insert({
-        org_id: orgId,
-        thread_id: thread.id,
-        sender: 'staff',
-        sender_user_id: userId,
-        sender_name: member?.name || null,
-        body,
-      })
-      .select('id, sender, sender_name, body, created_at')
-      .single()
-
-    if (error || !message) {
-      console.error('[portal-messages] insert failed:', error?.message)
-      return NextResponse.json({ error: 'Could not send message' }, { status: 500 })
-    }
-
-    await db.from('portal_message_threads').update({
-      last_message_at: message.created_at,
-      last_message_snippet: body.slice(0, 160),
-      last_sender: 'staff',
-      staff_last_read_at: now,
-      updated_at: now,
-    }).eq('id', thread.id)
-
-    // Tell the traveller. A private thread emails that traveller; the shared
-    // thread emails the booking's contact.
-    let emailed = false
-    try {
-      let to = booking.client_email as string | null
-      if (thread.passenger_id) {
-        const { data: pax } = await db
-          .from('booking_passengers')
-          .select('email')
-          .eq('id', thread.passenger_id)
-          .maybeSingle()
-        to = pax?.email || to
-      }
-
-      const { data: link } = await db
-        .from('booking_portal_links')
-        .select('token')
-        .eq('booking_id', id)
-        .is('revoked_at', null)
-        .limit(1)
-        .maybeSingle()
-
-      if (to && link?.token) {
-        const base = (process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '')
-        const url = `${base}/portal/${link.token}`
-        const result = await sendEmailInternal({
-          to,
-          subject: `【${booking.trip_name || 'ご旅行'}】担当者からのご返信`,
-          // Deliberately does NOT quote the reply: the message may concern a
-          // passport or a payment, and email is the less private channel of
-          // the two. It says a reply is waiting and where to read it.
-          html: `
-            <p>${booking.client_name || 'お客様'} 様</p>
-            <p>担当者よりご返信いたしました。下記のページよりご確認ください。</p>
-            <p><a href="${url}">${url}</a></p>
-            <p>ご予約番号：${booking.booking_code || '-'}</p>
-          `,
-        })
-        emailed = Boolean(result?.success)
-      }
-    } catch (err) {
-      console.warn('[portal-messages] reply email failed:', err)
+    const result = await sendStaffReply(db, {
+      thread,
+      orgId,
+      userId: await getCurrentUserId(),
+      body,
+    })
+    if (!result.ok) {
+      return NextResponse.json({ error: result.error }, { status: result.status ?? 500 })
     }
 
     return NextResponse.json({
       success: true,
-      emailed,
-      message: {
-        id: message.id,
-        sender: message.sender,
-        senderName: message.sender_name,
-        body: message.body,
-        createdAt: message.created_at,
-      },
+      emailed: result.emailed,
+      message: result.message,
     })
   } catch (error) {
     console.error('Error in portal-messages POST:', error)
