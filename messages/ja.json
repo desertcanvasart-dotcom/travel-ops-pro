@@ -7408,7 +7408,19 @@
     "roleManagers": "マネージャー",
     "roleCoordinators": "コーディネーター",
     "department": "部門",
-    "noDepartment": "部門なし"
+    "noDepartment": "部門なし",
+    "systemUser": "システム利用者",
+    "invitationSent": "招待送信済み",
+    "inviteToSystem": "システムへ招待…",
+    "inviteDialogTitle": "システムへ招待",
+    "systemRole": "システム権限",
+    "sysRoleAgent": "エージェント — 日常業務（財務なし）",
+    "sysRoleManager": "マネージャー — 財務を含む",
+    "sysRoleAdmin": "管理者 — 全権限",
+    "sysRoleViewer": "閲覧者 — 読み取り専用",
+    "sendInvitation": "招待を送信",
+    "sending": "送信中…",
+    "inviteFailed": "招待を送信できませんでした"
   },
   "tasks": {
     "title": "タスク",
