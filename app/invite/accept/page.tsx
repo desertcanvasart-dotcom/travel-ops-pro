@@ -105,20 +105,49 @@ function AcceptInvitationContent() {
         }
       })
 
-      if (authError) {
+      // The account may ALREADY exist: an earlier attempt created the auth user
+      // and then failed before membership was granted (this is exactly what the
+      // 401'd accept call used to do — it stranded users with a login that
+      // every gate rejected). Detect both shapes Supabase uses to say so: an
+      // explicit "already registered" error, and the confirmation-enabled
+      // obfuscation where a user comes back with no identities.
+      const alreadyRegistered =
+        (authError && /already\s*registered|already\s*exists|user\s*already/i.test(authError.message)) ||
+        (!authError && authData?.user && Array.isArray(authData.user.identities) && authData.user.identities.length === 0)
+
+      if (authError && !alreadyRegistered) {
         throw new Error(authError.message)
       }
 
-      if (!authData.user) {
+      if (!alreadyRegistered && !authData.user) {
         throw new Error(t('failedToCreateAccount'))
       }
 
-      // Mark invitation as accepted
-      await fetch('/api/invitations/accept', {
+      // Grant membership either way. The invitation token proves the person
+      // controls the invited mailbox, and the accept route is idempotent (it
+      // resolves the profile by the invitation's email and tolerates a
+      // duplicate membership), so re-running it is safe and is what rescues a
+      // half-finished signup.
+      const acceptRes = await fetch('/api/invitations/accept', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token })
       })
+
+      if (alreadyRegistered) {
+        // Their password was set on the earlier attempt; the one typed now may
+        // not match. Try it — on success they land in the app as usual, and if
+        // it does not match we say so plainly instead of failing silently.
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: invitation!.email,
+          password,
+        })
+        if (signInError) {
+          const body = await acceptRes.json().catch(() => null)
+          if (!acceptRes.ok && body?.error) throw new Error(body.error)
+          throw new Error(t('accountExistsSignIn'))
+        }
+      }
 
       setSuccess(true)
       

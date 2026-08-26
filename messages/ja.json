@@ -2726,7 +2726,8 @@
     "creatingAccount": "アカウントを作成中...",
     "createAccount": "アカウントを作成",
     "alreadyHaveAccount": "すでにアカウントをお持ちですか？",
-    "signIn": "サインイン"
+    "signIn": "サインイン",
+    "accountExistsSignIn": "このアカウントは既に存在し、組織へのアクセス権を付与しました。既存のパスワードでサインインするか、「パスワードをお忘れですか？」から再設定してください。"
   },
   "whatsappParser": {
     "title": "WhatsAppから旅程へ",

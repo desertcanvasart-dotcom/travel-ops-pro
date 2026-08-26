@@ -40,3 +40,27 @@ describe('invitation accept is reachable without a session', () => {
     expect(code).toContain('has expired')
   })
 })
+
+describe('a half-finished signup is rescued, not stranded', () => {
+  const page = src('app/invite/accept/page.tsx')
+
+  it('detects an already-registered account (both Supabase shapes)', () => {
+    expect(page).toContain('alreadyRegistered')
+    expect(page).toMatch(/already\\s\*registered/)
+    // confirmation-enabled obfuscation: user returned with no identities
+    expect(page).toContain('identities.length === 0')
+  })
+
+  it('still calls accept so membership is granted on the second attempt', () => {
+    // the accept fetch must NOT sit behind the "new account only" path
+    const acceptIdx = page.indexOf("fetch('/api/invitations/accept'")
+    const guardIdx = page.indexOf('if (alreadyRegistered) {')
+    expect(acceptIdx).toBeGreaterThan(-1)
+    expect(acceptIdx).toBeLessThan(guardIdx)
+  })
+
+  it('signs the returning user in and explains a password mismatch', () => {
+    expect(page).toContain('signInWithPassword')
+    expect(page).toContain('accountExistsSignIn')
+  })
+})

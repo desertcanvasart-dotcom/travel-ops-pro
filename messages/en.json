@@ -5383,7 +5383,8 @@
     "creatingAccount": "Creating account...",
     "createAccount": "Create Account",
     "alreadyHaveAccount": "Already have an account?",
-    "signIn": "Sign in"
+    "signIn": "Sign in",
+    "accountExistsSignIn": "This account already exists and is now linked to your organization. Please sign in with your existing password, or use \"Forgot Password\" to reset it."
   },
   "tourBuilder": {
     "title": "Multi-Day Tour Builder",
