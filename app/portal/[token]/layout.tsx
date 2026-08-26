@@ -137,6 +137,8 @@ const CSS = `
 /* The conversation with the office. Sized for a thumb, like everything else
    the traveller touches. */
 .chat{margin:6px 0 4px}
+.chat-hours{list-style:none;margin:0 0 10px;padding:8px 12px;border:1px solid var(--line);
+  border-radius:8px;background:var(--card);font-size:13px;color:var(--soft);line-height:1.8}
 .chat-empty{font-size:14px;color:var(--soft);margin:10px 0}
 .chat-log{list-style:none;margin:10px 0;padding:0;display:flex;flex-direction:column;gap:10px}
 .chat-msg{display:flex;flex-direction:column;gap:2px;max-width:88%;padding:10px 12px;

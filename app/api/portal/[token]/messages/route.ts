@@ -18,7 +18,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { portalVerifyCookieName } from '@/lib/booking-portal'
 import { portalLinkContext } from '@/lib/portal/traveller-gate'
-import { parseSupportHours, acknowledgementJa, describeHoursJa, isOfficeOpen } from '@/lib/portal/support-hours'
+import {
+  parseSupportOffices,
+  acknowledgementJa,
+  describeOfficesJa,
+  isAnyOfficeOpen,
+  nextOpening,
+  formatInTravellerTimeJa,
+} from '@/lib/portal/support-hours'
 import { checkRateLimit, getClientIdentifier, rateLimitResponse } from '@/lib/rate-limit'
 import { notifyOrgManagers } from '@/lib/notify-managers'
 
@@ -83,13 +90,13 @@ async function threadForLink(
   return data
 }
 
-async function supportHoursFor(db: Db, orgId: string) {
+async function officesFor(db: Db, orgId: string) {
   const { data } = await db
     .from('organizations')
     .select('support_hours')
     .eq('id', orgId)
     .maybeSingle()
-  return parseSupportHours(data?.support_hours)
+  return parseSupportOffices(data?.support_hours)
 }
 
 export async function GET(
@@ -108,7 +115,7 @@ export async function GET(
   })
   if (!gate.ok) return NextResponse.json(gate.body, { status: gate.status })
 
-  const hours = await supportHoursFor(db, gate.booking.org_id)
+  const offices = await officesFor(db, gate.booking.org_id)
 
   // Reading is not writing: a thread is not created just because somebody
   // opened the page. An empty conversation is a legitimate answer.
@@ -137,11 +144,18 @@ export async function GET(
       .eq('id', thread.id)
   }
 
+  const now = new Date()
+  const open = isAnyOfficeOpen(offices, now)
+  const next = open ? null : nextOpening(offices, now)
+
   return NextResponse.json({
     success: true,
     messages: messages.map(publicShape),
-    hours: describeHoursJa(hours),
-    officeOpen: isOfficeOpen(hours, new Date()),
+    // One line per office, each on its own clock and working week.
+    hours: describeOfficesJa(offices),
+    officeOpen: open,
+    // Named in the traveller's clock, because that is the one they read.
+    nextOpening: next ? formatInTravellerTimeJa(next) : null,
   })
 }
 
@@ -198,14 +212,14 @@ export async function POST(
     .eq('sender', 'system')
 
   if ((priorCount ?? 0) === 0) {
-    const hours = await supportHoursFor(db, orgId)
+    const offices = await officesFor(db, orgId)
     const { data: ack } = await db
       .from('portal_messages')
       .insert({
         org_id: orgId,
         thread_id: thread.id,
         sender: 'system',
-        body: acknowledgementJa(hours, now),
+        body: acknowledgementJa(offices, now),
       })
       .select('id, sender, sender_name, body, created_at')
       .single()

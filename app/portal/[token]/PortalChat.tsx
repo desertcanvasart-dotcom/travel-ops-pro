@@ -40,8 +40,9 @@ const stamp = (iso: string) => {
 
 export default function PortalChat({ token }: { token: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [hours, setHours] = useState<string | null>(null)
+  const [hours, setHours] = useState<string[]>([])
   const [officeOpen, setOfficeOpen] = useState(false)
+  const [nextOpening, setNextOpening] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
@@ -56,8 +57,9 @@ export default function PortalChat({ token }: { token: string }) {
       if (!res.ok) return
       const json = await res.json()
       setMessages(json.messages ?? [])
-      setHours(json.hours ?? null)
+      setHours(json.hours ?? [])
       setOfficeOpen(Boolean(json.officeOpen))
+      setNextOpening(json.nextOpening ?? null)
     } finally {
       setLoading(false)
     }
@@ -113,13 +115,19 @@ export default function PortalChat({ token }: { token: string }) {
     <div className="chat">
       <p className="hint">
         ご不明な点はこちらからお気軽にお尋ねください。
-        {hours && (
-          <>
-            {' '}受付時間は <b>{hours}</b>（エジプト時間）です。
-            {!officeOpen && ' ただいま営業時間外のため、次の営業時間内にご返信いたします。'}
-          </>
+        {/* Out of hours, the NEXT opening in Japan time. "We reply from 15:00 on
+            Sunday" is a different message from "we are closed", and only one of
+            them stops somebody wondering if they have been forgotten. */}
+        {!officeOpen && nextOpening && (
+          <> ただいま受付時間外です。<b>{nextOpening}</b>（日本時間）以降にご返信いたします。</>
         )}
       </p>
+
+      {hours.length > 0 && (
+        <ul className="chat-hours">
+          {hours.map(line => <li key={line}>{line}</li>)}
+        </ul>
+      )}
 
       {messages.length === 0 ? (
         <p className="chat-empty">まだメッセージはありません。</p>

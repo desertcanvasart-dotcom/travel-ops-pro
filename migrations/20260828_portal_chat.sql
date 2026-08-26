@@ -22,7 +22,22 @@ ALTER TABLE public.organizations
   ADD COLUMN IF NOT EXISTS support_hours JSONB;
 
 COMMENT ON COLUMN public.organizations.support_hours IS
-  'When the office answers portal messages: {timezone, days:[1-7, Mon=1], from:"09:00", to:"17:00"}. NULL means no hours are stated and the portal shows no promise rather than an empty one.';
+  'A LIST of offices, each with its own clock and working week: [{label, labelJa, timezone, days:[1-7, Mon=1], from:"09:00", to:"17:00"}]. NULL means no hours are stated and the portal promises no reply time rather than promising wrongly.';
+
+-- The operator's actual offices. Two, on different working weeks: Cairo runs
+-- Sunday to Thursday, Tokyo and Osaka Monday to Friday. Between them they cover
+-- most of a Japanese waking day — Cairo's afternoon is the Japanese evening —
+-- which is why the portal can tell a traveller something better than "we are
+-- closed". Friday is Japan only, Sunday is Cairo only, Saturday is nobody.
+--
+-- Only set when unset, so re-running never overwrites hours the operator has
+-- since edited.
+UPDATE public.organizations
+SET support_hours = '[
+  {"label":"Tokyo / Osaka","labelJa":"東京・大阪","timezone":"Asia/Tokyo","days":[1,2,3,4,5],"from":"09:00","to":"17:00"},
+  {"label":"Cairo","labelJa":"カイロ","timezone":"Africa/Cairo","days":[7,1,2,3,4],"from":"09:00","to":"17:00"}
+]'::jsonb
+WHERE support_hours IS NULL;
 
 -- ── 2. One conversation.
 CREATE TABLE IF NOT EXISTS public.portal_message_threads (

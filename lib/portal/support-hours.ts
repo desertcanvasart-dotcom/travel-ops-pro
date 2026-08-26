@@ -1,42 +1,63 @@
 // ============================================
-// When the office answers, and what the traveller is told
+// When somebody answers, and what the traveller is told
 // ============================================
-// The office is in Egypt and the travellers are in Japan, six or seven hours
-// ahead. A message sent in the Japanese evening lands in Cairo overnight. That
-// is fine — as long as the traveller is TOLD, because the alternative is a
-// chat box that looks ignored at exactly the moment somebody is anxious about
-// a passport or a payment.
+// There are TWO offices, on different working weeks:
 //
-// So the portal states the hours, and the first message in a conversation gets
-// an automatic acknowledgement saying when a reply is coming. The
-// acknowledgement is stored as a real message rather than rendered as UI text:
-// the traveller sees it in sequence, and the operator can see exactly what was
-// promised and when.
+//   Tokyo / Osaka   Mon-Fri  09:00-17:00  Asia/Tokyo
+//   Cairo           Sun-Thu  09:00-17:00  Africa/Cairo
+//
+// Which matters more than it first looks. A single Cairo office would leave a
+// Japanese traveller writing in the evening waiting overnight; with a Japan
+// office on Japanese hours, and Cairo's afternoon landing in the Japanese
+// evening, the two together cover most of a Japanese waking day. Friday is
+// Japan only, Sunday is Cairo only, and Saturday nobody.
+//
+// So "are we open" is asked of ALL offices, and when none are, the traveller is
+// told WHEN the next one opens — in Japan time, because that is the clock they
+// are reading. "We reply at 9am tomorrow" is a different message from "we are
+// closed", and only one of them keeps somebody from worrying.
 
 /** days: 1 = Monday … 7 = Sunday, matching ISO. */
-export interface SupportHours {
+export interface SupportOffice {
+  label: string
+  labelJa: string
   timezone: string
   days: number[]
   from: string   // 'HH:MM'
   to: string     // 'HH:MM'
 }
 
+/** The portal is Japanese-only, so hours are quoted in the traveller's clock. */
+export const TRAVELLER_TIMEZONE = 'Asia/Tokyo'
+
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/
 
-/** Read the org's configured hours, or null when none are set. Nothing here
- *  invents a default: an office that has not stated its hours should promise
- *  nothing rather than promise wrongly. */
-export function parseSupportHours(value: unknown): SupportHours | null {
+function parseOffice(value: unknown): SupportOffice | null {
   if (!value || typeof value !== 'object') return null
   const v = value as Record<string, unknown>
   const timezone = typeof v.timezone === 'string' && v.timezone.trim() ? v.timezone.trim() : null
   const from = typeof v.from === 'string' ? v.from.trim() : ''
   const to = typeof v.to === 'string' ? v.to.trim() : ''
   const days = Array.isArray(v.days)
-    ? v.days.map(Number).filter(d => Number.isInteger(d) && d >= 1 && d <= 7)
+    ? [...new Set(v.days.map(Number).filter(d => Number.isInteger(d) && d >= 1 && d <= 7))].sort((a, b) => a - b)
     : []
-  if (!timezone || !HHMM.test(from) || !HHMM.test(to) || days.length === 0) return null
-  return { timezone, days, from, to }
+  if (!timezone || !HHMM.test(from) || !HHMM.test(to) || to <= from || days.length === 0) return null
+  const label = typeof v.label === 'string' && v.label.trim() ? v.label.trim() : timezone
+  const labelJa = typeof v.labelJa === 'string' && v.labelJa.trim() ? v.labelJa.trim() : label
+  return { label, labelJa, timezone, days, from, to }
+}
+
+/**
+ * Read the configured offices. Returns [] when nothing usable is configured —
+ * an office that has not stated its hours should promise nothing rather than
+ * have hours guessed for it.
+ *
+ * Accepts a bare object as well as an array, so a single-office configuration
+ * written before there were two does not silently stop working.
+ */
+export function parseSupportOffices(value: unknown): SupportOffice[] {
+  const raw = Array.isArray(value) ? value : value ? [value] : []
+  return raw.map(parseOffice).filter((o): o is SupportOffice => o !== null)
 }
 
 const minutes = (hhmm: string): number => {
@@ -44,66 +65,114 @@ const minutes = (hhmm: string): number => {
   return h * 60 + m
 }
 
-/** The weekday (ISO 1-7) and minute-of-day in the OFFICE's timezone, not the
- *  server's and not the traveller's. Intl does the conversion so this holds
- *  across daylight saving without a date library. */
-function officeClock(at: Date, timezone: string): { day: number; minute: number } {
+/** The weekday (ISO 1-7) and minute-of-day in a given zone. Intl does the
+ *  conversion, so this stays correct across daylight saving without a date
+ *  library — Cairo observes it, Tokyo does not. */
+function clockIn(at: Date, timezone: string): { day: number; minute: number } {
   const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: timezone,
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
+    timeZone: timezone, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
   }).formatToParts(at)
   const get = (t: string) => parts.find(p => p.type === t)?.value ?? ''
   const weekdays: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 }
-  const day = weekdays[get('weekday')] ?? 1
-  // '24' at midnight in some locales; normalise so 24:00 reads as 00:00.
-  const hour = Number(get('hour')) % 24
-  return { day, minute: hour * 60 + Number(get('minute')) }
+  return {
+    day: weekdays[get('weekday')] ?? 1,
+    minute: (Number(get('hour')) % 24) * 60 + Number(get('minute')),
+  }
 }
 
-/** Is the office open right now? */
-export function isOfficeOpen(hours: SupportHours | null, at: Date): boolean {
-  if (!hours) return false
-  const { day, minute } = officeClock(at, hours.timezone)
-  if (!hours.days.includes(day)) return false
-  return minute >= minutes(hours.from) && minute < minutes(hours.to)
+export function isOfficeOpen(office: SupportOffice, at: Date): boolean {
+  const { day, minute } = clockIn(at, office.timezone)
+  return office.days.includes(day) && minute >= minutes(office.from) && minute < minutes(office.to)
+}
+
+/** Is ANY office open? Which one does not matter to the traveller. */
+export function isAnyOfficeOpen(offices: SupportOffice[], at: Date): boolean {
+  return offices.some(o => isOfficeOpen(o, at))
+}
+
+const STEP_MS = 15 * 60 * 1000
+const HORIZON_MS = 8 * 24 * 60 * 60 * 1000
+
+/**
+ * The next moment any office is open, or null if none is within a week.
+ *
+ * Walks forward in quarter-hours rather than doing calendar arithmetic per
+ * zone. It is a rare path, the loop is under a thousand iterations, and it is
+ * correct across daylight saving and differing working weeks by construction —
+ * which hand-rolled date maths across two timezones is not.
+ */
+export function nextOpening(offices: SupportOffice[], at: Date): Date | null {
+  if (offices.length === 0) return null
+  for (let t = at.getTime() + STEP_MS; t <= at.getTime() + HORIZON_MS; t += STEP_MS) {
+    const when = new Date(t)
+    if (isAnyOfficeOpen(offices, when)) return when
+  }
+  return null
 }
 
 const JA_DAYS = ['', '月', '火', '水', '木', '金', '土', '日']
 
-/** "月〜金 9:00–17:00" — the run of days collapsed when it is contiguous,
- *  because "月・火・水・木・金" is a worse thing to read. */
-export function describeHoursJa(hours: SupportHours | null): string | null {
-  if (!hours) return null
-  const days = [...hours.days].sort((a, b) => a - b)
-  const contiguous = days.every((d, i) => i === 0 || d === days[i - 1] + 1)
-  const label = days.length === 1
-    ? JA_DAYS[days[0]]
-    : contiguous
-      ? `${JA_DAYS[days[0]]}〜${JA_DAYS[days[days.length - 1]]}`
-      : days.map(d => JA_DAYS[d]).join('・')
-  return `${label} ${hours.from}〜${hours.to}`
+/**
+ * "月〜金", and crucially "日〜木".
+ *
+ * The Egyptian working week runs Sunday to Thursday, which crosses the end of
+ * the ISO week: Sunday is 7 and Monday is 1, so a plain ascending check reads
+ * it as five scattered days and prints 日・月・火・水・木. The run is found by
+ * trying each day as a start and walking forward with the week wrapping, which
+ * is what "Sunday to Thursday" means to the person reading it.
+ */
+const dayLabel = (days: number[]): string => {
+  if (days.length === 1) return JA_DAYS[days[0]]
+  if (days.length === 7) return `${JA_DAYS[1]}〜${JA_DAYS[7]}`
+
+  const set = new Set(days)
+  const nextDay = (d: number) => (d === 7 ? 1 : d + 1)
+
+  for (const start of days) {
+    let cursor = start
+    let covered = 1
+    while (covered < days.length && set.has(nextDay(cursor))) {
+      cursor = nextDay(cursor)
+      covered++
+    }
+    if (covered === days.length) return `${JA_DAYS[start]}〜${JA_DAYS[cursor]}`
+  }
+  return days.map(d => JA_DAYS[d]).join('・')
+}
+
+/** One line per office: "東京・大阪 月〜金 9:00〜17:00（日本時間）". */
+export function describeOfficesJa(offices: SupportOffice[]): string[] {
+  return offices.map(o => `${o.labelJa} ${dayLabel(o.days)} ${o.from}〜${o.to}`)
+}
+
+/** "8月27日(火) 9:00" in the traveller's clock, not the office's. */
+export function formatInTravellerTimeJa(at: Date): string {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: TRAVELLER_TIMEZONE,
+    month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(at)
+  const get = (t: string) => parts.find(p => p.type === t)?.value ?? ''
+  const weekdays: Record<string, string> = {
+    Mon: '月', Tue: '火', Wed: '水', Thu: '木', Fri: '金', Sat: '土', Sun: '日',
+  }
+  // Number() strips the zero padding Intl adds when other fields are 2-digit:
+  // "8月30日", not "08月30日".
+  return `${Number(get('month'))}月${Number(get('day'))}日(${weekdays[get('weekday')] ?? ''}) ${Number(get('hour'))}:${get('minute')}`
 }
 
 /**
- * The automatic acknowledgement, in Japanese, for the first message of a
- * conversation.
+ * The automatic acknowledgement for the first message of a conversation.
  *
- * Deliberately does NOT promise a time when no hours are configured — an
- * office that has not said when it answers should not have words put in its
- * mouth. It still confirms the message arrived, which is the part that stops
- * the traveller wondering whether the button worked.
+ * Out of hours it names the next opening in JAPAN time. "We will reply from
+ * 9:00 on Tuesday" is a different message from "we are closed", and only one of
+ * them stops somebody wondering whether they have been forgotten.
  */
-export function acknowledgementJa(hours: SupportHours | null, at: Date): string {
+export function acknowledgementJa(offices: SupportOffice[], at: Date): string {
   const received = 'メッセージを受け付けました。'
-  const described = describeHoursJa(hours)
-  if (!described) {
-    return `${received}担当者より順次ご返信いたします。`
-  }
-  if (isOfficeOpen(hours, at)) {
-    return `${received}営業時間内ですので、担当者より順次ご返信いたします。（受付時間：${described} エジプト時間）`
-  }
-  return `${received}ただいま営業時間外のため、次の営業時間内に担当者よりご返信いたします。（受付時間：${described} エジプト時間）`
+  if (offices.length === 0) return `${received}担当者より順次ご返信いたします。`
+  if (isAnyOfficeOpen(offices, at)) return `${received}担当者より順次ご返信いたします。`
+
+  const next = nextOpening(offices, at)
+  if (!next) return `${received}担当者より順次ご返信いたします。`
+  return `${received}ただいま受付時間外です。${formatInTravellerTimeJa(next)}（日本時間）以降に担当者よりご返信いたします。`
 }
