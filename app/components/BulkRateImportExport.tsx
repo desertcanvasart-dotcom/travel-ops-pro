@@ -26,6 +26,7 @@ interface ImportState {
     inserted: number
     updated: number
     errors: any[]
+    warnings?: { kind: string; key: string; message: string }[]
   }
   error?: string
 }
@@ -164,6 +165,7 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
             inserted: data.inserted || 0,
             updated: data.updated || 0,
             errors: data.errors || [],
+            warnings: data.warnings || [],
           },
         }))
         onImportComplete?.()
@@ -176,6 +178,7 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
             inserted: data.inserted || 0,
             updated: data.updated || 0,
             errors: data.errors || [],
+            warnings: data.warnings || [],
           },
         }))
       }
@@ -326,10 +329,22 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
               {/* Done */}
               {importState.step === 'done' && importState.result && (
                 <div className="space-y-3">
-                  <div className="flex items-center gap-3 p-4 bg-green-50 rounded-lg">
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                    <span className="text-sm text-green-700">Import completed successfully!</span>
-                  </div>
+                  {/* "Successfully" is the wrong top line when some of the
+                      prices will not reach a quote — the detail below says so,
+                      and a green tick above it invites nobody to read on. */}
+                  {(importState.result.warnings?.length ?? 0) > 0 ? (
+                    <div className="flex items-center gap-3 p-4 bg-amber-50 rounded-lg">
+                      <AlertCircle className="w-5 h-5 text-amber-500" />
+                      <span className="text-sm text-amber-800">
+                        Import completed — but some rows need your attention below.
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 p-4 bg-green-50 rounded-lg">
+                      <CheckCircle className="w-5 h-5 text-green-500" />
+                      <span className="text-sm text-green-700">Import completed successfully!</span>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="p-3 bg-green-50 rounded-lg text-center">
                       <div className="text-xl font-bold text-green-600">{importState.result.inserted}</div>
@@ -340,6 +355,29 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
                       <div className="text-xs text-blue-600">Rows Updated</div>
                     </div>
                   </div>
+                  {/* Succeeded, but the prices will not reach a quote. Louder
+                      than the error block on purpose: an error is visibly a
+                      failure, whereas this looks like success until somebody
+                      wonders why the quote did not move. */}
+                  {(importState.result.warnings?.length ?? 0) > 0 && (
+                    <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg">
+                      <div className="text-sm font-medium text-amber-800 mb-1">
+                        Imported, but these prices will not change what is quoted
+                      </div>
+                      <div className="text-xs text-amber-700 mb-2">
+                        These rates already have dated rate periods, and pricing reads the
+                        periods rather than these columns. Edit the periods on the rate itself.
+                      </div>
+                      {importState.result.warnings!.slice(0, 8).map((w, i) => (
+                        <div key={i} className="text-xs text-amber-700">{w.message}</div>
+                      ))}
+                      {importState.result.warnings!.length > 8 && (
+                        <div className="text-xs text-amber-600 mt-1">
+                          ...and {importState.result.warnings!.length - 8} more
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {importState.result.errors.length > 0 && (
                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
                       <div className="text-sm font-medium text-amber-700 mb-1">Some errors occurred:</div>

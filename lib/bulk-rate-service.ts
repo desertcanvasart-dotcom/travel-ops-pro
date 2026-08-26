@@ -37,6 +37,16 @@ export interface ImportResult {
   inserted: number
   updated: number
   errors: ValidationError[]
+  /** Things that did not fail, but that the operator would want to know. A
+   *  spreadsheet whose prices will not reach a quote is the case this exists
+   *  for — see supersededByPeriods in the import route. */
+  warnings?: ImportWarning[]
+}
+
+export interface ImportWarning {
+  kind: 'periods_supersede_columns'
+  key: string
+  message: string
 }
 
 export interface ImportPreview {
