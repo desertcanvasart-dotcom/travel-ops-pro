@@ -31,6 +31,8 @@ export const CRON_JOBS: CronJob[] = [
   { name: 'rate-change-digest', schedule: '*/15 * * * *', handler: () => import('@/app/api/cron/rate-change-digest/route').then(m => m.GET) },
   { name: 'process-agent-memory', schedule: '0 2 * * *', handler: () => import('@/app/api/cron/process-agent-memory/route').then(m => m.GET) },
   { name: 'data-invariants', schedule: '15 3 * * *', handler: () => import('@/app/api/cron/data-invariants/route').then(m => m.GET) },
+  // Retention: destroy traveller passport scans once their trip has ended.
+  { name: 'purge-traveller-documents', schedule: '45 3 * * *', handler: () => import('@/app/api/cron/purge-traveller-documents/route').then(m => m.GET) },
 ]
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

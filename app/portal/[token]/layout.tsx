@@ -116,6 +116,20 @@ const CSS = `
 .radios label{display:flex;align-items:center;gap:6px;cursor:pointer}
 
 .paxbody h5{font-size:13px;margin:16px 0 6px;color:var(--soft);font-weight:700}
+
+/* Attached documents. A row reads as a fact already recorded, not a control:
+   the file is on the booking, and the only action is to take it back off. */
+.docs{margin:6px 0 4px}
+.docs input[type=file]{display:block;margin:6px 0 4px;font:inherit;font-size:13px;max-width:100%}
+.docs .doc-add{margin-top:6px}
+.doc-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;padding:8px 10px;margin:4px 0;
+  border:1px solid var(--line);border-radius:6px;background:#fafbf9}
+.doc-row .doc-name{font-size:14px;font-weight:600;word-break:break-all}
+.doc-row .doc-meta{font-size:12px;color:var(--soft)}
+.doc-row button{margin-left:auto;font:inherit;font-size:13px;padding:4px 10px;cursor:pointer;
+  border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--err)}
+.doc-row button:disabled{opacity:.5;cursor:default}
+.docs-error{font-size:13px;color:var(--err);margin:6px 0}
 .ins{margin-top:18px;padding:14px;border:1px solid var(--line);border-radius:8px;background:#fafbf9}
 .ins h4{margin-top:0}
 .tell{margin:10px 0}
@@ -196,5 +210,7 @@ footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);
   .issues{background:#241a19;border-color:#3a2422}
   .actions .ghost{background:#1b1f1b}
   .locked{background:#1b1f1b}
+  .doc-row{background:#131613}
+  .doc-row button{background:#1b1f1b}
 }
 `

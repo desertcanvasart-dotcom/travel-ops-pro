@@ -47,6 +47,7 @@ import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import PassengerManifest from '@/components/PassengerManifest'
 import SendConfirmationButton from '@/components/SendConfirmationButton'
 import PortalCoordinator from '@/app/components/PortalCoordinator'
+import TravellerDocumentsPanel from '@/app/components/TravellerDocumentsPanel'
 import BookingChangeRequests from '@/app/components/BookingChangeRequests'
 import InsuranceCard from '@/app/components/InsuranceCard'
 
@@ -421,6 +422,9 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
       {/* Portal: family (one link) or friends (a private link per traveller). */}
       <PortalCoordinator bookingId={resolvedParams.id} />
       <InsuranceCard bookingId={resolvedParams.id} />
+      {/* What travellers attached from their portal link. Renders nothing until
+          something has been uploaded. */}
+      <TravellerDocumentsPanel bookingId={resolvedParams.id} />
 
       {/* Tabs */}
       <div className="bg-white rounded-lg shadow-sm border mb-6">
