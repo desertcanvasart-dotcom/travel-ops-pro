@@ -38,6 +38,7 @@ import {
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
+import RatePeriodsImportExport from '@/app/components/RatePeriodsImportExport'
 import RateSeasonsEditor from '@/components/rates/RateSeasonsEditor'
 import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
 
@@ -835,6 +836,9 @@ export default function HotelsContent() {
                 {t('hotelCompanies')}
               </Link>
               <BulkRateImportExport tableName="accommodation_rates" onImportComplete={fetchRates} />
+              {/* The wide sheet above carries three fixed seasons; this one
+                  carries as many dated periods as the contract has. */}
+              <RatePeriodsImportExport entity="accommodation" />
               <button
                 onClick={handleAddNew}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
