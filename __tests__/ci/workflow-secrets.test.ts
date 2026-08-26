@@ -65,3 +65,39 @@ describe('GitHub workflows', () => {
     expect(ci, 'a missing secret outside a fork must fail the job').toMatch(/::error::[\s\S]*?exit 1/)
   })
 })
+
+// ============================================
+// Nor does a laptop
+// ============================================
+// The dedicated-project decision above protected CI and stopped at the laptop.
+// .env.local holds the PRODUCTION keys and nothing overrode them, so
+// `npm run test:e2e` run locally wrote to real customer data — and these specs
+// write: one creates a hotel rate, another a booking and a traveller.
+//
+// playwright.config.ts now refuses to start without a dedicated project. This
+// pins that refusal, because a config guard is exactly the kind of thing that
+// gets deleted to make a run go through.
+
+describe('the E2E suite refuses to run against production', () => {
+  const config = readFileSync(join(process.cwd(), 'playwright.config.ts'), 'utf8')
+
+  it('requires a dedicated project before it will start', () => {
+    expect(config).toContain('E2E_SUPABASE_URL')
+    expect(config).toMatch(/Refusing to run the E2E suite/)
+  })
+
+  it('points the dev server it boots at that same project', () => {
+    // Otherwise the fixtures would write to the throwaway project while the app
+    // under test still read and wrote production — the worst of both.
+    expect(config).toMatch(/webServer[\s\S]*env:\s*\{[\s\S]*NEXT_PUBLIC_SUPABASE_URL/)
+  })
+
+  it('leaves CI alone, which maps its own secrets already', () => {
+    expect(config).toContain('process.env.CI')
+  })
+
+  it('keeps an explicit, loud opt-in for proving a deploy', () => {
+    expect(config).toContain('E2E_ALLOW_PRODUCTION')
+    expect(config).toMatch(/writes to the PRODUCTION database/)
+  })
+})

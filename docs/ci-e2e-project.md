@@ -120,6 +120,40 @@ there. The gate now tells the two cases apart.
 
 ---
 
+## Running the suite locally
+
+The protection above covers CI. It used to stop there: `.env.local` holds the
+PRODUCTION keys, nothing overrode them, and so `npm run test:e2e` on a laptop
+wrote to real customer data. The specs write — one creates a hotel rate,
+another a booking and a traveller — so this was a live hazard, not a
+theoretical one.
+
+`playwright.config.ts` now refuses to start unless it is handed a dedicated
+project:
+
+```bash
+E2E_SUPABASE_URL=https://<ci-project>.supabase.co \
+E2E_SUPABASE_ANON_KEY=... \
+E2E_SUPABASE_SERVICE_ROLE_KEY=... \
+E2E_EMAIL=... E2E_PASSWORD=... \
+npm run test:e2e
+```
+
+Those three keys are applied to the tests **and** to the dev server Playwright
+boots, so both halves talk to the same throwaway project. `E2E_EMAIL` and
+`E2E_PASSWORD` must be a login that exists in THAT project — the production
+one will not authenticate against it.
+
+Put them in a `.env.e2e` you source, not in `.env.local`: `.env.local` is what
+`next dev` reads, and pointing your own development server at the CI project is
+not what you want.
+
+To run against production deliberately — proving a deploy, which is a real and
+occasional need — set `E2E_ALLOW_PRODUCTION=1`. The run prints a warning each
+time, and it writes to live data.
+
+---
+
 ## Keeping it working
 
 The CI project's schema drifts as production's does. When a migration lands,
