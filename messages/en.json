@@ -420,7 +420,15 @@
     "vsLastMonth": "vs {count} last month",
     "unifiedInbox": "Unified Inbox",
     "manageConversations": "WhatsApp & email conversations",
-    "paymentsReceived": "Payments Received"
+    "paymentsReceived": "Payments Received",
+    "needsAttention": "Needs Attention",
+    "allClear": "All clear — nothing needs your attention right now.",
+    "attnBalanceDue": "Balance {amount} due {date}",
+    "attnBalanceOverdue": "Balance {amount} OVERDUE",
+    "attnForms": "Traveller forms: {submitted}/{total} submitted",
+    "attnNoGuide": "No guide assigned",
+    "attnChangeRequest": "Pending portal change request",
+    "departsOn": "departs {date}"
   },
   "analytics": {
     "title": "Analytics Dashboard",

@@ -420,7 +420,15 @@
     "vsLastMonth": "先月は{count}件",
     "unifiedInbox": "統合受信箱",
     "manageConversations": "WhatsApp・メールの会話",
-    "paymentsReceived": "入金件数"
+    "paymentsReceived": "入金件数",
+    "needsAttention": "要対応",
+    "allClear": "すべて順調です — 現在対応が必要な項目はありません。",
+    "attnBalanceDue": "残金 {amount}（期限 {date}）",
+    "attnBalanceOverdue": "残金 {amount} 期限超過",
+    "attnForms": "申込書: {submitted}/{total} 名提出済み",
+    "attnNoGuide": "ガイド未割当",
+    "attnChangeRequest": "ポータルからの変更依頼あり",
+    "departsOn": "出発 {date}"
   },
   "analytics": {
     "title": "分析ダッシュボード",
