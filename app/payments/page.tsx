@@ -252,12 +252,12 @@ export default function PaymentsPage() {
   return (
     <div className="p-4 lg:p-6 space-y-4">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-y-2">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t('paymentTracking')}</h1>
           <p className="text-sm text-gray-600 mt-1">{t('allPaymentsDescription')}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => {
               const cols = [

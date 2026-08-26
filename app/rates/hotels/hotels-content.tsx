@@ -821,13 +821,13 @@ export default function HotelsContent() {
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="container mx-auto px-4 lg:px-6 py-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-y-2">
             <div className="flex items-center gap-2">
               <Building2 className="w-5 h-5 text-purple-600" />
               <h1 className="text-xl font-bold text-gray-900">{t('title')}</h1>
               <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Link
                 href="/suppliers?type=hotel"
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"

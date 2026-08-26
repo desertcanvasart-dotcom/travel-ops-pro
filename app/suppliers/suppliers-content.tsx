@@ -523,7 +523,7 @@ export default function SuppliersContent() {
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-y-2">
             <div>
               <h1 className="text-lg font-semibold text-gray-900">
                 {selectedType === 'all' ? t('allSuppliers') : getTypeConfig(selectedType).label}

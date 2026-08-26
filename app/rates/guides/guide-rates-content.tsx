@@ -525,7 +525,7 @@ export default function GuideRatesContent() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-y-2">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-purple-100 rounded-lg">
             <Users className="w-6 h-6 text-purple-600" />
