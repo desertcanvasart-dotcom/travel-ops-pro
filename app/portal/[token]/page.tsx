@@ -40,6 +40,7 @@ import { tripDays, type PremiumBand } from '@/lib/insurance'
 import TravellerForm from './TravellerForm'
 import ChangeRequestForm from './ChangeRequestForm'
 import LeadCoordinator from './LeadCoordinator'
+import PortalChat from './PortalChat'
 import { customerFacingOrgName } from '@/lib/org-name'
 
 export const dynamic = 'force-dynamic'
@@ -453,6 +454,16 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
         {/* Family link only: the lead may request adding travellers. A private
             per-traveller link is one person's and shows no such control. */}
         {!scopedPassengerId && !booking.detailsLocked && <ChangeRequestForm token={token} />}
+      </section>
+
+      {/* ---------------- messages ---------------- */}
+      {/* Which conversation this is follows the LINK: a family link opens the
+          booking's shared thread, a per-traveller link opens that person's
+          private one. The API decides it from the token, so nothing here has
+          to be told which. */}
+      <section>
+        <h2>お問い合わせ</h2>
+        <PortalChat token={token} />
       </section>
 
       {/* ---------------- documents ---------------- */}

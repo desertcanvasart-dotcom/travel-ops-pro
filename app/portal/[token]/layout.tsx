@@ -134,6 +134,34 @@ const CSS = `
 
 .paxbody h5{font-size:13px;margin:16px 0 6px;color:var(--soft);font-weight:700}
 
+/* The conversation with the office. Sized for a thumb, like everything else
+   the traveller touches. */
+.chat{margin:6px 0 4px}
+.chat-hours{list-style:none;margin:0 0 10px;padding:8px 12px;border:1px solid var(--line);
+  border-radius:8px;background:var(--card);font-size:13px;color:var(--soft);line-height:1.8}
+.chat-empty{font-size:14px;color:var(--soft);margin:10px 0}
+.chat-log{list-style:none;margin:10px 0;padding:0;display:flex;flex-direction:column;gap:10px}
+.chat-msg{display:flex;flex-direction:column;gap:2px;max-width:88%;padding:10px 12px;
+  border-radius:12px;font-size:15px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+/* The traveller's own words sit right, in the brand colour — the same
+   arrangement every messaging app has taught them to read. */
+.chat-msg.customer{align-self:flex-end;background:var(--brand);color:#fff;border-bottom-right-radius:4px}
+.chat-msg.staff{align-self:flex-start;background:var(--card);border:1px solid var(--line);
+  border-bottom-left-radius:4px}
+/* The automatic acknowledgement is deliberately quieter than a person. */
+.chat-msg.system{align-self:center;background:transparent;border:1px dashed var(--line);
+  color:var(--soft);font-size:13px;max-width:100%;text-align:center}
+.chat-who{font-size:11px;font-weight:700;color:var(--soft)}
+.chat-msg.customer .chat-time{color:rgba(255,255,255,.75)}
+.chat-time{font-size:11px;color:var(--soft);align-self:flex-end}
+.chat-error{font-size:13px;color:var(--err);margin:6px 0}
+.chat-form{margin-top:12px}
+.chat-form textarea{width:100%;padding:11px;border:1px solid var(--line);border-radius:6px;
+  font:inherit;font-size:16px;background:#fff;color:var(--ink);resize:vertical}
+.chat-form button{margin-top:8px;width:100%;min-height:48px;padding:12px;border:0;border-radius:7px;
+  background:var(--brand);color:#fff;font:inherit;font-size:15px;font-weight:700;cursor:pointer}
+.chat-form button:disabled{opacity:.45;cursor:not-allowed}
+
 /* Attached documents. A row reads as a fact already recorded, not a control:
    the file is on the booking, and the only action is to take it back off. */
 .docs{margin:6px 0 4px}
@@ -242,6 +270,7 @@ footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);
   .actions .ghost{background:#1b1f1b}
   .locked{background:#1b1f1b}
   .doc-row{background:#131613}
+  .chat-form textarea{background:#141714;color:var(--ink)}
   .doc-row button{background:#1b1f1b}
 }
 `

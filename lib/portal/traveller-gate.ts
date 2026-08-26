@@ -70,6 +70,47 @@ export const PORTAL_LOCKED: PortalGateFailure = {
 type Db = { from(table: string): any }
 
 /**
+ * The part of the gate that does not care which traveller is acting: token
+ * shape, confirmation cookie, link state, and the booking behind it.
+ *
+ * Chat needs this without the passenger step, because a conversation belongs to
+ * the LINK. A booking-level (family) link has no passenger and gets the
+ * booking's shared thread; a per-traveller (friends) link gets that person's
+ * private one. Sharing the code with travellerWriteContext is the point — a
+ * second copy of "is this token allowed to act" is a second copy to drift.
+ */
+export async function portalLinkContext(
+  db: Db,
+  opts: { token: string; cookieValue: string | undefined | null }
+): Promise<
+  | { ok: true; link: Record<string, any>; booking: Record<string, any> }  // eslint-disable-line @typescript-eslint/no-explicit-any
+  | PortalGateFailure
+> {
+  const { token, cookieValue } = opts
+
+  if (!isValidPortalToken(token)) return PORTAL_NOT_FOUND
+  if (!isPortalVerified(token, cookieValue)) return PORTAL_UNVERIFIED
+
+  const { data: link } = await db
+    .from('booking_portal_links')
+    .select('id, booking_id, org_id, passenger_id, revoked_at, expires_at, details_locked_at')
+    .eq('token', token)
+    .maybeSingle()
+
+  if (!portalLinkState(link).usable) return PORTAL_NOT_FOUND
+
+  const { data: booking } = await db
+    .from('bookings')
+    .select('id, org_id, booking_code, trip_name, client_name, start_date, end_date')
+    .eq('id', link.booking_id)
+    .maybeSingle()
+
+  if (!booking) return PORTAL_NOT_FOUND
+
+  return { ok: true, link, booking }
+}
+
+/**
  * Resolve a portal token + passenger id to the row a write may touch.
  *
  * `requireUnlocked` is on by default: reads (listing what has been uploaded)
