@@ -114,7 +114,7 @@ function AcceptInvitationContent() {
       }
 
       // Mark invitation as accepted
-      await fetch('/api/invitations', {
+      await fetch('/api/invitations/accept', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token })

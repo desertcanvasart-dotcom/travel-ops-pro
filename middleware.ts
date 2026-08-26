@@ -328,6 +328,13 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     // The route validates the token, checks revocation and expiry, rate-limits
     // by IP, and writes only allowlisted fields.
     '/api/portal/',
+    // Invitation verify/accept: the invitee has NO session yet by definition
+    // (they clicked the emailed link; accept runs right after signUp). Both
+    // routes authenticate by the unguessable invitation token and check
+    // expiry/reuse themselves. EXACT routes — the sibling /api/invitations
+    // list/create/delete handlers rely on this session gate and stay behind it.
+    '/api/invitations/verify',
+    '/api/invitations/accept',
   ]
   const isSelfAuthApi = apiSelfAuthPrefixes.some(p => request.nextUrl.pathname.startsWith(p))
 
