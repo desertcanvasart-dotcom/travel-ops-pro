@@ -14,7 +14,7 @@
 // written. Nobody should discover a replaced rate card afterwards.
 
 import { useRef, useState } from 'react'
-import { Download, Upload, X, Loader2, AlertCircle, CheckCircle, CalendarRange } from 'lucide-react'
+import { Download, Upload, X, Loader2, AlertCircle, CheckCircle, CalendarRange, FileText } from 'lucide-react'
 
 type Entity = 'accommodation' | 'cruise'
 type Change = { key: string; name: string; before: number; after: number }
@@ -25,6 +25,7 @@ type Step = 'idle' | 'previewing' | 'preview' | 'importing' | 'done' | 'error'
 export default function RatePeriodsImportExport({ entity }: { entity: Entity }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [exporting, setExporting] = useState(false)
+  const [templating, setTemplating] = useState(false)
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState<Step>('idle')
   const [csv, setCsv] = useState('')
@@ -36,20 +37,27 @@ export default function RatePeriodsImportExport({ entity }: { entity: Entity }) 
 
   const noun = entity === 'accommodation' ? 'hotel' : 'cruise'
 
-  const doExport = async () => {
-    setExporting(true)
+  // `template` gives the headers plus two example periods — the sheet to start
+  // from when no rate carries periods yet, which is when an export would be
+  // headers and nothing else.
+  const download = async (mode: 'export' | 'template') => {
+    const busy = mode === 'export' ? setExporting : setTemplating
+    busy(true)
     try {
-      const res = await fetch(`/api/rates/bulk/periods/export?entity=${entity}`)
+      const qs = mode === 'template' ? `entity=${entity}&template=1` : `entity=${entity}`
+      const res = await fetch(`/api/rates/bulk/periods/export?${qs}`)
       if (!res.ok) return
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${entity}-rate-periods.csv`
+      a.download = mode === 'template'
+        ? `${entity}-rate-periods-template.csv`
+        : `${entity}-rate-periods.csv`
       a.click()
       URL.revokeObjectURL(url)
     } finally {
-      setExporting(false)
+      busy(false)
     }
   }
 
@@ -91,7 +99,17 @@ export default function RatePeriodsImportExport({ entity }: { entity: Entity }) 
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={doExport}
+          onClick={() => download('template')}
+          disabled={templating}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+          title="Download a sample periods sheet with the correct columns"
+        >
+          {templating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+          Sample Periods
+        </button>
+        <button
+          type="button"
+          onClick={() => download('export')}
           disabled={exporting}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
         >

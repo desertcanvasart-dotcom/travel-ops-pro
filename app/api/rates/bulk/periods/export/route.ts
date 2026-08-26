@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import Papa from 'papaparse'
-import { PERIOD_SHEETS, periodHeaders, periodsToRows } from '@/lib/rates/period-csv'
+import { PERIOD_SHEETS, periodHeaders, periodsToRows, periodTemplateRows } from '@/lib/rates/period-csv'
 import { seasonsForRow } from '@/lib/rates/rate-seasons'
 
 export const dynamic = 'force-dynamic'
@@ -28,6 +28,22 @@ export async function GET(request: NextRequest) {
     }
 
     const config = PERIOD_SHEETS[entity]
+
+    // `template=1`: the sheet to start from. Without it, a catalog where no
+    // rate carries periods yet exports headers and nothing else.
+    if (request.nextUrl.searchParams.get('template') === '1') {
+      const csv = Papa.unparse({
+        fields: periodHeaders(config),
+        data: periodTemplateRows(config),
+      })
+      return new NextResponse(csv, {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="${entity}-rate-periods-template.csv"`,
+        },
+      })
+    }
+
     const supabase = createServerClient()
 
     // `*` rather than a column list: the legacy-column fallback reads a dozen

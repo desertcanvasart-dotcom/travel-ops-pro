@@ -44,7 +44,11 @@ export interface ImportResult {
 }
 
 export interface ImportWarning {
-  kind: 'periods_supersede_columns'
+  /** `periods_supersede_columns`: the file's prices will not reach a quote,
+   *  because that rate prices from its dated period list.
+   *  `example_row_skipped`: the unedited sample row from a downloaded
+   *  template was left out rather than inserted as a rate. */
+  kind: 'periods_supersede_columns' | 'example_row_skipped'
   key: string
   message: string
 }
@@ -605,6 +609,125 @@ export function validateImportData(
  */
 export function getExportHeaders(config: RateTableConfig): string[] {
   return config.columns.map(c => c.name)
+}
+
+// ============================================
+// A sample file to start from
+// ============================================
+// Exporting an EMPTY rate table produced a completely blank file — Papa
+// returns "" for zero rows, headers and all — so the one moment somebody most
+// needs to know the format (their first import, before any data exists) was
+// the moment the system told them nothing.
+//
+// The template is the headers plus one filled-in example row, because headers
+// alone still leave the date format and the enum spellings to guesswork.
+//
+// The example row carries EXAMPLE_ROW_KEY in the unique-key column and the
+// importer SKIPS it, so the classic mistake — filling in the sheet underneath
+// and importing the sample along with it — cannot land a junk rate.
+
+export const EXAMPLE_ROW_KEY = 'EXAMPLE-DELETE-THIS-ROW'
+
+/** Is this the untouched sample row from a downloaded template? */
+export function isExampleRow(value: unknown): boolean {
+  return String(value ?? '').trim().toUpperCase() === EXAMPLE_ROW_KEY
+}
+
+/** A coherent sample calendar. A template whose every date is the same day
+ *  teaches nothing about which column is a start and which an end, and a
+ *  season list where low, high and peak share a window is not a rate card
+ *  anyone would recognise. */
+const SAMPLE_DATES: Record<string, [string, string]> = {
+  low:      ['2026-05-01', '2026-09-30'],
+  high:     ['2026-10-01', '2026-12-19'],
+  peak:     ['2026-12-20', '2027-01-05'],
+  peak_2:   ['2027-03-20', '2027-03-28'],
+  validity: ['2026-04-01', '2027-03-31'],
+  other:    ['2026-05-01', '2026-09-30'],
+}
+
+/** Which pair of dates a column belongs to, and whether it is the start. */
+function sampleDate(name: string): string {
+  const isEnd = /(_to|_end)$/.test(name)
+  const band =
+    /peak_season_2|peak_2/.test(name) ? 'peak_2'
+    : /peak/.test(name) ? 'peak'
+    : /high/.test(name) ? 'high'
+    : /valid/.test(name) ? 'validity'
+    : /low/.test(name) ? 'low'
+    : 'other'
+  return SAMPLE_DATES[band][isEnd ? 1 : 0]
+}
+
+/** Sample money. A row where every number is 100 does not show which column is
+ *  the headline rate and which is a supplement — and a rate card where peak
+ *  costs the same as low is not one either. */
+function sampleNumber(name: string): string {
+  // Supplements and reductions are a fraction of the rate they attach to.
+  const role =
+    /supp/.test(name) ? 0.5
+    : /(red|reduction|child|infant)/.test(name) ? 0.15
+    : 1
+  const season =
+    /peak/.test(name) ? 1.8
+    : /high/.test(name) ? 1.35
+    : 1
+  const base = /single/.test(name) && !/supp/.test(name) ? 140 : 100
+  return String(Math.round(base * role * season))
+}
+
+/** Plausible sample values, so the row reads as a real rate rather than as
+ *  filler. Matched on the column name first, then the declared type. */
+function exampleValue(colDef: ColumnDef, config: RateTableConfig): string {
+  // An enum tells us its own vocabulary; the first value is always valid.
+  if (colDef.allowedValues?.length) return colDef.allowedValues[0]
+
+  if (config.uniqueKey.includes(colDef.name)) return EXAMPLE_ROW_KEY
+
+  const name = colDef.name
+  if (/(^|_)(email)/.test(name)) return 'reservations@example-hotel.com'
+  if (/(^|_)(phone|fax|mobile)/.test(name)) return '+20 100 000 0000'
+  if (/(^|_)city$/.test(name) || name === 'embark_city' || name === 'disembark_city') return 'Cairo'
+  if (/country/.test(name)) return 'Egypt'
+  if (name === 'property_type') return 'hotel'
+  if (name === 'board_basis') return 'BB'
+  if (name === 'tier') return 'standard'
+  if (/(property|ship|hotel|supplier|contact|attraction|activity|guide|route|template)_?name/.test(name)) {
+    return 'Example Name'
+  }
+  if (/notes|description|remarks/.test(name)) return 'Optional free text'
+
+  switch (colDef.type) {
+    case 'date':
+      // ISO. The importer also accepts DD/MM/YYYY because Excel rewrites dates
+      // on save, but the sample should show the form that always works.
+      return sampleDate(name)
+    case 'number':
+      // Never 0: a blank or zero rate means "unpriced" in this system, and a
+      // sample that teaches otherwise is a sample that causes holes.
+      return sampleNumber(name)
+    case 'boolean':
+      return 'true'
+    default:
+      return colDef.required ? 'Required' : ''
+  }
+}
+
+/** Headers for a template: everything the importer reads, and nothing it
+ *  ignores — id and the timestamps are export-only and would just be noise on
+ *  a sheet somebody is filling in by hand. */
+export function getTemplateHeaders(config: RateTableConfig): string[] {
+  return config.columns.filter(c => !c.exportOnly).map(c => c.name)
+}
+
+/** The single example row, keyed by column name. */
+export function buildTemplateRow(config: RateTableConfig): Record<string, string> {
+  const row: Record<string, string> = {}
+  for (const colDef of config.columns) {
+    if (colDef.exportOnly) continue
+    row[colDef.name] = exampleValue(colDef, config)
+  }
+  return row
 }
 
 /**

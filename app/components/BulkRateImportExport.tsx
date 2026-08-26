@@ -26,7 +26,7 @@ interface ImportState {
     inserted: number
     updated: number
     errors: any[]
-    warnings?: { kind: string; key: string; message: string }[]
+    warnings?: { kind: 'periods_supersede_columns' | 'example_row_skipped'; key: string; message: string }[]
   }
   error?: string
 }
@@ -35,6 +35,7 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
   const t = useTranslations('common')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [exporting, setExporting] = useState(false)
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false)
   const [importState, setImportState] = useState<ImportState>({ step: 'idle' })
   const [showImportModal, setShowImportModal] = useState(false)
 
@@ -45,32 +46,39 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
   // EXPORT
   // ============================================
 
-  const handleExport = async () => {
-    setExporting(true)
+  // `template` fetches the headers plus one filled-in example row instead of
+  // the data — the sheet to start from when there is nothing to export yet.
+  const download = async (mode: 'export' | 'template') => {
+    const busy = mode === 'export' ? setExporting : setDownloadingTemplate
+    busy(true)
     try {
-      const res = await fetch(`/api/rates/bulk/export?table=${tableName}`)
+      const qs = mode === 'template' ? `table=${tableName}&template=1` : `table=${tableName}`
+      const res = await fetch(`/api/rates/bulk/export?${qs}`)
       if (!res.ok) {
         const err = await res.json()
-        throw new Error(err.error || 'Export failed')
+        throw new Error(err.error || 'Download failed')
       }
 
-      // Get the CSV blob and trigger download
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${tableName}_export_${new Date().toISOString().split('T')[0]}.csv`
+      a.download = mode === 'template'
+        ? `${tableName}_template.csv`
+        : `${tableName}_export_${new Date().toISOString().split('T')[0]}.csv`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch (err: any) {
-      console.error('Export failed:', err)
-      alert(`Export failed: ${err.message}`)
+      console.error(`${mode} failed:`, err)
+      alert(`Download failed: ${err.message}`)
     } finally {
-      setExporting(false)
+      busy(false)
     }
   }
+
+  const handleExport = () => download('export')
 
   // ============================================
   // IMPORT
@@ -214,6 +222,23 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
           Export CSV
         </button>
 
+        {/* The sheet to start from. Exporting an empty table used to hand back
+            a blank file, so the first import — before any data exists — had
+            nothing to copy the format from. */}
+        <button
+          onClick={() => download('template')}
+          disabled={downloadingTemplate}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          title="Download a sample CSV with the correct columns and one example row"
+        >
+          {downloadingTemplate ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <FileText className="w-3.5 h-3.5" />
+          )}
+          Sample CSV
+        </button>
+
         <button
           onClick={() => fileInputRef.current?.click()}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -332,7 +357,7 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
                   {/* "Successfully" is the wrong top line when some of the
                       prices will not reach a quote — the detail below says so,
                       and a green tick above it invites nobody to read on. */}
-                  {(importState.result.warnings?.length ?? 0) > 0 ? (
+                  {(importState.result.warnings ?? []).some(w => w.kind === 'periods_supersede_columns') ? (
                     <div className="flex items-center gap-3 p-4 bg-amber-50 rounded-lg">
                       <AlertCircle className="w-5 h-5 text-amber-500" />
                       <span className="text-sm text-amber-800">
@@ -359,25 +384,39 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
                       than the error block on purpose: an error is visibly a
                       failure, whereas this looks like success until somebody
                       wonders why the quote did not move. */}
-                  {(importState.result.warnings?.length ?? 0) > 0 && (
-                    <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg">
-                      <div className="text-sm font-medium text-amber-800 mb-1">
-                        Imported, but these prices will not change what is quoted
-                      </div>
-                      <div className="text-xs text-amber-700 mb-2">
-                        These rates already have dated rate periods, and pricing reads the
-                        periods rather than these columns. Edit the periods on the rate itself.
-                      </div>
-                      {importState.result.warnings!.slice(0, 8).map((w, i) => (
-                        <div key={i} className="text-xs text-amber-700">{w.message}</div>
-                      ))}
-                      {importState.result.warnings!.length > 8 && (
-                        <div className="text-xs text-amber-600 mt-1">
-                          ...and {importState.result.warnings!.length - 8} more
-                        </div>
-                      )}
+                  {(importState.result.warnings ?? []).some(w => w.kind === 'example_row_skipped') && (
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      {importState.result.warnings!
+                        .filter(w => w.kind === 'example_row_skipped')
+                        .map((w, i) => (
+                          <div key={i} className="text-xs text-blue-700">{w.message}</div>
+                        ))}
                     </div>
                   )}
+                  {(() => {
+                    const superseded = (importState.result?.warnings ?? [])
+                      .filter(w => w.kind === 'periods_supersede_columns')
+                    if (superseded.length === 0) return null
+                    return (
+                      <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg">
+                        <div className="text-sm font-medium text-amber-800 mb-1">
+                          Imported, but these prices will not change what is quoted
+                        </div>
+                        <div className="text-xs text-amber-700 mb-2">
+                          These rates already have dated rate periods, and pricing reads the
+                          periods rather than these columns. Edit the periods on the rate itself.
+                        </div>
+                        {superseded.slice(0, 8).map((w, i) => (
+                          <div key={i} className="text-xs text-amber-700">{w.message}</div>
+                        ))}
+                        {superseded.length > 8 && (
+                          <div className="text-xs text-amber-600 mt-1">
+                            ...and {superseded.length - 8} more
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
                   {importState.result.errors.length > 0 && (
                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
                       <div className="text-sm font-medium text-amber-700 mb-1">Some errors occurred:</div>
