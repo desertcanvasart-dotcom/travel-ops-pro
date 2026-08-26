@@ -5601,6 +5601,35 @@
       "of": "/",
       "rateRequired": "0〜100の率を入力してください",
       "enginePayNote": "ツアーのコミッション生成時の計算：「受取」＝率×そのサービスのサプライヤー価格。「支払」＝率×そのサービスの当社利益（販売価格−サプライヤー原価）。利益のないサービスにはコミッションは発生しません。"
+    },
+    "ratePeriods": {
+      "title": "料金期間",
+      "titleWithCurrency": "料金期間（{currency}）",
+      "help": "契約書の日付区分ごとに1期間を作成し、それぞれに料金を入力します。契約書にある分だけ追加でき、上限はありません。出発日が含まれる期間の料金が適用されます。",
+      "count": "{count, plural, =0 {期間なし} other {#期間}}",
+      "empty": "期間がまだありません。仕入先契約書の日付区分ごとに追加してください。",
+      "addPeriod": "期間を追加",
+      "periodName": "期間名",
+      "periodNamePlaceholder": "例：クリスマス・年末年始",
+      "from": "開始日",
+      "to": "終了日",
+      "duplicate": "この期間の料金を複製",
+      "remove": "期間を削除",
+      "unnamed": "期間{number}",
+      "eurPassportHolders": "EUパスポート保持者",
+      "nonEurPassportHolders": "EUパスポート以外（日本国籍ほか）",
+      "backwards": "{period}の終了日が開始日より前になっています。",
+      "overlap": "{first}と{second}が重複しています。重複する日は短い方の期間が適用されます。",
+      "gap": "{from}から{to}を含む期間がありません。この期間の出発は最初の期間の料金が適用されます。",
+      "fields": {
+        "pp_double": "1名料金(2名室)",
+        "single_supp": "1人部屋追加",
+        "triple_red": "3人部屋割引",
+        "single": "シングル",
+        "double": "ダブル",
+        "triple": "トリプル",
+        "suite": "スイート"
+      }
     }
   },
   "profitLoss": {

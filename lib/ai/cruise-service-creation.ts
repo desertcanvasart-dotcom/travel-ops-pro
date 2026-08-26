@@ -323,7 +323,7 @@ export async function createCruiseItineraryServices(
         rate_non_eur: cruiseRate.totalPerNight / totalPax,
         total_cost: toTarget(nightCost),
         client_price: toTarget(withMargin(nightCost)),
-        notes: `Night ${dayData.day_number}: ${dayOvernight} | ${cruiseRate.season} season | ${cabinDesc}`,
+        notes: `Night ${dayData.day_number}: ${dayOvernight} | ${cruiseRate.season} | ${cabinDesc}`,
         supplier_currency: rateCurrency,
         supplier_cost_original: nightCost,
         exchange_rate_used: rateToTarget || 1,

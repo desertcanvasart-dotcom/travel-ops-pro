@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
+import { sanitizeSeasons, legacyColumnMirror } from '@/lib/rates/rate-seasons'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createActorAdminClient } from '@/lib/supabase-actor'
@@ -54,9 +55,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
     }
 
-    // Include supplier_id in insert (resolved/validated above)
+    // Include supplier_id in insert (resolved/validated above).
+    // `seasons` is JSONB straight off the request, so it is validated rather
+    // than spread through — and the first period is mirrored onto the base
+    // columns for readers that have no travel date.
+    const cruiseSeasons = sanitizeSeasons(body.seasons, 'cruise')
     const newCruise = {
       ...body,
+      seasons: cruiseSeasons,
+      ...legacyColumnMirror(cruiseSeasons, 'cruise'),
       supplier_id: supplierCheck.supplier_id
     }
 

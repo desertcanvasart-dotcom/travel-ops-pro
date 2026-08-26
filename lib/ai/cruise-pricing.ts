@@ -4,6 +4,7 @@
 // ============================================
 
 import { type ServiceTier, toNumber } from './parsing-utils'
+import { seasonForTravelDate, seasonsForRow } from '@/lib/rates/rate-seasons'
 
 export interface CabinAllocation {
   type: 'single' | 'double' | 'triple' | 'suite'
@@ -25,44 +26,27 @@ export interface CruiseRate {
 }
 
 /**
- * Detect which season a date falls in for a given cruise ship record
+ * The rate period a departure date falls in, by name.
+ *
+ * Was a month-day comparison over three fixed windows (peak → high → low), so
+ * a window entered for one contract year silently priced every year after it,
+ * and a ship could never have more than three price levels. It now reads the
+ * `seasons` list on the ship row — unlimited dated periods, each with its own
+ * rates — falling back to the legacy low_/high_/peak_ columns for rows that
+ * predate migration 20260826_rate_seasons or came in through the bulk importer.
+ *
+ * Returns 'low' when no period covers the date, which is what the old resolver
+ * did with an unmatched date and keeps an uncovered departure priced rather
+ * than free.
  */
 export function detectCruiseSeason(ship: any, startDate: string): string {
-  // 'YYYY-MM-DD' strings parse as UTC midnight, so read the parts back in UTC
-  // too — local-time getters shift boundary dates back a day on any server
-  // west of UTC, mis-assigning low/high/peak on season edges.
-  const toMmdd = (dateStr: string | null): number => {
-    if (!dateStr) return 0
-    const d = new Date(dateStr)
-    return (d.getUTCMonth() + 1) * 100 + d.getUTCDate()
-  }
-  const mmdd = toMmdd(startDate)  // e.g., March 20 = 320
-
-  // Check peak season first (2 possible periods)
-  if (ship.peak_season_1_start && ship.peak_season_1_end) {
-    const start = toMmdd(ship.peak_season_1_start)
-    const end = toMmdd(ship.peak_season_1_end)
-    if (start <= end ? (mmdd >= start && mmdd <= end) : (mmdd >= start || mmdd <= end)) return 'peak'
-  }
-  if (ship.peak_season_2_start && ship.peak_season_2_end) {
-    const start = toMmdd(ship.peak_season_2_start)
-    const end = toMmdd(ship.peak_season_2_end)
-    if (start <= end ? (mmdd >= start && mmdd <= end) : (mmdd >= start || mmdd <= end)) return 'peak'
-  }
-
-  // Check high season
-  if (ship.high_season_start && ship.high_season_end) {
-    const start = toMmdd(ship.high_season_start)
-    const end = toMmdd(ship.high_season_end)
-    if (start <= end ? (mmdd >= start && mmdd <= end) : (mmdd >= start || mmdd <= end)) return 'high'
-  }
-
-  // Default to low season
-  return 'low'
+  return seasonForTravelDate(seasonsForRow(ship ?? {}, 'cruise'), startDate)?.name ?? 'low'
 }
 
 /**
- * Get per-person-per-night rates for a given season and passport type
+ * Per-person-per-night rates for a named season, off the legacy columns.
+ * Only 'low' | 'high' | 'peak' resolve here — a named period from `seasons`
+ * carries its own rates and never needs this.
  */
 export function getCruiseSeasonRates(ship: any, season: string, isEuro: boolean): {
   single: number; double: number; triple: number; suite: number
@@ -73,6 +57,30 @@ export function getCruiseSeasonRates(ship: any, season: string, isEuro: boolean)
     double: toNumber(ship[`rate_${season}_double_${suffix}`], 0),
     triple: toNumber(ship[`rate_${season}_triple_${suffix}`], 0),
     suite:  toNumber(ship[`rate_${season}_suite_${suffix}`], 0),
+  }
+}
+
+/**
+ * The cabin rates that apply to a departure date: the matching period's own
+ * rates, or the legacy low-season columns when no period covers the date.
+ */
+export function resolveCruiseRates(ship: any, startDate: string, isEuro: boolean): {
+  season: string
+  rates: { single: number; double: number; triple: number; suite: number }
+} {
+  const period = seasonForTravelDate(seasonsForRow(ship ?? {}, 'cruise'), startDate)
+  if (!period) {
+    return { season: 'low', rates: getCruiseSeasonRates(ship ?? {}, 'low', isEuro) }
+  }
+  const suffix = isEuro ? 'eur' : 'non_eur'
+  return {
+    season: period.name,
+    rates: {
+      single: toNumber(period.rates[`single_${suffix}`], 0),
+      double: toNumber(period.rates[`double_${suffix}`], 0),
+      triple: toNumber(period.rates[`triple_${suffix}`], 0),
+      suite:  toNumber(period.rates[`suite_${suffix}`], 0),
+    },
   }
 }
 
@@ -222,9 +230,8 @@ export async function getCruiseRate(
 
     if (!ship) return noRate
 
-    // Detect season
-    const season = detectCruiseSeason(ship, startDate)
-    const rates = getCruiseSeasonRates(ship, season, isEuroPassport)
+    // Which dated period this departure falls in, and its rates
+    const { season, rates } = resolveCruiseRates(ship, startDate, isEuroPassport)
 
     console.log(`🚢 Cruise: ${ship.ship_name} | Season: ${season} | Passport: ${isEuroPassport ? 'EUR' : 'non-EUR'}`)
     console.log(`💰 Rates (pppn): single=${rates.single}, double=${rates.double}, triple=${rates.triple}, suite=${rates.suite}`)
