@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
-import { RATE_TABLE_CONFIGS, getExportHeaders } from '@/lib/bulk-rate-service'
+import {
+  RATE_TABLE_CONFIGS,
+  getExportHeaders,
+  getTemplateHeaders,
+  buildTemplateRow,
+} from '@/lib/bulk-rate-service'
 import Papa from 'papaparse'
 
 const supabase = createServerClient()
 
 /**
- * GET /api/rates/bulk/export?table=accommodation_rates
- * Exports all rows from a rate table as CSV.
+ * GET /api/rates/bulk/export?table=accommodation_rates[&template=1]
+ *
+ * Exports a rate table as CSV. `template=1` returns the headers plus one
+ * filled-in example row instead of the data — the sheet to start from when
+ * there is nothing to export yet.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -24,6 +32,22 @@ export async function GET(request: NextRequest) {
     }
 
     const config = RATE_TABLE_CONFIGS[table]
+    const wantsTemplate = request.nextUrl.searchParams.get('template') === '1'
+
+    if (wantsTemplate) {
+      const csv = Papa.unparse({
+        fields: getTemplateHeaders(config),
+        data: [buildTemplateRow(config)],
+      })
+      return new NextResponse(csv, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="${table}_template.csv"`,
+        },
+      })
+    }
+
     const headers = getExportHeaders(config)
 
     // Fetch all rows from the table
@@ -40,10 +64,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Convert to CSV
-    const csv = Papa.unparse(data || [], {
-      columns: headers,
-    })
+    // The { fields, data } form, NOT unparse(rows, { columns }): the latter
+    // returns an empty string for zero rows — no headers either — so exporting
+    // an empty rate table handed back a completely blank file, at exactly the
+    // moment somebody most needs to see the column names.
+    const csv = Papa.unparse({ fields: headers, data: data || [] })
 
     // Return CSV as a downloadable file
     return new NextResponse(csv, {
