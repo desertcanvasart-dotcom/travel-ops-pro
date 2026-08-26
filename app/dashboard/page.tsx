@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
-import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/app/contexts/AuthContext'
 import {
@@ -31,6 +30,8 @@ const supabase = createClient()
 
 interface DashboardStats {
   totalClients: number
+  clientsThisMonth: number
+  clientsPrevMonth: number
   activeClients: number
   pendingFollowups: number
   overdueFollowups: number
@@ -38,7 +39,16 @@ interface DashboardStats {
   quotesSent: number
   quotesConfirmed: number
   upcomingTrips: number
-  recentActivity: number
+  // Operations row — real counts from /api/dashboard/summary
+  departingSoon: number
+  departingSoonItems: { id: string; booking_code?: string; trip_name?: string; client_name?: string; start_date?: string }[]
+  tripsInProgress: number
+  tasksDueToday: number
+  tasksOverdue: number
+  unreadInbox: number
+  todayQuotesCreated: number
+  todayBookingsCreated: number
+  todayPaymentsReceived: number
 }
 
 export default function DashboardPage() {
@@ -48,6 +58,8 @@ export default function DashboardPage() {
   const { profile } = useAuth()
   const [stats, setStats] = useState<DashboardStats>({
     totalClients: 0,
+    clientsThisMonth: 0,
+    clientsPrevMonth: 0,
     activeClients: 0,
     pendingFollowups: 0,
     overdueFollowups: 0,
@@ -55,7 +67,15 @@ export default function DashboardPage() {
     quotesSent: 0,
     quotesConfirmed: 0,
     upcomingTrips: 0,
-    recentActivity: 0
+    departingSoon: 0,
+    departingSoonItems: [],
+    tripsInProgress: 0,
+    tasksDueToday: 0,
+    tasksOverdue: 0,
+    unreadInbox: 0,
+    todayQuotesCreated: 0,
+    todayBookingsCreated: 0,
+    todayPaymentsReceived: 0
   })
   const [recentClients, setRecentClients] = useState<any[]>([])
   const [upcomingFollowups, setUpcomingFollowups] = useState<any[]>([])
@@ -71,47 +91,19 @@ export default function DashboardPage() {
 
   async function loadDashboardData() {
     try {
-      // Get client stats
+      // One computed summary from the server (ops row, pipeline, today) —
+      // every number here is calculated, none are hardcoded strings.
+      const summaryRes = await fetch('/api/dashboard/summary')
+      const summary = summaryRes.ok ? (await summaryRes.json()).data : null
+
+      // Recent clients (side panel)
       const { data: clients } = await supabase
         .from('clients')
         .select('*')
         .order('created_at', { ascending: false })
+        .limit(5)
 
-      const totalClients = clients?.length || 0
-      const activeClients = clients?.filter(c => c.status === 'active').length || 0
-
-      // Get followup stats
-      const { data: followups } = await supabase
-        .from('client_followups')
-        .select('*')
-        .eq('status', 'pending')
-
-      const pendingFollowups = followups?.length || 0
-      const overdueFollowups = followups?.filter(f => 
-        new Date(f.due_date) < new Date()
-      ).length || 0
-
-      // Get itinerary/quote stats (B2C). Walk every page — the upcoming-trips
-      // stat scans all quotes, and a one-shot request silently truncates past
-      // the API's 1000-row page cap.
-      const quotes = await fetchAllPages<any>('/api/itineraries')
-
-      // Get upcoming trips (next 30 days)
-      const today = new Date()
-      const thirtyDaysLater = new Date()
-      thirtyDaysLater.setDate(today.getDate() + 30)
-      
-      // Try to get from itineraries with start_date
-      const upcomingTrips = quotes.filter((q: any) => {
-        if (!q.start_date) return false
-        const startDate = new Date(q.start_date)
-        return startDate >= today && startDate <= thirtyDaysLater && q.status === 'confirmed'
-      }).length
-
-      // Get recent clients
-      const recentClients = clients?.slice(0, 5) || []
-
-      // Get upcoming followups
+      // Upcoming follow-ups list
       const { data: upcoming } = await supabase
         .from('client_followups')
         .select(`
@@ -128,27 +120,46 @@ export default function DashboardPage() {
         .order('due_date', { ascending: true })
         .limit(5)
 
-      // Get recent quotes
-      const recentQuotes = quotes.slice(0, 5).map((q: any) => ({
-        id: q.id,
-        action: `Quote ${q.itinerary_code} for ${q.client_name}`,
-        time: new Date(q.created_at).toLocaleString(),
-        status: q.status
-      }))
+      // Recent quotes list (first page is plenty for 5 rows)
+      let recentQuotes: any[] = []
+      try {
+        const res = await fetch('/api/itineraries?page=1')
+        if (res.ok) {
+          const body = await res.json()
+          const rows: any[] = body.data || body.itineraries || []
+          recentQuotes = rows.slice(0, 5).map((q: any) => ({
+            id: q.id,
+            action: `Quote ${q.itinerary_code} for ${q.client_name}`,
+            time: new Date(q.created_at).toLocaleString(),
+            status: q.status
+          }))
+        }
+      } catch { /* the list is decorative — the counts above are authoritative */ }
 
-      setStats({
-        totalClients,
-        activeClients,
-        pendingFollowups,
-        overdueFollowups,
-        // quotes now holds every row (full page walk), so length IS the count
-        totalQuotes: quotes.length,
-        quotesSent: quotes.filter((q: any) => q.status === 'sent' || q.status === 'confirmed').length,
-        quotesConfirmed: quotes.filter((q: any) => q.status === 'confirmed').length,
-        upcomingTrips,
-        recentActivity: 0
-      })
-      setRecentClients(recentClients)
+      if (summary) {
+        setStats({
+          totalClients: summary.clients.total,
+          clientsThisMonth: summary.clients.thisMonth,
+          clientsPrevMonth: summary.clients.prevMonth,
+          activeClients: summary.clients.total, // active concept folded into total; row removed below
+          pendingFollowups: summary.followups.pending,
+          overdueFollowups: summary.followups.overdue,
+          totalQuotes: summary.quotes.total,
+          quotesSent: summary.quotes.sent,
+          quotesConfirmed: summary.quotes.confirmed,
+          upcomingTrips: summary.quotes.upcoming30d,
+          departingSoon: summary.ops.departingSoon.count,
+          departingSoonItems: summary.ops.departingSoon.items,
+          tripsInProgress: summary.ops.inProgress,
+          tasksDueToday: summary.ops.tasksDueToday,
+          tasksOverdue: summary.ops.tasksOverdue,
+          unreadInbox: summary.ops.unreadWhatsApp + summary.ops.unreadEmail,
+          todayQuotesCreated: summary.today.quotesCreated,
+          todayBookingsCreated: summary.today.bookingsCreated,
+          todayPaymentsReceived: summary.today.paymentsReceived
+        })
+      }
+      setRecentClients(clients || [])
       setUpcomingFollowups(upcoming || [])
       setRecentQuotes(recentQuotes)
     } catch (error) {
@@ -178,21 +189,59 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {/* Quick Stats - Row 1 */}
+      {/* Row 1 — today's operations */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Total Clients */}
+        <StatCard
+          title={t('departingThisWeek')}
+          value={stats.departingSoon}
+          icon={CalendarDays}
+          subtitle={t('next7Days')}
+          href="/bookings"
+          color="orange"
+        />
+
+        <StatCard
+          title={t('tripsInProgress')}
+          value={stats.tripsInProgress}
+          icon={Activity}
+          subtitle={t('onTheGround')}
+          href="/bookings"
+          color="primary"
+        />
+
+        <StatCard
+          title={t('unreadInbox')}
+          value={stats.unreadInbox}
+          icon={MessageSquare}
+          subtitle={t('acrossWhatsappEmail')}
+          href="/communications"
+          color="purple"
+        />
+
+        <StatCard
+          title={t('tasksDueToday')}
+          value={stats.tasksDueToday}
+          icon={CheckSquare}
+          badge={stats.tasksOverdue > 0 ? `${stats.tasksOverdue} ${t('overdue')}` : undefined}
+          badgeColor="danger"
+          href="/tasks"
+          color="warning"
+        />
+      </div>
+
+      {/* Row 2 — clients & pipeline */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           title={t('totalClients')}
           value={stats.totalClients}
           icon={Users}
-          trend="+12%"
-          trendUp={true}
+          trend={stats.clientsThisMonth > 0 ? `+${stats.clientsThisMonth}` : undefined}
+          trendUp={stats.clientsThisMonth >= stats.clientsPrevMonth}
           href="/clients"
           color="primary"
-          trendLabel={t('fromLastMonth')}
+          trendLabel={t('newThisMonth')}
         />
 
-        {/* Pending Follow-ups */}
         <StatCard
           title={t('pendingFollowups')}
           value={stats.pendingFollowups}
@@ -203,19 +252,14 @@ export default function DashboardPage() {
           color="warning"
         />
 
-        {/* Client Quotes (B2C) */}
         <StatCard
           title={t('clientQuotes')}
           value={stats.totalQuotes}
           icon={FileText}
-          trend="+8%"
-          trendUp={true}
           href="/itineraries"
           color="purple"
-          trendLabel={t('fromLastMonth')}
         />
 
-        {/* Upcoming Trips */}
         <StatCard
           title={t('upcomingTrips')}
           value={stats.upcomingTrips}
@@ -264,17 +308,17 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Active Clients */}
+        {/* New clients this month (real period-over-period, not a slogan) */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <h3 className="text-xs text-gray-600">{t('activeClients')}</h3>
+              <h3 className="text-xs text-gray-600">{t('newThisMonth')}</h3>
               <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
             </div>
-            <Activity className="w-4 h-4 text-gray-400" />
+            <Users className="w-4 h-4 text-gray-400" />
           </div>
-          <p className="text-2xl font-bold text-gray-900">{stats.activeClients}</p>
-          <p className="text-xs text-gray-500 mt-1">{t('engagedCustomers')}</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.clientsThisMonth}</p>
+          <p className="text-xs text-gray-500 mt-1">{t('vsLastMonth', { count: stats.clientsPrevMonth })}</p>
         </div>
       </div>
 
@@ -286,9 +330,9 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           <QuickActionButton
             icon={MessageSquare}
-            label={t('parseWhatsApp')}
-            href="/whatsapp-parser"
-            description={t('aiPoweredParser')}
+            label={t('unifiedInbox')}
+            href="/communications"
+            description={t('manageConversations')}
             color="bg-success"
             startNowLabel={t('startNow')}
           />
@@ -342,7 +386,7 @@ export default function DashboardPage() {
                 <FileText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
                 <p className="text-sm text-gray-500 mb-3">{t('noQuotesYet')}</p>
                 <Link
-                  href="/whatsapp-parser"
+                  href="/itineraries/new"
                   className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
                 >
                   <Sparkles className="w-4 h-4" />
@@ -416,15 +460,15 @@ export default function DashboardPage() {
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-xs text-gray-600">{t('quotesCreated')}</span>
-                <span className="font-bold text-lg text-gray-900">0</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-600">{t('quotesSent')}</span>
-                <span className="font-bold text-lg text-gray-900">0</span>
+                <span className="font-bold text-lg text-gray-900">{stats.todayQuotesCreated}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-xs text-gray-600">{t('bookings')}</span>
-                <span className="font-bold text-lg text-gray-900">0</span>
+                <span className="font-bold text-lg text-gray-900">{stats.todayBookingsCreated}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-600">{t('paymentsReceived')}</span>
+                <span className="font-bold text-lg text-gray-900">{stats.todayPaymentsReceived}</span>
               </div>
             </div>
           </div>
@@ -440,33 +484,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* System Status */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-            <h3 className="text-base font-bold text-gray-900 mb-3">{t('systemStatus')}</h3>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600">{t('aiParser')}</span>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-success" />
-                  <span className="text-xs font-medium text-gray-700">{t('online')}</span>
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600">{t('b2bPackages')}</span>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-success" />
-                  <span className="text-xs font-medium text-gray-700">{t('active')}</span>
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-600">{t('emailService')}</span>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-success" />
-                  <span className="text-xs font-medium text-gray-700">{t('ready')}</span>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>

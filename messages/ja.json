@@ -408,7 +408,19 @@
     "fromLastMonth": "先月比",
     "overdue": "期限超過",
     "days": "日",
-    "startNow": "今すぐ開始 →"
+    "startNow": "今すぐ開始 →",
+    "departingThisWeek": "今週の出発",
+    "next7Days": "今後7日間",
+    "tripsInProgress": "催行中のツアー",
+    "onTheGround": "現地対応中",
+    "unreadInbox": "未読メッセージ",
+    "acrossWhatsappEmail": "WhatsApp + メール",
+    "tasksDueToday": "本日期限のタスク",
+    "newThisMonth": "今月の新規",
+    "vsLastMonth": "先月は{count}件",
+    "unifiedInbox": "統合受信箱",
+    "manageConversations": "WhatsApp・メールの会話",
+    "paymentsReceived": "入金件数"
   },
   "analytics": {
     "title": "分析ダッシュボード",
