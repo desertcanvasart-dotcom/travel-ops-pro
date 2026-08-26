@@ -32,6 +32,7 @@ import {
   type ValidationIssue,
 } from '@/lib/passenger-validation'
 import type { PortalTraveller } from '@/lib/booking-portal'
+import TravellerDocuments from './TravellerDocuments'
 
 interface Props {
   token: string
@@ -259,6 +260,9 @@ export default function TravellerForm({
                 <Field label="有効期間満了日" type="date" value={form.passport_expiry} onChange={set('passport_expiry')} issue={errorFor('passport_expiry')} />
               </div>
             )}
+
+            <h4>パスポート・書類の添付</h4>
+            <TravellerDocuments token={token} passengerId={traveller.id} locked={locked} />
 
             <h4>ご本人様情報</h4>
             <div className="g2">
