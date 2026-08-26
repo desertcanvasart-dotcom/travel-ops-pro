@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/app/contexts/AuthContext'
+import { useRole } from '@/hooks/useRole'
 import {
   Users,
   CheckSquare,
@@ -25,6 +26,9 @@ import {
   CalendarDays,
   Layers,
   AlertTriangle,
+  Wallet,
+  CreditCard,
+  Receipt,
 } from 'lucide-react'
 
 const supabase = createClient()
@@ -57,6 +61,8 @@ export default function DashboardPage() {
   const tCommon = useTranslations('common')
   const tDates = useTranslations('dates')
   const { profile } = useAuth()
+  const { canViewFinancials } = useRole()
+  const [money, setMoney] = useState<any | null>(null)
   const [stats, setStats] = useState<DashboardStats>({
     totalClients: 0,
     clientsThisMonth: 0,
@@ -90,6 +96,28 @@ export default function DashboardPage() {
   useEffect(() => {
     loadDashboardData()
   }, [])
+
+  // Money row — fetched only for roles the financial gate admits, so agents
+  // never even issue the (middleware-403'd) request.
+  useEffect(() => {
+    if (!canViewFinancials) return
+    let alive = true
+    fetch('/api/dashboard/money')
+      .then(res => (res.ok ? res.json() : null))
+      .then(body => { if (alive && body?.data) setMoney(body.data) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [canViewFinancials])
+
+  // "¥879,917 · €70" — one figure per currency, never summed across them.
+  const CURRENCY_SYMBOLS: Record<string, string> = { JPY: '¥', USD: '$', EUR: '€', EGP: 'E£' }
+  const fmtTotals = (t: Record<string, number> | undefined | null) => {
+    const entries = Object.entries(t || {}).filter(([, v]) => v !== 0)
+    if (entries.length === 0) return '0'
+    return entries
+      .map(([c, v]) => `${CURRENCY_SYMBOLS[c] || c + ' '}${Math.round(v).toLocaleString()}`)
+      .join(' · ')
+  }
 
   async function loadDashboardData() {
     try {
@@ -328,6 +356,53 @@ export default function DashboardPage() {
           <p className="text-xs text-gray-500 mt-1">{t('vsLastMonth', { count: stats.clientsPrevMonth })}</p>
         </div>
       </div>
+
+      {/* Money row — manager/owner only (mirrors the middleware financial gate) */}
+      {canViewFinancials && money && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatCard
+            title={t('outstandingReceivables')}
+            value={fmtTotals(money.receivables.totals)}
+            icon={Wallet}
+            badge={Object.keys(money.receivables.overdue || {}).length > 0
+              ? t('overdueBadge', { amount: fmtTotals(money.receivables.overdue) })
+              : undefined}
+            badgeColor="danger"
+            subtitle={t('invoicesCount', { count: money.receivables.count })}
+            href="/accounts-receivable"
+            color="primary"
+          />
+          <StatCard
+            title={t('unpaidExpensesBills')}
+            value={fmtTotals({
+              ...money.payables.expenseTotals,
+              ...Object.fromEntries(Object.entries(money.payables.billTotals as Record<string, number>).map(([c, v]) => [
+                c, (money.payables.expenseTotals[c] || 0) + v,
+              ])),
+            })}
+            icon={CreditCard}
+            subtitle={t('itemsCount', { count: money.payables.expenseCount + money.payables.billCount })}
+            href="/accounts-payable"
+            color="warning"
+          />
+          <StatCard
+            title={t('receivedThisMonth')}
+            value={fmtTotals(money.month.received)}
+            icon={DollarSign}
+            subtitle={t('paymentsCount', { count: money.month.receivedCount })}
+            href="/payments"
+            color="primary"
+          />
+          <StatCard
+            title={t('spentThisMonth')}
+            value={fmtTotals(money.month.spent)}
+            icon={Receipt}
+            subtitle={t('paymentsCount', { count: money.month.spentCount })}
+            href="/expenses"
+            color="orange"
+          />
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">

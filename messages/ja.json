@@ -428,7 +428,15 @@
     "attnForms": "申込書: {submitted}/{total} 名提出済み",
     "attnNoGuide": "ガイド未割当",
     "attnChangeRequest": "ポータルからの変更依頼あり",
-    "departsOn": "出発 {date}"
+    "departsOn": "出発 {date}",
+    "outstandingReceivables": "未回収の売掛金",
+    "overdueBadge": "{amount} 期限超過",
+    "invoicesCount": "請求書 {count} 件",
+    "unpaidExpensesBills": "未払いの経費・仕入請求",
+    "itemsCount": "{count} 件",
+    "receivedThisMonth": "今月の入金",
+    "spentThisMonth": "今月の支出",
+    "paymentsCount": "{count} 件"
   },
   "analytics": {
     "title": "分析ダッシュボード",

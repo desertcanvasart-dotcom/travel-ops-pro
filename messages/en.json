@@ -428,7 +428,15 @@
     "attnForms": "Traveller forms: {submitted}/{total} submitted",
     "attnNoGuide": "No guide assigned",
     "attnChangeRequest": "Pending portal change request",
-    "departsOn": "departs {date}"
+    "departsOn": "departs {date}",
+    "outstandingReceivables": "Outstanding Receivables",
+    "overdueBadge": "{amount} overdue",
+    "invoicesCount": "{count} invoices",
+    "unpaidExpensesBills": "Unpaid Expenses & Bills",
+    "itemsCount": "{count} items",
+    "receivedThisMonth": "Received This Month",
+    "spentThisMonth": "Spent This Month",
+    "paymentsCount": "{count} payments"
   },
   "analytics": {
     "title": "Analytics Dashboard",

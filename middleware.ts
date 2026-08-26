@@ -145,6 +145,7 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 // open API is theater. /api/invoices and /api/payments stay agent-accessible
 // on purpose: reservation staff issue invoices and record customer payments.
 const FINANCIAL_API_PREFIXES = [
+  '/api/dashboard/money',
   '/api/profit-loss',
   '/api/financial-reports',
   '/api/expenses',
