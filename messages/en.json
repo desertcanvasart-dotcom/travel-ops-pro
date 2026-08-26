@@ -6822,7 +6822,19 @@
     "roleManagers": "Managers",
     "roleCoordinators": "Coordinators",
     "department": "Department",
-    "noDepartment": "No Department"
+    "noDepartment": "No Department",
+    "systemUser": "System user",
+    "invitationSent": "Invitation sent",
+    "inviteToSystem": "Invite to system…",
+    "inviteDialogTitle": "Invite to the system",
+    "systemRole": "System role",
+    "sysRoleAgent": "Agent — day-to-day work, no financials",
+    "sysRoleManager": "Manager — includes financials",
+    "sysRoleAdmin": "Admin — full control",
+    "sysRoleViewer": "Viewer — read-only",
+    "sendInvitation": "Send invitation",
+    "sending": "Sending…",
+    "inviteFailed": "Could not send the invitation"
   },
   "tasks": {
     "title": "Tasks",

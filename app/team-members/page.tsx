@@ -14,9 +14,11 @@ import {
   Shield,
   CheckCircle,
   XCircle,
-  Users
+  Users,
+  KeyRound
 } from 'lucide-react'
 import { useConfirm } from '@/components/ConfirmDialog'
+import { useAuth } from '@/app/contexts/AuthContext'
 
 interface Department {
   id: string
@@ -68,10 +70,86 @@ export default function TeamMembersPage() {
   })
   const [saving, setSaving] = useState(false)
 
+  // ---- Bridge to User Management ----
+  // Team members are the operational roster (assignment/routing) and have no
+  // login of their own. This block shows, per member, whether their email
+  // already has system access or a pending invitation — and lets an admin
+  // send the invitation right from the roster card.
+  const { profile } = useAuth()
+  const [userEmails, setUserEmails] = useState<Set<string>>(new Set())
+  const [pendingInviteEmails, setPendingInviteEmails] = useState<Set<string>>(new Set())
+  const [inviteTarget, setInviteTarget] = useState<TeamMember | null>(null)
+  const [inviteRole, setInviteRole] = useState('agent')
+  const [invitingNow, setInvitingNow] = useState(false)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+
+  const fetchAccessStatus = async () => {
+    try {
+      const [profilesRes, invitesRes] = await Promise.all([
+        fetch('/api/profiles'),
+        fetch('/api/invitations?status=pending'),
+      ])
+      if (profilesRes.ok) {
+        const body = await profilesRes.json()
+        setUserEmails(new Set(
+          (body.data || []).map((p: any) => (p.email || '').toLowerCase()).filter(Boolean)
+        ))
+      }
+      if (invitesRes.ok) {
+        const body = await invitesRes.json()
+        setPendingInviteEmails(new Set(
+          (body.data || []).map((i: any) => (i.email || '').toLowerCase()).filter(Boolean)
+        ))
+      }
+    } catch {
+      // status chips are a convenience; the roster itself must still render
+    }
+  }
+
+  const handleSendInvite = async () => {
+    if (!inviteTarget?.email) return
+    setInvitingNow(true)
+    setInviteError(null)
+    try {
+      const res = await fetch('/api/invitations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: inviteTarget.email,
+          role: inviteRole,
+          invited_by: profile?.id,
+        }),
+      })
+      const body = await res.json()
+      if (res.ok && body.success !== false) {
+        setPendingInviteEmails(prev => new Set(prev).add(inviteTarget.email!.toLowerCase()))
+        setInviteTarget(null)
+      } else {
+        setInviteError(body.error || t('inviteFailed'))
+      }
+    } catch {
+      setInviteError(t('inviteFailed'))
+    } finally {
+      setInvitingNow(false)
+    }
+  }
+
+  const accessStatus = (member: TeamMember): 'user' | 'invited' | 'none' => {
+    const email = (member.email || '').toLowerCase()
+    if (!email) return 'none'
+    if (userEmails.has(email)) return 'user'
+    if (pendingInviteEmails.has(email)) return 'invited'
+    return 'none'
+  }
+
   useEffect(() => {
     fetchMembers()
     fetchDepartments()
   }, [showInactive])
+
+  useEffect(() => {
+    fetchAccessStatus()
+  }, [])
 
   const fetchDepartments = async () => {
     try {
@@ -356,6 +434,29 @@ export default function TeamMembersPage() {
                       <span>{member.phone}</span>
                     </div>
                   )}
+                  {member.email && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <KeyRound className="h-3.5 w-3.5 text-gray-400" />
+                      {accessStatus(member) === 'user' && (
+                        <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                          {t('systemUser')}
+                        </span>
+                      )}
+                      {accessStatus(member) === 'invited' && (
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
+                          {t('invitationSent')}
+                        </span>
+                      )}
+                      {accessStatus(member) === 'none' && (
+                        <button
+                          onClick={() => { setInviteTarget(member); setInviteRole('agent'); setInviteError(null) }}
+                          className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                        >
+                          {t('inviteToSystem')}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {member.notes && (
@@ -510,6 +611,45 @@ export default function TeamMembersPage() {
       <div className="text-center pt-4">
         <p className="text-xs text-gray-400">© 2024 Autoura Operations System</p>
       </div>
+      {/* Invite-to-system dialog (bridge to User Management) */}
+      {inviteTarget && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-5">
+            <h3 className="text-base font-semibold text-gray-900 mb-1">{t('inviteDialogTitle')}</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              {inviteTarget.name} · {inviteTarget.email}
+            </p>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('systemRole')}</label>
+            <select
+              value={inviteRole}
+              onChange={(e) => setInviteRole(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-3"
+            >
+              <option value="agent">{t('sysRoleAgent')}</option>
+              <option value="manager">{t('sysRoleManager')}</option>
+              <option value="admin">{t('sysRoleAdmin')}</option>
+              <option value="viewer">{t('sysRoleViewer')}</option>
+            </select>
+            {inviteError && <p className="text-sm text-red-600 mb-3">{inviteError}</p>}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setInviteTarget(null)}
+                disabled={invitingNow}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                {t('cancel')}
+              </button>
+              <button
+                onClick={handleSendInvite}
+                disabled={invitingNow}
+                className="px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+              >
+                {invitingNow ? t('sending') : t('sendInvitation')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
