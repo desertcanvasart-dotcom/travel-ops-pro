@@ -702,7 +702,7 @@ export default function TransportationContent() {
   return (
     <div className="p-6 space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-y-2">
         <div className="flex items-center gap-2">
           <Car className="h-5 w-5 text-blue-600" />
           <h1 className="text-lg font-semibold text-gray-900">{t('title')}</h1>

@@ -67,8 +67,13 @@ export default function RootLayout({
                 // App pages - with sidebar
                 <div className="flex h-screen overflow-hidden bg-gray-50">
                   <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+                  {/* pt-14 below lg: the menu button is `fixed top-4 left-4`
+                      and floats OVER the page, so on a phone it landed on top
+                      of whatever each page put in its top-left corner — page
+                      titles came out as "otel Rates". Reserving the strip once
+                      here beats every page remembering to dodge it. */}
                   <main
-                    className={`flex-1 overflow-y-auto transition-all duration-300 ${
+                    className={`flex-1 overflow-y-auto transition-all duration-300 pt-14 lg:pt-0 ${
                       isCollapsed ? 'lg:ml-16' : 'lg:ml-56'
                     }`}
                   >

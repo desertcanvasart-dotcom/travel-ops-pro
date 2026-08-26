@@ -704,13 +704,13 @@ export default function CruisesPage() {
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="container mx-auto px-4 lg:px-6 py-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-y-2">
             <div className="flex items-center gap-2">
               <Ship className="w-5 h-5 text-blue-600" />
               <h1 className="text-xl font-bold text-gray-900">{t('title')}</h1>
               <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <BulkRateImportExport tableName="nile_cruises" onImportComplete={fetchCruises} />
               {/* The wide sheet above carries three fixed seasons; this one
                   carries as many dated periods as the contract has. */}
