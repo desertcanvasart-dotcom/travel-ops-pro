@@ -136,7 +136,11 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'messageTemplates', href: '/templates', icon: FileText },
       { labelKey: 'aiCopilot', href: '/copilot', icon: Sparkles },
       { labelKey: 'copilotKnowledge', href: '/copilot-knowledge', icon: BookOpen },
-      { labelKey: 'conciergeLeads', href: '/concierge-briefs', icon: ConciergeBell },
+      // Concierge leads is hidden from the nav while the operator is not using
+      // it (2026-08-26). Hidden, NOT removed: /concierge-briefs, its API and
+      // the inbound partner webhook all still work, so anything already
+      // pointing at it keeps working and turning it back on is one line.
+      // { labelKey: 'conciergeLeads', href: '/concierge-briefs', icon: ConciergeBell },
       { labelKey: 'copilotAnalytics', href: '/copilot-analytics', icon: BarChart3 },
     ]
   },
