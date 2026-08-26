@@ -34,7 +34,9 @@ const CSS = `
 .portal .gateform button{padding:12px;border:none;border-radius:8px;background:var(--brand);color:#fff;font-size:15px;font-weight:600;cursor:pointer}
 .portal .gateform button:disabled{opacity:.5;cursor:default}
 .portal .changereq{margin-top:20px;padding-top:16px;border-top:1px dashed var(--line)}
-.portal .crtoggle{background:none;border:none;color:var(--brand);font-size:14px;font-weight:600;cursor:pointer;padding:0;text-decoration:underline}
+/* A text button still needs a thumb-sized target: this was 24px tall. */
+.portal .crtoggle{background:none;border:none;color:var(--brand);font-size:15px;font-weight:600;
+  cursor:pointer;padding:10px 0;min-height:44px;text-decoration:underline;text-align:left}
 .portal .crform{display:flex;flex-direction:column;gap:8px;margin-top:6px}
 .portal .crform label{font-size:13px;color:var(--soft)}
 .portal .crlead{font-size:13px;color:var(--soft);margin:0 0 4px}
@@ -66,6 +68,13 @@ const CSS = `
 .portal .gateerr{font-size:13px;color:#c0392b;margin:0}
 .portal .op{font-size:12px;letter-spacing:.08em;color:var(--soft);margin:0 0 8px}
 .portal .optag{font-size:11px;color:var(--soft);margin:-4px 0 8px}
+/* globals.css colours every h1-h6 with --gray-900, a near-black. That is an
+   element selector, so it beats the colour these headings would otherwise
+   INHERIT from .portal. Invisible in light mode, where both are dark. In dark
+   mode the portal's background flips and the headings do not, so a traveller
+   with dark mode on — most of them, on a phone — saw a page whose every
+   heading had vanished. Scoped to .portal: the operator's app is not touched. */
+.portal h1,.portal h2,.portal h3,.portal h4,.portal h5,.portal h6{color:var(--ink)}
 .portal h1{font-size:22px;line-height:1.4;margin:0 0 8px;font-weight:700}
 .portal .sub{margin:0;color:var(--soft);font-size:14px}
 .portal .ref{margin:6px 0 0;color:var(--soft);font-size:12px;font-variant-numeric:tabular-nums}
@@ -107,27 +116,42 @@ const CSS = `
 .f{display:block;margin-bottom:2px}
 .f.wide{grid-column:1/-1}
 .f>span{display:block;font-size:12px;color:var(--soft);margin-bottom:4px}
-.f input,.f select{width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;
-  font:inherit;font-size:15px;background:#fff;color:var(--ink)}
+/* 16px, NOT 15. Below 16 iOS Safari zooms the whole page in when the field
+   takes focus and does not zoom back out — on a form this long that is a lurch
+   per field, and the traveller ends up dragging the page sideways to read the
+   next label. The change-request form above already knew this. */
+.f input,.f select,.f textarea{width:100%;padding:11px;border:1px solid var(--line);border-radius:6px;
+  font:inherit;font-size:16px;background:#fff;color:var(--ink)}
 .f input:focus,.f select:focus{outline:2px solid var(--brand);outline-offset:1px;border-color:transparent}
 .f.error input,.f.error select{border-color:var(--err)}
 .f.warning input{border-color:var(--warn)}
-.radios{display:flex;flex-wrap:wrap;gap:16px;margin:6px 0 12px;font-size:14px}
-.radios label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.radios{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 12px;font-size:15px}
+/* The whole label is the target, not the 13px dot inside it: on a phone the
+   passport held/applying choice was a pinpoint. */
+.radios label{display:flex;align-items:center;gap:8px;cursor:pointer;
+  min-height:44px;padding:4px 10px 4px 6px;border-radius:8px}
+.radios input[type=radio]{width:20px;height:20px;accent-color:var(--brand);flex:none}
 
 .paxbody h5{font-size:13px;margin:16px 0 6px;color:var(--soft);font-weight:700}
 
 /* Attached documents. A row reads as a fact already recorded, not a control:
    the file is on the booking, and the only action is to take it back off. */
 .docs{margin:6px 0 4px}
-.docs input[type=file]{display:block;margin:6px 0 4px;font:inherit;font-size:13px;max-width:100%}
+.docs input[type=file]{display:block;width:100%;margin:8px 0 4px;font:inherit;font-size:15px;
+  max-width:100%}
+/* The native control's own button is the tap target — 28px tall and unstyled
+   before this. It is the control that attaches a passport, so it should look
+   and feel like a button worth pressing. */
+.docs input[type=file]::file-selector-button{font:inherit;font-size:15px;font-weight:600;
+  min-height:44px;padding:0 16px;margin-right:12px;border:1px solid var(--line);
+  border-radius:8px;background:#fff;color:var(--ink);cursor:pointer}
 .docs .doc-add{margin-top:6px}
 .doc-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;padding:8px 10px;margin:4px 0;
   border:1px solid var(--line);border-radius:6px;background:#fafbf9}
 .doc-row .doc-name{font-size:14px;font-weight:600;word-break:break-all}
 .doc-row .doc-meta{font-size:12px;color:var(--soft)}
-.doc-row button{margin-left:auto;font:inherit;font-size:13px;padding:4px 10px;cursor:pointer;
-  border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--err)}
+.doc-row button{margin-left:auto;font:inherit;font-size:14px;min-height:44px;padding:0 14px;
+  cursor:pointer;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--err)}
 .doc-row button:disabled{opacity:.5;cursor:default}
 .docs-error{font-size:13px;color:var(--err);margin:6px 0}
 .ins{margin-top:18px;padding:14px;border:1px solid var(--line);border-radius:8px;background:#fafbf9}
@@ -155,7 +179,13 @@ const CSS = `
 .issues li.error{color:var(--err)}
 .issues li.warning{color:var(--warn)}
 .actions{display:flex;gap:10px;margin-top:16px}
-.actions button{flex:1;padding:12px;border-radius:7px;font:inherit;font-weight:700;cursor:pointer;font-size:14px}
+.actions button{flex:1;min-height:48px;padding:12px;border-radius:7px;font:inherit;font-weight:700;
+  cursor:pointer;font-size:15px}
+/* Two buttons side by side stop being pressable somewhere around here: stack
+   them rather than shrink them. */
+@media(max-width:420px){
+  .actions{flex-direction:column-reverse}
+}
 .actions .primary{background:var(--brand);color:#fff;border:0}
 .actions .primary:disabled{opacity:.45;cursor:not-allowed}
 .actions .ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
@@ -204,7 +234,8 @@ footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);
   .portal{--ink:#e8eae7;--soft:#9aa29a;--line:#2c322c;--bg:#141714;--card:#1b1f1b;
     --err:#f2b8b5;--warn:#d6ac58;--ok:#8fb795}
   .money .total,.money .due{background:#191d19}
-  .f input,.f select{background:#141714;color:var(--ink)}
+  .f input,.f select,.f textarea{background:#141714;color:var(--ink)}
+  .docs input[type=file]::file-selector-button{background:#1b1f1b;color:var(--ink)}
   .ins{background:#131613}
   .plan{background:#141714}
   .issues{background:#241a19;border-color:#3a2422}
