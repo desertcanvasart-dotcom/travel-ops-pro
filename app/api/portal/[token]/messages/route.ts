@@ -245,6 +245,12 @@ export async function POST(
       title: 'New portal message',
       message: `${who}: ${body.slice(0, 120)}`,
       link: `/bookings/${gate.booking.id}`,
+      // IN-APP ONLY. notifyOrgManagers emails by default, which here means one
+      // email per manager per message — sent from and to the shared mailbox,
+      // so Gmail sync pulls every one of them back into the unified inbox as
+      // its own conversation. The message is already in that inbox; announcing
+      // it there N times buries the thing being announced.
+      send_email: false,
     })
   } catch (err) {
     console.warn('[portal] manager notification failed:', err)

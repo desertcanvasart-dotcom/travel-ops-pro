@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   Search, RefreshCw, User, Filter, Loader2,
-  MessageSquare, Mail, UserX, Users, Plus, X, Trash2, Check,
+  MessageSquare, Mail, Plane, UserX, Users, Plus, X, Trash2, Check,
   CloudDownload
 } from 'lucide-react'
 import { ChannelBadge, ChannelBadgeLight } from './ChannelBadge'
@@ -60,10 +60,12 @@ function ContactAvatar({ name, channel, size = 'md' }: {
     .join('')
     .toUpperCase() || '?'
 
-  // Different color schemes for WhatsApp vs Email
+  // A colour family per channel, so the list is scannable without reading.
   const colors = channel === 'whatsapp'
     ? ['bg-emerald-500', 'bg-teal-500', 'bg-green-500', 'bg-lime-600']
-    : ['bg-blue-500', 'bg-indigo-500', 'bg-violet-500', 'bg-sky-500']
+    : channel === 'portal'
+      ? ['bg-[#647C47]', 'bg-[#4f6339]', 'bg-[#7a9159]', 'bg-[#566b3c]']
+      : ['bg-blue-500', 'bg-indigo-500', 'bg-violet-500', 'bg-sky-500']
   const colorIndex = displayName.charCodeAt(0) % colors.length
 
   return (
@@ -403,13 +405,16 @@ export function UnifiedConversationList({
   }
 
   const getChannelIcon = (channel: ConversationChannel) => {
-    return channel === 'whatsapp' ? MessageSquare : Mail
+    if (channel === 'whatsapp') return MessageSquare
+    if (channel === 'portal') return Plane
+    return Mail
   }
 
   // Count summaries
   const totalUnread = conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0)
   const whatsappCount = conversations.filter(c => c.channel === 'whatsapp').length
   const emailCount = conversations.filter(c => c.channel === 'email').length
+  const portalCount = conversations.filter(c => c.channel === 'portal').length
 
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-200">
@@ -493,6 +498,7 @@ export function UnifiedConversationList({
             { key: 'all', label: t('all'), count: conversations.length, icon: null, color: 'gray' },
             { key: 'whatsapp', label: t('whatsapp'), count: whatsappCount, icon: MessageSquare, color: 'emerald' },
             { key: 'email', label: t('email'), count: emailCount, icon: Mail, color: 'blue' },
+            { key: 'portal', label: t('portal'), count: portalCount, icon: Plane, color: 'olive' },
           ].map(tab => {
             const isActive = filters.channel === tab.key
             const IconComp = tab.icon
@@ -510,7 +516,9 @@ export function UnifiedConversationList({
                 {IconComp && (
                   <IconComp className={`w-3.5 h-3.5 ${
                     isActive
-                      ? tab.color === 'emerald' ? 'text-emerald-500' : 'text-blue-500'
+                      ? tab.color === 'emerald' ? 'text-emerald-500'
+                        : tab.color === 'olive' ? 'text-[#647C47]'
+                        : 'text-blue-500'
                       : ''
                   }`} />
                 )}
@@ -704,7 +712,10 @@ export function UnifiedConversationList({
                       <span className="text-[11px] text-gray-400 truncate">
                         {conv.contact_info}
                       </span>
-                      {!conv.assigned_agent && (
+                      {/* Portal conversations belong to a booking and have no
+                          assignment, so an amber "Unassigned" chip on every one
+                          of them is a permanent false alarm. */}
+                      {!conv.assigned_agent && conv.channel !== 'portal' && (
                         <span className="text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-medium">
                           {t('unassigned')}
                         </span>
