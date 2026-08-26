@@ -48,6 +48,7 @@ import PassengerManifest from '@/components/PassengerManifest'
 import SendConfirmationButton from '@/components/SendConfirmationButton'
 import PortalCoordinator from '@/app/components/PortalCoordinator'
 import TravellerDocumentsPanel from '@/app/components/TravellerDocumentsPanel'
+import PortalMessagesPanel from '@/app/components/PortalMessagesPanel'
 import BookingChangeRequests from '@/app/components/BookingChangeRequests'
 import InsuranceCard from '@/app/components/InsuranceCard'
 
@@ -425,6 +426,9 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
       {/* What travellers attached from their portal link. Renders nothing until
           something has been uploaded. */}
       <TravellerDocumentsPanel bookingId={resolvedParams.id} />
+      {/* Questions the travellers have asked from their portal link. Renders
+          nothing until somebody has written. */}
+      <PortalMessagesPanel bookingId={resolvedParams.id} />
 
       {/* Tabs */}
       <div className="bg-white rounded-lg shadow-sm border mb-6">
