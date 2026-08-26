@@ -793,6 +793,7 @@
     "unread": "unread",
     "whatsapp": "WhatsApp",
     "email": "Email",
+    "portal": "Portal",
     "all": "All",
     "searchPlaceholder": "Search by name, email, or subject...",
     "noConversations": "No conversations found",
