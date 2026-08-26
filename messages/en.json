@@ -4767,6 +4767,35 @@
       "of": "of",
       "rateRequired": "Enter a rate between 0 and 100",
       "enginePayNote": "How it is computed when commissions are generated for a trip: \"We receive\" = rate × the supplier's price on the service. \"We pay\" = rate × our profit on the service (client price − supplier cost); a service with no profit pays no commission."
+    },
+    "ratePeriods": {
+      "title": "Rate periods",
+      "titleWithCurrency": "Rate periods ({currency})",
+      "help": "One period per dated block on the contract, each with its own rates. Add as many as the contract has — there is no limit. A departure is priced at the period its dates fall in.",
+      "count": "{count, plural, =0 {no periods} =1 {1 period} other {# periods}}",
+      "empty": "No periods yet. Add one for each dated block on the supplier's contract.",
+      "addPeriod": "Add period",
+      "periodName": "Period name",
+      "periodNamePlaceholder": "e.g. Christmas / New Year",
+      "from": "From",
+      "to": "To",
+      "duplicate": "Duplicate this period's rates",
+      "remove": "Remove period",
+      "unnamed": "Period {number}",
+      "eurPassportHolders": "Travellers holding an EU passport",
+      "nonEurPassportHolders": "Travellers without an EU passport (Japanese and all others)",
+      "backwards": "{period} ends before it starts.",
+      "overlap": "{first} and {second} overlap. The shorter period wins on the days they share.",
+      "gap": "No period covers {from} to {to}. Departures in that window fall back to the first period's rates.",
+      "fields": {
+        "pp_double": "PP Dbl",
+        "single_supp": "Sgl Supp",
+        "triple_red": "Tpl Red",
+        "single": "Single",
+        "double": "Double",
+        "triple": "Triple",
+        "suite": "Suite"
+      }
     }
   },
   "profitLoss": {

@@ -1,6 +1,7 @@
 // app/api/rates/cruises/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
+import { sanitizeSeasons, legacyColumnMirror } from '@/lib/rates/rate-seasons'
 import { createServerClient } from '@/lib/supabase-server'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 
@@ -21,6 +22,19 @@ export async function PUT(
         return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
       }
       updateBody = { ...body, supplier_id: supplierCheck.supplier_id }
+    }
+
+    // PUT can patch, so only touch periods when the client sent them. When it
+    // did, they are validated rather than passed through as raw JSONB, and the
+    // first period is mirrored onto the base columns for readers that have no
+    // travel date.
+    if ('seasons' in body) {
+      const cruiseSeasons = sanitizeSeasons(body.seasons, 'cruise')
+      updateBody = {
+        ...updateBody,
+        seasons: cruiseSeasons,
+        ...legacyColumnMirror(cruiseSeasons, 'cruise'),
+      }
     }
 
     const { data, error } = await supabase

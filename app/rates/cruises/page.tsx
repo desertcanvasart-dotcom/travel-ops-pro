@@ -14,6 +14,8 @@ import { useCurrency } from '@/app/contexts/PreferencesContext'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
+import RateSeasonsEditor from '@/components/rates/RateSeasonsEditor'
+import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
 
 // ============================================
 // CONSTANTS
@@ -56,6 +58,10 @@ interface Cruise {
   rate_single_eur: number
   rate_double_eur: number
   rate_triple_eur: number | null
+  // Dated rate periods, each with its own rates. Supersedes the three fixed
+  // season blocks below, which are kept for the bulk importer and for readers
+  // that price without a travel date.
+  seasons: RateSeason[] | null
   // Seasonal rates - Low Season
   low_season_start: string | null
   low_season_end: string | null
@@ -129,6 +135,7 @@ interface CruiseFormData {
   rate_single_eur: number
   rate_double_eur: number
   rate_triple_eur: number
+  seasons: RateSeason[]
   // Low Season
   low_season_start: string
   low_season_end: string
@@ -311,220 +318,13 @@ function Pagination({
 }
 
 // ============================================
-// SEASONAL RATE SECTION COMPONENT
-// ============================================
-
-function SeasonalRateSection({
-  title,
-  seasonNumber,
-  startDate,
-  endDate,
-  startDate2,
-  endDate2,
-  onStartDateChange,
-  onEndDateChange,
-  onStartDate2Change,
-  onEndDate2Change,
-  rates,
-  onRateChange,
-  showSecondPeriod = false,
-  borderColor = 'border-gray-200',
-  bgColor = 'bg-white',
-  t
-}: {
-  title: string
-  seasonNumber: number
-  startDate: string
-  endDate: string
-  startDate2?: string
-  endDate2?: string
-  onStartDateChange: (value: string) => void
-  onEndDateChange: (value: string) => void
-  onStartDate2Change?: (value: string) => void
-  onEndDate2Change?: (value: string) => void
-  rates: {
-    single_eur: number
-    double_eur: number
-    triple_eur: number
-    suite_eur: number
-    single_non_eur: number
-    double_non_eur: number
-    triple_non_eur: number
-    suite_non_eur: number
-  }
-  onRateChange: (field: string, value: number) => void
-  showSecondPeriod?: boolean
-  borderColor?: string
-  bgColor?: string
-  t: (key: string) => string
-}) {
-  return (
-    <div className={`border ${borderColor} rounded-lg p-4 ${bgColor}`}>
-      <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-        <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs">
-          {seasonNumber}
-        </span>
-        {title}
-      </h4>
-
-      {/* Date Range */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div>
-          <label className="block text-xs font-medium text-red-600 mb-1">{t('form.from')}</label>
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => onStartDateChange(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-green-600 mb-1">{t('form.to')}</label>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => onEndDateChange(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-          />
-        </div>
-      </div>
-
-      {/* Second Period for Peak Season */}
-      {showSecondPeriod && (
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div>
-            <label className="block text-xs font-medium text-orange-600 mb-1">{t('form.period2From')}</label>
-            <input
-              type="date"
-              value={startDate2 || ''}
-              onChange={(e) => onStartDate2Change?.(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-orange-600 mb-1">{t('form.period2To')}</label>
-            <input
-              type="date"
-              value={endDate2 || ''}
-              onChange={(e) => onEndDate2Change?.(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* EUR Passport Rates */}
-      <div className="mb-3">
-        <label className="block text-xs font-medium text-gray-500 mb-2">{t('form.eurPassportHolders')}</label>
-        <div className="grid grid-cols-4 gap-2">
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">{t('form.single')}</label>
-            <input
-              type="number"
-              value={rates.single_eur}
-              onChange={(e) => onRateChange('single_eur', parseFloat(e.target.value) || 0)}
-              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
-              min="0"
-              step="0.01"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">{t('form.double')}</label>
-            <input
-              type="number"
-              value={rates.double_eur}
-              onChange={(e) => onRateChange('double_eur', parseFloat(e.target.value) || 0)}
-              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
-              min="0"
-              step="0.01"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">{t('form.triple')}</label>
-            <input
-              type="number"
-              value={rates.triple_eur}
-              onChange={(e) => onRateChange('triple_eur', parseFloat(e.target.value) || 0)}
-              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
-              min="0"
-              step="0.01"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">{t('form.suite')}</label>
-            <input
-              type="number"
-              value={rates.suite_eur}
-              onChange={(e) => onRateChange('suite_eur', parseFloat(e.target.value) || 0)}
-              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
-              min="0"
-              step="0.01"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Non-EUR Passport Rates */}
-      <div>
-        <label className="block text-xs font-medium text-gray-500 mb-2">{t('form.nonEurPassportHolders')}</label>
-        <div className="grid grid-cols-4 gap-2">
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">{t('form.single')}</label>
-            <input
-              type="number"
-              value={rates.single_non_eur}
-              onChange={(e) => onRateChange('single_non_eur', parseFloat(e.target.value) || 0)}
-              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
-              min="0"
-              step="0.01"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">{t('form.double')}</label>
-            <input
-              type="number"
-              value={rates.double_non_eur}
-              onChange={(e) => onRateChange('double_non_eur', parseFloat(e.target.value) || 0)}
-              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
-              min="0"
-              step="0.01"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">{t('form.triple')}</label>
-            <input
-              type="number"
-              value={rates.triple_non_eur}
-              onChange={(e) => onRateChange('triple_non_eur', parseFloat(e.target.value) || 0)}
-              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
-              min="0"
-              step="0.01"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-gray-400 mb-1">{t('form.suite')}</label>
-            <input
-              type="number"
-              value={rates.suite_non_eur}
-              onChange={(e) => onRateChange('suite_non_eur', parseFloat(e.target.value) || 0)}
-              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
-              min="0"
-              step="0.01"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ============================================
 // MAIN COMPONENT
 // ============================================
 
 export default function CruisesPage() {
   const t = useTranslations('rates.cruises')
   const tCommon = useTranslations('rates.common')
+  const tPeriods = useTranslations('rates.ratePeriods')
   const dialog = useConfirmDialog()
   const { formatWithConversion, rateCurrency } = useCurrency()
   const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
@@ -562,6 +362,7 @@ export default function CruisesPage() {
     rate_single_eur: 0,
     rate_double_eur: 0,
     rate_triple_eur: 0,
+    seasons: [],
     // Low Season (May 1 - Sep 30)
     low_season_start: `${currentYear}-05-01`,
     low_season_end: `${currentYear}-09-30`,
@@ -705,6 +506,9 @@ export default function CruisesPage() {
       rate_single_eur: cruise.rate_single_eur || 0,
       rate_double_eur: cruise.rate_double_eur || 0,
       rate_triple_eur: cruise.rate_triple_eur || 0,
+      // Opens with the ship's periods, or its old low/high/peak windows
+      // converted, so editing a pre-migration cruise loses nothing.
+      seasons: seasonsForRow(cruise, 'cruise'),
       // Low Season
       low_season_start: cruise.low_season_start || `${currentYear}-05-01`,
       low_season_end: cruise.low_season_end || `${currentYear}-09-30`,
@@ -1302,87 +1106,30 @@ export default function CruisesPage() {
                 </div>
               </div>
 
-              {/* Section 6: Low Season Rates */}
-              <SeasonalRateSection
-                title={t('form.lowSeasonRates', { currency: rateCurrency })}
-                seasonNumber={3}
-                startDate={formData.low_season_start}
-                endDate={formData.low_season_end}
-                onStartDateChange={(value) => setFormData({ ...formData, low_season_start: value })}
-                onEndDateChange={(value) => setFormData({ ...formData, low_season_end: value })}
-                rates={{
-                  single_eur: formData.rate_low_single_eur,
-                  double_eur: formData.rate_low_double_eur,
-                  triple_eur: formData.rate_low_triple_eur,
-                  suite_eur: formData.rate_low_suite_eur,
-                  single_non_eur: formData.rate_low_single_non_eur,
-                  double_non_eur: formData.rate_low_double_non_eur,
-                  triple_non_eur: formData.rate_low_triple_non_eur,
-                  suite_non_eur: formData.rate_low_suite_non_eur
-                }}
-                onRateChange={(field, value) => setFormData({ ...formData, [`rate_low_${field}`]: value })}
-                borderColor="border-green-200"
-                bgColor="bg-green-50/30"
-                t={t}
-              />
+              {/* Section 6: Rate periods */}
+              {/* Was three fixed season blocks — low, high, peak — with the
+                  peak one carrying a second date box because ships often have
+                  two. Contracts run to six or more dated periods and the count
+                  varies by ship, so the periods are a list now. An existing
+                  cruise opens with its old windows already converted (see
+                  openEditModal). */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs">3</span>
+                  {tPeriods('titleWithCurrency', { currency: rateCurrency })}
+                </h4>
+                <RateSeasonsEditor
+                  entity="cruise"
+                  seasons={formData.seasons}
+                  currency={rateCurrency}
+                  onChange={(seasons) => setFormData({ ...formData, seasons })}
+                />
+              </div>
 
-              {/* Section 7: High Season Rates */}
-              <SeasonalRateSection
-                title={t('form.highSeasonRates', { currency: rateCurrency })}
-                seasonNumber={4}
-                startDate={formData.high_season_start}
-                endDate={formData.high_season_end}
-                onStartDateChange={(value) => setFormData({ ...formData, high_season_start: value })}
-                onEndDateChange={(value) => setFormData({ ...formData, high_season_end: value })}
-                rates={{
-                  single_eur: formData.rate_high_single_eur,
-                  double_eur: formData.rate_high_double_eur,
-                  triple_eur: formData.rate_high_triple_eur,
-                  suite_eur: formData.rate_high_suite_eur,
-                  single_non_eur: formData.rate_high_single_non_eur,
-                  double_non_eur: formData.rate_high_double_non_eur,
-                  triple_non_eur: formData.rate_high_triple_non_eur,
-                  suite_non_eur: formData.rate_high_suite_non_eur
-                }}
-                onRateChange={(field, value) => setFormData({ ...formData, [`rate_high_${field}`]: value })}
-                borderColor="border-blue-200"
-                bgColor="bg-blue-50/30"
-                t={t}
-              />
-
-              {/* Section 8: Peak Season Rates */}
-              <SeasonalRateSection
-                title={t('form.peakSeasonRates', { currency: rateCurrency })}
-                seasonNumber={5}
-                startDate={formData.peak_season_1_start}
-                endDate={formData.peak_season_1_end}
-                startDate2={formData.peak_season_2_start}
-                endDate2={formData.peak_season_2_end}
-                onStartDateChange={(value) => setFormData({ ...formData, peak_season_1_start: value })}
-                onEndDateChange={(value) => setFormData({ ...formData, peak_season_1_end: value })}
-                onStartDate2Change={(value) => setFormData({ ...formData, peak_season_2_start: value })}
-                onEndDate2Change={(value) => setFormData({ ...formData, peak_season_2_end: value })}
-                rates={{
-                  single_eur: formData.rate_peak_single_eur,
-                  double_eur: formData.rate_peak_double_eur,
-                  triple_eur: formData.rate_peak_triple_eur,
-                  suite_eur: formData.rate_peak_suite_eur,
-                  single_non_eur: formData.rate_peak_single_non_eur,
-                  double_non_eur: formData.rate_peak_double_non_eur,
-                  triple_non_eur: formData.rate_peak_triple_non_eur,
-                  suite_non_eur: formData.rate_peak_suite_non_eur
-                }}
-                onRateChange={(field, value) => setFormData({ ...formData, [`rate_peak_${field}`]: value })}
-                showSecondPeriod={true}
-                borderColor="border-orange-200"
-                bgColor="bg-orange-50/30"
-                t={t}
-              />
-
-              {/* Section 9: Rate Card Validity */}
+              {/* Section 7: Rate Card Validity */}
               <div className="border border-gray-200 rounded-lg p-4">
                 <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-gray-600 text-white flex items-center justify-center text-xs">6</span>
+                  <span className="w-5 h-5 rounded-full bg-gray-600 text-white flex items-center justify-center text-xs">4</span>
                   {t('form.rateCardValidity')}
                   <span className="text-xs font-normal text-gray-500">{t('form.rateCardValidityHelp')}</span>
                 </h4>
@@ -1408,7 +1155,7 @@ export default function CruisesPage() {
                 </div>
               </div>
 
-              {/* Section 10: Options */}
+              {/* Section 8: Options */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.cruiseCode')}</label>
@@ -1445,7 +1192,7 @@ export default function CruisesPage() {
                 </div>
               </div>
 
-              {/* Section 11: Notes */}
+              {/* Section 9: Notes */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.notes')}</label>
                 <textarea

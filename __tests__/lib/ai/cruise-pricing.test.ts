@@ -2,27 +2,43 @@ import { describe, it, expect } from 'vitest'
 import {
   detectCruiseSeason,
   getCruiseSeasonRates,
+  resolveCruiseRates,
   calculateCabinAllocations,
 } from '@/lib/ai/cruise-pricing'
 
-describe('detectCruiseSeason', () => {
+// Season detection moved from a month-day comparison over three fixed windows
+// to real dated periods read off nile_cruises.seasons (migration
+// 20260826_rate_seasons). Two behaviours changed deliberately:
+//   - the period's NAME comes back, not the 'low'|'high'|'peak' keyword, because
+//     a ship may now have any number of named periods;
+//   - a window belongs to its contract year and no longer repeats for ever.
+// Rows that predate the migration still resolve through their legacy columns,
+// which is what the first block covers.
+
+describe('detectCruiseSeason — legacy rows (no seasons list)', () => {
   const mockShip = {
     peak_season_1_start: '2025-12-20',
     peak_season_1_end: '2026-01-10',
     peak_season_2_start: null,
     peak_season_2_end: null,
     high_season_start: '2025-10-01',
+    // Ends BEFORE it starts: the old month-day resolver read that as a window
+    // wrapping through the new year, and prod rows are entered that way.
     high_season_end: '2025-04-30',
   }
 
   it('should detect peak season', () => {
-    expect(detectCruiseSeason(mockShip, '2025-12-25')).toBe('peak')
-    expect(detectCruiseSeason(mockShip, '2026-01-05')).toBe('peak')
+    expect(detectCruiseSeason(mockShip, '2025-12-25')).toBe('Peak Season')
+    expect(detectCruiseSeason(mockShip, '2026-01-05')).toBe('Peak Season')
   })
 
   it('should detect high season', () => {
-    expect(detectCruiseSeason(mockShip, '2025-10-15')).toBe('high')
-    expect(detectCruiseSeason(mockShip, '2025-11-20')).toBe('high')
+    expect(detectCruiseSeason(mockShip, '2025-10-15')).toBe('High Season')
+    expect(detectCruiseSeason(mockShip, '2025-11-20')).toBe('High Season')
+  })
+
+  it('unwraps a backwards legacy window through the new year', () => {
+    expect(detectCruiseSeason(mockShip, '2026-02-14')).toBe('High Season')
   })
 
   it('should default to low season', () => {
@@ -33,6 +49,48 @@ describe('detectCruiseSeason', () => {
   it('should handle ship with no season data', () => {
     const emptyShip = {}
     expect(detectCruiseSeason(emptyShip, '2025-03-15')).toBe('low')
+  })
+})
+
+describe('resolveCruiseRates — dated periods', () => {
+  // What the operator can now enter: six periods, each with its own rates.
+  const ship = {
+    seasons: [
+      { name: 'Summer', from: '2026-05-01', to: '2026-09-30',
+        rates: { single_eur: 120, double_eur: 95, triple_eur: 85, suite_eur: 180,
+                 single_non_eur: 115, double_non_eur: 90, triple_non_eur: 80, suite_non_eur: 175 } },
+      { name: 'Autumn', from: '2026-10-01', to: '2026-12-19',
+        rates: { single_eur: 160, double_eur: 130, triple_eur: 115, suite_eur: 240,
+                 single_non_eur: 155, double_non_eur: 125, triple_non_eur: 110, suite_non_eur: 235 } },
+      { name: 'Christmas', from: '2026-12-20', to: '2027-01-05',
+        rates: { single_eur: 220, double_eur: 185, triple_eur: 165, suite_eur: 320,
+                 single_non_eur: 215, double_non_eur: 180, triple_non_eur: 160, suite_non_eur: 315 } },
+      { name: 'January', from: '2027-01-06', to: '2027-02-28',
+        rates: { single_eur: 140, double_eur: 110, triple_eur: 100, suite_eur: 210,
+                 single_non_eur: 135, double_non_eur: 105, triple_non_eur: 95, suite_non_eur: 205 } },
+    ],
+    // Legacy columns still present on the row — the periods must win.
+    rate_low_double_eur: 1,
+    low_season_start: '2026-01-01',
+    low_season_end: '2026-12-31',
+  }
+
+  it('prices a date at its own period, not the row base', () => {
+    expect(resolveCruiseRates(ship, '2026-07-15', true))
+      .toEqual({ season: 'Summer', rates: { single: 120, double: 95, triple: 85, suite: 180 } })
+    expect(resolveCruiseRates(ship, '2026-12-25', true).rates.double).toBe(185)
+    expect(resolveCruiseRates(ship, '2027-01-20', true).rates.double).toBe(110)
+  })
+
+  it('reads the non-EUR set for a non-EUR passport', () => {
+    expect(resolveCruiseRates(ship, '2026-07-15', false))
+      .toEqual({ season: 'Summer', rates: { single: 115, double: 90, triple: 80, suite: 175 } })
+  })
+
+  it('falls back to the legacy low columns for a date no period covers', () => {
+    const out = resolveCruiseRates(ship, '2027-08-01', true)
+    expect(out.season).toBe('low')
+    expect(out.rates.double).toBe(1)
   })
 })
 

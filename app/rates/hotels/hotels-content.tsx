@@ -38,6 +38,8 @@ import {
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
+import RateSeasonsEditor from '@/components/rates/RateSeasonsEditor'
+import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
 
 // ============================================
 // EGYPTIAN CITIES - Complete List
@@ -351,6 +353,7 @@ function Pagination({
 
 export default function HotelsContent() {
   const t = useTranslations('rates.hotels')
+  const tPeriods = useTranslations('rates.ratePeriods')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -393,6 +396,10 @@ export default function HotelsContent() {
     contact_phone: '',
     reservations_email: '',
     reservations_phone: '',
+    // Dated rate periods, each with its own rates. The legacy low_/high_/peak_
+    // fields below stay in the payload so the API can keep mirroring the first
+    // period onto them for readers that have no travel date.
+    seasons: [] as RateSeason[],
     // Low Season - Per Person
     pp_double_eur: 0,
     single_supp_eur: 0,
@@ -542,6 +549,7 @@ export default function HotelsContent() {
       contact_phone: '',
       reservations_email: '',
       reservations_phone: '',
+      seasons: [] as RateSeason[],
       // Low Season - Per Person
       pp_double_eur: 0,
       single_supp_eur: 0,
@@ -610,6 +618,9 @@ export default function HotelsContent() {
       contact_phone: rate.contact_phone || '',
       reservations_email: rate.reservations_email || '',
       reservations_phone: rate.reservations_phone || '',
+      // Opens with the row's periods, or its old low/high/peak windows
+      // converted, so editing a pre-migration rate loses nothing.
+      seasons: seasonsForRow(rate, 'accommodation'),
       // Low Season - Per Person
       pp_double_eur: rate.pp_double_eur || 0,
       single_supp_eur: rate.single_supp_eur || 0,
@@ -1517,197 +1528,29 @@ export default function HotelsContent() {
                 </div>
               </div>
 
-              {/* SECTION 4: Low Season Rates */}
+              {/* SECTION 4: Rate periods */}
+              {/* Was three fixed season blocks — low, high, peak — with four
+                  date boxes between them. Contracts run to six or more dated
+                  periods and the count varies by property, so the periods are
+                  a list now. An existing rate opens with its old windows
+                  already converted (see openEditModal). */}
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">4</span>
-                  {t('lowSeasonRates', { currency: rateCurrency })}
+                  {tPeriods('titleWithCurrency', { currency: rateCurrency })}
                 </h3>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  {/* Date Range */}
-                  <div className="grid grid-cols-2 gap-3 mb-4 pb-3 border-b border-blue-200">
-                    <div>
-                      <label className="block text-xs font-medium text-blue-700 mb-1">{t('from')}</label>
-                      <input type="date" name="low_season_from" value={formData.low_season_from} onChange={handleChange}
-                        className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-blue-700 mb-1">{t('to')}</label>
-                      <input type="date" name="low_season_to" value={formData.low_season_to} onChange={handleChange}
-                        className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white" />
-                    </div>
-                  </div>
-                  <p className="text-xs font-medium text-gray-600 mb-2">{t('eurPassportHolders')}</p>
-                  <div className="grid grid-cols-3 gap-3 mb-4">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('perPersonInDouble')}</label>
-                      <input type="number" name="pp_double_eur" value={formData.pp_double_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('singleSupplement')}</label>
-                      <input type="number" name="single_supp_eur" value={formData.single_supp_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('tripleReduction')}</label>
-                      <input type="number" name="triple_red_eur" value={formData.triple_red_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                  </div>
-                  <p className="text-xs font-medium text-gray-600 mb-2">{t('nonEurPassportHolders')}</p>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('perPersonInDouble')}</label>
-                      <input type="number" name="pp_double_non_eur" value={formData.pp_double_non_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('singleSupplement')}</label>
-                      <input type="number" name="single_supp_non_eur" value={formData.single_supp_non_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('tripleReduction')}</label>
-                      <input type="number" name="triple_red_non_eur" value={formData.triple_red_non_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                  </div>
-                </div>
+                <RateSeasonsEditor
+                  entity="accommodation"
+                  seasons={formData.seasons}
+                  currency={rateCurrency}
+                  onChange={(seasons) => setFormData({ ...formData, seasons })}
+                />
               </div>
 
-              {/* SECTION 5: High Season Rates */}
+              {/* SECTION 5: Rate Card Validity */}
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold">5</span>
-                  {t('highSeasonRates', { currency: rateCurrency })}
-                </h3>
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                  {/* Date Range */}
-                  <div className="grid grid-cols-2 gap-3 mb-4 pb-3 border-b border-orange-200">
-                    <div>
-                      <label className="block text-xs font-medium text-orange-700 mb-1">{t('from')}</label>
-                      <input type="date" name="high_season_from" value={formData.high_season_from} onChange={handleChange}
-                        className="w-full px-3 py-2 text-sm border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-orange-700 mb-1">{t('to')}</label>
-                      <input type="date" name="high_season_to" value={formData.high_season_to} onChange={handleChange}
-                        className="w-full px-3 py-2 text-sm border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white" />
-                    </div>
-                  </div>
-                  <p className="text-xs font-medium text-gray-600 mb-2">{t('eurPassportHolders')}</p>
-                  <div className="grid grid-cols-3 gap-3 mb-4">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('perPersonInDouble')}</label>
-                      <input type="number" name="high_pp_double_eur" value={formData.high_pp_double_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('singleSupplement')}</label>
-                      <input type="number" name="high_single_supp_eur" value={formData.high_single_supp_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('tripleReduction')}</label>
-                      <input type="number" name="high_triple_red_eur" value={formData.high_triple_red_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                  </div>
-                  <p className="text-xs font-medium text-gray-600 mb-2">{t('nonEurPassportHolders')}</p>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('perPersonInDouble')}</label>
-                      <input type="number" name="high_pp_double_non_eur" value={formData.high_pp_double_non_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('singleSupplement')}</label>
-                      <input type="number" name="high_single_supp_non_eur" value={formData.high_single_supp_non_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('tripleReduction')}</label>
-                      <input type="number" name="high_triple_red_non_eur" value={formData.high_triple_red_non_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION 6: Peak Season Rates */}
-              <div className="mb-6">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-xs font-bold">6</span>
-                  {t('peakSeasonRates', { currency: rateCurrency })}
-                </h3>
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  {/* Date Ranges - Primary and Secondary */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 pb-3 border-b border-red-200">
-                    <div>
-                      <label className="block text-xs font-medium text-red-700 mb-1">{t('period1From')}</label>
-                      <input type="date" name="peak_season_from" value={formData.peak_season_from} onChange={handleChange}
-                        className="w-full px-3 py-2 text-sm border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-red-700 mb-1">{t('period1To')}</label>
-                      <input type="date" name="peak_season_to" value={formData.peak_season_to} onChange={handleChange}
-                        className="w-full px-3 py-2 text-sm border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-red-700 mb-1">{t('period2From')} <span className="text-gray-400">{t('optional')}</span></label>
-                      <input type="date" name="peak_season_2_from" value={formData.peak_season_2_from} onChange={handleChange}
-                        className="w-full px-3 py-2 text-sm border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white" />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-red-700 mb-1">{t('period2To')} <span className="text-gray-400">{t('optional')}</span></label>
-                      <input type="date" name="peak_season_2_to" value={formData.peak_season_2_to} onChange={handleChange}
-                        className="w-full px-3 py-2 text-sm border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent bg-white" />
-                    </div>
-                  </div>
-                  <p className="text-xs font-medium text-gray-600 mb-2">{t('eurPassportHolders')}</p>
-                  <div className="grid grid-cols-3 gap-3 mb-4">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('perPersonInDouble')}</label>
-                      <input type="number" name="peak_pp_double_eur" value={formData.peak_pp_double_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('singleSupplement')}</label>
-                      <input type="number" name="peak_single_supp_eur" value={formData.peak_single_supp_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('tripleReduction')}</label>
-                      <input type="number" name="peak_triple_red_eur" value={formData.peak_triple_red_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                  </div>
-                  <p className="text-xs font-medium text-gray-600 mb-2">{t('nonEurPassportHolders')}</p>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('perPersonInDouble')}</label>
-                      <input type="number" name="peak_pp_double_non_eur" value={formData.peak_pp_double_non_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('singleSupplement')}</label>
-                      <input type="number" name="peak_single_supp_non_eur" value={formData.peak_single_supp_non_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">{t('tripleReduction')}</label>
-                      <input type="number" name="peak_triple_red_non_eur" value={formData.peak_triple_red_non_eur} onChange={handleChange} step="0.01" min="0"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent" placeholder="0" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION 7: Rate Card Validity */}
-              <div className="mb-6">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">7</span>
+                  <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">5</span>
                   {t('rateCardValidity')}
                   <span className="text-xs font-normal text-gray-500 ml-2">{t('rateCardValidityDesc')}</span>
                 </h3>

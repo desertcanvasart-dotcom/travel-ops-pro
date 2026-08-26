@@ -41,6 +41,7 @@ import { applyB2BDayRules } from '@/lib/ai/day-rules-engine'
 import type { PricingHole } from '@/lib/pricing-types'
 import { priceAcrossPax } from '@/lib/pricing/pax-range'
 import { usableRate } from '@/lib/pricing/usable-rate'
+import { ratesForTravelDate } from '@/lib/rates/rate-seasons'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -1052,17 +1053,87 @@ function inferAccommodationType(day: any, allDays: any[]): AccommodationType {
 // RATE LOOKUP FUNCTIONS
 // ============================================
 
+// ============================================
+// Which dated rate period a night falls in
+// ============================================
+// A catalog row read by column name. The `row` handed back by getHotelRates /
+// getCruiseRates so a caller can re-resolve per night without re-querying.
+type HotelOrCruiseRow = Record<string, unknown>
+
+// Hotels and cruises carry an unlimited list of dated periods, each with its
+// own rates (migration 20260826_rate_seasons). These take a catalog row that
+// has already been fetched and answer "what does this cost on this night",
+// so an itinerary spanning a season boundary prices each night at its own
+// period instead of one rate for the whole stay.
+//
+// No date, or a date outside every period, falls back to the row's base
+// columns — the historical behaviour, and the only behaviour available for
+// rows with no periods entered.
+
+/** Per-person-per-night double rate and single supplement for one night. */
+export function resolveHotelRatesForDate(
+  row: HotelOrCruiseRow,
+  isEurPassport: boolean,
+  travelDate?: string | null
+): { ppdNight: number; singleSuppNight: number; seasonName: string | null } {
+  const suffix = isEurPassport ? 'eur' : 'non_eur'
+  const hit = ratesForTravelDate(row, 'accommodation', travelDate)
+  const ppd = hit ? hit.rates[`pp_double_${suffix}`] : (row[`pp_double_${suffix}`] || 0)
+  const supp = hit ? hit.rates[`single_supp_${suffix}`] : (row[`single_supp_${suffix}`] || 0)
+  return {
+    ppdNight: Number(ppd) || 0,
+    // A negative supplement is a data-entry slip, never a discount.
+    singleSuppNight: Math.max(0, Number(supp) || 0),
+    seasonName: hit?.season.name ?? null,
+  }
+}
+
+/** Per-person-per-night double rate and single supplement for one cruise night.
+ *  The single supplement is the gap between the single and double cabin rates —
+ *  cruises price by cabin type rather than carrying a supplement column. */
+export function resolveCruiseRatesForDate(
+  row: HotelOrCruiseRow,
+  isEurPassport: boolean,
+  travelDate?: string | null
+): { ppdNight: number; singleSuppNight: number; seasonName: string | null } {
+  const suffix = isEurPassport ? 'eur' : 'non_eur'
+  const hit = ratesForTravelDate(row, 'cruise', travelDate)
+  // The legacy flat columns are EUR-only, so a non-EUR passport on a row with
+  // no periods falls back to the seasonal low columns before the flat ones.
+  const double = hit
+    ? hit.rates[`double_${suffix}`]
+    : (row[`rate_low_double_${suffix}`] || (isEurPassport ? row.rate_double_eur : 0) || 0)
+  const single = hit
+    ? hit.rates[`single_${suffix}`]
+    : (row[`rate_low_single_${suffix}`] || (isEurPassport ? row.rate_single_eur : 0) || 0)
+  return {
+    ppdNight: Number(double) || 0,
+    singleSuppNight: Math.max(0, (Number(single) || 0) - (Number(double) || 0)),
+    seasonName: hit?.season.name ?? null,
+  }
+}
+
 /**
- * Get cruise rates for a tier
+ * Get cruise rates for a tier.
+ *
+ * `row` comes back with the result so a caller pricing several nights can
+ * re-resolve each night's own date against the same catalog row (see
+ * resolveCruiseRatesForDate) instead of re-querying per night. The numbers on
+ * the result itself are the ones for `travelDate`, or the row's base columns
+ * when no dated period covers it.
  */
 export async function getCruiseRates(
   tier: ServiceTier,
-  embarkCity?: string
+  embarkCity?: string,
+  isEurPassport: boolean = true,
+  travelDate?: string | null
 ): Promise<{
   shipName: string
   ppdNight: number
   singleSuppNight: number
   durationNights: number
+  seasonName: string | null
+  row: HotelOrCruiseRow
 } | null> {
   try {
     let query = supabaseAdmin
@@ -1083,11 +1154,9 @@ export async function getCruiseRates(
     }
 
     const cruise = cruises[0]
-    // rate_double_eur is per-person PER-NIGHT (double occupancy): the cruise
-    // rates UI keeps it in sync with rate_low_double_eur, the seasonal pppn
-    // rate (see app/rates/cruises/page.tsx and lib/ai/cruise-pricing.ts).
-    // Do NOT divide by duration_nights — callers already multiply by the
-    // itinerary's cruise nights.
+    // Rates are per-person PER-NIGHT (double occupancy). Do NOT divide by
+    // duration_nights — callers already multiply by the itinerary's cruise
+    // nights.
     const safeNights = cruise.duration_nights && cruise.duration_nights > 0
       ? cruise.duration_nights
       : null
@@ -1095,16 +1164,17 @@ export async function getCruiseRates(
       console.warn(`⚠️ Cruise ${cruise.ship_name} has invalid duration_nights (${cruise.duration_nights}) — flagging hole (no fabrication)`)
       return null
     }
-    const ppdNight = cruise.rate_double_eur ?? 0
-    const singleSuppNight = (cruise.rate_single_eur ?? 0) - (cruise.rate_double_eur ?? 0)
+    const resolved = resolveCruiseRatesForDate(cruise, isEurPassport, travelDate)
 
-    debugLog(`✅ Cruise: ${cruise.ship_name} | PPD/night: €${ppdNight.toFixed(2)} | SingleSupp/night: €${singleSuppNight.toFixed(2)}`)
+    debugLog(`✅ Cruise: ${cruise.ship_name} | Period: ${resolved.seasonName ?? 'base rate'} | PPD/night: ${resolved.ppdNight.toFixed(2)} | SingleSupp/night: ${resolved.singleSuppNight.toFixed(2)}`)
 
     return {
       shipName: cruise.ship_name,
-      ppdNight,
-      singleSuppNight,
+      ppdNight: resolved.ppdNight,
+      singleSuppNight: resolved.singleSuppNight,
       durationNights: safeNights,
+      seasonName: resolved.seasonName,
+      row: cruise,
     }
   } catch (err) {
     console.error('Error fetching cruise rates:', err)
@@ -1113,17 +1183,32 @@ export async function getCruiseRates(
 }
 
 /**
- * Get hotel rates for a city and tier from accommodation_rates table
- * Uses pp_double and single_supp columns (per-person, per-night)
+ * Get hotel rates for a city and tier from accommodation_rates table.
+ * Per-person, per-night.
+ *
+ * Seasonality used to be entered on these rows and then ignored: this lookup
+ * read the base pp_double_/single_supp_ columns and took no travel date, so a
+ * hotel priced at its cheapest season whenever the client actually travelled.
+ * It now resolves the dated period covering `travelDate` (migration
+ * 20260826_rate_seasons), falling back to the base columns when no period
+ * covers it — which is also what a row with no periods entered does, so
+ * nothing regresses.
+ *
+ * `row` comes back with the result so a caller pricing several nights can
+ * re-resolve each night's own date against the same catalog row (see
+ * resolveHotelRatesForDate) instead of re-querying per night.
  */
 export async function getHotelRates(
   city: string,
   tier: ServiceTier,
-  isEurPassport: boolean = true
+  isEurPassport: boolean = true,
+  travelDate?: string | null
 ): Promise<{
   hotelName: string
   ppdNight: number
   singleSuppNight: number
+  seasonName: string | null
+  row: HotelOrCruiseRow
 } | null> {
   try {
     // Query accommodation_rates (the authoritative rates table with per-person pricing)
@@ -1144,19 +1229,16 @@ export async function getHotelRates(
     }
 
     const hotel = hotels[0]
-    const ppd = isEurPassport
-      ? (hotel.pp_double_eur || 0)
-      : (hotel.pp_double_non_eur || 0)
-    const singleSupp = isEurPassport
-      ? (hotel.single_supp_eur || 0)
-      : (hotel.single_supp_non_eur || 0)
+    const resolved = resolveHotelRatesForDate(hotel, isEurPassport, travelDate)
 
-    debugLog(`✅ Hotel: ${hotel.property_name} | PPD/night: €${ppd.toFixed(2)} | SingleSupp/night: €${singleSupp.toFixed(2)} (${isEurPassport ? 'EUR' : 'non-EUR'})`)
+    debugLog(`✅ Hotel: ${hotel.property_name} | Period: ${resolved.seasonName ?? 'base rate'} | PPD/night: ${resolved.ppdNight.toFixed(2)} | SingleSupp/night: ${resolved.singleSuppNight.toFixed(2)} (${isEurPassport ? 'EUR' : 'non-EUR'})`)
 
     return {
       hotelName: hotel.property_name,
-      ppdNight: ppd,
-      singleSuppNight: Math.max(0, singleSupp)
+      ppdNight: resolved.ppdNight,
+      singleSuppNight: resolved.singleSuppNight,
+      seasonName: resolved.seasonName,
+      row: hotel,
     }
   } catch (err) {
     console.error('Error fetching hotel rates:', err)
@@ -1871,6 +1953,19 @@ export async function calculateDayBasedPricing(
 
   debugLog(`📅 Parsed ${itinerary.length} days from itinerary`)
 
+  // A template's days are relative, so day N of a departure is travelDate + N-1.
+  // Hotel and cruise rates are dated, and a tour that crosses a season boundary
+  // must price each night in its own period rather than the whole stay at the
+  // first night's rate. Without a travel date there is nothing to resolve
+  // against and every night falls back to the row's base rate.
+  const dateForDay = (dayNumber?: number | null): string | null => {
+    if (!params.travelDate) return null
+    const start = new Date(`${params.travelDate.slice(0, 10)}T00:00:00Z`)
+    if (Number.isNaN(start.getTime())) return null
+    start.setUTCDate(start.getUTCDate() + Math.max(0, (dayNumber ?? 1) - 1))
+    return start.toISOString().slice(0, 10)
+  }
+
   // ============================================
   // STEP 2: Analyze accommodation types
   // ============================================
@@ -1922,9 +2017,9 @@ export async function calculateDayBasedPricing(
     fetchCruiseTransportPricingRules(),
     // Cruise rates only apply when the itinerary has cruise nights
     cruiseNights > 0
-      ? getCruiseRates(tier, firstCruiseDay?.city)
+      ? getCruiseRates(tier, firstCruiseDay?.city, isEurPassport, dateForDay(firstCruiseDay?.day))
       : Promise.resolve(null as Awaited<ReturnType<typeof getCruiseRates>>),
-    Promise.all(hotelCities.map(city => getHotelRates(city, tier, isEurPassport))),
+    Promise.all(hotelCities.map(city => getHotelRates(city, tier, isEurPassport, params.travelDate))),
     getGuideRate(language, tier),
     getMealRates(tier),
     getItemizedTips(tier),
@@ -2042,13 +2137,21 @@ export async function calculateDayBasedPricing(
   for (const day of hotelDays) {
     const hotelRate = hotelRatesMap.get(day.overnight_city || day.city)
     if (hotelRate) {
-      singleSupplement += hotelRate.singleSuppNight
+      // Each night at its own period's supplement — a stay crossing into peak
+      // pays the peak supplement for the nights that land there.
+      singleSupplement += resolveHotelRatesForDate(
+        hotelRate.row, isEurPassport, dateForDay(day.day)
+      ).singleSuppNight
     }
     // Missing hotel rate is flagged once, in the accommodation loop below (no fabrication here).
   }
 
   if (cruiseRates && cruiseNights > 0) {
-    singleSupplement += cruiseRates.singleSuppNight * cruiseNights
+    for (const day of cruiseDays) {
+      singleSupplement += resolveCruiseRatesForDate(
+        cruiseRates.row, isEurPassport, dateForDay(day.day)
+      ).singleSuppNight
+    }
   }
 
   debugLog(`💰 Total Single Supplement: €${singleSupplement.toFixed(2)}`)
@@ -2264,7 +2367,11 @@ export async function calculateDayBasedPricing(
     const hotelCity = day.overnight_city || day.city
     const hotelRate = hotelRatesMap.get(hotelCity)
     if (hotelRate) {
-      accommodationPPD += hotelRate.ppdNight
+      // This night's own period, not the stay's first night — see dateForDay.
+      const nightly = resolveHotelRatesForDate(
+        hotelRate.row, isEurPassport, dateForDay(day.day)
+      )
+      accommodationPPD += nightly.ppdNight
       services.push({
         id: `day${day.day}-hotel`,
         dayNumber: day.day,
@@ -2272,12 +2379,14 @@ export async function calculateDayBasedPricing(
         serviceName: `Hotel - ${hotelRate.hotelName} (${hotelCity})`,
         quantity: 1,
         quantityMode: 'per_pax',
-        unitCost: hotelRate.ppdNight,
-        lineTotal: hotelRate.ppdNight,
+        unitCost: nightly.ppdNight,
+        lineTotal: nightly.ppdNight,
         rateSource: 'accommodation_rates',
         isPerPax: true,
         isOptional: false,
-        notes: 'PPD (Per Person Double)'
+        notes: nightly.seasonName
+          ? `PPD (Per Person Double) — ${nightly.seasonName}`
+          : 'PPD (Per Person Double)'
       })
     } else {
       addHole({
@@ -2291,9 +2400,19 @@ export async function calculateDayBasedPricing(
     }
   }
 
-  // Cruise PPD
+  // Cruise PPD — each night at its own period's rate, so a sailing that crosses
+  // into peak is not billed at the rate of the night it embarked.
   if (cruiseRates && cruiseNights > 0) {
-    accommodationPPD += cruiseRates.ppdNight * cruiseNights
+    const nightly = cruiseDays.map(day =>
+      resolveCruiseRatesForDate(cruiseRates.row, isEurPassport, dateForDay(day.day))
+    )
+    const cruiseTotal = nightly.reduce((sum, n) => sum + n.ppdNight, 0)
+    const periodsUsed = [...new Set(nightly.map(n => n.seasonName).filter(Boolean))]
+    // One line for the sailing, so unitCost is the per-night average whenever
+    // the nights did not all price the same.
+    const perNight = cruiseNights > 0 ? cruiseTotal / cruiseNights : 0
+
+    accommodationPPD += cruiseTotal
     services.push({
       id: `cruise-accommodation`,
       dayNumber: cruiseDays[0]?.day || 1,
@@ -2301,12 +2420,19 @@ export async function calculateDayBasedPricing(
       serviceName: `Nile Cruise - ${cruiseRates.shipName} (${cruiseNights} nights)`,
       quantity: cruiseNights,
       quantityMode: 'per_pax',
-      unitCost: cruiseRates.ppdNight,
-      lineTotal: cruiseRates.ppdNight * cruiseNights,
+      unitCost: perNight,
+      lineTotal: cruiseTotal,
       rateSource: 'nile_cruises',
       isPerPax: true,
       isOptional: false,
-      notes: `PPD €${cruiseRates.ppdNight.toFixed(2)}/night × ${cruiseNights} nights`
+      // No currency symbol: rates are kept in the org's rate_currency (USD
+      // since 2026-08-22), and the result carries that currency on itself.
+      // The '€' this line used to print was a euro assumption on a note the
+      // operator reads. lib/auto-pricing-service.ts is outside the scan list
+      // of the no-hardcoded-rate-currency guard, so nothing caught it.
+      notes: periodsUsed.length > 1
+        ? `PPD ${perNight.toFixed(2)}/night avg × ${cruiseNights} nights (${periodsUsed.join(', ')})`
+        : `PPD ${perNight.toFixed(2)}/night × ${cruiseNights} nights`
     })
   }
 

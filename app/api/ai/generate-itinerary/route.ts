@@ -419,7 +419,7 @@ export async function POST(request: NextRequest) {
           startDate: start_date,
           isEuroPassport
         })
-        debugLog(`💰 Cruise rate: ${cruiseRate.totalPerNight}/night total on ${cruiseRate.shipName} (${cruiseRate.season} season)`)
+        debugLog(`💰 Cruise rate: ${cruiseRate.totalPerNight}/night total on ${cruiseRate.shipName} (${cruiseRate.season})`)
         if (cruiseRate.cabinAllocation.length > 0) {
           debugLog(`🛏️ Cabins: ${cruiseRate.cabinAllocation.map(a => `${a.count}×${a.type}`).join(' + ')}`)
         }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
+import { sanitizeSeasons, legacyColumnMirror } from '@/lib/rates/rate-seasons'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createActorAdminClient } from '@/lib/supabase-actor'
@@ -45,6 +46,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    // A malformed periods payload reads as "no periods" and the row keeps
+    // pricing off its base columns — never a 500 on a rate save.
+    const hotelSeasons = sanitizeSeasons(body.seasons, 'accommodation')
 
     const _rateCheck = validateRatePayload(body)
     if (!_rateCheck.ok) {
@@ -120,6 +124,12 @@ export async function POST(request: NextRequest) {
       peak_single_supp_non_eur: parseFloat(body.peak_single_supp_non_eur) || 0,
       peak_triple_red_non_eur: parseFloat(body.peak_triple_red_non_eur) || 0,
       
+      // Dated rate periods (unlimited). When present these are what pricing
+      // reads; the first one is mirrored onto the base columns above for
+      // readers that have no travel date.
+      seasons: hotelSeasons,
+      ...legacyColumnMirror(hotelSeasons, 'accommodation'),
+
       // Rate validity
       rate_valid_from: body.rate_valid_from || null,
       rate_valid_to: body.rate_valid_to || null,
