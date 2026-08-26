@@ -106,6 +106,38 @@ export function periodsToRows(
   })
 }
 
+/** The sample row for a periods sheet. Same reasoning as the wide template:
+ *  with no rate carrying periods yet, an export is headers and nothing else,
+ *  and the date format is left to guesswork. The key is the sentinel the
+ *  import refuses, so filling the sheet in underneath it cannot land a rate
+ *  called EXAMPLE-DELETE-THIS-ROW. */
+export const PERIOD_EXAMPLE_KEY = 'EXAMPLE-DELETE-THIS-ROW'
+
+export function periodTemplateRows(config: PeriodSheetConfig): Record<string, string | number>[] {
+  const example = (name: string, from: string, to: string, base: number) => {
+    const row: Record<string, string | number> = {}
+    for (const col of config.columns) {
+      if (col.field === 'key') row[col.label] = PERIOD_EXAMPLE_KEY
+      else if (col.field === 'display_name') row[col.label] = 'Example Name'
+      else if (col.field === 'name') row[col.label] = name
+      else if (col.field === 'from') row[col.label] = from
+      else if (col.field === 'to') row[col.label] = to
+      // Supplements and reductions are smaller than the headline rate; a
+      // sample where every number is identical teaches nothing about which
+      // column is which.
+      else if (/supp|red/.test(col.field)) row[col.label] = Math.round(base / 2)
+      else row[col.label] = base
+    }
+    return row
+  }
+  // Two rows, because one row does not show that periods REPEAT per rate —
+  // which is the whole point of this sheet.
+  return [
+    example('Summer', '2026-05-01', '2026-09-30', 100),
+    example('Christmas', '2026-12-20', '2027-01-05', 180),
+  ]
+}
+
 /** ISO through untouched; DD/MM/YYYY normalised. Anything else is refused —
  *  a date the database would reject is better caught here, by row number. */
 export function parseSheetDate(raw: unknown): string | null {
@@ -128,6 +160,8 @@ export interface ParsedPeriodSheet {
   /** rate key → the period list that key should end up with. */
   byKey: Map<string, RateSeason[]>
   errors: PeriodRowError[]
+  /** Unedited sample rows left out rather than treated as a missing rate. */
+  exampleRows: number
 }
 
 const num = (raw: unknown): number => {
@@ -149,6 +183,7 @@ export function parsePeriodRows(
 ): ParsedPeriodSheet {
   const byKey = new Map<string, RateSeason[]>()
   const errors: PeriodRowError[] = []
+  let exampleRows = 0
   const keyLabel = config.columns[0].label
   const nameLabel = config.columns[2].label
   const fromLabel = config.columns[3].label
@@ -159,6 +194,13 @@ export function parsePeriodRows(
     const key = String(raw[keyLabel] ?? '').trim()
     if (!key) {
       errors.push({ row: line, key: '', message: `${keyLabel} is required` })
+      return
+    }
+    // The untouched sample row from a downloaded template. Skipped silently
+    // here and reported by the route, so filling the sheet in underneath it
+    // cannot try to load periods onto a rate that does not exist.
+    if (key.toUpperCase() === PERIOD_EXAMPLE_KEY) {
+      exampleRows++
       return
     }
 
@@ -191,5 +233,5 @@ export function parsePeriodRows(
     list.sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0))
   }
 
-  return { byKey, errors }
+  return { byKey, errors, exampleRows }
 }

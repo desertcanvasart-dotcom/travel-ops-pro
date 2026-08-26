@@ -54,13 +54,15 @@ export async function POST(request: NextRequest) {
       transformHeader: h => h.trim(),
     })
 
-    const { byKey, errors } = parsePeriodRows(config, parsed.data ?? [])
+    const { byKey, errors, exampleRows } = parsePeriodRows(config, parsed.data ?? [])
     const rowErrors: PeriodRowError[] = [...errors]
 
     if (byKey.size === 0) {
       return NextResponse.json({
         success: false,
-        error: 'No usable rows in the file.',
+        error: exampleRows > 0
+          ? 'This file only contains the example row from the template. Replace it with your own periods.'
+          : 'No usable rows in the file.',
         errors: rowErrors,
       }, { status: 400 })
     }
@@ -111,6 +113,7 @@ export async function POST(request: NextRequest) {
         dryRun: true,
         changes,
         errors: rowErrors,
+        exampleRowsSkipped: exampleRows,
       })
     }
 

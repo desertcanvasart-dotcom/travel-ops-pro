@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
-import { RATE_TABLE_CONFIGS, validateImportData } from '@/lib/bulk-rate-service'
+import { RATE_TABLE_CONFIGS, validateImportData, isExampleRow } from '@/lib/bulk-rate-service'
 import type { ImportResult, ValidationError } from '@/lib/bulk-rate-service'
 import Papa from 'papaparse'
 import { validateRatePayload } from '@/lib/rate-validation'
@@ -193,12 +193,21 @@ export async function POST(request: NextRequest) {
     // Determine the unique key column for upsert
     const uniqueKeyColumn = config.uniqueKey[0] // e.g., 'service_code' or 'cruise_code' or 'cost_type'
 
+    // The untouched sample row from a downloaded template. Filling the sheet in
+    // underneath it and importing the lot is the obvious mistake to make, so it
+    // is skipped rather than inserted as a rate called EXAMPLE-DELETE-THIS-ROW.
+    let exampleRowsSkipped = 0
+
     // Reject rows whose unique key is blank — without a key every such row is
     // inserted as a brand-new record, creating uncontrolled duplicates.
     const keyedRows = rowsToUpsert.filter(r => {
       const key = r[uniqueKeyColumn]
       if (key === undefined || key === null || String(key).trim() === '') {
         importErrors.push({ operation: 'validate', message: `Row missing required ${uniqueKeyColumn}; skipped` })
+        return false
+      }
+      if (isExampleRow(key)) {
+        exampleRowsSkipped++
         return false
       }
       return true
@@ -306,6 +315,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const exampleWarnings = exampleRowsSkipped > 0
+      ? [{
+          kind: 'example_row_skipped' as const,
+          key: 'template',
+          message: `Skipped ${exampleRowsSkipped} unedited example row${exampleRowsSkipped === 1 ? '' : 's'} from the downloaded template. Delete that row from the file once you have used it as a guide.`,
+        }]
+      : []
+
     const warnings = Array.from(supersededByPeriods.entries()).map(([key, count]) => ({
       kind: 'periods_supersede_columns' as const,
       key,
@@ -319,7 +336,7 @@ export async function POST(request: NextRequest) {
       inserted,
       updated,
       errors: importErrors,
-      warnings,
+      warnings: [...exampleWarnings, ...warnings],
     }
 
     const success = importErrors.length === 0
