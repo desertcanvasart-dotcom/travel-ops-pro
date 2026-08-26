@@ -6603,7 +6603,8 @@
   },
   "channels": {
     "whatsapp": "WhatsApp",
-    "email": "メール"
+    "email": "メール",
+    "portal": "ポータル"
   },
   "commissions": {
     "title": "コミッション管理",

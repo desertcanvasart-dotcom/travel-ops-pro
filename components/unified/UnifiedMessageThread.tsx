@@ -233,6 +233,11 @@ export function UnifiedMessageThread({
   const { user } = useAuth()
   const t = useTranslations('communications')
   const tCommon = useTranslations('common')
+  // A portal conversation belongs to a BOOKING. Assignment is not modelled for
+  // it, and "deleting" it here would destroy a traveller's questions from a
+  // screen that is only a view onto them — so neither control is offered,
+  // rather than offered and quietly doing the wrong thing to the wrong channel.
+  const isPortal = conversation?.channel === 'portal'
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const [messages, setMessages] = useState<UnifiedMessage[]>([])
@@ -277,6 +282,8 @@ export function UnifiedMessageThread({
       let url: string
       if (conversation.channel === 'whatsapp') {
         url = `/api/whatsapp/messages?conversation_id=${conversation.id}`
+      } else if (conversation.channel === 'portal') {
+        url = `/api/portal-chat/messages?conversation_id=${conversation.id}`
       } else {
         url = `/api/email/messages?conversation_id=${conversation.id}`
       }
@@ -445,6 +452,11 @@ export function UnifiedMessageThread({
       if (conversation.channel === 'whatsapp') {
         url = '/api/whatsapp/messages'
         body = { conversation_id: conversation.id, message: messageToSend }
+      } else if (conversation.channel === 'portal') {
+        // The traveller reads this on their own booking page, and is emailed a
+        // link to it — there is no address to send to here.
+        url = '/api/portal-chat/messages'
+        body = { conversationId: conversation.id, message: messageToSend }
       } else {
         // For email, we need the thread_id and recipient
         url = '/api/gmail/send'
@@ -769,7 +781,7 @@ export function UnifiedMessageThread({
                 )}
               </div>
               <p className="text-xs text-gray-500 truncate">{conversation.contact_info}</p>
-              {conversation.channel === 'email' && conversation.subject && (
+              {(conversation.channel === 'email' || isPortal) && conversation.subject && (
                 <p className="text-xs text-gray-700 font-medium truncate mt-0.5 max-w-[300px]" title={conversation.subject}>
                   {conversation.subject}
                 </p>
@@ -778,8 +790,8 @@ export function UnifiedMessageThread({
           </div>
 
           <div className="flex items-center gap-1.5">
-            {/* Agent Selector */}
-            <div className="relative">
+            {/* Agent Selector — not for portal: see isPortal above. */}
+            <div className="relative" hidden={isPortal}>
               <button
                 type="button"
                 onClick={() => setShowAgentSelector(!showAgentSelector)}
@@ -916,16 +928,18 @@ export function UnifiedMessageThread({
               </button>
             )}
 
-            {/* Delete */}
-            <button
-              type="button"
-              onClick={() => setShowDeleteModal(true)}
-              disabled={actionLoading}
-              className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
-              title={tCommon('delete')}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            {/* Delete — not for portal: see isPortal above. */}
+            {!isPortal && (
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(true)}
+                disabled={actionLoading}
+                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                title={tCommon('delete')}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </div>

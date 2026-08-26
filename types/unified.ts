@@ -7,7 +7,11 @@
 // CHANNEL TYPES
 // ============================================
 
-export type ConversationChannel = 'whatsapp' | 'email'
+// 'portal' is the traveller writing from their own booking page. It behaves
+// like the other two in the inbox, with one difference worth knowing: a portal
+// conversation belongs to a BOOKING (or to one traveller on it), not to a phone
+// number or an address, so it is never merged with the same person's WhatsApp.
+export type ConversationChannel = 'whatsapp' | 'email' | 'portal'
 export type MessageDirection = 'inbound' | 'outbound'
 export type ConversationStatus = 'active' | 'archived' | 'spam' | 'blocked'
 export type SyncStatus = 'idle' | 'running' | 'failed'

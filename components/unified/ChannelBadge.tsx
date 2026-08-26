@@ -1,6 +1,6 @@
 'use client'
 
-import { MessageSquare, Mail } from 'lucide-react'
+import { MessageSquare, Mail, Plane } from 'lucide-react'
 import { ConversationChannel } from '@/types/unified'
 import { useTranslations } from 'next-intl'
 
@@ -26,6 +26,16 @@ const channelConfig = {
     lightBg: 'bg-blue-50',
     lightText: 'text-blue-600',
     icon: Mail,
+  },
+  // The traveller writing from their own booking page. The brand green marks
+  // it as ours rather than a carrier's, which is exactly what it is.
+  portal: {
+    labelKey: 'portal',
+    bgColor: 'bg-[#647C47]',
+    textColor: 'text-white',
+    lightBg: 'bg-[#647C47]/10',
+    lightText: 'text-[#647C47]',
+    icon: Plane,
   },
 }
 
