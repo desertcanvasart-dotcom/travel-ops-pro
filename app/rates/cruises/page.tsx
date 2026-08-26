@@ -14,6 +14,7 @@ import { useCurrency } from '@/app/contexts/PreferencesContext'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
+import RatePeriodsImportExport from '@/app/components/RatePeriodsImportExport'
 import RateSeasonsEditor from '@/components/rates/RateSeasonsEditor'
 import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
 
@@ -711,6 +712,9 @@ export default function CruisesPage() {
             </div>
             <div className="flex items-center gap-2">
               <BulkRateImportExport tableName="nile_cruises" onImportComplete={fetchCruises} />
+              {/* The wide sheet above carries three fixed seasons; this one
+                  carries as many dated periods as the contract has. */}
+              <RatePeriodsImportExport entity="cruise" />
               <button
                 onClick={handleAddNew}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
