@@ -226,6 +226,7 @@ a, button, input, select, textarea {
 
 /* Input Styles */
 input[type="text"],
+input[type="password"],
 input[type="email"],
 input[type="tel"],
 input[type="number"],
@@ -234,13 +235,38 @@ input[type="datetime-local"],
 textarea,
 select {
   width: 100%;
-  padding: 0.625rem 0.875rem;
   font-size: 0.875rem;
   border: 1px solid var(--gray-200);
   border-radius: 0.5rem;
   background-color: white;
   color: var(--gray-900);
   transition: all 0.2s ease;
+}
+
+/* Padding is separated into :where() so it carries ZERO specificity.
+ *
+ * An attribute selector (0,1,1) outranks a utility class (0,1,0), so the
+ * padding above silently swallowed every `pl-10` in the app — the left padding
+ * that makes room for an icon inside the field. Search boxes rendered their
+ * magnifier ON TOP of the text, and the reset-password field did the same with
+ * its padlock, but ONLY once the eye was clicked: masked it is
+ * type="password", which this selector list never matched, so the bug appeared
+ * at the moment the user revealed what they had typed.
+ *
+ * :where() keeps the default for inputs that ask for nothing, and lets any
+ * utility class override it. */
+:where(
+  input[type="text"],
+  input[type="password"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="number"],
+  input[type="date"],
+  input[type="datetime-local"],
+  textarea,
+  select
+) {
+  padding: 0.625rem 0.875rem;
 }
 
 input:focus,
