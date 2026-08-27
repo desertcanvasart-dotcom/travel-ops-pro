@@ -14,6 +14,7 @@ import {
   findCruiseTransportRule,
   getCruiseTransportRate,
 } from '@/lib/auto-pricing-service'
+import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import {
   getItemizedTippingRates,
   determineTipRolesForDay,
@@ -227,7 +228,9 @@ export async function createCruiseItineraryServices(
   }
 
   // 3. Tipping rates (itemized, tier-adjusted)
-  const cruiseTippingRates = await getItemizedTippingRates(supabase, tier)
+  // Tip rows may be entered in another currency (per-rate currency work).
+  const cruiseNormalizer = createRateNormalizer(rateCurrency)
+  const cruiseTippingRates = await getItemizedTippingRates(supabase, tier, cruiseNormalizer)
   if (cruiseTippingRates.allRates.length === 0) {
     warnings.push('No tipping rates found — tips will be €0')
   }

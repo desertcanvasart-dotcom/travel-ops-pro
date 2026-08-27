@@ -11,7 +11,7 @@ import {
   getCruiseTransportRate
 } from '@/lib/auto-pricing-service'
 import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, getExchangeRate, persistExchangeRate, type ExchangeRates } from '@/lib/currency-service'
-import { createRateNormalizer } from '@/lib/rates/rate-currency'
+import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
 import { DEFAULT_RATE_CURRENCY } from '@/lib/org-rate-currency'
 import { getFixedDailyCosts } from '@/lib/fixed-costs'
 import {
@@ -203,6 +203,9 @@ export interface PricingRates {
   hotelName: string | null
   selectedHotel: any
   tippingRates: ItemizedTippingRates
+  /** Converts rate rows entered in another currency; created once per run in
+   *  fetchAllPricingRates and reused by the per-city helpers. */
+  rateNormalizer: RateNormalizer
 }
 
 export async function fetchAllPricingRates(
@@ -392,7 +395,7 @@ export async function fetchAllPricingRates(
     // PRIORITY 1: Try to match the specific hotel name from the parsed input — WITH tier filter
     if (hotelName) {
       // First: try name + tier match (correct behavior: respect the selected tier)
-      const { data: namedHotelsTier } = await supabase
+      let { data: namedHotelsTier } = await supabase
         .from('accommodation_rates')
         .select('*')
         .eq('is_active', true)
@@ -400,6 +403,7 @@ export async function fetchAllPricingRates(
         .ilike('property_name', `%${hotelName}%`)
         .limit(3)
 
+      if (namedHotelsTier) namedHotelsTier = await rateNormalizer.normalize('accommodation_rates', namedHotelsTier) as typeof namedHotelsTier
       if (namedHotelsTier?.length) {
         selectedHotel = namedHotelsTier[0]
         hotelRate = isEuroPassport
@@ -409,13 +413,14 @@ export async function fetchAllPricingRates(
         console.log(`🏨 Matched hotel "${hotelName}" in ${tier} tier → ${selectedHotel.property_name} (rate: ${hotelRate})`)
       } else {
         // Fallback: name match ignoring tier — but log a warning about tier mismatch
-        const { data: namedHotelsAny } = await supabase
+        let { data: namedHotelsAny } = await supabase
           .from('accommodation_rates')
           .select('*')
           .eq('is_active', true)
           .ilike('property_name', `%${hotelName}%`)
           .limit(3)
 
+        if (namedHotelsAny) namedHotelsAny = await rateNormalizer.normalize('accommodation_rates', namedHotelsAny) as typeof namedHotelsAny
         if (namedHotelsAny?.length) {
           const actualTier = namedHotelsAny[0].tier || 'unknown'
           console.warn(`⚠️ Hotel "${hotelName}" found but in "${actualTier}" tier (requested: "${tier}") — ignoring name match, will use tier-appropriate hotel instead`)
@@ -428,7 +433,7 @@ export async function fetchAllPricingRates(
 
     // PRIORITY 2: Fall back to city + tier search if no hotel matched by name
     if (!selectedHotel) {
-      const { data: hotels } = await supabase
+      let { data: hotels } = await supabase
         .from('accommodation_rates')
         .select('*')
         .ilike('city', effectiveCity)
@@ -436,6 +441,7 @@ export async function fetchAllPricingRates(
         .eq('tier', tier)
         .order('created_at', { ascending: false })
         .limit(5)
+      if (hotels) hotels = await rateNormalizer.normalize('accommodation_rates', hotels) as typeof hotels
 
       if (hotels?.length) {
         selectedHotel = hotels[0]
@@ -477,6 +483,7 @@ export async function fetchAllPricingRates(
     hotelName: hotelName_final,
     selectedHotel,
     tippingRates,
+    rateNormalizer,
   }
 }
 
@@ -525,7 +532,8 @@ async function getTransportRatesForCity(
     .ilike('city', city)
     .limit(1)
 
-  const dayTourResult = dayTourRates?.length ? getTransportRateForPax(dayTourRates[0], totalPax, isEuroPassport) : null
+  const normDayTour = dayTourRates ? await primaryRates.rateNormalizer.normalize('transportation_rates', dayTourRates) : dayTourRates
+  const dayTourResult = normDayTour?.length ? getTransportRateForPax(normDayTour[0], totalPax, isEuroPassport) : null
   const vehiclePerDay = dayTourResult ? (isEuroPassport ? dayTourResult.rateEur : dayTourResult.rateNonEur) : primaryRates.vehiclePerDay
   const vehicleTypeName = dayTourResult ? dayTourResult.vehicleType : primaryRates.vehicleTypeName
   const vehicleServiceCode = dayTourRates?.[0]?.id || primaryRates.vehicleServiceCode
@@ -541,7 +549,8 @@ async function getTransportRatesForCity(
     .ilike('city', city)
     .limit(1)
 
-  const transferResult = transferRates?.length ? getTransportRateForPax(transferRates[0], totalPax, isEuroPassport) : null
+  const normTransfer = transferRates ? await primaryRates.rateNormalizer.normalize('transportation_rates', transferRates) : transferRates
+  const transferResult = normTransfer?.length ? getTransportRateForPax(normTransfer[0], totalPax, isEuroPassport) : null
   const transferRate = transferResult ? (isEuroPassport ? transferResult.rateEur : transferResult.rateNonEur) : 0
   const transferServiceCode = transferRates?.[0]?.id || primaryRates.transferServiceCode
   const transferSupplierName = transferRates?.[0]?.supplier_name || primaryRates.transferSupplierName
@@ -588,7 +597,7 @@ async function getHotelRatesForCity(
   const cached = cache.get(cacheKey)
   if (cached) return cached
 
-  const { data: hotels } = await supabase
+  let { data: hotels } = await supabase
     .from('accommodation_rates')
     .select('*')
     .ilike('city', city)
@@ -596,6 +605,7 @@ async function getHotelRatesForCity(
     .eq('tier', tier)
     .order('created_at', { ascending: false })
     .limit(5)
+  if (hotels) hotels = await primaryRates.rateNormalizer.normalize('accommodation_rates', hotels) as typeof hotels
 
   let result: CityHotelRates
   if (hotels?.length) {

@@ -1133,7 +1133,9 @@ export async function getCruiseRates(
   tier: ServiceTier,
   embarkCity?: string,
   isEurPassport: boolean = true,
-  travelDate?: string | null
+  travelDate?: string | null,
+  /** Converts a row entered in another currency — see lib/rates/rate-currency. */
+  normalizer?: RateNormalizer
 ): Promise<{
   shipName: string
   ppdNight: number
@@ -1153,7 +1155,8 @@ export async function getCruiseRates(
       query = query.ilike('embark_city', `%${embarkCity}%`)
     }
 
-    const { data: cruises, error } = await query.limit(1)
+    const { data: rawCruises, error } = await query.limit(1)
+    const cruises = normalizer && rawCruises ? await normalizer.normalize('nile_cruises', rawCruises) as typeof rawCruises : rawCruises
 
     if (error || !cruises || cruises.length === 0) {
       debugLog(`⚠️ No cruise rate for tier ${tier} — flagging hole (no fabrication)`)
@@ -1209,7 +1212,9 @@ export async function getHotelRates(
   city: string,
   tier: ServiceTier,
   isEurPassport: boolean = true,
-  travelDate?: string | null
+  travelDate?: string | null,
+  /** Converts a row entered in another currency — see lib/rates/rate-currency. */
+  normalizer?: RateNormalizer
 ): Promise<{
   hotelName: string
   ppdNight: number
@@ -1219,7 +1224,7 @@ export async function getHotelRates(
 } | null> {
   try {
     // Query accommodation_rates (the authoritative rates table with per-person pricing)
-    const { data: hotels, error } = await supabaseAdmin
+    const { data: rawHotels, error } = await supabaseAdmin
       .from('accommodation_rates')
       .select('*')
       .eq('tier', tier)
@@ -1227,6 +1232,7 @@ export async function getHotelRates(
       .ilike('city', `%${city}%`)
       .order('created_at', { ascending: false })
       .limit(1)
+    const hotels = normalizer && rawHotels ? await normalizer.normalize('accommodation_rates', rawHotels) as typeof rawHotels : rawHotels
 
     if (error || !hotels || hotels.length === 0) {
       // Per the harness policy we do NOT substitute an adjacent tier (fuzzy) or a
@@ -1780,11 +1786,12 @@ export function findTransportRate(
  * NOT b2b_pricing_rules. The old b2b_pricing_rules.cruise_transport read was
  * removed (table permanently empty, uncreatable from the UI).
  */
-export async function fetchCruiseTransportPricingRules(): Promise<CruiseTransportPackage[]> {
-  const { data, error } = await supabaseAdmin
+export async function fetchCruiseTransportPricingRules(normalizer?: RateNormalizer): Promise<CruiseTransportPackage[]> {
+  const { data: rawData, error } = await supabaseAdmin
     .from('b2b_transport_packages')
     .select('*')
     .eq('is_active', true)
+  const data = normalizer && rawData ? await normalizer.normalize('b2b_transport_packages', rawData) as typeof rawData : rawData
 
   if (error) {
     console.error('Error fetching cruise transport packages:', error)
@@ -2053,12 +2060,12 @@ export async function calculateDayBasedPricing(
   ] = await Promise.all([
     buildTransportCache(rateNormalizer),
     // Fetch cruise transport packages from b2b_transport_packages
-    fetchCruiseTransportPricingRules(),
+    fetchCruiseTransportPricingRules(rateNormalizer),
     // Cruise rates only apply when the itinerary has cruise nights
     cruiseNights > 0
-      ? getCruiseRates(tier, firstCruiseDay?.city, isEurPassport, dateForDay(firstCruiseDay?.day))
+      ? getCruiseRates(tier, firstCruiseDay?.city, isEurPassport, dateForDay(firstCruiseDay?.day), rateNormalizer)
       : Promise.resolve(null as Awaited<ReturnType<typeof getCruiseRates>>),
-    Promise.all(hotelCities.map(city => getHotelRates(city, tier, isEurPassport, params.travelDate))),
+    Promise.all(hotelCities.map(city => getHotelRates(city, tier, isEurPassport, params.travelDate, rateNormalizer))),
     getGuideRate(language, tier, rateNormalizer),
     getMealRates(tier, rateNormalizer),
     getItemizedTips(tier, rateNormalizer),

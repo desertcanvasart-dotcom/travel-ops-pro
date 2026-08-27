@@ -51,6 +51,20 @@ export const RATE_MONETARY_COLUMNS = {
   train_rates: ['rate_eur'],
   sleeping_train_rates: ['rate_oneway_eur', 'rate_roundtrip_eur'],
   fixed_daily_costs: ['cost_per_person_per_day'],
+  // The deferred three (migration 20260827_rate_currency_hotels_cruises).
+  // Hotels and cruises price from dated periods in `seasons` — handled like
+  // activity tiers below — with these flat columns as the no-period fallback
+  // the engine actually reads (resolveHotel/CruiseRatesForDate).
+  accommodation_rates: [
+    'pp_double_eur', 'single_supp_eur', 'triple_red_eur',
+    'pp_double_non_eur', 'single_supp_non_eur', 'triple_red_non_eur',
+  ],
+  nile_cruises: [
+    'rate_low_single_eur', 'rate_low_double_eur', 'rate_low_triple_eur', 'rate_low_suite_eur',
+    'rate_low_single_non_eur', 'rate_low_double_non_eur', 'rate_low_triple_non_eur', 'rate_low_suite_non_eur',
+    'rate_single_eur', 'rate_double_eur', 'rate_triple_eur', 'rate_suite_eur',
+  ],
+  b2b_transport_packages: ['sedan_rate', 'minivan_rate', 'van_rate', 'minibus_rate', 'bus_rate'],
 } as const
 
 export type RateCurrencyTable = keyof typeof RATE_MONETARY_COLUMNS
@@ -112,6 +126,7 @@ export function createRateNormalizer(runCurrency: string, deps?: {
     const copy: Record<string, unknown> = { ...row }
     for (const col of RATE_MONETARY_COLUMNS[table]) copy[col] = null
     if (table === 'activity_rates') copy.tiers = null
+    if (table === 'accommodation_rates' || table === 'nile_cruises') copy.seasons = null
     misses.push({ table, id: (row.id as string | number | undefined) ?? null, currency: String(row.rate_currency) })
     return copy as T
   }
@@ -120,6 +135,21 @@ export function createRateNormalizer(runCurrency: string, deps?: {
     const copy: Record<string, unknown> = { ...row }
     for (const col of RATE_MONETARY_COLUMNS[table]) {
       if (col in copy) copy[col] = convertValue(copy[col], factor)
+    }
+    if ((table === 'accommodation_rates' || table === 'nile_cruises') && Array.isArray(copy.seasons)) {
+      // Every value in a period's rates object is monetary by construction
+      // (lib/rates/rate-seasons RATE_FIELDS), so convert them all.
+      copy.seasons = copy.seasons.map(season =>
+        season && typeof season === 'object' && (season as Record<string, unknown>).rates && typeof (season as Record<string, unknown>).rates === 'object'
+          ? {
+              ...season,
+              rates: Object.fromEntries(
+                Object.entries((season as { rates: Record<string, unknown> }).rates)
+                  .map(([k, v]) => [k, convertValue(v, factor)])
+              ),
+            }
+          : season
+      )
     }
     if (table === 'activity_rates' && Array.isArray(copy.tiers)) {
       copy.tiers = copy.tiers.map(t =>

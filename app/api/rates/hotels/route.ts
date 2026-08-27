@@ -136,6 +136,7 @@ export async function POST(request: NextRequest) {
       
       // Other
       notes: body.notes || null,
+      ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
       is_active: body.is_active !== false
     }
 

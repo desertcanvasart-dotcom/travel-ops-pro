@@ -5,6 +5,7 @@ import { reassertClientId } from '@/lib/itineraries/reassert-client'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { loadDestinationPromptContext } from '@/lib/ai/destination-context'
+import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { isEuroPassport as isEuroPassportFromNationality } from '@/lib/passport'
 import {
   fetchCruiseTransportPricingRules,
@@ -430,6 +431,7 @@ export async function POST(request: NextRequest) {
           tier,
           recommendedSuppliers: cruiseContent.recommendedSuppliers,
           supabase,
+          normalizer: createRateNormalizer(rateCurrency),
           totalPax,
           nights,
           startDate: start_date,
