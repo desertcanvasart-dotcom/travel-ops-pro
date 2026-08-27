@@ -6026,6 +6026,7 @@
       "addActivitiesNow": "Would you like to add activities to this tour now?"
     },
     "tourTypes": {
+      "half_day": "Half Day Tour",
       "day_tour": "Day Tour",
       "multi_day": "Multi-Day Tour",
       "multi_day_tour": "Multi-Day Tour",
