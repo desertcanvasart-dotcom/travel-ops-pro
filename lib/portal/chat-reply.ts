@@ -16,11 +16,39 @@ type Db = { from(table: string): any }
 
 export const MAX_MESSAGE_LENGTH = 4000
 
+/**
+ * Why the traveller was, or was not, told.
+ *
+ * A bare boolean could not tell "we chose not to send" from "we tried and it
+ * broke", which made the outcome untestable anywhere without a live Gmail
+ * connection and unexplainable to the operator when it was false. Each value
+ * is a different thing to do about it:
+ *
+ *   sent          the notification went out
+ *   no-account    no Gmail is connected to this system  → connect one
+ *   no-recipient  nobody has an address on this booking → add one
+ *   no-link       the booking has no live portal link   → mint one
+ *   no-booking    the thread points at a booking that is gone
+ *   failed        Gmail was asked and refused
+ *
+ * Only `sent` means the traveller knows. The reply itself is stored either
+ * way — a mail failure must never lose a reply.
+ */
+export type NotifyOutcome =
+  | 'sent'
+  | 'no-account'
+  | 'no-recipient'
+  | 'no-link'
+  | 'no-booking'
+  | 'failed'
+
 export interface StaffReplyResult {
   ok: boolean
   error?: string
   status?: number
   emailed?: boolean
+  /** Why, in the `emailed === false` case. See NotifyOutcome. */
+  notified?: NotifyOutcome
   message?: {
     id: string
     sender: string
@@ -88,11 +116,12 @@ export async function sendStaffReply(
     updated_at: now,
   }).eq('id', args.thread.id)
 
-  const emailed = await notifyTraveller(db, args, message.created_at)
+  const notified = await notifyTraveller(db, args, message.created_at)
 
   return {
     ok: true,
-    emailed,
+    emailed: notified === 'sent',
+    notified,
     message: {
       id: message.id,
       sender: message.sender,
@@ -108,14 +137,14 @@ async function notifyTraveller(
   db: Db,
   args: { thread: { booking_id: string; passenger_id: string | null }; appUrl?: string },
   _at: string
-): Promise<boolean> {
+): Promise<NotifyOutcome> {
   try {
     const { data: booking } = await db
       .from('bookings')
       .select('booking_code, trip_name, client_name, client_email')
       .eq('id', args.thread.booking_id)
       .maybeSingle()
-    if (!booking) return false
+    if (!booking) return 'no-booking'
 
     // A private thread reaches that traveller; the shared one reaches the
     // booking's contact.
@@ -128,7 +157,7 @@ async function notifyTraveller(
         .maybeSingle()
       to = pax?.email || to
     }
-    if (!to) return false
+    if (!to) return 'no-recipient'
 
     // Prefer the traveller's own link when the thread is theirs, so the email
     // lands them on the page that actually holds their conversation.
@@ -141,7 +170,7 @@ async function notifyTraveller(
     const chosen = (candidates ?? []).find(
       (l: { passenger_id: string | null }) => l.passenger_id === args.thread.passenger_id
     ) ?? (candidates ?? [])[0]
-    if (!chosen?.token) return false
+    if (!chosen?.token) return 'no-link'
 
     const base = (args.appUrl || process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '')
     const url = `${base}/portal/${chosen.token}`
@@ -159,9 +188,13 @@ async function notifyTraveller(
         <p>ご予約番号：${booking.booking_code || '-'}</p>
       `,
     })
-    return Boolean(result?.success)
+    if (result?.success) return 'sent'
+    // `noAccount` is the system having no Gmail at all, which is a setup
+    // condition rather than a failure of this reply — worth telling apart, so
+    // the operator is pointed at Settings instead of at a broken send.
+    return result?.noAccount ? 'no-account' : 'failed'
   } catch (err) {
     console.warn('[portal-chat] reply email failed:', err)
-    return false
+    return 'failed'
   }
 }

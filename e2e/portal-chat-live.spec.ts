@@ -93,8 +93,16 @@ test('a traveller and the office hold a conversation', async ({ request }) => {
     })
     expect(replied.ok(), await replied.text()).toBeTruthy()
     const replyJson = await replied.json()
-    console.log('reply emailed to traveller:', replyJson.emailed)
-    expect(replyJson.emailed, 'the reply notification did not send').toBe(true)
+    console.log('reply notification outcome:', replyJson.notified)
+    // 'sent' where a Gmail account is connected; 'no-account' where none is
+    // (the CI project seeds no OAuth token, by design). Everything else —
+    // no-recipient, no-link, failed — is a regression in the reply path this
+    // test exists to guard. See portal-chat-inbox.spec.ts for the long form.
+    expect(
+      ['sent', 'no-account'],
+      `the reply notification broke (outcome: ${replyJson.notified})`
+    ).toContain(replyJson.notified)
+    expect(replyJson.emailed).toBe(replyJson.notified === 'sent')
 
     // 5. The traveller sees the reply.
     const seen = (await (await read(sharedToken)).json())

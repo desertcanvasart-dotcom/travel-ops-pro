@@ -172,6 +172,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       emailed: result.emailed,
+      notified: result.notified,
       message: result.message,
     })
   } catch (error) {

@@ -83,11 +83,18 @@ export default function PortalMessagesPanel({ bookingId }: { bookingId: string }
       const { ok, json } = await post(thread.id, { body })
       if (!ok) { setNotice(json.error || 'Could not send'); return }
       setDrafts(d => ({ ...d, [thread.id]: '' }))
-      // Say plainly whether the traveller was told. A reply nobody knows about
-      // is a reply that did not happen.
+      // Say plainly whether the traveller was told — and when they were not,
+      // WHY, because each reason has a different fix. A reply nobody knows
+      // about is a reply that did not happen.
       setNotice(json.emailed
         ? 'Sent — the traveller has been emailed a link to read it.'
-        : 'Sent, but no email went out (no address on file, or mail is not connected). They will only see it if they reopen their link.')
+        : json.notified === 'no-recipient'
+          ? 'Sent, but no email went out: nobody on this booking has an email address. Add one to notify them.'
+          : json.notified === 'no-account'
+            ? 'Sent, but no email went out: mail is not connected. Connect Gmail in Settings → Email.'
+            : json.notified === 'no-link'
+              ? 'Sent, but no email went out: this booking has no active portal link. Create one to notify them.'
+              : 'Sent, but the notification email failed. They will only see it if they reopen their link.')
       await load()
     } finally {
       setSending(null)

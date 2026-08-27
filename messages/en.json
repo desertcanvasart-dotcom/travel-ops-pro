@@ -862,7 +862,11 @@
     "note": "Note:",
     "deleting": "Deleting...",
     "chats": "chats",
-    "willSend": "Will send:"
+    "willSend": "Will send:",
+    "portalNotifyNoRecipient": "Reply saved, but no email went out: nobody on this booking has an email address. Add one to notify them.",
+    "portalNotifyNoAccount": "Reply saved, but no email went out: mail is not connected. Connect Gmail in Settings → Email.",
+    "portalNotifyNoLink": "Reply saved, but no email went out: this booking has no active portal link. Create one to notify them.",
+    "portalNotifyFailed": "Reply saved, but the notification email failed. The traveller will only see it if they reopen their link."
   },
   "pdf": {
     "brand": "Travel2Egypt",

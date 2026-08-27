@@ -244,6 +244,11 @@ export function UnifiedMessageThread({
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
+  // Portal replies: the message stored fine, but the traveller may not have
+  // been told (no address, mail not connected, no live link). The booking
+  // page says this out loud; the inbox used to stay silent, which made the
+  // two surfaces disagree about the part that matters.
+  const [sendNotice, setSendNotice] = useState<string | null>(null)
   const [agents, setAgents] = useState<Agent[]>([])
   const [showAgentSelector, setShowAgentSelector] = useState(false)
   const [assigningAgent, setAssigningAgent] = useState(false)
@@ -439,6 +444,7 @@ export function UnifiedMessageThread({
     e.preventDefault()
     if (!newMessage.trim() || !conversation || sending) return
     setSending(true)
+    setSendNotice(null)
     try {
       let url: string
       let body: any
@@ -453,8 +459,9 @@ export function UnifiedMessageThread({
         url = '/api/whatsapp/messages'
         body = { conversation_id: conversation.id, message: messageToSend }
       } else if (conversation.channel === 'portal') {
-        // The traveller reads this on their own booking page, and is emailed a
-        // link to it — there is no address to send to here.
+        // The traveller reads this on their own booking page and is emailed a
+        // link to it. Whether that email went out comes back on the response
+        // and is surfaced below — not assumed.
         url = '/api/portal-chat/messages'
         body = { conversationId: conversation.id, message: messageToSend }
       } else {
@@ -478,6 +485,23 @@ export function UnifiedMessageThread({
       if (res.ok) {
         setNewMessage('')
         setTranslatedMessage('')
+        // A portal reply is stored even when the traveller could not be
+        // notified — say so, with the reason, instead of looking identical
+        // to a notified send. Mirrors PortalMessagesPanel on the booking page.
+        if (conversation.channel === 'portal') {
+          const json = await res.json().catch(() => null)
+          if (json && json.emailed === false) {
+            setSendNotice(
+              json.notified === 'no-recipient'
+                ? t('portalNotifyNoRecipient')
+                : json.notified === 'no-account'
+                  ? t('portalNotifyNoAccount')
+                  : json.notified === 'no-link'
+                    ? t('portalNotifyNoLink')
+                    : t('portalNotifyFailed')
+            )
+          }
+        }
         fetchMessages(false)
       }
     } catch (error) {
@@ -1152,6 +1176,22 @@ export function UnifiedMessageThread({
           </div>
         )}
       </div>
+
+      {/* Sent-but-not-notified notice (portal) */}
+      {sendNotice && (
+        <div className="px-4 py-2 bg-amber-50 border-t border-amber-200 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+          <p className="text-xs text-amber-800 flex-1">{sendNotice}</p>
+          <button
+            type="button"
+            onClick={() => setSendNotice(null)}
+            className="text-amber-400 hover:text-amber-600"
+            aria-label={tCommon('close')}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Translation Controls */}
       <div className="px-4 py-2 bg-gray-50 border-t border-gray-200">
