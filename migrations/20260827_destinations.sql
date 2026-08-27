@@ -24,6 +24,38 @@
 -- until a second destination is added.
 --
 -- Idempotent: safe to run twice.
+--
+-- COLLISION, discovered on first prod run: a LEGACY `destinations` table
+-- already existed (Nov 2025 — city-level rows CAIRO/LUXOR/... with
+-- destination_code/region/popular_attractions). It has ZERO code consumers
+-- (verified 2026-08-27: no reference to destination_code or
+-- popular_attractions anywhere in app/, lib/ or components/), so it is
+-- RENAMED aside — rows preserved, nothing dropped — and the real table takes
+-- the name. The rename is guarded on the legacy shape, so a database that
+-- never had the legacy table, or where this already ran, skips it.
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'destinations'
+      AND column_name = 'destination_code'
+  ) THEN
+    -- The first prod run FAILED at the seed (the legacy table has no
+    -- country_code), but everything before the seed had already executed —
+    -- against the LEGACY table: destination_cities and the four
+    -- destination_id columns were created with foreign keys pointing at it.
+    -- All of them are provably empty (the run died before any seed or
+    -- backfill), so they are dropped here and recreated cleanly below
+    -- against the real table.
+    DROP TABLE IF EXISTS public.destination_cities;
+    ALTER TABLE public.itineraries        DROP COLUMN IF EXISTS destination_id;
+    ALTER TABLE public.writing_rules      DROP COLUMN IF EXISTS destination_id;
+    ALTER TABLE public.content_library    DROP COLUMN IF EXISTS destination_id;
+    ALTER TABLE public.attraction_aliases DROP COLUMN IF EXISTS destination_id;
+    ALTER TABLE public.destinations RENAME TO destinations_legacy_2025;
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS public.destinations (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
