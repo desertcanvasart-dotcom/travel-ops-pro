@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { useDestinationCities } from '@/app/components/useDestinationCities'
+import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
@@ -316,10 +316,6 @@ function Pagination({
 // ============================================
 
 export default function HotelsContent() {
-  // City vocabulary from the destinations tables (falls back to the
-  // hardcoded Egypt list until the migration is applied) — see
-  // app/components/useDestinationCities.ts.
-  const { cities: destinationCities } = useDestinationCities()
   const t = useTranslations('rates.hotels')
   const tPeriods = useTranslations('rates.ratePeriods')
   const tCommon = useTranslations('rates.common')
@@ -1348,9 +1344,7 @@ export default function HotelsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
                       <option value="">{tCommon('selectCity')}</option>
-                      {destinationCities.map(city => (
-                        <option key={city} value={city}>{city}</option>
-                      ))}
+                      <CityOptions />
                     </select>
                   </div>
                   <div>

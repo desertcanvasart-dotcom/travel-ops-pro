@@ -7230,6 +7230,14 @@
     "namePlaceholder": "Country name (e.g. Jordan)",
     "nameJaPlaceholder": "日本語名 (optional)",
     "create": "Create",
-    "addCountryHint": "Adding a country is step one. Its attractions, entrance fees, rates and writing rules are entered through the existing screens — the AI can only work with the data it is given."
+    "addCountryHint": "Adding a country is step one. Its attractions, entrance fees, rates and writing rules are entered through the existing screens — the AI can only work with the data it is given.",
+    "newCityAliases": "Codes/aliases (comma-sep)",
+    "newCityAliasesHint": "Airport codes and shorthand for this city, e.g. AMM, QAIA. The WhatsApp parser learns them.",
+    "voiceTitle": "Generation brief & glossary — how the AI writes this destination",
+    "briefPlaceholder": "Brief: geography facts, transfer norms, pacing, tone. Injected into every generation prompt as DESTINATION NOTES.",
+    "glossaryPlaceholder": "Glossary: one abbreviation per line, e.g. \"AMM = Amman (Queen Alia Airport)\". Replaces the built-in glossary block for this destination.",
+    "saveVoice": "Save brief & glossary",
+    "voiceHint": "Leave empty for minimal automatic framing built from the city list.",
+    "voiceHintEgypt": "Leave empty to keep Egypt’s built-in glossary and framing."
   }
 }

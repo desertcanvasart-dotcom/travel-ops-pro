@@ -7816,6 +7816,14 @@
     "namePlaceholder": "国名（例：Jordan）",
     "nameJaPlaceholder": "日本語名（任意）",
     "create": "作成",
-    "addCountryHint": "国の追加は最初の一歩です。観光地・入場料・レート・ライティングルールは既存の画面から入力します。AIは与えられたデータの範囲でしか作成できません。"
+    "addCountryHint": "国の追加は最初の一歩です。観光地・入場料・レート・ライティングルールは既存の画面から入力します。AIは与えられたデータの範囲でしか作成できません。",
+    "newCityAliases": "コード/別名（カンマ区切り）",
+    "newCityAliasesHint": "この都市の空港コードや略称（例：AMM, QAIA）。WhatsApp解析が学習します。",
+    "voiceTitle": "生成ブリーフとグロッサリー — AIがこの国をどう書くか",
+    "briefPlaceholder": "ブリーフ：地理、送迎の慣例、ペース配分、トーン。すべての生成プロンプトに DESTINATION NOTES として挿入されます。",
+    "glossaryPlaceholder": "グロッサリー：1行に1つの略語（例：AMM = Amman (Queen Alia Airport)）。この国では組み込みのグロッサリーを置き換えます。",
+    "saveVoice": "ブリーフとグロッサリーを保存",
+    "voiceHint": "空欄の場合は都市リストから自動生成される最小限の説明が使われます。",
+    "voiceHintEgypt": "空欄の場合はエジプトの組み込みグロッサリーが使われます。"
   }
 }

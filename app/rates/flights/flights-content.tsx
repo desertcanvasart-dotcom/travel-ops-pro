@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useDestinationCities } from '@/app/components/useDestinationCities'
+import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
@@ -175,10 +175,6 @@ const POPULAR_ROUTES = [
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function FlightsContent() {
-  // City vocabulary from the destinations tables (falls back to the
-  // hardcoded Egypt list until the migration is applied) — see
-  // app/components/useDestinationCities.ts.
-  const { cities: destinationCities } = useDestinationCities()
   const t = useTranslations('rates.flights')
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
@@ -619,9 +615,7 @@ export default function FlightsContent() {
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
             <option value="">{t('fromAny')}</option>
-            {destinationCities.map(city => (
-              <option key={city} value={city}>{city}</option>
-            ))}
+            <CityOptions />
           </select>
           <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
         </div>
@@ -633,9 +627,7 @@ export default function FlightsContent() {
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
             <option value="">{t('toAny')}</option>
-            {destinationCities.map(city => (
-              <option key={city} value={city}>{city}</option>
-            ))}
+            <CityOptions />
           </select>
           <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
         </div>
@@ -1008,9 +1000,7 @@ export default function FlightsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       <option value="">{t('selectDepartureCity')}</option>
-                      {destinationCities.map(city => (
-                        <option key={city} value={city}>{city}</option>
-                      ))}
+                      <CityOptions />
                     </select>
                   </div>
 
@@ -1025,9 +1015,7 @@ export default function FlightsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       <option value="">{t('selectArrivalCity')}</option>
-                      {destinationCities.filter(c => c !== formData.route_from).map(city => (
-                        <option key={city} value={city}>{city}</option>
-                      ))}
+                      <CityOptions exclude={formData.route_from} />
                     </select>
                   </div>
                 </div>

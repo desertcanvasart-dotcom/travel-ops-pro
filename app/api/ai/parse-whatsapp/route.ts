@@ -4,6 +4,13 @@ import { PACKAGE_TYPE_SLUGS } from '@/lib/package-types'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { MODEL_PARSER } from '@/lib/ai/models'
 import { isEuroPassport as isEuroPassportFromNationality } from '@/lib/passport'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+
+// Read-only vocabulary lookups (destination city codes for detection).
+const supabaseAdmin = createSupabaseClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 // ============================================
 // EGYPTIAN TRAVEL ABBREVIATIONS
@@ -54,7 +61,7 @@ interface ExtractedDay {
   notes: string | null
 }
 
-function detectStructuredItinerary(text: string): StructureDetectionResult {
+function detectStructuredItinerary(text: string, extraCityCodes: string[] = []): StructureDetectionResult {
   const signals: string[] = []
   let confidence = 0
   const rawDaySegments: string[] = []
@@ -103,7 +110,11 @@ function detectStructuredItinerary(text: string): StructureDetectionResult {
   // ============================================
   // PATTERN 3: Egyptian city codes (CAI, ALX, ASW, LXR, HRG, CRZ)
   // ============================================
-  const cityCodePattern = new RegExp(`\\b(${EGYPT_CITY_CODES.join('|')})\\b`, 'gi')
+  // Egypt's codes stay built in; other destinations contribute the airport
+  // codes and aliases entered on their cities (Settings → Destinations), so a
+  // new country's shorthand starts scoring as soon as its data exists.
+  const allCityCodes = [...new Set([...EGYPT_CITY_CODES, ...extraCityCodes.map(c => c.toUpperCase())])]
+  const cityCodePattern = new RegExp(`\\b(${allCityCodes.join('|')})\\b`, 'gi')
   const cityMatches = text.match(cityCodePattern)
   
   if (cityMatches && cityMatches.length >= 2) {
@@ -444,7 +455,22 @@ export async function POST(request: Request) {
     }
 
     // Pre-detect if this is a structured itinerary
-    const structureDetection = detectStructuredItinerary(conversation)
+    // City codes from the destinations vocabulary — airport codes and aliases
+    // of every active city. Best effort: a read failure just means Egypt's
+    // built-in codes only, which is the pre-destinations behaviour.
+    let destinationCityCodes: string[] = []
+    try {
+      const { data: codeRows } = await supabaseAdmin
+        .from('destination_cities')
+        .select('aliases, airport_codes')
+        .eq('is_active', true)
+      destinationCityCodes = (codeRows ?? []).flatMap(
+        (r: { aliases: string[] | null; airport_codes: string[] | null }) =>
+          [...(r.aliases ?? []), ...(r.airport_codes ?? [])]
+      ).filter((c: string) => /^[A-Za-z]{2,6}$/.test(c))
+    } catch { /* built-in codes only */ }
+
+    const structureDetection = detectStructuredItinerary(conversation, destinationCityCodes)
     
     console.log('📊 Structure Detection Result:', {
       isStructured: structureDetection.isStructured,
