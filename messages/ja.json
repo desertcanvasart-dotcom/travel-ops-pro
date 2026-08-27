@@ -6155,6 +6155,7 @@
       "addActivitiesNow": "今すぐこのツアーにアクティビティを追加しますか？"
     },
     "tourTypes": {
+      "half_day": "半日ツアー",
       "day_tour": "日帰りツアー",
       "multi_day": "複数日ツアー",
       "multi_day_tour": "複数日ツアー",

@@ -135,10 +135,15 @@ const EGYPTIAN_CITIES = [
 ]
 
 const TOUR_TYPES = [
+  { value: 'half_day', label: 'Half Day Tour', minDays: 1, maxDays: 1 },
   { value: 'day_tour', label: 'Day Tour', minDays: 1, maxDays: 1 },
   { value: 'multi_day', label: 'Multi-Day Tour', minDays: 2, maxDays: 99 },
   { value: 'stopover', label: 'Stopover Tour', minDays: 1, maxDays: 1 }
 ]
+
+/** The single-day types. Duration 1 is ambiguous between them, so entering it
+ *  must not overwrite a choice the user has already made. */
+const SINGLE_DAY_TYPES = TOUR_TYPES.filter(t => t.maxDays === 1).map(t => t.value)
 
 const PHYSICAL_LEVELS = [
   { value: 'easy', label: 'Easy - Suitable for all' },
@@ -937,8 +942,9 @@ export default function TourManagerContent() {
       // Auto-suggest tour_type based on duration_days
       if (name === 'duration_days' && typeof parsedValue === 'number') {
         if (parsedValue === 1) {
-          // Keep current type if it's day_tour or stopover, otherwise suggest day_tour
-          if (prev.tour_type !== 'day_tour' && prev.tour_type !== 'stopover') {
+          // Duration 1 does not decide WHICH single-day type this is, so only
+          // suggest one when the current choice is a multi-day type.
+          if (!SINGLE_DAY_TYPES.includes(prev.tour_type)) {
             updated.tour_type = 'day_tour'
           }
         } else if (parsedValue >= 2) {
