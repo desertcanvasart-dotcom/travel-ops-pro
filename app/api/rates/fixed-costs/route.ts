@@ -126,3 +126,33 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
+
+// DELETE — remove a fixed cost permanently. Note for 'Water Bottle': the
+// engine falls back to a built-in default (lib/fixed-costs DEFAULTS) when no
+// row exists, so deleting the water row does NOT price water at zero — the
+// UI's confirm dialog says so. Deactivating (is_active=false) is the
+// reversible alternative and zeroes nothing either.
+export async function DELETE(request: NextRequest) {
+  try {
+    const id = request.nextUrl.searchParams.get('id')
+    if (!id) {
+      return NextResponse.json({ success: false, error: 'Missing id' }, { status: 400 })
+    }
+
+    const { error } = await supabaseAdmin
+      .from('fixed_daily_costs')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      console.error('DELETE fixed_daily_costs error:', error)
+      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
+    }
+
+    clearFixedCostsCache()
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('DELETE fixed_daily_costs catch error:', error)
+    return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
+  }
+}

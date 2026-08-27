@@ -231,7 +231,7 @@ export async function POST(request: NextRequest) {
       let existingKeys = new Set<string>()
       if (keyValues.length > 0) {
         const { data: existing } = await supabase
-          .from(table)
+          .from(config.tableName)
           .select(uniqueKeyColumn)
           .in(uniqueKeyColumn, keyValues)
 
@@ -255,7 +255,7 @@ export async function POST(request: NextRequest) {
       // INSERT ... ON CONFLICT (key) DO UPDATE SET ...
       if (batch.length > 0) {
         const { error: upsertError } = await supabase
-          .from(table)
+          .from(config.tableName)
           .upsert(batch, { onConflict: uniqueKeyColumn })
 
         if (upsertError) {

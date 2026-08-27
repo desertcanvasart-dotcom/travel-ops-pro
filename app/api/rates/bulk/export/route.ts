@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch all rows from the table
     const { data, error } = await supabase
-      .from(table)
+      .from(config.tableName)
       .select(headers.join(','))
       .order('created_at', { ascending: false })
 
