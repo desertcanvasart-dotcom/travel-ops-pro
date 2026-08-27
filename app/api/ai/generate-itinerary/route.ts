@@ -323,15 +323,24 @@ export async function POST(request: NextRequest) {
     // ============================================
     // CRUISE DETECTION (for both modes now)
     // ============================================
-    const cruiseDetection = detectCruiseRequest(
-      finalTourName,
-      interests,
-      cities,
-      special_requests,
-      duration_days,
-      raw_itinerary || '', // Pass raw itinerary for better detection
-      requested_package_type // Pass parser's package type to prevent false overrides
-    )
+    // Only a destination that HAS cruise products can detect a cruise — a
+    // Jordan request mentioning "cruise" must never be routed down the Nile
+    // path (multi-destination finish work).
+    const cruiseDetection: ReturnType<typeof detectCruiseRequest> = destinationContext.hasCruises
+      ? detectCruiseRequest(
+          finalTourName,
+          interests,
+          cities,
+          special_requests,
+          duration_days,
+          raw_itinerary || '', // Pass raw itinerary for better detection
+          requested_package_type // Pass parser's package type to prevent false overrides
+        )
+      : {
+          isCruise: false, cruiseType: null, route: null, detectedDuration: null,
+          startCity: null, endCity: null, keywords: [], includesLand: false,
+          cruiseNights: 0, landNights: 0,
+        }
 
     // Adjust duration for cruise if needed:
     // - Apply when duration is 1 (undetected) OR when cruise detection found a more accurate duration

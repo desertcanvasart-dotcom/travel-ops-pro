@@ -46,6 +46,8 @@ describe('loadDestinationPromptContext', () => {
     // And none of Egypt's specifics leak through.
     expect(ctx.constraintLines).not.toMatch(/Nile|Aswan|Luxor/)
     expect(ctx.glossary).not.toContain('CAI = Cairo')
+    // A Jordan request mentioning "cruise" must never enter the Nile path.
+    expect(ctx.hasCruises).toBe(false)
   })
 
   it('a Jordan row WITHOUT glossary/brief gets honest minimal framing from its cities', async () => {
@@ -62,6 +64,7 @@ describe('loadDestinationPromptContext', () => {
     const ctx = await loadDestinationPromptContext(fakeDb({ destinations: eg, destination_cities: [] }), 'd-eg')
     expect(ctx.glossary).toBe(EGYPT_TRAVEL_GLOSSARY)
     expect(ctx.defaultCity).toBe('Cairo')
+    expect(ctx.hasCruises).toBe(true)
   })
 })
 
