@@ -37,18 +37,14 @@ export interface ImportResult {
   inserted: number
   updated: number
   errors: ValidationError[]
-  /** Things that did not fail, but that the operator would want to know. A
-   *  spreadsheet whose prices will not reach a quote is the case this exists
-   *  for — see supersededByPeriods in the import route. */
+  /** Things that did not fail, but that the operator would want to know. */
   warnings?: ImportWarning[]
 }
 
 export interface ImportWarning {
-  /** `periods_supersede_columns`: the file's prices will not reach a quote,
-   *  because that rate prices from its dated period list.
-   *  `example_row_skipped`: the unedited sample row from a downloaded
+  /** `example_row_skipped`: the unedited sample row from a downloaded
    *  template was left out rather than inserted as a rate. */
-  kind: 'periods_supersede_columns' | 'example_row_skipped'
+  kind: 'example_row_skipped'
   key: string
   message: string
 }
@@ -123,41 +119,9 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('property_type', 'Property Type', 'text', false),
       col('city', 'City', 'text', false),
       col('board_basis', 'Board Basis', 'text', false),
-      // Low season EUR
-      col('pp_double_eur', 'Low PP Double (EU passport)', 'number', false),
-      col('single_supp_eur', 'Low Single Supp (EU passport)', 'number', false),
-      col('triple_red_eur', 'Low Triple Red (EU passport)', 'number', false),
-      // Low season Non-EUR
-      col('pp_double_non_eur', 'Low PP Double (non-EU passport)', 'number', false),
-      col('single_supp_non_eur', 'Low Single Supp (non-EU passport)', 'number', false),
-      col('triple_red_non_eur', 'Low Triple Red (non-EU passport)', 'number', false),
-      // Low season dates
-      col('low_season_from', 'Low Season From', 'date', false),
-      col('low_season_to', 'Low Season To', 'date', false),
-      // High season EUR
-      col('high_pp_double_eur', 'High PP Double (EU passport)', 'number', false),
-      col('high_single_supp_eur', 'High Single Supp (EU passport)', 'number', false),
-      col('high_triple_red_eur', 'High Triple Red (EU passport)', 'number', false),
-      // High season Non-EUR
-      col('high_pp_double_non_eur', 'High PP Double (non-EU passport)', 'number', false),
-      col('high_single_supp_non_eur', 'High Single Supp (non-EU passport)', 'number', false),
-      col('high_triple_red_non_eur', 'High Triple Red (non-EU passport)', 'number', false),
-      // High season dates
-      col('high_season_from', 'High Season From', 'date', false),
-      col('high_season_to', 'High Season To', 'date', false),
-      // Peak season EUR
-      col('peak_pp_double_eur', 'Peak PP Double (EU passport)', 'number', false),
-      col('peak_single_supp_eur', 'Peak Single Supp (EU passport)', 'number', false),
-      col('peak_triple_red_eur', 'Peak Triple Red (EU passport)', 'number', false),
-      // Peak season Non-EUR
-      col('peak_pp_double_non_eur', 'Peak PP Double (non-EU passport)', 'number', false),
-      col('peak_single_supp_non_eur', 'Peak Single Supp (non-EU passport)', 'number', false),
-      col('peak_triple_red_non_eur', 'Peak Triple Red (non-EU passport)', 'number', false),
-      // Peak season dates
-      col('peak_season_from', 'Peak Season From', 'date', false),
-      col('peak_season_to', 'Peak Season To', 'date', false),
-      col('peak_season_2_from', 'Peak Season 2 From', 'date', false),
-      col('peak_season_2_to', 'Peak Season 2 To', 'date', false),
+      // No season rate columns: a hotel prices from its dated period list
+      // (the `seasons` JSONB), imported from the rate-periods sheet. This
+      // sheet carries the property and the contract around it, not the prices.
       // Validity
       rateValidFrom(), rateValidTo(),
       // Contact
@@ -382,41 +346,9 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('embark_city', 'Embark City', 'text', true),
       col('disembark_city', 'Disembark City', 'text', true),
       col('duration_nights', 'Duration (Nights)', 'number', true),
-      // Low season
-      col('low_season_start', 'Low Season Start', 'date', false),
-      col('low_season_end', 'Low Season End', 'date', false),
-      col('rate_low_single_eur', 'Low Single (EU passport)', 'number', false),
-      col('rate_low_double_eur', 'Low Double (EU passport)', 'number', false),
-      col('rate_low_triple_eur', 'Low Triple (EU passport)', 'number', false),
-      col('rate_low_suite_eur', 'Low Suite (EU passport)', 'number', false),
-      col('rate_low_single_non_eur', 'Low Single (non-EU passport)', 'number', false),
-      col('rate_low_double_non_eur', 'Low Double (non-EU passport)', 'number', false),
-      col('rate_low_triple_non_eur', 'Low Triple (non-EU passport)', 'number', false),
-      col('rate_low_suite_non_eur', 'Low Suite (non-EU passport)', 'number', false),
-      // High season
-      col('high_season_start', 'High Season Start', 'date', false),
-      col('high_season_end', 'High Season End', 'date', false),
-      col('rate_high_single_eur', 'High Single (EU passport)', 'number', false),
-      col('rate_high_double_eur', 'High Double (EU passport)', 'number', false),
-      col('rate_high_triple_eur', 'High Triple (EU passport)', 'number', false),
-      col('rate_high_suite_eur', 'High Suite (EU passport)', 'number', false),
-      col('rate_high_single_non_eur', 'High Single (non-EU passport)', 'number', false),
-      col('rate_high_double_non_eur', 'High Double (non-EU passport)', 'number', false),
-      col('rate_high_triple_non_eur', 'High Triple (non-EU passport)', 'number', false),
-      col('rate_high_suite_non_eur', 'High Suite (non-EU passport)', 'number', false),
-      // Peak season
-      col('peak_season_1_start', 'Peak Season 1 Start', 'date', false),
-      col('peak_season_1_end', 'Peak Season 1 End', 'date', false),
-      col('peak_season_2_start', 'Peak Season 2 Start', 'date', false),
-      col('peak_season_2_end', 'Peak Season 2 End', 'date', false),
-      col('rate_peak_single_eur', 'Peak Single (EU passport)', 'number', false),
-      col('rate_peak_double_eur', 'Peak Double (EU passport)', 'number', false),
-      col('rate_peak_triple_eur', 'Peak Triple (EU passport)', 'number', false),
-      col('rate_peak_suite_eur', 'Peak Suite (EU passport)', 'number', false),
-      col('rate_peak_single_non_eur', 'Peak Single (non-EU passport)', 'number', false),
-      col('rate_peak_double_non_eur', 'Peak Double (non-EU passport)', 'number', false),
-      col('rate_peak_triple_non_eur', 'Peak Triple (non-EU passport)', 'number', false),
-      col('rate_peak_suite_non_eur', 'Peak Suite (non-EU passport)', 'number', false),
+      // No season rate columns: a cruise prices from its dated period list
+      // (the `seasons` JSONB), imported from the rate-periods sheet. This
+      // sheet carries the ship and the contract around it, not the prices.
       // Other
       rateValidFrom(), rateValidTo(),
       col('meals_included', 'Meals Included', 'text', false),

@@ -66,45 +66,6 @@ describe('the sample CSV', () => {
     }
   })
 
-  it('shows an ISO date rather than leaving the format to guesswork', () => {
-    const row = buildTemplateRow(RATE_TABLE_CONFIGS.accommodation_rates)
-    expect(row.low_season_from).toMatch(/^\d{4}-\d{2}-\d{2}$/)
-  })
-
-  it('gives each season its own window, not the same day everywhere', () => {
-    // A template whose every date is identical does not show which column is a
-    // start and which an end, nor that the seasons are different windows.
-    const r = buildTemplateRow(RATE_TABLE_CONFIGS.accommodation_rates)
-    expect(r.low_season_from).toBe('2026-05-01')
-    expect(r.low_season_to).toBe('2026-09-30')
-    expect(r.high_season_from).toBe('2026-10-01')
-    expect(r.peak_season_from).toBe('2026-12-20')
-    expect(r.peak_season_2_from).toBe('2027-03-20')
-    // Every window runs forwards.
-    for (const [from, to] of [
-      [r.low_season_from, r.low_season_to],
-      [r.high_season_from, r.high_season_to],
-      [r.peak_season_from, r.peak_season_to],
-      [r.peak_season_2_from, r.peak_season_2_to],
-      [r.rate_valid_from, r.rate_valid_to],
-    ]) {
-      expect(to > from, `${from}..${to}`).toBe(true)
-    }
-  })
-
-  it('reads like a rate card: peak above high above low, supplements below both', () => {
-    const r = buildTemplateRow(RATE_TABLE_CONFIGS.accommodation_rates)
-    expect(Number(r.peak_pp_double_eur)).toBeGreaterThan(Number(r.high_pp_double_eur))
-    expect(Number(r.high_pp_double_eur)).toBeGreaterThan(Number(r.pp_double_eur))
-    expect(Number(r.single_supp_eur)).toBeLessThan(Number(r.pp_double_eur))
-    expect(Number(r.triple_red_eur)).toBeLessThan(Number(r.single_supp_eur))
-  })
-
-  it('never suggests a zero rate — a blank or zero price means unpriced here', () => {
-    const row = buildTemplateRow(RATE_TABLE_CONFIGS.accommodation_rates)
-    expect(Number(row.pp_double_eur)).toBeGreaterThan(0)
-  })
-
   it('passes the importer\'s own validation', () => {
     // If the sample cannot validate, it is not a sample, it is a trap.
     const config = RATE_TABLE_CONFIGS.accommodation_rates
@@ -162,5 +123,48 @@ describe('the sample periods sheet', () => {
     const parsed = parsePeriodRows(config, rows as Record<string, unknown>[])
     expect(parsed.byKey.get('ACC-1')).toHaveLength(2)
     expect(parsed.exampleRows).toBe(0)
+  })
+  it('shows ISO dates whose windows run forwards', () => {
+    // Moved here from the wide rate sheet, which no longer carries seasons:
+    // a template that leaves the date format to guesswork gets DD/MM back.
+    for (const entity of ['accommodation', 'cruise'] as const) {
+      for (const row of periodTemplateRows(PERIOD_SHEETS[entity])) {
+        const from = String(row['From'])
+        const to = String(row['To'])
+        expect(from, entity).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+        expect(to, entity).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+        expect(to > from, `${entity} ${from}..${to}`).toBe(true)
+      }
+    }
+  })
+
+  it('never suggests a zero rate — a blank or zero price means unpriced here', () => {
+    const [summer] = periodTemplateRows(PERIOD_SHEETS.accommodation)
+    expect(Number(summer['PP Double (EU passport)'])).toBeGreaterThan(0)
+  })
+})
+
+describe('the hotel and cruise rate sheets', () => {
+  // Pricing for these two comes from the dated period list. The wide sheet
+  // used to carry three fixed seasons alongside it, so the same price lived
+  // in two files and the CSV's copy quietly lost. It carries the property or
+  // the ship now, and nothing that looks like a price.
+  it('carry no price or season columns at all', () => {
+    for (const table of ['accommodation_rates', 'nile_cruises'] as const) {
+      const names = RATE_TABLE_CONFIGS[table].columns.map(c => c.name)
+      expect(names.filter(n => /^(rate_)?(low|high|peak)/.test(n)), table).toEqual([])
+      expect(names.filter(n => /(pp_double|single_supp|triple_red)/.test(n)), table).toEqual([])
+      expect(names.filter(n => /season/.test(n)), table).toEqual([])
+    }
+  })
+
+  it('still carry the identity the periods sheet cannot create', () => {
+    // The periods importer only UPDATEs rows it can match, so this sheet is
+    // the one path that creates a hotel or a ship. Losing these columns would
+    // remove bulk onboarding without anything replacing it.
+    expect(RATE_TABLE_CONFIGS.accommodation_rates.columns.map(c => c.name))
+      .toEqual(expect.arrayContaining(['service_code', 'property_name', 'city']))
+    expect(RATE_TABLE_CONFIGS.nile_cruises.columns.map(c => c.name))
+      .toEqual(expect.arrayContaining(['cruise_code', 'ship_name', 'route_name', 'duration_nights']))
   })
 })
