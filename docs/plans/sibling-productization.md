@@ -114,19 +114,21 @@ design in from the start, not bolt on:
 - The port campaign direction reverses the historical one (sibling→here, [[sibling-feature-port-campaign]]);
   update that memory when the first port lands.
 
-## 7. Open questions for the operator
+## 7. Open questions — ANSWERED by the operator, 2026-08-27
 
-1. **Self-hosted licensing model** (§5): key check-in, annual license, or support
-   contract? Shapes real code (entitlement checks) — needed before P-anything ships
-   to a self-hosted buyer, not before ports start.
-2. **Who maintains the global catalog** — and does a tenant get to ADD a country
-   themselves (self-serve, like our Settings page) or request it? Suggest: self-serve,
-   it worked here.
-3. **Sibling revival logistics**: it's 17 days stale — does anything on its `main`
-   need finishing/deploying first? Is its Railway environment live with real tenants
-   already, or pre-launch? (Changes how boldly P1 can restructure its destinations.)
-4. First target market/destination for the SaaS pitch — same answer as the
-   multi-destination §8 question, now with commercial weight.
+1. **Self-hosted licensing: support contract.** A commercial arrangement, not an
+   entitlement system — meaning NO license-key/check-in code needs building. Simplest
+   possible outcome; §5's packaging and migration-runner work stands unchanged.
+2. **Global catalog: self-serve.** Tenants add countries and cities themselves, the
+   same Settings model that worked here. The catalog grows from tenant activity;
+   curation is a later concern if quality drifts.
+3. **Sibling state: live on Railway, 6 tenants created, ALL EMPTY.** Effectively
+   pre-launch data-wise: P1 may restructure the destinations model boldly. Keep the
+   6 tenant rows; there is no tenant data to migrate carefully.
+4. **First market: Middle East and Africa.** Catalog seeding priority: Egypt, Jordan,
+   Morocco, UAE, Kenya, Tanzania… — and a flag for later: MEA agencies will sooner or
+   later want an **Arabic UI (RTL)**; the i18n stack should not paint that into a
+   corner. Not scoped here; recorded so it is a known cost, not a surprise.
 
 ## 8. Suggested first motion
 
