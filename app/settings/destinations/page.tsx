@@ -24,6 +24,8 @@ interface AdminCity extends DestinationCity {
 
 interface AdminDestination extends Omit<Destination, 'cities'> {
   is_active?: boolean
+  generation_brief?: string | null
+  glossary?: { text?: string } | string | null
   cities: AdminCity[]
 }
 
@@ -36,7 +38,10 @@ export default function DestinationsSettingsPage() {
   const [error, setError] = useState<string | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
   const [newCountry, setNewCountry] = useState({ code: '', name: '', name_ja: '' })
-  const [newCity, setNewCity] = useState({ name: '', name_ja: '' })
+  const [newCity, setNewCity] = useState({ name: '', name_ja: '', aliases: '' })
+  const [warning, setWarning] = useState<string | null>(null)
+  // Local draft of the generation brief/glossary per destination, saved on blur-button.
+  const [voiceDrafts, setVoiceDrafts] = useState<Record<string, { generation_brief: string; glossary: string }>>({})
 
   const load = useCallback(async () => {
     try {
@@ -57,6 +62,7 @@ export default function DestinationsSettingsPage() {
   const act = async (payload: Record<string, unknown>): Promise<boolean> => {
     setBusy(true)
     setError(null)
+    setWarning(null)
     try {
       const res = await fetch('/api/destinations/manage', {
         method: 'POST',
@@ -68,6 +74,7 @@ export default function DestinationsSettingsPage() {
         setError(data.error || 'Failed to save')
         return false
       }
+      setWarning(data.warning || null)
       clearDestinationCache() // dropdowns pick the change up on next mount
       await load()
       return true
@@ -94,6 +101,9 @@ export default function DestinationsSettingsPage() {
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>
+      )}
+      {warning && (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">{warning}</div>
       )}
 
       {destinations.length === 0 && (
@@ -178,12 +188,19 @@ export default function DestinationsSettingsPage() {
                       value={newCity.name_ja}
                       onChange={e => setNewCity(c => ({ ...c, name_ja: e.target.value }))}
                     />
+                    <input
+                      className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm w-40"
+                      placeholder={t('newCityAliases')}
+                      title={t('newCityAliasesHint')}
+                      value={newCity.aliases}
+                      onChange={e => setNewCity(c => ({ ...c, aliases: e.target.value }))}
+                    />
                     <button
                       type="button"
                       disabled={busy || !newCity.name.trim()}
                       onClick={async () => {
-                        if (await act({ action: 'add_city', destination_id: dest.id, name: newCity.name.trim(), name_ja: newCity.name_ja.trim() || null })) {
-                          setNewCity({ name: '', name_ja: '' })
+                        if (await act({ action: 'add_city', destination_id: dest.id, name: newCity.name.trim(), name_ja: newCity.name_ja.trim() || null, aliases: newCity.aliases })) {
+                          setNewCity({ name: '', name_ja: '', aliases: '' })
                         }
                       }}
                       className="flex items-center gap-1 px-3 py-1.5 bg-[#647C47] text-white rounded-lg text-sm hover:bg-[#4a5c35] disabled:opacity-50"
@@ -208,6 +225,50 @@ export default function DestinationsSettingsPage() {
                         />
                         {t('active')}
                       </label>
+                    </div>
+                  </div>
+
+                  {/* The destination's voice in the generation prompt */}
+                  <div className="pt-3 border-t border-gray-100 space-y-2">
+                    <p className="text-xs font-medium text-gray-600">{t('voiceTitle')}</p>
+                    <textarea
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
+                      rows={3}
+                      placeholder={t('briefPlaceholder')}
+                      value={voiceDrafts[dest.id]?.generation_brief ?? dest.generation_brief ?? ''}
+                      onChange={e => setVoiceDrafts(v => ({ ...v, [dest.id]: {
+                        generation_brief: e.target.value,
+                        glossary: v[dest.id]?.glossary ?? (typeof dest.glossary === 'string' ? dest.glossary : dest.glossary?.text ?? ''),
+                      } }))}
+                    />
+                    <textarea
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
+                      rows={4}
+                      placeholder={t('glossaryPlaceholder')}
+                      value={voiceDrafts[dest.id]?.glossary ?? (typeof dest.glossary === 'string' ? dest.glossary : dest.glossary?.text ?? '')}
+                      onChange={e => setVoiceDrafts(v => ({ ...v, [dest.id]: {
+                        generation_brief: v[dest.id]?.generation_brief ?? dest.generation_brief ?? '',
+                        glossary: e.target.value,
+                      } }))}
+                    />
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        disabled={busy || !voiceDrafts[dest.id]}
+                        onClick={async () => {
+                          const draft = voiceDrafts[dest.id]
+                          if (!draft) return
+                          if (await act({ action: 'update_destination', id: dest.id, generation_brief: draft.generation_brief, glossary: draft.glossary })) {
+                            setVoiceDrafts(v => Object.fromEntries(Object.entries(v).filter(([k]) => k !== dest.id)))
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-[#647C47] text-white rounded-lg text-sm hover:bg-[#4a5c35] disabled:opacity-50"
+                      >
+                        {t('saveVoice')}
+                      </button>
+                      <p className="text-xs text-gray-500">
+                        {dest.country_code === 'EG' ? t('voiceHintEgypt') : t('voiceHint')}
+                      </p>
                     </div>
                   </div>
                 </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { useDestinationCities } from '@/app/components/useDestinationCities'
+import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
@@ -90,10 +90,6 @@ interface GuideRate {
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function GuideRatesContent() {
-  // City vocabulary from the destinations tables (falls back to the
-  // hardcoded Egypt list until the migration is applied) — see
-  // app/components/useDestinationCities.ts.
-  const { cities: destinationCities } = useDestinationCities()
   const t = useTranslations('rates.guides')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
@@ -652,9 +648,7 @@ export default function GuideRatesContent() {
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
             <option value="">{t('allCities')}</option>
-            {destinationCities.map(city => (
-              <option key={city} value={city}>{city}</option>
-            ))}
+            <CityOptions />
           </select>
 
           {/* Guide Type Filter */}
@@ -1065,9 +1059,7 @@ export default function GuideRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       <option value="">{t('form.selectCity')}</option>
-                      {destinationCities.map(city => (
-                        <option key={city} value={city}>{city}</option>
-                      ))}
+                      <CityOptions />
                     </select>
                   </div>
                 </div>

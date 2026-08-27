@@ -61,6 +61,9 @@ export async function POST(request: NextRequest) {
       if ('name' in body) update.name = String(body.name).trim()
       if ('name_ja' in body) update.name_ja = body.name_ja || null
       if ('is_active' in body) update.is_active = body.is_active === true
+      // Phase 2 fields — the destination's voice in the generation prompt.
+      if ('generation_brief' in body) update.generation_brief = String(body.generation_brief ?? '').trim() || null
+      if ('glossary' in body) update.glossary = String(body.glossary ?? '').trim() ? { text: String(body.glossary).trim() } : null
       if (body.is_default === true) {
         // Exactly one default: quoting and new itineraries start from it.
         await supabaseAdmin.from('destinations').update({ is_default: false }).eq('is_default', true)
@@ -77,6 +80,19 @@ export async function POST(request: NextRequest) {
       if (!destination_id || !name) {
         return NextResponse.json({ success: false, error: 'Destination and city name are required' }, { status: 400 })
       }
+
+      // Rates match cities by bare NAME, so the same name in two destinations
+      // means both countries' rates answer for it. Allowed — some names are
+      // genuinely shared — but never silently.
+      const { data: sameName } = await supabaseAdmin
+        .from('destination_cities')
+        .select('id, destinations(name)')
+        .ilike('name', name)
+        .neq('destination_id', destination_id)
+      const clash = (sameName ?? [])
+        .map((r: { destinations: { name: string } | { name: string }[] | null }) =>
+          Array.isArray(r.destinations) ? r.destinations[0]?.name : r.destinations?.name)
+        .filter(Boolean)
       const { data: last } = await supabaseAdmin
         .from('destination_cities')
         .select('sort_order')
@@ -90,6 +106,9 @@ export async function POST(request: NextRequest) {
           destination_id,
           name,
           name_ja: body.name_ja || null,
+          aliases: Array.isArray(body.aliases)
+            ? body.aliases.map((a: unknown) => String(a).trim()).filter(Boolean)
+            : String(body.aliases ?? '').split(',').map(a => a.trim()).filter(Boolean),
           lat: body.lat ?? null,
           lng: body.lng ?? null,
           sort_order: (last?.sort_order ?? 0) + 1,
@@ -100,7 +119,13 @@ export async function POST(request: NextRequest) {
         const friendly = /duplicate|unique/i.test(error.message) ? `"${name}" is already in this destination` : error.message
         return NextResponse.json({ success: false, error: friendly }, { status: 400 })
       }
-      return NextResponse.json({ success: true, data })
+      return NextResponse.json({
+        success: true,
+        data,
+        warning: clash.length
+          ? `"${name}" also exists in ${clash.join(', ')} — rates match cities by name, so both destinations' rates will answer for it.`
+          : undefined,
+      })
     }
 
     if (action === 'update_city') {

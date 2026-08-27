@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useDestinationCities } from '@/app/components/useDestinationCities'
+import CityOptions from '@/app/components/CityOptions'
 import { useTranslations } from 'next-intl'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
@@ -244,10 +244,6 @@ function getMinRate(rate: TransportationRate): number {
 // ============================================
 
 export default function TransportationContent() {
-  // City vocabulary from the destinations tables (falls back to the
-  // hardcoded Egypt list until the migration is applied) — see
-  // app/components/useDestinationCities.ts.
-  const { cities: destinationCities } = useDestinationCities()
   const t = useTranslations('rates.transportation')
   // The banner lives at the top of a long modal; the save button is at the
   // bottom. Without this, a refusal is written where nobody is looking.
@@ -782,9 +778,7 @@ export default function TransportationContent() {
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
             <option value="">{t('allCities')}</option>
-            {destinationCities.map(city => (
-              <option key={city} value={city}>{translateCity(city)}</option>
-            ))}
+            <CityOptions label={translateCity} />
           </select>
           <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
         </div>
@@ -1524,9 +1518,7 @@ export default function TransportationContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       <option value="">{t('selectDepartureCity')}</option>
-                      {destinationCities.map(city => (
-                        <option key={city} value={city}>{translateCity(city)}</option>
-                      ))}
+                      <CityOptions label={translateCity} />
                     </select>
                   </div>
 
@@ -1542,9 +1534,7 @@ export default function TransportationContent() {
                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                       >
                         <option value="">{t('selectDestinationCity')}</option>
-                        {destinationCities.filter(city => city !== formData.city).map(city => (
-                          <option key={city} value={city}>{translateCity(city)}</option>
-                        ))}
+                        <CityOptions exclude={formData.city} label={translateCity} />
                       </select>
                     </div>
                   )}
