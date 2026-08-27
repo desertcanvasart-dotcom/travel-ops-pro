@@ -3,9 +3,11 @@
 import { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { useEffect, useState } from 'react'
-import { Droplets, Coins, Plus, Edit, Save, X, Check, Loader2, AlertTriangle, Settings } from 'lucide-react'
+import { Droplets, Coins, Plus, Edit, Save, X, Check, Loader2, AlertTriangle, Settings, Trash2 } from 'lucide-react'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { useConfirm } from '@/components/ConfirmDialog'
+import Link from 'next/link'
 
 interface FixedCost {
   id: string
@@ -98,6 +100,31 @@ export default function FixedCostsPage() {
     }
   }
 
+  const confirmDialog = useConfirm()
+
+  const handleDelete = async (cost: FixedCost) => {
+    // 'Water Bottle' is read by the pricing engine by name; without a row it
+    // falls back to a BUILT-IN default rather than €0 — say so, because
+    // "delete = free water" is the natural (wrong) reading.
+    const warning = cost.cost_type === 'Water Bottle'
+      ? ' Pricing will fall back to the built-in default water rate, not zero. Deactivating instead is reversible.'
+      : ''
+    const ok = await confirmDialog(`Delete "${cost.cost_type}" permanently?${warning}`)
+    if (!ok) return
+    try {
+      const res = await fetch(`/api/rates/fixed-costs?id=${cost.id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.success) {
+        showNotice('success', `"${cost.cost_type}" deleted`)
+        fetchCosts()
+      } else {
+        showNotice('error', data.error || 'Failed to delete')
+      }
+    } catch {
+      showNotice('error', 'Failed to delete')
+    }
+  }
+
   const handleToggleActive = async (cost: FixedCost) => {
     try {
       const res = await fetch('/api/rates/fixed-costs', {
@@ -171,18 +198,19 @@ export default function FixedCostsPage() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-[#647C47]/10 rounded-lg">
+      {/* Header — actions wrap under the title instead of crushing the
+          description against them on narrower windows */}
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2 bg-[#647C47]/10 rounded-lg shrink-0">
             <Settings className="w-6 h-6 text-[#647C47]" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-xl font-bold text-gray-900">Fixed Daily Costs</h1>
-            <p className="text-sm text-gray-600">Per-person daily rates for water and other fixed costs included in every itinerary</p>
+            <p className="text-sm text-gray-600 max-w-xl">Per-person daily rates for water and other fixed costs included in every itinerary</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
           <BulkRateImportExport tableName="fixed_costs" onImportComplete={fetchCosts} />
           <button
             onClick={() => setShowAddForm(true)}
@@ -191,6 +219,9 @@ export default function FixedCostsPage() {
             <Plus className="w-4 h-4" />
             Add Cost
           </button>
+          <Link href="/rates" className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">
+            ← Rates Hub
+          </Link>
         </div>
       </div>
 
@@ -311,6 +342,13 @@ export default function FixedCostsPage() {
                           }`}
                         >
                           {cost.is_active ? 'Active' : 'Inactive'}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(cost)}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     )}

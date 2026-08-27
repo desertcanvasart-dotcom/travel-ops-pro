@@ -424,7 +424,12 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
   },
 
   fixed_costs: {
-    tableName: 'fixed_costs',
+    // The registry key stays 'fixed_costs' (it is the page's URL-facing name),
+    // but the DATABASE table is fixed_daily_costs — with the key used for the
+    // query, this sheet's export and import had never worked at all. The bulk
+    // routes now read tableName for every .from(). No updated_at: the real
+    // table does not have one, and selecting it errors the whole export.
+    tableName: 'fixed_daily_costs',
     displayName: 'Fixed Costs',
     uniqueKey: ['cost_type'],
     columns: [
@@ -433,7 +438,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('cost_per_person_per_day', 'Cost Per Person/Day', 'number', true),
       col('description', 'Description', 'text', false),
       rateCurrency(),
-      isActive(), createdAt(), updatedAt(),
+      isActive(), createdAt(),
     ],
   },
 }
