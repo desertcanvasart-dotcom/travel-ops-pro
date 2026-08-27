@@ -272,7 +272,8 @@
     "departments": "部署",
     "activityLog": "操作ログ",
     "seasonalPremiums": "季節料金",
-    "commissionRates": "コミッション"
+    "commissionRates": "コミッション",
+    "destinations": "デスティネーション"
   },
   "roles": {
     "admin": "管理者",
@@ -7793,5 +7794,28 @@
     "selected": "{count}件選択中",
     "deleteSelected": "選択した項目を削除",
     "clear": "クリア"
+  },
+  "destinationsSettings": {
+    "loading": "デスティネーションを読み込み中…",
+    "title": "デスティネーション",
+    "subtitle": "取り扱う国と都市の一覧です。レート・サプライヤーのすべての都市選択がこのリストを参照します。",
+    "migrationMissing": "destinations テーブルがまだデータベースにありません。マイグレーション 20260827_destinations.sql を適用してください。適用まではエジプトの組み込みリストが使われます。",
+    "default": "既定",
+    "cityCount": "{count}都市",
+    "activateCity": "有効/無効を切替",
+    "deactivateCity": "有効/無効を切替",
+    "deleteCity": "都市を削除",
+    "deleteCityConfirm": "「{name}」を削除しますか？レートから参照されていない場合のみ削除できます。無効化は元に戻せます。",
+    "newCityName": "新しい都市名（英語）",
+    "newCityNameJa": "日本語名（任意）",
+    "addCity": "追加",
+    "makeDefault": "既定にする",
+    "active": "有効",
+    "addCountry": "国を追加",
+    "codePlaceholder": "JO",
+    "namePlaceholder": "国名（例：Jordan）",
+    "nameJaPlaceholder": "日本語名（任意）",
+    "create": "作成",
+    "addCountryHint": "国の追加は最初の一歩です。観光地・入場料・レート・ライティングルールは既存の画面から入力します。AIは与えられたデータの範囲でしか作成できません。"
   }
 }

@@ -272,7 +272,8 @@
     "departments": "Departments",
     "activityLog": "Activity Log",
     "seasonalPremiums": "Seasonal Premiums",
-    "commissionRates": "Commissions"
+    "commissionRates": "Commissions",
+    "destinations": "Destinations"
   },
   "roles": {
     "admin": "Admin",
@@ -7207,5 +7208,28 @@
     "selected": "{count} selected",
     "deleteSelected": "Delete selected",
     "clear": "Clear"
+  },
+  "destinationsSettings": {
+    "loading": "Loading destinations…",
+    "title": "Destinations",
+    "subtitle": "The countries and cities the agency operates. Every city dropdown in Rates and Suppliers reads this list.",
+    "migrationMissing": "The destinations tables are not in the database yet — apply migration 20260827_destinations.sql. Until then, dropdowns use the built-in Egypt list.",
+    "default": "Default",
+    "cityCount": "{count} cities",
+    "activateCity": "Toggle active",
+    "deactivateCity": "Toggle active",
+    "deleteCity": "Delete city",
+    "deleteCityConfirm": "Delete \"{name}\"? Only possible while no rate references it — deactivating is the reversible option.",
+    "newCityName": "New city name",
+    "newCityNameJa": "日本語名 (optional)",
+    "addCity": "Add",
+    "makeDefault": "Make default",
+    "active": "Active",
+    "addCountry": "Add a country",
+    "codePlaceholder": "JO",
+    "namePlaceholder": "Country name (e.g. Jordan)",
+    "nameJaPlaceholder": "日本語名 (optional)",
+    "create": "Create",
+    "addCountryHint": "Adding a country is step one. Its attractions, entrance fees, rates and writing rules are entered through the existing screens — the AI can only work with the data it is given."
   }
 }

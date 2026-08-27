@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import { useDestinationCities } from '@/app/components/useDestinationCities'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
@@ -45,44 +46,6 @@ import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
 // ============================================
 // EGYPTIAN CITIES - Complete List
 // ============================================
-const EGYPT_CITIES = [
-  'Alamein',
-  'Alexandria',
-  'Aswan',
-  'Asyut',
-  'Bahariya',
-  'Beni Suef',
-  'Cairo',
-  'Dahab',
-  'Dakhla',
-  'Edfu',
-  'El Arish',
-  'El Balyana',
-  'El Gouna',
-  'El Quseir',
-  'El Tor',
-  'Esna',
-  'Farafra',
-  'Fayoum',
-  'Giza',
-  'Hurghada',
-  'Kharga',
-  'Kom Ombo',
-  'Luxor',
-  'Marsa Alam',
-  'Minya',
-  'Nuweiba',
-  'Qena',
-  'Rafah',
-  'Rosetta (Rashid)',
-  'Safaga',
-  'Saint Catherine',
-  'Sharm El Sheikh',
-  'Sheikh Zuweid',
-  'Siwa',
-  'Sohag',
-  'Taba'
-]
 
 const TIER_OPTIONS_CONFIG = [
   { value: 'budget', labelKey: 'budget', color: 'bg-gray-100 text-gray-700' },
@@ -353,6 +316,10 @@ function Pagination({
 // ============================================
 
 export default function HotelsContent() {
+  // City vocabulary from the destinations tables (falls back to the
+  // hardcoded Egypt list until the migration is applied) — see
+  // app/components/useDestinationCities.ts.
+  const { cities: destinationCities } = useDestinationCities()
   const t = useTranslations('rates.hotels')
   const tPeriods = useTranslations('rates.ratePeriods')
   const tCommon = useTranslations('rates.common')
@@ -1381,7 +1348,7 @@ export default function HotelsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
                       <option value="">{tCommon('selectCity')}</option>
-                      {EGYPT_CITIES.map(city => (
+                      {destinationCities.map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
                     </select>

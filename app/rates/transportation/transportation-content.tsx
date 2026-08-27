@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useDestinationCities } from '@/app/components/useDestinationCities'
 import { useTranslations } from 'next-intl'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
@@ -26,7 +27,6 @@ import {
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
-import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 
 type ViewMode = 'cards' | 'table' | 'list'
 
@@ -218,7 +218,6 @@ const SERVICE_TYPES = [
   { value: 'dinner_transfer', labelKey: 'dinnerTransfer', needsDestination: false },
 ]
 
-// Using centralized EGYPT_CITIES from lib/constants/egypt-cities.ts
 
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
@@ -245,6 +244,10 @@ function getMinRate(rate: TransportationRate): number {
 // ============================================
 
 export default function TransportationContent() {
+  // City vocabulary from the destinations tables (falls back to the
+  // hardcoded Egypt list until the migration is applied) — see
+  // app/components/useDestinationCities.ts.
+  const { cities: destinationCities } = useDestinationCities()
   const t = useTranslations('rates.transportation')
   // The banner lives at the top of a long modal; the save button is at the
   // bottom. Without this, a refusal is written where nobody is looking.
@@ -779,7 +782,7 @@ export default function TransportationContent() {
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
             <option value="">{t('allCities')}</option>
-            {EGYPT_CITIES.map(city => (
+            {destinationCities.map(city => (
               <option key={city} value={city}>{translateCity(city)}</option>
             ))}
           </select>
@@ -1521,7 +1524,7 @@ export default function TransportationContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       <option value="">{t('selectDepartureCity')}</option>
-                      {EGYPT_CITIES.map(city => (
+                      {destinationCities.map(city => (
                         <option key={city} value={city}>{translateCity(city)}</option>
                       ))}
                     </select>
@@ -1539,7 +1542,7 @@ export default function TransportationContent() {
                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                       >
                         <option value="">{t('selectDestinationCity')}</option>
-                        {EGYPT_CITIES.filter(city => city !== formData.city).map(city => (
+                        {destinationCities.filter(city => city !== formData.city).map(city => (
                           <option key={city} value={city}>{translateCity(city)}</option>
                         ))}
                       </select>

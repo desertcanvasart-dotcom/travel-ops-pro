@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useDestinationCities } from '@/app/components/useDestinationCities'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
@@ -9,7 +10,6 @@ import {
   ChevronDown, ChevronUp
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
-import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // ============================================
@@ -93,6 +93,10 @@ const DEFAULT_PACKAGE_FORM: PackageFormData = {
 
 export default function B2BPricingRulesPage() {
   const { rateCurrency, rateSymbol } = useCurrency()
+  // City vocabulary from the destinations tables (falls back to the
+  // hardcoded Egypt list until the migration is applied) — see
+  // app/components/useDestinationCities.ts.
+  const { cities: destinationCities } = useDestinationCities()
   const t = useTranslations('b2bPricingRules')
   const [transportPackages, setTransportPackages] = useState<TransportPackage[]>([])
   const [loading, setLoading] = useState(true)
@@ -446,7 +450,7 @@ export default function B2BPricingRulesPage() {
                     onChange={(e) => setPackageForm({ ...packageForm, origin_city: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   >
-                    {EGYPT_CITIES.map(city => (
+                    {destinationCities.map(city => (
                       <option key={city} value={city}>{city}</option>
                     ))}
                   </select>
@@ -458,7 +462,7 @@ export default function B2BPricingRulesPage() {
                     onChange={(e) => setPackageForm({ ...packageForm, destination_city: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   >
-                    {EGYPT_CITIES.map(city => (
+                    {destinationCities.map(city => (
                       <option key={city} value={city}>{city}</option>
                     ))}
                   </select>

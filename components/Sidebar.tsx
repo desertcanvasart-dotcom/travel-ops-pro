@@ -237,6 +237,7 @@ const navigationConfig: NavConfig[] = [
     roles: ['admin'],
     items: [
       { labelKey: 'activityLog', href: '/activity', icon: ScrollText },
+      { labelKey: 'destinations', href: '/settings/destinations', icon: Globe },
       { labelKey: 'settings', href: '/settings', icon: Settings },
       { labelKey: 'userManagement', href: '/users', icon: Shield },
     ]
