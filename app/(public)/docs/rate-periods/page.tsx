@@ -77,16 +77,20 @@ export default function RatePeriodsPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">The other spreadsheet</h2>
         <p className="text-gray-600 mb-3">
-          The wide <strong>Import CSV</strong> on the same page is a different thing: one row per
-          rate, with columns for three seasons. It still works, and it is the right tool for
-          loading many properties at once.
+          The <strong>Import CSV</strong> on the same page is a different thing, and the two do
+          not overlap. It carries the property or the ship itself &mdash; code, name, category,
+          route, nights, supplier, contacts &mdash; and it is the right tool for loading many
+          properties at once, because it is the only sheet that can <em>create</em> rates.
         </p>
         <p className="text-gray-600">
-          But if a property already has dated periods, pricing reads the periods and ignores those
-          columns &mdash; so a price change made through the wide sheet will not reach your
-          quotes. The import tells you when this happens instead of staying quiet. Edit the
-          periods instead.
+          It carries no prices at all. Pricing for hotels and cruises comes from dated periods,
+          so a rate arrives in two steps: create it with <strong>Import CSV</strong>, then price
+          it with <strong>Import Periods</strong>.
         </p>
+        <Tip>
+          Sheets exported before this change still import. Their old season-price columns are
+          simply ignored &mdash; the periods are what price your quotes.
+        </Tip>
       </section>
 
       <section className="mb-10">
