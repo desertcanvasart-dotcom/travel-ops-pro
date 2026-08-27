@@ -36,6 +36,20 @@ export default function DepartmentsPage() {
   const [error, setError] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
+  // What the SERVER currently holds, per department. The picker greys pills
+  // from local state (so deselecting a type unlocks it here immediately), but
+  // the exclusivity check on save runs against the server — this snapshot is
+  // how a card can say "save Reservation first" instead of letting the PUT 400.
+  const [savedTypes, setSavedTypes] = useState<Record<string, { service_types: string[]; is_active: boolean }>>({})
+  // Why a blocked pill did nothing. Shown in the card, not as a title
+  // attribute: a disabled button gets no pointer events, so the old tooltip
+  // never rendered and the rule was invisible.
+  const [notice, setNotice] = useState<{ id: string; text: string } | null>(null)
+
+  const snapshot = (rows: Department[]) =>
+    Object.fromEntries(
+      rows.map(d => [d.id, { service_types: d.service_types ?? [], is_active: d.is_active }])
+    )
 
   const load = useCallback(async () => {
     try {
@@ -45,7 +59,9 @@ export default function DepartmentsPage() {
       ])
       const deptData = await deptRes.json()
       if (!deptRes.ok) throw new Error(deptData.error)
-      setDepartments(deptData.data || [])
+      const deptRows: Department[] = deptData.data || []
+      setDepartments(deptRows)
+      setSavedTypes(snapshot(deptRows))
       const memberData = await memberRes.json().catch(() => null)
       const rows: Array<{ department_id: string | null }> =
         memberData?.data || memberData?.members || []
@@ -71,6 +87,7 @@ export default function DepartmentsPage() {
   const save = async (dept: Department) => {
     setSavingId(dept.id)
     setError(null)
+    setNotice(null)
     try {
       const res = await fetch(`/api/departments/${dept.id}`, {
         method: 'PUT',
@@ -85,6 +102,7 @@ export default function DepartmentsPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       patch(dept.id, data.data)
+      setSavedTypes(prev => ({ ...prev, ...snapshot([data.data]) }))
       setSavedId(dept.id)
       setTimeout(() => setSavedId(null), 2500)
     } catch (err: any) {
@@ -120,6 +138,7 @@ export default function DepartmentsPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setDepartments(prev => [...prev, data.data].sort((a, b) => a.name.localeCompare(b.name)))
+      setSavedTypes(prev => ({ ...prev, ...snapshot([data.data]) }))
       setNewName('')
     } catch (err: any) {
       setError(err.message || 'Failed to create')
@@ -137,7 +156,21 @@ export default function DepartmentsPage() {
     return null
   }
 
+  /** The same question asked of the last SAVED state — i.e. what the server
+   *  would answer right now. A type deselected but not yet saved elsewhere is
+   *  still owned there as far as the PUT is concerned. */
+  const serverOwnerOf = (type: string, selfId: string): string | null => {
+    for (const d of departments) {
+      if (d.id === selfId) continue
+      const saved = savedTypes[d.id]
+      if (!saved?.is_active) continue
+      if (saved.service_types.includes(type)) return d.name
+    }
+    return null
+  }
+
   const toggleType = (dept: Department, type: string) => {
+    setNotice(null)
     const current = dept.service_types ?? []
     patch(dept.id, {
       service_types: current.includes(type)
@@ -172,6 +205,11 @@ export default function DepartmentsPage() {
           // Custom types already on this department stay visible even if not
           // in the known vocabulary — removing them silently would unroute work.
           const palette = [...new Set([...KNOWN_TYPES, ...types])]
+          // Types this card has claimed that the SERVER still gives to someone
+          // else — saving now would come back 400, so say so before the click.
+          const pending = types
+            .map(type => ({ type, owner: serverOwnerOf(type, dept.id) }))
+            .filter((p): p is { type: string; owner: string } => p.owner !== null)
           return (
             <div key={dept.id} className={`bg-white border rounded-lg p-5 ${dept.is_active ? 'border-gray-200' : 'border-dashed border-gray-300 opacity-70'}`}>
               <div className="flex items-center gap-3 mb-3">
@@ -205,14 +243,20 @@ export default function DepartmentsPage() {
                   return (
                     <button
                       key={type}
-                      disabled={blocked}
+                      // Deliberately NOT disabled: a disabled button receives no
+                      // pointer events, so the click did nothing and explained
+                      // nothing. It stays clickable and answers instead.
                       title={blocked ? t('ownedBy', { name: owner! }) : undefined}
-                      onClick={() => toggleType(dept, type)}
+                      onClick={() =>
+                        blocked
+                          ? setNotice({ id: dept.id, text: t('blockedNotice', { type, name: owner! }) })
+                          : toggleType(dept, type)
+                      }
                       className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
                         selected
                           ? 'bg-[#647C47] text-white border-[#647C47]'
                           : blocked
-                            ? 'bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed'
+                            ? 'bg-gray-50 text-gray-400 border-gray-200 border-dashed hover:border-gray-400 cursor-help'
                             : 'bg-white text-gray-600 border-gray-300 hover:border-[#647C47]'
                       }`}
                     >
@@ -221,6 +265,19 @@ export default function DepartmentsPage() {
                   )
                 })}
               </div>
+              {notice?.id === dept.id && (
+                <p className="-mt-2 mb-3 px-2.5 py-1.5 rounded border border-amber-200 bg-amber-50 text-xs text-amber-800">
+                  {notice.text}
+                </p>
+              )}
+              {pending.length > 0 && (
+                <p className="-mt-2 mb-3 px-2.5 py-1.5 rounded border border-amber-200 bg-amber-50 text-xs text-amber-800">
+                  {t('saveOrder', {
+                    types: pending.map(p => p.type).join(', '),
+                    names: [...new Set(pending.map(p => p.owner))].join(', '),
+                  })}
+                </p>
+              )}
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => save(dept)}

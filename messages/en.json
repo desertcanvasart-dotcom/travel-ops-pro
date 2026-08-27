@@ -7155,6 +7155,8 @@
     "descriptionPlaceholder": "Description (optional)",
     "routedTypes": "Routed service types",
     "ownedBy": "Routed to {name} — remove it there first",
+    "blockedNotice": "\"{type}\" is already routed to {name}. Deselect it on the {name} card and save that department first — then it becomes available here.",
+    "saveOrder": "Save {names} first: {types} still belongs there on the server, so saving this department now will be rejected.",
     "save": "Save",
     "saved": "Saved",
     "newPlaceholder": "New department name",

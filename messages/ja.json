@@ -7741,6 +7741,8 @@
     "descriptionPlaceholder": "説明（任意）",
     "routedTypes": "担当サービス種別",
     "ownedBy": "{name} に割り当て済み — 先にそちらで外してください",
+    "blockedNotice": "「{type}」は {name} に割り当て済みです。先に {name} のカードで選択を外して保存すると、こちらで選べるようになります。",
+    "saveOrder": "先に {names} を保存してください。サーバー上では {types} がまだ {names} に属しているため、このまま保存すると拒否されます。",
     "save": "保存",
     "saved": "保存しました",
     "newPlaceholder": "新しい部署名",
