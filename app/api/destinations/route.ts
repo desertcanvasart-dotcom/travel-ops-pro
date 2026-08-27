@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
@@ -14,16 +14,19 @@ const supabaseAdmin = createClient(
 // Phase 1). Until migration 20260827_destinations is applied this returns
 // success with an empty list, and the client hook falls back to the
 // hardcoded Egypt vocabulary — deploy-safe in either order.
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
-    const { data: destinations, error } = await supabaseAdmin
+    // The settings page manages inactive rows too; dropdowns never ask for them.
+    const includeInactive = request.nextUrl.searchParams.get('include_inactive') === '1'
+    let query = supabaseAdmin
       .from('destinations')
-      .select('id, country_code, name, name_ja, is_default, destination_cities(id, name, name_ja, aliases, lat, lng, airport_codes, timezone, sort_order, is_active)')
-      .eq('is_active', true)
+      .select('id, country_code, name, name_ja, is_default, is_active, generation_brief, destination_cities(id, name, name_ja, aliases, lat, lng, airport_codes, timezone, sort_order, is_active)')
       .order('name')
+    if (!includeInactive) query = query.eq('is_active', true)
+    const { data: destinations, error } = await query
 
     if (error) {
       // Table absent = migration not applied yet. An empty answer, not a 500:
@@ -40,8 +43,9 @@ export async function GET() {
       name: d.name,
       name_ja: d.name_ja,
       is_default: d.is_default,
+      is_active: d.is_active,
       cities: (d.destination_cities ?? [])
-        .filter((c: { is_active: boolean }) => c.is_active)
+        .filter((c: { is_active: boolean }) => includeInactive || c.is_active)
         .sort((a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order),
     }))
 
