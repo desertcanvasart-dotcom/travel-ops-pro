@@ -117,17 +117,16 @@ interface FormData {
   supplier_name: string
   notes: string
   is_active: boolean
-  // Tiered rates
+  // Tiered rates. ONE price per vehicle: a vehicle costs what it costs
+  // regardless of the traveller's passport (unlike entrance fees, which keep
+  // their split). The save mirrors this value into both legacy DB columns
+  // (<tier>_rate_eur and _rate_non_eur) so every consumer reads the same
+  // number; the currency it is in comes from the Rate currency field.
   sedan_rate_eur: string
-  sedan_rate_non_eur: string
   minivan_rate_eur: string
-  minivan_rate_non_eur: string
   van_rate_eur: string
-  van_rate_non_eur: string
   minibus_rate_eur: string
-  minibus_rate_non_eur: string
   bus_rate_eur: string
-  bus_rate_non_eur: string
   // Capacity per vehicle, per route. An agency that never uses a sedan leaves
   // its rate blank and starts the minivan at 1 — the engine then picks the
   // minivan for a couple, because it is the smallest vehicle they actually run.
@@ -183,15 +182,10 @@ const initialFormData: FormData = {
   notes: '',
   is_active: true,
   sedan_rate_eur: '',
-  sedan_rate_non_eur: '',
   minivan_rate_eur: '',
-  minivan_rate_non_eur: '',
   van_rate_eur: '',
-  van_rate_non_eur: '',
   minibus_rate_eur: '',
-  minibus_rate_non_eur: '',
   bus_rate_eur: '',
-  bus_rate_non_eur: '',
   sedan_capacity_min: '1',
   sedan_capacity_max: '2',
   minivan_capacity_min: '3',
@@ -446,16 +440,14 @@ export default function TransportationContent() {
       supplier_name: rate.supplier_name || rate.supplier?.name || '',
       notes: rate.notes || '',
       is_active: rate.is_active,
-      sedan_rate_eur: rate.sedan_rate_eur?.toString() || '',
-      sedan_rate_non_eur: rate.sedan_rate_non_eur?.toString() || '',
-      minivan_rate_eur: rate.minivan_rate_eur?.toString() || '',
-      minivan_rate_non_eur: rate.minivan_rate_non_eur?.toString() || '',
-      van_rate_eur: rate.van_rate_eur?.toString() || '',
-      van_rate_non_eur: rate.van_rate_non_eur?.toString() || '',
-      minibus_rate_eur: rate.minibus_rate_eur?.toString() || '',
-      minibus_rate_non_eur: rate.minibus_rate_non_eur?.toString() || '',
-      bus_rate_eur: rate.bus_rate_eur?.toString() || '',
-      bus_rate_non_eur: rate.bus_rate_non_eur?.toString() || '',
+      // Old rows may carry two passport prices; the form is single-price now,
+      // so show the EU-column value (falling back to the other) — saving
+      // collapses the row to that one number, visibly.
+      sedan_rate_eur: (rate.sedan_rate_eur ?? rate.sedan_rate_non_eur)?.toString() || '',
+      minivan_rate_eur: (rate.minivan_rate_eur ?? rate.minivan_rate_non_eur)?.toString() || '',
+      van_rate_eur: (rate.van_rate_eur ?? rate.van_rate_non_eur)?.toString() || '',
+      minibus_rate_eur: (rate.minibus_rate_eur ?? rate.minibus_rate_non_eur)?.toString() || '',
+      bus_rate_eur: (rate.bus_rate_eur ?? rate.bus_rate_non_eur)?.toString() || '',
       ...capacityFieldsFor(rate),
     })
     setIsModalOpen(true)
@@ -546,10 +538,12 @@ export default function TransportationContent() {
 
       // Add tiered rates
       for (const tier of VEHICLE_TIERS) {
-        const eurVal = formData[`${tier.key}_rate_eur` as keyof FormData] as string
-        const nonEurVal = formData[`${tier.key}_rate_non_eur` as keyof FormData] as string
-        submitData[`${tier.key}_rate_eur`] = eurVal ? parseFloat(eurVal) : null
-        submitData[`${tier.key}_rate_non_eur`] = nonEurVal ? parseFloat(nonEurVal) : null
+        // One price per vehicle, mirrored into both legacy passport columns
+        // so nothing downstream depends on which one it reads.
+        const priceVal = formData[`${tier.key}_rate_eur` as keyof FormData] as string
+        const price = priceVal ? parseFloat(priceVal) : null
+        submitData[`${tier.key}_rate_eur`] = price
+        submitData[`${tier.key}_rate_non_eur`] = price
 
         const minVal = formData[`${tier.key}_capacity_min` as keyof FormData] as string
         const maxVal = formData[`${tier.key}_capacity_max` as keyof FormData] as string
@@ -1579,8 +1573,7 @@ export default function TransportationContent() {
                       <tr className="bg-gray-100 text-[10px] uppercase tracking-wider text-gray-500">
                         <th className="text-left px-3 py-2 font-medium">{t('vehicle')}</th>
                         <th className="text-center px-3 py-2 font-medium">{t('capacity')}</th>
-                        <th className="text-center px-3 py-2 font-medium">{t('eurRate')}</th>
-                        <th className="text-center px-3 py-2 font-medium">{t('nonEurRate')}</th>
+                        <th className="text-center px-3 py-2 font-medium">{t('singlePrice')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1628,17 +1621,7 @@ export default function TransportationContent() {
                               className="w-full px-2 py-1 text-sm text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                             />
                           </td>
-                          <td className="px-3 py-2">
-                            <input
-                              type="number"
-                              value={formData[`${tier.key}_rate_non_eur` as keyof FormData] as string}
-                              onChange={(e) => setFormData(prev => ({ ...prev, [`${tier.key}_rate_non_eur`]: e.target.value }))}
-                              step="0.01"
-                              min="0"
-                              placeholder="—"
-                              className="w-full px-2 py-1 text-sm text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                            />
-                          </td>
+
                         </tr>
                       ))}
                     </tbody>

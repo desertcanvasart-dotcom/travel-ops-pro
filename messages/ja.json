@@ -4209,7 +4209,8 @@
         "selectDestination": "都市間/市内送迎サービスには到着都市を選択してください",
         "validEurRate": "有効な料金を入力してください"
       },
-      "rateHeader": "料金（{currency}）"
+      "rateHeader": "料金（{currency}）",
+      "singlePrice": "料金"
     },
     "meals": {
       "title": "食事料金",

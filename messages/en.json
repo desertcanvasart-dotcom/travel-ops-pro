@@ -3615,7 +3615,8 @@
         "selectDestination": "Please select a destination city for intercity/city transfer services",
         "validEurRate": "Please enter a valid rate"
       },
-      "rateHeader": "Rate ({currency})"
+      "rateHeader": "Rate ({currency})",
+      "singlePrice": "Price"
     },
     "cruises": {
       "title": "Cruise Rates",

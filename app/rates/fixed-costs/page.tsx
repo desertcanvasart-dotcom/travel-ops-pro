@@ -1,6 +1,6 @@
 'use client'
 
-import { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { useEffect, useState } from 'react'
 import { Droplets, Coins, Plus, Edit, Save, X, Check, Loader2, AlertTriangle, Settings, Trash2 } from 'lucide-react'
@@ -289,15 +289,17 @@ export default function FixedCostsPage() {
                             autoFocus
                           />
                           <span className="text-sm text-gray-500">/person/day</span>
-                          <select
-                            value={editCurrency}
-                            onChange={(e) => setEditCurrency(e.target.value)}
-                            className="px-2 py-2 text-xs border border-gray-300 rounded-lg"
-                            title="Rate currency (blank = organisation default)"
-                          >
-                            <option value="">Default</option>
-                            {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                          </select>
+                          <label className="flex items-center gap-1.5 ml-2 text-xs text-gray-600 shrink-0">
+                            Currency
+                            <select
+                              value={editCurrency}
+                              onChange={(e) => setEditCurrency(e.target.value)}
+                              className="w-40 px-2 py-2 text-sm border border-gray-300 rounded-lg"
+                            >
+                              <option value="">Org default ({rateCurrency})</option>
+                              {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </label>
                         </div>
                         <button
                           onClick={() => handleSave(cost)}
@@ -402,16 +404,12 @@ export default function FixedCostsPage() {
                   placeholder="e.g., 2.00"
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#647C47]"
                 />
-                <select
-                  value={newCostCurrency}
-                  onChange={(e) => setNewCostCurrency(e.target.value)}
-                  className="mt-2 w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#647C47]"
-                  title="Rate currency (blank = organisation default)"
-                >
-                  <option value="">Currency: organisation default</option>
-                  {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
               </div>
+              <RateCurrencyField
+                value={newCostCurrency}
+                onChange={setNewCostCurrency}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#647C47]"
+              />
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-1">Description</label>
                 <input
