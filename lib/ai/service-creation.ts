@@ -11,6 +11,8 @@ import {
   getCruiseTransportRate
 } from '@/lib/auto-pricing-service'
 import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, getExchangeRate, persistExchangeRate, type ExchangeRates } from '@/lib/currency-service'
+import { createRateNormalizer } from '@/lib/rates/rate-currency'
+import { DEFAULT_RATE_CURRENCY } from '@/lib/org-rate-currency'
 import { getFixedDailyCosts } from '@/lib/fixed-costs'
 import {
   getItemizedTippingRates,
@@ -213,21 +215,27 @@ export async function fetchAllPricingRates(
     language: string
     hotelName: string | null
     includeAccommodation: boolean
+    /** The org's rate currency (organizations.rate_currency). Rows whose own
+     *  rate_currency differs are converted into it at this fetch boundary —
+     *  see lib/rates/rate-currency.ts. Optional so existing callers keep the
+     *  pre-migration behaviour verbatim. */
+    rateCurrency?: string
   }
 ): Promise<PricingRates> {
   const { tier, effectiveCity, totalPax, isEuroPassport, language, hotelName, includeAccommodation } = params
+  const rateNormalizer = createRateNormalizer(params.rateCurrency ?? DEFAULT_RATE_CURRENCY)
 
   // All of these top-level lookups are mutually independent — run them in one
   // parallel batch (I/O scheduling only; downstream logic/warnings unchanged).
   const [
-    { data: transportRates },
-    { data: transferRates },
-    { data: guideRates },
-    { data: allEntranceFees },
-    { data: allActivityRates },
-    { data: allMealRates },
-    { data: airportServicesData },
-    { data: hotelServicesData },
+    { data: rawTransportRates },
+    { data: rawTransferRates },
+    { data: rawGuideRates },
+    { data: rawEntranceFees },
+    { data: rawActivityRates },
+    { data: rawMealRates },
+    { data: rawAirportServicesData },
+    { data: rawHotelServicesData },
     tippingRates,
     { getTransportRateForPax },
   ] = await Promise.all([
@@ -265,9 +273,28 @@ export async function fetchAllPricingRates(
     // Hotel services (hotel_staff_rates table — managed via Rates > Hotel Services UI)
     supabase.from('hotel_staff_rates').select('*').eq('is_active', true),
     // Tipping rates (from tipping_rates table, tier-adjusted, per-role)
-    getItemizedTippingRates(supabase, tier),
+    getItemizedTippingRates(supabase, tier, rateNormalizer),
     import('@/lib/transport-rate-utils'),
   ])
+
+  // Convert any row entered in another currency (rate_currency) into the run
+  // currency — a no-op making no FX call when nothing is set. Accommodation
+  // is deliberately absent: hotels/cruises join the per-rate-currency model
+  // in a later phase (their prices live in the seasons JSONB).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [transportRates, transferRates, guideRates, allEntranceFees, allActivityRates, allMealRates, airportServicesData, hotelServicesData]: any[] = await Promise.all([
+    rateNormalizer.normalize('transportation_rates', rawTransportRates),
+    rateNormalizer.normalize('transportation_rates', rawTransferRates),
+    rateNormalizer.normalize('guide_rates', rawGuideRates),
+    rateNormalizer.normalize('entrance_fees', rawEntranceFees),
+    rateNormalizer.normalize('activity_rates', rawActivityRates),
+    rateNormalizer.normalize('meal_rates', rawMealRates),
+    rateNormalizer.normalize('airport_staff_rates', rawAirportServicesData),
+    rateNormalizer.normalize('hotel_staff_rates', rawHotelServicesData),
+  ])
+  for (const miss of rateNormalizer.misses) {
+    console.warn(`⚠️ [Service Creation] Rate ${miss.id ?? ''} in ${miss.table} is entered in ${miss.currency} and no exchange rate was available — treated as missing`)
+  }
 
   const transportResult = transportRates?.length ? getTransportRateForPax(transportRates[0], totalPax, isEuroPassport) : null
   if (!transportResult) {

@@ -42,6 +42,7 @@ import type { PricingHole } from '@/lib/pricing-types'
 import { priceAcrossPax } from '@/lib/pricing/pax-range'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { ratesForTravelDate } from '@/lib/rates/rate-seasons'
+import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -1251,24 +1252,29 @@ export async function getHotelRates(
  */
 export async function getEntranceFee(
   attractionName: string,
-  isEurPassport: boolean
+  isEurPassport: boolean,
+  /** Converts rows entered in another currency into the run currency —
+   *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
+  normalizer?: RateNormalizer
 ): Promise<{ id: string; name: string; rate: number } | null> {
   try {
     let { data: fees, error } = await supabaseAdmin
       .from('entrance_fees')
-      .select('id, attraction_name, eur_rate, non_eur_rate')
+      .select('*')
       .eq('is_active', true)
       .ilike('attraction_name', `%${attractionName}%`)
       .limit(1)
+    if (normalizer && fees) fees = await normalizer.normalize('entrance_fees', fees) as typeof fees
 
     if (error || !fees || fees.length === 0) {
       // STRICT fallback: Only match if the full attraction name substantially overlaps
       // with a DB entry. Do NOT split into individual keywords — that causes false matches
       // like "Solar Boat Museum" matching "Egyptian Museum" via the keyword "museum".
-      const { data: allFees } = await supabaseAdmin
+      let { data: allFees } = await supabaseAdmin
         .from('entrance_fees')
-        .select('id, attraction_name, eur_rate, non_eur_rate')
+        .select('*')
         .eq('is_active', true)
+      if (normalizer && allFees) allFees = await normalizer.normalize('entrance_fees', allFees) as typeof allFees
 
       if (allFees && allFees.length > 0) {
         const searchName = attractionName.toLowerCase()
@@ -1318,12 +1324,14 @@ type EntranceFeeRow = { id: string; attraction_name: string; eur_rate: number | 
  * (and a full-table scan on every miss); building this cache once and matching
  * with findEntranceFeeInList() collapses that N+1 to a single query.
  */
-export async function buildEntranceFeeCache(): Promise<EntranceFeeRow[]> {
+export async function buildEntranceFeeCache(normalizer?: RateNormalizer): Promise<EntranceFeeRow[]> {
   const { data } = await supabaseAdmin
     .from('entrance_fees')
-    .select('id, attraction_name, eur_rate, non_eur_rate')
+    // select('*') so this deploys safely before the rate_currency migration.
+    .select('*')
     .eq('is_active', true)
-  return (data as EntranceFeeRow[]) || []
+  const rows = (data as EntranceFeeRow[]) || []
+  return normalizer ? ((await normalizer.normalize('entrance_fees', rows)) ?? rows) : rows
 }
 
 /**
@@ -1361,17 +1369,23 @@ export function findEntranceFeeInList(
  */
 export async function getGuideRate(
   language: string,
-  tier: ServiceTier
+  tier: ServiceTier,
+  /** Converts rows entered in another currency into the run currency —
+   *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
+  normalizer?: RateNormalizer
 ): Promise<{ id: string; name: string; dailyRate: number } | null> {
   try {
     // 1. Try guide_rates table first (has per-language/type/duration rates)
-    const { data: guideRate } = await supabaseAdmin
+    const { data: rawGuideRate } = await supabaseAdmin
       .from('guide_rates')
       .select('*')
       .eq('is_active', true)
       .ilike('guide_language', `%${language}%`)
       .limit(1)
       .single()
+    const guideRate = normalizer && rawGuideRate
+      ? (await normalizer.normalize('guide_rates', [rawGuideRate]))?.[0]
+      : rawGuideRate
 
     if (guideRate) {
       const dailyRate = guideRate.base_rate_eur || guideRate.rate_eur || 0
@@ -1431,7 +1445,10 @@ export async function getGuideRate(
  * synthesised rate.
  */
 export async function getMealRates(
-  tier: ServiceTier
+  tier: ServiceTier,
+  /** Converts rows entered in another currency into the run currency —
+   *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
+  normalizer?: RateNormalizer
 ): Promise<{ lunch: number; dinner: number } | null> {
   try {
     // The meals rates UI (app/rates/meals) writes rows shaped
@@ -1440,11 +1457,12 @@ export async function getMealRates(
     // UI-managed rows at €0 without flagging a hole. Resolve via
     // meal_type/base_rate_eur (same as the land path in lib/ai/service-creation),
     // falling back to the legacy columns for pre-UI rows.
-    const { data: mealRows } = await supabaseAdmin
+    let { data: mealRows } = await supabaseAdmin
       .from('meal_rates')
       .select('*')
       .eq('is_active', true)
       .eq('tier', tier)
+    if (normalizer && mealRows) mealRows = await normalizer.normalize('meal_rates', mealRows) as typeof mealRows
 
     if (!mealRows || mealRows.length === 0) {
       return null
@@ -1483,16 +1501,20 @@ export async function getMealRates(
 export async function getAirportServiceRate(
   airportCode: string,
   direction: 'arrival' | 'departure',
-  tier: ServiceTier
+  tier: ServiceTier,
+  /** Converts rows entered in another currency into the run currency —
+   *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
+  normalizer?: RateNormalizer
 ): Promise<number | null> {
   try {
-    const { data: rates } = await supabaseAdmin
+    let { data: rates } = await supabaseAdmin
       .from('airport_staff_rates')
-      .select('rate_eur')
+      .select('*')
       .eq('is_active', true)
       .eq('airport_code', airportCode)
       .or(`direction.eq.${direction},direction.eq.both`)
       .limit(1)
+    if (normalizer && rates) rates = await normalizer.normalize('airport_staff_rates', rates) as typeof rates
 
     if (!rates || rates.length === 0) {
       return null
@@ -1509,19 +1531,23 @@ export async function getAirportServiceRate(
  */
 export async function getHotelServiceRate(
   serviceType: 'checkin_assist' | 'porter' | 'full_service',
-  tier: ServiceTier
+  tier: ServiceTier,
+  /** Converts rows entered in another currency into the run currency —
+   *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
+  normalizer?: RateNormalizer
 ): Promise<number | null> {
   try {
     const category = getTierCategory(tier)
 
     const lookup = async (type: string) => {
-      const { data } = await supabaseAdmin
+      let { data } = await supabaseAdmin
         .from('hotel_staff_rates')
-        .select('rate_eur')
+        .select('*')
         .eq('is_active', true)
         .eq('service_type', type)
         .or(`hotel_category.eq.${category},hotel_category.eq.all`)
         .limit(1)
+      if (normalizer && data) data = await normalizer.normalize('hotel_staff_rates', data) as typeof data
       return data && data.length > 0 ? usableRate(data[0].rate_eur) : null
     }
 
@@ -1539,17 +1565,17 @@ export async function getHotelServiceRate(
 /**
  * Get tipping rate per day (flat total — backward compat for simple callers)
  */
-export async function getTippingRate(tier: ServiceTier): Promise<number> {
+export async function getTippingRate(tier: ServiceTier, normalizer?: RateNormalizer): Promise<number> {
   const { getDailyTippingRate } = await import('@/lib/tipping-utils')
-  return getDailyTippingRate(supabaseAdmin, tier)
+  return getDailyTippingRate(supabaseAdmin, tier, normalizer)
 }
 
 /**
  * Get itemized tipping rates for context-aware per-role lookups
  */
-async function getItemizedTips(tier: ServiceTier) {
+async function getItemizedTips(tier: ServiceTier, normalizer?: RateNormalizer) {
   const { getItemizedTippingRates } = await import('@/lib/tipping-utils')
-  return getItemizedTippingRates(supabaseAdmin, tier)
+  return getItemizedTippingRates(supabaseAdmin, tier, normalizer)
 }
 
 // ============================================
@@ -1560,11 +1586,12 @@ async function getItemizedTips(tier: ServiceTier) {
  * Build transport cache from database
  * Key format: "service_type|city|duration|area" (one entry per service, all vehicle rates in one row)
  */
-export async function buildTransportCache(): Promise<Map<string, TransportRate>> {
-  const { data: allRates } = await supabaseAdmin
+export async function buildTransportCache(normalizer?: RateNormalizer): Promise<Map<string, TransportRate>> {
+  let { data: allRates } = await supabaseAdmin
     .from('transportation_rates')
     .select('*')
     .eq('is_active', true)
+  if (normalizer && allRates) allRates = await normalizer.normalize('transportation_rates', allRates) as typeof allRates
 
   const cache = new Map<string, TransportRate>()
 
@@ -1999,6 +2026,12 @@ export async function calculateDayBasedPricing(
   const firstCruiseDay = cruiseDays[0]
   const hotelCities = [...new Set(hotelDays.map(d => d.overnight_city || d.city))]
 
+  // Rows entered in another currency (rate_currency, per-rate currency work)
+  // are converted into this run's currency at the fetch boundary, so every
+  // number downstream is in ONE currency exactly as before. With no such rows
+  // this is a no-op that makes no FX call.
+  const rateNormalizer = createRateNormalizer(params.rateCurrency ?? DEFAULT_RATE_CURRENCY)
+
   const [
     transportCache,
     cruiseTransportPricingRules,
@@ -2012,7 +2045,7 @@ export async function calculateDayBasedPricing(
     airportStaffRows,
     hotelStaffRows,
   ] = await Promise.all([
-    buildTransportCache(),
+    buildTransportCache(rateNormalizer),
     // Fetch cruise transport packages from b2b_transport_packages
     fetchCruiseTransportPricingRules(),
     // Cruise rates only apply when the itinerary has cruise nights
@@ -2020,26 +2053,35 @@ export async function calculateDayBasedPricing(
       ? getCruiseRates(tier, firstCruiseDay?.city, isEurPassport, dateForDay(firstCruiseDay?.day))
       : Promise.resolve(null as Awaited<ReturnType<typeof getCruiseRates>>),
     Promise.all(hotelCities.map(city => getHotelRates(city, tier, isEurPassport, params.travelDate))),
-    getGuideRate(language, tier),
-    getMealRates(tier),
-    getItemizedTips(tier),
+    getGuideRate(language, tier, rateNormalizer),
+    getMealRates(tier, rateNormalizer),
+    getItemizedTips(tier, rateNormalizer),
     // Water cost from DB (fixed_daily_costs table) instead of hardcoding
-    import('@/lib/fixed-costs').then(m => m.getFixedDailyCosts()),
+    import('@/lib/fixed-costs').then(m => m.getFixedDailyCosts(rateNormalizer)),
     // Entrance fees fetched ONCE here, matched in memory later (Step 7)
-    buildEntranceFeeCache(),
+    buildEntranceFeeCache(rateNormalizer),
     // Tiny tables prefetched whole so the day loop below resolves
     // airport/hotel staff rates in memory instead of one query per day
     supabaseAdmin
       .from('airport_staff_rates')
       .select('*')
       .eq('is_active', true)
-      .then(({ data }) => data || []),
+      .then(({ data }) => rateNormalizer.normalize('airport_staff_rates', data || []))
+      .then(rows => rows || []),
     supabaseAdmin
       .from('hotel_staff_rates')
       .select('*')
       .eq('is_active', true)
-      .then(({ data }) => data || []),
+      .then(({ data }) => rateNormalizer.normalize('hotel_staff_rates', data || []))
+      .then(rows => rows || []),
   ])
+
+  // A rate whose currency could not be backed by an FX rate was neutralised
+  // into the ordinary missing-rate machinery above; say why here so the
+  // operator sees "no FX rate", not just "no rate".
+  for (const miss of rateNormalizer.misses) {
+    warnings.push(`Rate ${miss.id ?? ''} in ${miss.table} is entered in ${miss.currency} and no exchange rate was available — treated as missing`)
+  }
 
   if (cruiseNights > 0 && !cruiseRates) {
     addHole({
