@@ -1208,7 +1208,8 @@
     "deleteBlockedMessage": "{name} には {count} 件の旅程が紐づいています。強制削除するとそれらも削除されます。",
     "deleteConfirmBody": "{name} を削除してもよろしいですか？この操作は取り消せません。",
     "deleteForceConfirm": "顧客と紐づくすべての旅程を強制的に削除しますか？",
-    "error": "エラー"
+    "error": "エラー",
+    "firstContactNote": "初回問い合わせ"
   },
   "communications": {
     "title": "コミュニケーション",

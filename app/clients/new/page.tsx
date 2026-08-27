@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   User, Mail, Phone, MapPin, Globe, Building, CreditCard, Tag,
@@ -21,20 +21,54 @@ const LEAD_SOURCES = [
   { value: 'other', label: 'Other', icon: '➕' }
 ]
 
+// The inbox links here with everything it already knows about the person
+// (components/unified/UnifiedMessageThread.tsx). useSearchParams needs a
+// Suspense boundary in the app router, so the form is a child of one.
 export default function NewClientPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewClientForm />
+    </Suspense>
+  )
+}
+
+function NewClientForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const t = useTranslations('clients')
   const tCommon = useTranslations('common')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [currentStep, setCurrentStep] = useState(1)
 
+  // Anything the inbox handed over. Read once, as the seed for the form —
+  // after that the operator owns every field, so this must not be an effect
+  // that reaches back in and overwrites what they have typed.
+  const prefill = (() => {
+    const channel = searchParams.get('source')
+    // One display name, split on the first space. Any convention beyond that
+    // (family name first, particles, multi-word surnames) is guesswork, and
+    // both boxes are right there to correct.
+    const [first = '', ...rest] = (searchParams.get('name') || '').trim().split(/\s+/).filter(Boolean)
+    const subject = (searchParams.get('subject') || '').trim()
+    return {
+      first_name: first,
+      last_name: rest.join(' '),
+      email: searchParams.get('email') || '',
+      phone: searchParams.get('phone') || '',
+      // Only the two channels the picker actually offers; 'portal' has no
+      // lead source of its own, and a wrong one is worse than none.
+      lead_source: channel === 'whatsapp' || channel === 'email' ? channel : '',
+      preferred_contact_method: (channel === 'email' ? 'email' : 'whatsapp') as 'email' | 'whatsapp' | 'phone' | 'sms',
+      internal_notes: subject ? `${t('firstContactNote')}: ${subject}` : '',
+    }
+  })()
+
   // Form data
   const [formData, setFormData] = useState({
-    first_name: '',
-    last_name: '',
-    email: '',
-    phone: '',
+    // first_name / last_name / email / phone / lead_source /
+    // preferred_contact_method / internal_notes all come from `prefill`
+    // below, which defaults them to blank when nothing was handed over.
     alternative_phone: '',
     nationality: '',
     passport_type: 'euro_passport' as 'euro_passport' | 'other_passport',
@@ -45,7 +79,6 @@ export default function NewClientPage() {
     address_line1: '',
     address_line2: '',
     postal_code: '',
-    preferred_contact_method: 'whatsapp' as 'email' | 'whatsapp' | 'phone' | 'sms',
     best_time_to_contact: 'morning',
     timezone: 'Africa/Cairo',
     preferred_accommodation_level: 'moderate' as 'budget' | 'moderate' | 'luxury' | 'ultra_luxury',
@@ -58,13 +91,12 @@ export default function NewClientPage() {
     agent_commission_rate: 0,
     client_type: 'individual' as 'individual' | 'family' | 'group' | 'corporate' | 'agent',
     vip_status: false,
-    lead_source: '',
     marketing_consent: false,
     newsletter_subscribed: false,
     sms_consent: false,
     tags: [] as string[],
-    internal_notes: '',
-    currency_preference: 'EUR' as 'EUR' | 'USD' | 'GBP' | 'JPY'
+    currency_preference: 'EUR' as 'EUR' | 'USD' | 'GBP' | 'JPY',
+    ...prefill,
   })
 
   const supabase = createClient()
