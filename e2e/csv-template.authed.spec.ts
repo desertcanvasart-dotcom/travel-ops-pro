@@ -15,7 +15,12 @@ test('an empty table still exports its headers', async ({ request }) => {
   expect(text.trim().length).toBeGreaterThan(0)
   const header = text.split('\n')[0]
   expect(header).toContain('service_code')
-  expect(header).toContain('pp_double_eur')
+  expect(header).toContain('board_basis')
+  // No price columns since #229: hotels price from dated periods, and this
+  // sheet carries the property. A season/price header reappearing here means
+  // the duplicated-pricing model is creeping back.
+  expect(header).not.toContain('pp_double_eur')
+  expect(header).not.toContain('season')
 })
 
 test('the sample CSV is a sheet you can actually fill in', async ({ request }) => {
@@ -26,7 +31,7 @@ test('the sample CSV is a sheet you can actually fill in', async ({ request }) =
   expect(lines[0]).toContain('property_name')
   expect(lines[0]).not.toContain('created_at')       // export-only, left out
   expect(lines[1]).toContain('EXAMPLE-DELETE-THIS-ROW')
-  expect(lines[1]).toContain('2026-05-01')           // the date format, shown
+  expect(lines[1]).toContain('2026-04-01')           // the date format, shown (rate_valid_from)
 })
 
 test('the unedited sample is skipped rather than imported as a rate', async ({ request }) => {
