@@ -69,7 +69,20 @@ test('a portal conversation reaches the unified inbox', async ({ request }) => {
     })
     expect(replied.ok(), await replied.text()).toBeTruthy()
     const replyJson = await replied.json()
-    expect(replyJson.emailed, 'replying from the inbox did not notify the traveller').toBe(true)
+    // The booking above HAS an email and a live portal link, so of the
+    // notification outcomes only two are legitimate here: 'sent' (a Gmail
+    // account is connected — production, and any local env with one) and
+    // 'no-account' (no Gmail connected at all — the CI project, by design:
+    // its seed holds no OAuth token). Anything else is a real regression:
+    // 'no-recipient'/'no-link' mean the lookup lost data this test created,
+    // 'failed' means the send threw. Asserting emailed===true outright made
+    // the suite fail wherever Gmail wasn't connected, which said nothing
+    // about the reply path.
+    expect(
+      ['sent', 'no-account'],
+      `replying from the inbox did not notify the traveller (outcome: ${replyJson.notified})`
+    ).toContain(replyJson.notified)
+    expect(replyJson.emailed).toBe(replyJson.notified === 'sent')
 
     // 5. Opening it marked it read, so it stops shouting at the whole team.
     const after = await request.get('/api/unified/conversations?channel=portal&limit=100')

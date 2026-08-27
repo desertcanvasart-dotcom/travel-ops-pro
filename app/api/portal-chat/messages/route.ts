@@ -104,7 +104,12 @@ export async function POST(request: NextRequest) {
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status ?? 500 })
     }
-    return NextResponse.json({ success: true, emailed: result.emailed, message: result.message })
+    return NextResponse.json({
+      success: true,
+      emailed: result.emailed,
+      notified: result.notified,
+      message: result.message,
+    })
   } catch (error) {
     console.error('Error in portal-chat POST:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
