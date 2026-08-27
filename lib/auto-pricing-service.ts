@@ -659,7 +659,13 @@ function appendExtras(lines: TransportNeed[], day: ItineraryDay): void {
 /**
  * Parse itinerary JSONB - handles both old and new formats
  */
-export function parseItinerary(itineraryData: any): ItineraryDay[] {
+export function parseItinerary(itineraryData: any, opts?: {
+  /** Where a day with no recognisable city lands. The Egypt keyword table in
+   *  inferCityFromTitle still runs first (harmless for other destinations —
+   *  their titles simply won't contain Egyptian names); this only replaces
+   *  the last-resort hardcoded 'Cairo' (multi-destination plan, Phase 2). */
+  defaultCity?: string
+}): ItineraryDay[] {
   if (!itineraryData || !Array.isArray(itineraryData)) {
     return []
   }
@@ -747,7 +753,7 @@ export function parseItinerary(itineraryData: any): ItineraryDay[] {
       day: day.day || index + 1,
       title: day.title || `Day ${index + 1}`,
       description: day.description || '',
-      city: day.city || inferCityFromTitle(day.title || ''),
+      city: day.city || inferCityFromTitle(day.title || '', opts?.defaultCity),
       overnight_city: day.overnight_city || undefined,
       accommodation_type: day.accommodation_type || inferAccommodationType(day, itineraryData),
       meals,
@@ -976,7 +982,7 @@ function normalizeAttractionsList(attractions: string[]): string[] {
 /**
  * Infer city from day title
  */
-function inferCityFromTitle(title: string): string {
+function inferCityFromTitle(title: string, defaultCity: string = 'Cairo'): string {
   const lower = title.toLowerCase()
   
   if (lower.includes('cairo') || lower.includes('pyramid') || lower.includes('sphinx') || lower.includes('giza')) {
@@ -1007,7 +1013,7 @@ function inferCityFromTitle(title: string): string {
     return 'Abu Simbel'
   }
 
-  return 'Cairo'  // Default
+  return defaultCity  // Last resort — the itinerary's own base city
 }
 
 /**

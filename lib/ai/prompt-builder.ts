@@ -15,7 +15,7 @@ import {
   preParseRawItinerary,
 } from '@/lib/ai/parsing-utils'
 import { type WritingRule, buildWritingRulesContext } from '@/lib/ai/content-library'
-import { EGYPT_TRAVEL_GLOSSARY } from '@/lib/ai/egypt-glossary'
+import { egyptPromptContext, type DestinationPromptContext } from '@/lib/ai/destination-context'
 
 // ============================================
 // STRUCTURED MODE: FOLLOW PROVIDED ITINERARY
@@ -33,9 +33,11 @@ export async function generateFromStructuredInput(
     writingRules: WritingRule[]
     packageType?: PackageType
     contentContext?: string
+    /** The destination's framing; omitted = Egypt (multi-destination Phase 2). */
+    destination?: DestinationPromptContext
   }
 ): Promise<any> {
-  const { tier, totalPax, language, attractionNames, attractionMenu, writingRules, packageType, contentContext } = params
+  const { tier, totalPax, language, attractionNames, attractionMenu, writingRules, packageType, contentContext, destination } = params
   const writingContext = buildWritingRulesContext(writingRules)
 
   // Calculate expected number of days
@@ -61,6 +63,7 @@ ${seg.rawContent}
   const prompt = buildStructuredPrompt({
     rawItinerary, dayMappingSection, expectedDays, language, tier, totalPax,
     packageType, writingContext, attractionNames, attractionMenu, contentContext,
+    destination,
   })
 
   console.log('🤖 Sending STRICT structured prompt to AI...')
@@ -234,6 +237,8 @@ export async function generateCreativeItinerary(
     // Optional agent-memory personalisation block (learned client/pricing/
     // inquiry/supplier patterns). Empty string when there's nothing learned yet.
     memoryContext?: string
+    /** The destination's framing; omitted = Egypt (multi-destination Phase 2). */
+    destination?: DestinationPromptContext
   }
 ): Promise<any> {
   const {
@@ -248,6 +253,7 @@ export async function generateCreativeItinerary(
     language, cities, interests, specialRequests, startDate, effectiveCity,
     attractionNames, attractionMenu, contentContext, writingContext, includeLunch, includeDinner,
     includeAccommodation, memoryContext,
+    destination: params.destination,
   })
 
   const message = await createMessageWithRetry({
@@ -294,16 +300,23 @@ export function buildStructuredPrompt(input: {
   attractionNames: string[]
   attractionMenu?: string
   contentContext?: string
+  /** The destination's framing; omitted = Egypt, byte-identical to before
+   *  (pinned by the golden snapshot test). */
+  destination?: DestinationPromptContext
 }): string {
   const { rawItinerary, dayMappingSection, expectedDays, language, tier, totalPax, packageType, writingContext, attractionNames, attractionMenu, contentContext } = input
+  const d = input.destination ?? egyptPromptContext()
   return `You are a DATA CONVERTER. Your ONLY task is to convert an existing itinerary into JSON format.
 
 ⛔ THIS IS NOT A CREATIVE TASK ⛔
 You are NOT designing an itinerary. You are CONVERTING an existing one.
-The input may be in Egyptian travel shorthand (D1 CAI, D2 ALX) OR in full prose English (Day 1 Arrival in Cairo...).
+${d.shorthandLine}
 Either way, your job is the SAME: extract EXACTLY what is described and convert to JSON.
 
-${EGYPT_TRAVEL_GLOSSARY}
+${d.glossary}${d.brief ? `
+
+DESTINATION NOTES (from the operator):
+${d.brief}` : ''}
 
 ═══════════════════════════════════════════════════════════════
 ⛔ FORBIDDEN ACTIONS - VIOLATING THESE IS A CRITICAL ERROR ⛔
@@ -610,11 +623,17 @@ export function buildCreativePrompt(input: {
   includeDinner: boolean
   includeAccommodation: boolean
   memoryContext?: string
+  /** The destination's framing; omitted = Egypt, byte-identical to before. */
+  destination?: DestinationPromptContext
 }): string {
   const { clientName, tourName, durationDays, tier, totalPax, numAdults, numChildren, language, cities, interests, specialRequests, startDate, effectiveCity, attractionNames, attractionMenu, contentContext, writingContext, includeLunch, includeDinner, includeAccommodation, memoryContext } = input
-  return `Create a ${durationDays}-day Egypt itinerary.
+  const d = input.destination ?? egyptPromptContext()
+  return `Create a ${durationDays}-day ${d.name} itinerary.
 ${memoryContext ? `\n${memoryContext}\n` : ''}
-${EGYPT_TRAVEL_GLOSSARY}
+${d.glossary}${d.brief ? `
+
+DESTINATION NOTES (from the operator):
+${d.brief}` : ''}
 
 CLIENT: ${clientName}
 TOUR: ${tourName}
@@ -687,10 +706,7 @@ If mentioning these, describe them in the day description but NOT in attractions
 
 CRITICAL CONSTRAINTS:
 - ONLY use cities from the CITIES list above. Do NOT add cities not mentioned.
-- If no Nile Cruise / CRZ is mentioned, do NOT create a cruise itinerary.
-- If no Aswan/Luxor is mentioned, do NOT add Upper Egypt destinations.
-- Stay faithful to the client's request — do not "improve" by adding unrelated destinations.
-- Do NOT generate a Nile Cruise unless the client explicitly asks for one.
+${d.constraintLines}
 ${language !== 'English' ? `
 LANGUAGE REQUIREMENT (CRITICAL):
 Write ALL content (trip_name, title, description) in ${language}.
