@@ -15,7 +15,7 @@ import {
   preParseRawItinerary,
 } from '@/lib/ai/parsing-utils'
 import { type WritingRule, buildWritingRulesContext } from '@/lib/ai/content-library'
-import { EGYPT_TRAVEL_GLOSSARY } from '@/lib/ai/egypt-glossary'
+import { egyptPromptContext, type DestinationPromptContext } from '@/lib/ai/destination-context'
 
 // ============================================
 // STRUCTURED MODE: FOLLOW PROVIDED ITINERARY
@@ -33,9 +33,11 @@ export async function generateFromStructuredInput(
     writingRules: WritingRule[]
     packageType?: PackageType
     contentContext?: string
+    /** The destination's framing; omitted = Egypt (multi-destination Phase 2). */
+    destination?: DestinationPromptContext
   }
 ): Promise<any> {
-  const { tier, totalPax, language, attractionNames, attractionMenu, writingRules, packageType, contentContext } = params
+  const { tier, totalPax, language, attractionNames, attractionMenu, writingRules, packageType, contentContext, destination } = params
   const writingContext = buildWritingRulesContext(writingRules)
 
   // Calculate expected number of days
@@ -58,14 +60,263 @@ ${seg.rawContent}
 ───────────────────────────────────────`
   }).join('\n')
 
-  const prompt = `You are a DATA CONVERTER. Your ONLY task is to convert an existing itinerary into JSON format.
+  const prompt = buildStructuredPrompt({
+    rawItinerary, dayMappingSection, expectedDays, language, tier, totalPax,
+    packageType, writingContext, attractionNames, attractionMenu, contentContext,
+    destination,
+  })
+
+  console.log('🤖 Sending STRICT structured prompt to AI...')
+
+  const message = await createMessageWithRetry({
+    model: MODEL_GENERATOR,
+    max_tokens: 16384,
+    messages: [
+      {
+        role: 'user',
+        content: prompt
+      }
+    ]
+  })
+
+  const responseText = message.content
+    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+    .map(block => block.text)
+    .join('')
+
+  // Parse JSON
+  const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) {
+    console.error('❌ Failed to parse AI response:', responseText.substring(0, 500))
+    throw new Error('Failed to parse AI response as JSON')
+  }
+
+  const result = JSON.parse(jsonMatch[0])
+
+  // ============================================
+  // POST-GENERATION VALIDATION
+  // ============================================
+
+  // Validate day count
+  if (result.days && result.days.length < expectedDays) {
+    console.warn(`⚠️ AI returned ${result.days.length} days but expected ${expectedDays}`)
+  } else {
+    console.log(`✅ AI successfully generated ${result.days?.length || 0} days`)
+  }
+
+  // Log first day for debugging
+  if (result.days && result.days[0]) {
+    console.log('📍 Day 1 generated:', {
+      title: result.days[0].title,
+      attractions: result.days[0].attractions,
+      cities_visited: result.days[0].cities_visited
+    })
+  }
+
+  // HALLUCINATION CHECK: Verify output cities match input cities
+  if (result.days && daySegments.length > 0) {
+    const outputCities = result.days.map((d: any) => (d.city || '').toLowerCase()).filter(Boolean)
+
+    // Check if AI hallucinated cruise days when input has no cruise
+    const inputHasCruise = /\b(crz|nile\s*cruise|cruise)\b/i.test(rawItinerary)
+    const outputHasCruise = result.days.some((d: any) =>
+      d.is_cruise_day === true ||
+      d.accommodation_type === 'cruise' ||
+      /\b(cruise|sailing|nile)\b/i.test(d.title || '') && /\b(on board|sailing)\b/i.test(d.title || '')
+    )
+
+    if (!inputHasCruise && outputHasCruise) {
+      console.error('🚨 HALLUCINATION DETECTED: AI generated cruise days but input has NO cruise!')
+      console.error('🚨 Stripping cruise flags from output...')
+      // Strip cruise flags — force to land itinerary
+      result.days.forEach((d: any) => {
+        d.is_cruise_day = false
+        d.is_sailing_day = false
+        if (d.accommodation_type === 'cruise') d.accommodation_type = 'hotel'
+      })
+    }
+
+    // CRUISE DAY CONSISTENCY FIX: Ensure all days between first and last cruise day are marked
+    // The AI sometimes marks only the embarkation day, missing sailing/touring days
+    if (inputHasCruise && outputHasCruise) {
+      const cruiseDayIndices = result.days
+        .map((d: any, i: number) => (d.is_cruise_day || d.accommodation_type === 'cruise') ? i : -1)
+        .filter((i: number) => i >= 0)
+
+      if (cruiseDayIndices.length > 0) {
+        const firstCruise = cruiseDayIndices[0]
+        const lastCruise = cruiseDayIndices[cruiseDayIndices.length - 1]
+
+        // Also detect cruise nights from input (e.g., "3NTS CRZ")
+        const cruiseNightsMatch = rawItinerary.match(/(\d+)\s*(?:NTS?|nights?)\s*(?:CRZ|cruise)/i)
+        const expectedCruiseNights = cruiseNightsMatch ? parseInt(cruiseNightsMatch[1]) : 0
+
+        // Fill gaps between first and last marked cruise day
+        let fixedCount = 0
+        for (let i = firstCruise; i <= lastCruise; i++) {
+          const day = result.days[i]
+          if (!day.is_cruise_day && day.accommodation_type !== 'cruise') {
+            day.is_cruise_day = true
+            day.accommodation_type = 'cruise'
+            fixedCount++
+          }
+        }
+
+        // If we know expected cruise nights and they exceed the range, extend forward
+        const actualCruiseDays = lastCruise - firstCruise + 1
+        if (expectedCruiseNights > 0 && actualCruiseDays < expectedCruiseNights) {
+          const missingDays = expectedCruiseNights - actualCruiseDays
+          for (let i = 1; i <= missingDays; i++) {
+            const idx = lastCruise + i
+            if (idx < result.days.length) {
+              const day = result.days[idx]
+              // Only extend if this day isn't already a land day with hotel + specific sightseeing outside cruise ports
+              if (!day.is_departure && !day.is_arrival) {
+                day.is_cruise_day = true
+                day.accommodation_type = 'cruise'
+                // If no activities, mark as sailing day
+                if (!day.attractions?.length) {
+                  day.is_sailing_day = true
+                  day.is_free_day = true
+                }
+                fixedCount++
+                console.log(`🚢 Extended cruise to Day ${day.day_number} (expected ${expectedCruiseNights} nights)`)
+              }
+            }
+          }
+        }
+
+        if (fixedCount > 0) {
+          console.log(`🚢 Fixed ${fixedCount} cruise day(s) that were not marked by AI`)
+        }
+      }
+    }
+
+    // Check if AI hallucinated cities not in input (e.g., Aswan/Luxor when input says Cairo)
+    const inputMentionsCairo = /\b(cairo|cai|giza|gza|pyramid|museum|mena\s*house)\b/i.test(rawItinerary)
+    const inputMentionsUpperEgypt = /\b(aswan|asw|luxor|lxr|kom\s*ombo|edfu|abu\s*simbel|philae|valley\s*of\s*(the\s*)?kings)\b/i.test(rawItinerary)
+    const outputMentionsUpperEgypt = outputCities.some((c: string) =>
+      /\b(aswan|luxor|kom\s*ombo|edfu)\b/i.test(c)
+    )
+
+    if (inputMentionsCairo && !inputMentionsUpperEgypt && outputMentionsUpperEgypt) {
+      console.error('🚨 HALLUCINATION DETECTED: AI added Upper Egypt cities (Aswan/Luxor) but input only mentions Cairo area!')
+      console.error('🚨 This is a critical hallucination — the AI ignored the input entirely.')
+    }
+  }
+
+  return result
+}
+
+// ============================================
+// CREATIVE MODE: AI GENERATES ITINERARY
+// ============================================
+
+export async function generateCreativeItinerary(
+  params: {
+    clientName: string
+    tourName: string
+    durationDays: number
+    tier: ServiceTier
+    totalPax: number
+    numAdults: number
+    numChildren: number
+    language: string
+    cities: string[]
+    interests: string[]
+    specialRequests: string[]
+    startDate: string
+    effectiveCity: string
+    attractionNames: string[]
+    attractionMenu?: string
+    contentContext: string
+    writingContext: string
+    includeLunch: boolean
+    includeDinner: boolean
+    includeAccommodation: boolean
+    // Optional agent-memory personalisation block (learned client/pricing/
+    // inquiry/supplier patterns). Empty string when there's nothing learned yet.
+    memoryContext?: string
+    /** The destination's framing; omitted = Egypt (multi-destination Phase 2). */
+    destination?: DestinationPromptContext
+  }
+): Promise<any> {
+  const {
+    clientName, tourName, durationDays, tier, totalPax, numAdults, numChildren,
+    language, cities, interests, specialRequests, startDate, effectiveCity,
+    attractionNames, attractionMenu, contentContext, writingContext, includeLunch, includeDinner, includeAccommodation,
+    memoryContext,
+  } = params
+
+  const prompt = buildCreativePrompt({
+    clientName, tourName, durationDays, tier, totalPax, numAdults, numChildren,
+    language, cities, interests, specialRequests, startDate, effectiveCity,
+    attractionNames, attractionMenu, contentContext, writingContext, includeLunch, includeDinner,
+    includeAccommodation, memoryContext,
+    destination: params.destination,
+  })
+
+  const message = await createMessageWithRetry({
+    model: MODEL_GENERATOR,
+    max_tokens: 8192,
+    messages: [
+      {
+        role: 'user',
+        content: prompt
+      }
+    ]
+  })
+
+  const responseText = message.content
+    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+    .map(block => block.text)
+    .join('')
+
+  const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) {
+    throw new Error('Failed to parse AI response as JSON')
+  }
+
+  return JSON.parse(jsonMatch[0])
+}
+
+// ============================================
+// PURE PROMPT BUILDERS
+// ============================================
+// The template text is byte-identical to what the generate functions always
+// sent — extracted so tests can pin it (and, in Phase 2 of the
+// multi-destination plan, so the destination can parameterise it) without
+// calling the model.
+
+export function buildStructuredPrompt(input: {
+  rawItinerary: string
+  dayMappingSection: string
+  expectedDays: number
+  language: string
+  tier: ServiceTier
+  totalPax: number
+  packageType?: PackageType
+  writingContext: string
+  attractionNames: string[]
+  attractionMenu?: string
+  contentContext?: string
+  /** The destination's framing; omitted = Egypt, byte-identical to before
+   *  (pinned by the golden snapshot test). */
+  destination?: DestinationPromptContext
+}): string {
+  const { rawItinerary, dayMappingSection, expectedDays, language, tier, totalPax, packageType, writingContext, attractionNames, attractionMenu, contentContext } = input
+  const d = input.destination ?? egyptPromptContext()
+  return `You are a DATA CONVERTER. Your ONLY task is to convert an existing itinerary into JSON format.
 
 ⛔ THIS IS NOT A CREATIVE TASK ⛔
 You are NOT designing an itinerary. You are CONVERTING an existing one.
-The input may be in Egyptian travel shorthand (D1 CAI, D2 ALX) OR in full prose English (Day 1 Arrival in Cairo...).
+${d.shorthandLine}
 Either way, your job is the SAME: extract EXACTLY what is described and convert to JSON.
 
-${EGYPT_TRAVEL_GLOSSARY}
+${d.glossary}${d.brief ? `
+
+DESTINATION NOTES (from the operator):
+${d.brief}` : ''}
 
 ═══════════════════════════════════════════════════════════════
 ⛔ FORBIDDEN ACTIONS - VIOLATING THESE IS A CRITICAL ERROR ⛔
@@ -348,190 +599,41 @@ ${writingContext}
 □ The last day with activities includes everything mentioned (not just "departure")
 
 NOW CONVERT THE ITINERARY TO JSON:`
-
-  console.log('🤖 Sending STRICT structured prompt to AI...')
-
-  const message = await createMessageWithRetry({
-    model: MODEL_GENERATOR,
-    max_tokens: 16384,
-    messages: [
-      {
-        role: 'user',
-        content: prompt
-      }
-    ]
-  })
-
-  const responseText = message.content
-    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-    .map(block => block.text)
-    .join('')
-
-  // Parse JSON
-  const jsonMatch = responseText.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    console.error('❌ Failed to parse AI response:', responseText.substring(0, 500))
-    throw new Error('Failed to parse AI response as JSON')
-  }
-
-  const result = JSON.parse(jsonMatch[0])
-
-  // ============================================
-  // POST-GENERATION VALIDATION
-  // ============================================
-
-  // Validate day count
-  if (result.days && result.days.length < expectedDays) {
-    console.warn(`⚠️ AI returned ${result.days.length} days but expected ${expectedDays}`)
-  } else {
-    console.log(`✅ AI successfully generated ${result.days?.length || 0} days`)
-  }
-
-  // Log first day for debugging
-  if (result.days && result.days[0]) {
-    console.log('📍 Day 1 generated:', {
-      title: result.days[0].title,
-      attractions: result.days[0].attractions,
-      cities_visited: result.days[0].cities_visited
-    })
-  }
-
-  // HALLUCINATION CHECK: Verify output cities match input cities
-  if (result.days && daySegments.length > 0) {
-    const outputCities = result.days.map((d: any) => (d.city || '').toLowerCase()).filter(Boolean)
-
-    // Check if AI hallucinated cruise days when input has no cruise
-    const inputHasCruise = /\b(crz|nile\s*cruise|cruise)\b/i.test(rawItinerary)
-    const outputHasCruise = result.days.some((d: any) =>
-      d.is_cruise_day === true ||
-      d.accommodation_type === 'cruise' ||
-      /\b(cruise|sailing|nile)\b/i.test(d.title || '') && /\b(on board|sailing)\b/i.test(d.title || '')
-    )
-
-    if (!inputHasCruise && outputHasCruise) {
-      console.error('🚨 HALLUCINATION DETECTED: AI generated cruise days but input has NO cruise!')
-      console.error('🚨 Stripping cruise flags from output...')
-      // Strip cruise flags — force to land itinerary
-      result.days.forEach((d: any) => {
-        d.is_cruise_day = false
-        d.is_sailing_day = false
-        if (d.accommodation_type === 'cruise') d.accommodation_type = 'hotel'
-      })
-    }
-
-    // CRUISE DAY CONSISTENCY FIX: Ensure all days between first and last cruise day are marked
-    // The AI sometimes marks only the embarkation day, missing sailing/touring days
-    if (inputHasCruise && outputHasCruise) {
-      const cruiseDayIndices = result.days
-        .map((d: any, i: number) => (d.is_cruise_day || d.accommodation_type === 'cruise') ? i : -1)
-        .filter((i: number) => i >= 0)
-
-      if (cruiseDayIndices.length > 0) {
-        const firstCruise = cruiseDayIndices[0]
-        const lastCruise = cruiseDayIndices[cruiseDayIndices.length - 1]
-
-        // Also detect cruise nights from input (e.g., "3NTS CRZ")
-        const cruiseNightsMatch = rawItinerary.match(/(\d+)\s*(?:NTS?|nights?)\s*(?:CRZ|cruise)/i)
-        const expectedCruiseNights = cruiseNightsMatch ? parseInt(cruiseNightsMatch[1]) : 0
-
-        // Fill gaps between first and last marked cruise day
-        let fixedCount = 0
-        for (let i = firstCruise; i <= lastCruise; i++) {
-          const day = result.days[i]
-          if (!day.is_cruise_day && day.accommodation_type !== 'cruise') {
-            day.is_cruise_day = true
-            day.accommodation_type = 'cruise'
-            fixedCount++
-          }
-        }
-
-        // If we know expected cruise nights and they exceed the range, extend forward
-        const actualCruiseDays = lastCruise - firstCruise + 1
-        if (expectedCruiseNights > 0 && actualCruiseDays < expectedCruiseNights) {
-          const missingDays = expectedCruiseNights - actualCruiseDays
-          for (let i = 1; i <= missingDays; i++) {
-            const idx = lastCruise + i
-            if (idx < result.days.length) {
-              const day = result.days[idx]
-              // Only extend if this day isn't already a land day with hotel + specific sightseeing outside cruise ports
-              if (!day.is_departure && !day.is_arrival) {
-                day.is_cruise_day = true
-                day.accommodation_type = 'cruise'
-                // If no activities, mark as sailing day
-                if (!day.attractions?.length) {
-                  day.is_sailing_day = true
-                  day.is_free_day = true
-                }
-                fixedCount++
-                console.log(`🚢 Extended cruise to Day ${day.day_number} (expected ${expectedCruiseNights} nights)`)
-              }
-            }
-          }
-        }
-
-        if (fixedCount > 0) {
-          console.log(`🚢 Fixed ${fixedCount} cruise day(s) that were not marked by AI`)
-        }
-      }
-    }
-
-    // Check if AI hallucinated cities not in input (e.g., Aswan/Luxor when input says Cairo)
-    const inputMentionsCairo = /\b(cairo|cai|giza|gza|pyramid|museum|mena\s*house)\b/i.test(rawItinerary)
-    const inputMentionsUpperEgypt = /\b(aswan|asw|luxor|lxr|kom\s*ombo|edfu|abu\s*simbel|philae|valley\s*of\s*(the\s*)?kings)\b/i.test(rawItinerary)
-    const outputMentionsUpperEgypt = outputCities.some((c: string) =>
-      /\b(aswan|luxor|kom\s*ombo|edfu)\b/i.test(c)
-    )
-
-    if (inputMentionsCairo && !inputMentionsUpperEgypt && outputMentionsUpperEgypt) {
-      console.error('🚨 HALLUCINATION DETECTED: AI added Upper Egypt cities (Aswan/Luxor) but input only mentions Cairo area!')
-      console.error('🚨 This is a critical hallucination — the AI ignored the input entirely.')
-    }
-  }
-
-  return result
 }
 
-// ============================================
-// CREATIVE MODE: AI GENERATES ITINERARY
-// ============================================
-
-export async function generateCreativeItinerary(
-  params: {
-    clientName: string
-    tourName: string
-    durationDays: number
-    tier: ServiceTier
-    totalPax: number
-    numAdults: number
-    numChildren: number
-    language: string
-    cities: string[]
-    interests: string[]
-    specialRequests: string[]
-    startDate: string
-    effectiveCity: string
-    attractionNames: string[]
-    attractionMenu?: string
-    contentContext: string
-    writingContext: string
-    includeLunch: boolean
-    includeDinner: boolean
-    includeAccommodation: boolean
-    // Optional agent-memory personalisation block (learned client/pricing/
-    // inquiry/supplier patterns). Empty string when there's nothing learned yet.
-    memoryContext?: string
-  }
-): Promise<any> {
-  const {
-    clientName, tourName, durationDays, tier, totalPax, numAdults, numChildren,
-    language, cities, interests, specialRequests, startDate, effectiveCity,
-    attractionNames, attractionMenu, contentContext, writingContext, includeLunch, includeDinner, includeAccommodation,
-    memoryContext,
-  } = params
-
-  const prompt = `Create a ${durationDays}-day Egypt itinerary.
+export function buildCreativePrompt(input: {
+  clientName: string
+  tourName: string
+  durationDays: number
+  tier: ServiceTier
+  totalPax: number
+  numAdults: number
+  numChildren: number
+  language: string
+  cities: string[]
+  interests: string[]
+  specialRequests: string[]
+  startDate: string
+  effectiveCity: string
+  attractionNames: string[]
+  attractionMenu?: string
+  contentContext: string
+  writingContext: string
+  includeLunch: boolean
+  includeDinner: boolean
+  includeAccommodation: boolean
+  memoryContext?: string
+  /** The destination's framing; omitted = Egypt, byte-identical to before. */
+  destination?: DestinationPromptContext
+}): string {
+  const { clientName, tourName, durationDays, tier, totalPax, numAdults, numChildren, language, cities, interests, specialRequests, startDate, effectiveCity, attractionNames, attractionMenu, contentContext, writingContext, includeLunch, includeDinner, includeAccommodation, memoryContext } = input
+  const d = input.destination ?? egyptPromptContext()
+  return `Create a ${durationDays}-day ${d.name} itinerary.
 ${memoryContext ? `\n${memoryContext}\n` : ''}
-${EGYPT_TRAVEL_GLOSSARY}
+${d.glossary}${d.brief ? `
+
+DESTINATION NOTES (from the operator):
+${d.brief}` : ''}
 
 CLIENT: ${clientName}
 TOUR: ${tourName}
@@ -604,10 +706,7 @@ If mentioning these, describe them in the day description but NOT in attractions
 
 CRITICAL CONSTRAINTS:
 - ONLY use cities from the CITIES list above. Do NOT add cities not mentioned.
-- If no Nile Cruise / CRZ is mentioned, do NOT create a cruise itinerary.
-- If no Aswan/Luxor is mentioned, do NOT add Upper Egypt destinations.
-- Stay faithful to the client's request — do not "improve" by adding unrelated destinations.
-- Do NOT generate a Nile Cruise unless the client explicitly asks for one.
+${d.constraintLines}
 ${language !== 'English' ? `
 LANGUAGE REQUIREMENT (CRITICAL):
 Write ALL content (trip_name, title, description) in ${language}.
@@ -649,27 +748,4 @@ Return ONLY valid JSON:
 
 Use EXACT attraction names from the provided list. Set includes_hotel to false on the last day.
 For cruise packages: set is_cruise_day: true and accommodation_type: "cruise" for all days on the Nile cruise.`
-
-  const message = await createMessageWithRetry({
-    model: MODEL_GENERATOR,
-    max_tokens: 8192,
-    messages: [
-      {
-        role: 'user',
-        content: prompt
-      }
-    ]
-  })
-
-  const responseText = message.content
-    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-    .map(block => block.text)
-    .join('')
-
-  const jsonMatch = responseText.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
-    throw new Error('Failed to parse AI response as JSON')
-  }
-
-  return JSON.parse(jsonMatch[0])
 }

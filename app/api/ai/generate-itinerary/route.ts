@@ -4,6 +4,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { reassertClientId } from '@/lib/itineraries/reassert-client'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
+import { loadDestinationPromptContext } from '@/lib/ai/destination-context'
 import { isEuroPassport as isEuroPassportFromNationality } from '@/lib/passport'
 import {
   fetchCruiseTransportPricingRules,
@@ -73,6 +74,21 @@ export async function POST(request: NextRequest) {
     // What the org's supplier rates are in — the engine's unit and the source
     // side of the conversion into the trip's billing currency.
     const rateCurrency = await getOrgRateCurrency(supabaseAdmin, orgId)
+
+    // ── Which destination this itinerary is for ──
+    // Explicit destination_id in the request, else the org's default
+    // destination (Egypt today). The context carries the destination's
+    // glossary, framing and operator brief into the generation prompts;
+    // resolution never throws — any failure means Egypt, exactly as before
+    // destinations existed. Multi-destination plan, Phase 2.
+    const requestedDestinationId: string | null = body.destination_id || null
+    const destinationContext = await loadDestinationPromptContext(supabaseAdmin, requestedDestinationId)
+    let resolvedDestinationId: string | null = requestedDestinationId
+    if (!resolvedDestinationId) {
+      const { data: defaultDest } = await supabaseAdmin
+        .from('destinations').select('id').eq('is_default', true).maybeSingle()
+      resolvedDestinationId = defaultDest?.id ?? null
+    }
     if (!orgId) {
       return NextResponse.json(
         { success: false, error: 'No organization context — re-login or contact admin.' },
@@ -477,6 +493,7 @@ export async function POST(request: NextRequest) {
           .insert({
             itinerary_code,
             org_id: orgId,
+            destination_id: resolvedDestinationId,
             client_name,
             client_email: client_email || null,
             client_phone: client_phone || null,
@@ -697,6 +714,7 @@ export async function POST(request: NextRequest) {
           writingRules,
           packageType: effectivePackageType,
           contentContext,
+          destination: destinationContext,
         }
       )
     } else {
@@ -728,6 +746,7 @@ export async function POST(request: NextRequest) {
         includeDinner: include_dinner,
         includeAccommodation: includeAccommodationFinal,
         memoryContext: agentMemory.prompt_block,
+        destination: destinationContext,
       })
     }
 
@@ -861,6 +880,7 @@ export async function POST(request: NextRequest) {
       .insert({
         itinerary_code,
         org_id: orgId,
+        destination_id: resolvedDestinationId,
         client_name,
         client_email: client_email || null,
         client_phone: client_phone || null,
