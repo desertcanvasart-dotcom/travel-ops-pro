@@ -111,6 +111,7 @@ export async function POST(request: NextRequest) {
       rate_valid_to: body.rate_valid_to || null,
       category: body.category || null,
       notes: body.notes || null,
+      ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
       is_active: body.is_active !== false,
       is_addon: body.is_addon === true,
       addon_note: body.addon_note || null,

@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
       cost_type: body.cost_type,
       cost_per_person_per_day: parseFloat(body.cost_per_person_per_day) || 0,
       description: body.description || null,
+      ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
       is_active: body.is_active !== false,
     }
 
@@ -103,6 +104,7 @@ export async function PUT(request: NextRequest) {
     if (updateFields.cost_type !== undefined && tableColumns.has('cost_type')) updateData.cost_type = updateFields.cost_type
     if (updateFields.cost_per_person_per_day !== undefined && tableColumns.has('cost_per_person_per_day')) updateData.cost_per_person_per_day = parseFloat(updateFields.cost_per_person_per_day) || 0
     if (updateFields.description !== undefined && tableColumns.has('description')) updateData.description = updateFields.description || null
+    if (updateFields.rate_currency !== undefined && tableColumns.has('rate_currency')) updateData.rate_currency = updateFields.rate_currency || null
     if (updateFields.is_active !== undefined && tableColumns.has('is_active')) updateData.is_active = updateFields.is_active
 
     const { data, error } = await supabaseAdmin

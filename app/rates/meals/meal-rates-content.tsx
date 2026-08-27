@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
+import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -111,6 +112,7 @@ interface MealRate {
   city?: string
   base_rate_eur: number
   base_rate_non_eur: number
+  rate_currency?: string | null
   season?: string
   rate_valid_from?: string
   rate_valid_to?: string
@@ -202,6 +204,7 @@ export default function MealRatesContent() {
     city: '',
     base_rate_eur: 0,
     base_rate_non_eur: 0,
+    rate_currency: '',
     season: '',
     rate_valid_from: today,
     rate_valid_to: nextYear,
@@ -300,6 +303,7 @@ export default function MealRatesContent() {
       city: '',
       base_rate_eur: 0,
       base_rate_non_eur: 0,
+      rate_currency: '',
       season: '',
       rate_valid_from: today,
       rate_valid_to: nextYear,
@@ -329,6 +333,7 @@ export default function MealRatesContent() {
       city: rate.city || '',
       base_rate_eur: rate.base_rate_eur || 0,
       base_rate_non_eur: rate.base_rate_non_eur || 0,
+      rate_currency: rate.rate_currency || '',
       season: rate.season || '',
       rate_valid_from: rate.rate_valid_from || today,
       rate_valid_to: rate.rate_valid_to || nextYear,
@@ -377,6 +382,7 @@ export default function MealRatesContent() {
         city: formData.city || null,
         base_rate_eur: parseFloat(String(formData.base_rate_eur)) || 0,
         base_rate_non_eur: parseFloat(String(formData.base_rate_non_eur)) || 0,
+        ...rateCurrencyPatch(formData.rate_currency, editingRate?.rate_currency),
         season: formData.season || null,
         rate_valid_from: formData.rate_valid_from || null,
         rate_valid_to: formData.rate_valid_to || null,
@@ -866,6 +872,7 @@ export default function MealRatesContent() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm font-bold text-green-600">{formatRate(rate.base_rate_eur)}</span>
+                      {rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold">{rate.rate_currency}</span>}
                       {rate.per_person_rate && <span className="text-xs text-gray-400">/pp</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -1260,6 +1267,11 @@ export default function MealRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     />
                   </div>
+                  <RateCurrencyField
+                    value={formData.rate_currency}
+                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  />
                   <div>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input

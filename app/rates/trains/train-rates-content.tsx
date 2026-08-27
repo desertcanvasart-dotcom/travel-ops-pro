@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
+import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import { useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
@@ -59,6 +60,7 @@ interface TrainRate {
   destination_city: string
   class_type: string
   rate_eur: number
+  rate_currency?: string | null
   duration_hours?: number
   rate_valid_from?: string
   rate_valid_to?: string
@@ -137,6 +139,7 @@ export default function TrainRatesContent() {
     destination_city: '',
     class_type: '',
     rate_eur: 0,
+    rate_currency: '',
     duration_hours: '',
     rate_valid_from: today,
     rate_valid_to: nextYear,
@@ -193,6 +196,7 @@ export default function TrainRatesContent() {
       destination_city: '',
       class_type: '',
       rate_eur: 0,
+      rate_currency: '',
       duration_hours: '',
       rate_valid_from: today,
       rate_valid_to: nextYear,
@@ -214,6 +218,7 @@ export default function TrainRatesContent() {
       destination_city: rate.destination_city || '',
       class_type: rate.class_type || '',
       rate_eur: rate.rate_eur || 0,
+      rate_currency: rate.rate_currency || '',
       duration_hours: rate.duration_hours?.toString() || '',
       rate_valid_from: rate.rate_valid_from || today,
       rate_valid_to: rate.rate_valid_to || nextYear,
@@ -248,10 +253,14 @@ export default function TrainRatesContent() {
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          duration_hours: formData.duration_hours ? parseFloat(formData.duration_hours) : null
-        })
+        body: JSON.stringify((() => {
+          const { rate_currency: pickedCurrency, ...rest } = formData
+          return {
+            ...rest,
+            duration_hours: formData.duration_hours ? parseFloat(formData.duration_hours) : null,
+            ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency),
+          }
+        })())
       })
 
       const data = await response.json()
@@ -686,7 +695,7 @@ export default function TrainRatesContent() {
                       <span className="text-sm text-gray-600">{rate.operator_name || '—'}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm font-bold text-green-600">{formatRate(rate.rate_eur)}</span>
+                      <span className="text-sm font-bold text-green-600">{formatRate(rate.rate_eur)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -786,7 +795,7 @@ export default function TrainRatesContent() {
                   )}
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="text-sm font-bold text-green-600">{formatRate(rate.rate_eur)}</span>
+                  <span className="text-sm font-bold text-green-600">{formatRate(rate.rate_eur)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>
@@ -1029,6 +1038,11 @@ export default function TrainRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     />
                   </div>
+                  <RateCurrencyField
+                    value={formData.rate_currency}
+                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  />
                 </div>
               </div>
 

@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
       departure_times: body.departure_times || null,
       description: body.description || null,
       notes: body.notes || null,
+      ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
       is_active: body.is_active !== false
     }
 

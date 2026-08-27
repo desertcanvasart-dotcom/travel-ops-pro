@@ -48,6 +48,7 @@ export async function PUT(
     if (body.tour_duration !== undefined) updateData.tour_duration = body.tour_duration
     if (body.base_rate_eur !== undefined) updateData.base_rate_eur = parseFloat(body.base_rate_eur) || 0
     if (body.base_rate_non_eur !== undefined) updateData.base_rate_non_eur = parseFloat(body.base_rate_non_eur) || 0
+    if (body.rate_currency !== undefined) updateData.rate_currency = body.rate_currency || null
     if (body.season !== undefined) updateData.season = body.season || null
     if (body.rate_valid_from !== undefined) updateData.rate_valid_from = body.rate_valid_from || null
     if (body.rate_valid_to !== undefined) updateData.rate_valid_to = body.rate_valid_to || null

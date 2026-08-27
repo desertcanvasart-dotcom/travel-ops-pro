@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
+import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import { useTranslations } from 'next-intl'
 import { SLEEPING_TRAIN_CABINS } from '@/lib/rates/sleeping-train-cabins'
@@ -64,6 +65,7 @@ interface SleepingTrainRate {
   cabin_type: string
   rate_oneway_eur: number
   rate_roundtrip_eur?: number
+  rate_currency?: string | null
   departure_time?: string
   arrival_time?: string
   rate_valid_from?: string
@@ -144,6 +146,7 @@ export default function SleepingTrainRatesContent() {
     cabin_type: '',
     rate_oneway_eur: 0,
     rate_roundtrip_eur: 0,
+    rate_currency: '',
     departure_time: '',
     arrival_time: '',
     rate_valid_from: today,
@@ -202,6 +205,7 @@ export default function SleepingTrainRatesContent() {
       cabin_type: '',
       rate_oneway_eur: 0,
       rate_roundtrip_eur: 0,
+      rate_currency: '',
       departure_time: '',
       arrival_time: '',
       rate_valid_from: today,
@@ -225,6 +229,7 @@ export default function SleepingTrainRatesContent() {
       cabin_type: rate.cabin_type || '',
       rate_oneway_eur: rate.rate_oneway_eur || 0,
       rate_roundtrip_eur: rate.rate_roundtrip_eur || 0,
+      rate_currency: rate.rate_currency || '',
       departure_time: rate.departure_time || '',
       arrival_time: rate.arrival_time || '',
       rate_valid_from: rate.rate_valid_from || today,
@@ -260,7 +265,10 @@ export default function SleepingTrainRatesContent() {
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify((() => {
+          const { rate_currency: pickedCurrency, ...rest } = formData
+          return { ...rest, ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency) }
+        })())
       })
 
       const data = await response.json()
@@ -693,7 +701,7 @@ export default function SleepingTrainRatesContent() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm font-bold text-green-600">{formatRate(rate.rate_oneway_eur)}</span>
+                      <span className="text-sm font-bold text-green-600">{formatRate(rate.rate_oneway_eur)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       {rate.rate_roundtrip_eur ? (
@@ -808,7 +816,7 @@ export default function SleepingTrainRatesContent() {
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="text-sm font-bold text-green-600">{formatRate(rate.rate_oneway_eur)}</span>
+                  <span className="text-sm font-bold text-green-600">{formatRate(rate.rate_oneway_eur)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>
@@ -1083,6 +1091,11 @@ export default function SleepingTrainRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     />
                   </div>
+                  <RateCurrencyField
+                    value={formData.rate_currency}
+                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  />
                 </div>
               </div>
 

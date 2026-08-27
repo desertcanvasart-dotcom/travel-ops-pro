@@ -78,6 +78,7 @@ export async function PUT(
       city: (v) => v || null,
       base_rate_eur: (v) => parseFloat(v) || 0,
       base_rate_non_eur: (v) => parseFloat(v) || 0,
+      rate_currency: (v) => v || null,
       season: (v) => v || null,
       rate_valid_from: (v) => v || null,
       rate_valid_to: (v) => v || null,

@@ -1,5 +1,7 @@
 'use client'
 
+import { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { useEffect, useState } from 'react'
 import { Droplets, Coins, Plus, Edit, Save, X, Check, Loader2, AlertTriangle, Settings } from 'lucide-react'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
@@ -9,6 +11,7 @@ interface FixedCost {
   id: string
   cost_type: string
   cost_per_person_per_day: number
+  rate_currency?: string | null
   description?: string
   is_active: boolean
   created_at?: string
@@ -34,12 +37,14 @@ export default function FixedCostsPage() {
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [editCurrency, setEditCurrency] = useState('')
   const [editDescription, setEditDescription] = useState('')
   const [saving, setSaving] = useState(false)
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
   const [newCostType, setNewCostType] = useState('')
   const [newCostRate, setNewCostRate] = useState('')
+  const [newCostCurrency, setNewCostCurrency] = useState('')
   const [newCostDescription, setNewCostDescription] = useState('')
 
   const showNotice = (type: 'success' | 'error', message: string) => {
@@ -75,6 +80,7 @@ export default function FixedCostsPage() {
           id: cost.id,
           cost_per_person_per_day: parseFloat(editValue) || 0,
           description: editDescription || null,
+          ...rateCurrencyPatch(editCurrency, cost.rate_currency),
         }),
       })
       const data = await res.json()
@@ -119,6 +125,7 @@ export default function FixedCostsPage() {
         body: JSON.stringify({
           cost_type: newCostType.trim(),
           cost_per_person_per_day: parseFloat(newCostRate) || 0,
+          ...rateCurrencyPatch(newCostCurrency),
           description: newCostDescription || null,
           is_active: true,
         }),
@@ -251,6 +258,15 @@ export default function FixedCostsPage() {
                             autoFocus
                           />
                           <span className="text-sm text-gray-500">/person/day</span>
+                          <select
+                            value={editCurrency}
+                            onChange={(e) => setEditCurrency(e.target.value)}
+                            className="px-2 py-2 text-xs border border-gray-300 rounded-lg"
+                            title="Rate currency (blank = organisation default)"
+                          >
+                            <option value="">Default</option>
+                            {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
                         </div>
                         <button
                           onClick={() => handleSave(cost)}
@@ -270,7 +286,7 @@ export default function FixedCostsPage() {
                       <div className="flex items-center gap-3">
                         <div className="text-right">
                           <div className="flex items-baseline gap-1">
-                            <span className="text-3xl font-bold text-gray-900">{rateSymbol}{cost.cost_per_person_per_day.toFixed(2)}</span>
+                            <span className="text-3xl font-bold text-gray-900">{cost.rate_currency ? `${cost.rate_currency} ${cost.cost_per_person_per_day.toFixed(2)}` : `${rateSymbol}${cost.cost_per_person_per_day.toFixed(2)}`}</span>
                           </div>
                           <p className="text-xs text-gray-500 mt-0.5">per person / per day</p>
                         </div>
@@ -278,6 +294,7 @@ export default function FixedCostsPage() {
                           onClick={() => {
                             setEditingId(cost.id)
                             setEditValue(String(cost.cost_per_person_per_day))
+                            setEditCurrency(cost.rate_currency || '')
                             setEditDescription(cost.description || '')
                           }}
                           className="p-2 text-gray-400 hover:text-[#647C47] hover:bg-[#647C47]/10 rounded-lg transition-colors"
@@ -347,6 +364,15 @@ export default function FixedCostsPage() {
                   placeholder="e.g., 2.00"
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#647C47]"
                 />
+                <select
+                  value={newCostCurrency}
+                  onChange={(e) => setNewCostCurrency(e.target.value)}
+                  className="mt-2 w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#647C47]"
+                  title="Rate currency (blank = organisation default)"
+                >
+                  <option value="">Currency: organisation default</option>
+                  {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-1">Description</label>

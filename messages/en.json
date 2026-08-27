@@ -3253,7 +3253,10 @@
       "confirmDelete": "Are you sure you want to delete",
       "edit": "Edit",
       "showPerPage": "per page",
-      "toOf": "–{end} of {total}"
+      "toOf": "–{end} of {total}",
+      "rateCurrency": "Rate currency",
+      "rateCurrencyDefault": "Organisation default",
+      "rateCurrencyHint": "The currency this supplier's contract is written in. Leave on the default unless the contract says otherwise — pricing converts automatically."
     },
     "meals": {
       "title": "Meal Rates",
