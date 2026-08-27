@@ -1,6 +1,6 @@
 # Plan — Currency belongs to the rate, not the organisation
 
-**Status:** Phase A built 2026-08-27 (migration `20260827_rate_currency.sql` UNAPPLIED — operator runs SQL; PGlite-proven idempotent; code is deploy-safe in either order). Phase A = schema + `lib/rates/rate-currency.ts` normalizer + both engines convert at the fetch boundary. Phases B (entry surfaces: forms + bulk CSV) and C (freeze-at-approval mechanics) not started. Raised by the accounting department 2026-08-27.
+**Status:** Phases A–C built 2026-08-27. A (#232): schema + fetch-boundary normalizer + engines — migration `20260827_rate_currency.sql` APPLIED to prod by operator. B (#233): currency field on all 12 rate forms + bulk CSV Currency column. C: FX freezes at first confirm (`itineraries.fx_frozen`), explicit logged re-price (`POST /api/itineraries/[id]/reprice-fx`) restating lines from preserved originals — migration `20260827_itinerary_fx_freeze.sql` PENDING operator. Raised by the accounting department 2026-08-27.
 **Decision owner:** operator (Islam), with accounting.
 **Author:** drafted 2026-08-27.
 **Accounting-facing summary:** https://claude.ai/code/artifact/01e3064e-078d-469f-97c7-55cee32c12e4

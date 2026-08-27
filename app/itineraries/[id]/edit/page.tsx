@@ -121,6 +121,7 @@ interface Itinerary {
   num_adults: number
   num_children: number
   currency: string
+  fx_frozen?: { base: string; rates: Record<string, number>; frozen_at: string; frozen_by: string | null; source: string } | null
   tier: string
   package_type: string
   status: string
@@ -257,6 +258,43 @@ export default function ItineraryEditorPage() {
   const t = useTranslations('itineraries.edit')
   const tCommon = useTranslations('common')
   const dialog = useConfirmDialog()
+  const [repricing, setRepricing] = useState(false)
+
+  // The ONLY way a confirmed file's FX moves — explicit and logged. The
+  // client price is untouched; costs and margin are restated at today's
+  // rates from each line's preserved original.
+  const handleRepriceFx = async () => {
+    if (!itinerary) return
+    const ok = await dialog.confirm({
+      title: t('fxReprice.confirmTitle'),
+      message: t('fxReprice.confirmMessage'),
+      variant: 'warning',
+      confirmText: t('fxReprice.confirmButton'),
+    })
+    if (!ok) return
+    setRepricing(true)
+    try {
+      const res = await fetch(`/api/itineraries/${itinerary.id}/reprice-fx`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        await dialog.alert(tCommon('error'), data.error || t('fxReprice.failed'), 'warning')
+        return
+      }
+      const r = data.repriced
+      await dialog.alert(
+        t('fxReprice.doneTitle'),
+        t('fxReprice.doneMessage', {
+          lines: r.lines_changed,
+          oldCost: String(r.supplier_cost.old),
+          newCost: String(r.supplier_cost.new),
+        }),
+        'success'
+      )
+      window.location.reload()
+    } finally {
+      setRepricing(false)
+    }
+  }
   const router = useRouter()
   const params = useParams()
   const itineraryId = params?.id as string
@@ -1328,13 +1366,32 @@ export default function ItineraryEditorPage() {
                 <p className="text-sm text-green-600">{t('confirmedBookingBanner.description')}</p>
               </div>
             </div>
-            <Link
-              href={`/bookings?search=${encodeURIComponent(itinerary.itinerary_code)}`}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 flex items-center gap-2"
-            >
-              {t('confirmedBookingBanner.goToBooking')}
-              <ChevronRight size={16} />
-            </Link>
+            <div className="flex items-center gap-3">
+              {itinerary.fx_frozen && (
+                <span
+                  className="text-xs text-green-700 bg-green-100 px-2.5 py-1.5 rounded-lg"
+                  title={t('fxReprice.frozenHint')}
+                >
+                  {t('fxReprice.frozenAt', { date: new Date(itinerary.fx_frozen.frozen_at).toLocaleDateString() })}
+                </span>
+              )}
+              {itinerary.fx_frozen && (
+                <button
+                  onClick={handleRepriceFx}
+                  disabled={repricing}
+                  className="px-3 py-2 border border-green-300 text-green-700 rounded-lg text-sm font-medium hover:bg-green-100 disabled:opacity-50"
+                >
+                  {repricing ? t('fxReprice.working') : t('fxReprice.button')}
+                </button>
+              )}
+              <Link
+                href={`/bookings?search=${encodeURIComponent(itinerary.itinerary_code)}`}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 flex items-center gap-2"
+              >
+                {t('confirmedBookingBanner.goToBooking')}
+                <ChevronRight size={16} />
+              </Link>
+            </div>
           </div>
         </div>
       )}
