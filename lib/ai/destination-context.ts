@@ -33,6 +33,10 @@ export interface DestinationPromptContext {
   brief: string
   /** Where a trip is assumed to start/base when nothing says otherwise. */
   defaultCity: string
+  /** Whether cruise detection should run at all. Cruise products are not
+   *  destination-tagged yet, so this is Egypt-only for now — a Jordan
+   *  request can never be silently turned into a Nile cruise. */
+  hasCruises: boolean
 }
 
 /** Today's Egypt framing, verbatim — the golden snapshots pin it. */
@@ -48,6 +52,7 @@ export function egyptPromptContext(): DestinationPromptContext {
 - Do NOT generate a Nile Cruise unless the client explicitly asks for one.`,
     brief: '',
     defaultCity: 'Cairo',
+    hasCruises: true,
   }
 }
 
@@ -64,6 +69,7 @@ function bareContext(name: string, cities: string[], defaultCity: string): Desti
       `- Stay faithful to the client's request — do not "improve" by adding unrelated destinations.\n- Do NOT add cities, cruises, or excursions that are not mentioned.`,
     brief: '',
     defaultCity,
+    hasCruises: false,
   }
 }
 

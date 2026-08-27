@@ -42,7 +42,27 @@ export interface MatchResult {
   error?: string
 }
 
-// Keywords that map to specific attractions/places
+// Keywords that map to specific attractions/places. The Egypt attraction map
+// below is built in; every ACTIVE destination city (and its aliases, entered
+// in Settings → Destinations) is merged in at match time, mapping to itself —
+// so "petra" or "amm" resolves the moment Jordan's cities exist as data.
+async function destinationCityKeywords(supabase: { from(t: string): any }): Promise<Record<string, string[]>> {  // eslint-disable-line @typescript-eslint/no-explicit-any
+  try {
+    const { data } = await supabase
+      .from('destination_cities')
+      .select('name, aliases')
+      .eq('is_active', true)
+    const out: Record<string, string[]> = {}
+    for (const row of data ?? []) {
+      out[String(row.name).toLowerCase()] = [row.name]
+      for (const alias of row.aliases ?? []) out[String(alias).toLowerCase()] = [row.name]
+    }
+    return out
+  } catch {
+    return {} // vocabulary unavailable → the built-in Egypt map alone
+  }
+}
+
 const ATTRACTION_KEYWORDS: Record<string, string[]> = {
   'pyramids': ['Giza', 'Cairo'],
   'sphinx': ['Giza', 'Cairo'],
@@ -111,11 +131,18 @@ export async function matchTourTemplate(
       input.cities.forEach((c: string) => extractedCities.add(c))
     }
 
+    // Built-in Egypt attraction map + every active destination city and its
+    // aliases from the vocabulary (Settings → Destinations).
+    const cityKeywords: Record<string, string[]> = {
+      ...(await destinationCityKeywords(supabase)),
+      ...ATTRACTION_KEYWORDS,
+    }
+
     // From tour_requested text
     if (input.tour_requested) {
       const requestLower = input.tour_requested.toLowerCase()
       
-      for (const [keyword, cities] of Object.entries(ATTRACTION_KEYWORDS)) {
+      for (const [keyword, cities] of Object.entries(cityKeywords)) {
         if (requestLower.includes(keyword)) {
           cities.forEach((c: string) => extractedCities.add(c))
         }
@@ -126,7 +153,7 @@ export async function matchTourTemplate(
     if (input.attractions) {
       input.attractions.forEach((attr: string) => {
         const attrLower = attr.toLowerCase()
-        for (const [keyword, cities] of Object.entries(ATTRACTION_KEYWORDS)) {
+        for (const [keyword, cities] of Object.entries(cityKeywords)) {
           if (attrLower.includes(keyword)) {
             cities.forEach((c: string) => extractedCities.add(c))
           }
