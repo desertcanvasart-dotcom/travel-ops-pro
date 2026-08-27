@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useDestinationCities } from '@/app/components/useDestinationCities'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
@@ -12,7 +13,6 @@ import {
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
-import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
@@ -208,6 +208,10 @@ function getLanguageFromCookie(): string {
 }
 
 export default function AttractionsContent() {
+  // City vocabulary from the destinations tables (falls back to the
+  // hardcoded Egypt list until the migration is applied) — see
+  // app/components/useDestinationCities.ts.
+  const { cities: destinationCities } = useDestinationCities()
   const t = useTranslations('rates.attractions')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
@@ -1023,7 +1027,7 @@ export default function AttractionsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
                       <option value="">{t('form.selectCity')}</option>
-                      {EGYPT_CITIES.map(city => (
+                      {destinationCities.map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
                     </select>

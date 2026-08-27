@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useDestinationCities } from '@/app/components/useDestinationCities'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import SupplierPicker from '@/components/rates/SupplierPicker'
@@ -13,7 +14,6 @@ import {
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
-import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 
@@ -176,6 +176,10 @@ function Pagination({
 // ============================================
 
 export default function HotelServicesPage() {
+  // City vocabulary from the destinations tables (falls back to the
+  // hardcoded Egypt list until the migration is applied) — see
+  // app/components/useDestinationCities.ts.
+  const { cities: destinationCities } = useDestinationCities()
   const t = useTranslations('rates.hotelServices')
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
@@ -518,7 +522,7 @@ export default function HotelServicesPage() {
               title={t('filters.allDestinations')}
             >
               <option value="all">{t('filters.allDestinations')}</option>
-              {EGYPT_CITIES.map(city => (
+              {destinationCities.map(city => (
                 <option key={city} value={city}>{city}</option>
               ))}
             </select>
@@ -716,7 +720,7 @@ export default function HotelServicesPage() {
                   title={t('form.destination')}
                 >
                   <option value="">{t('form.allDestinations')}</option>
-                  {EGYPT_CITIES.map(city => (
+                  {destinationCities.map(city => (
                     <option key={city} value={city}>{city}</option>
                   ))}
                 </select>

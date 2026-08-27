@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useDestinationCities } from '@/app/components/useDestinationCities'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
@@ -25,7 +26,6 @@ import {
   ArrowRight
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
-import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 interface FlightRate {
@@ -175,6 +175,10 @@ const POPULAR_ROUTES = [
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function FlightsContent() {
+  // City vocabulary from the destinations tables (falls back to the
+  // hardcoded Egypt list until the migration is applied) — see
+  // app/components/useDestinationCities.ts.
+  const { cities: destinationCities } = useDestinationCities()
   const t = useTranslations('rates.flights')
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
@@ -615,7 +619,7 @@ export default function FlightsContent() {
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
             <option value="">{t('fromAny')}</option>
-            {EGYPT_CITIES.map(city => (
+            {destinationCities.map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
           </select>
@@ -629,7 +633,7 @@ export default function FlightsContent() {
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
             <option value="">{t('toAny')}</option>
-            {EGYPT_CITIES.map(city => (
+            {destinationCities.map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
           </select>
@@ -1004,7 +1008,7 @@ export default function FlightsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       <option value="">{t('selectDepartureCity')}</option>
-                      {EGYPT_CITIES.map(city => (
+                      {destinationCities.map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
                     </select>
@@ -1021,7 +1025,7 @@ export default function FlightsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       <option value="">{t('selectArrivalCity')}</option>
-                      {EGYPT_CITIES.filter(c => c !== formData.route_from).map(city => (
+                      {destinationCities.filter(c => c !== formData.route_from).map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
                     </select>

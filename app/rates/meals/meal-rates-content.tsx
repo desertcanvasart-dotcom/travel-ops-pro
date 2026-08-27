@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useDestinationCities } from '@/app/components/useDestinationCities'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
@@ -35,14 +36,6 @@ import {
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // Egyptian cities
-const EGYPT_CITIES = [
-  'Alamein', 'Alexandria', 'Aswan', 'Asyut', 'Bahariya', 'Beni Suef', 'Cairo',
-  'Dahab', 'Dakhla', 'Edfu', 'El Arish', 'El Balyana', 'El Gouna', 'El Quseir',
-  'El Tor', 'Esna', 'Farafra', 'Fayoum', 'Giza', 'Hurghada', 'Ismailia', 'Kharga',
-  'Kom Ombo', 'Luxor', 'Marsa Alam', 'Minya', 'Nuweiba', 'Port Said', 'Qena',
-  'Rafah', 'Rosetta (Rashid)', 'Safaga', 'Saint Catherine', 'Sharm El Sheikh',
-  'Sheikh Zuweid', 'Siwa', 'Sohag', 'Suez', 'Taba'
-]
 
 const MEAL_TYPES = [
   'Breakfast',
@@ -133,6 +126,10 @@ interface MealRate {
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function MealRatesContent() {
+  // City vocabulary from the destinations tables (falls back to the
+  // hardcoded Egypt list until the migration is applied) — see
+  // app/components/useDestinationCities.ts.
+  const { cities: destinationCities } = useDestinationCities()
   const t = useTranslations('rates.meals')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
@@ -733,7 +730,7 @@ export default function MealRatesContent() {
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
             <option value="">{t('allCities')}</option>
-            {EGYPT_CITIES.map(city => (
+            {destinationCities.map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
           </select>
@@ -1190,7 +1187,7 @@ export default function MealRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       <option value="">{tCommon('selectCity')}</option>
-                      {EGYPT_CITIES.map(city => (
+                      {destinationCities.map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
                     </select>
