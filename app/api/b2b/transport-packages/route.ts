@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
         origin_city: body.origin_city,
         destination_city: body.destination_city,
         duration_days: body.duration_days || 1,
+        ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
         sedan_rate: body.sedan_rate,
         sedan_capacity: body.sedan_capacity || 3,
         minivan_rate: body.minivan_rate,

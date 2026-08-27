@@ -42,6 +42,7 @@ import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import RatePeriodsImportExport from '@/app/components/RatePeriodsImportExport'
 import RateSeasonsEditor from '@/components/rates/RateSeasonsEditor'
 import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
+import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 
 // ============================================
 // EGYPTIAN CITIES - Complete List
@@ -86,6 +87,7 @@ interface AccommodationRate {
   property_type?: string
   city?: string
   board_basis?: string
+  rate_currency?: string | null
   // Hotel contacts
   contact_name?: string
   contact_email?: string
@@ -354,6 +356,7 @@ export default function HotelsContent() {
     property_type: 'hotel',
     city: '',
     board_basis: 'BB',
+    rate_currency: '',
     // Hotel contacts (NEW)
     contact_name: '',
     contact_email: '',
@@ -507,6 +510,7 @@ export default function HotelsContent() {
       property_type: 'hotel',
       city: '',
       board_basis: 'BB',
+      rate_currency: '',
       // Hotel contacts
       contact_name: '',
       contact_email: '',
@@ -576,6 +580,7 @@ export default function HotelsContent() {
       property_type: rate.property_type || 'hotel',
       city: rate.city || '',
       board_basis: rate.board_basis || 'BB',
+      rate_currency: rate.rate_currency || '',
       // Hotel contacts
       contact_name: rate.contact_name || '',
       contact_email: rate.contact_email || '',
@@ -639,9 +644,11 @@ export default function HotelsContent() {
     }
     
     // Generate service code if empty
+    const { rate_currency: pickedCurrency, ...restFormData } = formData
     const dataToSubmit = {
-      ...formData,
-      service_code: formData.service_code || generateServiceCode(formData.city)
+      ...restFormData,
+      service_code: formData.service_code || generateServiceCode(formData.city),
+      ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency),
     }
     
     try {
@@ -1377,6 +1384,11 @@ export default function HotelsContent() {
                       ))}
                     </select>
                   </div>
+                  <RateCurrencyField
+                    value={formData.rate_currency}
+                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                  />
                 </div>
               </div>
 

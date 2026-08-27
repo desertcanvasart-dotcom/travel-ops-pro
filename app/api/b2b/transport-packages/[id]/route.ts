@@ -34,6 +34,7 @@ export async function PUT(
         origin_city: body.origin_city,
         destination_city: body.destination_city,
         duration_days: body.duration_days,
+        ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
         sedan_rate: body.sedan_rate,
         sedan_capacity: body.sedan_capacity,
         minivan_rate: body.minivan_rate,

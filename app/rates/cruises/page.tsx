@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
@@ -108,6 +109,7 @@ interface Cruise {
   notes: string | null
   is_active: boolean
   tier: string | null
+  rate_currency?: string | null
   is_preferred: boolean
   supplier_id: string | null
   created_at: string
@@ -125,6 +127,7 @@ interface Toast {
 
 interface CruiseFormData {
   cruise_code: string
+  rate_currency: string
   ship_name: string
   ship_category: 'standard' | 'deluxe' | 'luxury'
   route_name: string
@@ -410,7 +413,8 @@ export default function CruisesPage() {
     is_active: true,
     tier: 'standard',
     is_preferred: false,
-    supplier_id: ''
+    supplier_id: '',
+    rate_currency: ''
   })
 
   const [formData, setFormData] = useState<CruiseFormData>(getDefaultFormData())
@@ -555,6 +559,7 @@ export default function CruisesPage() {
       notes: cruise.notes || '',
       is_active: cruise.is_active,
       tier: cruise.tier || 'standard',
+      rate_currency: cruise.rate_currency || '',
       is_preferred: cruise.is_preferred || false,
       supplier_id: cruise.supplier_id || ''
     })
@@ -573,8 +578,10 @@ export default function CruisesPage() {
     }
     
     // Use low season rates as the "default" legacy rates for backward compatibility
+    const { rate_currency: pickedCurrency, ...restFormData } = formData
     const submitData = {
-      ...formData,
+      ...restFormData,
+      ...rateCurrencyPatch(pickedCurrency, editingCruise?.rate_currency),
       cruise_code: formData.cruise_code || generateCode(),
       route_name: formData.route_name || `${formData.embark_city} to ${formData.disembark_city}`,
       // Set legacy rates from low season for backward compatibility
@@ -1088,6 +1095,13 @@ export default function CruisesPage() {
                       {t(`tiers.${tier.labelKey}`)}
                     </button>
                   ))}
+                </div>
+                <div className="mb-3 max-w-xs">
+                  <RateCurrencyField
+                    value={formData.rate_currency}
+                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  />
                 </div>
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                   <label className="flex items-start gap-3 cursor-pointer">

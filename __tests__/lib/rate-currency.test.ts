@@ -95,12 +95,62 @@ describe('createRateNormalizer', () => {
     expect(await n.normalize('meal_rates', rows)).toBe(rows)
   })
 
+  it('converts hotel season rates AND the flat fallback — 5000 EGP/night → $100', async () => {
+    const rows = [{
+      id: 'h1', rate_currency: 'EGP',
+      pp_double_eur: 5000, single_supp_eur: 1500, pp_double_non_eur: null,
+      seasons: [
+        { name: 'High', from: '2026-10-01', to: '2026-12-19', rates: { pp_double_eur: 6000, single_supp_eur: 2000 } },
+        { name: 'Low', from: '2026-05-01', to: '2026-09-30', rates: { pp_double_eur: 5000, single_supp_eur: 1500 } },
+      ],
+    }]
+    const [r] = (await usd().normalize('accommodation_rates', rows))!
+    expect(r.pp_double_eur).toBe(100)
+    expect(r.pp_double_non_eur).toBeNull()   // blank stays blank
+    const seasons = r.seasons as Array<{ name: string; rates: Record<string, number> }>
+    expect(seasons[0].rates.pp_double_eur).toBe(120)
+    expect(seasons[0].rates.single_supp_eur).toBe(40)
+    expect(seasons[0].name).toBe('High')      // period metadata untouched
+    expect(seasons[1].rates.pp_double_eur).toBe(100)
+    // stored row untouched
+    expect((rows[0].seasons as Array<{ rates: Record<string, number> }>)[0].rates.pp_double_eur).toBe(6000)
+  })
+
+  it('converts cruise cabin rates in periods and legacy fallback columns', async () => {
+    const rows = [{
+      id: 'c1', rate_currency: 'EGP', rate_low_double_eur: 10000, rate_double_eur: 9000,
+      seasons: [{ name: 'Peak', rates: { double_eur: 12500, suite_eur: 25000 } }],
+    }]
+    const [r] = (await usd().normalize('nile_cruises', rows))!
+    expect(r.rate_low_double_eur).toBe(200)
+    expect(r.rate_double_eur).toBe(180)
+    const seasons = r.seasons as Array<{ rates: Record<string, number> }>
+    expect(seasons[0].rates.double_eur).toBe(250)
+    expect(seasons[0].rates.suite_eur).toBe(500)
+  })
+
+  it('converts a JPY cruise transport package', async () => {
+    const rows = [{ id: 'p1', rate_currency: 'JPY', minivan_rate: 15000, bus_rate: 45000, sedan_rate: null }]
+    const [r] = (await usd().normalize('b2b_transport_packages', rows))!
+    expect(r.minivan_rate).toBe(100)
+    expect(r.bus_rate).toBe(300)
+    expect(r.sedan_rate).toBeNull()
+  })
+
+  it('an unbackable hotel row neutralises its seasons too — a hole, not a 50x price', async () => {
+    const noEgp = { base: 'USD', rates: { USD: 1 }, timestamp: 0 } as unknown as ExchangeRates
+    const n = createRateNormalizer('USD', { getRates: async () => noEgp })
+    const [r] = (await n.normalize('accommodation_rates', [{ id: 'h1', rate_currency: 'EGP', pp_double_eur: 5000, seasons: [{ rates: { pp_double_eur: 6000 } }] }]))!
+    expect(r.pp_double_eur).toBeNull()
+    expect(r.seasons).toBeNull()
+  })
+
   it('every declared monetary column ends in a price-like name, never a count', () => {
     // Guard against a capacity/duration/percentage sneaking into the map —
     // converting a capacity by 50x would be as wrong as not converting a price.
     for (const cols of Object.values(RATE_MONETARY_COLUMNS)) {
       for (const c of cols) {
-        expect(c).toMatch(/rate|cost|fee|tax/)
+        expect(c).toMatch(/rate|cost|fee|tax|pp_double|supp|red/)
         expect(c).not.toMatch(/capacity|duration|pax|percent|kg|minutes/)
       }
     }

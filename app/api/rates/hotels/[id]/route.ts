@@ -57,6 +57,7 @@ export async function PUT(
       property_name: body.property_name,
       property_type: body.property_type || 'hotel',
       city: body.city || null,
+      ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
       board_basis: body.board_basis || 'BB',
       tier: body.tier || 'standard',
       supplier_id: supplierCheck.supplier_id,

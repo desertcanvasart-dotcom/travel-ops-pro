@@ -176,6 +176,8 @@ export async function getCruiseRate(
     nights: number
     startDate: string
     isEuroPassport: boolean
+    /** Converts rows entered in another currency — lib/rates/rate-currency. */
+    normalizer?: import('@/lib/rates/rate-currency').RateNormalizer
   }
 ): Promise<CruiseRate> {
   const { tier, recommendedSuppliers, supabase, totalPax, nights, startDate, isEuroPassport } = params
@@ -202,7 +204,10 @@ export async function getCruiseRate(
         .eq('is_active', true)
         .in('ship_name', recommendedSuppliers)
         .limit(1)
-      if (data?.length) ship = data[0]
+      if (data?.length) {
+        const rows = params.normalizer ? await params.normalizer.normalize('nile_cruises', data) : data
+        ship = rows?.[0]
+      }
     }
 
     // Fallback: tier match
@@ -214,7 +219,10 @@ export async function getCruiseRate(
         .eq('tier', tier)
         .order('is_preferred', { ascending: false })
         .limit(1)
-      if (data?.length) ship = data[0]
+      if (data?.length) {
+        const rows = params.normalizer ? await params.normalizer.normalize('nile_cruises', data) : data
+        ship = rows?.[0]
+      }
     }
 
     // Final fallback: any active cruise

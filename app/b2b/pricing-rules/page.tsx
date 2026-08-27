@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import CityOptions from '@/app/components/CityOptions'
+import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
@@ -26,6 +27,7 @@ interface TransportPackage {
   origin_city: string
   destination_city: string
   duration_days: number
+  rate_currency?: string | null
   sedan_rate: number | null
   sedan_capacity: number
   minivan_rate: number | null
@@ -54,6 +56,7 @@ interface PackageFormData {
   origin_city: string
   destination_city: string
   duration_days: number
+  rate_currency: string
   sedan_rate: number
   sedan_capacity: number
   minivan_rate: number
@@ -76,6 +79,7 @@ const DEFAULT_PACKAGE_FORM: PackageFormData = {
   origin_city: 'Luxor',
   destination_city: 'Aswan',
   duration_days: 5,
+  rate_currency: '',
   sedan_rate: 180,
   sedan_capacity: 3,
   minivan_rate: 250,
@@ -172,6 +176,7 @@ export default function B2BPricingRulesPage() {
       origin_city: pkg.origin_city || 'Luxor',
       destination_city: pkg.destination_city || 'Aswan',
       duration_days: pkg.duration_days || 5,
+      rate_currency: pkg.rate_currency || '',
       sedan_rate: pkg.sedan_rate || 0,
       sedan_capacity: pkg.sedan_capacity || 3,
       minivan_rate: pkg.minivan_rate || 0,
@@ -204,10 +209,14 @@ export default function B2BPricingRulesPage() {
       const res = await fetch(url, {
         method: editingPackage ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...packageForm,
-          package_code: packageForm.package_code || `PKG-${Date.now()}`
-        })
+        body: JSON.stringify((() => {
+          const { rate_currency: pickedCurrency, ...rest } = packageForm
+          return {
+            ...rest,
+            package_code: packageForm.package_code || `PKG-${Date.now()}`,
+            ...rateCurrencyPatch(pickedCurrency, editingPackage?.rate_currency),
+          }
+        })())
       })
 
       const data = await res.json()
@@ -468,6 +477,11 @@ export default function B2BPricingRulesPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   />
                 </div>
+                <RateCurrencyField
+                  value={packageForm.rate_currency}
+                  onChange={v => setPackageForm(prev => ({ ...prev, rate_currency: v }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
               </div>
 
               <div>
