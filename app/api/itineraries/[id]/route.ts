@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { buildFrozenFx, parseFrozenFx } from '@/lib/itinerary-fx'
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 
 // Server-side admin client — bypasses RLS for reliable reads/writes
 const supabase = createAdminClient(
@@ -119,16 +121,38 @@ export async function PUT(
     if (body.inclusions !== undefined) updateData.inclusions = body.inclusions
     if (body.exclusions !== undefined) updateData.exclusions = body.exclusions
 
-    // Get current itinerary status before update (for booking auto-creation)
+    // Get current itinerary status before update (for booking auto-creation
+    // and the FX freeze below)
     let previousStatus: string | null = null
     if (body.status === 'confirmed') {
       const { data: currentItinerary } = await supabase
         .from('itineraries')
-        .select('status')
+        .select('*')
         .eq('id', id)
         .eq('org_id', orgId)
         .single()
       previousStatus = currentItinerary?.status || null
+
+      // ── FX freezes at approval ──
+      // While a quotation is being prepared it converts at the current rate;
+      // confirming freezes the rates in force onto the file, so its cost and
+      // margin stop moving with the market. Frozen ONCE — a file that already
+      // carries a snapshot keeps it (re-pricing is the explicit, logged path,
+      // POST /api/itineraries/[id]/reprice-fx). The column-presence check
+      // keeps this deploy-safe before migration 20260827_itinerary_fx_freeze
+      // is applied. A freeze failure never blocks the confirmation itself.
+      if (
+        previousStatus !== 'confirmed' &&
+        currentItinerary && 'fx_frozen' in currentItinerary &&
+        !parseFrozenFx(currentItinerary.fx_frozen)
+      ) {
+        try {
+          const rateCurrency = await getOrgRateCurrency(supabaseAdmin, orgId)
+          updateData.fx_frozen = await buildFrozenFx(rateCurrency, await getCurrentUserId(), 'confirm')
+        } catch (err) {
+          console.warn('[itinerary] FX freeze at confirm failed (confirmation proceeds unfrozen):', err instanceof Error ? err.message : String(err))
+        }
+      }
     }
 
     const { data, error } = await supabase

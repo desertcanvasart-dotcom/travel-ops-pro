@@ -1264,7 +1264,19 @@
       "programmeUnlinkedNote": "Without a programme, the portal falls back to the plain day list.",
       "soldBy": "Sold by",
       "soldByNone": "Not sold by a guide",
-      "soldByHint": "The guide who sold this to the client is paid a \"we pay\" commission on our profit from it (Rates › Commissions)."
+      "soldByHint": "The guide who sold this to the client is paid a \"we pay\" commission on our profit from it (Rates › Commissions).",
+      "fxReprice": {
+        "confirmTitle": "Re-price at today’s exchange rates?",
+        "confirmMessage": "Costs and margin will be restated at today’s rates from each service’s original supplier amount. The client price does not change. This action is recorded with your name.",
+        "confirmButton": "Re-price",
+        "button": "Re-price FX",
+        "working": "Re-pricing…",
+        "failed": "Re-pricing failed",
+        "doneTitle": "Re-priced",
+        "doneMessage": "{lines} line(s) restated. Supplier cost {oldCost} → {newCost}. The client price is unchanged.",
+        "frozenAt": "FX frozen {date}",
+        "frozenHint": "Exchange rates were frozen when this itinerary was confirmed. Costs and margin only move if someone re-prices — explicitly, and logged."
+      }
     },
     "delete": "Delete",
     "clickToConfirm": "Click again to confirm",
