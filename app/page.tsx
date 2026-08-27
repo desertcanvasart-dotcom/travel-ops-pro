@@ -356,8 +356,12 @@ const capabilityClusters = [
       'Promote briefs straight into itineraries & threads',
       'Passenger manifests for every departure',
       'Supplier confirmations and voucher delivery',
+      'Switch it off if you do not work from briefs — the rest of the platform does not depend on it',
     ],
-    badge: 'Ops control center',
+    // Marked optional at the operator's request: the module is complete and
+    // works, but it is not part of every operator's workflow and can be hidden
+    // from the navigation entirely.
+    badge: 'Optional module',
   },
   {
     icon: UserRound,
