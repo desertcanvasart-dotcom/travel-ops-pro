@@ -220,50 +220,6 @@ export async function POST(request: NextRequest) {
     for (const r of keyedRows) dedupMap.set(String(r[uniqueKeyColumn]), r)
     const dedupedRows = Array.from(dedupMap.values())
 
-    // ── Prices that will not reach a quote
-    // Hotels and cruises resolve their rates from `seasons`, the dated period
-    // list, whenever a row has one; the low_/high_/peak_ columns this CSV
-    // writes are only the fallback for rows that do not. So importing prices
-    // onto a rate that somebody has already given periods to SUCCEEDS and
-    // changes nothing about what gets quoted.
-    //
-    // It is not destructive — the upsert only writes the columns present in
-    // the file, so the periods survive — it is silent, which is worse. The
-    // import reports it rather than letting the operator believe a rate rise
-    // has been applied.
-    // Column lists are written out per table rather than interpolated: a
-    // built .select() string defeats the client's typing, and this codebase
-    // does not interpolate select lists.
-    const supersededByPeriods = new Map<string, number>()
-    const periodKeys = dedupedRows.map(r => r[uniqueKeyColumn]).filter(Boolean)
-    for (let i = 0; i < periodKeys.length; i += BATCH_SIZE) {
-      const slice = periodKeys.slice(i, i + BATCH_SIZE)
-      let rows: Array<{ key: unknown; seasons: unknown }> = []
-
-      if (table === 'accommodation_rates') {
-        const { data } = await supabase
-          .from('accommodation_rates')
-          .select('service_code, seasons')
-          .in('service_code', slice)
-          .not('seasons', 'is', null)
-        rows = (data ?? []).map(r => ({ key: r.service_code, seasons: r.seasons }))
-      } else if (table === 'nile_cruises') {
-        const { data } = await supabase
-          .from('nile_cruises')
-          .select('cruise_code, seasons')
-          .in('cruise_code', slice)
-          .not('seasons', 'is', null)
-        rows = (data ?? []).map(r => ({ key: r.cruise_code, seasons: r.seasons }))
-      } else {
-        break
-      }
-
-      for (const row of rows) {
-        const periods = Array.isArray(row.seasons) ? row.seasons.length : 0
-        if (periods > 0) supersededByPeriods.set(String(row.key), periods)
-      }
-    }
-
     for (let i = 0; i < dedupedRows.length; i += BATCH_SIZE) {
       const batch = dedupedRows.slice(i, i + BATCH_SIZE)
 
@@ -323,12 +279,6 @@ export async function POST(request: NextRequest) {
         }]
       : []
 
-    const warnings = Array.from(supersededByPeriods.entries()).map(([key, count]) => ({
-      kind: 'periods_supersede_columns' as const,
-      key,
-      message: `${key} already has ${count} dated rate period${count === 1 ? '' : 's'}. Pricing reads those periods, so the prices in this file will not change what is quoted — edit the periods on the rate instead.`,
-    }))
-
     const result: ImportResult = {
       totalRows: rows.length,
       validRows: preview.validRows,
@@ -336,7 +286,7 @@ export async function POST(request: NextRequest) {
       inserted,
       updated,
       errors: importErrors,
-      warnings: [...exampleWarnings, ...warnings],
+      warnings: exampleWarnings,
     }
 
     const success = importErrors.length === 0
