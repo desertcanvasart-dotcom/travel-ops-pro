@@ -8,10 +8,16 @@ operating agency's deep ops tool and the design reference.
 **Decision owner:** operator (Islam).
 **Author:** drafted 2026-08-27 from a same-day inspection of both repos — every claim
 below is measured, and the ones that aren't are marked.
+**Corrected same day:** the first inspection ran on a LOCAL clone 128 commits behind.
+Re-verified against the true `origin/main` (last commit 2026-08-25 — the sibling is
+ACTIVE, not stale): tenancy and billing confirmed; still no per-rate currency, FX
+freeze or destination vocabulary; its prompts still Egypt-hardcoded; suite healthy
+(1545 tests passing). One finding REVERSED: migrations 291/292 show the sibling built
+its own traveller↔office messaging (`trip_messages` + trip channel) — see P5.
 
 ## 1. Why the sibling, in numbers
 
-Inspected 2026-08-27 (its last commit: 2026-08-10):
+Inspected 2026-08-27 against origin/main (last commit 2026-08-25):
 
 **The sibling already has the entire "any agency" layer this repo lacks:**
 - `tenant_id` on every rate table, suppliers, tour_templates, content_library,
@@ -77,7 +83,7 @@ The SaaS-correct shape combines them:
 | P2 | Destination-parameterised generation | `lib/ai/destination-context.ts`, prompt-builder golden-snapshot method | P1; extract ITS prompt templates first and pin them the same way | M |
 | P3 | Per-rate currency (flat tables + hotels/cruises/packages) | `lib/rates/rate-currency.ts`, `RateCurrencyField`, migrations | tenant-scoped rate tables (already there); re-verify its seasons shape | M–L |
 | P4 | FX freeze-at-approval + logged re-price | `lib/itinerary-fx.ts`, reprice-fx route | P3; its approval/booking flow may differ — find ITS confirm moment | M |
-| P5 | Portal chat + notify outcomes | `lib/portal/chat-reply.ts` + portal/inbox routes | its portal exists? UNVERIFIED — inspect first | L |
+| P5 | RECONCILE messaging, don't port: the sibling has its own `trip_messages` thread (migration 291/292). Port only what ours adds — the notify-OUTCOME model (why the traveller wasn't told) and inbox-channel treatment — into ITS shape | `lib/portal/chat-reply.ts` NotifyOutcome | inspect its trip-channel flow first | S–M |
 | P6 | This week's fix crop where UIs overlap (fixed-costs CSV, transport single-price, export-survives-missing-column, …) | respective PRs #226–#242 | none | S each |
 
 Sizing legend: S ≤ half a day, M = 1–3 days, L = a week-ish — all as design ports.
@@ -114,19 +120,21 @@ design in from the start, not bolt on:
 - The port campaign direction reverses the historical one (sibling→here, [[sibling-feature-port-campaign]]);
   update that memory when the first port lands.
 
-## 7. Open questions for the operator
+## 7. Open questions — ANSWERED by the operator, 2026-08-27
 
-1. **Self-hosted licensing model** (§5): key check-in, annual license, or support
-   contract? Shapes real code (entitlement checks) — needed before P-anything ships
-   to a self-hosted buyer, not before ports start.
-2. **Who maintains the global catalog** — and does a tenant get to ADD a country
-   themselves (self-serve, like our Settings page) or request it? Suggest: self-serve,
-   it worked here.
-3. **Sibling revival logistics**: it's 17 days stale — does anything on its `main`
-   need finishing/deploying first? Is its Railway environment live with real tenants
-   already, or pre-launch? (Changes how boldly P1 can restructure its destinations.)
-4. First target market/destination for the SaaS pitch — same answer as the
-   multi-destination §8 question, now with commercial weight.
+1. **Self-hosted licensing: support contract.** A commercial arrangement, not an
+   entitlement system — meaning NO license-key/check-in code needs building. Simplest
+   possible outcome; §5's packaging and migration-runner work stands unchanged.
+2. **Global catalog: self-serve.** Tenants add countries and cities themselves, the
+   same Settings model that worked here. The catalog grows from tenant activity;
+   curation is a later concern if quality drifts.
+3. **Sibling state: live on Railway, 6 tenants created, ALL EMPTY.** Effectively
+   pre-launch data-wise: P1 may restructure the destinations model boldly. Keep the
+   6 tenant rows; there is no tenant data to migrate carefully.
+4. **First market: Middle East and Africa.** Catalog seeding priority: Egypt, Jordan,
+   Morocco, UAE, Kenya, Tanzania… — and a flag for later: MEA agencies will sooner or
+   later want an **Arabic UI (RTL)**; the i18n stack should not paint that into a
+   corner. Not scoped here; recorded so it is a known cost, not a surprise.
 
 ## 8. Suggested first motion
 
