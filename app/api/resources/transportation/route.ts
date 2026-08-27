@@ -100,6 +100,11 @@ export async function POST(request: NextRequest) {
       supplier_name: body.supplier_name || null,
       notes: body.notes || null,
       is_active: body.is_active !== undefined ? body.is_active : true,
+      // Phase B (per-rate currency) named the WRONG route family for this
+      // form — it saves through /api/resources/transportation, so the chosen
+      // currency was silently dropped here. Only-when-present, so old
+      // clients and unmigrated databases are untouched.
+      ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
       ...tieredRates
     }
 
