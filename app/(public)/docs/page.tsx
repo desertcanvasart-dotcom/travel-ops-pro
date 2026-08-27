@@ -40,6 +40,10 @@ import {
   GitBranch,
   Gauge,
   Tag,
+  UserRound,
+  IdCard,
+  MessagesSquare,
+  CalendarRange,
 } from 'lucide-react'
 
 interface DocItem {
@@ -89,17 +93,18 @@ const CATEGORIES: DocCategory[] = [
     label: 'B2B',
     items: [
       { href: '/docs/b2b-pricing', icon: Briefcase, title: 'B2B Pricing', description: 'B2B price calculator with rate sheets, pax tables, and single supplement.' },
-      { href: '/docs/b2b-pricing-rules', icon: PackageSearch, title: 'B2B Pricing Rules', description: 'Partner-specific margin rules, volume discounts, and date-based pricing overrides.' },
       { href: '/docs/tour-programs', icon: ClipboardList, title: 'Tour Programs Manager', description: 'Create and manage tour templates, variations, and the template-to-pricing flow.' },
       { href: '/docs/b2b-quotes', icon: FileCheck, title: 'B2B Quotes', description: 'Save, manage, and export B2B quotes with PDF generation.' },
       { href: '/docs/quote-revisions', icon: GitBranch, title: 'Quote Revisions', description: 'Versioned B2B quotes — snapshot, compare side-by-side, revert, plus bulk status operations.' },
-      { href: '/docs/b2b-import', icon: FileInput, title: 'B2B Import', description: 'Convert standard itineraries into B2B packages for partner distribution.' },
     ],
   },
   {
     label: 'Operations',
     items: [
       { href: '/docs/bookings', icon: CalendarCheck, title: 'Bookings', description: 'Track supplier confirmations, payments, and operational status.' },
+      { href: '/docs/traveller-portal', icon: UserRound, title: 'Traveller Portal', description: 'The page your customers see: a private link per traveller, the form that replaces the posted 申込書, and who is allowed to see what.' },
+      { href: '/docs/passport-documents', icon: IdCard, title: 'Passport & Documents', description: 'Travellers attach their passport from their own link. Stored privately, opened by a short-lived link, deleted automatically after the trip.' },
+      { href: '/docs/portal-messages', icon: MessagesSquare, title: 'Portal Messages', description: 'Travellers ask questions from their booking page; your team answers from the unified inbox, beside WhatsApp and email.' },
       { href: '/docs/calendar', icon: Calendar, title: 'Calendar', description: 'Month, week, and timeline views of all tours. Drag-to-reschedule, resource conflict detection, and team-wide visibility.' },
       { href: '/docs/tasks', icon: CheckSquare, title: 'Tasks', description: 'Kanban board, table, and list views for managing operational tasks with priorities and assignments.' },
       { href: '/docs/suppliers', icon: Building2, title: 'Suppliers', description: 'Manage supplier profiles, contact details, commission rates, and type-specific fields for guides, hotels, and transport.' },
@@ -123,7 +128,8 @@ const CATEGORIES: DocCategory[] = [
   {
     label: 'Rates & Content',
     items: [
-      { href: '/docs/tours-rates', icon: Globe, title: 'Tours & Rates', description: 'Pre-built tour templates and comprehensive rate management across 15 categories.' },
+      { href: '/docs/tours-rates', icon: Globe, title: 'Tours & Rates', description: 'Pre-built tour templates and comprehensive rate management across 16 categories.' },
+      { href: '/docs/rate-periods', icon: CalendarRange, title: 'Rate Periods', description: 'Give a hotel or cruise as many dated price periods as its contract has, by hand or from a spreadsheet.' },
       { href: '/docs/content-library', icon: BookOpen, title: 'Content Library', description: 'Reusable attraction and activity descriptions with per-tier variations, AI prompts, and writing rules.' },
       { href: '/docs/resources-documents', icon: FolderOpen, title: 'Resources & Documents', description: 'Manage guides, vehicles, hotels, restaurants, and airport assistants. Generate invoices, contracts, vouchers, and receipts.' },
     ],

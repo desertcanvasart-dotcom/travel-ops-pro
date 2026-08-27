@@ -6,6 +6,7 @@ import {
   MessageSquare,
   FileText,
   Users,
+  UserRound,
   DollarSign,
   Calendar,
   Truck,
@@ -183,12 +184,16 @@ function PlatformSlot() {
 
 // ── NEW DATA ARRAYS ──
 
+// Counted from the codebase, not remembered. Re-count before editing:
+//   API endpoints  find app/api -name route.ts | wc -l
+//   Modules        grep -cE "labelKey: '" components/Sidebar.tsx
+//   Rate tables    grep -c 'tableName:' lib/bulk-rate-service.ts
 const socialProofStats = [
-  { value: '222+', label: 'API Endpoints' },
-  { value: '53+', label: 'Operational Modules' },
-  { value: '15', label: 'Rate Categories' },
+  { value: '340+', label: 'API Endpoints' },
+  { value: '60', label: 'Operational Modules' },
+  { value: '16', label: 'Rate Categories' },
   { value: '4', label: 'Service Tiers' },
-  { value: '2', label: 'Messaging Platforms (more coming soon)' },
+  { value: '3', label: 'Messaging Channels' },
 ]
 
 const problemScenarios = [
@@ -222,7 +227,7 @@ const aiDemoItinerary = [
 ]
 
 const pricingPills = [
-  { icon: DollarSign, label: '15 Rate Categories' },
+  { icon: DollarSign, label: '16 Rate Categories' },
   { icon: Star, label: '4 Tiers (Budget → Luxury)' },
   { icon: Globe, label: 'Dual Passport Pricing' },
   { icon: Truck, label: 'Auto Vehicle Selection' },
@@ -323,19 +328,19 @@ const capabilityClusters = [
     iconBg: 'bg-amber-100 text-amber-700',
     title: 'Rate Management',
     bullets: [
-      '15 rate categories from transport to tipping',
-      'Seasonal pricing with automatic date selection',
+      '16 rate categories from transport to tipping',
+      'Unlimited dated rate periods per hotel and cruise — as many as the contract has',
       'EU/non-EU dual passport rates on every service',
       'Rate-coverage checks flag gaps before customers hit them',
     ],
-    badge: '15 rate tables',
+    badge: '16 rate tables',
   },
   {
     icon: Handshake,
     iconBg: 'bg-violet-100 text-violet-700',
     title: 'B2B & Quoting',
     bullets: [
-      'Partner profiles with 4-tier pax-based pricing (1–40 pax)',
+      'Partner profiles with pax-band pricing across the whole quote grid',
       'One-click B2B & B2C quotes from any itinerary',
       'Versioned quotes — snapshot, compare, and revert',
       'Bulk quote operations across your pipeline',
@@ -351,8 +356,24 @@ const capabilityClusters = [
       'Promote briefs straight into itineraries & threads',
       'Passenger manifests for every departure',
       'Supplier confirmations and voucher delivery',
+      'Switch it off if you do not work from briefs — the rest of the platform does not depend on it',
     ],
-    badge: 'Ops control center',
+    // Marked optional at the operator's request: the module is complete and
+    // works, but it is not part of every operator's workflow and can be hidden
+    // from the navigation entirely.
+    badge: 'Optional module',
+  },
+  {
+    icon: UserRound,
+    iconBg: 'bg-sky-100 text-sky-700',
+    title: 'Traveller Portal',
+    bullets: [
+      'Every traveller gets a private link — no account, no password',
+      'They fill their own details, attach their passport, and ask questions',
+      'Passport scans stored privately and deleted automatically after the trip',
+      'Messages reach your inbox beside WhatsApp and email',
+    ],
+    badge: 'Your customers see this',
   },
   {
     icon: BarChart3,
@@ -362,7 +383,7 @@ const capabilityClusters = [
       'Per-trip P&L visible before departure',
       'AR aging reports (30/60/90 days)',
       'Auto-calculated commissions per booking',
-      'QuickBooks & Xero sync for invoices and payments',
+      'QuickBooks and Xero sync for invoices and payments (in development)',
     ],
     badge: 'Accounting-ready',
   },
@@ -371,7 +392,7 @@ const capabilityClusters = [
     iconBg: 'bg-cyan-100 text-cyan-700',
     title: 'Communications Hub',
     bullets: [
-      'Unified WhatsApp + Gmail inbox',
+      'Unified inbox: WhatsApp, Gmail and traveller portal messages in one place',
       'Complete client timeline (messages, quotes, invoices)',
       'Follow-up reminders and notification system',
       'Scheduled message templates',
@@ -437,7 +458,7 @@ const integrationBadges = [
   { icon: MessageSquare, label: 'WhatsApp Business API' },
   { icon: Mail, label: 'Gmail OAuth' },
   { icon: Sparkles, label: 'Claude AI (Anthropic)' },
-  { icon: DollarSign, label: 'QuickBooks & Xero Sync' },
+  { icon: DollarSign, label: 'QuickBooks & Xero Sync (beta)' },
   { icon: Globe, label: 'Multi-Currency' },
   { icon: Shield, label: 'Role-Based Access' },
   { icon: Clock, label: 'Full Audit Logging' },
@@ -811,7 +832,7 @@ export default function AutouraHomepage() {
           <AnimatedSection>
             <div className="text-center mb-12 sm:mb-16">
               <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold text-stone-900 mb-4 sm:mb-6">
-                53 Modules. <span className="text-[#3B5E2E]">One Platform.</span>
+                60 Modules. <span className="text-[#3B5E2E]">One Platform.</span>
               </h2>
               <p className="text-stone-600 text-base sm:text-lg max-w-2xl mx-auto">
                 Every tool a tour operator needs — from the first WhatsApp message to the final commission payment.
