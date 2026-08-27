@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
+import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -37,6 +38,7 @@ interface HotelStaffRate {
   destination: string | null
   /** null = not priced yet. Never 0 to mean unknown — see 20260821_staff_rates_unpriced.sql. */
   rate_eur: number | null
+  rate_currency?: string | null
   description: string | null
   notes: string | null
   is_active: boolean
@@ -201,6 +203,7 @@ export default function HotelServicesPage() {
     hotel_category: 'all' as 'budget' | 'standard' | 'deluxe' | 'luxury' | 'all',
     destination: '' as string,
     rate_eur: '' as number | '',
+    rate_currency: '',
     description: '',
     notes: '',
     supplier_id: '',
@@ -261,6 +264,7 @@ export default function HotelServicesPage() {
       hotel_category: 'all',
       destination: '',
       rate_eur: '' as number | '',
+      rate_currency: '',
       description: '',
       notes: '',
       supplier_id: '',
@@ -279,6 +283,7 @@ export default function HotelServicesPage() {
       // An unpriced row must open with an empty box. Showing 0 invites the
       // operator to save it back as 0, which is how these rows persist.
       rate_eur: rate.rate_eur ?? '',
+      rate_currency: rate.rate_currency || '',
       description: rate.description || '',
       notes: rate.notes || '',
       supplier_id: rate.supplier_id || '',
@@ -297,12 +302,14 @@ export default function HotelServicesPage() {
       showToast('error', invalid)
       return
     }
+    const { rate_currency: pickedCurrency, ...restFormData } = formData
     const submitData = {
-      ...formData,
+      ...restFormData,
       service_code: formData.service_code || generateCode(),
       // Empty means NOT PRICED. Sending 0 would store a rate that can never
       // charge and reads as a price on screen — see 20260821_staff_rates_unpriced.sql.
       rate_eur: formData.rate_eur === '' ? null : Number(formData.rate_eur),
+      ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency),
     }
 
     try {
@@ -581,7 +588,12 @@ export default function HotelServicesPage() {
                         // is how two rate rows sat inert for months.
                         <span className="text-gray-400 font-normal italic">{tCommon('notPriced')}</span>
                       ) : (
-                        formatRate(rate.rate_eur)
+                        <>
+                          {formatRate(rate.rate_eur)}
+                          {rate.rate_currency && (
+                            <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>
+                          )}
+                        </>
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-600 max-w-[250px] truncate">
@@ -723,6 +735,11 @@ export default function HotelServicesPage() {
                   title={t('form.rateEur', { currency: rateCurrency })}
                 />
               </div>
+              <RateCurrencyField
+                value={formData.rate_currency}
+                onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-600"
+              />
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.description')}</label>
                 <input

@@ -58,6 +58,7 @@ export async function PUT(
       city: body.city || null,
       base_rate_eur: parseFloat(body.base_rate_eur) || 0,
       base_rate_non_eur: parseFloat(body.base_rate_non_eur) || 0,
+      ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
       // Add-on pricing fields
       pricing_type: body.pricing_type || 'per_person',
       // Volume-discount bands (pricing_type='tiered'); invalid payloads read as no tiers

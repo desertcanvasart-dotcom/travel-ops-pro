@@ -1,4 +1,5 @@
 import { SLEEPING_TRAIN_CABIN_VALUES } from '@/lib/rates/sleeping-train-cabins'
+import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 /**
  * Bulk Rate Import/Export Service
  * Provides CSV import/export for all rate tables with validation and upsert.
@@ -75,6 +76,14 @@ function col(name: string, label: string, type: ColumnDef['type'], required: boo
 // configured spelling on import, so a stray "Day_Tour" becomes "day_tour".
 function colEnum(name: string, label: string, allowedValues: readonly string[], required: boolean): ColumnDef {
   return { name, label, type: 'text', required, allowedValues }
+}
+
+// The currency a row's prices are entered in. Blank = the organisation
+// default (organizations.rate_currency) — which is what every sheet meant
+// before the per-rate-currency work, so old files import unchanged. See
+// docs/plans/per-rate-currency.md and migrations/20260827_rate_currency.sql.
+function rateCurrency(): ColumnDef {
+  return { name: 'rate_currency', label: 'Currency', type: 'text', required: false, allowedValues: RATE_CURRENCIES }
 }
 
 // Canonical transportation service_type taxonomy (locked-in 2026-06-23).
@@ -170,6 +179,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('bus_capacity_min', 'Bus Cap Min', 'number', false),
       col('bus_capacity_max', 'Bus Cap Max', 'number', false),
       season(), rateValidFrom(), rateValidTo(),
+      rateCurrency(),
       supplierId(), notes(), isActive(), createdAt(), updatedAt(),
     ],
   },
@@ -187,6 +197,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('base_rate_eur', 'Rate (EU passport)', 'number', true),
       col('base_rate_non_eur', 'Rate (non-EU passport)', 'number', true),
       season(), rateValidFrom(), rateValidTo(),
+      rateCurrency(),
       supplierId(), notes(), isActive(), createdAt(), updatedAt(),
     ],
   },
@@ -211,6 +222,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       season(), rateValidFrom(), rateValidTo(),
       supplierId(),
       col('supplier_name', 'Supplier Name', 'text', false),
+      rateCurrency(),
       notes(), isActive(),
       col('is_preferred', 'Preferred', 'boolean', false),
       createdAt(), updatedAt(),
@@ -235,6 +247,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('is_addon', 'Is Add-on', 'boolean', false),
       col('addon_note', 'Add-on Note', 'text', false),
       season(), rateValidFrom(), rateValidTo(),
+      rateCurrency(),
       supplierId(), notes(), isActive(), createdAt(), updatedAt(),
     ],
   },
@@ -261,6 +274,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       season(), rateValidFrom(), rateValidTo(),
       supplierId(),
       col('supplier_name', 'Supplier Name', 'text', false),
+      rateCurrency(),
       notes(), isActive(), createdAt(), updatedAt(),
     ],
   },
@@ -285,6 +299,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       season(), rateValidFrom(), rateValidTo(),
       supplierId(),
       col('supplier_name', 'Supplier Name', 'text', false),
+      rateCurrency(),
       notes(), isActive(), createdAt(), updatedAt(),
     ],
   },
@@ -300,6 +315,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('rate_unit', 'Rate Unit', 'text', true),
       col('rate_eur', 'Rate (EU passport)', 'number', true),
       col('description', 'Description', 'text', false),
+      rateCurrency(),
       notes(), isActive(),
     ],
   },
@@ -315,6 +331,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('direction', 'Direction', 'text', true),
       col('rate_eur', 'Rate (EU passport)', 'number', true),
       col('description', 'Description', 'text', false),
+      rateCurrency(),
       notes(), isActive(),
     ],
   },
@@ -329,6 +346,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('hotel_category', 'Hotel Category', 'text', true),
       col('rate_eur', 'Rate (EU passport)', 'number', true),
       col('description', 'Description', 'text', false),
+      rateCurrency(),
       notes(), isActive(),
     ],
   },
@@ -378,6 +396,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       rateValidFrom(), rateValidTo(),
       supplierId(),
       col('description', 'Description', 'text', false),
+      rateCurrency(),
       notes(), isActive(), createdAt(), updatedAt(),
     ],
   },
@@ -399,6 +418,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('operator_name', 'Operator', 'text', false),
       supplierId(),
       col('description', 'Description', 'text', false),
+      rateCurrency(),
       notes(), isActive(), createdAt(), updatedAt(),
     ],
   },
@@ -412,6 +432,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('cost_type', 'Cost Type', 'text', true),
       col('cost_per_person_per_day', 'Cost Per Person/Day', 'number', true),
       col('description', 'Description', 'text', false),
+      rateCurrency(),
       isActive(), createdAt(), updatedAt(),
     ],
   },

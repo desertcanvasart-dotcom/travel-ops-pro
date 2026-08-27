@@ -42,6 +42,7 @@ export async function PUT(
     const updateData: Record<string, any> = {}
 
     if (body.service_code !== undefined) updateData.service_code = body.service_code
+    if (body.rate_currency !== undefined) updateData.rate_currency = body.rate_currency || null
     if (body.origin_city !== undefined) updateData.origin_city = body.origin_city || null
     if (body.destination_city !== undefined) updateData.destination_city = body.destination_city || null
     if (body.cabin_type !== undefined) {

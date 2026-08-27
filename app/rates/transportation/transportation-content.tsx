@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
+import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
 import {
   Search,
@@ -44,6 +45,7 @@ interface TransportationRate {
   area?: string | null
   route_name?: string | null
   includes?: string | null
+  rate_currency?: string | null
   // Tiered vehicle rates
   sedan_rate_eur: number | null
   sedan_rate_non_eur: number | null
@@ -108,6 +110,7 @@ interface FormData {
   destination_city: string
   includes: string
   season: string
+  rate_currency: string
   rate_valid_from: string
   rate_valid_to: string
   supplier_id: string
@@ -172,6 +175,7 @@ const initialFormData: FormData = {
   destination_city: '',
   includes: '',
   season: '',
+  rate_currency: '',
   rate_valid_from: new Date().toISOString().split('T')[0],
   rate_valid_to: '2099-12-31',
   supplier_id: '',
@@ -435,6 +439,7 @@ export default function TransportationContent() {
       destination_city: rate.destination_city || '',
       includes: rate.includes || '',
       season: rate.season || '',
+      rate_currency: rate.rate_currency || '',
       rate_valid_from: rate.rate_valid_from,
       rate_valid_to: rate.rate_valid_to,
       supplier_id: rate.supplier_id || '',
@@ -530,6 +535,7 @@ export default function TransportationContent() {
         destination_city: formData.destination_city || null,
         includes: formData.includes || null,
         season: formData.season || null,
+        ...rateCurrencyPatch(formData.rate_currency, editingRate?.rate_currency),
         rate_valid_from: formData.rate_valid_from,
         rate_valid_to: formData.rate_valid_to,
         supplier_id: formData.supplier_id || null,
@@ -1661,6 +1667,11 @@ export default function TransportationContent() {
                       <option value="peak">Peak</option>
                     </select>
                   </div>
+                  <RateCurrencyField
+                    value={formData.rate_currency}
+                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                  />
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5">Valid From</label>
                     <input

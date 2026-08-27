@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
+import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
@@ -81,6 +82,7 @@ interface GuideRate {
   tour_duration: string
   base_rate_eur: number
   base_rate_non_eur: number
+  rate_currency?: string | null
   season?: string
   rate_valid_from?: string
   rate_valid_to?: string
@@ -165,6 +167,7 @@ export default function GuideRatesContent() {
     tour_duration: 'full_day',
     base_rate_eur: 0,
     base_rate_non_eur: 0,
+    rate_currency: '',
     season: '',
     rate_valid_from: today,
     rate_valid_to: nextYear,
@@ -261,6 +264,7 @@ export default function GuideRatesContent() {
       tour_duration: 'full_day',
       base_rate_eur: 0,
       base_rate_non_eur: 0,
+      rate_currency: '',
       season: '',
       rate_valid_from: today,
       rate_valid_to: nextYear,
@@ -281,6 +285,7 @@ export default function GuideRatesContent() {
       tour_duration: rate.tour_duration || 'full_day',
       base_rate_eur: rate.base_rate_eur || 0,
       base_rate_non_eur: rate.base_rate_non_eur || 0,
+      rate_currency: rate.rate_currency || '',
       season: rate.season || '',
       rate_valid_from: rate.rate_valid_from || today,
       rate_valid_to: rate.rate_valid_to || nextYear,
@@ -309,10 +314,11 @@ export default function GuideRatesContent() {
 
       const method = editingRate ? 'PUT' : 'POST'
 
+      const { rate_currency: pickedCurrency, ...restFormData } = formData
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({ ...restFormData, ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency) })
       })
 
       const data = await response.json()
@@ -799,7 +805,7 @@ export default function GuideRatesContent() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm font-bold text-green-600">{formatRate(rate.base_rate_eur)}</span>
+                      <span className="text-sm font-bold text-green-600">{formatRate(rate.base_rate_eur)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm text-gray-600">{formatRate(rate.base_rate_non_eur)}</span>
@@ -897,7 +903,7 @@ export default function GuideRatesContent() {
                   )}
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="text-sm font-bold text-green-600">{formatRate(rate.base_rate_eur)}</span>
+                  <span className="text-sm font-bold text-green-600">{formatRate(rate.base_rate_eur)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>
@@ -1142,6 +1148,11 @@ export default function GuideRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     />
                   </div>
+                  <RateCurrencyField
+                    value={formData.rate_currency}
+                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  />
                 </div>
               </div>
 

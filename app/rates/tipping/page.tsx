@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
+import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
@@ -34,6 +35,7 @@ interface TippingRate {
   context: string | null
   rate_unit: string
   rate_eur: number
+  rate_currency?: string | null
   description: string | null
   notes: string | null
   is_active: boolean
@@ -195,6 +197,7 @@ export default function TippingPage() {
     context: 'day_tour',
     rate_unit: 'per_day',
     rate_eur: 0,
+    rate_currency: '',
     description: '',
     notes: '',
     is_active: true
@@ -249,6 +252,7 @@ export default function TippingPage() {
       context: 'day_tour', 
       rate_unit: 'per_day', 
       rate_eur: 0, 
+      rate_currency: '',
       description: '', 
       notes: '', 
       is_active: true 
@@ -264,6 +268,7 @@ export default function TippingPage() {
       context: rate.context || '',
       rate_unit: rate.rate_unit,
       rate_eur: rate.rate_eur,
+      rate_currency: rate.rate_currency || '',
       description: rate.description || '',
       notes: rate.notes || '',
       is_active: rate.is_active
@@ -281,7 +286,12 @@ export default function TippingPage() {
       showToast('error', invalid)
       return
     }
-    const submitData = { ...formData, service_code: formData.service_code || generateCode() }
+    const { rate_currency: pickedCurrency, ...restFormData } = formData
+    const submitData = {
+      ...restFormData,
+      service_code: formData.service_code || generateCode(),
+      ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency),
+    }
 
     try {
       const url = editingRate ? `/api/rates/tipping/${editingRate.id}` : '/api/rates/tipping'
@@ -520,6 +530,9 @@ export default function TippingPage() {
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
                       {formatRate(rate.rate_eur)}
+                      {rate.rate_currency && (
+                        <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-600 max-w-[200px] truncate">
                       {rate.description || '-'}
@@ -648,6 +661,11 @@ export default function TippingPage() {
                   />
                 </div>
               </div>
+              <RateCurrencyField
+                value={formData.rate_currency}
+                onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
+              />
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.description')}</label>
                 <input

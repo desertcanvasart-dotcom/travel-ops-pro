@@ -28,6 +28,8 @@ const EMPTY_MEANS_NULL = [
   'destination',
   'rate_valid_from',
   'rate_valid_to',
+  // '' would violate the rate_currency CHECK; blank means "org default" = NULL
+  'rate_currency',
   'valid_from',
   'valid_to',
 ] as const

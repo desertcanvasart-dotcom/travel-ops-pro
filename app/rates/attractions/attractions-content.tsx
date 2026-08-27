@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
+import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -35,6 +36,7 @@ interface Attraction {
   eur_rate: number
   non_eur_rate: number
   egyptian_rate?: number
+  rate_currency?: string | null
   student_discount_percentage?: number
   child_discount_percent?: number
   season?: string
@@ -244,6 +246,7 @@ export default function AttractionsContent() {
     eur_rate: 0,
     non_eur_rate: 0,
     egyptian_rate: 0,
+    rate_currency: '',
     student_discount_percentage: 0,
     child_discount_percent: 0,
     season: 'all_year',
@@ -391,6 +394,7 @@ export default function AttractionsContent() {
       eur_rate: 0,
       non_eur_rate: 0,
       egyptian_rate: 0,
+      rate_currency: '',
       student_discount_percentage: 0,
       child_discount_percent: 0,
       season: 'all_year',
@@ -417,6 +421,7 @@ export default function AttractionsContent() {
       eur_rate: attraction.eur_rate,
       non_eur_rate: attraction.non_eur_rate,
       egyptian_rate: attraction.egyptian_rate || 0,
+      rate_currency: attraction.rate_currency || '',
       student_discount_percentage: attraction.student_discount_percentage || 0,
       child_discount_percent: attraction.child_discount_percent || 0,
       season: attraction.season || 'all_year',
@@ -452,10 +457,12 @@ export default function AttractionsContent() {
       const method = editingAttraction ? 'PUT' : 'POST'
       
       // Clean up empty supplier_id and include language for version-aware saving
+      const { rate_currency: pickedCurrency, ...restFormData } = formData
       const submitData = {
-        ...formData,
+        ...restFormData,
         supplier_id: formData.supplier_id || null,
-        language: activeLanguage
+        language: activeLanguage,
+        ...rateCurrencyPatch(pickedCurrency, editingAttraction?.rate_currency),
       }
       console.log('📤 Saving attraction: lang=' + activeLanguage + ' method=' + method + ' name=' + submitData.attraction_name)
       
@@ -832,6 +839,7 @@ export default function AttractionsContent() {
                       <span className="text-sm font-bold text-green-600">
                       {attraction.fee_type === 'free' ? 'FREE' : formatRate(attraction.eur_rate || 0)}
                       </span>
+                      {attraction.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold">{attraction.rate_currency}</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm font-semibold text-primary-600">
@@ -1109,6 +1117,12 @@ export default function AttractionsContent() {
                       placeholder="0.00"
                     />
                   </div>
+
+                  <RateCurrencyField
+                    value={formData.rate_currency}
+                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                  />
 
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">

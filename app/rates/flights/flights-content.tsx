@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
+import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
@@ -44,6 +45,7 @@ interface FlightRate {
   duration_minutes: number | null
   frequency: string | null
   season: string | null
+  rate_currency?: string | null
   rate_valid_from: string
   rate_valid_to: string
   supplier_id: string | null
@@ -79,6 +81,7 @@ interface FormData {
   duration_minutes: number
   frequency: string
   season: string
+  rate_currency: string
   rate_valid_from: string
   rate_valid_to: string
   supplier_id: string
@@ -103,6 +106,7 @@ const initialFormData: FormData = {
   duration_minutes: 0,
   frequency: 'daily',
   season: '',
+  rate_currency: '',
   rate_valid_from: new Date().toISOString().split('T')[0],
   rate_valid_to: '2099-12-31',
   supplier_id: '',
@@ -340,6 +344,7 @@ export default function FlightsContent() {
       duration_minutes: rate.duration_minutes || 0,
       frequency: rate.frequency || 'daily',
       season: rate.season || '',
+      rate_currency: rate.rate_currency || '',
       rate_valid_from: rate.rate_valid_from,
       rate_valid_to: rate.rate_valid_to,
       supplier_id: rate.supplier_id || '',
@@ -399,8 +404,10 @@ export default function FlightsContent() {
         ? `/api/rates/flights/${editingRate.id}`
         : '/api/rates/flights'
       
+      const { rate_currency: pickedCurrency, ...restFormData } = formData
       const submitData = {
-        ...formData,
+        ...restFormData,
+        ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency),
         supplier_id: formData.supplier_id || null,
         flight_number: formData.flight_number || null,
         departure_time: formData.departure_time || null,
@@ -754,7 +761,7 @@ export default function FlightsContent() {
                     </div>
                   </td>
                   <td className="px-4 py-2 text-right">
-                    <span className="text-sm font-medium text-gray-900">{formatRate(rate.base_rate_eur)}</span>
+                    <span className="text-sm font-medium text-gray-900">{formatRate(rate.base_rate_eur)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
                   </td>
                   <td className="px-4 py-2 text-center">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -1182,6 +1189,12 @@ export default function FlightsContent() {
                       />
                     </div>
                   </div>
+
+                  <RateCurrencyField
+                    value={formData.rate_currency}
+                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                  />
 
                   <div>
                     <label className="block text-sm font-medium text-gray-600 mb-1.5 flex items-center gap-1">

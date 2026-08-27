@@ -132,6 +132,7 @@ export async function PUT(
       if (eur_rate !== undefined) updateData.eur_rate = eur_rate
       if (non_eur_rate !== undefined) updateData.non_eur_rate = non_eur_rate
       if (egyptian_rate !== undefined) updateData.egyptian_rate = egyptian_rate
+      if (body.rate_currency !== undefined) updateData.rate_currency = body.rate_currency || null
       if (student_discount_percentage !== undefined) updateData.student_discount_percentage = student_discount_percentage
       if (child_discount_percent !== undefined) updateData.child_discount_percent = child_discount_percent
       if (season !== undefined) updateData.season = season
@@ -202,6 +203,7 @@ export async function PUT(
     if (eur_rate !== undefined) updateData.eur_rate = eur_rate
     if (non_eur_rate !== undefined) updateData.non_eur_rate = non_eur_rate
     if (egyptian_rate !== undefined) updateData.egyptian_rate = egyptian_rate
+      if (body.rate_currency !== undefined) updateData.rate_currency = body.rate_currency || null
     if (student_discount_percentage !== undefined) updateData.student_discount_percentage = student_discount_percentage
     if (child_discount_percent !== undefined) updateData.child_discount_percent = child_discount_percent
     if (season !== undefined) updateData.season = season

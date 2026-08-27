@@ -3919,7 +3919,10 @@
       "success": "成功",
       "rateDeleted": "料金が削除されました。",
       "failedToDelete": "料金の削除に失敗しました。もう一度お試しください。",
-      "noDataReturned": "データが返されませんでした"
+      "noDataReturned": "データが返されませんでした",
+      "rateCurrency": "レート通貨",
+      "rateCurrencyDefault": "組織の既定通貨",
+      "rateCurrencyHint": "サプライヤー契約書に記載されている通貨です。契約書に別段の記載がない限り既定のままにしてください。価格計算は自動的に換算されます。"
     },
     "hub": {
       "title": "料金管理",

@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
       per_person_rate: body.per_person_rate !== false,
       minimum_pax: body.minimum_pax ? parseInt(body.minimum_pax) : null,
       notes: body.notes || null,
+      ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
       is_active: body.is_active !== false,
       is_preferred: body.is_preferred === true
     }

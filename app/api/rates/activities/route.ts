@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
       supplier_id: supplierCheck.supplier_id,
       supplier_name: supplierCheck.supplier_name,
       notes: body.notes || null,
+      ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
       is_active: body.is_active !== false
     }
 
