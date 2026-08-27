@@ -50,10 +50,16 @@ export async function GET(request: NextRequest) {
 
     const headers = getExportHeaders(config)
 
-    // Fetch all rows from the table
+    // select('*'), NOT select(headers.join(',')): naming the columns makes the
+    // export FAIL OUTRIGHT whenever a config gains a column before its
+    // migration reaches a given database — which is exactly the deploy-safe
+    // in-either-order contract every rate_currency change shipped under, and
+    // exactly how the hotels/cruises Currency column broke this export on the
+    // unmigrated CI project. A column the table does not have yet simply
+    // exports blank; the headers keep the sheet's full shape.
     const { data, error } = await supabase
       .from(config.tableName)
-      .select(headers.join(','))
+      .select('*')
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -68,7 +74,10 @@ export async function GET(request: NextRequest) {
     // returns an empty string for zero rows — no headers either — so exporting
     // an empty rate table handed back a completely blank file, at exactly the
     // moment somebody most needs to see the column names.
-    const csv = Papa.unparse({ fields: headers, data: data || [] })
+    const rows = (data || []).map((row: Record<string, unknown>) =>
+      headers.map(h => row[h] ?? '')
+    )
+    const csv = Papa.unparse({ fields: headers, data: rows })
 
     // Return CSV as a downloadable file
     return new NextResponse(csv, {
