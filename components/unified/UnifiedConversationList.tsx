@@ -492,8 +492,13 @@ export function UnifiedConversationList({
           </div>
         )}
 
-        {/* Channel Filter Tabs */}
-        <div className="flex gap-1 mb-3 p-1 bg-gray-100/80 rounded-xl">
+        {/* Channel Filter Tabs — 2×2, deliberately not a single row.
+            The rail is a fixed w-96, which leaves ~83px per tab on one line;
+            "WhatsApp" plus its icon and count needs ~130px. As flex items with
+            the default min-width:auto these refused to shrink, so the row
+            overflowed the rail and clipped Portal off the right edge. Two rows
+            fit every label at full width instead of hiding or truncating one. */}
+        <div className="grid grid-cols-2 gap-1 mb-3 p-1 bg-gray-100/80 rounded-xl">
           {[
             { key: 'all', label: t('all'), count: conversations.length, icon: null, color: 'gray' },
             { key: 'whatsapp', label: t('whatsapp'), count: whatsappCount, icon: MessageSquare, color: 'emerald' },
@@ -507,14 +512,14 @@ export function UnifiedConversationList({
                 type="button"
                 key={tab.key}
                 onClick={() => setFilters(f => ({ ...f, channel: tab.key as any }))}
-                className={`flex-1 px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-150 flex items-center justify-center gap-1.5 ${
+                className={`min-w-0 px-2.5 py-2 text-xs font-semibold rounded-lg transition-all duration-150 flex items-center justify-center gap-1.5 ${
                   isActive
                     ? 'bg-white text-gray-900 shadow-sm'
                     : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
                 }`}
               >
                 {IconComp && (
-                  <IconComp className={`w-3.5 h-3.5 ${
+                  <IconComp className={`w-3.5 h-3.5 shrink-0 ${
                     isActive
                       ? tab.color === 'emerald' ? 'text-emerald-500'
                         : tab.color === 'olive' ? 'text-[#647C47]'
@@ -522,8 +527,10 @@ export function UnifiedConversationList({
                       : ''
                   }`} />
                 )}
-                <span>{tab.label}</span>
-                <span className={`ml-0.5 px-1.5 py-0.5 text-[10px] rounded-full ${
+                {/* A longer label in another locale degrades to an ellipsis
+                    rather than pushing the count out of the rail. */}
+                <span className="truncate">{tab.label}</span>
+                <span className={`ml-0.5 shrink-0 px-1.5 py-0.5 text-[10px] rounded-full ${
                   isActive
                     ? 'bg-gray-100 text-gray-600'
                     : 'text-gray-400'
