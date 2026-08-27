@@ -10,6 +10,8 @@
 // to the tip roles that should be applied.
 // ============================================
 
+import type { RateNormalizer } from '@/lib/rates/rate-currency'
+
 // ---- Types ----
 
 // 'hotel_assistant' was 'hotel_staff' until the vocabulary was unified: the
@@ -79,17 +81,23 @@ const TIPPING_TIER_MULTIPLIERS: Record<string, number> = {
  */
 export async function getDailyTippingRate(
   supabase: any,
-  tier: string = 'standard'
+  tier: string = 'standard',
+  /** Converts rows entered in another currency into the run currency —
+   *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
+  normalizer?: RateNormalizer
 ): Promise<number> {
-  const { data: rates, error } = await supabase
+  const { data, error } = await supabase
     .from('tipping_rates')
-    .select('rate_eur, rate_unit')
+    // select('*') so this deploys safely whether or not the rate_currency
+    // migration has been applied yet (an explicitly named missing column errors).
+    .select('*')
     .eq('is_active', true)
 
   if (error) {
     console.warn('[Tipping] Failed to fetch tipping_rates:', error.message)
     return 0
   }
+  const rates = normalizer ? await normalizer.normalize('tipping_rates', data) : data
 
   const baseDailyTips = (rates || []).reduce(
     (sum: number, t: any) => t.rate_unit === 'per_day' ? sum + (parseFloat(t.rate_eur) || 0) : sum,
@@ -117,17 +125,21 @@ export async function getDailyTippingRate(
  */
 export async function getItemizedTippingRates(
   supabase: any,
-  tier: string = 'standard'
+  tier: string = 'standard',
+  /** Converts rows entered in another currency into the run currency —
+   *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
+  normalizer?: RateNormalizer
 ): Promise<ItemizedTippingRates> {
-  const { data: rates, error } = await supabase
+  const { data, error } = await supabase
     .from('tipping_rates')
-    .select('role_type, context, rate_eur, rate_unit, service_code')
+    .select('*')
     .eq('is_active', true)
 
   if (error) {
     console.warn('[Tipping] Failed to fetch tipping_rates:', error.message)
     return buildEmptyRates()
   }
+  const rates = normalizer ? await normalizer.normalize('tipping_rates', data) : data
 
   const multiplier = TIPPING_TIER_MULTIPLIERS[tier] || 1.0
 
