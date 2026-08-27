@@ -747,6 +747,55 @@ export function UnifiedMessageThread({
   const displayName = conversation.client_name || conversation.contact_info?.split('@')[0] || 'Unknown'
   const initials = displayName.split(/[\s@.]/).filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase() || '?'
 
+  // ============================================
+  // "Create client" — carry what the conversation already knows
+  // ============================================
+  // This link used to pass a single UNENCODED param and the form on the other
+  // end read none of them, so it always opened blank: every detail sitting in
+  // the thread had to be retyped from the message next to it. A '+' in a
+  // WhatsApp number also silently became a space on the way.
+
+  /** The human name, when we actually have one FOR THIS ADDRESS.
+   *  An inbound email's from_address is a full From header — "Zehra SD
+   *  <zehra@example.com>" — so the real name is in there even though the
+   *  conversation is titled with the address's local part.
+   *
+   *  The address in that header has to match the conversation's contact before
+   *  the name is used. A thread often carries messages from other people —
+   *  a forwarded mail quotes whoever forwarded it — and taking the newest
+   *  inbound sender blindly pairs one person's name with another's address,
+   *  which is how you end up filing a customer under your own colleague's name.
+   *
+   *  Nothing is prefilled when all we have IS the local part: "nizeh01" in a
+   *  First name box is noise the operator has to clear before typing the
+   *  real thing. */
+  const senderName = (): string => {
+    const contact = (conversation.contact_info || '').trim().toLowerCase()
+    const inbound = messages.filter(m => m.direction === 'inbound')
+    for (let i = inbound.length - 1; i >= 0; i--) {
+      const from = inbound[i]?.from_address || ''
+      const address = (from.match(/<([^>]+)>/)?.[1] || from).trim().toLowerCase()
+      if (address !== contact) continue
+      const display = from.match(/^\s*"?([^"<]+?)"?\s*</)?.[1]?.trim()
+      if (display && !display.includes('@')) return display
+      break
+    }
+    const name = (conversation.client_name || '').trim()
+    const localPart = (conversation.contact_info || '').split('@')[0]
+    if (!name || name === localPart || name === conversation.contact_info) return ''
+    return name
+  }
+
+  const createClientHref = (): string => {
+    const params = new URLSearchParams()
+    params.set(conversation.channel === 'whatsapp' ? 'phone' : 'email', conversation.contact_info || '')
+    const name = senderName()
+    if (name) params.set('name', name)
+    params.set('source', conversation.channel)
+    if (conversation.subject) params.set('subject', conversation.subject)
+    return `/clients/new?${params.toString()}`
+  }
+
   return (
     <div className="flex-1 flex flex-col bg-white">
       {/* Header */}
@@ -868,7 +917,7 @@ export function UnifiedMessageThread({
               </Link>
             ) : (
               <Link
-                href={`/clients/new?${conversation.channel === 'whatsapp' ? 'phone' : 'email'}=${conversation.contact_info}`}
+                href={createClientHref()}
                 className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium border border-gray-200 rounded-md hover:bg-gray-50"
               >
                 <Plus className="w-3.5 h-3.5" />

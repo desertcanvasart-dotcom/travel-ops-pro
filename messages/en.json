@@ -781,7 +781,8 @@
     "dueDate": "Due:",
     "markComplete": "Mark Complete",
     "delete": "Delete",
-    "error": "Error"
+    "error": "Error",
+    "firstContactNote": "First contact"
   },
   "communications": {
     "title": "Communications",
