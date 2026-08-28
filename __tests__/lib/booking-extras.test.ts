@@ -5,6 +5,8 @@ import {
   nextStatus,
   isPriced,
   lineAmount,
+  paymentStandingFor,
+  totalPaidFrom,
   type BookingExtraLine,
   type ExtraStatus,
 } from '@/lib/booking-extras'
@@ -224,6 +226,52 @@ describe('nextStatus', () => {
   it('never lets a confirmed extra be re-confirmed or re-priced', () => {
     expect(nextStatus('confirmed', 'confirm', priced).ok).toBe(false)
     expect(nextStatus('confirmed', 'price', priced).ok).toBe(false)
+  })
+})
+
+describe('paymentStandingFor', () => {
+  // A transcription of record_booking_payment()'s own branch. If these ever
+  // disagree, the status flips every time a payment is recorded.
+  it('is paid once what was received covers the total', () => {
+    expect(paymentStandingFor({ totalPaid: 5000, totalCost: 5000, depositAmount: 1000 }))
+      .toEqual({ payment_status: 'paid', deposit_paid: true })
+  })
+
+  it('is deposit_received on exactly the deposit, and partial above it', () => {
+    expect(paymentStandingFor({ totalPaid: 1000, totalCost: 5000, depositAmount: 1000 }).payment_status)
+      .toBe('deposit_received')
+    expect(paymentStandingFor({ totalPaid: 1500, totalCost: 5000, depositAmount: 1000 }).payment_status)
+      .toBe('partial')
+  })
+
+  it('is pending below the deposit', () => {
+    expect(paymentStandingFor({ totalPaid: 400, totalCost: 5000, depositAmount: 1000 }))
+      .toEqual({ payment_status: 'pending', deposit_paid: false })
+  })
+
+  it('drops a fully-paid booking back to partial when an extra raises the total', () => {
+    expect(paymentStandingFor({ totalPaid: 5000, totalCost: 5340, depositAmount: 1000 }).payment_status)
+      .toBe('partial')
+  })
+})
+
+describe('totalPaidFrom', () => {
+  it('subtracts refunds', () => {
+    expect(totalPaidFrom([
+      { amount: 2000, payment_type: 'payment', currency: 'EUR' },
+      { amount: 500, payment_type: 'refund', currency: 'EUR' },
+    ], 'EUR')).toBe(1500)
+  })
+
+  it('ignores a payment in another currency, as the database does', () => {
+    expect(totalPaidFrom([
+      { amount: 2000, payment_type: 'payment', currency: 'EUR' },
+      { amount: 900000, payment_type: 'payment', currency: 'JPY' },
+    ], 'EUR')).toBe(2000)
+  })
+
+  it('treats a payment with no currency as the booking currency', () => {
+    expect(totalPaidFrom([{ amount: 2000, payment_type: 'payment', currency: null }], 'EUR')).toBe(2000)
   })
 })
 

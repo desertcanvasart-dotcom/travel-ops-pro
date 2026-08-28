@@ -180,6 +180,59 @@ export function applyExtras(input: ApplyExtrasInput): ApplyExtrasResult {
 }
 
 // ============================================
+// Payment status, after the total moves
+// ============================================
+
+export interface PaymentStanding {
+  payment_status: 'pending' | 'deposit_received' | 'partial' | 'paid'
+  deposit_paid: boolean
+}
+
+/**
+ * Where a booking stands once its total has changed.
+ *
+ * This is a transcription of record_booking_payment()'s own branch
+ * (20260624_record_booking_payment_atomic.sql:104-114), and it has to stay one.
+ * Confirming an extra raises what is owed, so a booking that read `paid` can
+ * legitimately fall back to `partial` — and if this function and the RPC ever
+ * disagreed, the status would flip every time a payment was recorded.
+ */
+export function paymentStandingFor(input: {
+  totalPaid: number | null | undefined
+  totalCost: number | null | undefined
+  depositAmount: number | null | undefined
+}): PaymentStanding {
+  const paid = finite(input.totalPaid) ?? 0
+  const total = finite(input.totalCost) ?? 0
+  const deposit = finite(input.depositAmount) ?? 0
+
+  if (paid >= total) return { payment_status: 'paid', deposit_paid: true }
+  if (paid >= deposit) {
+    return {
+      payment_status: paid > deposit ? 'partial' : 'deposit_received',
+      deposit_paid: true,
+    }
+  }
+  return { payment_status: 'pending', deposit_paid: false }
+}
+
+/**
+ * What has actually been received, the way the database counts it: refunds
+ * subtract, and a payment in some other currency is not part of this total.
+ */
+export function totalPaidFrom(
+  payments: Array<{ amount: number | null; payment_type?: string | null; currency?: string | null }>,
+  bookingCurrency: string
+): number {
+  const want = normalise(bookingCurrency)
+  return payments.reduce((sum, p) => {
+    if (normalise(p.currency ?? want) !== want) return sum
+    const amount = finite(p.amount) ?? 0
+    return sum + (p.payment_type === 'refund' ? -amount : amount)
+  }, 0)
+}
+
+// ============================================
 // The state machine
 // ============================================
 

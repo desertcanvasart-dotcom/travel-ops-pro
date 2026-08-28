@@ -50,6 +50,7 @@ import PortalCoordinator from '@/app/components/PortalCoordinator'
 import TravellerDocumentsPanel from '@/app/components/TravellerDocumentsPanel'
 import PortalMessagesPanel from '@/app/components/PortalMessagesPanel'
 import BookingChangeRequests from '@/app/components/BookingChangeRequests'
+import BookingExtrasPanel from '@/app/components/BookingExtrasPanel'
 import InsuranceCard from '@/app/components/InsuranceCard'
 
 type TabType = 'overview' | 'suppliers' | 'payments' | 'passengers' | 'notes'
@@ -423,6 +424,9 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
       {/* Portal: family (one link) or friends (a private link per traveller). */}
       <PortalCoordinator bookingId={resolvedParams.id} />
       <InsuranceCard bookingId={resolvedParams.id} />
+      {/* Extras and upgrades sold after the trip was sold. Only Confirm moves
+          money — see docs/plans/extras-and-upgrades.md. */}
+      <BookingExtrasPanel bookingId={resolvedParams.id} />
       {/* What travellers attached from their portal link. Renders nothing until
           something has been uploaded. */}
       <TravellerDocumentsPanel bookingId={resolvedParams.id} />
