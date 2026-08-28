@@ -24,62 +24,41 @@ export async function GET(request: NextRequest) {
 
     switch (type) {
       case 'accommodation':
-        // ✅ Pull from hotel_contacts table
+        // The RATE table, not hotel_contacts. This used to read the supplier
+        // CONTACT directory and hand back each entry as a rate priced at
+        // base_rate_eur: 0 — so the rates hub counted 13 "hotels" that were
+        // really contact cards, while the hotels rate page (which reads this
+        // table) correctly showed none. Two screens, two answers, and the
+        // fabricated zeros looked like real prices.
         const accommodationQuery = supabase
-          .from('hotel_contacts')
+          .from('accommodation_rates')
           .select('*')
           .eq('is_active', true)
-        
+
         if (city) {
           accommodationQuery.ilike('city', city)
         }
-        
+
         const accommodationResult = await accommodationQuery
-        
-        // Transform hotel data to match rates format
-        data = (accommodationResult.data || []).map(hotel => ({
-          service_code: hotel.id,
-          property_name: hotel.name,
-          property_type: hotel.property_type,
-          star_rating: hotel.star_rating,
-          city: hotel.city,
-          address: hotel.address,
-          supplier_name: hotel.contact_person,
-          notes: hotel.notes,
-          base_rate_eur: 0,
-          base_rate_non_eur: 0
-        }))
+        data = accommodationResult.data || []
         error = accommodationResult.error
         break
 
       case 'meal':
-        // ✅ Pull from restaurant_contacts table
+        // The RATE table, not restaurant_contacts — see the note above. The
+        // 26 "meals" the hub listed were the restaurant contact directory,
+        // every one of them priced at zero.
         const mealQuery = supabase
-          .from('restaurant_contacts')
+          .from('meal_rates')
           .select('*')
           .eq('is_active', true)
-        
+
         if (city) {
           mealQuery.ilike('city', city)
         }
-        
+
         const mealResult = await mealQuery
-        
-        // Transform restaurant data to match rates format
-        data = (mealResult.data || []).map(restaurant => ({
-          service_code: restaurant.id,
-          restaurant_name: restaurant.name,
-          meal_type: restaurant.meal_types?.[0] || 'lunch',
-          cuisine_type: restaurant.cuisine_type,
-          restaurant_type: restaurant.restaurant_type,
-          city: restaurant.city,
-          supplier_name: restaurant.contact_person,
-          notes: restaurant.notes,
-          base_rate_eur: 0,
-          base_rate_non_eur: 0,
-          eur_rate: 0,
-          non_eur_rate: 0
-        }))
+        data = mealResult.data || []
         error = mealResult.error
         break
 
