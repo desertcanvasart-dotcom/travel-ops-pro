@@ -94,34 +94,45 @@ function AcceptInvitationContent() {
     setSubmitting(true)
 
     try {
-      // Create Supabase auth account
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: invitation!.email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-          }
-        }
-      })
-
-      if (authError) {
-        throw new Error(authError.message)
-      }
-
-      if (!authData.user) {
-        throw new Error(t('failedToCreateAccount'))
-      }
-
-      // Mark invitation as accepted
-      await fetch('/api/invitations/accept', {
-        method: 'PUT',
+      // The SERVER creates the account, already confirmed, and binds the
+      // membership in one call. It used to be supabase.auth.signUp() here,
+      // which leaves the account unconfirmed when the project requires email
+      // confirmation: the invitee then needs a second email before they can
+      // ever sign in, and missing it strands the account for good (it exists,
+      // so signup answers "already registered", and login always fails).
+      // The invitation token was emailed to them — that is the verification.
+      const res = await fetch('/api/invitations/accept', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token })
+        body: JSON.stringify({ token, password, fullName })
       })
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok || !result.success) {
+        throw new Error(result.error || t('failedToCreateAccount'))
+      }
+
+      // An already-confirmed account keeps its own password (an invitation
+      // must never reset a live account's credentials), so signing in with
+      // the password just typed would fail — send them to the login page.
+      if (result.mode === 'link') {
+        setSuccess(true)
+        setTimeout(() => router.push('/login'), 2000)
+        return
+      }
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: result.email || invitation!.email,
+        password,
+      })
+      if (signInError) {
+        // The account is real and usable; only this leg failed.
+        setSuccess(true)
+        setTimeout(() => router.push('/login'), 2000)
+        return
+      }
 
       setSuccess(true)
-      
+
       // Redirect to dashboard after 2 seconds
       setTimeout(() => {
         router.push('/dashboard')
