@@ -65,6 +65,24 @@ const CSS = `
 .portal .lcactions button:disabled{opacity:.5}
 .portal .lcactions .lcdanger{color:#c62828;border-color:#ef9a9a}
 .portal .gateform button:disabled{opacity:.5;cursor:default}
+.portal .extras .exlist{list-style:none;margin:0 0 4px;padding:0;display:flex;flex-direction:column;gap:12px}
+.portal .extras .exlist li{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;
+  padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+.portal .extras .exmain{min-width:0}
+.portal .extras .extitle{margin:0;font-size:15px;font-weight:600}
+.portal .extras .exqty{margin-left:6px;font-weight:400;color:var(--soft)}
+.portal .extras .exnote{margin:4px 0 0;font-size:13px;color:var(--soft)}
+.portal .extras .exstatus{margin:6px 0 0;font-size:12px;color:var(--soft)}
+.portal .extras .exside{flex-shrink:0;text-align:right}
+.portal .extras .exprice{margin:0;font-size:15px;font-weight:600;white-space:nowrap}
+.portal .extras .exdiff{display:block;font-size:11px;font-weight:400;color:var(--soft)}
+.portal .extras .exactions{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.portal .extras .exactions button{padding:9px 14px;border:none;border-radius:8px;background:var(--brand);
+  color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.portal .extras .exactions button:disabled{opacity:.5}
+/* Same specificity as the rule above it, or the shared button background wins. */
+.portal .extras .exactions .exdecline{background:none;border:1px solid var(--line);color:var(--soft);font-weight:400}
+.portal .extras .crtoggle{margin-top:14px}
 .portal .gateerr{font-size:13px;color:#c0392b;margin:0}
 .portal .op{font-size:12px;letter-spacing:.08em;color:var(--soft);margin:0 0 8px}
 .portal .optag{font-size:11px;color:var(--soft);margin:-4px 0 8px}

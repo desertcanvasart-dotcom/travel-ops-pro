@@ -39,6 +39,7 @@ import { formatMoney } from '@/lib/currency-totals'
 import { tripDays, type PremiumBand } from '@/lib/insurance'
 import TravellerForm from './TravellerForm'
 import ChangeRequestForm from './ChangeRequestForm'
+import ExtrasSection from './ExtrasSection'
 import LeadCoordinator from './LeadCoordinator'
 import PortalChat from './PortalChat'
 import { customerFacingOrgName } from '@/lib/org-name'
@@ -455,6 +456,13 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
             per-traveller link is one person's and shows no such control. */}
         {!scopedPassengerId && !booking.detailsLocked && <ChangeRequestForm token={token} />}
       </section>
+
+      {/* ---------------- options and upgrades ---------------- */}
+      {/* Offers the office has priced, and a way to ask for something else.
+          Renders nothing until there is one or the other. Nothing here moves
+          money: accepting stops short of confirmed, and a request arrives
+          unpriced — see docs/plans/extras-and-upgrades.md §4. */}
+      <ExtrasSection token={token} />
 
       {/* ---------------- messages ---------------- */}
       {/* Which conversation this is follows the LINK: a family link opens the

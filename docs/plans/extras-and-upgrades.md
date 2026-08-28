@@ -275,13 +275,31 @@ third copy. `/api/profit-loss` reads itineraries, not bookings, so extras are
 invisible to it today — join `booking_extras` by `itinerary_id` and add their
 revenue and `supplier_cost`, or P&L will report the margin as pure profit.
 
-**E3 — the customer can ask, and can accept.** Portal Extras section: what the
-office has offered (with price, Accept / Decline) and a free-text "request
-something" form. Booking-level link requests booking-scope extras; a private
-per-traveller link only ever sees and touches that passenger's own — same
-`passenger_id` branching as the documents work. Behind the verify gate,
-rate-limited, `notifyOrgManagers` on a new request, and a needs-attention reason
-so a request older than a day surfaces on the dashboard.
+**E3 — the customer can ask, and can accept.** DONE. A portal Extras section
+showing what the office has offered, with the price and Accept / Decline, and a
+free-text "ask for something" form. Behind the verify gate, rate-limited,
+managers notified on a request and on an acceptance, and a `extra_request`
+reason on the dashboard's needs-attention list covering both `requested` (needs
+a price) and `accepted` (needs securing).
+
+THE PORTAL NEVER MOVES MONEY, and that is the design rather than a precaution.
+Accepting stops at `accepted`; only the office can reach `confirmed`, which is
+the one status that changes what is owed. And a request arrives UNPRICED by
+construction — the body carries a title and a note and nothing else, the same
+discipline as the insurance route resolving a premium server-side.
+
+Scope follows the link, exactly as the traveller forms and the party-size
+request do: a booking-level link is the lead's and answers for the party, a
+private per-traveller link sees and answers only that person's own — including
+NOT the party's, which are the lead's to accept. The rule is a pure function
+(`lib/portal/extras-scope.ts` `mayAnswerExtra`) with tests, because "which
+traveller may accept this charge?" should not live inside a query builder.
+`portalExtraView` decides what a traveller is sent: the LINE amount, never the
+unit price, never the supplier or what we paid, and null rather than zero for
+something not yet priced.
+
+New requests stop once the booking's details are locked; an offer the office
+has already made can still be answered.
 
 **E4 — pricing from the catalogue.** Superseded and enlarged by §5a; now the
 F-series below, because it serves both cases rather than only the post-purchase
