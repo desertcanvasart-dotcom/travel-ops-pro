@@ -63,3 +63,43 @@ describe('input guards', () => {
     expect(emailsMatch(null, undefined)).toBe(true) // both empty; callers guard first
   })
 })
+
+import { inviteDelivery, inviteDeliveryMessage } from '@/lib/invitation-accept'
+
+// The second half of the same incident: invitations reported as SENT while
+// the app's Gmail connection had lapsed, so nothing ever left. Creating the
+// invitation is still a success — the link works — but the operator must be
+// told the email did not go, and handed the link.
+
+describe('inviteDelivery', () => {
+  it('a real send is reported as sent', () => {
+    expect(inviteDelivery({ success: true })).toEqual({ sent: true })
+    expect(inviteDeliveryMessage({ sent: true })).toBeNull()
+  })
+
+  it('no connected account is its own reason, not a generic failure', () => {
+    const d = inviteDelivery({ success: false, noAccount: true, error: 'Gmail not connected. Please connect your Gmail account in Settings.' })
+    expect(d).toMatchObject({ sent: false, reason: 'not_connected' })
+    expect(inviteDeliveryMessage(d)).toContain('no email account is connected')
+    expect(inviteDeliveryMessage(d)).toContain('Share the link')
+  })
+
+  it('a thrown "not connected" error is classified the same way', () => {
+    const d = inviteDelivery(null, new Error('Gmail not connected. Please connect your Gmail account in Settings.'))
+    expect(d).toMatchObject({ sent: false, reason: 'not_connected' })
+  })
+
+  it('any other failure is reported with its detail, never as success', () => {
+    const d = inviteDelivery({ success: false, error: 'rate limited' })
+    expect(d).toEqual({ sent: false, reason: 'failed', detail: 'rate limited' })
+    expect(inviteDeliveryMessage(d)).toContain('rate limited')
+
+    const thrown = inviteDelivery(null, new Error('socket hang up'))
+    expect(thrown).toMatchObject({ sent: false, reason: 'failed' })
+  })
+
+  it('an absent result is a failure, not an assumed send', () => {
+    expect(inviteDelivery(null).sent).toBe(false)
+    expect(inviteDelivery(undefined).sent).toBe(false)
+  })
+})

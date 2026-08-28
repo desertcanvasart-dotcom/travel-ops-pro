@@ -80,6 +80,8 @@ export default function TeamMembersPage() {
   const [pendingInviteEmails, setPendingInviteEmails] = useState<Set<string>>(new Set())
   const [inviteTarget, setInviteTarget] = useState<TeamMember | null>(null)
   const [inviteRole, setInviteRole] = useState('agent')
+  // Set when the invitation was created but its email could not be sent.
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
   const [invitingNow, setInvitingNow] = useState(false)
   const [inviteError, setInviteError] = useState<string | null>(null)
 
@@ -123,7 +125,14 @@ export default function TeamMembersPage() {
       const body = await res.json()
       if (res.ok && body.success !== false) {
         setPendingInviteEmails(prev => new Set(prev).add(inviteTarget.email!.toLowerCase()))
-        setInviteTarget(null)
+        if (body.emailSent === false) {
+          // Created, but the mail did not go — keep the dialog open and hand
+          // over the link instead of implying an email arrived.
+          setInviteLink(body.inviteUrl || null)
+          setInviteError(body.emailWarning || null)
+        } else {
+          setInviteTarget(null)
+        }
       } else {
         setInviteError(body.error || t('inviteFailed'))
       }
@@ -631,6 +640,22 @@ export default function TeamMembersPage() {
               <option value="viewer">{t('sysRoleViewer')}</option>
             </select>
             {inviteError && <p className="text-sm text-red-600 mb-3">{inviteError}</p>}
+            {inviteLink && (
+              <div className="mb-3 p-2 rounded-lg bg-amber-50 border border-amber-200">
+                <p className="text-xs text-amber-900 mb-1">Send this link to them yourself:</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 px-2 py-1 bg-white border border-amber-200 rounded text-[11px] break-all">
+                    {inviteLink}
+                  </code>
+                  <button
+                    onClick={() => { navigator.clipboard?.writeText(inviteLink).catch(() => {}) }}
+                    className="px-2 py-1 text-xs font-medium text-amber-900 border border-amber-300 rounded hover:bg-amber-100"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setInviteTarget(null)}

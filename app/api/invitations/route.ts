@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { sendEmailInternal } from '@/lib/email-send'
+import { inviteDelivery, inviteDeliveryMessage } from '@/lib/invitation-accept'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -140,17 +141,26 @@ export async function POST(request: NextRequest) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://autoura.net'
     const inviteUrl = `${baseUrl}/invite/accept?token=${token}`
 
+    // The invitation itself is created either way — the link works. But a
+    // failed send must NOT be reported as a sent invitation: that silence is
+    // how a lapsed Gmail connection turned into days of re-inviting the same
+    // person and deleting accounts, with nothing anywhere saying the mail had
+    // never left.
+    let delivery
     try {
-      await sendInvitationEmail(email, role, inviteUrl)
+      const result = await sendInvitationEmail(email, role, inviteUrl)
+      delivery = inviteDelivery(result)
     } catch (emailError) {
       console.error('Failed to send invitation email:', emailError)
-      // Don't fail the request, invitation is still created
+      delivery = inviteDelivery(null, emailError)
     }
 
     return NextResponse.json({
       success: true,
       data: invitation,
-      inviteUrl // Return URL in case email fails
+      inviteUrl, // Always returned: the operator can share it by hand.
+      emailSent: delivery.sent,
+      emailWarning: inviteDeliveryMessage(delivery),
     })
   } catch (error) {
     console.error('Error creating invitation:', error)

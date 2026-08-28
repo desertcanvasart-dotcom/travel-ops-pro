@@ -74,3 +74,49 @@ export function checkPassword(password: unknown): { ok: true } | { ok: false; er
 export function emailsMatch(a: unknown, b: unknown): boolean {
   return String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase()
 }
+
+// ---------------------------------------------------------------------------
+// Invitation DELIVERY — the outcome, never swallowed
+// ---------------------------------------------------------------------------
+// The creation route used to catch a failed send, log it, and answer
+// { success: true }. So when this app's Gmail connection lapsed, every
+// invitation reported as sent and none arrived: the operator re-invited the
+// same person repeatedly, deleted accounts, and had no way to see that the
+// mail had never left. Creating the invitation IS still a success — the link
+// works — but the caller has to be told the email did not go, and be handed
+// the link to pass on by hand.
+
+export type InviteDelivery =
+  | { sent: true }
+  | { sent: false; reason: 'not_connected' | 'failed'; detail: string }
+
+export function inviteDelivery(
+  result: { success?: boolean; noAccount?: boolean; error?: string } | null | undefined,
+  thrown?: unknown
+): InviteDelivery {
+  if (thrown) {
+    const message = thrown instanceof Error ? thrown.message : String(thrown)
+    return {
+      sent: false,
+      reason: /not connected|no account/i.test(message) ? 'not_connected' : 'failed',
+      detail: message,
+    }
+  }
+  if (result?.success) return { sent: true }
+  if (result?.noAccount) {
+    return {
+      sent: false,
+      reason: 'not_connected',
+      detail: result.error || 'No email account is connected, so nothing was sent.',
+    }
+  }
+  return { sent: false, reason: 'failed', detail: result?.error || 'The email could not be sent.' }
+}
+
+/** What the operator should be told, in their own terms. */
+export function inviteDeliveryMessage(delivery: InviteDelivery): string | null {
+  if (delivery.sent) return null
+  return delivery.reason === 'not_connected'
+    ? 'The invitation was created, but no email was sent because no email account is connected (Settings → Email). Share the link below instead.'
+    : `The invitation was created, but the email could not be sent (${delivery.detail}). Share the link below instead.`
+}
