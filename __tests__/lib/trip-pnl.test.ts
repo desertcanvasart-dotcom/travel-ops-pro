@@ -311,3 +311,78 @@ describe('accrued layer keeps its existing behaviour', () => {
     expect(pnl.currency).toBe('USD')
   })
 })
+
+// ============================================
+// Extras and upgrades
+// ============================================
+// They are sold after the trip was priced and never touch the itinerary, so
+// without them the report earns what an extra brings in and knows nothing of
+// what it cost — every extra reading as pure profit.
+
+describe('extras and upgrades', () => {
+  const extra = (over: Record<string, unknown> = {}) => ({
+    title: 'Business class, Cairo–Aswan',
+    quantity: 1,
+    unit_price: 820,
+    currency: 'EUR',
+    supplier_cost: 600,
+    supplier_currency: 'EUR',
+    confirmed_at: '2026-06-20T10:00:00Z',
+    ...over,
+  })
+
+  it('changes nothing on a trip that has none', () => {
+    const withNone = computeTripPnL(FX, inputs()).pnl
+    const withEmpty = computeTripPnL(FX, inputs({ extras: [] })).pnl
+    expect(withEmpty).toEqual(withNone)
+    expect(withNone.extras_revenue).toBe(0)
+  })
+
+  it('counts what the extra cost us, so the margin is not a lie', () => {
+    const base = computeTripPnL(FX, inputs()).pnl
+    const { pnl } = computeTripPnL(FX, inputs({ extras: [extra()] }))
+
+    expect(pnl.extras_supplier_cost).toBe(600)
+    expect(pnl.supplier_cost).toBe(base.supplier_cost + 600)
+    expect(pnl.extras_revenue).toBe(820)
+    // Quoted follows too, or quoted and invoiced diverge by the extras.
+    expect(pnl.quoted_amount).toBe(base.quoted_amount + 820)
+  })
+
+  it('multiplies the price by the quantity', () => {
+    const { pnl } = computeTripPnL(FX, inputs({
+      extras: [extra({ quantity: 2, unit_price: 340, supplier_cost: 250 })],
+    }))
+    expect(pnl.extras_revenue).toBe(680)
+    expect(pnl.extras_supplier_cost).toBe(250) // a cost is per extra, not per unit
+  })
+
+  it('counts an extra with no supplier cost as revenue only, never as zero cost', () => {
+    const { pnl } = computeTripPnL(FX, inputs({ extras: [extra({ supplier_cost: null })] }))
+    expect(pnl.extras_revenue).toBe(820)
+    expect(pnl.extras_supplier_cost).toBe(0)
+  })
+
+  it('converts a foreign extra at the rate on the day it was confirmed', () => {
+    const { pnl } = computeTripPnL(FX, inputs({
+      extras: [extra({
+        unit_price: 5600, currency: 'EGP',
+        supplier_cost: 2800, supplier_currency: 'EGP',
+        confirmed_at: '2026-06-20T10:00:00Z',
+      })],
+    }))
+    // June rate is 56 EGP to the euro, not January's 50.
+    expect(pnl.extras_revenue).toBe(100)
+    expect(pnl.extras_supplier_cost).toBe(50)
+  })
+
+  it('excludes an extra it cannot convert and reports it as a hole', () => {
+    const { pnl } = computeTripPnL(FX, inputs({
+      extras: [extra({ title: 'Desert camp', currency: 'ZAR', supplier_currency: 'ZAR' })],
+    }))
+    expect(pnl.extras_revenue).toBe(0)
+    expect(pnl.extras_supplier_cost).toBe(0)
+    expect(pnl.fx_holes.some(h => h.reference === 'Desert camp')).toBe(true)
+    expect(pnl.fx_complete).toBe(false)
+  })
+})

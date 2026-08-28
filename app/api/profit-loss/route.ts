@@ -29,7 +29,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { loadFxIndex, buildFxMeta, emptyFxSummary, type FxHole } from '@/lib/fx-report'
-import { computeTripPnL, type TripPnL } from '@/lib/trip-pnl'
+import { computeTripPnL, type TripPnL, type PnLExtra } from '@/lib/trip-pnl'
 import { mergeFxSummary } from '@/lib/fx-conversion'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
@@ -202,6 +202,30 @@ export async function GET(request: NextRequest) {
       if (data) expenses.push(...data)
     }
 
+    // Extras and upgrades sold after the trip was priced. They live on the
+    // BOOKING, not the itinerary, so they are reached through it — and only the
+    // confirmed ones, which are the only ones that are money.
+    const extrasByItinerary = new Map<string, PnLExtra[]>()
+    for (const ids of chunk(itineraryIds)) {
+      const { data, error } = await supabaseAdmin
+        .from('booking_extras')
+        .select('title, quantity, unit_price, currency, supplier_cost, supplier_currency, confirmed_at, bookings!inner(itinerary_id, org_id)')
+        .eq('status', 'confirmed')
+        .eq('org_id', orgId)
+        .in('bookings.itinerary_id', ids)
+      // A database without migration 20260828_booking_extras answers with an
+      // error here. The report is still true about everything else, so it
+      // carries on without them rather than 500ing.
+      if (error) console.error('Error fetching booking extras:', error)
+      for (const row of data ?? []) {
+        const itinId = (row.bookings as { itinerary_id?: string } | null)?.itinerary_id
+        if (!itinId) continue
+        const list = extrasByItinerary.get(itinId) ?? []
+        list.push(row as unknown as PnLExtra)
+        extrasByItinerary.set(itinId, list)
+      }
+    }
+
     // Rate history, loaded once for every trip in this response.
     const fxIndex = await loadFxIndex(supabaseAdmin)
 
@@ -223,6 +247,7 @@ export async function GET(request: NextRequest) {
         ),
         expenses: expenses.filter(exp => exp.itinerary_id === itinerary.id),
         commissions: commissions.filter(c => c.itinerary_id === itinerary.id),
+        extras: extrasByItinerary.get(itinerary.id) ?? [],
       })
 
       // Fold this trip's accuracy into the response-level tally.
