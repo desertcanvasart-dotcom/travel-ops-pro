@@ -7847,7 +7847,7 @@
     "noIncluded": "このバリエーションにはまだサービスがありません。",
     "addOption": "オプションを追加",
     "makeOptional": "オプションにする",
-    "makeIncluded": "含める",
+    "makeIncluded": "基本料金に含める",
     "sellsFor": "販売価格",
     "costs": "原価",
     "costPlusMargin": "原価＋マージン",

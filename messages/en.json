@@ -7261,7 +7261,7 @@
     "noIncluded": "This variation has no services yet.",
     "addOption": "Add an option",
     "makeOptional": "Make it an option",
-    "makeIncluded": "Include it",
+    "makeIncluded": "Include in the price",
     "sellsFor": "Sells for",
     "costs": "Costs",
     "costPlusMargin": "cost + margin",
