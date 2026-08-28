@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
@@ -445,7 +446,7 @@ export default function RatesPage() {
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
     link.setAttribute('href', url)
-    link.setAttribute('download', `autoura_${activeTab}_rates_${new Date().toISOString().split('T')[0]}.csv`)
+    link.setAttribute('download', `autoura_${activeTab}_rates_${todayLocal()}.csv`)
     link.style.visibility = 'hidden'
     document.body.appendChild(link)
     link.click()

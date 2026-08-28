@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useState, useRef } from 'react'
 import { Download, Upload, FileText, AlertCircle, CheckCircle, X, Loader2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -65,7 +66,7 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
       a.href = url
       a.download = mode === 'template'
         ? `${tableName}_template.csv`
-        : `${tableName}_export_${new Date().toISOString().split('T')[0]}.csv`
+        : `${tableName}_export_${todayLocal()}.csv`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)

@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
 import { createClient } from '@/app/supabase'
 
@@ -127,7 +128,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
       // Use fallback rates if API fails
       setExchangeRates({
         base: 'USD',
-        date: new Date().toISOString().split('T')[0],
+        date: todayLocal(),
         rates: { USD: 1, EUR: 0.92, GBP: 0.79, EGP: 50.5, JPY: 147 }
       })
     } finally {

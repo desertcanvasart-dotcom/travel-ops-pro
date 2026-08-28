@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
@@ -435,7 +436,7 @@ export default function SuppliersContent() {
     const blob = new Blob([csv], { type: 'text/csv' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `suppliers-${new Date().toISOString().split('T')[0]}.csv`
+    a.download = `suppliers-${todayLocal()}.csv`
     a.click()
   }
 

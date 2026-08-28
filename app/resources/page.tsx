@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
@@ -411,7 +412,7 @@ export default function ResourcesPage() {
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
     link.setAttribute('href', url)
-    link.setAttribute('download', `autoura_${activeTab}_${new Date().toISOString().split('T')[0]}.csv`)
+    link.setAttribute('download', `autoura_${activeTab}_${todayLocal()}.csv`)
     link.style.visibility = 'hidden'
     document.body.appendChild(link)
     link.click()

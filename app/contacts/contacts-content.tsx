@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -310,7 +311,7 @@ export default function ContactsContent() {
     const blob = new Blob([csv], { type: 'text/csv' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `contacts-${new Date().toISOString().split('T')[0]}.csv`
+    a.download = `contacts-${todayLocal()}.csv`
     a.click()
   }
 

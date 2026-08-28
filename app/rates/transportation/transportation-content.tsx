@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { useTranslations } from 'next-intl'
@@ -175,7 +176,7 @@ const initialFormData: FormData = {
   includes: '',
   season: '',
   rate_currency: '',
-  rate_valid_from: new Date().toISOString().split('T')[0],
+  rate_valid_from: todayLocal(),
   rate_valid_to: '2099-12-31',
   supplier_id: '',
   supplier_name: '',

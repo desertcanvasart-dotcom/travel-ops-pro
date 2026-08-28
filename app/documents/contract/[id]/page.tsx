@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useParams } from 'next/navigation'
@@ -65,7 +66,7 @@ export default function ContractPage() {
 
   const [contractData, setContractData] = useState<ContractData>({
     contractNumber: '',
-    contractDate: new Date().toISOString().split('T')[0],
+    contractDate: todayLocal(),
     serviceProvider: 'Travel2Egypt',
     providerWebsite: 'https://travel2egypt.org/',
     providerLocation: 'Cairo, Egypt',

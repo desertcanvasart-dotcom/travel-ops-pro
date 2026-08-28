@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import {
   Users, UserPlus, Search, Filter, Star, TrendingUp, Calendar,
   Phone, Mail, MessageSquare, AlertCircle, CheckCircle, Clock,
@@ -684,7 +685,7 @@ export default function ClientsPage() {
                     type="date"
                     value={filters.dateTo}
                     onChange={(e) => handleFilterChange('dateTo', e.target.value)}
-                    max={new Date().toISOString().split('T')[0]}
+                    max={todayLocal()}
                     className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent shadow-sm"
                   />
                 </div>
