@@ -269,7 +269,11 @@ async function main() {
       deposit_percent: 20,
       deposit_amount: 600,
       deposit_paid: false,
-      status: 'confirmed',
+      // 'confirmed' is an ITINERARY status, not a booking one. The booking
+      // vocabulary is pending | supplier_confirmed | payment_received | ready |
+      // in_progress | completed | cancelled (types/bookings.ts), and nothing in
+      // the database enforces it — the wrong value simply broke the list page.
+      status: 'supplier_confirmed',
       payment_status: 'pending',
       payment_schedule_overridden: false,
       portal_mode: 'family',
