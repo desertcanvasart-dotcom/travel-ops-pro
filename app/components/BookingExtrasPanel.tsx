@@ -9,7 +9,7 @@
 // what they owe, and the panel says so after it does.
 
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, Plus, Check, X, Sparkles, ArrowUpRight, Trash2, AlertTriangle } from 'lucide-react'
+import { Loader2, Plus, Check, X, Sparkles, ArrowUpRight, Trash2, AlertTriangle, List, Pencil } from 'lucide-react'
 import { currencySymbol } from '@/lib/currency-totals'
 import { useConfirm } from '@/components/ConfirmDialog'
 
@@ -147,7 +147,7 @@ export default function BookingExtrasPanel({ bookingId }: { bookingId: string })
       )}
 
       {adding && (
-        <AddExtraForm
+        <AddExtra
           bookingId={bookingId}
           currency={currency}
           onDone={async () => { setAdding(false); await load() }}
@@ -258,6 +258,178 @@ function PriceButton({
   )
 }
 
+// ============================================
+// Adding one: pick it, or type it
+// ============================================
+// Picking is the default because a typed extra drifts — two agents name the
+// same tour differently, the price is whatever was remembered, and no supplier
+// cost comes with it, so the P&L reads the whole thing as margin. Picking
+// carries the name, the price, the supplier and the cost, and stamps where it
+// came from, which is what makes "how much did this option earn us?" a
+// question with an answer.
+
+type CatalogItem = {
+  source_kind: string
+  source_id: string
+  title: string
+  subtitle: string | null
+  supplier_id: string | null
+  supplier_cost: number | null
+  supplier_currency: string | null
+  unit_price: number | null
+  currency: string
+  price_note: string
+}
+
+type CatalogGroup = { source: string; label: string; items: CatalogItem[] }
+
+function AddExtra(props: {
+  bookingId: string
+  currency: string
+  onDone: () => void
+  onError: (msg: string | null) => void
+}) {
+  const [mode, setMode] = useState<'catalog' | 'manual'>('catalog')
+
+  return (
+    <div className="bg-gray-50 rounded-lg p-3 mb-3">
+      <div className="flex gap-2 mb-3">
+        <button type="button" onClick={() => setMode('catalog')}
+          className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border ${
+            mode === 'catalog' ? 'bg-[#647C47] text-white border-[#647C47]' : 'bg-white text-gray-700 border-gray-300'
+          }`}>
+          <List className="w-3.5 h-3.5" /> From the catalogue
+        </button>
+        <button type="button" onClick={() => setMode('manual')}
+          className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border ${
+            mode === 'manual' ? 'bg-[#647C47] text-white border-[#647C47]' : 'bg-white text-gray-700 border-gray-300'
+          }`}>
+          <Pencil className="w-3.5 h-3.5" /> Type it in
+        </button>
+      </div>
+      {mode === 'catalog'
+        ? <CatalogPicker {...props} onTypeInstead={() => setMode('manual')} />
+        : <AddExtraForm {...props} />}
+    </div>
+  )
+}
+
+function CatalogPicker({
+  bookingId, currency, onDone, onError, onTypeInstead,
+}: {
+  bookingId: string
+  currency: string
+  onDone: () => void
+  onError: (msg: string | null) => void
+  onTypeInstead: () => void
+}) {
+  const [groups, setGroups] = useState<CatalogGroup[] | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [prices, setPrices] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    let alive = true
+    fetch(`/api/bookings/${bookingId}/extras/catalog`)
+      .then(r => (r.ok ? r.json() : { groups: [] }))
+      .then(d => { if (alive) setGroups(d.groups || []) })
+      .catch(() => { if (alive) setGroups([]) })
+    return () => { alive = false }
+  }, [bookingId])
+
+  const add = async (item: CatalogItem, kind: 'addon' | 'upgrade') => {
+    // An unpriced row cannot be added blind — the office types the price into
+    // the row first, and that typed figure is what gets used.
+    const typed = prices[item.source_id]
+    const unitPrice = item.unit_price ?? (typed === '' || typed === undefined ? null : Number(typed))
+    if (unitPrice == null) { onError('Set a price for this option first.'); return }
+
+    setBusy(item.source_id); onError(null)
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}/extras`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind,
+          title: item.title,
+          description: item.subtitle,
+          quantity: 1,
+          unit_price: unitPrice,
+          currency,
+          supplier_cost: item.supplier_cost,
+          supplier_currency: item.supplier_currency,
+          supplier_id: item.supplier_id,
+          source_kind: item.source_kind,
+          source_id: item.source_id,
+        }),
+      })
+      if (!res.ok) { onError((await res.json().catch(() => ({})))?.error || 'Could not add it.'); return }
+      onDone()
+    } finally { setBusy(null) }
+  }
+
+  if (groups === null) {
+    return <p className="text-sm text-gray-500 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading the catalogue…</p>
+  }
+
+  if (groups.length === 0) {
+    return (
+      <p className="text-sm text-gray-500">
+        Nothing in the catalogue for this trip yet — mark options on the programme&rsquo;s variations, or
+        flag an attraction as an add-on in the rates.{' '}
+        <button type="button" onClick={onTypeInstead} className="text-[#647C47] underline">Type one in instead.</button>
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {groups.map(g => (
+        <div key={g.source}>
+          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">{g.label}</p>
+          <div className="divide-y bg-white rounded-lg border">
+            {g.items.map(item => (
+              <div key={item.source_id} className="p-2.5 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900">{item.title}</p>
+                  {item.subtitle && <p className="text-xs text-gray-600">{item.subtitle}</p>}
+                  <p className="text-[11px] text-gray-500">
+                    {item.unit_price == null
+                      ? item.price_note
+                      : `${money(item.unit_price, currency)} · ${item.price_note}`}
+                    {item.supplier_cost != null &&
+                      ` · we pay ${money(item.supplier_cost, item.supplier_currency || currency)}`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {item.unit_price == null && (
+                    <input type="number" min="0" step="0.01" placeholder="price"
+                      value={prices[item.source_id] ?? ''}
+                      onChange={e => setPrices(p => ({ ...p, [item.source_id]: e.target.value }))}
+                      className="w-24 px-2 py-1 text-xs border border-gray-300 rounded-lg" />
+                  )}
+                  {busy === item.source_id && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
+                  <button type="button" onClick={() => add(item, 'addon')} disabled={busy === item.source_id}
+                    className="px-2.5 py-1 text-xs font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] disabled:opacity-40">
+                    Add
+                  </button>
+                  <button type="button" onClick={() => add(item, 'upgrade')} disabled={busy === item.source_id}
+                    title="Add as an upgrade — the price is the difference, not the new price"
+                    className="px-2.5 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40">
+                    As upgrade
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      <p className="text-[11px] text-gray-500">
+        Adding it changes nothing the customer owes — it becomes an offer. Confirm does that, once they have agreed.
+      </p>
+    </div>
+  )
+}
+
 function AddExtraForm({
   bookingId, currency, onDone, onError,
 }: { bookingId: string; currency: string; onDone: () => void; onError: (msg: string | null) => void }) {
@@ -290,7 +462,7 @@ function AddExtraForm({
   }
 
   return (
-    <form onSubmit={submit} className="bg-gray-50 rounded-lg p-3 mb-3 space-y-2">
+    <form onSubmit={submit} className="space-y-2">
       <div className="flex gap-2">
         {(['addon', 'upgrade'] as const).map(k => (
           <button key={k} type="button" onClick={() => setKind(k)}
