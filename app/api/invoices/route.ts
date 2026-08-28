@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+import {
+  includeAdditions,
+  partitionAdditions,
+  toLineItems,
+  type Addition,
+} from '@/lib/invoice-additions'
 import { createClient } from '@supabase/supabase-js'
 import { syncInvoice } from '@/lib/accounting'
 import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-numbering'
@@ -128,17 +134,21 @@ export async function POST(request: NextRequest) {
     const currency = body.currency || 'EUR'
     const moneyDp = currencyDecimals(currency)
 
-    // ---------- confirmed travel insurance ----------
-    // Added HERE rather than by each caller, so every invoice for a trip picks
-    // the premiums up the same way. Only CONFIRMED ones: a traveller's choice
-    // in the portal is a request until the office says otherwise.
+    // ---------- what the SERVER adds to this invoice ----------
+    // Two kinds of money reach a trip's invoice without the caller sending
+    // them: a traveller's confirmed insurance premium, and the extras and
+    // upgrades sold after the trip was priced. They come from different tables
+    // and answer to different currency rules, but what they do to the document
+    // is identical — so the shared part is lib/invoice-additions.ts and a third
+    // kind will not add a third copy.
     //
-    // The premium is a yen figure published by the insurer. It is not
-    // converted — a rate applied to somebody else's tariff invents a precision
-    // they never quoted — so an invoice in another currency is refused rather
-    // than fudged. A.T.S bill in JPY; anything else here is a mistake worth
-    // stopping.
-    let insuranceLines: Array<{ description: string; quantity: number; unit_price: number; amount: number }> = []
+    // Both are added HERE rather than by each caller, so every invoice for a
+    // trip picks them up the same way, and only when CONFIRMED: a traveller's
+    // choice in the portal, or a customer's interest in an upgrade, is a
+    // request until the office says otherwise.
+    const additions: Addition[] = []
+    let billedExtraIds: string[] = []
+    let excludedExtras: Addition[] = []
     if (body.itinerary_id) {
       const { data: insured } = await supabaseAdmin
         .from('booking_passengers')
@@ -148,47 +158,90 @@ export async function POST(request: NextRequest) {
         .not('insurance_confirmed_at', 'is', null)
         .gt('insurance_premium_jpy', 0)
 
-      insuranceLines = (insured ?? []).map(p => {
+      for (const p of insured ?? []) {
         const name =
           [p.family_name_kanji, p.given_name_kanji].filter(Boolean).join(' ') ||
           [p.last_name, p.first_name].filter(Boolean).join(' ')
-        const amount = Number(p.insurance_premium_jpy)
-        return {
+        additions.push({
+          id: null,
+          source: 'insurance',
           description: `海外旅行傷害保障 トラベルセーフティプラン ${p.insurance_plan_code}${name ? `（${name}）` : ''}`,
           quantity: 1,
-          unit_price: amount,
-          amount,
-        }
-      })
+          unit_price: Number(p.insurance_premium_jpy),
+          // A yen figure published by the insurer, by definition.
+          currency: 'JPY',
+        })
+      }
 
-      if (insuranceLines.length && currency !== 'JPY') {
-        return NextResponse.json(
-          {
-            error:
-              'This trip has confirmed travel insurance, which is priced in JPY. ' +
-              `Invoice this booking in JPY (it is currently ${currency}) rather than converting the premium.`,
-          },
-          { status: 409 }
-        )
+      // Extras and upgrades: confirmed, and not already on someone else's
+      // invoice. The `invoiced_at` stamp written after the insert is what stops
+      // the same extra being billed twice.
+      const { data: extras, error: extrasError } = await supabaseAdmin
+        .from('booking_extras')
+        .select('id, title, kind, quantity, unit_price, currency, bookings!inner(itinerary_id, org_id)')
+        .eq('status', 'confirmed')
+        .is('invoiced_at', null)
+        .eq('org_id', orgId)
+        .eq('bookings.itinerary_id', body.itinerary_id)
+      // A database without migration 20260828_booking_extras answers with an
+      // error. An invoice for the trip itself is still correct, so it is raised
+      // without them rather than refused.
+      if (extrasError) console.error('invoices: could not read extras', extrasError)
+
+      for (const e of extras ?? []) {
+        additions.push({
+          id: String(e.id),
+          source: 'extra',
+          description: e.kind === 'upgrade' ? `${e.title} (upgrade)` : String(e.title),
+          quantity: Number(e.quantity) || 1,
+          unit_price: Number(e.unit_price),
+          currency: String(e.currency || currency),
+        })
       }
     }
 
-    const insuranceTotal = insuranceLines.reduce((sum, l) => sum + l.amount, 0)
-    if (insuranceTotal) {
-      // The premium is part of what the trip costs, so full_trip_cost tells the
+    const parts = partitionAdditions(additions, currency)
+
+    // The premium is not converted — a rate applied to somebody else's tariff
+    // invents a precision they never quoted — so an invoice in the wrong
+    // currency is REFUSED rather than fudged. A.T.S bill in JPY; anything else
+    // here is a mistake worth stopping.
+    if (parts.otherCurrency.some(a => a.source === 'insurance')) {
+      return NextResponse.json(
+        {
+          error:
+            'This trip has confirmed travel insurance, which is priced in JPY. ' +
+            `Invoice this booking in JPY (it is currently ${currency}) rather than converting the premium.`,
+        },
+        { status: 409 }
+      )
+    }
+
+    // An extra in another currency is a different decision: refusing the whole
+    // invoice would block billing the trip at all. It is left off this document
+    // and left UNSTAMPED, so it turns up on the next invoice raised in its own
+    // currency — and the caller is told, so it does not look free.
+    excludedExtras = parts.otherCurrency.filter(a => a.source === 'extra')
+
+    const additionsTotal = parts.total
+    const additionLines = toLineItems(parts.billable, currency)
+    billedExtraIds = parts.billable.filter(a => a.source === 'extra' && a.id).map(a => a.id as string)
+    if (additionsTotal) {
+      // An addition is part of what the trip costs, so full_trip_cost tells the
       // truth about the total. What it is NOT is part of the deposit base: a
-      // deposit is a percentage on account against the tour, while the premium
-      // is a fixed pass-through the insurer charges in full. Taking 20% of a
-      // ¥12,200 premium bills ¥2,440 for cover that costs ¥12,200.
+      // deposit is a percentage on account against the tour, while a premium is
+      // a fixed pass-through the insurer charges in full and an extra was
+      // agreed after the deposit was invoiced. Taking 20% of a ¥12,200 premium
+      // bills ¥2,440 for cover that costs ¥12,200.
       //
-      // So it is settled with the BALANCE, and appears on exactly one document:
-      // the final invoice, or a standard one. Adding it to both a deposit and a
-      // final would bill it twice.
-      fullTripCost += insuranceTotal
+      // So additions settle with the BALANCE, and appear on exactly one
+      // document: the final invoice, or a standard one. Putting them on both a
+      // deposit and a final would bill them twice.
+      fullTripCost += additionsTotal
     }
 
     if (invoiceType === 'deposit') {
-      totalAmount = roundToCurrency(((fullTripCost - insuranceTotal) * depositPercent) / 100, currency)
+      totalAmount = roundToCurrency(((fullTripCost - additionsTotal) * depositPercent) / 100, currency)
 
       // The itemisation is KEPT. This used to replace every line with a single
       // "Booking Deposit (20%)", which discarded the fuel surcharge, the airport
@@ -220,7 +273,7 @@ export async function POST(request: NextRequest) {
       // deposit invoice's actual total_amount.
       // Same base as the deposit invoice used — the tour without the premium —
       // or the two documents disagree about what was already paid.
-      let depositAmount = roundToCurrency(((fullTripCost - insuranceTotal) * depositPercent) / 100, currency)
+      let depositAmount = roundToCurrency(((fullTripCost - additionsTotal) * depositPercent) / 100, currency)
       let depositSource: 'percent' | 'parent' = 'percent'
       let depositReconciles = true
       let reconcileNote = ''
@@ -237,7 +290,7 @@ export async function POST(request: NextRequest) {
           // Surface a mismatch between the recomputed percent and the
           // actual parent amount; don't fail the request — the caller may
           // intentionally have a manual deposit — but record the delta.
-          const expected = roundToCurrency(((fullTripCost - insuranceTotal) * depositPercent) / 100, currency)
+          const expected = roundToCurrency(((fullTripCost - additionsTotal) * depositPercent) / 100, currency)
           if (Math.abs(expected - depositAmount) > 0.01) {
             depositReconciles = false
             reconcileNote = ` (parent deposit ${parent.currency || ''}${depositAmount.toFixed(moneyDp)} differs from ${depositPercent}% of trip ${expected.toFixed(moneyDp)})`
@@ -249,7 +302,7 @@ export async function POST(request: NextRequest) {
       // The balance LINE covers the tour only, because the premium is listed
       // separately below. Rolling it into this line would make the document
       // total correct while saying nothing about what the extra money is for.
-      const tourBalance = roundToCurrency(Math.max(0, totalAmount - insuranceTotal), currency)
+      const tourBalance = roundToCurrency(Math.max(0, totalAmount - additionsTotal), currency)
       lineItems = [{
         description: `${headerPrefix} - ${body.line_items?.[0]?.description || 'Tour Package'} (Total: ${currency} ${fullTripCost.toFixed(moneyDp)} minus deposit ${currency} ${depositAmount.toFixed(moneyDp)})${depositReconciles ? '' : reconcileNote}`,
         quantity: 1,
@@ -260,16 +313,16 @@ export async function POST(request: NextRequest) {
 
     // A standard invoice is whatever the caller said, PLUS anything added here.
     // Without this the document lists a premium line it does not bill.
-    if (invoiceType === 'standard' && insuranceTotal) {
-      totalAmount = roundToCurrency(totalAmount + insuranceTotal, currency)
+    if (invoiceType === 'standard' && additionsTotal && includeAdditions(invoiceType)) {
+      totalAmount = roundToCurrency(totalAmount + additionsTotal, currency)
     }
 
     // Appended LAST: the final branch rebuilds lineItems from scratch, so
     // anything added before it is silently dropped. Not on the deposit — the
     // premium is settled with the balance, and listing it on both documents
     // would say it is owed twice.
-    if (insuranceTotal && invoiceType !== 'deposit') {
-      lineItems = [...lineItems, ...insuranceLines]
+    if (additionsTotal && includeAdditions(invoiceType)) {
+      lineItems = [...lineItems, ...additionLines]
     }
 
     const baseInvoice = {
@@ -314,12 +367,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create invoice' }, { status: 500 })
     }
 
+    // Mark the extras that made it onto this document. THIS is what stops one
+    // being billed twice — the next invoice for the trip filters on
+    // invoiced_at IS NULL. Not on a deposit: they are not billed there.
+    if (data?.id && billedExtraIds.length && includeAdditions(invoiceType)) {
+      const { error: stampError } = await supabaseAdmin
+        .from('booking_extras')
+        .update({ invoiced_at: new Date().toISOString(), invoice_id: data.id })
+        .in('id', billedExtraIds)
+        .eq('org_id', orgId)
+      // Loud, because the failure mode is silent double-billing later.
+      if (stampError) console.error('invoices: could not stamp extras as invoiced', stampError)
+    }
+
     // Fire-and-forget accounting sync
     if (data?.id) {
       syncInvoice(data.id).catch(err => console.error('Accounting sync failed:', err))
     }
 
-    return NextResponse.json(data, { status: 201 })
+    return NextResponse.json(
+      excludedExtras.length
+        ? {
+            ...data,
+            // Deliberately not on this invoice, and deliberately not converted.
+            excluded_extras: excludedExtras.map(e => ({
+              title: e.description,
+              currency: e.currency,
+              amount: e.unit_price * (e.quantity || 1),
+            })),
+          }
+        : data,
+      { status: 201 }
+    )
   } catch (error) {
     console.error('Error in invoices POST:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

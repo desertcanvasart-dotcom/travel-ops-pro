@@ -49,6 +49,24 @@ export interface PnLItinerary {
   supplier_cost?: number | string | null
 }
 
+/**
+ * A confirmed extra or upgrade (booking_extras).
+ *
+ * It never reaches the itinerary — see docs/plans/extras-and-upgrades.md — so
+ * without this the report would count what an extra earns (once invoiced) and
+ * nothing of what it cost, and every extra would read as pure profit.
+ */
+export interface PnLExtra {
+  title?: string | null
+  quantity?: number | string | null
+  unit_price?: number | string | null
+  currency?: string | null
+  supplier_cost?: number | string | null
+  supplier_currency?: string | null
+  /** The date its money became real — what any conversion is done on. */
+  confirmed_at?: string | null
+}
+
 export interface PnLInvoice {
   id?: string | null
   itinerary_id?: string | null
@@ -97,6 +115,10 @@ export interface TripPnL {
   status: string
   currency: string
   quoted_amount: number
+  /** Of quoted_amount, what came from extras sold after the trip was priced. */
+  extras_revenue: number
+  /** Of supplier_cost, what those extras cost us. */
+  extras_supplier_cost: number
   total_revenue: number
   total_paid: number
   supplier_cost: number
@@ -134,6 +156,9 @@ export interface TripPnLInputs {
   payments: PnLPayment[]
   expenses: PnLExpense[]
   commissions: PnLCommission[]
+  /** CONFIRMED extras and upgrades sold on this trip's booking. Optional:
+   *  absent is the same as none, which is every trip before they existed. */
+  extras?: PnLExtra[]
 }
 
 export interface TripPnLResult {
@@ -194,7 +219,48 @@ export function computeTripPnL(fxIndex: FxIndex, inputs: TripPnLInputs): TripPnL
     expenseBreakdown[cat] = (expenseBreakdown[cat] || 0) + value
   }
 
-  const supplierCost = Number(itinerary.supplier_cost || 0)
+  // ---- Extras and upgrades ----------------------------------------------
+  // Sold after the trip was priced, so they are in neither itinerary.total_cost
+  // nor itinerary.supplier_cost. What they EARN arrives on its own once
+  // invoiced; what they COST has to come from here or the margin is a lie.
+  // Converted on confirmed_at like every other dated line: an unconvertible one
+  // becomes a hole rather than a guessed number.
+  let extrasRevenue = 0
+  let extrasSupplierCost = 0
+
+  for (const extra of inputs.extras ?? []) {
+    const reference = extra.title || 'extra'
+    const quantity = Math.max(1, Math.floor(Number(extra.quantity) || 1))
+
+    const priced = convertLine(fxIndex, fx, {
+      amount: Number(extra.unit_price || 0) * quantity,
+      fromCurrency: extra.currency,
+      toCurrency: tripCurrency,
+      date: extra.confirmed_at,
+      // Reusing the existing kinds deliberately: an extra's price is revenue
+      // and its supplier cost is an expense, which is what a reader of the
+      // hole list needs to know about it.
+      kind: 'revenue',
+      reference,
+    })
+    if (priced.hole) holes.push(priced.hole)
+    else extrasRevenue += priced.amount ?? 0
+
+    if (extra.supplier_cost != null && extra.supplier_cost !== '') {
+      const cost = convertLine(fxIndex, fx, {
+        amount: extra.supplier_cost,
+        fromCurrency: extra.supplier_currency || extra.currency,
+        toCurrency: tripCurrency,
+        date: extra.confirmed_at,
+        kind: 'expense',
+        reference,
+      })
+      if (cost.hole) holes.push(cost.hole)
+      else extrasSupplierCost += cost.amount ?? 0
+    }
+  }
+
+  const supplierCost = Number(itinerary.supplier_cost || 0) + extrasSupplierCost
   const totalExpenses = supplierCost + manualExpenses
   if (supplierCost > 0) expenseBreakdown['supplier_services'] = supplierCost
 
@@ -275,7 +341,12 @@ export function computeTripPnL(fxIndex: FxIndex, inputs: TripPnLInputs): TripPnL
       end_date: itinerary.end_date || '',
       status: itinerary.status || 'draft',
       currency: tripCurrency,
-      quoted_amount: Number(itinerary.total_cost || 0),
+      // What we told the client the trip costs, INCLUDING anything they bought
+      // afterwards — otherwise quoted and invoiced diverge by the extras and
+      // every trip with one looks like it was over-billed.
+      quoted_amount: Number(itinerary.total_cost || 0) + extrasRevenue,
+      extras_revenue: extrasRevenue,
+      extras_supplier_cost: extrasSupplierCost,
       total_revenue: totalRevenue,
       total_paid: totalPaid,
       supplier_cost: supplierCost,
