@@ -783,7 +783,9 @@
     "markComplete": "Mark Complete",
     "delete": "Delete",
     "error": "Error",
-    "firstContactNote": "First contact"
+    "firstContactNote": "First contact",
+    "newTrip": "New Trip",
+    "createFirstTrip": "Create First Trip"
   },
   "communications": {
     "title": "Communications",
@@ -1420,7 +1422,10 @@
       "saving": "Saving…",
       "pdf": "Itinerary PDF",
       "print": "Print"
-    }
+    },
+    "fromProgramme": "Start from a programme",
+    "fromScratch": "Build from scratch",
+    "fromProgrammeHint": "Links the trip to the programme, fills in the name if you have not, and sets the end date from its length. The day plan is still built in the itinerary or the quote."
   },
   "payments": {
     "loadingPayments": "Loading payments...",

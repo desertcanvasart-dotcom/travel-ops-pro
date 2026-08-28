@@ -1210,7 +1210,9 @@
     "deleteConfirmBody": "{name} を削除してもよろしいですか？この操作は取り消せません。",
     "deleteForceConfirm": "顧客と紐づくすべての旅程を強制的に削除しますか？",
     "error": "エラー",
-    "firstContactNote": "初回問い合わせ"
+    "firstContactNote": "初回問い合わせ",
+    "newTrip": "新規旅程",
+    "createFirstTrip": "最初の旅程を作成"
   },
   "communications": {
     "title": "コミュニケーション",
@@ -1847,7 +1849,10 @@
       "saving": "保存中…",
       "pdf": "日程表PDF",
       "print": "印刷"
-    }
+    },
+    "fromProgramme": "ツアープログラムから作成",
+    "fromScratch": "白紙から作成",
+    "fromProgrammeHint": "プログラムと紐付け、旅程名が未入力なら補完し、日数から終了日を設定します。日程の中身は旅程画面または見積で作成します。"
   },
   "payments": {
     "loadingPayments": "支払を読み込み中...",
