@@ -6472,7 +6472,10 @@
     "failedToSaveItinerary": "Failed to save itinerary changes",
     "seasonPremium": "{season} premium +{percent}%",
     "seasonPremiumNote": "{amount} on {base}. On an ordinary date this trip sells for {base_price}.",
-    "seasonBadge": "{season} +{percent}%"
+    "seasonBadge": "{season} +{percent}%",
+    "optionalExtras": "Optional extras",
+    "optionalExtrasHint": "Tick the ones this customer is buying — the price updates, and what is ticked goes into the quote.",
+    "day": "Day"
   },
   "bookings": {
     "title": "Bookings",

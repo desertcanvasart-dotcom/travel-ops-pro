@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileSpreadsheet, TrendingUp, AlertCircle, UserPlus, Save, X, CheckCircle2, Building2, User, Mail, Phone, FileText, ChevronDown, ChevronUp, Pencil, Plane, Ship, MapPin, Plus, RotateCcw, Tag } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { currencySymbol } from '@/lib/currency-totals'
 
 // ============================================
 // B2B TOUR PRICE CALCULATOR PAGE
@@ -43,6 +44,25 @@ interface PricingResult {
     pricing_note?: string
     is_optional?: boolean
   }>
+  optional_services?: Array<{
+    service_id: string
+    service_name: string
+    service_category: string
+    // quantity and unit_cost are listed because the CHOSEN options are
+    // snapshotted into the quote verbatim, and conversion reads both when it
+    // builds itinerary_services. Dropping them here would drop them there.
+    quantity: number
+    unit_cost: number
+    rate_type: string | null
+    rate_source: string
+    quantity_mode: string
+    line_total: number
+    day_number: number | null
+    pricing_note?: string
+    is_optional?: boolean
+    is_selected?: boolean
+  }>
+  optional_total?: number
   subtotal_cost: number
   total_cost: number
   margin_percent: number
@@ -148,7 +168,11 @@ export default function TourPriceCalculator() {
   const [travelDate, setTravelDate] = useState(new Date().toISOString().split('T')[0])
   const [isEurPassport, setIsEurPassport] = useState(true)
   const [marginPercent, setMarginPercent] = useState(25)
-  const [includeOptionals, setIncludeOptionals] = useState(false)
+  // WHICH options the customer wants, not merely whether. This used to be one
+  // boolean for the whole quote, so a customer who wanted the balloon ride but
+  // not the second Abu Simbel day could not be quoted — see
+  // docs/plans/extras-and-upgrades.md §5a.
+  const [selectedOptionals, setSelectedOptionals] = useState<string[]>([])
   const [tourLeaderIncluded, setTourLeaderIncluded] = useState(false)
 
   // Rate sheet range
@@ -358,7 +382,10 @@ export default function TourPriceCalculator() {
     }
   }
 
-  const calculatePrice = async () => {
+  const calculatePrice = async (optionalIdsOverride?: string[]) => {
+    // Passed explicitly when a checkbox triggers the recalculation: reading it
+    // from state would price the selection as it was BEFORE the click.
+    const optionalIds = optionalIdsOverride ?? selectedOptionals
     // Auto-save itinerary changes before pricing
     if (hasUnsavedChanges && templateId) {
       await saveItineraryChanges()
@@ -376,7 +403,7 @@ export default function TourPriceCalculator() {
           travel_date: travelDate,
           is_eur_passport: isEurPassport,
           margin_percent: marginPercent,
-          include_optionals: includeOptionals,
+          selected_optional_ids: optionalIds,
           tour_leader_included: tourLeaderIncluded,
           tier: variationTier
         })
@@ -465,7 +492,15 @@ export default function TourPriceCalculator() {
           travel_date: travelDate,
           num_adults: numPax,
           num_children: 0,
-          services_snapshot: result.services,
+          // The CHOSEN optional services travel with the quote. Without them
+          // the itinerary built at conversion carries their money in
+          // selling_price and none of the services, and the first save on the
+          // edit page recomputes the total from the services it can see and
+          // loses the difference (docs/plans/extras-and-upgrades.md §5a).
+          services_snapshot: [
+            ...result.services,
+            ...(result.optional_services || []).filter(s => s.is_selected),
+          ],
           total_cost: result.total_cost,
           margin_percent: result.margin_percent,
           margin_amount: result.margin_amount,
@@ -690,20 +725,13 @@ export default function TourPriceCalculator() {
                 />
               </div>
 
-              {/* Include Optionals */}
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={includeOptionals}
-                  onChange={(e) => setIncludeOptionals(e.target.checked)}
-                  className="w-4 h-4 text-[#647C47] rounded"
-                />
-                <span className="text-sm">{t('includeOptionalExtras')}</span>
-              </label>
+              {/* Optional extras are chosen ONE BY ONE, in the results panel
+                  where their names and prices are visible — a switch here
+                  priced options the operator could not see. */}
 
               {/* Calculate Button */}
               <button
-                onClick={calculatePrice}
+                onClick={() => calculatePrice()}
                 disabled={loading}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] font-medium disabled:opacity-50"
               >
@@ -1256,6 +1284,51 @@ export default function TourPriceCalculator() {
                   </tfoot>
                 </table>
               </div>
+
+              {/* ============================================
+                  Optional extras — chosen one by one
+                  ============================================
+                  The customer picks the ones they want. Ticking re-prices
+                  immediately, and what is ticked here is what travels into the
+                  quote as a real service. */}
+              {result.optional_services && result.optional_services.length > 0 && (
+                <div className="bg-white rounded-lg shadow-sm border p-6">
+                  <h3 className="text-base font-semibold mb-1">{t('optionalExtras')}</h3>
+                  <p className="text-xs text-gray-500 mb-3">{t('optionalExtrasHint')}</p>
+                  <div className="divide-y">
+                    {result.optional_services.map(opt => (
+                      <label key={opt.service_id} className="flex items-center justify-between gap-3 py-2 cursor-pointer">
+                        <span className="flex items-center gap-2 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={opt.is_selected ?? false}
+                            disabled={loading}
+                            onChange={e => {
+                              const next = e.target.checked
+                                ? [...selectedOptionals, opt.service_id]
+                                : selectedOptionals.filter(id => id !== opt.service_id)
+                              setSelectedOptionals(next)
+                              // Priced from `next`, not from state — state has
+                              // not updated by the time this runs.
+                              calculatePrice(next)
+                            }}
+                            className="w-4 h-4 text-[#647C47] rounded flex-shrink-0"
+                          />
+                          <span className="text-sm truncate">
+                            {opt.service_name}
+                            {opt.day_number != null && (
+                              <span className="text-gray-400"> · {t('day')} {opt.day_number}</span>
+                            )}
+                          </span>
+                        </span>
+                        <span className="text-sm text-gray-700 flex-shrink-0">
+                          +{currencySymbol(result.currency)}{opt.line_total.toFixed(2)}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
 

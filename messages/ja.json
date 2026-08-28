@@ -7058,7 +7058,10 @@
     "failedToSaveItinerary": "旅程の保存に失敗しました",
     "seasonPremium": "{season}割増 +{percent}%",
     "seasonPremiumNote": "{base}に対して{amount}。通常日程であれば{base_price}です。",
-    "seasonBadge": "{season} +{percent}%"
+    "seasonBadge": "{season} +{percent}%",
+    "optionalExtras": "オプショナルツアー",
+    "optionalExtrasHint": "このお客様がご購入されるものにチェックを入れてください。料金が更新され、チェックした内容が見積に入ります。",
+    "day": "日目"
   },
   "bookings": {
     "title": "予約管理",
