@@ -6480,7 +6480,8 @@
     "seasonBadge": "{season} +{percent}%",
     "optionalExtras": "Optional extras",
     "optionalExtrasHint": "Tick the ones this customer is buying — the price updates, and what is ticked goes into the quote.",
-    "day": "Day"
+    "day": "Day",
+    "operatorPrice": "set price"
   },
   "bookings": {
     "title": "Bookings",
@@ -7247,5 +7248,33 @@
     "saveVoice": "Save brief & glossary",
     "voiceHint": "Leave empty for minimal automatic framing built from the city list.",
     "voiceHintEgypt": "Leave empty to keep Egypt’s built-in glossary and framing."
+  },
+  "variationOptions": {
+    "title": "Options this programme sells",
+    "intro": "Anything here can be added to a trip — chosen by the customer when the trip is quoted, or sold afterwards from the booking. A price set here is the price in both places.",
+    "backToProgrammes": "Back to programmes",
+    "loading": "Loading…",
+    "optionsHeading": "Options",
+    "includedHeading": "Included in the programme",
+    "includedIntro": "Part of the price everyone pays. Move one here to sell it separately.",
+    "noOptions": "No options yet. Add one, or move an included service across.",
+    "noIncluded": "This variation has no services yet.",
+    "addOption": "Add an option",
+    "makeOptional": "Make it an option",
+    "makeIncluded": "Include it",
+    "sellsFor": "Sells for",
+    "costs": "Costs",
+    "costPlusMargin": "cost + margin",
+    "priceNote": "Leave the price blank and the option is sold at cost plus your usual margin. Set one and that is the price — options are priced off-margin, so the margin percentage never changes it.",
+    "category": "Category",
+    "charged": "Charged",
+    "day": "Day",
+    "anyDay": "any",
+    "namePlaceholder": "Hot-air balloon over Luxor",
+    "delete": "Delete",
+    "deleteTitle": "Delete this option?",
+    "deleteMessage": "“{name}” will be removed from this programme. Trips already sold keep what they bought.",
+    "couldNotSave": "Could not save that.",
+    "couldNotDelete": "Could not delete it."
   }
 }

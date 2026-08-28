@@ -30,7 +30,8 @@ import {
   Layers,
   MapPin,
   Calculator,
-  Loader2
+  Loader2,
+  Sparkles,
 } from 'lucide-react'
 
 import { LanguageIndicator } from '@/components/multilingual'
@@ -1613,6 +1614,19 @@ export default function TourManagerContent() {
                                         <p className="text-xs opacity-75">{variation.group_type} • {variation.min_pax}-{variation.max_pax} pax</p>
                                       </div>
                                       <div className="flex items-center gap-1 ml-2">
+                                        {/* The options this variation sells.
+                                            Until this link existed, is_optional
+                                            and optional_price_override could
+                                            not be set from anywhere in the app
+                                            — see docs/plans/extras-and-upgrades.md §6a. */}
+                                        <Link
+                                          href={`/tours/variations/${variation.id}/options`}
+                                          className="p-1.5 text-[#647C47] hover:bg-[#e8ede3] rounded transition-colors"
+                                          title="Options this programme sells"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <Sparkles className="w-4 h-4" />
+                                        </Link>
                                         <Link
                                           href={`/b2b/calculator/${variation.id}`}
                                           className="p-1.5 text-green-600 hover:bg-green-100 rounded transition-colors"

@@ -346,6 +346,86 @@ export async function PUT(
   }
 }
 
+// ============================================
+// PATCH — change ONE service on this variation
+// ============================================
+// PUT replaces every service the variation has, which is the right shape for
+// an importer and the wrong one for a person editing a price: a failed replace
+// takes the other services with it (see the restore path above). This edits a
+// single row, which is what the options screen needs.
+//
+// The allow-list matters. `variation_id` is not on it: moving a service to
+// another programme by PATCH would be a quiet re-parenting, and there is no
+// screen that wants it.
+const EDITABLE_SERVICE_FIELDS = [
+  'service_name',
+  'service_category',
+  'quantity_mode',
+  'quantity_value',
+  'cost_per_unit',
+  'day_number',
+  'is_optional',
+  'optional_price_override',
+  'notes',
+  'sequence_order',
+] as const
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const body = await request.json().catch(() => ({}))
+    const serviceId = typeof body?.serviceId === 'string' ? body.serviceId : null
+    if (!serviceId) {
+      return NextResponse.json({ error: 'serviceId is required' }, { status: 400 })
+    }
+
+    const updates: Record<string, unknown> = {}
+    for (const field of EDITABLE_SERVICE_FIELDS) {
+      if (body[field] === undefined) continue
+      updates[field] = body[field] === '' ? null : body[field]
+    }
+
+    if (typeof updates.service_name === 'string' && !updates.service_name.trim()) {
+      return NextResponse.json({ error: 'A service name is required' }, { status: 400 })
+    }
+    // A blank price is "no price of its own", which is a real state — the
+    // option falls back to cost + margin. A NEGATIVE one is not.
+    for (const money of ['cost_per_unit', 'optional_price_override'] as const) {
+      if (updates[money] != null && Number(updates[money]) < 0) {
+        return NextResponse.json({ error: `${money} cannot be negative` }, { status: 400 })
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: 'Nothing to change' }, { status: 400 })
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('tour_variation_services')
+      .update(updates)
+      .eq('id', serviceId)
+      // Scoped by variation as well as id: a service id alone must not be
+      // enough to edit a service on another programme.
+      .eq('variation_id', id)
+      .select()
+      .single()
+
+    if (error) {
+      return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
+    }
+    if (!data) {
+      return NextResponse.json({ error: 'Service not found on this variation' }, { status: 404 })
+    }
+
+    return NextResponse.json({ success: true, data })
+  } catch (error) {
+    return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

@@ -7066,7 +7066,8 @@
     "seasonBadge": "{season} +{percent}%",
     "optionalExtras": "オプショナルツアー",
     "optionalExtrasHint": "このお客様がご購入されるものにチェックを入れてください。料金が更新され、チェックした内容が見積に入ります。",
-    "day": "日目"
+    "day": "日目",
+    "operatorPrice": "設定価格"
   },
   "bookings": {
     "title": "予約管理",
@@ -7833,5 +7834,33 @@
     "saveVoice": "ブリーフとグロッサリーを保存",
     "voiceHint": "空欄の場合は都市リストから自動生成される最小限の説明が使われます。",
     "voiceHintEgypt": "空欄の場合はエジプトの組み込みグロッサリーが使われます。"
+  },
+  "variationOptions": {
+    "title": "このプログラムのオプション",
+    "intro": "ここに登録した内容は旅程に追加できます。見積時にお客様が選ぶことも、成約後に予約から販売することもできます。ここで設定した価格は、どちらの場合も同じ価格になります。",
+    "backToProgrammes": "プログラム一覧へ戻る",
+    "loading": "読み込み中…",
+    "optionsHeading": "オプション",
+    "includedHeading": "プログラムに含まれるもの",
+    "includedIntro": "全員が支払う料金に含まれます。個別販売にする場合はこちらから移動してください。",
+    "noOptions": "オプションはまだありません。追加するか、含まれるサービスから移動してください。",
+    "noIncluded": "このバリエーションにはまだサービスがありません。",
+    "addOption": "オプションを追加",
+    "makeOptional": "オプションにする",
+    "makeIncluded": "含める",
+    "sellsFor": "販売価格",
+    "costs": "原価",
+    "costPlusMargin": "原価＋マージン",
+    "priceNote": "価格を空欄にすると、原価に通常のマージンを乗せて販売します。価格を設定した場合はその金額が販売価格となり、マージン率では変わりません。",
+    "category": "カテゴリ",
+    "charged": "課金単位",
+    "day": "日目",
+    "anyDay": "指定なし",
+    "namePlaceholder": "ルクソール気球ツアー",
+    "delete": "削除",
+    "deleteTitle": "このオプションを削除しますか？",
+    "deleteMessage": "「{name}」をこのプログラムから削除します。すでに販売済みの旅程は影響を受けません。",
+    "couldNotSave": "保存できませんでした。",
+    "couldNotDelete": "削除できませんでした。"
   }
 }

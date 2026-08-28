@@ -61,6 +61,9 @@ interface PricingResult {
     pricing_note?: string
     is_optional?: boolean
     is_selected?: boolean
+    /** What the CUSTOMER pays — the operator's own price when they set one. */
+    selling_price?: number
+    price_basis?: 'operator_price' | 'cost_plus_margin'
   }>
   optional_total?: number
   subtotal_cost: number
@@ -1321,8 +1324,15 @@ export default function TourPriceCalculator() {
                             )}
                           </span>
                         </span>
-                        <span className="text-sm text-gray-700 flex-shrink-0">
-                          +{currencySymbol(result.currency)}{opt.line_total.toFixed(2)}
+                        <span className="text-sm text-gray-700 flex-shrink-0 text-right">
+                          {/* What the CUSTOMER pays, not what the option costs
+                              us — and when the operator set that price, it is
+                              taken off-margin, so say so. */}
+                          +{currencySymbol(result.currency)}
+                          {(opt.selling_price ?? opt.line_total).toFixed(2)}
+                          {opt.price_basis === 'operator_price' && (
+                            <span className="block text-[11px] text-gray-400">{t('operatorPrice')}</span>
+                          )}
                         </span>
                       </label>
                     ))}

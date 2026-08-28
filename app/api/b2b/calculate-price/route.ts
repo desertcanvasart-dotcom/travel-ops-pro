@@ -10,6 +10,12 @@ import { currencySymbol } from '@/lib/currency-totals'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { parseOptionalSelection, isOptionalSelected } from '@/lib/b2b/optional-selection'
+import {
+  serviceQuantity,
+  optionalContribution,
+  composeQuoteTotals,
+  type OptionalContribution,
+} from '@/lib/b2b/optional-pricing'
 
 // ============================================
 // B2B TOUR PRICE CALCULATOR - v6
@@ -51,6 +57,10 @@ interface CalculatedService {
   is_optional: boolean
   /** For optional lines: is the customer buying this one? */
   is_selected?: boolean
+  /** For optional lines: what the CUSTOMER pays, which is the operator's own
+   *  price when they set one — options are priced off-margin. */
+  selling_price?: number
+  price_basis?: 'operator_price' | 'cost_plus_margin'
   day_number: number | null
   pricing_note?: string
 }
@@ -596,7 +606,9 @@ export async function POST(request: NextRequest) {
     const calculatedServices: CalculatedService[] = []
     const optionalServices: CalculatedService[] = []
     let subtotalCost = 0
-    let optionalTotal = 0
+    // One entry per CHOSEN option, each already split into the part margin
+    // applies to and the part it does not — see lib/b2b/optional-pricing.
+    const chosenOptionals: OptionalContribution[] = []
 
     // Process each service
     // Day-tour vehicle rates come from transportation_rates (the operator's
@@ -791,29 +803,19 @@ export async function POST(request: NextRequest) {
       // ============================================
       // STEP 5: Calculate line total if not already set
       // ============================================
+      // ONE quantity for this line. It used to be worked out twice — once here
+      // for the total and once below for display — and the two disagreed:
+      // per_day, per_night and per_room were missing from the display copy, so
+      // a per-night hotel reported a quantity that did not match its own total.
+      const effectiveQuantity = serviceQuantity({
+        quantityMode: effectiveQuantityMode,
+        quantityValue: service.quantity_value,
+        numPax: num_pax,
+        durationDays: template?.duration_days || 1,
+      })
+
       if (lineTotal === 0 && unitCost > 0) {
-        let quantity = service.quantity_value || 1
-
-        switch (effectiveQuantityMode) {
-          case 'per_pax':
-            quantity = (service.quantity_value || 1) * num_pax
-            break
-          case 'per_group':
-          case 'fixed':
-            quantity = service.quantity_value || 1
-            break
-          case 'per_day':
-            quantity = (service.quantity_value || 1) * (template?.duration_days || 1)
-            break
-          case 'per_night':
-            quantity = (service.quantity_value || 1) * ((template?.duration_days || 1) - 1)
-            break
-          case 'per_room':
-            quantity = Math.ceil(num_pax / 2)
-            break
-        }
-
-        lineTotal = unitCost * quantity
+        lineTotal = unitCost * effectiveQuantity
       }
 
       const calculatedService: CalculatedService = {
@@ -823,7 +825,7 @@ export async function POST(request: NextRequest) {
         rate_type: service.rate_type,
         rate_source: rateSource,
         quantity_mode: effectiveQuantityMode,
-        quantity: effectiveQuantityMode === 'fixed' ? 1 : (service.quantity_value || 1) * (effectiveQuantityMode === 'per_pax' ? num_pax : 1),
+        quantity: effectiveQuantity,
         unit_cost: Math.round(unitCost * 100) / 100,
         line_total: Math.round(lineTotal * 100) / 100,
         is_optional: service.is_optional || false,
@@ -836,19 +838,40 @@ export async function POST(request: NextRequest) {
         // chosen — and so the quote can snapshot the chosen ones as real
         // services rather than losing them (docs/plans §5a).
         const selected = isOptionalSelected(service.id, optionalSelection)
-        optionalServices.push({ ...calculatedService, is_selected: selected })
-        if (selected) optionalTotal += lineTotal
+        const override = service.optional_price_override
+        optionalServices.push({
+          ...calculatedService,
+          is_selected: selected,
+          // What the customer pays for it: the operator's own price when there
+          // is one, otherwise cost + margin like any other service.
+          selling_price: override
+            ? Math.round(Number(override) * effectiveQuantity * 100) / 100
+            : Math.round(lineTotal * (1 + effectiveMargin / 100) * 100) / 100,
+          price_basis: override ? 'operator_price' : 'cost_plus_margin',
+        })
+        if (selected) {
+          chosenOptionals.push(
+            optionalContribution({ lineTotal, override, quantity: effectiveQuantity })
+          )
+        }
       } else {
         calculatedServices.push(calculatedService)
         subtotalCost += lineTotal
       }
     }
 
-    // Calculate totals
-    // optionalTotal already holds ONLY the chosen options, so no second gate.
-    const totalCost = subtotalCost + optionalTotal
-    const marginAmount = totalCost * (effectiveMargin / 100)
-    const baseSellingPrice = totalCost + marginAmount
+    // Calculate totals. An option the operator has priced is added AFTER
+    // margin — that price is a decision, not a number to mark up — while its
+    // cost still counts as cost. See lib/b2b/optional-pricing.
+    const quoteTotals = composeQuoteTotals({
+      subtotalCost,
+      optionals: chosenOptionals,
+      marginPercent: effectiveMargin,
+    })
+    const totalCost = quoteTotals.costTotal
+    const marginAmount = quoteTotals.marginAmount
+    const baseSellingPrice = quoteTotals.baseSellingPrice
+    const optionalTotal = quoteTotals.optionalSellingTotal
 
     // The operator's demand premium, on this path too. A variation that happens
     // to carry its own service rows must not quote Golden Week at the ordinary
