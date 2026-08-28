@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { excludeDemoLinked, loadDemoItineraryIds, type DemoLookupClient } from '@/lib/demo-data'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
@@ -27,17 +28,28 @@ export async function GET() {
     const today = new Date().toISOString().slice(0, 10)
     const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
 
+    // Seeded fixtures carry real money on real rows (lib/demo-data.ts). The
+    // portal demo alone is ¥1,099,897 across two invoices, one marked paid with
+    // no payment behind it — which is most of what the QA audit read as the
+    // Dashboard contradicting Invoices and Payments.
+    // Cast: the Supabase generic chain is deep enough that inference here trips
+    // TS2589. The helper only ever reads id + itinerary_code.
+    const demoItineraryIds = await loadDemoItineraryIds(
+      supabase as unknown as DemoLookupClient,
+      orgId,
+    )
+
     const [receivableInvoices, unpaidExpenses, unpaidBills, monthPayments, monthPaidExpenses] = await Promise.all([
       // Outstanding receivables — same filter as /api/accounts-receivable
       supabase.from('invoices')
-        .select('balance_due, currency, due_date')
+        .select('balance_due, currency, due_date, itinerary_id')
         .eq('org_id', orgId)
         .gt('balance_due', 0)
         .not('status', 'eq', 'cancelled')
         .limit(1000),
       // Unpaid expenses — same filter as /api/accounts-payable
       supabase.from('expenses')
-        .select('amount, currency')
+        .select('amount, currency, itinerary_id')
         .eq('org_id', orgId)
         .in('status', ['pending', 'approved']),
       // Supplier bills not yet settled
@@ -47,12 +59,12 @@ export async function GET() {
         .in('status', ['received', 'matched', 'approved']),
       // Money that actually arrived this month
       supabase.from('payments')
-        .select('amount, currency')
+        .select('amount, currency, itinerary_id')
         .eq('org_id', orgId)
         .gte('payment_date', monthStart.slice(0, 10)),
       // Money that actually left this month (expenses marked paid this month)
       supabase.from('expenses')
-        .select('amount, currency')
+        .select('amount, currency, itinerary_id')
         .eq('org_id', orgId)
         .eq('status', 'paid')
         .gte('payment_date', monthStart.slice(0, 10)),
@@ -61,24 +73,38 @@ export async function GET() {
       if (r.error) throw r.error
     }
 
+    // Hold back rows belonging to a seeded fixture. Reported below, not silent.
+    const invoicesReal = excludeDemoLinked(receivableInvoices.data, demoItineraryIds)
+    const unpaidExpensesReal = excludeDemoLinked(unpaidExpenses.data, demoItineraryIds)
+    const monthPaymentsReal = excludeDemoLinked(monthPayments.data, demoItineraryIds)
+    const monthPaidExpensesReal = excludeDemoLinked(monthPaidExpenses.data, demoItineraryIds)
+    const demoExcluded = {
+      excluded:
+        invoicesReal.exclusion.excluded +
+        unpaidExpensesReal.exclusion.excluded +
+        monthPaymentsReal.exclusion.excluded +
+        monthPaidExpensesReal.exclusion.excluded,
+      codes: [],
+    }
+
     const receivableTotals: CurrencyTotals = {}
     const receivableOverdue: CurrencyTotals = {}
-    for (const inv of receivableInvoices.data || []) {
+    for (const inv of invoicesReal.real) {
       add(receivableTotals, inv.currency, inv.balance_due)
       if (inv.due_date && inv.due_date <= today) add(receivableOverdue, inv.currency, inv.balance_due)
     }
 
     const expenseTotals: CurrencyTotals = {}
-    for (const e of unpaidExpenses.data || []) add(expenseTotals, e.currency, e.amount)
+    for (const e of unpaidExpensesReal.real) add(expenseTotals, e.currency, e.amount)
 
     const billTotals: CurrencyTotals = {}
     for (const b of unpaidBills.data || []) add(billTotals, b.currency, b.amount)
 
     const receivedThisMonth: CurrencyTotals = {}
-    for (const p of monthPayments.data || []) add(receivedThisMonth, p.currency, p.amount)
+    for (const p of monthPaymentsReal.real) add(receivedThisMonth, p.currency, p.amount)
 
     const spentThisMonth: CurrencyTotals = {}
-    for (const e of monthPaidExpenses.data || []) add(spentThisMonth, e.currency, e.amount)
+    for (const e of monthPaidExpensesReal.real) add(spentThisMonth, e.currency, e.amount)
 
     return NextResponse.json({
       success: true,
@@ -86,20 +112,21 @@ export async function GET() {
         receivables: {
           totals: receivableTotals,
           overdue: receivableOverdue,
-          count: receivableInvoices.data?.length || 0,
+          count: invoicesReal.real.length,
         },
         payables: {
           expenseTotals,
-          expenseCount: unpaidExpenses.data?.length || 0,
+          expenseCount: unpaidExpensesReal.real.length,
           billTotals,
           billCount: unpaidBills.data?.length || 0,
         },
         month: {
           received: receivedThisMonth,
-          receivedCount: monthPayments.data?.length || 0,
+          receivedCount: monthPaymentsReal.real.length,
           spent: spentThisMonth,
-          spentCount: monthPaidExpenses.data?.length || 0,
+          spentCount: monthPaidExpensesReal.real.length,
         },
+        demo_excluded: demoExcluded,
       },
     })
   } catch (error: any) {

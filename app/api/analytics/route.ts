@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { partitionDemoRows } from '@/lib/demo-data'
 import { clientMessage } from '@/lib/api-errors'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { loadFxIndex, convertLine, buildFxMeta, emptyFxSummary, type FxHole } from '@/lib/fx-report'
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
       // Itineraries (bookings) in date range
       supabase
         .from('itineraries')
-        .select('id, status, total_cost, currency, start_date, destinations, created_at')
+        .select('id, itinerary_code, status, total_cost, currency, start_date, destinations, created_at')
         .eq('org_id', orgId)
         .gte('created_at', startDateStr),
 
@@ -123,7 +124,7 @@ export async function GET(request: NextRequest) {
       // Revenue by week for trend chart
       supabase
         .from('itineraries')
-        .select('total_cost, currency, start_date, created_at')
+        .select('itinerary_code, total_cost, currency, start_date, created_at')
         .eq('org_id', orgId)
         .in('status', ['confirmed', 'completed'])
         .gte('created_at', startDateStr)
@@ -147,7 +148,12 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const itineraries = itinerariesResult.data || []
+    // Seeded demo fixtures are real rows with real money on them and were
+    // being counted as revenue and as clients (see lib/demo-data.ts).
+    const { real: itineraries, exclusion: demoExcluded } = partitionDemoRows(
+      itinerariesResult.data,
+      row => row.itinerary_code,
+    )
     const clients = clientsResult.data || []
     const leadsCount = leadsResult.count || 0
     const followUpsCount = followUpsResult.count || 0
@@ -192,7 +198,10 @@ export async function GET(request: NextRequest) {
     const revenueById = new Map<string, number | null>()
     for (const itin of itineraries) revenueById.set(itin.id, toReporting(itin))
 
-    const revenueData = (revenueByWeekResult.data || []).map(row => ({
+    const revenueData = partitionDemoRows(
+      revenueByWeekResult.data,
+      row => row.itinerary_code,
+    ).real.map(row => ({
       ...row,
       total_cost: toReporting(row),
     }))
@@ -267,7 +276,7 @@ export async function GET(request: NextRequest) {
     const previousStartDate = new Date(startDate.getTime() - (now.getTime() - startDate.getTime()))
     const { data: previousItineraries, error: previousError } = await supabase
       .from('itineraries')
-      .select('total_cost, currency, start_date, status')
+      .select('itinerary_code, total_cost, currency, start_date, status')
       .eq('org_id', orgId)
       .gte('created_at', previousStartDate.toISOString())
       .lt('created_at', startDateStr)
@@ -283,7 +292,12 @@ export async function GET(request: NextRequest) {
 
     // Converted too — comparing a raw mixed-currency sum against a converted
     // one would invent growth out of nothing but exchange rates.
-    const previousRevenue = (previousItineraries || []).reduce(
+    // Filtered the same way as the current period: comparing a filtered total
+    // against an unfiltered one would invent a growth figure.
+    const previousRevenue = partitionDemoRows(
+      previousItineraries,
+      row => row.itinerary_code,
+    ).real.reduce(
       (sum, i) => sum + (toReporting(i) ?? 0), 0
     )
     
@@ -322,7 +336,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, data: analyticsData })
+    return NextResponse.json({ success: true, data: analyticsData, demo_excluded: demoExcluded })
   } catch (error: any) {
     console.error('Analytics error:', error)
     return NextResponse.json(

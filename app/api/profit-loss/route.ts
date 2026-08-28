@@ -27,6 +27,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { partitionDemoRows } from '@/lib/demo-data'
 import { createClient } from '@supabase/supabase-js'
 import { loadFxIndex, buildFxMeta, emptyFxSummary, type FxHole } from '@/lib/fx-report'
 import { computeTripPnL, type TripPnL, type PnLExtra } from '@/lib/trip-pnl'
@@ -124,18 +125,26 @@ export async function GET(request: NextRequest) {
       itineraryQuery = itineraryQuery.lte('start_date', endDate)
     }
 
-    const { data: itineraries, error: itinError } = await itineraryQuery
+    const { data: allItineraries, error: itinError } = await itineraryQuery
 
     if (itinError) {
       console.error('Error fetching itineraries:', itinError)
       return NextResponse.json({ error: 'Failed to fetch itineraries' }, { status: 500 })
     }
 
+    // Seeded fixtures are real rows carrying real money, and every money query
+    // here has been counting them (see lib/demo-data.ts). Drop them from the
+    // AGGREGATE only: asking for one trip by id must still answer, or the
+    // extras walkthrough's own P&L page stops working.
+    const { real: itineraries, exclusion: demoExcluded } = itineraryId
+      ? { real: allItineraries ?? [], exclusion: { excluded: 0, codes: [] } }
+      : partitionDemoRows(allItineraries, row => row.itinerary_code)
+
     if (!itineraries || itineraries.length === 0) {
       // Was a bare `[]`, which has no `success` key — the page checks for one,
       // so an org with no trips got a permanently-loading screen rather than an
       // empty report. Return the same shape as every other path.
-      return NextResponse.json({ success: true, data: [], summary: emptySummary() })
+      return NextResponse.json({ success: true, data: [], summary: emptySummary(), demo_excluded: demoExcluded })
     }
 
     const itineraryIds = itineraries.map(i => i.id)
@@ -332,7 +341,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: pnlData,
-      summary
+      summary,
+      // Reported, never silent: a total that quietly changed is how the
+      // contradictory-figures problem started.
+      demo_excluded: demoExcluded
     })
   } catch (error) {
     console.error('Error in P&L GET:', error)
