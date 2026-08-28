@@ -38,7 +38,8 @@ import {
   BOOKING_STATUS_CONFIG,
   SUPPLIER_STATUS_CONFIG,
   PAYMENT_STATUS_CONFIG,
-  SupplierConfirmationStatus
+  SupplierConfirmationStatus,
+  statusChip
 } from '@/types/bookings'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { SUPPLIER_TYPE_GROUPS, supplierTypeLabel } from '@/lib/supplier-types'
@@ -325,15 +326,9 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
   }
 
   // A status outside the config vocabulary used to take the WHOLE page down
-  // with "cannot read properties of undefined". Nothing in the database
-  // constrains these columns, so one unexpected value — from an import, a
-  // migration, or another service — white-screened a booking rather than
-  // showing an unfamiliar label.
-  const UNKNOWN = { label: booking.status ?? 'Unknown', color: 'text-gray-600', bgColor: 'bg-gray-100' }
-  const statusConfig = BOOKING_STATUS_CONFIG[booking.status] ?? UNKNOWN
-  const paymentStatusConfig =
-    PAYMENT_STATUS_CONFIG[booking.payment_status] ??
-    { ...UNKNOWN, label: booking.payment_status ?? 'Unknown' }
+  // with "cannot read properties of undefined" — see statusChip.
+  const statusConfig = statusChip(booking.status, BOOKING_STATUS_CONFIG)
+  const paymentStatusConfig = statusChip(booking.payment_status, PAYMENT_STATUS_CONFIG)
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">

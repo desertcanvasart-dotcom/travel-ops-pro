@@ -17,7 +17,7 @@ import {
   PlayCircle,
   Filter
 } from 'lucide-react'
-import { Booking, BookingStatus, BOOKING_STATUS_CONFIG } from '@/types/bookings'
+import { Booking, BookingStatus, BOOKING_STATUS_CONFIG, statusChip } from '@/types/bookings'
 
 export default function BookingsPage() {
   const t = useTranslations('bookings')
@@ -250,7 +250,9 @@ export default function BookingsPage() {
             </thead>
             <tbody className="divide-y">
               {filteredBookings.map((booking) => {
-                const statusConfig = BOOKING_STATUS_CONFIG[booking.status]
+                // Never index the config directly — an unfamiliar status must
+                // show an unfamiliar label, not white-screen the list.
+                const statusConfig = statusChip(booking.status, BOOKING_STATUS_CONFIG)
                 const daysUntil = getDaysUntilStart(booking.start_date)
 
                 return (
