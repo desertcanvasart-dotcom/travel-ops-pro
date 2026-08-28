@@ -61,6 +61,8 @@ export default function OrganizationSettingsPage() {
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState<InviteRole>('agent')
   const [sendingInvite, setSendingInvite] = useState(false)
+  // Set when the invitation was created but its email could not be sent.
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
 
   // Is the current user an owner?
   const currentMember = members.find(m => m.user_id === user?.id)
@@ -137,9 +139,17 @@ export default function OrganizationSettingsPage() {
       })
       const json = await res.json()
       if (!res.ok || !json?.success) throw new Error(json?.error || 'Failed to send invitation')
-      setSuccess(`Invitation sent to ${inviteEmail.trim()}`)
-      setInviteEmail('')
-      setShowInvite(false)
+      if (json.emailSent === false) {
+        // The invitation exists and the link works — the mail did not go.
+        // Say so, and hand over the link rather than reporting a send.
+        setInviteLink(json.inviteUrl || null)
+        setError(json.emailWarning || 'The invitation was created, but no email was sent.')
+      } else {
+        setInviteLink(null)
+        setSuccess(`Invitation sent to ${inviteEmail.trim()}`)
+        setInviteEmail('')
+        setShowInvite(false)
+      }
       await loadAll()
     } catch (err: any) {
       setError(err.message || 'Failed to send invitation')
@@ -210,6 +220,26 @@ export default function OrganizationSettingsPage() {
       {success && (
         <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-800 text-sm flex items-start gap-2">
           <CheckCircle className="w-5 h-5 flex-shrink-0" /> {success}
+        </div>
+      )}
+      {inviteLink && (
+        <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm">
+          <p className="font-medium mb-1">Send this link to the person yourself</p>
+          <p className="text-xs mb-2">
+            The invitation is valid for 7 days. Opening it lets them set a password and sign in
+            straight away.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 px-2 py-1 bg-white border border-amber-200 rounded text-xs break-all">
+              {inviteLink}
+            </code>
+            <button
+              onClick={() => { navigator.clipboard?.writeText(inviteLink).catch(() => {}) }}
+              className="px-2 py-1 text-xs font-medium text-amber-900 border border-amber-300 rounded hover:bg-amber-100"
+            >
+              Copy
+            </button>
+          </div>
         </div>
       )}
 
