@@ -316,12 +316,35 @@ options listed by name and price in the results panel where the operator can
 see what they are buying, and the chosen ones riding into `services_snapshot`
 so conversion puts them in the day plan as real services. That closes the leak.
 
-FOUND WHILE DOING IT, NOT FIXED: `optional_price_override` — the selling price
-the operator sets on an option — is read by the F1 catalogue and **ignored by
-the B2B calculator**, which prices every optional service as cost + margin. So
-the same option can be quoted at one price and sold as an extra at another.
-Fixing it changes quote arithmetic, so it is its own decision rather than a
-side effect of F2.
+**F4 — the authoring screen, and options priced off-margin.** DONE. Two things
+F2 surfaced and did not fix.
+
+*The list could not be written.* `tour_variation_services` is reached by exactly
+one route and **no screen called it**, so `is_optional` and
+`optional_price_override` could not be set from anywhere in the app. The table
+was empty, which meant `calculate-price` always took its auto-pricing fallback —
+a path that sets `isOptional: false` at all fourteen sites — so F2's picker had
+nothing to show and the "Available add-ons" block on `/tours/[code]` was empty
+for the same reason. `/tours/variations/[id]/options` is that screen: move a
+service between "included" and "options", set what an option sells for, add one,
+delete one. Reached from each variation in the tour manager. A single-service
+PATCH was added beside the existing bulk PUT, because a failed replace-all takes
+the variation's other services with it.
+
+*Options are priced OFF-MARGIN* (operator's decision, 2026-08-28). A price set
+on an option is THE price: it is added to the quote AFTER margin, and its cost
+still counts as cost so the option is not reported as pure profit. An option
+with no price of its own is still cost + margin, like any other service. The
+catalogue and the calculator now agree — before this the same balloon ride was
+125 before the sale and 140 after it. The seasonal demand premium still applies
+to the whole selling price, override included: that premium is about the DATE,
+not the markup.
+
+Fixed in passing: the quantity behind `line_total` and the quantity DISPLAYED
+were computed by two different expressions, and the display copy was missing
+per_day, per_night and per_room — so a per-night hotel line reported a quantity
+that did not match its own total. One function, both callers
+(`lib/b2b/optional-pricing.ts` `serviceQuantity`).
 
 **F3 — CRM "New trip", from a programme.** DONE. See §6b.
 
