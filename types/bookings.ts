@@ -272,6 +272,26 @@ export interface BookingFilters {
   assignedGuideId?: string
 }
 
+/**
+ * The chip for a status, including one nobody has thought of.
+ *
+ * Nothing in the database constrains bookings.status or payment_status, so an
+ * import, a migration or another service can put a value there that the config
+ * has never heard of. Indexing the config directly then yields undefined, and
+ * reading `.bgColor` off it takes the WHOLE page down — which is exactly what
+ * happened to the bookings list the first time a row said 'confirmed'. The
+ * detail page had already been fixed this way; the list had not, so the fix
+ * lives here now and both read it.
+ */
+export function statusChip(
+  status: string | null | undefined,
+  config: Record<string, { label: string; color: string; bgColor: string }>
+): { label: string; color: string; bgColor: string } {
+  const known = status ? config[status] : undefined
+  if (known) return known
+  return { label: status || 'Unknown', color: 'text-gray-600', bgColor: 'bg-gray-100' }
+}
+
 export const BOOKING_STATUS_CONFIG: Record<BookingStatus, { label: string; color: string; bgColor: string }> = {
   pending: { label: 'Pending', color: 'text-gray-600', bgColor: 'bg-gray-100' },
   supplier_confirmed: { label: 'Suppliers Confirmed', color: 'text-blue-600', bgColor: 'bg-blue-100' },
