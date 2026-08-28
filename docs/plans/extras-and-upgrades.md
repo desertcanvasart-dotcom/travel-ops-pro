@@ -188,6 +188,68 @@ the next itinerary edit. Operations still see it: confirming an extra with a
 supplier inserts a `booking_supplier_status` row, so it appears on the existing
 manifest and gets confirmed like any other service.
 
+## 5a. Two cases, one catalogue
+
+Added 2026-08-28 after the operator drew a distinction the original plan had
+collapsed.
+
+**There are two moments, not one**, and the boundary is not payment — it is
+whether the price has been agreed:
+
+| | Before the price is agreed | After |
+|---|---|---|
+| The customer | picks a programme, then adds options | comes back and asks for more |
+| Where it lands | a service in the quote / itinerary | a `booking_extras` row |
+| Why | the itinerary is still editable, so the price follows | the booking total is frozen (§2) |
+
+**The second case is what §1–§6 are about. The first case leaks today**, in a
+way that is worth writing down:
+
+- `include_optionals` on the B2B calculator is ONE boolean for the whole quote.
+  A customer who wants the balloon ride but not Abu Simbel cannot be quoted.
+- The calculator saves `services_snapshot: result.services` — the
+  **non-optional** list — while `total_cost` includes the optionals. Converting
+  that quote builds the itinerary's days and services from the snapshot, so the
+  optional lines are absent while their money is in the price. The first save on
+  the itinerary edit page then recomputes `total_cost` from Σ services × margin
+  and the optionals' money disappears. The customer has paid for a tour that is
+  in neither the day plan nor, a moment later, the price.
+- `/tours/[code]` lists "Available add-ons" with prices, but `/tours` requires
+  admin/manager/agent and its "Request this tour" button has no handler. There
+  is no customer-facing surface at all.
+
+**And one catalogue serves both.** The operator's own idea, and the right one:
+the list of what can be added already exists and has simply never had a consumer
+that sells from it.
+
+- `tour_variation_services.is_optional` — the options belonging to a specific
+  programme. Each carries `cost_per_unit` AND `optional_price_override`, which
+  is a selling price the operator already decided. This is the per-package
+  option list, editable today through the variation services screen.
+- `entrance_fees.is_addon` — things that can be added to any trip. The flag §1
+  found with no consumer.
+
+Same list, two destinations, decided by *when*. This needs **no migration**:
+`booking_extras` already carries `source_kind`, `source_id`, `supplier_id` and
+`supplier_cost`, which is what they were put there for.
+
+Why picking beats typing, which is all E1 gave: a typed extra drifts between
+agents and months, carries no supplier or cost (so the P&L reads it as pure
+margin), and cannot answer *"how much did the balloon ride earn us this year?"*.
+With `source_id` stamped, that question has an answer — and the answer is what
+tells the operator what belongs in next season's packages.
+
+Two rules the catalogue does not get to break. The price is **snapshotted onto
+the extra when it is offered**, never looked up later — rates change and an
+agreed price must not move under the customer (E0 already stores `unit_price` on
+the row). And a blank rate is a **hole**: an item that cannot be priced comes
+back unpriced, with the reason, rather than offering something for nothing.
+
+One gap to be honest about: AI-generated itineraries are not built from a
+template, so they have no programme to hang a per-package list on. Those trips
+see the cross-package add-ons only. Both feed the same picker, so the office
+never has to know which kind of trip it is looking at.
+
 ## 6. Phases
 
 Each is one gated PR. **Exactly one migration**, in E0, carrying every column
@@ -221,9 +283,9 @@ per-traveller link only ever sees and touches that passenger's own — same
 rate-limited, `notifyOrgManagers` on a new request, and a needs-attention reason
 so a request older than a day surfaces on the dashboard.
 
-**E4 — pricing from the catalog.** `entrance_fees WHERE is_addon = true` finally
-gets its consumer: pick an add-on, price it from the rate table with the org
-margin applied (`lib/org-default-margin`). Activities and tours the same way.
+**E4 — pricing from the catalogue.** Superseded and enlarged by §5a; now the
+F-series below, because it serves both cases rather than only the post-purchase
+one.
 
 **E5 — flight class upgrades.** Delta between the booked cabin and the target
 cabin from `flight_rates`, per passenger. Largest and least certain, because
@@ -232,7 +294,44 @@ upgrade *from*, so this phase has to establish that first. Last, and only if
 this is really sold.
 
 E0–E3 is the useful minimum: a customer can be sold an extra tour or an upgrade
-and it bills correctly. E4 and E5 are convenience and coverage.
+and it bills correctly. E5 is coverage.
+
+## 6a. The catalogue phases (F)
+
+Reordered ahead of E3 on the operator's reasoning: E3 gives the customer a way
+to ask after the fact, but the first case happens on **every sale**, and it is
+leaking now.
+
+**F1 — the picker, pointed at a booking.** `GET
+/api/bookings/[id]/extras/catalog` reads the programme's own optional services
+and the add-on entrance fees, prices each through `lib/extras-catalog.ts` (the
+operator's own selling price if set, else cost + the org margin, converted into
+the booking's currency at today's rate, unpriced when there is no rate for
+either), and the extras panel gains a "From the catalogue" tab beside "Type it
+in". Typing stays, because a genuinely one-off extra is a real thing.
+
+**F2 — the same picker on the quote side.** Per-option rather than one
+checkbox, and the chosen options ride into `services_snapshot` so conversion
+puts them in the day plan as real services. That closes the leak in §5a.
+
+**F3 — CRM "New trip", from a programme.** See §6b.
+
+**E5 — flight class upgrades**, unchanged and still last.
+
+## 6b. The CRM entry point
+
+Both "New booking" buttons on the client page go to
+`/itineraries/new?clientId=…`. Three things about that:
+
+- **It is mislabelled.** It creates an *itinerary* — a plan — not a booking. A
+  booking only exists at confirmation. The two are different objects with
+  different tabs and different lifecycles, and calling one by the other's name
+  is exactly what made the two cases in §5a feel like a single question.
+- **It starts from nothing.** Name, dates, pax, currency, blank. There is no
+  "start from a programme", which is where the first case actually begins.
+- The client prefill (name, email, phone, `client_id`) works correctly.
+
+F3: rename it "New trip", and offer two ways in — blank, or from a programme.
 
 ## 7. The optional-services split, which is NOT part of this
 
