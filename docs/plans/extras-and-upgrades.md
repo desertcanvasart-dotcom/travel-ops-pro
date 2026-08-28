@@ -16,12 +16,24 @@ attractions from the main list (`app/tours/manage/TourManagerContent.tsx:916`);
 the supplier-document editor draws an amber chip. Nothing prices an add-on,
 offers one, or sells one.
 
-**`optionalServices` in the pricing engine** — a stub that can never fire.
-`lib/auto-pricing-service.ts` builds it from
-`services.filter(s => s.notes?.includes('optional'))` and returns
-`optionalTotal: 0` hardcoded, in all four return paths (lines 3252/3254,
-3663/3665). Nothing in the codebase ever writes `optional` into a service note,
-so the array is always empty and the total is always zero.
+**Optional services — real on one pricing path, vestigial on the other.**
+Tour template and variation services carry a genuine `is_optional` column
+(`/api/tours/templates/[id]/days`, `/api/tours/variations/[id]/services`), and
+the B2B calculator honours it properly: optional lines are kept out of the
+subtotal, returned separately as `optional_services`, and added only when the
+caller passes `include_optionals`
+(`app/api/b2b/calculate-price/route.ts:826`). That is a working feature — for
+**pre-sale B2B quotes off a tour template**. It is not a post-purchase channel,
+and it has no customer-facing surface.
+
+The auto-pricing engine — the path `generate-itinerary` actually uses — does
+none of that. It sets `isOptional: false` at all fourteen sites where it builds
+a service, and instead splits optional from non-optional on
+`s.notes?.includes('optional')`, a substring test against engine-generated free
+text that nothing ever writes. `optionalTotal` is hardcoded `0` in all four
+return paths (lib/auto-pricing-service.ts:3252/3254, 3663/3665). So on the main
+path the array is always empty, the total is always zero, and the flag the B2B
+calculator respects is dropped on the floor.
 
 **`flight_rates.cabin_class`** — economy / business / first exists in the rate
 catalog, and **no pricing path reads `flight_rates` at all**: only the rate CRUD
@@ -222,11 +234,19 @@ this is really sold.
 E0–E3 is the useful minimum: a customer can be sold an extra tour or an upgrade
 and it bills correctly. E4 and E5 are convenience and coverage.
 
-## 7. Also in E0
+## 7. The optional-services split, which is NOT part of this
 
-Delete the `optionalServices` / `optionalTotal: 0` stub from
-`lib/auto-pricing-service.ts`. It can never be non-empty, and leaving it beside
-a real extras feature gives two answers to the same question.
+The vestigial half of §1 — the auto-pricing engine's notes-substring filter and
+its hardcoded `optionalTotal: 0` — should either carry `is_optional` through
+properly or be deleted. It is deliberately **not** in E0 or anywhere else in
+this plan: wiring it changes subtotals on the main pricing path, which is
+snapshot-pinned, and it is a pre-sale concern ("would you like to include the
+balloon ride in this quote?") rather than a post-purchase one. Different
+feature, different PR.
+
+What it does give this plan is E4's source of truth: template services already
+flagged `is_optional` are the operator's own curated list of what can be added
+to a given tour, which is exactly what an extras picker wants to offer.
 
 ## 8. What this does not do
 
