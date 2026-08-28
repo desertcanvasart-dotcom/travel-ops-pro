@@ -323,7 +323,7 @@ the same option can be quoted at one price and sold as an extra at another.
 Fixing it changes quote arithmetic, so it is its own decision rather than a
 side effect of F2.
 
-**F3 — CRM "New trip", from a programme.** See §6b.
+**F3 — CRM "New trip", from a programme.** DONE. See §6b.
 
 **E5 — flight class upgrades**, unchanged and still last.
 
@@ -340,7 +340,20 @@ Both "New booking" buttons on the client page go to
   "start from a programme", which is where the first case actually begins.
 - The client prefill (name, email, phone, `client_id`) works correctly.
 
-F3: rename it "New trip", and offer two ways in — blank, or from a programme.
+F3, done: renamed "New trip", and the form offers two ways in — blank, or from
+a programme. Choosing one links `template_id`, fills the name **only when it is
+still blank** (a trip called "Tanaka family — Nile, October" was meant), and
+sets the end date from the programme's length, which also follows the start
+date if that moves.
+
+It is a LINK plus defaults, not a day plan: building the days is what the quote
+flow and the generator do, and materialising a week of services from a dropdown
+would be a surprise rather than a convenience.
+
+The link is the point. `itineraries.template_id` is how the F1 catalogue knows
+which options belong to THIS programme — before F3 the only way a trip got one
+was conversion from a B2B quote, so a trip started from the CRM could never
+show its own programme's options.
 
 ## 7. The optional-services split, which is NOT part of this
 

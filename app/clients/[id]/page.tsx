@@ -501,12 +501,18 @@ export default function ClientProfilePage() {
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
                 <h3 className="text-base font-semibold mb-3">{t('quickActions')}</h3>
                 <div className="space-y-2">
+                {/* "New trip", not "New booking": this creates an ITINERARY,
+                    which is a plan. A booking is a different record that only
+                    exists once the trip is confirmed, and calling one by the
+                    other's name is what made adding a service before the sale
+                    and adding one after it look like the same question.
+                    See docs/plans/extras-and-upgrades.md §6b. */}
                 <Link
                href={`/itineraries/new?clientId=${clientId}`}
                className="w-full flex items-center gap-2 px-3 py-2 bg-blue-50 text-blue-700 text-sm rounded-lg hover:bg-blue-100"
                  >
                 <Plus className="w-4 h-4" />
-                {t('newBooking')}
+                {t('newTrip')}
                 </Link>
                 <button
                    onClick={() => setIsCommunicationModalOpen(true)}
@@ -672,7 +678,7 @@ export default function ClientProfilePage() {
                className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
                >
               <Plus className="w-4 h-4" />
-              {t('newBooking')}
+              {t('newTrip')}
                </Link>
             </div>
 
@@ -685,7 +691,7 @@ export default function ClientProfilePage() {
                 className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
                  >
                 <Plus className="w-4 h-4" />
-               {t('createFirstBooking')}
+               {t('createFirstTrip')}
                  </Link>  
               </div>
             ) : (

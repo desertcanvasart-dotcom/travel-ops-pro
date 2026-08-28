@@ -4,8 +4,14 @@ import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Check, User, Plane, Users, FileText } from 'lucide-react'
+import { ArrowLeft, Check, User, Plane, Users, FileText, Map } from 'lucide-react'
 import { usePreferences } from '@/app/contexts/PreferencesContext'
+import {
+  applyTemplate,
+  deriveEndDate,
+  templateLabel,
+  type TripTemplate,
+} from '@/lib/itineraries/from-template'
 
 export default function NewItineraryContent() {
   const router = useRouter()
@@ -32,7 +38,14 @@ export default function NewItineraryContent() {
     currency: 'USD',
     notes: '',
     client_id: null as string | null,
+    // The programme this trip is built from, when it is built from one. It is
+    // what lets the extras catalogue offer THIS programme's options later.
+    template_id: null as string | null,
   })
+
+  // The programmes the operator sells. `slim=1` because this is a dropdown
+  // showing a code and a length, not the day-by-day payload.
+  const [templates, setTemplates] = useState<TripTemplate[]>([])
 
   // Pre-fill from the client this booking is being made for, so their name and
   // contact details are not retyped — and so the trip carries their id.
@@ -59,6 +72,26 @@ export default function NewItineraryContent() {
     return () => { cancelled = true }
   }, [clientId])
 
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/tours/templates?slim=1')
+        const json = await res.json()
+        if (cancelled || !json?.success) return
+        setTemplates((json.data ?? []).filter((tpl: TripTemplate & { is_active?: boolean }) => tpl.is_active !== false))
+      } catch {
+        // No programmes listed just means the blank form, not a broken page.
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  const chooseTemplate = (templateId: string) => {
+    const template = templates.find(tpl => tpl.id === templateId) ?? null
+    setFormData(prev => ({ ...prev, ...applyTemplate(template, prev) }))
+  }
+
   // Update currency from preferences once loaded
   useEffect(() => {
     if (!prefsLoading && preferences.default_currency) {
@@ -71,10 +104,20 @@ export default function NewItineraryContent() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: name === 'num_adults' || name === 'num_children' || name === 'num_infants' ? parseInt(value) || 0 : value
-    }))
+    setFormData(prev => {
+      const next = {
+        ...prev,
+        [name]: name === 'num_adults' || name === 'num_children' || name === 'num_infants' ? parseInt(value) || 0 : value
+      }
+      // Moving the start date of a programme moves its end date with it — the
+      // length belongs to the programme, not to whatever was typed before.
+      if (name === 'start_date' && prev.template_id) {
+        const template = templates.find(tpl => tpl.id === prev.template_id)
+        const end = deriveEndDate(value, template?.duration_days)
+        if (end) next.end_date = end
+      }
+      return next
+    })
   }
 
   const calculateDays = () => {
@@ -210,6 +253,25 @@ export default function NewItineraryContent() {
               {t('tripDetails')}
             </h2>
             <div className="grid grid-cols-1 gap-6">
+              {templates.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                    <Map className="w-4 h-4 text-primary-600" />
+                    {t('fromProgramme')}
+                  </label>
+                  <select
+                    value={formData.template_id ?? ''}
+                    onChange={e => chooseTemplate(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  >
+                    <option value="">{t('fromScratch')}</option>
+                    {templates.map(tpl => (
+                      <option key={tpl.id} value={tpl.id}>{templateLabel(tpl)}</option>
+                    ))}
+                  </select>
+                  <p className="mt-2 text-xs text-gray-500">{t('fromProgrammeHint')}</p>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {t('tripName')} <span className="text-danger">*</span>
