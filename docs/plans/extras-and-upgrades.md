@@ -310,9 +310,18 @@ the booking's currency at today's rate, unpriced when there is no rate for
 either), and the extras panel gains a "From the catalogue" tab beside "Type it
 in". Typing stays, because a genuinely one-off extra is a real thing.
 
-**F2 — the same picker on the quote side.** Per-option rather than one
-checkbox, and the chosen options ride into `services_snapshot` so conversion
-puts them in the day plan as real services. That closes the leak in §5a.
+**F2 — the same picker on the quote side.** DONE. Per-option rather than one
+checkbox (`selected_optional_ids`, with the old boolean still honoured), the
+options listed by name and price in the results panel where the operator can
+see what they are buying, and the chosen ones riding into `services_snapshot`
+so conversion puts them in the day plan as real services. That closes the leak.
+
+FOUND WHILE DOING IT, NOT FIXED: `optional_price_override` — the selling price
+the operator sets on an option — is read by the F1 catalogue and **ignored by
+the B2B calculator**, which prices every optional service as cost + margin. So
+the same option can be quoted at one price and sold as an extra at another.
+Fixing it changes quote arithmetic, so it is its own decision rather than a
+side effect of F2.
 
 **F3 — CRM "New trip", from a programme.** See §6b.
 

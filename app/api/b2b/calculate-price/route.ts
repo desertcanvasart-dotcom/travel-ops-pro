@@ -9,6 +9,7 @@ import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { parseOptionalSelection, isOptionalSelected } from '@/lib/b2b/optional-selection'
 
 // ============================================
 // B2B TOUR PRICE CALCULATOR - v6
@@ -48,6 +49,8 @@ interface CalculatedService {
   unit_cost: number
   line_total: number
   is_optional: boolean
+  /** For optional lines: is the customer buying this one? */
+  is_selected?: boolean
   day_number: number | null
   pricing_note?: string
 }
@@ -285,12 +288,17 @@ export async function POST(request: NextRequest) {
       is_eur_passport = true,
       margin_percent: requestedMargin = null,  // resolved below: request → org default → 25
       partner_id = null,
-      include_optionals = false,
+      // include_optionals / selected_optional_ids are read off `body` by
+      // parseOptionalSelection below, not destructured here.
       language = 'English',
       tier = 'standard',
       tour_leader_included = false
     } = body
     const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(supabaseAdmin, await getCurrentOrgId()) })
+
+    // WHICH optional services the customer is buying, not merely whether. The
+    // old boolean priced every option or none — see lib/b2b/optional-selection.
+    const optionalSelection = parseOptionalSelection(body)
 
     // Determine if using passenger breakdown or simple num_pax
     const usePassengerBreakdown = num_adults !== undefined && num_adults !== null
@@ -824,8 +832,12 @@ export async function POST(request: NextRequest) {
       }
 
       if (service.is_optional) {
-        optionalServices.push(calculatedService)
-        if (include_optionals) optionalTotal += lineTotal
+        // is_selected travels with the line so the caller can show what was
+        // chosen — and so the quote can snapshot the chosen ones as real
+        // services rather than losing them (docs/plans §5a).
+        const selected = isOptionalSelected(service.id, optionalSelection)
+        optionalServices.push({ ...calculatedService, is_selected: selected })
+        if (selected) optionalTotal += lineTotal
       } else {
         calculatedServices.push(calculatedService)
         subtotalCost += lineTotal
@@ -833,7 +845,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate totals
-    const totalCost = subtotalCost + (include_optionals ? optionalTotal : 0)
+    // optionalTotal already holds ONLY the chosen options, so no second gate.
+    const totalCost = subtotalCost + optionalTotal
     const marginAmount = totalCost * (effectiveMargin / 100)
     const baseSellingPrice = totalCost + marginAmount
 
