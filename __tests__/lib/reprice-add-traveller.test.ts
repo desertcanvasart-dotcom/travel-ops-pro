@@ -30,6 +30,48 @@ describe('computeAddTravellerReprice', () => {
     expect(r.newTotal).toBe(1333.33) // 1000/3*4 = 1333.33…
   })
 
+  it('does not divide one traveller\'s upgrade across the people added later', () => {
+    // €2000 agreed for 2 (=€1000pp), plus an €820 business-class upgrade for
+    // ONE of them, so total_cost is €2820. Adding a third traveller must cost
+    // €1000 — not €1410, which is what dividing the total would charge.
+    const r = computeAddTravellerReprice({
+      oldTotal: 2820, oldBaseTotal: 2000, oldPax: 2, addedPax: 1,
+      depositPercent: 20, oldBalanceDue: 2820,
+    })
+    if (r.method !== 'per_person') throw new Error('expected per_person')
+    expect(r.perPerson).toBe(1000)
+    expect(r.delta).toBe(1000)
+    expect(r.newTotal).toBe(3820)          // the upgrade rides along, unscaled
+    expect(r.newBaseTotalCost).toBe(3000)  // and stays out of the base
+    expect(r.newDepositAmount).toBe(600)   // 20% of the base, not of 3820
+    expect(r.newBalanceDue).toBe(3820)
+  })
+
+  it('keeps the base in step so a SECOND addition is still correct', () => {
+    const first = computeAddTravellerReprice({
+      oldTotal: 2820, oldBaseTotal: 2000, oldPax: 2, addedPax: 1,
+      depositPercent: 20, oldBalanceDue: 2820,
+    })
+    if (first.method !== 'per_person') throw new Error('expected per_person')
+    const second = computeAddTravellerReprice({
+      oldTotal: first.newTotal, oldBaseTotal: first.newBaseTotalCost,
+      oldPax: 3, addedPax: 1, depositPercent: 20, oldBalanceDue: first.newBalanceDue,
+    })
+    if (second.method !== 'per_person') throw new Error('expected per_person')
+    expect(second.perPerson).toBe(1000)  // still €1000pp, not creeping upward
+    expect(second.delta).toBe(1000)
+  })
+
+  it('is unchanged on a booking with no extras (base absent)', () => {
+    const withoutBase = computeAddTravellerReprice({
+      oldTotal: 2000, oldPax: 2, addedPax: 2, depositPercent: 25, oldBalanceDue: 2000,
+    })
+    const withBaseEqualToTotal = computeAddTravellerReprice({
+      oldTotal: 2000, oldBaseTotal: 2000, oldPax: 2, addedPax: 2, depositPercent: 25, oldBalanceDue: 2000,
+    })
+    expect(withoutBase).toEqual(withBaseEqualToTotal)
+  })
+
   it('falls back to manual when there is no priced base', () => {
     expect(computeAddTravellerReprice({ oldTotal: 0, oldPax: 2, addedPax: 1, depositPercent: 25, oldBalanceDue: 0 }).method).toBe('manual')
     expect(computeAddTravellerReprice({ oldTotal: null, oldPax: 2, addedPax: 1, depositPercent: 25, oldBalanceDue: null }).method).toBe('manual')

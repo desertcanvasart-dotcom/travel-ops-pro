@@ -49,9 +49,14 @@ export async function POST(
   }
 
   // Approve: bump the booked count and seed the new (blank) passenger rows.
+  // `*` rather than a column list on purpose: base_total_cost arrived with
+  // extras (migration 20260828_booking_extras) and naming it here would 400
+  // every approval on a deployment where the migration has not been applied
+  // yet. Selecting everything means the key is present exactly when the column
+  // is, which is also how the update below decides whether to write it.
   const { data: booking } = await admin
     .from('bookings')
-    .select('id, num_adults, num_children, total_cost, balance_due, deposit_percent')
+    .select('*')
     .eq('id', id)
     .eq('org_id', orgId)
     .maybeSingle()
@@ -63,6 +68,9 @@ export async function POST(
   // Auto-reprice: extend the per-person rate the customer already agreed to.
   const reprice = computeAddTravellerReprice({
     oldTotal: booking.total_cost,
+    // The agreed trip price WITHOUT extras. Undefined on a booking that has
+    // never had one, which is the same arithmetic as before extras existed.
+    oldBaseTotal: booking.base_total_cost,
     oldPax,
     addedPax: req.requested_count,
     depositPercent: booking.deposit_percent,
@@ -77,6 +85,12 @@ export async function POST(
     bookingUpdate.total_cost = reprice.newTotal
     bookingUpdate.deposit_amount = reprice.newDepositAmount
     bookingUpdate.balance_due = reprice.newBalanceDue
+    // Only when the column exists (see the select above). Keeping the base in
+    // step matters for the NEXT addition: without it, a later add-traveller
+    // would divide a total that already carries this booking's extras.
+    if ('base_total_cost' in booking) {
+      bookingUpdate.base_total_cost = reprice.newBaseTotalCost
+    }
   }
 
   const { error: bumpErr } = await admin
