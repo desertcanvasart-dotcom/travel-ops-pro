@@ -185,6 +185,10 @@ export default function VariationOptionsPage() {
                         </div>
                       </label>
                       {busy === s.id && <Loader2 className="w-4 h-4 animate-spin text-gray-400 mt-4" />}
+                      {/* Says where it GOES, not that it is being added. The
+                          first label was "Include it", which reads as "yes, add
+                          this option to the trip" — the operator clicked it on
+                          both options and moved them into the base price. */}
                       <button type="button" onClick={() => patch(s.id, { is_optional: false })}
                         disabled={busy === s.id} title={t('makeIncluded')}
                         className="mt-4 px-2.5 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40">
