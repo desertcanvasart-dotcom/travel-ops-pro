@@ -60,11 +60,42 @@ proving somebody configured cron correctly.
 
 ## 4. Phases
 
-**T1 — the migration runner and the tracker.** Port `migrate.mjs` +
+**T1 — the migration runner and the tracker.** ✅ **BUILT.** Port `migrate.mjs` +
 `migrate-core.mjs`. Add `schema_migrations`. Baseline this database — record all
 125 existing files as applied without running them, since they already are.
 Until this exists nothing else can be trusted, including "which version is this
 customer on?".
+
+> **What T1 actually found.** The port was not clean, because this repo's
+> filenames could not be sorted into an apply order. 114 migrations were
+> date-prefixed (`20260203_x.sql`); **11 were bare** (`create_bookings_tables.sql`).
+> Digits sort before letters, so a plain name sort put the eleven OLDEST files
+> LAST — and two of them (`b2b_quotes_itinerary_bridge`, `add_generation_warnings`)
+> are not oldest at all, they interleave with the dated ones. Sorting by name
+> would have built the schema in an order that has never existed.
+>
+> The eleven were renamed to their true dates, taken from the git commit that
+> added each one. **That was safe exactly once and the window is now closed:**
+> no database had ever recorded a migration name, because no tracker existed.
+> After a baseline, renaming a file means the tracker holds a name no file has,
+> and the runner tries to re-apply schema that is already there.
+>
+> `assertOrderable()` now refuses to run if any migration lacks a `YYYYMMDD_`
+> prefix, and a test asserts it against the real `migrations/` directory, so
+> the problem cannot come back.
+>
+> **Two guards were added that the sibling does not have**, both from incidents
+> this project has actually had:
+> - The runner refuses a database that looks like autoura-saas (`tenants` but no
+>   `organizations`). On 2026-08-28 a migration was pasted into the wrong
+>   Supabase project; it failed and rolled back, which was luck rather than design.
+> - It refuses `--baseline` on an empty database — that would record a schema as
+>   applied without building it, and no later run would ever build it.
+>
+> Anything that writes names the target database and asks first, unless `--yes`.
+>
+> **Still to do on the operator's side:** run `--baseline` against production.
+> Nothing has been run against a real database yet.
 
 **T2 — the install procedure.** `.env.example` (every variable this app reads,
 with which are required) and `docs/SELF-HOSTING.md` (prerequisites, first

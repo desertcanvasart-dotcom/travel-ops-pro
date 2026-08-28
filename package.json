@@ -11,6 +11,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "seed:e2e": "node scripts/seed-e2e.mjs",
+    "migrate": "node scripts/migrate.mjs",
+    "migrate:status": "node scripts/migrate.mjs --status",
     "verify:deploy": "node scripts/verify-deploy.mjs"
   },
   "dependencies": {
@@ -44,6 +46,7 @@
     "openai": "^6.8.1",
     "papaparse": "^5.5.3",
     "pdf-lib": "^1.17.1",
+    "pg": "^8.23.0",
     "puppeteer": "^25.8.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
@@ -56,6 +59,7 @@
     "@next/swc-linux-x64-gnu": "^16.3.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@eslint/eslintrc": "^3",
     "@playwright/test": "^1.61.1",
     "@types/node": "^20",
