@@ -17,7 +17,7 @@ import { createServerClient } from '@/lib/supabase-server'
 const HORIZON_DAYS = 45
 
 interface AttentionItem {
-  type: 'balance_due' | 'forms_incomplete' | 'no_guide' | 'change_request'
+  type: 'balance_due' | 'forms_incomplete' | 'no_guide' | 'change_request' | 'extra_request'
   severity: 'urgent' | 'soon'
   bookingId: string
   bookingCode: string | null
@@ -73,7 +73,7 @@ export async function GET() {
     const bookingIds = rows.map(b => b.id)
     const itineraryIds = rows.map(b => b.itinerary_id).filter(Boolean)
 
-    const [passengers, changeRequests, itineraries] = await Promise.all([
+    const [passengers, changeRequests, extraRequests, itineraries] = await Promise.all([
       bookingIds.length
         ? supabase.from('booking_passengers')
             .select('booking_id, details_submitted_at')
@@ -83,6 +83,16 @@ export async function GET() {
         ? supabase.from('booking_change_requests')
             .select('booking_id, kind, requested_count, created_at')
             .eq('status', 'pending')
+            .in('booking_id', bookingIds)
+        : Promise.resolve({ data: [], error: null } as any),
+      // Options a traveller has asked for or accepted from the portal. Both
+      // are waiting on the office: 'requested' needs a price, 'accepted' needs
+      // the thing actually secured before it can be confirmed and billed.
+      bookingIds.length
+        ? supabase.from('booking_extras')
+            .select('booking_id, title, status, created_at')
+            .in('status', ['requested', 'accepted'])
+            .eq('requested_via', 'portal')
             .in('booking_id', bookingIds)
         : Promise.resolve({ data: [], error: null } as any),
       itineraryIds.length
@@ -104,6 +114,13 @@ export async function GET() {
       const list = crByBooking.get(cr.booking_id) || []
       list.push(cr)
       crByBooking.set(cr.booking_id, list)
+    }
+    type PortalExtraRow = { booking_id: string; title: string; status: string; created_at: string }
+    const extraByBooking = new Map<string, PortalExtraRow[]>()
+    for (const ex of (extraRequests.data || []) as PortalExtraRow[]) {
+      const list = extraByBooking.get(ex.booking_id) || []
+      list.push(ex)
+      extraByBooking.set(ex.booking_id, list)
     }
     const guideByItinerary = new Map<string, string | null>()
     for (const it of itineraries.data || []) guideByItinerary.set(it.id, it.assigned_guide_id)
@@ -155,6 +172,17 @@ export async function GET() {
           severity: departsSoon ? 'urgent' : 'soon',
           detail: {},
           href: `/itineraries/${b.itinerary_id}/edit`,
+        })
+      }
+
+      // 5. Options the traveller is waiting on an answer for
+      for (const ex of extraByBooking.get(b.id) || []) {
+        items.push({
+          ...base,
+          type: 'extra_request',
+          severity: 'urgent', // a customer has asked and is waiting
+          detail: { title: ex.title, status: ex.status, requestedAt: ex.created_at },
+          href: `/bookings/${b.id}`,
         })
       }
 
