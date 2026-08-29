@@ -23,6 +23,8 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { withJobRun } from '@/lib/support/job-runs'
+import { createServerClient } from '@/lib/supabase-server'
 import { createClient } from '@supabase/supabase-js'
 import { refreshExchangeRates } from '@/lib/exchange-rate-refresh'
 
@@ -64,10 +66,17 @@ async function handle(request: NextRequest) {
 }
 
 /** POST is the real verb; GET is accepted so a plain curl/uptime check works. */
-export async function POST(request: NextRequest) {
+async function postHandler(request: NextRequest) {
   return handle(request)
 }
 
-export async function GET(request: NextRequest) {
+async function getHandler(request: NextRequest) {
   return handle(request)
 }
+
+// Recorded in job_runs so the support bundle can answer "has this job ever run
+// here?". Wrapping the ROUTE covers both the in-process scheduler (which calls
+// this handler directly) and any external caller. Fail-open: if the recording
+// cannot happen, the job still runs — see lib/support/job-runs.ts.
+export const GET = withJobRun('refresh-exchange-rates', () => createServerClient(), getHandler)
+export const POST = withJobRun('refresh-exchange-rates', () => createServerClient(), postHandler)

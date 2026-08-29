@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withJobRun } from '@/lib/support/job-runs'
+import { createServerClient } from '@/lib/supabase-server'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmailInternal } from '@/lib/email-send'
 
@@ -14,7 +16,7 @@ const supabase = createClient(
 // Vercel: Add to vercel.json crons
 // External: Use cron-job.org or similar service
 
-export async function GET(request: NextRequest) {
+async function getHandler(request: NextRequest) {
   // Optional: Verify cron secret to prevent unauthorized calls
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
@@ -155,7 +157,7 @@ export async function GET(request: NextRequest) {
 }
 
 // Also support POST for some cron services
-export async function POST(request: NextRequest) {
+async function postHandler(request: NextRequest) {
   return GET(request)
 }
 
@@ -299,3 +301,10 @@ function formatDate(dateStr: string): string {
     day: 'numeric' 
   })
 }
+
+// Recorded in job_runs so the support bundle can answer "has this job ever run
+// here?". Wrapping the ROUTE covers both the in-process scheduler (which calls
+// this handler directly) and any external caller. Fail-open: if the recording
+// cannot happen, the job still runs — see lib/support/job-runs.ts.
+export const GET = withJobRun('task-reminders', () => createServerClient(), getHandler)
+export const POST = withJobRun('task-reminders', () => createServerClient(), postHandler)

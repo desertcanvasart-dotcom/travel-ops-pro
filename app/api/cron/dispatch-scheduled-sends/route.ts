@@ -11,6 +11,8 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { withJobRun } from '@/lib/support/job-runs'
+import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
@@ -95,12 +97,19 @@ function authed(request: NextRequest): boolean {
   return !(CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`)
 }
 
-export async function GET(request: NextRequest) {
+async function getHandler(request: NextRequest) {
   if (!authed(request)) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
   return NextResponse.json(await run())
 }
 
-export async function POST(request: NextRequest) {
+async function postHandler(request: NextRequest) {
   if (!authed(request)) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
   return NextResponse.json(await run())
 }
+
+// Recorded in job_runs so the support bundle can answer "has this job ever run
+// here?". Wrapping the ROUTE covers both the in-process scheduler (which calls
+// this handler directly) and any external caller. Fail-open: if the recording
+// cannot happen, the job still runs — see lib/support/job-runs.ts.
+export const GET = withJobRun('dispatch-scheduled-sends', () => createServerClient(), getHandler)
+export const POST = withJobRun('dispatch-scheduled-sends', () => createServerClient(), postHandler)

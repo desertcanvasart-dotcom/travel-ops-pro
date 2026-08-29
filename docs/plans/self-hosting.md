@@ -238,8 +238,35 @@ open-ended part, and neither can start until someone can run `pg_dump` against
 production — which needs the database password and a `postgresql` client
 version matching the server.
 
-**T4 — the support toolkit.** Port `doctor.mjs`, the support bundle, the deep
-health probe and `job_runs` from the sibling. The redaction rules and their
+**T4 — the support toolkit.** 🔨 **IN PROGRESS — `job_runs` and the redaction
+core done; `doctor.mjs`, the bundle and the deep health probe remain.** Port
+`doctor.mjs`, the support bundle, the deep health probe and `job_runs` from the
+sibling.
+
+> **T4a found the gap it was built to find, before it was even wired up.**
+> Eight cron routes exist under `app/api/cron`; the in-process scheduler
+> registers four. `refresh-exchange-rates`, `send-reminders`, `task-reminders`
+> and `dispatch-scheduled-sends` are scheduled by nothing in this repository.
+>
+> `refresh-exchange-rates` demonstrably DOES run on the reference deployment —
+> production rates were fetched at 01:00 on 2026-08-29 — so something external
+> calls it. That could only be established because exchange rates stamp
+> `api_fetched_at` on the data they write. The other three leave no trace
+> whatsoever, and one of them is the retention purge for passport scans.
+>
+> `job-names.mjs` therefore lists all eight and marks which four are scheduled,
+> so a job nothing runs is REPORTED as never having run rather than being
+> quietly absent from the report.
+>
+> The wrapper goes on the ROUTE, not the scheduler: the in-process scheduler
+> calls these handlers directly, so route-level recording covers both the
+> scheduled path and any external caller. Wrapping the scheduler would have
+> recorded only the four it knows about — exactly the blind spot.
+>
+> The redaction rules come across **unchanged** from the sibling, as the plan
+> requires. The env allow-list does not: it is this product's, derived from
+> `.env.example` and held there by a test, because two allow-lists drift and
+> the one that drifts silently is the one deciding what leaves the server. The redaction rules and their
 tests come across unchanged; what differs is this app's vocabulary
 (`organizations` not `tenants`, roles not super-admin) and its in-process
 scheduler.
