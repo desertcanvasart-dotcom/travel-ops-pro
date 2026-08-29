@@ -322,3 +322,45 @@ describe('the squashed migrations directory', () => {
     expect(() => assertOrderable(archive)).not.toThrow()
   })
 })
+
+describe('a migration must not be able to poison the session it runs in', () => {
+  // Found by standing up a real install: the baseline is a pg_dump, which emits
+  // set_config('search_path', '', false). That persists AFTER the file, so the
+  // runner's very next statement — INSERT INTO schema_migrations, unqualified —
+  // failed with `relation "schema_migrations" does not exist` on a perfectly
+  // good install. The replay harness had worked around it locally, so it stayed
+  // green: the test had fixed the problem the product still had.
+  it('records a migration that emptied the search_path', async () => {
+    const db = new PGlite()
+    const result = await runPending(adapt(db), [
+      file(
+        '20260201_poisons_the_session.sql',
+        "CREATE TABLE a (id int); SELECT pg_catalog.set_config('search_path', '', false);",
+      ),
+      file('20260202_after.sql', 'CREATE TABLE public.b (id int);'),
+    ])
+
+    expect(result.failed).toBeUndefined()
+    expect(result.applied).toEqual(['20260201_poisons_the_session.sql', '20260202_after.sql'])
+    expect(await loadApplied(adapt(db))).toEqual([
+      '20260201_poisons_the_session',
+      '20260202_after',
+    ])
+  })
+})
+
+describe('the baseline is atomic', () => {
+  it('is wrapped in a transaction, so a failure leaves nothing behind', () => {
+    // Without this a partial apply left a half-built database, which then
+    // tripped the runner's own baseline guard on the retry: "this database
+    // already has the schema". pg_dump does not add transaction control itself.
+    const sql = fs.readFileSync(path.join(MIGRATIONS, '20260829_baseline_schema.sql'), 'utf8')
+    expect(sql).toMatch(/^BEGIN;$/m)
+    expect(sql.trimEnd().endsWith('COMMIT;')).toBe(true)
+  })
+
+  it('does not create the runner\'s own tracker table', () => {
+    const sql = fs.readFileSync(path.join(MIGRATIONS, '20260829_baseline_schema.sql'), 'utf8')
+    expect(sql).not.toMatch(/CREATE TABLE (public\.)?schema_migrations/)
+  })
+})

@@ -212,6 +212,16 @@ export async function runPending(client, files, options = {}) {
     }
     try {
       await client.query(file.sql)
+      // A migration can change the SESSION, and one of ours does: pg_dump
+      // emits `set_config('search_path', '', false)`, which persists after the
+      // file finishes. The very next statement the runner issues is
+      // `INSERT INTO schema_migrations` — unqualified — and it then fails with
+      // `relation "schema_migrations" does not exist` on a perfectly good
+      // install. Found by standing up a real one.
+      //
+      // Reset unconditionally rather than only after the baseline: any
+      // migration can do this, and the runner should not care which.
+      await client.query("SELECT pg_catalog.set_config('search_path', 'public', false)")
     } catch (error) {
       // Stop HERE: later migrations assume this one's schema. Nothing is
       // recorded for the failed file, so a rerun retries it.

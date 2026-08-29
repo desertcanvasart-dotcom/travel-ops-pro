@@ -122,10 +122,11 @@ async function main() {
     }
     try {
       await db.exec(readFileSync(path.join(MIGRATIONS, name), 'utf8'))
-      // pg_dump emits set_config('search_path', '') and it persists for the
-      // rest of the SESSION, so everything after the baseline fails to resolve
-      // unqualified names. That cost an hour and looked like 45 unrelated
-      // "relation does not exist" errors.
+      // Exactly what scripts/migrate-core.mjs does after each file. This used
+      // to be a workaround living only here, which is why the harness stayed
+      // green while a real install failed on the same session poisoning: the
+      // test fixed the problem the product still had. It belongs in the runner,
+      // and this line now mirrors it rather than compensating for its absence.
       await db.exec("SELECT pg_catalog.set_config('search_path', 'public', false);")
       applied.push(name)
     } catch (error) {
