@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
 import {
   User,
   Link as LinkIcon,
@@ -51,6 +52,10 @@ export default function ClientLinkButton({
   const [linkedClient, setLinkedClient] = useState<Client | null>(null)
   const [linkId, setLinkId] = useState<string | null>(null)
   const [isOpen, setIsOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  // No backdrop: the old fixed-inset-0 layer swallowed the press that closed
+  // it — see lib/use-dismiss-on-outside.ts (AUT-W02).
+  useDismissOnOutside(isOpen, rootRef, () => setIsOpen(false))
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<Client[]>([])
@@ -195,7 +200,7 @@ export default function ClientLinkButton({
 
   // Not linked - show link button
   return (
-    <div className={`relative ${className}`}>
+    <div className={`relative ${className}`} ref={rootRef}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -208,7 +213,6 @@ export default function ClientLinkButton({
       {/* Dropdown */}
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
           <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
             <div className="p-3 border-b border-gray-100">
               <div className="relative">

@@ -1,7 +1,8 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
 import { useTranslations } from 'next-intl'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
@@ -102,6 +103,10 @@ export default function ContactsContent() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const rowMenuRef = useRef<HTMLDivElement>(null)
+  // No backdrop: the old fixed-inset-0 layer swallowed the first click made
+  // with a row menu open — see lib/use-dismiss-on-outside.ts (AUT-W02).
+  useDismissOnOutside(openMenuId !== null, rowMenuRef, () => setOpenMenuId(null))
 
   // URL sync
   useEffect(() => {
@@ -472,7 +477,7 @@ export default function ContactsContent() {
                             <p className="text-xs text-gray-500">{contact.subtype}{contact.city && ` • ${contact.city}`}</p>
                           </div>
                         </div>
-                        <div className="relative">
+                        <div className="relative" ref={openMenuId === contact.id ? rowMenuRef : undefined}>
                           <button onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === contact.id ? null : contact.id) }} className="p-1 hover:bg-gray-100 rounded opacity-0 group-hover:opacity-100">
                             <MoreHorizontal className="w-4 h-4 text-gray-400" />
                           </button>
@@ -597,8 +602,6 @@ export default function ContactsContent() {
           </>
         )}
       </div>
-
-      {openMenuId && <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />}
 
       {/* ADD MODAL */}
       {showAddModal && (

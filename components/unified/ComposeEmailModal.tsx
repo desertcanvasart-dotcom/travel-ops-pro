@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
 import {
   Send, Loader2, X, AlertCircle, Paperclip, Image as ImageIcon,
   FileText, Signature, ChevronDown, Users, Building2
@@ -72,6 +73,14 @@ export default function ComposeEmailModal({
   const [templates, setTemplates] = useState<EmailTemplate[]>([])
   const [showSignatureDropdown, setShowSignatureDropdown] = useState(false)
   const [showTemplateDropdown, setShowTemplateDropdown] = useState(false)
+  const signatureDropdownRef = useRef<HTMLDivElement>(null)
+  const templateDropdownRef = useRef<HTMLDivElement>(null)
+  // No backdrop: the old fixed-inset-0 layer swallowed the press that closed
+  // these — see lib/use-dismiss-on-outside.ts (AUT-W02). (At z-0 it also sat
+  // UNDER most of the modal, so whether it even closed them depended on what
+  // you happened to press.)
+  useDismissOnOutside(showSignatureDropdown, signatureDropdownRef, () => setShowSignatureDropdown(false))
+  useDismissOnOutside(showTemplateDropdown, templateDropdownRef, () => setShowTemplateDropdown(false))
 
   // Template placeholder state
   const [showPlaceholderModal, setShowPlaceholderModal] = useState(false)
@@ -339,7 +348,7 @@ export default function ComposeEmailModal({
           {/* Templates & Signatures Bar */}
           <div className="flex items-center justify-end gap-1 px-4 py-2 border-b border-gray-100 bg-gray-50/50">
             {templates.length > 0 && (
-              <div className="relative">
+              <div className="relative" ref={templateDropdownRef}>
                 <button
                   onClick={() => setShowTemplateDropdown(!showTemplateDropdown)}
                   className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
@@ -395,7 +404,7 @@ export default function ComposeEmailModal({
             )}
 
             {signatures.length > 0 && (
-              <div className="relative">
+              <div className="relative" ref={signatureDropdownRef}>
                 <button
                   onClick={() => setShowSignatureDropdown(!showSignatureDropdown)}
                   className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded transition-colors"
@@ -492,17 +501,6 @@ export default function ComposeEmailModal({
           </div>
         </div>
       </div>
-
-      {/* Click outside to close dropdowns */}
-      {(showSignatureDropdown || showTemplateDropdown) && (
-        <div
-          className="fixed inset-0 z-0"
-          onClick={() => {
-            setShowSignatureDropdown(false)
-            setShowTemplateDropdown(false)
-          }}
-        />
-      )}
 
       {/* Placeholder Modal */}
       {showPlaceholderModal && selectedTemplate && (
