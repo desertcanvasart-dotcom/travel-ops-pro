@@ -4,105 +4,9 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import {
-  ArrowLeft,
-  Menu,
-  X,
-  Rocket,
-  LayoutDashboard,
-  Users,
-  Map,
-  CalendarCheck,
-  FileText,
-  Wallet,
-  MessageCircle,
-  Globe,
-  FolderOpen,
-  Settings,
-  Lightbulb,
-  Camera,
-  BookOpen,
-  MailPlus,
-  Wand2,
-  Calculator,
-  Briefcase,
-  ClipboardList,
-  FileCheck,
-  Bell,
-  TrendingUp,
-  Bot,
-  Sparkles,
-  ConciergeBell,
-  GitBranch,
-  Gauge,
-  Tag,
-  Truck,
-  ReceiptText,
-  Table,
-  CreditCard,
-  Receipt,
-  BellRing,
-  BarChart3,
-  LineChart,
-  CalendarDays,
-  CheckSquare,
-  BellDot,
-  Library,
-  Languages,
-  Plug,
-  UserRound,
-  IdCard,
-  MessagesSquare,
-  CalendarRange,
-} from 'lucide-react'
+import { CATEGORIES } from './toc'
+import { ArrowLeft, Menu, X, Camera, Lightbulb, BookOpen } from 'lucide-react'
 
-const NAV_ITEMS = [
-  { href: '/docs/getting-started', label: 'Getting Started', icon: Rocket },
-  { href: '/docs/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/docs/communication', label: 'Communication', icon: MessageCircle },
-  { href: '/docs/whatsapp-agent', label: 'WhatsApp AI Agent', icon: Bot },
-  { href: '/docs/copilot', label: 'AI Copilot', icon: Sparkles },
-  { href: '/docs/concierge', label: 'Concierge Briefs', icon: ConciergeBell },
-  { href: '/docs/clients', label: 'Clients (CRM)', icon: Users },
-  { href: '/docs/itinerary-creation', label: 'Itinerary Creation', icon: Wand2 },
-  { href: '/docs/itineraries', label: 'Itineraries', icon: Map },
-  { href: '/docs/b2c-pricing', label: 'B2C Pricing', icon: Calculator },
-  { href: '/docs/b2c-quotes', label: 'B2C Quotes', icon: Tag },
-  { href: '/docs/b2b-pricing', label: 'B2B Pricing', icon: Briefcase },
-  { href: '/docs/tour-programs', label: 'Tour Programs Manager', icon: ClipboardList },
-  { href: '/docs/b2b-quotes', label: 'B2B Quotes', icon: FileCheck },
-  { href: '/docs/quote-revisions', label: 'Quote Revisions', icon: GitBranch },
-  { href: '/docs/bookings', label: 'Bookings', icon: CalendarCheck },
-  { href: '/docs/traveller-portal', label: 'Traveller Portal', icon: UserRound },
-  { href: '/docs/passport-documents', label: 'Passport & Documents', icon: IdCard },
-  { href: '/docs/portal-messages', label: 'Portal Messages', icon: MessagesSquare },
-  { href: '/docs/capacity-departures', label: 'Capacity & Departures', icon: Gauge },
-  { href: '/docs/invoices-payments', label: 'Invoices & Payments', icon: FileText },
-  { href: '/docs/expenses-commissions', label: 'Expenses & Commissions', icon: Wallet },
-  { href: '/docs/profit-loss', label: 'Profit & Loss', icon: TrendingUp },
-  { href: '/docs/followups-reminders', label: 'Follow-ups & Reminders', icon: Bell },
-  { href: '/docs/tours-rates', label: 'Tours & Rates', icon: Globe },
-  { href: '/docs/rate-periods', label: 'Rate Periods', icon: CalendarRange },
-  { href: '/docs/resources-documents', label: 'Resources & Documents', icon: FolderOpen },
-  { href: '/docs/message-templates', label: 'Message Templates', icon: MailPlus },
-  { href: '/docs/suppliers', label: 'Suppliers', icon: Truck },
-  { href: '/docs/supplier-invoices', label: 'Supplier Invoices', icon: ReceiptText },
-  { href: '/docs/pricing-grid', label: 'Pricing Grid', icon: Table },
-  { href: '/docs/accounts-receivable', label: 'Accounts Receivable', icon: Wallet },
-  { href: '/docs/accounts-payable', label: 'Accounts Payable', icon: CreditCard },
-  { href: '/docs/receipts', label: 'Receipts', icon: Receipt },
-  { href: '/docs/invoice-reminders', label: 'Invoice Reminders', icon: BellRing },
-  { href: '/docs/financial-reports', label: 'Financial Reports', icon: BarChart3 },
-  { href: '/docs/analytics', label: 'Analytics', icon: LineChart },
-  { href: '/docs/calendar', label: 'Calendar', icon: CalendarDays },
-  { href: '/docs/tasks', label: 'Tasks', icon: CheckSquare },
-  { href: '/docs/notifications', label: 'Notifications', icon: BellDot },
-  { href: '/docs/content-library', label: 'Content Library', icon: Library },
-  { href: '/docs/multi-language', label: 'Languages', icon: Languages },
-  { href: '/docs/integrations', label: 'Integrations', icon: Plug },
-  { href: '/docs/team-settings', label: 'Team & Settings', icon: Settings },
-  { href: '/docs/workflows', label: 'Workflows & Tips', icon: Lightbulb },
-]
 
 export function ScreenshotPlaceholder({ caption }: { caption: string }) {
   return (
@@ -218,29 +122,42 @@ export default function DocsLayout({
               ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
             `}
           >
-            <nav className="p-4 space-y-1">
-              {NAV_ITEMS.map((item) => {
-                const Icon = item.icon
-                const isActive = pathname === item.href
+            {/* Same groups, same order as the /docs index — both render
+                app/(public)/docs/toc.ts. The sidebar used to carry its own
+                flat copy of this list in a different order, which the audit
+                read as the docs disagreeing with themselves (AUT-L04). */}
+            <nav className="p-4 space-y-4">
+              {CATEGORIES.map((category) => (
+                <div key={category.label}>
+                  <p className="px-3 pb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                    {category.label}
+                  </p>
+                  <div className="space-y-0.5">
+                    {category.items.map((item) => {
+                      const Icon = item.icon
+                      const isActive = pathname === item.href
 
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setSidebarOpen(false)}
-                    className={`
-                      flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                      ${isActive
-                        ? 'bg-primary-50 text-primary-700 border-l-2 border-primary-600 ml-0'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                      }
-                    `}
-                  >
-                    <Icon className={`w-4.5 h-4.5 flex-shrink-0 ${isActive ? 'text-primary-600' : 'text-gray-400'}`} />
-                    {item.label}
-                  </Link>
-                )
-              })}
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setSidebarOpen(false)}
+                          className={`
+                            flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                            ${isActive
+                              ? 'bg-primary-50 text-primary-700 border-l-2 border-primary-600 ml-0'
+                              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                            }
+                          `}
+                        >
+                          <Icon className={`w-4.5 h-4.5 flex-shrink-0 ${isActive ? 'text-primary-600' : 'text-gray-400'}`} />
+                          {item.navLabel ?? item.title}
+                        </Link>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </nav>
           </aside>
 
