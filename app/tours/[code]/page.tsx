@@ -6,6 +6,7 @@
 // ============================================
 
 import { todayLocal } from '@/lib/today'
+import { useCompanyInfo } from '@/lib/use-company-info'
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -151,6 +152,8 @@ function todayLocalISO(): string {
 }
 
 export default function TourDetailPage() {
+  // Whoever runs this install — not whoever wrote it.
+  const company = useCompanyInfo()
   const params = useParams()
   const t = useTranslations('tours')
   // Engine prices are EUR; render them in the preferred currency.
@@ -893,19 +896,25 @@ export default function TourDetailPage() {
               {t('detail.contactUsForCustom')}
             </p>
             <div className="space-y-2 text-sm">
-              <a href="mailto:info@travel2egypt.org" className="flex items-center gap-2 text-gray-600 hover:text-[#647C47]">
-                <Mail className="h-4 w-4" />
-                info@travel2egypt.org
-              </a>
-              <a href="tel:+201158011600" className="flex items-center gap-2 text-gray-600 hover:text-[#647C47]">
-                <Phone className="h-4 w-4" />
-                +20 115 801 1600
-              </a>
-              <a href="https://travel2egypt.org" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-gray-600 hover:text-[#647C47]">
-                <ExternalLink className="h-4 w-4" />
-                travel2egypt.org
-              </a>
-            </div>
+              {company?.email && (
+                <a href={`mailto:${company.email}`} className="flex items-center gap-2 text-gray-600 hover:text-[#647C47]">
+                  <Mail className="h-4 w-4" />
+                  {company.email}
+                </a>
+              )}
+              {company?.phone && (
+                <a href={`tel:${company.phone.replace(/\s/g, '')}`} className="flex items-center gap-2 text-gray-600 hover:text-[#647C47]">
+                  <Phone className="h-4 w-4" />
+                  {company.phone}
+                </a>
+              )}
+              {company?.website && (
+                <a href={company.website.startsWith('http') ? company.website : `https://${company.website}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-gray-600 hover:text-[#647C47]">
+                  <ExternalLink className="h-4 w-4" />
+                  {company.website}
+                </a>
+              )}
+              </div>
           </div>
         </div>
       </div>

@@ -11,7 +11,7 @@ function getStatusMessage(
   status: BookingStatus,
   notes?: string
 ): string {
-  const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
+  const businessName = process.env.BUSINESS_NAME || ''
   const emoji = {
     confirmed: '✅',
     cancelled: '❌',

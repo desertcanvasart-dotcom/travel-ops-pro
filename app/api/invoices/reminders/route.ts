@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { businessIdentity } from '@/lib/org-identity'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
@@ -28,6 +29,8 @@ async function sendReminderEmail(params: {
 }
 
 function generateReminderEmail(invoice: any, reminderType: string, locale: RecipientLocale = 'en'): { subject: string; html: string } {
+  // The operator's own name, never a literal — this goes to their customer.
+  const brand = businessIdentity()
   // Client-facing copy localized to the recipient's language (email.reminder.*).
   // Colors / layout stay in code; dates format per the recipient's locale.
   const t = (k: string, p: Record<string, string | number> = {}) =>
@@ -79,7 +82,7 @@ function generateReminderEmail(invoice: any, reminderType: string, locale: Recip
           <!-- Header -->
           <tr>
             <td style="background-color: #647C47; padding: 30px 40px; text-align: center;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">Travel2Egypt</h1>
+              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">${brand.name}</h1>
             </td>
           </tr>
           

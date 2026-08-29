@@ -271,7 +271,7 @@ export class WhatsAppAIAgent {
 
   constructor(opts?: { businessName?: string; model?: string }) {
     this.anthropic = getAnthropicClient()
-    this.businessName = opts?.businessName || process.env.BUSINESS_NAME || 'Travel2Egypt'
+    this.businessName = opts?.businessName || process.env.BUSINESS_NAME || ''
     this.modelId = opts?.model || MODEL_DRAFT
   }
 

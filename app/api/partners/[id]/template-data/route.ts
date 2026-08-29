@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { businessIdentity } from '@/lib/org-identity'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 
@@ -136,9 +137,11 @@ export async function GET(
     }
 
     // Add company defaults
-    placeholderData.company_name = 'Travel2Egypt'
+    // The operator's own identity — this feeds customer documents.
+    const brand = businessIdentity()
+    placeholderData.company_name = brand.name
     placeholderData.agent_name = 'Islam'
-    placeholderData.company_email = 'info@travel2egypt.com'
+    placeholderData.company_email = brand.email
     placeholderData.company_phone = '+20 115 801 1600'
     placeholderData.today = formatDate(new Date())
 

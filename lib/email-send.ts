@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { businessIdentity } from '@/lib/org-identity'
 import { headerSafe, safeEmailAddress } from '@/lib/http/safe-header'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 
@@ -116,8 +117,10 @@ function encodeEmailHeader(value: string): string {
 }
 
 function buildSimpleEmail(to: string, subject: string, body: string): string {
-  const fromAddress = process.env.GMAIL_USER || 'info@travel2egypt.org'
-  const fromName = 'Islam Mohamed - Travel2Egypt.org'
+  const fromAddress = process.env.GMAIL_USER || ''
+  // The From name a customer sees. Their operator's, not ours; blank lets the
+  // mail client fall back to the address rather than name the wrong company.
+  const fromName = businessIdentity().name
 
   // The HTML body is base64-encoded (Content-Transfer-Encoding: base64) so
   // multi-byte UTF-8 (Japanese) survives intact rather than being emitted as
@@ -148,8 +151,10 @@ function buildEmailWithAttachment(
   filename: string,
   attachmentBase64: string
 ): string {
-  const fromAddress = process.env.GMAIL_USER || 'info@travel2egypt.org'
-  const fromName = 'Islam Mohamed - Travel2Egypt.org'
+  const fromAddress = process.env.GMAIL_USER || ''
+  // The From name a customer sees. Their operator's, not ours; blank lets the
+  // mail client fall back to the address rather than name the wrong company.
+  const fromName = businessIdentity().name
   const boundary = `boundary_${Date.now()}`
 
   const emailParts = [

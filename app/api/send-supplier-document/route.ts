@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { businessIdentity } from '@/lib/org-identity'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
@@ -36,8 +37,8 @@ export async function POST(request: Request) {
     }
 
     // Build email content
-    const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
-    const businessEmail = process.env.BUSINESS_EMAIL || 'info@travel2egypt.com'
+    const businessName = process.env.BUSINESS_NAME || ''
+    const businessEmail = process.env.BUSINESS_EMAIL || ''
 
     const emailSubject = `${documentType} - ${documentNumber} | Guest: ${clientName} | ${businessName}`
 
@@ -155,8 +156,8 @@ function buildEmailWithAttachment(
   filename: string,
   attachmentBase64: string
 ): string {
-  const fromAddress = process.env.GMAIL_USER || 'info@travel2egypt.org'
-  const fromName = 'Islam Mohamed - Travel2Egypt.org'
+  const fromAddress = process.env.GMAIL_USER || ''
+  const fromName = businessIdentity().name
   const boundary = `boundary_${Date.now()}`
 
   const emailParts = [

@@ -52,9 +52,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
-    const businessEmail = process.env.BUSINESS_EMAIL || 'info@travel2egypt.com'
-    const businessWebsite = process.env.BUSINESS_WEBSITE || 'travel2egypt.org'
+    const businessName = process.env.BUSINESS_NAME || ''
+    const businessEmail = process.env.BUSINESS_EMAIL || ''
+    const businessWebsite = process.env.BUSINESS_WEBSITE || ''
 
     // Format dates
     const startDate = new Date(itinerary.start_date).toLocaleDateString('en-GB', {

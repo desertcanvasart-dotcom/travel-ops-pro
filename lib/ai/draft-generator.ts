@@ -7,6 +7,14 @@
 // ============================================
 
 import { SupabaseClient } from '@supabase/supabase-js'
+import { businessIdentity } from '@/lib/org-identity'
+
+/** " (Acme Travel)" when the operator has a name, otherwise nothing. Naming
+ *  the wrong agency in a system prompt teaches the model to sign as them. */
+function brandSuffix(): string {
+  const name = businessIdentity().name
+  return name ? ` (${name})` : ''
+}
 import { createMessageWithRetry } from '@/lib/ai/anthropic-client'
 import { MODEL_DRAFT } from '@/lib/ai/models'
 import { buildCommunicationContext } from '@/lib/ai/communication-context-builder'
@@ -194,7 +202,7 @@ export function buildSystemPrompt(
         ? "- LANGUAGE: Write your reply in English (the client's registered language)."
         : '- LANGUAGE: Reply in the same language the customer wrote their most recent message in. If that is unclear, default to English.'
 
-  return `You are a communication assistant for a travel operations company specializing in Egypt tours (Travel2Egypt / Autoura).
+  return `You are a communication assistant for a travel operations company specializing in Egypt tours${brandSuffix()}.
 
 ROLE:
 - You draft reply messages for the human operator to review before sending. You do NOT send messages directly.

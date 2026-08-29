@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import { useCompanyInfo } from '@/lib/use-company-info'
 import { useTranslations, useLocale } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -48,6 +49,8 @@ interface SupplierDocument {
 }
 
 export default function SupplierDocumentViewPage() {
+  // The operator's own letterhead — the PDF already used it; the preview did not.
+  const company = useCompanyInfo()
   const t = useTranslations('supplierDocumentDetail')
   const tVoucher = useTranslations('pdf.voucher')
   const tBrand = useTranslations('pdf')
@@ -454,7 +457,7 @@ export default function SupplierDocumentViewPage() {
             <div className="p-6 border-b border-gray-200">
               <div className="flex justify-between items-start">
                 <div>
-                  <h2 className="text-2xl font-bold text-primary-600">TRAVEL2EGYPT</h2>
+                  {company?.name && <h2 className="text-2xl font-bold text-primary-600">{company.name.toUpperCase()}</h2>}
                   <p className="text-sm text-gray-500 mt-1">{DOCUMENT_TITLES[document.document_type]}</p>
                 </div>
                 <div className="text-right">

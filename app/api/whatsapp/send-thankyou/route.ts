@@ -41,8 +41,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
-    const reviewUrl = process.env.REVIEW_URL || 'https://g.page/r/travel2egypt/review'
+    const businessName = process.env.BUSINESS_NAME || ''
+    const reviewUrl = process.env.REVIEW_URL || ''
 
     const formatDate = (dateStr: string) => {
       return new Date(dateStr).toLocaleDateString('en-GB', {

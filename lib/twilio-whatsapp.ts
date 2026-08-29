@@ -186,7 +186,7 @@ export async function sendQuoteViaWhatsApp({
   pdfUrl
 }: QuoteMessage): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
-    const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
+    const businessName = process.env.BUSINESS_NAME || ''
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     
     // Build message body
@@ -216,8 +216,8 @@ export async function sendQuoteViaWhatsApp({
     
     message += `💳 *Ready to Book?*\n`
     message += `Reply to this message or contact us:\n`
-    message += `📧 ${process.env.BUSINESS_EMAIL || 'info@travel2egypt.com'}\n`
-    message += `🌐 ${process.env.BUSINESS_WEBSITE || 'travel2egypt.org'}\n\n`
+    message += `📧 ${process.env.BUSINESS_EMAIL || ''}\n`
+    message += `🌐 ${process.env.BUSINESS_WEBSITE || ''}\n\n`
     
     message += `We look forward to creating unforgettable memories with you! 🐪✨\n\n`
     message += `Best regards,\n`
@@ -251,7 +251,7 @@ function getStatusMessage(
   status: StatusUpdate['status'],
   notes?: string
 ): string {
-  const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
+  const businessName = process.env.BUSINESS_NAME || ''
   const emoji = {
     confirmed: '✅',
     cancelled: '❌',
@@ -364,7 +364,7 @@ export async function sendTourReminder(
   pickupLocation: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
-    const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
+    const businessName = process.env.BUSINESS_NAME || ''
     
     const message = `⏰ *${businessName}* ⏰\n\n` +
       `Dear ${clientName},\n\n` +
@@ -410,7 +410,7 @@ export async function sendPaymentReminder(
   currency: string = 'EUR'
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
-    const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
+    const businessName = process.env.BUSINESS_NAME || ''
     
     const message = `💳 *${businessName}* 💳\n\n` +
       `Dear ${clientName},\n\n` +
@@ -419,7 +419,7 @@ export async function sendPaymentReminder(
       `💰 *Amount Due:* ${formatCurrency(amountDue, currency)}\n` +
       `📅 *Due Date:* ${formatDate(dueDate)}\n\n` +
       `To secure your booking, please complete your payment at your earliest convenience.\n\n` +
-      `📧 Payment details: ${process.env.BUSINESS_EMAIL || 'info@travel2egypt.com'}\n\n` +
+      `📧 Payment details: ${process.env.BUSINESS_EMAIL || ''}\n\n` +
       `If you've already paid, please disregard this message or send us your payment confirmation.\n\n` +
       `Thank you!\n\n` +
       `Best regards,\n${businessName} Team`

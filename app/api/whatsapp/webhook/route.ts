@@ -236,7 +236,7 @@ export async function POST(request: NextRequest) {
 
       if (itineraries && itineraries.length > 0) {
         const itinerary = itineraries[0]
-        const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
+        const businessName = process.env.BUSINESS_NAME || ''
         
         const autoResponse = `Thank you for your message! 😊\n\n` +
           `Your most recent booking:\n` +
@@ -254,7 +254,7 @@ export async function POST(request: NextRequest) {
 
     // Check for greeting keywords
     if (lowerBody.match(/^(hi|hello|hola|مرحبا|bonjour|hey)[\s!]?$/i)) {
-      const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
+      const businessName = process.env.BUSINESS_NAME || ''
       const greetingResponse = `Hello! 👋 Welcome to ${businessName}.\n\n` +
         `How can we help you today?\n\n` +
         `• Type "booking" to check your reservation\n` +

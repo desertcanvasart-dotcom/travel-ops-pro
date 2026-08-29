@@ -105,6 +105,16 @@ interface PDFOptions {
   // font for every text call. Helvetica (jsPDF default) cannot render kanji.
   locale?: 'en' | 'ja'
   labels?: PdfLabels
+  /**
+   * The operator's own footer line — name, website, email.
+   *
+   * This generator runs in the BROWSER (jsPDF), where process.env holds only
+   * NEXT_PUBLIC_* variables, so it cannot look the operator up. The caller,
+   * which already fetches the organization for the letterhead, passes it.
+   * Blank means no footer line at all: a document naming the wrong company is
+   * worse than one naming none.
+   */
+  companyFooter?: string
 }
 
 const DEFAULT_OPTIONS: PDFOptions = {
@@ -117,7 +127,7 @@ const DEFAULT_OPTIONS: PDFOptions = {
 // Caller SHOULD always pass labels in production; this avoids hard-breaking
 // edge callers like tests or one-off scripts.
 const FALLBACK_LABELS_EN: PdfLabels = {
-  brand: 'Travel2Egypt',
+  brand: '',
   quote: 'Quote',
   date: 'Date',
   client: 'Client',
@@ -707,7 +717,10 @@ export async function generateItineraryPDF(
       
       doc.setFontSize(8)
       doc.setTextColor(150, 150, 150)
-      doc.text('Travel2Egypt | www.travel2egypt.org | info@travel2egypt.org', pageWidth / 2, footerY, { align: 'center' })
+      // Only when the caller supplied one — see PDFOptions.companyFooter.
+      if (opts.companyFooter) {
+        doc.text(opts.companyFooter, pageWidth / 2, footerY, { align: 'center' })
+      }
       doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, footerY, { align: 'right' })
     }
     

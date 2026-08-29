@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { businessIdentity } from '@/lib/org-identity'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
@@ -6,6 +7,8 @@ import { sendEmailInternal } from '@/lib/email-send'
 
 // Reuse the email generation from the main route
 function generateReminderEmail(invoice: any, reminderType: string): { subject: string; html: string } {
+  // The operator's own name, never a literal — this goes to their customer.
+  const brand = businessIdentity()
   const currencySymbol = ({ EUR: '€', USD: '$', GBP: '£' } as Record<string, string>)[invoice.currency] || invoice.currency
   const balanceDue = `${currencySymbol}${Number(invoice.balance_due).toFixed(2)}`
   const totalAmount = `${currencySymbol}${Number(invoice.total_amount).toFixed(2)}`
@@ -40,7 +43,7 @@ function generateReminderEmail(invoice: any, reminderType: string): { subject: s
           
           <tr>
             <td style="background-color: #647C47; padding: 30px 40px; text-align: center;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">Travel2Egypt</h1>
+              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">${brand.name}</h1>
             </td>
           </tr>
           
@@ -105,7 +108,7 @@ function generateReminderEmail(invoice: any, reminderType: string): { subject: s
               ` : ''}
               
               <p style="margin: 30px 0 0; color: #374151; font-size: 16px;">
-                Best regards,<br><strong>Travel2Egypt Team</strong>
+                Best regards,${brand.name ? `<br><strong>${brand.name}</strong>` : ''}
               </p>
             </td>
           </tr>
@@ -113,7 +116,7 @@ function generateReminderEmail(invoice: any, reminderType: string): { subject: s
           <tr>
             <td style="background-color: #f9fafb; padding: 25px 40px; border-top: 1px solid #e5e7eb;">
               <p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">
-                This is an automated payment reminder from Travel2Egypt.
+                ${brand.name ? `This is an automated payment reminder from ${brand.name}.` : 'This is an automated payment reminder.'}
               </p>
             </td>
           </tr>

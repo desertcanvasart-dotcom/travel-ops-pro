@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useCompanyInfo } from '@/lib/use-company-info'
 import { useTranslations } from 'next-intl'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -29,6 +30,8 @@ interface Payment {
 }
 
 export default function InvoicePage() {
+  // The operator's own letterhead — the PDF already used it; the preview did not.
+  const company = useCompanyInfo()
   const t = useTranslations('invoice')
   const dialog = useConfirmDialog()
   const params = useParams()
@@ -186,9 +189,9 @@ export default function InvoicePage() {
               <p className="text-sm text-gray-600 font-mono">{invoiceNumber}</p>
             </div>
             <div className="text-right">
-              <p className="text-lg font-bold text-gray-900">Travel2Egypt</p>
+              {company?.name && <p className="text-lg font-bold text-gray-900">{company.name}</p>}
               <p className="text-xs text-gray-500">Cairo, Egypt</p>
-              <p className="text-xs text-gray-500">info@travel2egypt.com</p>
+              {company?.email && <p className="text-xs text-gray-500">{company.email}</p>}
             </div>
           </div>
 

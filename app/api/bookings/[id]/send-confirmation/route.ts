@@ -85,7 +85,7 @@ export async function POST(
     if (booking.special_requests) {
       lines.push('', `Special Requests: ${booking.special_requests}`)
     }
-    lines.push('', 'We look forward to welcoming you.', '', 'Best regards,', process.env.BUSINESS_NAME || 'Travel2Egypt')
+    lines.push('', 'We look forward to welcoming you.', '', 'Best regards,', process.env.BUSINESS_NAME || '')
     const messageText = lines.join('\n')
 
     if (sendVia === 'whatsapp') {

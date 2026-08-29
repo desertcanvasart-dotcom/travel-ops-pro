@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { businessIdentity } from '@/lib/org-identity'
 import { safeKeySegment } from '@/lib/storage-key'
 import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
@@ -21,7 +22,8 @@ async function generateInvoicePDF(invoice: any): Promise<Uint8Array> {
   const currencySymbol = ({ EUR: '€', USD: '$', GBP: '£' } as Record<string, string>)[invoice.currency] || invoice.currency
 
   // Header
-  page.drawText('Travel2Egypt', {
+  const brand = businessIdentity()
+  if (brand.name) page.drawText(brand.name, {
     x: margin, y, size: 24, font: helveticaBold, color: rgb(0.39, 0.49, 0.28)
   })
   
@@ -164,7 +166,8 @@ async function generateInvoicePDF(invoice: any): Promise<Uint8Array> {
   }
 
   // Footer
-  page.drawText('Travel2Egypt | www.travel2egypt.org | info@travel2egypt.org', {
+  const footerLine = [brand.name, brand.website, brand.email].filter(Boolean).join(' | ')
+  if (footerLine) page.drawText(footerLine, {
     x: width / 2 - 100, y: 30, size: 8, font: helvetica, color: rgb(0.5, 0.5, 0.5)
   })
 
@@ -265,8 +268,8 @@ export async function POST(request: NextRequest) {
     const pdfUrl = urlData.publicUrl
     console.log('✅ PDF uploaded:', pdfUrl)
 
-    const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
-    const businessEmail = process.env.BUSINESS_EMAIL || 'info@travel2egypt.com'
+    const businessName = process.env.BUSINESS_NAME || ''
+    const businessEmail = process.env.BUSINESS_EMAIL || ''
     const currencySymbol = ({ EUR: '€', USD: '$', GBP: '£' } as Record<string, string>)[invoice.currency] || invoice.currency
 
     const issueDate = new Date(invoice.issue_date).toLocaleDateString('en-GB', {

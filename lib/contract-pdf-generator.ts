@@ -5,6 +5,16 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 
 interface ContractData {
+  /**
+   * The operator's own identity, supplied by the caller.
+   *
+   * Not read from process.env here: app/documents/contract/[id]/page.tsx calls
+   * this in the BROWSER, where only NEXT_PUBLIC_* variables exist. Blank fields
+   * print nothing — a contract naming the wrong company is worse than one
+   * naming none.
+   */
+  provider?: { name?: string; website?: string; email?: string }
+
   contractNumber: string
   contractDate: string
   clientName: string
@@ -49,9 +59,13 @@ export async function generateContractPDF(data: ContractData): Promise<Uint8Arra
   // Parties
   page.drawText('PARTIES', { x: 50, y, size: 14, font: helveticaBold, color: rgb(0.2, 0.2, 0.2) })
   y -= 20
-  page.drawText('Service Provider: Travel2Egypt', { x: 50, y, size: 11, font: helvetica })
+  if (data.provider?.name) {
+    page.drawText(`Service Provider: ${data.provider.name}`, { x: 50, y, size: 11, font: helvetica })
+  }
   y -= 15
-  page.drawText('Website: https://travel2egypt.org', { x: 50, y, size: 10, font: helvetica, color: rgb(0.4, 0.4, 0.4) })
+  if (data.provider?.website) {
+    page.drawText(`Website: ${data.provider.website}`, { x: 50, y, size: 10, font: helvetica, color: rgb(0.4, 0.4, 0.4) })
+  }
   y -= 25
   page.drawText(`Client: ${data.clientName}`, { x: 50, y, size: 11, font: helvetica })
   y -= 15
@@ -138,9 +152,13 @@ export async function generateContractPDF(data: ContractData): Promise<Uint8Arra
   page.drawText('Client: _________________________  Date: __________', { x: 50, y, size: 10, font: helvetica })
 
   // Footer
-  page.drawText('Travel2Egypt | www.travel2egypt.org | info@travel2egypt.org', {
+  const footerLine = [data.provider?.name, data.provider?.website, data.provider?.email]
+    .filter(Boolean).join(' | ')
+  if (footerLine) {
+    page.drawText(footerLine, {
     x: 150, y: 30, size: 9, font: helvetica, color: rgb(0.5, 0.5, 0.5)
   })
+  }
 
   return await pdfDoc.save()
 }
