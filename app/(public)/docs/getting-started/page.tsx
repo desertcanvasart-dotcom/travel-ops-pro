@@ -22,10 +22,15 @@ export default function GettingStartedPage() {
           <li>Enter your email and password</li>
           <li>Click <strong>Sign In</strong></li>
         </ol>
+        {/* No Google sign-in claim: the login page has never had a Google
+            button — staff accounts are email + password, and Google OAuth in
+            this product connects Gmail/Calendar AFTER login, from Settings.
+            The audit caught new users following instructions for a button
+            that is not there (AUT-L04). */}
         <p className="mt-3 text-gray-600">
-          You can also sign in with your Google account by clicking the Google button.
+          Forgot your password? Use the <strong>Forgot Password?</strong> link on the login page to reset it by email.
         </p>
-        <DocScreenshot src="/docs/getting-started/login-page.jpg" alt="Login page with email, password fields, and Google sign-in button" />
+        <DocScreenshot src="/docs/getting-started/login-page.png" alt="Login page with email and password fields" />
       </section>
 
       {/* First-Time Setup */}
