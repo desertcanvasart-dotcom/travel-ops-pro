@@ -40,12 +40,15 @@ function addDays(dateStr: string, numDays: number): string {
   return shifted.toISOString().split('T')[0]
 }
 
-// Slot → service_type mapping
+// Slot → service_type mapping. Service types are the canonical singular
+// (lib/service-types.ts) — the plural here is the SLOT id, which keeps its
+// name (AUT-L02: this map used to emit the plural as a service type, so the
+// grid and the AI writer populated the same column in two spellings).
 const SLOT_TO_SERVICE: Record<string, string> = {
   route: 'transportation',
   guide: 'guide',
-  airport_services: 'airport_services',
-  hotel_services: 'hotel_services',
+  airport_services: 'airport_service',
+  hotel_services: 'hotel_service',
   tipping: 'tips',
   boat_rides: 'activity',
   accommodation: 'accommodation',

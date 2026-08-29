@@ -20,6 +20,8 @@
 // operator can edit service_types without a deploy), and the two are
 // cross-checked so drift is REPORTED rather than silently dropping work.
 
+import { normalizeServiceType } from '@/lib/service-types'
+
 /** The four departments seeded by 20260217_create_departments.sql. */
 export const DEPARTMENT_NAMES = ['Reservation', 'Aviation', 'Execution', 'Accounting'] as const
 export type DepartmentName = (typeof DEPARTMENT_NAMES)[number]
@@ -31,12 +33,12 @@ export interface DepartmentRow {
 }
 
 /**
- * The expected routing, mirroring migration 20260812_departments_assignees_pnl.
+ * The expected routing, in the canonical vocabulary (lib/service-types.ts).
  *
- * Both spellings of the airport/hotel service types are listed on purpose: the
- * app writes the singular form today (lib/ai/service-creation.ts), while rows
- * created earlier carry the plural. Routing is a lookup — listing both costs
- * nothing, and listing one silently drops the other on the floor.
+ * This map used to list both spellings of the airport/hotel types because the
+ * grid and the AI writer disagreed. The taxonomy is unified now (AUT-L02):
+ * lookups normalize the incoming value, so legacy plural rows still route,
+ * and the map itself stays single-spelling.
  */
 export const SERVICE_TYPE_ROUTING: Readonly<Record<string, DepartmentName>> = {
   // Reservation — anything booked with a supplier ahead of the trip
@@ -53,9 +55,7 @@ export const SERVICE_TYPE_ROUTING: Readonly<Record<string, DepartmentName>> = {
   entrance: 'Execution',
   activity: 'Execution',
   airport_service: 'Execution',
-  airport_services: 'Execution',
   hotel_service: 'Execution',
-  hotel_services: 'Execution',
   tips: 'Execution',
   supplies: 'Execution',
 
@@ -78,11 +78,11 @@ export function resolveDepartment(
   departments: DepartmentRow[]
 ): { id: string; name: string; source: 'database' | 'fallback' } | null {
   if (!serviceType) return null
-  const type = serviceType.trim().toLowerCase()
+  const type = normalizeServiceType(serviceType)
   if (!type) return null
 
   for (const dept of departments) {
-    if (dept.service_types?.some(t => t?.trim().toLowerCase() === type)) {
+    if (dept.service_types?.some(t => normalizeServiceType(t) === type)) {
       return { id: dept.id, name: dept.name, source: 'database' }
     }
   }

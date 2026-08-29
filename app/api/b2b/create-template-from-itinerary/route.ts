@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { normalizeServiceType } from '@/lib/service-types'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -100,30 +101,30 @@ export async function POST(request: NextRequest) {
 
       // Airport: determine arrival vs departure from service name + position
       const airportArrival = daySvcs.some((s: any) =>
-        s.service_type === 'airport_service' &&
+        normalizeServiceType(s.service_type) === 'airport_service' &&
         (s.service_name?.toLowerCase().includes('meet') ||
          s.service_name?.toLowerCase().includes('arrival') ||
          s.service_name?.toLowerCase().includes('greet'))
-      ) || (isFirstDay && daySvcs.some((s: any) => s.service_type === 'airport_service'))
+      ) || (isFirstDay && daySvcs.some((s: any) => normalizeServiceType(s.service_type) === 'airport_service'))
 
       const airportDeparture = daySvcs.some((s: any) =>
-        s.service_type === 'airport_service' &&
+        normalizeServiceType(s.service_type) === 'airport_service' &&
         (s.service_name?.toLowerCase().includes('departure') ||
          s.service_name?.toLowerCase().includes('farewell') ||
          s.service_name?.toLowerCase().includes('assist'))
-      ) || (isLastDay && daySvcs.some((s: any) => s.service_type === 'airport_service'))
+      ) || (isLastDay && daySvcs.some((s: any) => normalizeServiceType(s.service_type) === 'airport_service'))
 
       // Hotel services: check-in vs check-out
       const hotelCheckin = daySvcs.some((s: any) =>
-        s.service_type === 'hotel_service' &&
+        normalizeServiceType(s.service_type) === 'hotel_service' &&
         s.service_name?.toLowerCase().includes('check-in')
-      ) || (isFirstDay && daySvcs.some((s: any) => s.service_type === 'hotel_service'))
+      ) || (isFirstDay && daySvcs.some((s: any) => normalizeServiceType(s.service_type) === 'hotel_service'))
 
       const hotelCheckout = daySvcs.some((s: any) =>
-        s.service_type === 'hotel_service' &&
+        normalizeServiceType(s.service_type) === 'hotel_service' &&
         (s.service_name?.toLowerCase().includes('check-out') ||
          s.service_name?.toLowerCase().includes('porter'))
-      ) || (isLastDay && daySvcs.some((s: any) => s.service_type === 'hotel_service'))
+      ) || (isLastDay && daySvcs.some((s: any) => normalizeServiceType(s.service_type) === 'hotel_service'))
 
       // Infer accommodation_type
       let accommodationType: string = 'hotel'
