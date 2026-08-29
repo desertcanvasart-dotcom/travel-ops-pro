@@ -1104,15 +1104,15 @@ Itineraries support two cost modes:
 | `20260217_create_departments.sql` | Create departments table |
 | `20260220_add_entrance_fee_versions.sql` | Multilingual entrance fee names |
 | `20260220_add_service_versions.sql` | Multilingual itinerary service names |
-| `add_b2b_land_operator_templates.sql` | B2B land operator template support |
-| `add_cached_pricing_columns.sql` | Cached pricing for performance |
-| `add_is_cruise_day_column.sql` | Flag cruise days in itineraries |
-| `add_num_infants_column.sql` | Infant count support (ages 0-3, free except flights) |
-| `add_partner_to_itineraries.sql` | Link itineraries to B2B partners |
-| `add_preferred_language.sql` | User language preference |
-| `add_supplier_message_templates.sql` | Supplier-specific message templates |
-| `create_bookings_tables.sql` | Booking management tables |
-| `create_user_preferences_table.sql` | User preferences storage |
+| `20260204_add_b2b_land_operator_templates.sql` | B2B land operator template support |
+| `20260201_add_cached_pricing_columns.sql` | Cached pricing for performance |
+| `20260204_add_is_cruise_day_column.sql` | Flag cruise days in itineraries |
+| `20260203_add_num_infants_column.sql` | Infant count support (ages 0-3, free except flights) |
+| `20260202_add_partner_to_itineraries.sql` | Link itineraries to B2B partners |
+| `20260129_add_preferred_language.sql` | User language preference |
+| `20260202_add_supplier_message_templates.sql` | Supplier-specific message templates |
+| `20260201_create_bookings_tables.sql` | Booking management tables |
+| `20260201_create_user_preferences_table.sql` | User preferences storage |
 
 ---
 
