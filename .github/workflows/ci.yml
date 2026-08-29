@@ -35,6 +35,12 @@ jobs:
       - name: Unit tests (Vitest)
         run: npm test
 
+      # Builds the entire schema from nothing against a real Postgres. Before
+      # the baseline existed this could not pass at all — 17 of 125 migrations
+      # applied. It is a gate now precisely because it finally can.
+      - name: From-scratch schema replay
+        run: npm run replay:schema
+
       - name: Generate Next route types
         # `next typegen` produces .next/types without a build (no env vars, no
         # prerender), which is all the full type-check needs on a fresh checkout.

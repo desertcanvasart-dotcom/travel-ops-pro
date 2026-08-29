@@ -1,6 +1,6 @@
 # Running Autoura on a customer's own server
 
-Status: **T1 and T2 done; T3–T5 outstanding.** Written
+Status: **T1, T2 and T3 done; T4–T5 outstanding.** Written
 2026-08-28, revised 2026-08-29.
 
 This app is what gets installed on a customer's server. That is a different
@@ -20,7 +20,7 @@ make one do not exist:
 | An install procedure | **done** — `docs/SELF-HOSTING.md`, with its blockers stated up front |
 | A way to build the schema | **partly** — `scripts/migrate.mjs` applies them in order (T1). But see T3: the files cannot build a schema from nothing |
 | A record of which migrations ran | **done** — `schema_migrations`; production baselined 2026-08-29 (125 recorded, 0 pending) |
-| Proof a fresh install works | **absent** — nobody has ever built this schema from zero |
+| Proof a fresh install works | **done** — `npm run replay:schema`, a CI gate since the T3 squash |
 | A way to see what went wrong remotely | **absent** |
 
 The last row is what prompted this. It is not the first one to fix: a support
@@ -145,7 +145,7 @@ customer on?".
 > `docs/SELF-HOSTING.md` states both blockers up front rather than letting
 > someone discover them after committing to an install.
 
-**T3 — prove a fresh install works.** The from-scratch replay in CI.
+**T3 — prove a fresh install works.** ✅ **DONE.** The from-scratch replay in CI.
 
 > **This phase was scoped wrongly and the estimate below replaces it.** The
 > original text said to expect the replay to fail the first time and to treat
@@ -199,6 +199,31 @@ fix defects:
    do not replay cleanly against a bare Postgres. The sibling exempts seven
    files for exactly this reason; budget for the same treatment here.
 
+> **T3 OUTCOME (2026-08-29).** The dump applied cleanly after four
+> transformations: strip pg_dump 18's `\restrict` meta-commands, make
+> `CREATE SCHEMA public` idempotent, drop the PG17-only `transaction_timeout`,
+> and remove `match_copilot_knowledge` (typed on `public.vector`, which the
+> `--exclude-table` flag cannot reach).
+>
+> **The baseline SUPERSEDES the history — it cannot precede it.** Replaying the
+> 125 files on top of the baseline gave 111 ok / 14 failed, all "already
+> exists": the baseline is the schema AFTER those migrations, so they
+> double-apply. So the 125 moved to `migrations/archive/` and are never
+> replayed. `migrations/` now holds the baseline plus anything newer, which is
+> exactly what a fresh install runs.
+>
+> **Two things cost real time and are worth knowing:**
+> - Supabase installs extensions into an `extensions` schema, and column
+>   defaults call `extensions.uuid_generate_v4()`. Without that schema the
+>   baseline dies immediately.
+> - pg_dump emits `set_config('search_path', '')` and it persists **for the rest
+>   of the session**, so everything after it fails to resolve unqualified names.
+>   It presented as 45 unrelated "relation does not exist" errors.
+>
+> The runner now refuses to APPLY a baseline to a database that already has the
+> schema (`checkBaselineSafety`), because a dump is not idempotent. On such a
+> database it must be recorded with `--baseline`. That refusal is tested.
+
 **The trap, now that production is baselined (2026-08-29):** the tracker holds
 the 125 existing names. Adding a baseline-schema file makes it show as PENDING
 on production, and a plain `migrate` run would try to *apply* it — creating
@@ -228,7 +253,7 @@ T1 → T2 → T3 → T4 → T5, and the order is not negotiable in one place: **
 before T4.** A support bundle whose findings say "3 migrations pending" is only
 useful once applying those migrations is a command rather than an afternoon.
 
-T1 and T2 are done, so **T3 is next** — and it is the largest phase, not the routine one it was originally written as. T5 waits for T3, because
+T1, T2 and T3 are done, so **T4 (the support toolkit) is next**. T5 is now unblocked too: a release can be tagged, because a fresh install is finally provable. T5 waits for T3, because
 tagging a release that cannot be installed from scratch would be tagging a
 promise we have not checked — and T3 has just turned out to be the largest
 phase, not the routine one it was written as.

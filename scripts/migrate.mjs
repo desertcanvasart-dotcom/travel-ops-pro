@@ -26,7 +26,14 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import readline from 'node:readline/promises'
-import { checkTarget, computePending, identifyDatabase, loadApplied, runPending } from './migrate-core.mjs'
+import {
+  checkBaselineSafety,
+  checkTarget,
+  computePending,
+  identifyDatabase,
+  loadApplied,
+  runPending,
+} from './migrate-core.mjs'
 
 const MIGRATIONS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'migrations')
 
@@ -39,7 +46,7 @@ function redactUrl(url) {
   }
 }
 
-async function confirmTarget(client, url, { baseline, assumeYes }) {
+async function confirmTarget(client, url, { baseline, assumeYes, pending }) {
   const id = await identifyDatabase(client)
 
   console.log(`\nTarget: ${redactUrl(url)}`)
@@ -48,6 +55,14 @@ async function confirmTarget(client, url, { baseline, assumeYes }) {
   const verdict = checkTarget(id, { baseline })
   if (!verdict.ok) {
     console.error(`\n${verdict.reason}`)
+    return false
+  }
+
+  // The baseline is a dump, not an increment. Never run it at a database that
+  // already has the schema.
+  const safety = checkBaselineSafety(id, pending, { baseline })
+  if (!safety.ok) {
+    console.error(`\n${safety.reason}`)
     return false
   }
 
@@ -101,7 +116,15 @@ async function main() {
     const baseline = args.has('--baseline')
 
     if (!dryRun) {
-      const ok = await confirmTarget(client, url, { baseline, assumeYes: args.has('--yes') })
+      // Which files are pending decides whether the baseline guard applies, so
+      // work it out before asking anything.
+      const appliedNow = (await loadApplied(client, { create: false })) ?? []
+      const pending = computePending(fileNames, appliedNow)
+      const ok = await confirmTarget(client, url, {
+        baseline,
+        assumeYes: args.has('--yes'),
+        pending,
+      })
       if (!ok) {
         process.exitCode = 1
         return

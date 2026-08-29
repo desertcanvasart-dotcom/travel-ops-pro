@@ -11,16 +11,23 @@ import fs from 'fs'
 import path from 'path'
 import { SUPPLIER_TYPES, SUPPLIER_TYPE_VALUES, supplierTypeLabel, SUPPLIER_TYPE_GROUPS } from '@/lib/supplier-types'
 
-/** The allowed set, read from the migration that actually constrains the column. */
+/**
+ * The allowed set, read from the CHECK that actually constrains the column.
+ *
+ * This used to read one historical migration. Since the T3 squash the baseline
+ * schema is the authority — a pg_dump of the live database — so this now reads
+ * what the database really enforces rather than what one migration once said.
+ */
 function valuesFromMigration(): string[] {
   const sql = fs.readFileSync(
-    path.resolve(process.cwd(), 'migrations/20260820_supplier_types_transport_assist.sql'),
+    path.resolve(process.cwd(), 'migrations/20260829_baseline_schema.sql'),
     'utf8'
   )
-  // Only the CHECK's own parenthesised list — the COMMENT below it quotes
-  // 'guide' in prose, and counting that would fail the test for no reason.
-  const start = sql.indexOf('CHECK (type IN (')
-  const check = sql.slice(start, sql.indexOf('));', start))
+  const start = sql.indexOf('CONSTRAINT suppliers_type_check CHECK')
+  if (start === -1) throw new Error('suppliers_type_check not found in the baseline schema')
+  // pg_dump renders it as ARRAY['hotel'::character varying, ...]; stop at the
+  // end of that array so the neighbouring constraints are not swept in.
+  const check = sql.slice(start, sql.indexOf(']', start))
   return [...new Set([...check.matchAll(/'([a-z_]+)'/g)].map(m => m[1]))]
 }
 

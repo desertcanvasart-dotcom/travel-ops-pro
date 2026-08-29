@@ -26,10 +26,10 @@
 // The prelude below already removed every environmental excuse; what is left
 // is the real gap, and it is the gap a reconstructed baseline closes.
 //
-// So this script is not yet a pass/fail gate. It is the measurement that tells
-// us whether the reconstructed baseline (T3 step 1: pg_dump --schema-only,
-// committed as the earliest migration) is complete. It becomes a CI gate the
-// day it reports zero unexpected failures.
+// THAT IS NOW FIXED and this script is a CI gate. migrations/ holds the
+// baseline schema (a pg_dump of production, T3 step 1) plus anything added
+// after it; the 125 historical files moved to migrations/archive/ and are never
+// replayed. A fresh install is exactly what this script builds.
 
 import { PGlite } from '@electric-sql/pglite'
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto'
@@ -55,15 +55,18 @@ const MIGRATIONS = path.join(ROOT, 'migrations')
 // the replay stops being evidence about a real install.
 const PRELUDE = `
   CREATE SCHEMA IF NOT EXISTS auth;
+  -- Supabase installs extensions into their own schema, and the schema dump
+  -- refers to extensions.uuid_generate_v4() in column defaults.
+  CREATE SCHEMA IF NOT EXISTS extensions;
   DO $$ BEGIN CREATE ROLE anon;          EXCEPTION WHEN duplicate_object THEN END $$;
   DO $$ BEGIN CREATE ROLE authenticated; EXCEPTION WHEN duplicate_object THEN END $$;
   DO $$ BEGIN CREATE ROLE service_role;  EXCEPTION WHEN duplicate_object THEN END $$;
-  CREATE EXTENSION IF NOT EXISTS pgcrypto;
-  CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+  CREATE EXTENSION IF NOT EXISTS pgcrypto    WITH SCHEMA extensions;
+  CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
   -- Supabase's real auth.users has far more columns; migrations here only ever
   -- reference it by id for foreign keys.
   CREATE TABLE IF NOT EXISTS auth.users (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    id uuid PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
     email text
   );
   -- auth.uid() is Supabase's "who is calling", read by 28 of these migrations
@@ -82,12 +85,11 @@ const PRELUDE = `
 // A file here is NOT tested. Each needs a reason that is about the test
 // environment, never about the migration being inconvenient — an exemption
 // added to make the numbers look better is a lie told to the next person.
-const EXEMPT = new Map([
-  [
-    '20260628_copilot_knowledge_rag.sql',
-    'needs the `vector` extension, which PGlite does not ship. Applies fine on Supabase.',
-  ],
-])
+// Empty, and that is the goal. The one file that needed an exemption
+// (20260628_copilot_knowledge_rag.sql, which requires pgvector) is now in
+// migrations/archive/ and is not replayed; the baseline deliberately excludes
+// its pgvector-typed objects so this runs anywhere.
+const EXEMPT = new Map([])
 
 async function main() {
   const showAll = process.argv.includes('--all')
@@ -107,6 +109,11 @@ async function main() {
     }
     try {
       await db.exec(readFileSync(path.join(MIGRATIONS, name), 'utf8'))
+      // pg_dump emits set_config('search_path', '') and it persists for the
+      // rest of the SESSION, so everything after the baseline fails to resolve
+      // unqualified names. That cost an hour and looked like 45 unrelated
+      // "relation does not exist" errors.
+      await db.exec("SELECT pg_catalog.set_config('search_path', 'public', false);")
       applied.push(name)
     } catch (error) {
       failed.push({ name, message: String(error.message).split('\n')[0] })
@@ -119,6 +126,31 @@ async function main() {
       }
     }
   }
+
+  // "N files applied" is weak evidence — an empty file would satisfy it. Count
+  // what actually got built, and refuse to call a hollow schema a pass.
+  const counts = {}
+  for (const [label, query] of [
+    ['tables', "SELECT count(*)::int c FROM pg_tables WHERE schemaname = 'public'"],
+    ['views', "SELECT count(*)::int c FROM pg_views WHERE schemaname = 'public'"],
+    ['indexes', "SELECT count(*)::int c FROM pg_indexes WHERE schemaname = 'public'"],
+    ['policies', "SELECT count(*)::int c FROM pg_policies WHERE schemaname = 'public'"],
+    [
+      'functions',
+      "SELECT count(*)::int c FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public'",
+    ],
+  ]) {
+    try {
+      counts[label] = (await db.query(query)).rows[0].c
+    } catch {
+      counts[label] = -1
+    }
+  }
+
+  // Floors, not exact numbers: this must not fail every time somebody adds a
+  // table. It exists to catch a baseline that silently stopped short.
+  const FLOORS = { tables: 150, views: 15, indexes: 600, policies: 250, functions: 60 }
+  const short = Object.entries(FLOORS).filter(([k, min]) => counts[k] < min)
 
   console.log(`migrations:  ${files.length}`)
   console.log(`applied:     ${applied.length}`)
@@ -160,7 +192,18 @@ async function main() {
     for (const name of skipped) console.log(`  ${name}\n      ${EXEMPT.get(name)}`)
   }
 
-  process.exitCode = failed.length === 0 ? 0 : 1
+  console.log('')
+  console.log('--- schema built ---')
+  for (const [k, v] of Object.entries(counts)) console.log(`  ${k.padEnd(10)} ${v}`)
+
+  if (short.length) {
+    console.log('')
+    console.log('SCHEMA IS SHORT OF EXPECTATIONS:')
+    for (const [k, min] of short) console.log(`  ${k}: ${counts[k]}, expected at least ${min}`)
+    console.log('The migrations applied without error but did not build what they should.')
+  }
+
+  process.exitCode = failed.length === 0 && short.length === 0 ? 0 : 1
 }
 
 main().catch(err => {

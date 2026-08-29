@@ -13,7 +13,9 @@ import {
   assertOrderable,
   computePending,
   identifyDatabase,
+  checkBaselineSafety,
   checkTarget,
+  isBaselineFile,
   loadApplied,
   normalizeName,
   runPending,
@@ -265,5 +267,58 @@ describe('checkTarget', () => {
   it('allows both modes against this product', () => {
     expect(checkTarget({ verdict: 'ours', detail: '' }).ok).toBe(true)
     expect(checkTarget({ verdict: 'ours', detail: '' }, { baseline: true }).ok).toBe(true)
+  })
+})
+
+describe('the baseline must never be APPLIED to a database that has the schema', () => {
+  // migrations/20260829_baseline_schema.sql is a pg_dump: bare CREATE TABLE,
+  // CREATE POLICY, CREATE INDEX. Running it against production would fail
+  // partway and record nothing. On such a database it must be RECORDED.
+  const ours = { verdict: 'ours' as const, detail: '' }
+  const empty = { verdict: 'empty' as const, detail: '' }
+  const BASELINE = '20260829_baseline_schema.sql'
+
+  it('recognises a baseline file by name', () => {
+    expect(isBaselineFile(BASELINE)).toBe(true)
+    expect(isBaselineFile('20260828_portal_chat.sql')).toBe(false)
+    expect(isBaselineFile(null)).toBe(false)
+  })
+
+  it('refuses to run it at a database that already has the schema', () => {
+    const v = checkBaselineSafety(ours, [BASELINE])
+    expect(v.ok).toBe(false)
+    expect(v.ok === false && v.reason).toMatch(/--baseline/)
+  })
+
+  it('allows RECORDING it there — that is the correct action', () => {
+    expect(checkBaselineSafety(ours, [BASELINE], { baseline: true }).ok).toBe(true)
+  })
+
+  it('allows running it against an empty database — that is a fresh install', () => {
+    expect(checkBaselineSafety(empty, [BASELINE]).ok).toBe(true)
+  })
+
+  it('does not interfere when the baseline is already recorded', () => {
+    expect(checkBaselineSafety(ours, ['20260901_something_new.sql']).ok).toBe(true)
+    expect(checkBaselineSafety(ours, []).ok).toBe(true)
+    expect(checkBaselineSafety(ours, null).ok).toBe(true)
+  })
+})
+
+describe('the squashed migrations directory', () => {
+  it('holds the baseline, and the archive is not replayed', () => {
+    const top = fs.readdirSync(MIGRATIONS).filter(f => f.endsWith('.sql'))
+    expect(top.some(isBaselineFile)).toBe(true)
+
+    // The runner reads the top level only, so archive/ is excluded by
+    // construction rather than by a filter someone could remove.
+    const archive = fs.readdirSync(path.join(MIGRATIONS, 'archive')).filter(f => f.endsWith('.sql'))
+    expect(archive.length).toBeGreaterThan(100)
+    expect(top).not.toEqual(expect.arrayContaining(archive))
+  })
+
+  it('every archived file is still dated, so history stays readable in order', () => {
+    const archive = fs.readdirSync(path.join(MIGRATIONS, 'archive')).filter(f => f.endsWith('.sql'))
+    expect(() => assertOrderable(archive)).not.toThrow()
   })
 })

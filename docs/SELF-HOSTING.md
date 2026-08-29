@@ -2,9 +2,9 @@
 
 Install, upgrade and diagnose. T2 of `docs/plans/self-hosting.md`.
 
-**Read "Known limitations" at the bottom first.** A fresh install has never been
-performed end to end, and there is one blocker that will affect every customer
-email you send. Both are stated plainly rather than discovered later.
+**Read "Known limitations" at the bottom first.** There is one blocker that will
+affect every customer email you send. It is stated plainly rather than
+discovered later.
 
 ---
 
@@ -37,9 +37,13 @@ Two entries there are easy to miss and both bite silently:
 
 ### Build the schema
 
-> **This is the step that does not work yet.** See "Known limitations". On a
-> database that already has the schema, the runner is proven and correct; on an
-> empty one it cannot build from nothing.
+`migrations/` holds the **baseline schema** — a dump of a real production
+database — plus anything added since. Building from nothing is proven on every
+CI run by `npm run replay:schema`.
+
+The 125 files in `migrations/archive/` are history. They were written against a
+database that already existed and cannot build one; they are kept so an old
+database can still be understood, and are never replayed.
 
 ```bash
 DATABASE_URL='postgresql://...' npm run migrate:status   # read-only, safe
@@ -160,22 +164,20 @@ Instead:
 These are real and current. They are listed because finding them yourself, after
 committing to an install, would be worse.
 
-### A fresh install has never been performed
+### A fresh install builds, but has never been run in anger
 
-**The migration files cannot build this schema from nothing.** Measured
-2026-08-29: of 177 objects in the reference production database, **114 were never
-created by any migration**, and 36 are `ALTER`ed by migrations that never create
-them. There is no `CREATE TABLE` anywhere for `itineraries`, `clients`,
-`invoices`, `payments` or `suppliers`.
+`npm run replay:schema` builds the whole schema from nothing on every CI run —
+157 tables, 19 views, 697 indexes, 274 policies. That is real proof and it did
+not exist before 2026-08-29, when replaying the migrations applied 17 of 125.
 
-`migrations/` is a change log for a database that already existed, not a schema
-definition. A from-scratch run dies on the first `ALTER TABLE` against a table
-nothing created.
+What it does **not** prove: that the resulting app then works. Nobody has stood
+up a second install, signed in and taken a booking on it. The schema builds;
+the install has not been exercised.
 
-**Until T3 of `docs/plans/self-hosting.md` is done, this app can only be
-installed against a database that already has the schema.** T3's first task is
-to reconstruct the missing origin with `pg_dump --schema-only` and commit it as
-the earliest migration.
+Two known gaps in the replay: it runs on PGlite rather than Supabase, and the
+pgvector objects (`copilot_knowledge` and its index) are created by
+`archive/20260628_copilot_knowledge_rag.sql` rather than the baseline, so they
+are not covered.
 
 ### The operator's identity is hardcoded in 46 files
 
