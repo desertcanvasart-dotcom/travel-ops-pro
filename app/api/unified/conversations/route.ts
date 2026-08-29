@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
+import { requireRole } from '@/lib/auth/current-org'
 import type { UnifiedConversation, UnifiedConversationFilters } from '@/types/unified'
 
 // Use service role for API routes to bypass RLS
@@ -11,8 +12,13 @@ const supabase = createClient(
 )
 
 // GET /api/unified/conversations - List all conversations across channels
+//
+// Role-gated to match the /inbox page — middleware only gates pages.
 export async function GET(request: NextRequest) {
   try {
+    const forbidden = await requireRole(['admin', 'manager', 'agent'])
+    if (forbidden) return forbidden
+
     const { searchParams } = new URL(request.url)
 
     // Parse filters

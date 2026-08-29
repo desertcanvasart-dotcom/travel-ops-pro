@@ -343,6 +343,9 @@ export interface EmailSyncResult {
   conversations_created: number
   conversations_updated: number
   messages_created: number
+  /** New threads that did not enter the shared store — machine mail addressed
+   *  to the operator personally (lib/email-scoping.ts). */
+  threads_skipped?: number
   history_id: string | null
   error?: string
 }
