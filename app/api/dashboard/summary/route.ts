@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // ============================================
 // DASHBOARD SUMMARY — one round trip for the operator's morning view
@@ -16,6 +17,14 @@ const dayStart = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); r
 
 export async function GET() {
   try {
+    // createServerClient() is SERVICE-ROLE: it bypasses RLS, so nothing filters
+    // these queries except what is written here. Until this line existed, every
+    // figure on the dashboard counted EVERY organisation's rows — which is how
+    // "Dashboard says 7 quotes, Itineraries says 1" happened: the 7 included
+    // another org's trip, and B2B trips the list deliberately hides.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const supabase = createServerClient()
 
     const now = new Date()
@@ -46,6 +55,7 @@ export async function GET() {
       // Confirmed trips leaving in the next 7 days — the "get ready" list
       supabase.from('bookings')
         .select('id, booking_code, trip_name, client_name, start_date, status')
+        .eq('org_id', orgId)
         .neq('status', 'cancelled')
         .gte('start_date', todayDate)
         .lt('start_date', in7.toISOString().slice(0, 10))
@@ -54,9 +64,15 @@ export async function GET() {
       // Trips on the ground right now
       supabase.from('bookings')
         .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
         .neq('status', 'cancelled')
         .lte('start_date', todayDate)
         .gte('end_date', todayDate),
+      // NOT org-scoped, and cannot be: tasks, whatsapp_conversations,
+      // email_conversations and client_followups have NO org_id column at all
+      // (adding .eq('org_id', ...) to them returns a 400). They predate
+      // organisations; scoping them is the deferred G1 work. Called out here so
+      // the omission reads as known rather than missed.
       // Open tasks with a due date (split due-today vs overdue in JS)
       supabase.from('tasks')
         .select('id, due_date, status')
@@ -74,18 +90,28 @@ export async function GET() {
       supabase.from('client_followups')
         .select('id, due_date')
         .eq('status', 'pending'),
-      supabase.from('clients').select('id', { count: 'exact', head: true }),
+      supabase.from('clients').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
       supabase.from('clients').select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
         .gte('created_at', iso(monthStart)),
       supabase.from('clients').select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
         .gte('created_at', iso(prevMonthStart)).lt('created_at', iso(monthStart)),
-      // Quote pipeline (B2C itineraries)
-      supabase.from('itineraries').select('id, status, start_date'),
+      // Quote pipeline (B2C itineraries). `source != 'b2b_custom'` is what the
+      // Itineraries list applies too — without it this counted B2B trips the
+      // list deliberately hides, and the two screens disagreed by design.
+      supabase.from('itineraries').select('id, status, start_date')
+        .eq('org_id', orgId)
+        .not('source', 'eq', 'b2b_custom'),
       supabase.from('itineraries').select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .not('source', 'eq', 'b2b_custom')
         .gte('created_at', iso(todayStart)),
       supabase.from('bookings').select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
         .gte('created_at', iso(todayStart)),
       supabase.from('payments').select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
         .gte('payment_date', todayDate),
     ])
 

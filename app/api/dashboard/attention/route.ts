@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // ============================================
 // NEEDS ATTENTION — the dashboard's exceptions list
@@ -30,6 +31,13 @@ interface AttentionItem {
 
 export async function GET() {
   try {
+    // createServerClient() is SERVICE-ROLE and bypasses RLS. Scoping the two
+    // bookings queries below is enough for the whole route: every later query
+    // is keyed on the booking/itinerary ids these return, so nothing outside
+    // the org can reach the response.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const supabase = createServerClient()
     const today = new Date().toISOString().slice(0, 10)
     const horizon = new Date(Date.now() + HORIZON_DAYS * 864e5).toISOString().slice(0, 10)
@@ -48,12 +56,14 @@ export async function GET() {
     const [departing, balanceDue] = await Promise.all([
       supabase.from('bookings')
         .select(BOOKING_COLS)
+        .eq('org_id', orgId)
         .neq('status', 'cancelled')
         .gte('start_date', today)
         .lte('start_date', horizon)
         .order('start_date', { ascending: true }),
       supabase.from('bookings')
         .select(BOOKING_COLS)
+        .eq('org_id', orgId)
         .neq('status', 'cancelled')
         .gte('start_date', today)
         .gt('balance_due', 0)
@@ -98,6 +108,7 @@ export async function GET() {
       itineraryIds.length
         ? supabase.from('itineraries')
             .select('id, assigned_guide_id')
+            .eq('org_id', orgId)
             .in('id', itineraryIds)
         : Promise.resolve({ data: [], error: null } as any),
     ])
