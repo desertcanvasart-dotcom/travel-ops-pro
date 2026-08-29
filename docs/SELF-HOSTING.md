@@ -2,9 +2,8 @@
 
 Install, upgrade and diagnose. T2 of `docs/plans/self-hosting.md`.
 
-**Read "Known limitations" at the bottom first.** There is one blocker that will
-affect every customer email you send. It is stated plainly rather than
-discovered later.
+**Read "Known limitations" at the bottom first.** Nothing there now blocks an
+install, but two things are worth knowing before you commit to one.
 
 ---
 
@@ -261,19 +260,25 @@ pgvector objects (`copilot_knowledge` and its index) are created by
 `archive/20260628_copilot_knowledge_rag.sql` rather than the baseline, so they
 are not covered.
 
-### The operator's identity is hardcoded in 46 files
+### The operator's identity — FIXED, with one deliberate exception
 
-**89 occurrences** of `Travel2Egypt` and its addresses are literals in the source,
-not configuration — in invoice reminders, booking confirmations, WhatsApp
-templates, contract PDFs, transport vouchers and the navigation bar.
+This used to say that 89 literals across 46 files would make a second agency's
+customers receive mail signed with another company's name. That is fixed.
 
-`BUSINESS_NAME`, `BUSINESS_EMAIL` and `REVIEW_URL` exist and are honoured in
-*some* of those places. Most are literal strings.
+Everything customer-facing now reads the operator's own identity: the
+`organizations` row (edited in Settings) preferred, falling back per field to
+`BUSINESS_*` in the environment. **Blank beats fake** — an unset field prints
+nothing rather than borrowing somebody else's, because a document with no
+company name looks unfinished, which it is, while one naming the wrong company
+looks wrong in a way the reader cannot diagnose.
 
-**A second agency installing this today would send customer-facing email and
-WhatsApp messages signed with another company's name, address and review link.**
-Setting the environment variables reduces this but does not fix it. Replacing
-those literals with the company profile is not scheduled work yet.
+`__tests__/no-hardcoded-operator-identity.test.ts` fails on any new occurrence,
+including the `process.env.X || 'SomeAgency'` shape that made this configurable
+in theory and wrong in practice.
+
+**The one exception** is a marketing testimonial on the landing page, attributed
+to a real named person at that company. It is a quotation, not this
+application's branding, and the allow-list says so.
 
 ### Other things worth knowing
 

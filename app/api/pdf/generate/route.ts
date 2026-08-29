@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { businessIdentity } from '@/lib/org-identity'
 import puppeteer from 'puppeteer'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { escapeHtml as esc, money } from '@/lib/html-escape'
@@ -612,7 +613,7 @@ function generateHTML(itinerary: Itinerary, days: Day[]): string {
     <footer class="footer">
       <div class="footer-card">
         <h3>TRAVEL TO EGYPT</h3>
-        <p>info@travel2egypt.org • www.travel2egypt.org</p>
+        ${(() => { const b = businessIdentity(); const parts = [b.email, b.website].filter(Boolean); return parts.length ? `<p>${parts.join(' • ')}</p>` : '' })()}
         <p class="tagline">Crafted with care by local Egypt travel experts</p>
       </div>
     </footer>

@@ -13,6 +13,14 @@
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { businessIdentity } from '@/lib/org-identity'
+
+/** " (Acme Travel)" when the operator has a name, otherwise nothing. Naming
+ *  the wrong agency in a system prompt teaches the model to sign as them. */
+function brandSuffix(): string {
+  const name = businessIdentity().name
+  return name ? ` (${name})` : ''
+}
 import { createMessageWithRetry } from '@/lib/ai/anthropic-client'
 import { MODEL_DRAFT } from '@/lib/ai/models'
 import { buildCommunicationContext } from '@/lib/ai/communication-context-builder'
@@ -233,7 +241,7 @@ export function buildMultiDraftSystemPrompt(
       ? 'WhatsApp: keep each draft concise (under ~300 words), light formatting (*bold*, line breaks).'
       : 'Email: drafts can be longer and more detailed; use proper email structure.'
 
-  return `You are a communication assistant for a travel operations company specialising in Egypt tours (Travel2Egypt / Autoura).
+  return `You are a communication assistant for a travel operations company specialising in Egypt tours${brandSuffix()}.
 
 ROLE: Produce ${count} DISTINCT reply options a human operator will choose from, edit, and send. You do NOT send anything yourself. Make the options meaningfully different (e.g. concise vs detailed, or different angles) — not trivial rewordings.
 

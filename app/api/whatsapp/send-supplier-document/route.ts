@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     const pdfUrl = urlData.publicUrl
 
     // Build WhatsApp message
-    const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
+    const businessName = process.env.BUSINESS_NAME || ''
 
     const message =
       `*${businessName}*\n\n` +

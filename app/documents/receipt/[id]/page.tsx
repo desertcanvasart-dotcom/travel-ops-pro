@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useCompanyInfo } from '@/lib/use-company-info'
 import { useTranslations } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -41,6 +42,8 @@ interface Payment {
 }
 
 export default function ReceiptPage() {
+  // The operator's own letterhead — the PDF already used it; the preview did not.
+  const company = useCompanyInfo()
   const t = useTranslations('receipt')
   const dialog = useConfirmDialog()
   const params = useParams()
@@ -237,7 +240,7 @@ export default function ReceiptPage() {
                 <h1 className="text-2xl font-bold">{receiptNumber}</h1>
               </div>
               <div className="text-right">
-                <p className="text-primary-200 text-xs mb-1">Travel2Egypt</p>
+                {company?.name && <p className="text-primary-200 text-xs mb-1">{company.name}</p>}
                 <p className="text-xs opacity-75">Cairo, Egypt</p>
               </div>
             </div>

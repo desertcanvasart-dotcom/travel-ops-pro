@@ -2,14 +2,36 @@
 
 import { lookupServerMessage } from '@/lib/i18n/server-messages'
 import type { RecipientLocale } from '@/lib/i18n/recipient-locale'
+import { businessIdentity } from '@/lib/org-identity'
 
-export const COMPANY_INFO = {
-  name: 'Islam Mohamed',
-  title: 'Travel Consultant',
-  company: 'Travel2Egypt.org',
-  email: 'info@travel2egypt.org',
-  phone: '+20 115 801 1600',
-  website: 'www.travel2egypt.org'
+// The sender block on every customer email and WhatsApp message.
+//
+// This was a literal — including a named employee, their phone number and
+// their company — so a second agency's emails were signed by somebody who does
+// not work there. It now comes from the operator's own configuration, and
+// every field is blank rather than borrowed when unset: an email signed with
+// nothing is unfinished, an email signed with the wrong company is wrong.
+//
+// A function, not a constant: a constant is evaluated once at import and would
+// freeze whatever the environment looked like at module load.
+export function companyInfo(): {
+  name: string
+  title: string
+  company: string
+  email: string
+  phone: string
+  website: string
+} {
+  const identity = businessIdentity()
+  return {
+    // The individual signing. Optional — most operators sign as the company.
+    name: (process.env.BUSINESS_CONTACT_NAME ?? '').trim(),
+    title: (process.env.BUSINESS_CONTACT_TITLE ?? '').trim(),
+    company: identity.name,
+    email: identity.email,
+    phone: identity.phone,
+    website: identity.website,
+  }
 }
 
 export function generateEmailTemplate(
@@ -24,6 +46,7 @@ export function generateEmailTemplate(
   // Brand constants (COMPANY_INFO), colors and layout stay as-is.
   const t = (k: string, p: Record<string, string | number> = {}) =>
     lookupServerMessage(locale, `email.itinerary.${k}`, p)
+  const info = companyInfo()
   return `
 <html>
 <head>
@@ -98,11 +121,11 @@ export function generateEmailTemplate(
     <p>${t('ctaDeposit')}</p>
     
     <div class="signature">
-      <p style="margin: 5px 0;"><strong>${COMPANY_INFO.name}</strong></p>
-      <p style="margin: 5px 0; color: #6b7280;">${COMPANY_INFO.title} | ${COMPANY_INFO.company}</p>
-      <p style="margin: 5px 0;">✉️ ${COMPANY_INFO.email}</p>
-      <p style="margin: 5px 0;">📞 ${COMPANY_INFO.phone}</p>
-      <p style="margin: 5px 0;">🌍 ${COMPANY_INFO.website}</p>
+      <p style="margin: 5px 0;"><strong>${info.name}</strong></p>
+      <p style="margin: 5px 0; color: #6b7280;">${info.title} | ${info.company}</p>
+      <p style="margin: 5px 0;">✉️ ${info.email}</p>
+      <p style="margin: 5px 0;">📞 ${info.phone}</p>
+      <p style="margin: 5px 0;">🌍 ${info.website}</p>
     </div>
   </div>
   
@@ -125,6 +148,7 @@ export function generateWhatsAppMessage(
   totalCost: string,
   currency: string
 ): string {
+  const info = companyInfo()
   return `Hi ${clientName}! 👋
 
 Thank you for your interest in ${tripName}! 
@@ -142,14 +166,14 @@ I've prepared a complete itinerary for you with all the details, pricing, and in
 
 The complete itinerary PDF has been sent to your email with day-by-day breakdown!
 
-Ready to confirm? Just reply here or call me at ${COMPANY_INFO.phone} 📞
+Ready to confirm? Just reply here or call me at ${info.phone} 📞
 
 Looking forward to making your Egypt adventure unforgettable! 🇪🇬✨
 
 Best regards,
-${COMPANY_INFO.name}
-${COMPANY_INFO.title}
-${COMPANY_INFO.company}`
+${info.name}
+${info.title}
+${info.company}`
 }
 
 export function generateWhatsAppLink(phoneNumber: string, message: string): string {

@@ -298,7 +298,14 @@ T1 → T2 → T3 → T4 → T5, and the order is not negotiable in one place: **
 before T4.** A support bundle whose findings say "3 migrations pending" is only
 useful once applying those migrations is a command rather than an afternoon.
 
-All five phases are done. What remains is not a phase: **the operator's identity is hardcoded in 46 files** (see T2), and a second agency's customers would receive mail signed with this one's name. That gates a real customer install more than any of T1–T5 did. T5 waits for T3, because
+All five phases are done, and so is the blocker T2 found: **the operator's
+identity is no longer hardcoded**. Everything customer-facing reads the
+`organizations` row, falling back to `BUSINESS_*`, with blank rather than
+borrowed when unset — guarded by `__tests__/no-hardcoded-operator-identity.test.ts`.
+
+What is left is not code: **nobody has stood up a second install.** The schema
+builds from nothing on every CI run and the identity is configurable, but no
+one has signed into a second copy and taken a booking on it. T5 waits for T3, because
 tagging a release that cannot be installed from scratch would be tagging a
 promise we have not checked — and T3 has just turned out to be the largest
 phase, not the routine one it was written as.

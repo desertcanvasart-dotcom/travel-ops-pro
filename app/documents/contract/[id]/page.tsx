@@ -1,6 +1,7 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
+import { useCompanyInfo } from '@/lib/use-company-info'
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useParams } from 'next/navigation'
@@ -64,11 +65,14 @@ export default function ContractPage() {
   const [editMode, setEditMode] = useState(true)
   const [saving, setSaving] = useState(false)
 
+  const company = useCompanyInfo()
   const [contractData, setContractData] = useState<ContractData>({
     contractNumber: '',
     contractDate: todayLocal(),
-    serviceProvider: 'Travel2Egypt',
-    providerWebsite: 'https://travel2egypt.org/',
+    // Filled from the operator's own profile once it loads — see the effect
+    // below. Blank until then, never another agency's name.
+    serviceProvider: '',
+    providerWebsite: '',
     providerLocation: 'Cairo, Egypt',
     clientName: '',
     clientEmail: '',
@@ -106,9 +110,20 @@ export default function ContractPage() {
     cancellation14to0Days: 'Cancellations received 14 days to 0 days before travel date are subject to 100% cancellation fees.',
     flightCancellation: 'Any ticket cancellation (domestic and/or international) will be subject to a 50% fee from the flight price from day 1 of booking.',
     noShowPolicy: 'Clients who fail to show up for departure without prior notification will forfeit 100% of the tour cost.',
-    forceMajeure: 'In case of cancellation due to force majeure events (natural disasters, political unrest, pandemic restrictions, etc.), Travel2Egypt will work with clients to reschedule or provide credit for future travel, subject to supplier policies.',
+    forceMajeure: 'In case of cancellation due to force majeure events (natural disasters, political unrest, pandemic restrictions, etc.), the operator will work with clients to reschedule or provide credit for future travel, subject to supplier policies.',
     specialNotes: 'Safety & Comfort: Meet & assist at all airports, trusted vetted teams, 24/7 WhatsApp support.\nPractical: Bottled water provided daily, restaurants chosen for cleanliness and hygiene.'
   })
+
+  // The contract names the service provider. That must be whoever runs this
+  // install, so it is filled in when their profile arrives rather than baked in.
+  useEffect(() => {
+    if (!company) return
+    setContractData(prev => ({
+      ...prev,
+      serviceProvider: prev.serviceProvider || company.name || '',
+      providerWebsite: prev.providerWebsite || company.website || '',
+    }))
+  }, [company])
 
   // PDF Preview state
   const [pdfPreviewBlob, setPdfPreviewBlob] = useState<Blob | null>(null)

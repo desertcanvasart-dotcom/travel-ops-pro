@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
+    const businessName = process.env.BUSINESS_NAME || ''
     
     // Format dates
     const formatDate = (dateStr: string) => {

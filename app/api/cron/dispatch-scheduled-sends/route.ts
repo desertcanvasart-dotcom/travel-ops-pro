@@ -11,6 +11,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { businessIdentity } from '@/lib/org-identity'
 import { withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
@@ -32,7 +33,8 @@ async function dispatchOne(row: any): Promise<{ ok: boolean; error?: string }> {
     return { ok: r.success, error: r.error }
   }
   if (row.channel === 'email') {
-    const subject = row.subject || 'Message from Travel2Egypt'
+    const brand = businessIdentity()
+    const subject = row.subject || (brand.name ? `Message from ${brand.name}` : 'Message from your travel agency')
     const html = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222;white-space:pre-wrap;line-height:1.6">${
       String(row.body).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     }</div>`

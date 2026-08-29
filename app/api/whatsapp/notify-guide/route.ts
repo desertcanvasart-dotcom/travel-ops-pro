@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
+    const businessName = process.env.BUSINESS_NAME || ''
     
     const message = `🎯 *${businessName} - New Assignment* 🎯\n\n` +
       `Hi ${guide.name},\n\n` +

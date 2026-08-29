@@ -68,7 +68,7 @@ export async function POST(
       'We look forward to welcoming you.',
       '',
       'Best regards,',
-      process.env.BUSINESS_NAME || 'Travel2Egypt',
+      process.env.BUSINESS_NAME || '',
     ].filter((l) => l !== '')
     const messageText = lines.join('\n')
 

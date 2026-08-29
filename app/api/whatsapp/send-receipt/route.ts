@@ -48,9 +48,9 @@ export async function POST(request: NextRequest) {
       year: 'numeric'
     })
 
-    const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
-    const businessEmail = process.env.BUSINESS_EMAIL || 'info@travel2egypt.com'
-    const businessWebsite = process.env.BUSINESS_WEBSITE || 'travel2egypt.org'
+    const businessName = process.env.BUSINESS_NAME || ''
+    const businessEmail = process.env.BUSINESS_EMAIL || ''
+    const businessWebsite = process.env.BUSINESS_WEBSITE || ''
 
     // Build message
     const message = `🧾 *PAYMENT RECEIPT*\n\n` +

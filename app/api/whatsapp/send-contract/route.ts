@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     console.log('✅ PDF uploaded:', pdfUrl)
 
     // Build message
-    const businessName = process.env.BUSINESS_NAME || 'Travel2Egypt'
+    const businessName = process.env.BUSINESS_NAME || ''
     
     const message = `📄 *${businessName}* 📄\n\n` +
       `Dear ${itinerary.client_name || 'Valued Guest'},\n\n` +
@@ -104,8 +104,8 @@ export async function POST(request: NextRequest) {
       `3. Return signed copy to us\n` +
       `4. Complete payment\n\n` +
       `If you have any questions, please don't hesitate to reach out!\n\n` +
-      `📧 ${process.env.BUSINESS_EMAIL || 'info@travel2egypt.com'}\n` +
-      `🌐 ${process.env.BUSINESS_WEBSITE || 'travel2egypt.org'}\n\n` +
+      `📧 ${process.env.BUSINESS_EMAIL || ''}\n` +
+      `🌐 ${process.env.BUSINESS_WEBSITE || ''}\n\n` +
       `Looking forward to your adventure! 🐪✨\n\n` +
       `Best regards,\n${businessName} Team`
 

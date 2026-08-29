@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { businessIdentity } from '@/lib/org-identity'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
@@ -185,7 +186,9 @@ function buildItineraryPlaceholderData(
 
   // Company defaults
   data.AgentName = 'Islam'
-  data.CompanyName = 'Travel2Egypt'
+  // The operator's own identity — this feeds customer documents.
+  const brand = businessIdentity()
+  data.CompanyName = brand.name
 
   return data
 }

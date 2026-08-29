@@ -163,7 +163,7 @@ export default function AccountsReceivablePage() {
       `Balance due: ${formatMoney(Number(invoice.balance_due), invoice.currency)}\n` +
       `Due date: ${new Date(invoice.due_date).toLocaleDateString()}\n\n` +
       `Please arrange payment at your earliest convenience.\n\n` +
-      `Best regards,\nTravel2Egypt`
+      `Best regards,`
     )
     
     window.open(`mailto:${invoice.client_email}?subject=${subject}&body=${body}`, '_blank')

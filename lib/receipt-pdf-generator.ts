@@ -21,7 +21,24 @@ interface Invoice {
   currency: string
 }
 
-export function generateReceiptPDF(receipt: ReceiptData, invoice: Invoice): jsPDF {
+/**
+ * The operator's own name and footer line.
+ *
+ * Runs in the BROWSER (jsPDF), where process.env holds only NEXT_PUBLIC_*
+ * variables, so it cannot look the operator up. The caller passes it — the
+ * same way the invoice letterhead already works. Blank prints nothing, which
+ * is right: a receipt naming the wrong company is worse than one naming none.
+ */
+export interface ReceiptBrand {
+  name?: string
+  footer?: string
+}
+
+export function generateReceiptPDF(
+  receipt: ReceiptData,
+  invoice: Invoice,
+  brand: ReceiptBrand = {},
+): jsPDF {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -36,7 +53,7 @@ export function generateReceiptPDF(receipt: ReceiptData, invoice: Invoice): jsPD
   doc.setFontSize(24)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(100, 124, 71)
-  doc.text('Travel2Egypt', margin, y + 8)
+  if (brand.name) doc.text(brand.name, margin, y + 8)
 
   doc.setFontSize(20)
   doc.setTextColor(40, 40, 40)
@@ -149,12 +166,12 @@ export function generateReceiptPDF(receipt: ReceiptData, invoice: Invoice): jsPD
   doc.setFontSize(8)
   doc.setTextColor(150, 150, 150)
   doc.setFont('helvetica', 'normal')
-  doc.text('Travel2Egypt | www.travel2egypt.org | info@travel2egypt.org', pageWidth / 2, footerY, { align: 'center' })
+  if (brand.footer) doc.text(brand.footer, pageWidth / 2, footerY, { align: 'center' })
 
   return doc
 }
 
-export function downloadReceiptPDF(receipt: ReceiptData, invoice: Invoice) {
-  const doc = generateReceiptPDF(receipt, invoice)
+export function downloadReceiptPDF(receipt: ReceiptData, invoice: Invoice, brand: ReceiptBrand = {}) {
+  const doc = generateReceiptPDF(receipt, invoice, brand)
   doc.save(`Receipt-${receipt.receiptNumber}.pdf`)
 }
