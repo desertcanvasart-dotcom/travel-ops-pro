@@ -13,6 +13,7 @@ export {
   STALE_AFTER_HOURS,
   buildBundle,
   bundleFindings,
+  isReleaseVersion,
   redactErrorLines,
   redactKnownSecrets,
   redactText,

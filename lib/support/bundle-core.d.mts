@@ -29,3 +29,6 @@ export function bundleFindings(bundle: any): string[]
 
 /** Redact values we hold, by value — shape-based rules cannot catch everything. */
 export function redactKnownSecrets(input: unknown, env?: Record<string, string | undefined>): string
+
+/** Is this version a release (YYYY.MM.DD), or just whatever main was? */
+export function isReleaseVersion(v: unknown): boolean
