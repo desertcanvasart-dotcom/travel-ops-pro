@@ -48,3 +48,7 @@ next-env.d.ts
 /e2e/.auth/
 /test-results/
 /playwright-report/
+
+# A generated support bundle is redacted, but it is still a snapshot of a
+# specific install. It is written for someone to read and send, not to commit.
+support-bundle.json

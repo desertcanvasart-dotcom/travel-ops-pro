@@ -21,3 +21,11 @@ export function redactText(input: unknown): string
 
 /** The most recent lines, scrubbed, each capped in length. */
 export function redactErrorLines(lines: readonly string[], limit?: number): string[]
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function buildBundle(parts: any): any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function bundleFindings(bundle: any): string[]
+
+/** Redact values we hold, by value — shape-based rules cannot catch everything. */
+export function redactKnownSecrets(input: unknown, env?: Record<string, string | undefined>): string
