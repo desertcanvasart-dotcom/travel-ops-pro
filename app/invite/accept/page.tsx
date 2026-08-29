@@ -33,6 +33,17 @@ function AcceptInvitationContent() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  // What actually happened, so the success screen can say it. Three endings:
+  //  'dashboard'  — account created (or repaired) and signed in; going to /dashboard
+  //  'existing'   — the address already had a confirmed account. Membership is
+  //                 granted, but its OWN password still applies, not the one
+  //                 just typed, so the next step is signing in as themselves.
+  //  'signIn'     — the account is ready with the password just chosen, but the
+  //                 automatic sign-in leg failed. They just need to sign in.
+  // Getting this wrong is not cosmetic: the screen used to promise "account
+  // created, redirecting to dashboard" while sending people to /login with a
+  // password that was never set.
+  const [outcome, setOutcome] = useState<'dashboard' | 'existing' | 'signIn'>('dashboard')
   const [invitation, setInvitation] = useState<InvitationData | null>(null)
   
   const [fullName, setFullName] = useState('')
@@ -115,8 +126,9 @@ function AcceptInvitationContent() {
       // must never reset a live account's credentials), so signing in with
       // the password just typed would fail — send them to the login page.
       if (result.mode === 'link') {
+        setOutcome('existing')
         setSuccess(true)
-        setTimeout(() => router.push('/login'), 2000)
+        setTimeout(() => router.push('/login'), 4000)
         return
       }
 
@@ -126,11 +138,13 @@ function AcceptInvitationContent() {
       })
       if (signInError) {
         // The account is real and usable; only this leg failed.
+        setOutcome('signIn')
         setSuccess(true)
-        setTimeout(() => router.push('/login'), 2000)
+        setTimeout(() => router.push('/login'), 4000)
         return
       }
 
+      setOutcome('dashboard')
       setSuccess(true)
 
       // Redirect to dashboard after 2 seconds
@@ -187,8 +201,16 @@ function AcceptInvitationContent() {
             <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
           <h1 className="text-xl font-semibold text-gray-900 mb-2">{t('welcomeToAutoura')}</h1>
-          <p className="text-gray-600 mb-4">{t('accountCreatedSuccessfully')}</p>
-          <p className="text-sm text-gray-500">{t('redirectingToDashboard')}</p>
+          <p className="text-gray-600 mb-4">
+            {outcome === 'existing'
+              ? t('accountExistsNowLinked')
+              : outcome === 'signIn'
+                ? t('accountReadyPleaseSignIn')
+                : t('accountCreatedSuccessfully')}
+          </p>
+          <p className="text-sm text-gray-500">
+            {outcome === 'dashboard' ? t('redirectingToDashboard') : t('redirectingToSignIn')}
+          </p>
         </div>
       </div>
     )
