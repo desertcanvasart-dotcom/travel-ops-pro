@@ -161,6 +161,44 @@ Instead:
 
 ## When something looks wrong
 
+**Start here:**
+
+```bash
+npm run doctor                             # check, print findings
+npm run doctor -- --bundle                 # also write support-bundle.json
+npm run doctor -- --logs /var/log/app.log  # include that log, scrubbed
+```
+
+It talks to Postgres directly and reads the migration files off disk, so it
+works whether or not the app is running — which matters, because the app not
+running is the case you most need it for. It prints a pass/fail line per check
+and then plain-language findings; most problems are a missing environment
+variable or an unapplied migration, and it names both along with the command
+that fixes them. Pass `DATABASE_URL` for the migration and job-history checks;
+without it those are reported as **skipped**, not as failures.
+
+**It sends nothing anywhere.** `--bundle` writes a file for you to read and then
+choose to send. What it contains:
+
+- environment variable **names** only — no value, not even a prefix
+- table **counts** only — no client names, emails, passports or row content
+- error lines scrubbed by pattern **and** by value: anything matching a variable
+  we hold is removed whatever shape it is
+- only variables this product defines; your own are not reported at all
+
+Hostnames survive deliberately — `ENOTFOUND db.internal` keeps the host, because
+which host failed is the useful half of the message.
+
+A running install can produce the same thing from the app: sign in as an admin
+and fetch `/api/support-bundle`. The script sees one thing the endpoint cannot —
+which migrations are **pending**, because that needs the migration files, and
+those are not in a built image.
+
+`GET /api/health/deep` answers "is anything degraded" for a monitor. It takes
+either an admin session or `Authorization: Bearer $CRON_SECRET`, returns 503
+only when a dependency is genuinely down, and **reports** a stopped scheduler
+without paging on it — a monitor that cries wolf gets muted.
+
 - `npm run migrate:status` — read-only; says how many migrations are applied and
   which are pending. It will not create the tracker just for being asked.
 - `GET /api/version` — the commit actually deployed.

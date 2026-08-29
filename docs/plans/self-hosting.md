@@ -1,6 +1,6 @@
 # Running Autoura on a customer's own server
 
-Status: **T1, T2 and T3 done; T4–T5 outstanding.** Written
+Status: **T1–T4 done; T5 outstanding.** Written
 2026-08-28, revised 2026-08-29.
 
 This app is what gets installed on a customer's server. That is a different
@@ -21,7 +21,7 @@ make one do not exist:
 | A way to build the schema | **partly** — `scripts/migrate.mjs` applies them in order (T1). But see T3: the files cannot build a schema from nothing |
 | A record of which migrations ran | **done** — `schema_migrations`; production baselined 2026-08-29 (125 recorded, 0 pending) |
 | Proof a fresh install works | **done** — `npm run replay:schema`, a CI gate since the T3 squash |
-| A way to see what went wrong remotely | **absent** |
+| A way to see what went wrong remotely | **done** — `npm run doctor`, `/api/support-bundle`, `/api/health/deep` |
 
 The last row is what prompted this. It is not the first one to fix: a support
 bundle reporting on an install nobody can reproduce is a thermometer in a room
@@ -238,8 +238,7 @@ open-ended part, and neither can start until someone can run `pg_dump` against
 production — which needs the database password and a `postgresql` client
 version matching the server.
 
-**T4 — the support toolkit.** 🔨 **IN PROGRESS — `job_runs` and the redaction
-core done; `doctor.mjs`, the bundle and the deep health probe remain.** Port
+**T4 — the support toolkit.** ✅ **DONE** (T4a #274, T4b). Port
 `doctor.mjs`, the support bundle, the deep health probe and `job_runs` from the
 sibling.
 
@@ -280,7 +279,7 @@ T1 → T2 → T3 → T4 → T5, and the order is not negotiable in one place: **
 before T4.** A support bundle whose findings say "3 migrations pending" is only
 useful once applying those migrations is a command rather than an afternoon.
 
-T1, T2 and T3 are done, so **T4 (the support toolkit) is next**. T5 is now unblocked too: a release can be tagged, because a fresh install is finally provable. T5 waits for T3, because
+T1–T4 are done, so **T5 (tagged releases) is next**, and it is unblocked: a release can be tagged because a fresh install is finally provable. T5 waits for T3, because
 tagging a release that cannot be installed from scratch would be tagging a
 promise we have not checked — and T3 has just turned out to be the largest
 phase, not the routine one it was written as.

@@ -14,6 +14,7 @@
     "migrate": "node scripts/migrate.mjs",
     "migrate:status": "node scripts/migrate.mjs --status",
     "replay:schema": "node scripts/replay-schema.mjs",
+    "doctor": "node scripts/doctor.mjs",
     "verify:deploy": "node scripts/verify-deploy.mjs"
   },
   "dependencies": {
