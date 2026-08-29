@@ -11,6 +11,7 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { partitionDemoRows } from '@/lib/demo-data'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { loadFxIndex, convertLine, buildFxMeta, emptyFxSummary, type FxHole } from '@/lib/fx-report'
@@ -114,9 +115,9 @@ export async function GET(request: NextRequest) {
       .lte('expense_date', rangeEnd)
       .order('expense_date', { ascending: true })
 
-    const { data: itineraries, error: itinError } = await supabaseAdmin
+    const { data: itineraryRows, error: itinError } = await supabaseAdmin
       .from('itineraries')
-      .select('id, start_date, status, total_cost, currency')
+      .select('id, itinerary_code, start_date, status, total_cost, currency')
       .eq('org_id', orgId)
       .gte('start_date', rangeStart)
       .lte('start_date', rangeEnd)
@@ -136,6 +137,14 @@ export async function GET(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Seeded demo fixtures carry real money and were being reported as revenue
+    // (see lib/demo-data.ts). Held back here, and reported below rather than
+    // silently dropped.
+    const { real: itineraries, exclusion: demoExcluded } = partitionDemoRows(
+      itineraryRows,
+      row => row.itinerary_code,
+    )
 
     // ---------- FX normalisation ----------
     // This report is org-wide, so unlike the per-trip P&L it has no single
@@ -489,6 +498,8 @@ export async function GET(request: NextRequest) {
       // rests on exact rates. complete:false means at least one line was
       // excluded or approximated — see fx_holes for exactly which.
       ...buildFxMeta(reportingCurrency, fx, fxHoles),
+      // Same principle as fx_holes above: say what was left out.
+      demo_excluded: demoExcluded,
     })
   } catch (error) {
     console.error('Error in Financial Reports GET:', error)
