@@ -88,7 +88,20 @@ npm run build
 npm start                      # serves on PORT (default 3000)
 ```
 
-Sign up the first user, who becomes the owner of the first organization.
+Sign up the first user. On an install with **no organization at all**, that
+signup creates the organization and makes that account its **owner** — the only
+role that clears every gate. The organization is created with a blank name; open
+**Settings** and put your agency's own name, contact details and letterhead in
+it. Until you do, documents fall back to the `BUSINESS_*` variables, and any
+field neither of them has prints blank rather than somebody else's.
+
+The bootstrap fires only when the install has no organization. A later signup on
+an install that already has one is a member of nothing until somebody invites
+them, which is what public signup should do.
+
+**If this account still cannot open `/clients` or `/settings`**, it has no
+membership. Run `npm run doctor` with `DATABASE_URL` set: "the install has an
+owner" is a check, and it names the fix.
 
 ## Scheduled jobs
 
@@ -245,18 +258,31 @@ without paging on it — a monitor that cries wolf gets muted.
 These are real and current. They are listed because finding them yourself, after
 committing to an install, would be worse.
 
-### A fresh install builds, but has never been run in anger
+### A fresh install has now been run, and it did not work the first time
 
 `npm run replay:schema` builds the whole schema from nothing on every CI run —
-157 tables, 19 views, 697 indexes, 274 policies. That is real proof and it did
+158 tables, 19 views, 699 indexes, 274 policies. That is real proof and it did
 not exist before 2026-08-29, when replaying the migrations applied 17 of 125.
 
-What it does **not** prove: that the resulting app then works. Nobody has stood
-up a second install, signed in and taken a booking on it. The schema builds;
-the install has not been exercised.
+**What it did not prove is that the resulting app can be used**, and on
+2026-08-29 an install of `v2026.08.29-6` on a clean database proved it could
+not. The schema built, the app booted, signup succeeded — and the account it
+created could open `/dashboard` and nothing else. `/clients`, `/itineraries` and
+`/settings` all bounced to `/dashboard?error=unauthorized`, and
+`/api/support-bundle` answered 403, so the tool for diagnosing it was behind the
+same door. Three rows nothing created: the profile (its trigger lives on
+`auth.users`, which a `--schema=public` dump cannot carry), the first
+organization, and the membership that makes somebody its owner. Fixed by
+`migrations/20260831_first_user_bootstrap.sql`, and the replay now inserts an
+auth user and asserts the outcome, so this cannot regress silently.
 
-Two known gaps in the replay: it runs on PGlite rather than Supabase, and the
-pgvector objects (`copilot_knowledge` and its index) are created by
+The lesson is worth more than the fix: **every count in that replay passed on a
+database nobody could log into and use.** Counting what a schema contains says
+nothing about whether the first thing an operator does works.
+
+Two known gaps remain in the replay: it runs on PGlite rather than Supabase — so
+it cannot see a privilege bug, since PGlite runs as superuser — and the pgvector
+objects (`copilot_knowledge` and its index) are created by
 `archive/20260628_copilot_knowledge_rag.sql` rather than the baseline, so they
 are not covered.
 

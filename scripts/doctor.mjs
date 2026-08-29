@@ -161,6 +161,51 @@ async function probeJobRuns() {
   }))
 }
 
+/**
+ * Can anyone administer this install?
+ *
+ * Roles come from `organization_members` and nowhere else (lib/auth/roles.ts),
+ * and middleware.ts treats no membership as `viewer` — which is allowed one
+ * route. An install with no organisation, or one whose organisation has no
+ * owner, therefore looks completely healthy from every other check here while
+ * being unusable: Settings is admin-only, so the operator cannot even reach the
+ * page that would fix it.
+ *
+ * This lives in the doctor rather than in the support bundle on purpose. The
+ * bundle endpoint requires an admin, so on precisely this install it answers
+ * 403 — a diagnosis nobody can read is not a diagnosis.
+ */
+async function probeOwnership() {
+  const url = process.env.DATABASE_URL
+  if (!url) return null
+
+  const { default: pg } = await import('pg')
+  const client = new pg.Client({ connectionString: url })
+  try {
+    await client.connect()
+    const { rows } = await client.query(`
+      SELECT
+        (SELECT count(*)::int FROM public.organizations) AS orgs,
+        (SELECT count(*)::int FROM public.organization_members WHERE role = 'owner') AS owners,
+        (SELECT count(*)::int FROM auth.users) AS users,
+        (SELECT count(*)::int FROM auth.users u
+           LEFT JOIN public.user_profiles p ON p.id = u.id
+          WHERE p.id IS NULL) AS users_without_profile
+    `)
+    return rows[0]
+  } catch (err) {
+    // A missing table is itself an answer, but not one worth guessing at: the
+    // migration check above already reports a schema that is not built.
+    return { error: err instanceof Error ? err.message : String(err) }
+  } finally {
+    try {
+      await client.end()
+    } catch {
+      /* already closed */
+    }
+  }
+}
+
 function readLogTail(file) {
   if (!file) return []
   try {
@@ -193,6 +238,24 @@ async function main() {
     }
   }
 
+  const ownership = await probeOwnership()
+  if (ownership === null) {
+    console.log('  skip  the install has an owner  — needs DATABASE_URL')
+  } else if (ownership.error) {
+    line(false, 'the install has an owner', ownership.error)
+  } else if (ownership.users === 0) {
+    // Nobody has signed up yet. That is what a just-migrated install looks
+    // like, not a fault — and calling it one would send the operator hunting
+    // for a problem that the next thing they do fixes.
+    console.log('  ok    the install has an owner  — no accounts yet; the first signup becomes the owner')
+  } else {
+    line(
+      ownership.orgs > 0 && ownership.owners > 0,
+      'the install has an owner',
+      `${ownership.orgs} organisation(s), ${ownership.owners} owner(s)`
+    )
+  }
+
   const crons = await probeJobRuns()
   if (crons === null) {
     console.log('  skip  scheduled jobs  — needs DATABASE_URL')
@@ -215,12 +278,33 @@ async function main() {
     errors: readLogTail(flagValue('--logs')),
   })
 
+  const findings = [...bundleFindings(bundle)]
+  if (ownership && !ownership.error && ownership.users > 0) {
+    const pending = database.migrationsPending?.length ?? 0
+    if (ownership.orgs === 0) {
+      findings.unshift(
+        pending > 0
+          ? `This install has ${ownership.users} account(s) and no organisation, so nobody can administer it: roles come from organization_members, and no membership means viewer, which is allowed only /dashboard. ${pending} migration(s) are pending — run npm run migrate. 20260831_first_user_bootstrap makes the earliest account the owner.`
+          : `This install has ${ownership.users} account(s) and no organisation, so nobody can administer it: roles come from organization_members, and no membership means viewer, which is allowed only /dashboard. Migrations are up to date, which should not leave it in this state — create the organisation and grant ownership directly: INSERT INTO organizations (name) VALUES (''); INSERT INTO organization_members (org_id, user_id, role) VALUES (<that id>, <user id>, 'owner');`
+      )
+    } else if (ownership.owners === 0) {
+      findings.unshift(
+        `This install has ${ownership.orgs} organisation(s) and no owner at all. Nobody clears an admin-only gate, so Settings and team management are unreachable. Grant one: INSERT INTO organization_members (org_id, user_id, role) VALUES (<org>, <user>, 'owner').`
+      )
+    }
+    if (ownership.users_without_profile > 0) {
+      findings.push(
+        `${ownership.users_without_profile} account(s) exist with no user_profiles row. They can sign in and then fail every gate, because the middleware reads is_active from a row that is not there. Applying migrations backfills them.`
+      )
+    }
+  }
+
   console.log('\nfindings:')
-  for (const f of bundleFindings(bundle)) console.log(`  - ${f}`)
+  for (const f of findings) console.log(`  - ${f}`)
 
   if (args.has('--bundle')) {
     const out = path.join(process.cwd(), 'support-bundle.json')
-    writeFileSync(out, JSON.stringify({ bundle, findings: bundleFindings(bundle) }, null, 2))
+    writeFileSync(out, JSON.stringify({ bundle, findings }, null, 2))
     console.log(`\nwrote ${out}`)
     console.log('Read it before you send it. Nothing was sent anywhere by this script.')
   }
@@ -228,7 +312,15 @@ async function main() {
   // Exit non-zero only for things that make the install unusable, so this can
   // be a smoke check after an upgrade. A stopped scheduler is a finding, not a
   // failed install.
-  const broken = env.missingRequired.length > 0 || (!database.notChecked && !database.reachable)
+  // An install nobody can administer IS unusable — the same class as a missing
+  // variable or an unreachable database, not a finding to read past.
+  const unowned =
+    ownership &&
+    !ownership.error &&
+    ownership.users > 0 &&
+    (ownership.orgs === 0 || ownership.owners === 0)
+  const broken =
+    env.missingRequired.length > 0 || (!database.notChecked && !database.reachable) || unowned
   process.exitCode = broken ? 1 : 0
 }
 

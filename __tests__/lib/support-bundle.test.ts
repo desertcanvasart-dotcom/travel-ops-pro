@@ -84,6 +84,29 @@ describe('bundleFindings', () => {
     expect(bundleFindings(b).join('\n')).toMatch(/CRON_IN_PROCESS=true/)
   })
 
+  it('does not prescribe CRON_IN_PROCESS to an install that already sets it', () => {
+    // The same mistake as the doctor reading a working install as broken, one
+    // layer down: an install stood up an hour ago HAS set the variable and has
+    // simply not reached 02:00 yet. Telling that operator to set what they set
+    // is how a findings list stops being read at all.
+    const b = buildBundle({
+      ...baseParts,
+      env: {
+        NEXT_PUBLIC_SUPABASE_URL: 'x',
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: 'y',
+        SUPABASE_SERVICE_ROLE_KEY: 'z',
+        CRON_IN_PROCESS: 'true',
+      },
+      crons: [
+        { name: 'data-invariants', lastRun: null, lastOutcome: null, scheduledInProcess: true },
+        { name: 'rate-change-digest', lastRun: null, lastOutcome: null, scheduledInProcess: true },
+      ],
+    })
+    const text = bundleFindings(b).join('\n')
+    expect(text).toMatch(/CRON_IN_PROCESS is set/)
+    expect(text).not.toMatch(/Set it\./)
+  })
+
   it('separates jobs nothing schedules from jobs that merely have not run', () => {
     const b = buildBundle({
       ...baseParts,
