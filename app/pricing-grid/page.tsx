@@ -735,6 +735,8 @@ function PricingGridContent() {
         onClearAll={handleClearAll}
         isParsing={isParsing}
         hasDays={days.length > 0}
+        packageType={config.packageType ?? 'full-package'}
+        onPackageTypeChange={(p) => setConfig(prev => ({ ...prev, packageType: p }))}
       />
 
       {/* Days Grid */}

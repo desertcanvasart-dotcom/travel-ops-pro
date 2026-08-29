@@ -26,6 +26,7 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
+import { PACKAGE_TYPE_CONFIGS } from '@/lib/package-types'
 import { roundToCurrency } from '@/lib/currency-totals'
 import { DEFAULT_RATE_CURRENCY } from '@/lib/org-rate-currency'
 import {
@@ -143,6 +144,8 @@ export interface ItineraryDay {
 // Pricing parameters
 export interface DayPricingParams {
   templateId: string
+  /** See PricingParams.packageType — same plumbing, per-day engine. */
+  packageType?: string
   tier: ServiceTier
   isEurPassport: boolean
   language?: string
@@ -665,6 +668,13 @@ export function parseItinerary(itineraryData: any, opts?: {
    *  their titles simply won't contain Egyptian names); this only replaces
    *  the last-resort hardcoded 'Cairo' (multi-destination plan, Phase 2). */
   defaultCity?: string
+  /** What the customer is buying. Gates the DEFAULT service flags below the
+   *  same way the grid's completeness mask does (lib/package-types.ts):
+   *  a product with no airport transfers must not default them onto days,
+   *  and a product with no accommodation has no hotel check-ins to price.
+   *  EXPLICIT day.services always win — same precedence as the grid.
+   *  Omitted = full-package, the engine's historical assumption. */
+  packageType?: string
 }): ItineraryDay[] {
   if (!itineraryData || !Array.isArray(itineraryData)) {
     return []
@@ -701,28 +711,43 @@ export function parseItinerary(itineraryData: any, opts?: {
     const hasAttractions = (day.attractions && day.attractions.length > 0) ||
                           (day.title && /temple|pyramid|museum|valley|tomb/i.test(day.title))
 
-    // Build services with defaults, then ENFORCE first/last day rules
+    // Build services with defaults, then ENFORCE first/last day rules.
+    //
+    // The defaults and the enforcement describe a FULL PACKAGE, so both are
+    // gated on what the product actually includes. Two latent bugs lived
+    // here (taxonomy review): a SINGLE-day template with no explicit
+    // services defaulted airport arrival AND departure AND hotel check-in
+    // AND check-out onto its one day — a day tour priced like a whole
+    // package — and no product ever escaped the full-package assumption.
+    // Explicit day.services still win over everything, same precedence as
+    // the pricing grid's package mask.
+    const pkgIncludes = PACKAGE_TYPE_CONFIGS.find(
+      p => p.slug === (opts?.packageType ?? 'full-package')
+    )?.includes ?? PACKAGE_TYPE_CONFIGS.find(p => p.slug === 'full-package')!.includes
+    const isSingleDay = itineraryData.length === 1
+
     const baseServices = day.services || {
-      airport_arrival: isFirstDay,
-      airport_departure: isLastDay,
-      hotel_checkin: isFirstDay,
-      hotel_checkout: isLastDay,
+      airport_arrival: pkgIncludes.airportTransfers && isFirstDay,
+      airport_departure: pkgIncludes.airportTransfers && isLastDay,
+      // A single-day trip has no overnight, so there is no hotel to check
+      // into whatever the package says — day-use is an explicit flag, not a
+      // default.
+      hotel_checkin: pkgIncludes.accommodation && !isSingleDay && isFirstDay,
+      hotel_checkout: pkgIncludes.accommodation && !isSingleDay && isLastDay,
       guide_required: hasAttractions
     }
 
-    // RULE ENFORCEMENT: Always ensure arrival/departure flags on first/last days
-    // even if the template data didn't include them
+    // RULE ENFORCEMENT: ensure arrival/departure flags on first/last days of
+    // a multi-day tour — when the package sells those services at all.
     const services = {
       ...baseServices,
-      // First day of multi-day tour: always has airport arrival + hotel check-in
       ...(isFirstDay && itineraryData.length > 1 ? {
-        airport_arrival: true,
-        hotel_checkin: true,
+        ...(pkgIncludes.airportTransfers ? { airport_arrival: true } : {}),
+        ...(pkgIncludes.accommodation ? { hotel_checkin: true } : {}),
       } : {}),
-      // Last day of multi-day tour: always has airport departure + hotel check-out
       ...(isLastDay && itineraryData.length > 1 ? {
-        airport_departure: true,
-        hotel_checkout: true,
+        ...(pkgIncludes.airportTransfers ? { airport_departure: true } : {}),
+        ...(pkgIncludes.accommodation ? { hotel_checkout: true } : {}),
       } : {}),
     }
 
@@ -768,7 +793,7 @@ export function parseItinerary(itineraryData: any, opts?: {
 
   // Apply B2B Day Rules Engine for deterministic enforcement
   // (first/last day flags, transfer-only cleanup, meal venue removal)
-  return applyB2BDayRules(parsed) as ItineraryDay[]
+  return applyB2BDayRules(parsed, opts?.packageType) as ItineraryDay[]
 }
 
 /**
@@ -1984,7 +2009,7 @@ export async function calculateDayBasedPricing(
 
   debugLog('📋 Template found:', template.template_name)
 
-  const itinerary = parseItinerary(template.itinerary)
+  const itinerary = parseItinerary(template.itinerary, { packageType: params.packageType })
   const totalDays = itinerary.length || template.duration_days || 1
 
   if (itinerary.length === 0) {
@@ -2925,6 +2950,11 @@ export function formatPricingTable(result: DayPricingResult): string[][] {
 
 export interface PricingParams {
   templateId: string
+  /** What the customer is buying (lib/package-types.ts). Templates carry no
+   *  package column yet, so callers usually omit this — full-package, the
+   *  historical assumption. The plumbing exists so the day a template knows
+   *  its product, the engine already listens. */
+  packageType?: string
   tier: ServiceTier
   numPax: number
   numAdults?: number
@@ -3129,6 +3159,7 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
 
   const dayResult = await calculateDayBasedPricing({
     templateId,
+    packageType: params.packageType,
     tier,
     isEurPassport,
     language,
@@ -3544,6 +3575,7 @@ export async function calculatePricingWithPassengerBreakdown(
   // First get the day-based pricing to get the base adult rate
   const dayResult = await calculateDayBasedPricing({
     templateId,
+    packageType: params.packageType,
     tier,
     isEurPassport,
     language,

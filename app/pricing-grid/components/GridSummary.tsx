@@ -1,6 +1,7 @@
 'use client'
 
 import { Save, ExternalLink, Loader2 } from 'lucide-react'
+import { PACKAGE_TYPE_CONFIGS } from '@/lib/package-types'
 import type { GridTotals, GridConfig } from '../types'
 import { convertAmount } from '../lib/calculator'
 
@@ -43,7 +44,7 @@ export default function GridSummary({ totals, config, dayCount, onSave, isSaving
         <div>
           <h3 className="text-sm font-bold uppercase tracking-wider">Grand Summary</h3>
           <p className="text-[11px] text-gray-400 mt-0.5">
-            {dayCount} days {'\u00B7'} {pax} pax {'\u00B7'} {config.passport === 'eu' ? 'EU' : 'Non-EU'} {'\u00B7'} {config.tier} {'\u00B7'} {config.clientType.toUpperCase()}
+            {dayCount} days {'\u00B7'} {pax} pax {'\u00B7'} {config.passport === 'eu' ? 'EU' : 'Non-EU'} {'\u00B7'} {config.tier} {'\u00B7'} {PACKAGE_TYPE_CONFIGS.find(p => p.slug === (config.packageType ?? 'full-package'))?.name ?? 'Full Package'} {'\u00B7'} {config.clientType.toUpperCase()}
             {savedItineraryCode && <span className="ml-2 text-green-400">{'\u2014'} {savedItineraryCode}</span>}
           </p>
         </div>
