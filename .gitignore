@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the template, which is the whole point of it existing. `.env*`
+# swallowed it silently: `git add .env.example` appeared to work and staged
+# nothing.
+!.env.example
 
 # vercel
 .vercel

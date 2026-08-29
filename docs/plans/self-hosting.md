@@ -1,6 +1,6 @@
 # Running Autoura on a customer's own server
 
-Status: **T1 built and applied to production; T2–T5 outstanding.** Written
+Status: **T1 and T2 done; T3–T5 outstanding.** Written
 2026-08-28, revised 2026-08-29.
 
 This app is what gets installed on a customer's server. That is a different
@@ -16,8 +16,8 @@ make one do not exist:
 
 | Needed to install this anywhere | State |
 |---|---|
-| A list of what to configure | **absent** — no `.env.example` |
-| An install procedure | **absent** — no `docs/SELF-HOSTING.md` |
+| A list of what to configure | **done** — `.env.example`, derived from the code and kept in sync by a test |
+| An install procedure | **done** — `docs/SELF-HOSTING.md`, with its blockers stated up front |
 | A way to build the schema | **partly** — `scripts/migrate.mjs` applies them in order (T1). But see T3: the files cannot build a schema from nothing |
 | A record of which migrations ran | **done** — `schema_migrations`; production baselined 2026-08-29 (125 recorded, 0 pending) |
 | Proof a fresh install works | **absent** — nobody has ever built this schema from zero |
@@ -112,9 +112,38 @@ customer on?".
 > with `SUPABASE_SERVICE_ROLE_KEY`, so resetting the Postgres password does not
 > affect production.
 
-**T2 — the install procedure.** `.env.example` (every variable this app reads,
-with which are required) and `docs/SELF-HOSTING.md` (prerequisites, first
-install, upgrading, what to do when a migration fails). Both largely a port.
+**T2 — the install procedure.** ✅ **DONE.** `.env.example` and
+`docs/SELF-HOSTING.md`.
+
+> **Not a port after all.** The sibling's template describes a different app.
+> `.env.example` here was derived by grepping `process.env` across `app/`,
+> `lib/`, `components/`, `middleware.ts` and `instrumentation.ts` — 54 distinct
+> variables — and `__tests__/env-example-sync.test.ts` fails if the code and the
+> template drift in either direction.
+>
+> **Two findings that change what T2 delivers:**
+>
+> 1. **`CRON_IN_PROCESS=true` is required off Railway.** The in-process
+>    scheduler — §3's stated advantage — arms only when `RAILWAY_SERVICE_NAME`
+>    exists or that flag is explicitly true. A self-hosted install has neither,
+>    so all four jobs silently never run, including the retention purge that
+>    destroys passport scans after a trip. §3's claim that "a customer
+>    configures no cron at all" is true only with that one line.
+> 2. **The operator's identity is hardcoded in 46 files, 89 occurrences.**
+>    `Travel2Egypt` and its addresses are literals in invoice reminders, booking
+>    confirmations, WhatsApp templates, contract PDFs and vouchers.
+>    `BUSINESS_NAME`/`BUSINESS_EMAIL`/`REVIEW_URL` are honoured in *some* of
+>    those places; most are not. A second agency would send customer-facing mail
+>    signed with this one's name — and `REVIEW_URL` unset sends their customers
+>    to this agency's Google review page. **This is a blocker for a real second
+>    install and is not scheduled work.**
+>
+> Also found: `DEFAULT_CURRENCY`, `MARKUP_PERCENTAGE` and `GMAIL_APP_PASSWORD`
+> are set in production and on Railway and read by nothing. `.env.example` says
+> to delete them.
+>
+> `docs/SELF-HOSTING.md` states both blockers up front rather than letting
+> someone discover them after committing to an install.
 
 **T3 — prove a fresh install works.** The from-scratch replay in CI.
 
@@ -183,7 +212,7 @@ T1 → T2 → T3 → T4 → T5, and the order is not negotiable in one place: **
 before T4.** A support bundle whose findings say "3 migrations pending" is only
 useful once applying those migrations is a command rather than an afternoon.
 
-T1 is done, so **T2 is the next thing to pick up**. T5 waits for T3, because
+T1 and T2 are done, so **T3 is next** — and it is the largest phase, not the routine one it was originally written as. T5 waits for T3, because
 tagging a release that cannot be installed from scratch would be tagging a
 promise we have not checked — and T3 has just turned out to be the largest
 phase, not the routine one it was written as.
