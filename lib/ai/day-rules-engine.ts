@@ -1,3 +1,4 @@
+import { PACKAGE_TYPE_CONFIGS } from '@/lib/package-types'
 // ============================================
 // DAY RULES ENGINE — Post-AI Validation Layer
 // File: lib/ai/day-rules-engine.ts
@@ -255,10 +256,18 @@ export function applyDayRules(days: any[], packageType: string): any[] {
  * The B2B path uses a different data structure (ItineraryDay),
  * so this function adapts the rules accordingly.
  */
-export function applyB2BDayRules(days: any[]): any[] {
+export function applyB2BDayRules(days: any[], packageType?: string): any[] {
   if (!days || !Array.isArray(days) || days.length === 0) return days
 
   const totalDays = days.length
+  // The forced first/last-day flags describe a FULL PACKAGE — its sibling
+  // applyDayRules() above has always gated on isFullPackage, but this B2B
+  // twin never learned about packages and forced airport pickups onto
+  // products that do not sell them (taxonomy review). Same source of truth
+  // as the grid's mask: the package's includes.
+  const pkgIncludes = PACKAGE_TYPE_CONFIGS.find(
+    p => p.slug === (packageType ?? 'full-package')
+  )?.includes ?? PACKAGE_TYPE_CONFIGS.find(p => p.slug === 'full-package')!.includes
 
   return days.map((day, index) => {
     const corrected = { ...day }
@@ -270,21 +279,21 @@ export function applyB2BDayRules(days: any[]): any[] {
       corrected.services = {}
     }
 
-    // First day: force arrival flags
+    // First day: force arrival flags — where the package sells them.
     if (isFirstDay && totalDays > 1) {
       corrected.services = {
         ...corrected.services,
-        airport_arrival: true,
-        hotel_checkin: true,
+        ...(pkgIncludes.airportTransfers ? { airport_arrival: true } : {}),
+        ...(pkgIncludes.accommodation ? { hotel_checkin: true } : {}),
       }
     }
 
-    // Last day: force departure flags
+    // Last day: force departure flags — where the package sells them.
     if (isLastDay && totalDays > 1) {
       corrected.services = {
         ...corrected.services,
-        airport_departure: true,
-        hotel_checkout: true,
+        ...(pkgIncludes.airportTransfers ? { airport_departure: true } : {}),
+        ...(pkgIncludes.accommodation ? { hotel_checkout: true } : {}),
       }
     }
 

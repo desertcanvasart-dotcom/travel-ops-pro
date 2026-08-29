@@ -6,6 +6,8 @@
 // 4. Returns grid days with slots pre-filled and matched to real rates
 
 import { NextRequest, NextResponse } from 'next/server'
+import { PACKAGE_TYPE_CONFIGS, type PackageTypeConfig } from '@/lib/package-types'
+import { packageRules } from '@/lib/ai/package-prompt-rules'
 import { createServerClient } from '@/lib/supabase-server'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { MODEL_PARSER } from '@/lib/ai/models'
@@ -142,8 +144,9 @@ async function buildRateCatalog(supabase: any, tier: string, sym: string) {
 // AI SYSTEM PROMPT
 // ============================================
 
-function buildSystemPrompt(catalog: Record<string, string>) {
+function buildSystemPrompt(catalog: Record<string, string>, pkg: PackageTypeConfig) {
   return `You are a travel itinerary pricing engine. Given a text (WhatsApp conversation, email, or itinerary), parse it into days and map each service to ACTUAL RATE IDs from the catalog below.
+${packageRules(pkg)}
 
 ## RATE CATALOGS (use these exact IDs)
 
@@ -362,7 +365,7 @@ Output ONLY valid JSON, no other text.`
 // GENERATIVE PROMPT (fallback for vague inquiries)
 // ============================================
 
-function buildGenerativePrompt(catalog: Record<string, string>) {
+function buildGenerativePrompt(catalog: Record<string, string>, pkg: PackageTypeConfig) {
   return `You are a travel itinerary designer for Egypt tours. The input is a VAGUE travel inquiry — NOT a detailed day-by-day itinerary. Your job is to DESIGN a suggested itinerary based on the destinations, dates, interests, and group size mentioned, then map each service to ACTUAL RATE IDs from the catalog below.
 
 ## DESIGN RULES
@@ -373,6 +376,7 @@ function buildGenerativePrompt(catalog: Record<string, string>) {
 - If the client mentions "beach" or "Red Sea", include Hurghada or Sharm El Sheikh.
 - Design a realistic, well-paced itinerary — don't cram too many sites into one day.
 - Always start with an arrival day and end with a departure day.
+${packageRules(pkg)}
 
 ## RATE CATALOGS (use these exact IDs)
 
@@ -514,7 +518,13 @@ Output ONLY valid JSON, no other text.`
 export async function POST(request: NextRequest) {
   try {
     const supabase = createServerClient()
-    const { text, tier, pax } = await request.json()
+    const { text, tier, pax, package_type } = await request.json()
+    // What the customer is buying. Decides what the AI is TOLD to include and
+    // what the auto-fill pass may add — until this existed the parser built
+    // every trip full-package shaped: airport reps, hotel porterage and
+    // hotels appeared on products that do not sell them (taxonomy review).
+    const pkg = PACKAGE_TYPE_CONFIGS.find(c => c.slug === package_type) ??
+      PACKAGE_TYPE_CONFIGS.find(c => c.slug === 'full-package')!
 
     if (!text || typeof text !== 'string') {
       return NextResponse.json({ success: false, error: 'No text provided' }, { status: 400 })
@@ -526,7 +536,7 @@ export async function POST(request: NextRequest) {
     const { catalog, rawRates } = await buildRateCatalog(supabase, tier || 'standard', sym)
 
     // 2. Build prompt with real rate IDs
-    const systemPrompt = buildSystemPrompt(catalog)
+    const systemPrompt = buildSystemPrompt(catalog, pkg)
 
     // 3. Send to AI
     const response = await createMessageWithRetry({
@@ -560,7 +570,7 @@ export async function POST(request: NextRequest) {
       console.log('Parse returned 0 days — falling back to generative mode')
       generationMode = 'generated'
 
-      const genPrompt = buildGenerativePrompt(catalog)
+      const genPrompt = buildGenerativePrompt(catalog, pkg)
       const genResponse = await createMessageWithRetry({
         model: MODEL_PARSER,
         max_tokens: 8192,
@@ -933,7 +943,7 @@ export async function POST(request: NextRequest) {
       //   Hotel AI (all inclusive): NO outside meals
       //   Hotel RO (room only) or no board: needs lunch + dinner
       //   Arrival/departure days: no meals auto-filled
-      if (isEmpty('meals') && !isArrivalDay && !isDepartureDay) {
+      if (pkg.includes.meals !== 'none' && isEmpty('meals') && !isArrivalDay && !isDepartureDay) {
         // Determine which meals are needed based on board type
         let needsLunch = false
         let needsDinner = false
@@ -1037,7 +1047,9 @@ export async function POST(request: NextRequest) {
       }
 
       // Arrival/departure day: driver tip only
-      if ((isArrivalDay || isDepartureDay) && isEmpty('tipping')) {
+      // The arrival/departure tip is for the airport-transfer driver — no
+      // airport transfer in the package, no driver to tip.
+      if (pkg.includes.airportTransfers && (isArrivalDay || isDepartureDay) && isEmpty('tipping')) {
         const tips = rawRates.tippingRates || []
         const driverTip = tips.find((t: any) => /driver.*half|TIP-DRIVER-HALF/i.test(t.role || t.service_code || ''))
           || tips.find((t: any) => /driver/i.test(t.role || t.service_code || ''))
@@ -1048,7 +1060,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Hotel services: auto-fill if missing on non-cruise, non-last day
-      if (!isCruiseDay && !isLastDay && isEmpty('hotel_services')) {
+      if (pkg.includes.accommodation && !isCruiseDay && !isLastDay && isEmpty('hotel_services')) {
         const hotelSvc = rawRates.hotelServiceRates?.find((h: any) =>
           h.service_type === 'full_service' &&
           (h.hotel_category === (tier || 'standard') || h.hotel_category === 'all')
@@ -1133,6 +1145,21 @@ export async function POST(request: NextRequest) {
 
       console.log(`Day ${day.dayNumber} "${day.title}": sightseeing=${hasSightseeing}, cruise=${isCruiseDay}, embark=${isCruiseEmbarkation}`,
         Object.fromEntries(Object.entries(slots).map(([k, v]) => [k, Array.isArray(v) ? v.length : v])))
+
+      // THE PACKAGE SCRUB — the prompt above ASKS the AI to leave excluded
+      // components empty; this GUARANTEES it. A model that adds a hotel to a
+      // tours-only trip anyway gets it removed here, deterministically,
+      // before anything is priced or saved.
+      if (!pkg.includes.accommodation) {
+        slots.accommodation = []
+        slots.hotel_services = []
+      }
+      if (!pkg.includes.airportTransfers) {
+        slots.airport_services = []
+      }
+      if (pkg.includes.meals === 'none') {
+        slots.meals = []
+      }
 
       return { ...day, slots }
     })

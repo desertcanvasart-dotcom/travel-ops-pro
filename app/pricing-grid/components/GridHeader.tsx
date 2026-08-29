@@ -143,6 +143,7 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
               <option key={t.value} value={t.value}>{t.label}</option>
             ))}
           </select>
+
         </div>
 
         {/* ===== PRICING MODE GROUP ===== */}
