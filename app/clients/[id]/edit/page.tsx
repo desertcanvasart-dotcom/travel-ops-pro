@@ -237,11 +237,14 @@ export default function EditClientPage() {
 
       if (updateError) throw updateError
 
+      // Keep the button in its saving state through the navigation —
+      // router.push() does not await the destination, and a finally{} here
+      // re-enabled Save while this page was still on screen (the AUT-W05
+      // dead window, one page over). The page unmounts on success.
       router.push(`/clients/${clientId}`)
     } catch (err) {
       console.error('Error updating client:', err)
       setError(t('failedToUpdate'))
-    } finally {
       setSaving(false)
     }
   }
