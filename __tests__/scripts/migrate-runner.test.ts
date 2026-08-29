@@ -5,7 +5,7 @@
 //
 // The contract, in one line: apply every unrecorded file in name order, record
 // each only AFTER it succeeds, stop on the first failure without recording it.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import fs from 'fs'
 import path from 'path'
 import { PGlite } from '@electric-sql/pglite'
@@ -19,6 +19,13 @@ import {
   runPending,
   type MigrationClient,
 } from '@/scripts/migrate-core.mjs'
+
+// PGlite boots a real Postgres per instance — roughly a second each, and slower
+// when vitest is running other suites in parallel. The 5s default is a timing
+// assumption, not a correctness one, and it started failing on main once a
+// second PGlite-backed suite landed alongside this one. Raised deliberately and
+// scoped to this file, so a genuine hang elsewhere still fails fast.
+vi.setConfig({ testTimeout: 30_000 })
 
 const MIGRATIONS = path.join(process.cwd(), 'migrations')
 

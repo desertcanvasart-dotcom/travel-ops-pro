@@ -5,9 +5,16 @@
 //
 // The first test below is the actual reproduction, against a real Postgres via
 // PGlite using the production column types. It fails without the fix.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { PGlite } from '@electric-sql/pglite'
 import { blankToNull } from '@/lib/blank-to-null'
+
+// PGlite boots a real Postgres per instance — roughly a second each, and slower
+// when vitest is running other suites in parallel. The 5s default is a timing
+// assumption, not a correctness one, and it started failing on main once a
+// second PGlite-backed suite landed alongside this one. Raised deliberately and
+// scoped to this file, so a genuine hang elsewhere still fails fast.
+vi.setConfig({ testTimeout: 30_000 })
 
 /** The `payments` shape as production actually has it (verified 2026-08-29). */
 const PAYMENTS_DDL = `
