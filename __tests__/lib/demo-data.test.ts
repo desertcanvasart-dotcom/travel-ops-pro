@@ -22,7 +22,13 @@ describe('isDemoCode', () => {
     expect(isDemoCode('DEMO-EXT-2026-001')).toBe(true)
     expect(isDemoCode('DEMO-PORTAL-001')).toBe(true)
     expect(isDemoCode('DEMO-2026-0001')).toBe(true)
-    expect(isDemoCode('E2E-SMOKE-001')).toBe(true)
+  })
+
+  it('does NOT match E2E-SMOKE-*, which lives in another org and is asserted on', () => {
+    // Org scoping already keeps it out of the operator's totals, and
+    // e2e/smoke.authed.spec.ts asserts the P&L still returns it — that
+    // assertion is the regression guard for "P&L lost its org filter".
+    expect(isDemoCode('E2E-SMOKE-001')).toBe(false)
   })
 
   it('does NOT match ITN-S-*, which is a real trip from the pricing grid', () => {
@@ -62,13 +68,12 @@ describe('partitionDemoRows', () => {
     { itinerary_code: 'DEMO-PORTAL-001', total: 1099897 },
     { itinerary_code: 'DEMO-EXT-2026-001', total: 3000 },
     { itinerary_code: 'ITN-S-2026-4801', total: 5953.88 },
-    { itinerary_code: 'E2E-SMOKE-001', total: 0 },
   ]
 
-  it('keeps the real trip and holds back the three fixtures', () => {
+  it('keeps the real trip and holds back the two fixtures', () => {
     const { real, exclusion } = partitionDemoRows(rows, r => r.itinerary_code)
     expect(real.map(r => r.itinerary_code)).toEqual(['ITN-S-2026-4801'])
-    expect(exclusion.excluded).toBe(3)
+    expect(exclusion.excluded).toBe(2)
     expect(exclusion.codes).toContain('DEMO-PORTAL-001')
   })
 

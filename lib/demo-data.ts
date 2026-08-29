@@ -2,9 +2,9 @@
 // DEMO FIXTURES ARE NOT REVENUE
 // ============================================
 // This database carries seeded records that exist so people can be shown the
-// product working: the extras walkthrough (DEMO-EXT-*), the portal demo
-// (DEMO-*), and the Playwright smoke fixture (E2E-*). They are real rows with
-// real money on them, and every financial aggregate has been counting them.
+// product working: the extras walkthrough (DEMO-EXT-*) and the portal demo
+// (DEMO-*). They are real rows with real money on them, and every financial
+// aggregate has been counting them.
 //
 // The 29 August QA audit reported this as a Critical data-integrity failure —
 // "Total Revenue ¥1,099,897 + €5,953.88 + $3,000.00". Two of those three
@@ -22,6 +22,13 @@
 //   ITN-S-*  — "S = from pricing grid (slot-based)" (app/api/pricing-grid/save).
 //              A real itinerary made a real way. €5,953.88 of the figure above
 //              is one of these and it belongs in revenue.
+//   E2E-*    — the Playwright smoke fixture lives in a DIFFERENT org, so the
+//              org filter every one of these queries already applies keeps it
+//              out of the operator's numbers. Adding it here bought nothing
+//              and broke a real regression test: e2e/smoke.authed.spec.ts
+//              seeds E2E-SMOKE-001 and asserts the P&L still returns it, which
+//              is how "P&L lost its org filter" would be caught. A prefix that
+//              protects nothing is not worth blinding a test that does.
 //   QA ...   — the auditor's own 13 records carry ordinary codes and cannot be
 //              recognised by shape. They are disposable and should be deleted,
 //              which is a separate, human-approved action.
@@ -37,7 +44,7 @@
  * that is what the seed scripts control and what a person can recognise on
  * screen. Add a prefix here when a new fixture family is introduced.
  */
-export const DEMO_CODE_PREFIXES = ['DEMO-', 'E2E-'] as const
+export const DEMO_CODE_PREFIXES = ['DEMO-'] as const
 
 /** Does this code belong to a seeded fixture rather than real trading? */
 export function isDemoCode(code: unknown): boolean {
