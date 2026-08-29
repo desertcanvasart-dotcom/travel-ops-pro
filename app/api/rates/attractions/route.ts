@@ -98,6 +98,13 @@ export async function GET(request: NextRequest) {
         is_addon: item.is_addon || false,
         addon_note: item.addon_note,
         supplier_id: item.supplier_id,
+        // The currency the row is ENTERED in. This hand-maintained field
+        // list predates per-rate-currency and silently dropped it — so the
+        // list showed EGP rates through the org formatter (600 EGP rendered
+        // as ¥95,808 for a JPY-display operator) and the edit form reopened
+        // on the default, which read exactly like "the currency didn't
+        // save". It had saved; this transform ate it on the way back.
+        rate_currency: item.rate_currency ?? null,
         created_at: item.created_at,
         updated_at: item.updated_at
       }

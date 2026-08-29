@@ -76,6 +76,9 @@ export async function GET(
       is_addon: data.is_addon || false,
       addon_note: data.addon_note,
       supplier_id: data.supplier_id,
+      // See the list route: this transform predates per-rate-currency and
+      // dropped the row's own currency on the way out.
+      rate_currency: data.rate_currency ?? null,
       created_at: data.created_at,
       updated_at: data.updated_at
     }

@@ -566,7 +566,16 @@ export default function AttractionsContent() {
   const addonAttractions = attractions.filter(a => a.is_addon).length  // NEW
   const standardAttractions = attractions.filter(a => !a.is_addon).length  // NEW
   const avgRate = attractions.length > 0 
-  ? (attractions.reduce((sum, a) => sum + (a.eur_rate || 0), 0) / attractions.length).toFixed(2)
+  // Only rows entered in the org currency average meaningfully — summing a
+  // raw 600 (EGP) with a raw 22 (org currency) produced the ¥44,817 header
+  // fiction. Rows with their own currency are excluded rather than
+  // converted: a stat, not an exchange desk.
+  ? (() => {
+      const orgRows = attractions.filter(a => !a.rate_currency)
+      return orgRows.length
+        ? (orgRows.reduce((sum, a) => sum + (a.eur_rate || 0), 0) / orgRows.length).toFixed(2)
+        : '—'
+    })()
   : '0.00'
 
   if (loading) {
