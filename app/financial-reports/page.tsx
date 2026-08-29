@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { SkeletonPageHeader, SkeletonStatCards, SkeletonTable } from '@/components/Skeleton'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import {
@@ -218,9 +219,12 @@ export default function FinancialReportsPage() {
   const maxMonthlyRevenue = Math.max(...monthly.map(m => Math.max(m.revenue, m.expenses)), 1)
 
   if (loading) {
+    // The page's own shape while the report period loads (AUT-H03).
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#647C47]"></div>
+      <div className="p-6 space-y-5" aria-busy="true" aria-label="Loading reports">
+        <SkeletonPageHeader />
+        <SkeletonStatCards count={6} />
+        <SkeletonTable rows={6} />
       </div>
     )
   }

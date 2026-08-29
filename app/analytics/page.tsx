@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { SkeletonPageHeader, SkeletonStatCards, SkeletonChart } from '@/components/Skeleton'
 import { useTranslations } from 'next-intl'
 import {
   TrendingUp,
@@ -268,11 +269,16 @@ export default function AnalyticsPage() {
                      (pipelineData.followups > 0)
 
   if (loading) {
+    // The page's own shape while its data loads — a full-screen spinner over
+    // a 1–4s fetch read as a broken page (AUT-H03). Mirrors the layout
+    // below: title, four stat tiles, two chart panels.
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">{t('loading')}</p>
+      <div className="p-6 space-y-5" aria-busy="true" aria-label={t('loading')}>
+        <SkeletonPageHeader />
+        <SkeletonStatCards count={4} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <SkeletonChart />
+          <SkeletonChart />
         </div>
       </div>
     )
