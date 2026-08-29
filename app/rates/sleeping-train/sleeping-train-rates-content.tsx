@@ -4,6 +4,7 @@ import { todayLocal } from '@/lib/today'
 import { useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import { useTranslations } from 'next-intl'
 import { SLEEPING_TRAIN_CABINS } from '@/lib/rates/sleeping-train-cabins'
@@ -702,11 +703,11 @@ export default function SleepingTrainRatesContent() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm font-bold text-green-600">{formatRate(rate.rate_oneway_eur)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
+                      <span className="text-sm font-bold text-green-600">{formatRateInRowCurrency(rate.rate_oneway_eur, rate, formatRate)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       {rate.rate_roundtrip_eur ? (
-                        <span className="text-sm text-gray-600">{formatRate(rate.rate_roundtrip_eur)}</span>
+                        <span className="text-sm text-gray-600">{formatRateInRowCurrency(rate.rate_roundtrip_eur, rate, formatRate)}</span>
                       ) : (
                         <span className="text-xs text-gray-400">—</span>
                       )}
@@ -779,9 +780,9 @@ export default function SleepingTrainRatesContent() {
                   <div>
                     <p className="text-xs text-gray-500">One-way / Roundtrip</p>
                     <p className="text-lg font-bold text-green-600">
-                      {formatRate(rate.rate_oneway_eur)}
+                      {formatRateInRowCurrency(rate.rate_oneway_eur, rate, formatRate)}
                       {rate.rate_roundtrip_eur && (
-                        <span className="text-sm text-gray-500 font-normal"> / {formatRate(rate.rate_roundtrip_eur)}</span>
+                        <span className="text-sm text-gray-500 font-normal"> / {formatRateInRowCurrency(rate.rate_roundtrip_eur, rate, formatRate)}</span>
                       )}
                     </p>
                   </div>
@@ -817,7 +818,7 @@ export default function SleepingTrainRatesContent() {
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="text-sm font-bold text-green-600">{formatRate(rate.rate_oneway_eur)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
+                  <span className="text-sm font-bold text-green-600">{formatRateInRowCurrency(rate.rate_oneway_eur, rate, formatRate)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>

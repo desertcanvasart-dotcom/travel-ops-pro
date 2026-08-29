@@ -4,6 +4,7 @@ import { todayLocal } from '@/lib/today'
 import { useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import { useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
@@ -696,7 +697,7 @@ export default function TrainRatesContent() {
                       <span className="text-sm text-gray-600">{rate.operator_name || '—'}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm font-bold text-green-600">{formatRate(rate.rate_eur)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
+                      <span className="text-sm font-bold text-green-600">{formatRateInRowCurrency(rate.rate_eur, rate, formatRate)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -759,7 +760,7 @@ export default function TrainRatesContent() {
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                   <div>
                     <p className="text-xs text-gray-500">Rate</p>
-                    <p className="text-lg font-bold text-green-600">{formatRate(rate.rate_eur)}</p>
+                    <p className="text-lg font-bold text-green-600">{formatRateInRowCurrency(rate.rate_eur, rate, formatRate)}</p>
                   </div>
                   <div className="flex gap-1">
                     <button
@@ -796,7 +797,7 @@ export default function TrainRatesContent() {
                   )}
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="text-sm font-bold text-green-600">{formatRate(rate.rate_eur)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
+                  <span className="text-sm font-bold text-green-600">{formatRateInRowCurrency(rate.rate_eur, rate, formatRate)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>

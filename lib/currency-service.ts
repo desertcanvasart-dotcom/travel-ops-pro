@@ -48,9 +48,12 @@ export async function fetchExchangeRates(baseCurrency: string = 'USD'): Promise<
   }
 
   try {
-    // Frankfurter API - free, no API key required
+    // Frankfurter API - free, no API key required. The .app host now 301s to
+    // .dev; call the new home directly before the redirect stops working.
+    // NOTE these are ECB reference rates — no EGP. Pricing runs merge the
+    // org's own exchange_rates table over this (lib/rates/fx-source.ts).
     const response = await fetch(
-      `https://api.frankfurter.app/latest?from=${baseCurrency}`,
+      `https://api.frankfurter.dev/v1/latest?from=${baseCurrency}`,
       { next: { revalidate: 3600 } } // Cache for 1 hour in Next.js
     )
 

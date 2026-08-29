@@ -2009,7 +2009,20 @@ export async function calculateDayBasedPricing(
 
   debugLog('📋 Template found:', template.template_name)
 
-  const itinerary = parseItinerary(template.itinerary, { packageType: params.packageType })
+  // The template's own tour_type is a package signal the engine always
+  // SELECTed and never read: a 'day_tour' (or half_day / stopover) is by
+  // definition a day trip — no accommodation, no airport transfers sold —
+  // yet it priced full-package shaped. An explicit packageType from the
+  // caller still wins; multi_day templates keep the historical full-package
+  // assumption until templates carry a real package column.
+  const SINGLE_DAY_TOUR_TYPES = ['day_tour', 'half_day', 'stopover']
+  const effectivePackageType =
+    params.packageType ??
+    (SINGLE_DAY_TOUR_TYPES.includes((template as { tour_type?: string }).tour_type ?? '')
+      ? 'day-trips'
+      : undefined)
+
+  const itinerary = parseItinerary(template.itinerary, { packageType: effectivePackageType })
   const totalDays = itinerary.length || template.duration_days || 1
 
   if (itinerary.length === 0) {
