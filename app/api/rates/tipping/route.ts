@@ -1,6 +1,7 @@
 // app/api/rates/tipping/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
+import { blankToNull } from '@/lib/blank-to-null'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createServerClient } from '@/lib/supabase-server'
 
@@ -24,7 +25,9 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const supabase = createServerClient()
-    const body = await request.json()
+    // Same guard as /api/payments: this route spreads the body straight into
+    // an update, so a blank form field must not reach a typed column as "".
+    const body = blankToNull(await request.json())
 
     const _rateCheck = validateRatePayload(body)
     if (!_rateCheck.ok) {

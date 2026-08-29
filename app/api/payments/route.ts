@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
+import { blankToNull } from '@/lib/blank-to-null'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
@@ -65,7 +66,10 @@ export async function POST(request: NextRequest) {
     if (!orgId) return noOrgResponse()
 
     const supabase = createServerClient()
-    const body = await request.json()
+    // A form field the user left alone arrives as "", and "" is not a date:
+    // `due_date: ""` made Postgres reject the whole insert, which is how this
+    // route silently discarded payments (AUT-W01).
+    const body = blankToNull(await request.json())
 
     // Validate the amount is a positive, finite number before recording — a
     // negative/NaN/string amount would silently corrupt invoice balances.

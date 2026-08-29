@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
@@ -25,6 +25,14 @@ export default function RecordPaymentPage() {
   const [itineraries, setItineraries] = useState<Itinerary[]>([])
   const [selectedItinerary, setSelectedItinerary] = useState<Itinerary | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // This form is long enough that the error banner sits well above the submit
+  // button. Setting an error the user cannot see is indistinguishable from the
+  // form doing nothing at all — which is exactly how a rejected payment read
+  // as "nothing happened" (AUT-W01). Bring the message to them.
+  const errorRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [error])
 
   const [formData, setFormData] = useState({
     itinerary_id: '',
@@ -155,7 +163,7 @@ export default function RecordPaymentPage() {
 
         <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
           {error && (
-            <div className="mb-4 p-3 bg-danger/10 border-l-4 border-danger rounded">
+            <div ref={errorRef} className="mb-4 p-3 bg-danger/10 border-l-4 border-danger rounded">
               <p className="text-sm text-danger">{error}</p>
             </div>
           )}
