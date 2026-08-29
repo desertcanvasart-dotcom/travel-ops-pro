@@ -11,8 +11,12 @@
 //   npm run doctor -- --bundle                # also write support-bundle.json
 //   npm run doctor -- --logs /var/log/app.log # include that log, scrubbed
 //
-// Reads DATABASE_URL and the Supabase variables from the environment. Plain
-// node with `--env-file=.env.local` if you keep them there.
+// Reads configuration from the environment, and from .env.local when present.
+// It has to: docs/SELF-HOSTING.md tells the operator to run `npm run doctor`,
+// which is plain node, which does NOT read .env.local — so on a correctly
+// configured install the doctor reported "required environment variables are
+// missing" and called a working install broken. Found by standing one up.
+// Real environment variables always win; the file only fills in gaps.
 //
 // IT SENDS NOTHING ANYWHERE. It prints, and optionally writes a file the
 // operator reads and then chooses to send. A diagnostic tool that phoned home
@@ -37,6 +41,26 @@ const PKG_VERSION = (() => {
   }
 })()
 const MIGRATIONS = path.join(ROOT, 'migrations')
+
+/**
+ * Merge .env.local into process.env WITHOUT overriding anything already set.
+ *
+ * Deliberately minimal: KEY=VALUE, optional surrounding quotes, # comments
+ * ignored. Enough for a diagnostic to see the same configuration the app does,
+ * and not so much that it becomes a second dotenv implementation to maintain.
+ */
+function loadEnvLocal() {
+  const file = path.join(ROOT, '.env.local')
+  if (!existsSync(file)) return
+  for (const line of readFileSync(file, 'utf8').split('\n')) {
+    const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)$/)
+    if (!m) continue
+    const [, key, raw] = m
+    if (process.env[key] !== undefined) continue
+    process.env[key] = raw.trim().replace(/^["']|["']$/g, '')
+  }
+}
+loadEnvLocal()
 
 const args = new Set(process.argv.slice(2))
 const flagValue = name => {

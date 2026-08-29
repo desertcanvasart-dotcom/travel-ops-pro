@@ -198,3 +198,28 @@ describe('THE BUNDLE MUST NOT LEAK', () => {
     expect(bundle.redaction.join(' ')).toMatch(/HOSTNAMES CAN APPEAR/)
   })
 })
+
+describe('the doctor sees the same configuration the app does', () => {
+  // docs/SELF-HOSTING.md tells the operator to run `npm run doctor`, which is
+  // plain node — and plain node does not read .env.local. On a correctly
+  // configured install the doctor therefore reported "required environment
+  // variables are missing" and called a working install broken. Found by
+  // standing up a real second install.
+  const src = readFileSync(join(process.cwd(), 'scripts/doctor.mjs'), 'utf8')
+
+  it('loads .env.local when it exists', () => {
+    expect(src).toContain('.env.local')
+    expect(src).toMatch(/function loadEnvLocal/)
+    expect(src).toMatch(/loadEnvLocal\(\)/)
+  })
+
+  it('never overrides a real environment variable with the file', () => {
+    // A deploy that sets a variable in the environment means it; the file is
+    // only there to fill gaps for someone running the command by hand.
+    expect(src).toMatch(/if \(process\.env\[key\] !== undefined\) continue/)
+  })
+
+  it('does not fail when there is no .env.local', () => {
+    expect(src).toMatch(/if \(!existsSync\(file\)\) return/)
+  })
+})
