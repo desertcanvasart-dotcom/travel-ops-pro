@@ -44,6 +44,11 @@ export interface OrgIdentity {
   phone: string
   website: string
   address: string
+  /** The operator's own marketing line, if they set one in Settings. The
+   *  templates used to hardcode the first operator's ("…local Egypt travel
+   *  experts"), which is a claim, not a label — so it comes from their row or
+   *  it does not appear. */
+  tagline: string
 }
 
 export const EMPTY_IDENTITY: OrgIdentity = {
@@ -52,6 +57,7 @@ export const EMPTY_IDENTITY: OrgIdentity = {
   phone: '',
   website: '',
   address: '',
+  tagline: '',
 }
 
 const clean = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
@@ -70,6 +76,9 @@ export function businessIdentity(env: NodeJS.ProcessEnv = process.env): OrgIdent
     phone: clean(env.BUSINESS_WHATSAPP),
     website: clean(env.BUSINESS_WEBSITE),
     address: '',
+    // No BUSINESS_TAGLINE: a tagline is written, edited and reconsidered, which
+    // is Settings' job, not a deploy variable's.
+    tagline: '',
   }
 }
 
@@ -82,6 +91,7 @@ export function identityFromOrg(org: Record<string, unknown> | null | undefined)
     phone: clean(org.company_phone),
     website: clean(org.company_website),
     address: clean(org.company_address),
+    tagline: clean(org.tagline),
   }
 }
 
@@ -93,6 +103,7 @@ export function mergeIdentity(primary: OrgIdentity, fallback: OrgIdentity): OrgI
     phone: primary.phone || fallback.phone,
     website: primary.website || fallback.website,
     address: primary.address || fallback.address,
+    tagline: primary.tagline || fallback.tagline,
   }
 }
 
@@ -122,6 +133,31 @@ export async function orgIdentity(orgId?: string | null): Promise<OrgIdentity> {
   } catch {
     return env
   }
+}
+
+/**
+ * The operator's initials, for a letterhead monogram.
+ *
+ * Two customer-facing PDF templates drew a circle reading "T2E" — the first
+ * operator's initials, hardcoded, on every agency's quote. Initials are
+ * identity exactly as the name is, so they are derived from it and blank when
+ * it is blank: a letterhead with no monogram is unfinished, one with somebody
+ * else's is wrong.
+ *
+ * Words, not characters, and at most three — "Karnak Voyages Ltd" is KVL, and
+ * a single-word name gives its first two letters rather than one lonely
+ * capital. Non-Latin names (a Japanese operator's 会社名) have no initials to
+ * take, so the first character stands for the whole.
+ */
+export function monogram(name: string): string {
+  const words = clean(name).split(/[\s\-–—]+/).filter(Boolean)
+  if (words.length === 0) return ''
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
+  return words
+    .slice(0, 3)
+    .map(w => w[0])
+    .join('')
+    .toUpperCase()
 }
 
 /**

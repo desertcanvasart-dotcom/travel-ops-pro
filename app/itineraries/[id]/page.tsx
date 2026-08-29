@@ -9,6 +9,7 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2, Languages, ClipboardList, AlertTriangle } from 'lucide-react'
 import { generateItineraryPDF } from '@/lib/pdf-generator'
+import { useCompanyInfo } from '@/lib/use-company-info'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import GenerateNitteiButton from '@/components/GenerateNitteiButton'
 import ResourceAssignmentV2 from '@/app/components/ResourceAssignmentV2'
@@ -104,6 +105,11 @@ export default function ViewItineraryPage() {
   const tEdit = useTranslations('itineraries.edit')
   const tCommon = useTranslations('common')
   const tPdf = useTranslations('pdf')
+  // The letterhead on the generated PDF. It used to come from the message
+  // catalogue — where the first operator's name sat as if it were a
+  // translation — so every agency's quote carried it. Undefined until the
+  // fetch resolves, and the generator draws nothing for a blank brand.
+  const company = useCompanyInfo()
   const dialog = useConfirmDialog()
   const params = useParams()
   const router = useRouter()
@@ -646,7 +652,7 @@ export default function ViewItineraryPage() {
   // the editor; the PDF should render in the same language). The PdfLabels
   // shape is defined in lib/pdf-generator.ts.
   const buildPdfLabels = () => ({
-    brand: tPdf('brand'),
+    brand: company?.name ?? '',
     quote: tPdf('quote'),
     date: tPdf('date'),
     client: tPdf('client'),

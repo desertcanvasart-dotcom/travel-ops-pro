@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { businessIdentity } from '@/lib/org-identity'
+import { businessIdentity, monogram, orgIdentity, type OrgIdentity } from '@/lib/org-identity'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 import puppeteer from 'puppeteer'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { escapeHtml as esc, money } from '@/lib/html-escape'
@@ -86,7 +87,7 @@ function formatDate(dateStr: string, format: 'long' | 'short' = 'long'): string 
 }
 
 // Generate HTML template
-function generateHTML(itinerary: Itinerary, days: Day[]): string {
+function generateHTML(itinerary: Itinerary, days: Day[], identity: OrgIdentity): string {
   const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
   const validUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
   
@@ -493,9 +494,9 @@ function generateHTML(itinerary: Itinerary, days: Day[]): string {
     <!-- Header -->
     <header class="header">
       <div class="logo-section">
-        <div class="logo-circle">T2E</div>
+        ${identity.name ? `<div class="logo-circle">${esc(monogram(identity.name))}</div>` : ''}
         <div class="company-info">
-          <h1>TRAVEL TO EGYPT</h1>
+          ${identity.name ? `<h1>${esc(identity.name)}</h1>` : ''}
           <p>Professional Itinerary & Quote</p>
         </div>
       </div>
@@ -612,9 +613,9 @@ function generateHTML(itinerary: Itinerary, days: Day[]): string {
     <!-- Footer -->
     <footer class="footer">
       <div class="footer-card">
-        <h3>TRAVEL TO EGYPT</h3>
-        ${(() => { const b = businessIdentity(); const parts = [b.email, b.website].filter(Boolean); return parts.length ? `<p>${parts.join(' • ')}</p>` : '' })()}
-        <p class="tagline">Crafted with care by local Egypt travel experts</p>
+        ${identity.name ? `<h3>${esc(identity.name)}</h3>` : ''}
+        ${(() => { const parts = [identity.email, identity.phone, identity.website].filter(Boolean); return parts.length ? `<p>${esc(parts.join(' • '))}</p>` : '' })()}
+        ${identity.tagline ? `<p class="tagline">${esc(identity.tagline)}</p>` : ''}
       </div>
     </footer>
   </div>
@@ -641,8 +642,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // The letterhead is the OPERATOR'S, resolved from the session's own
+    // organization — never from the request body, which a caller controls and
+    // could point at another agency's row. orgIdentity falls back per field to
+    // BUSINESS_*, and to blank when neither is set.
+    const orgId = await getCurrentOrgId()
+    const identity = orgId ? await orgIdentity(orgId) : businessIdentity()
+
     // Generate HTML
-    const html = generateHTML(itinerary, days || [])
+    const html = generateHTML(itinerary, days || [], identity)
 
     const pdf = await renderPdf(html)
 

@@ -133,9 +133,9 @@ export function generateEmailTemplate(
     <p style="color: #6b7280; font-size: 14px; margin: 0;">
       ${t('footerTagline')}
     </p>
-    <p style="color: #9ca3af; font-size: 12px; margin: 10px 0 0 0;">
-      ${t('copyright', { year: new Date().getFullYear() })}
-    </p>
+    ${info.company ? `<p style="color: #9ca3af; font-size: 12px; margin: 10px 0 0 0;">
+      ${t('copyright', { year: new Date().getFullYear(), company: info.company })}
+    </p>` : ''}
   </div>
 </body>
 </html>

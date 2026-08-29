@@ -59,7 +59,7 @@ function getDefaultPlaceholders() {
     // Trip
     { placeholder: '{{TripDates}}', display_name: 'Trip Dates', category: 'trip', example_value: '15-22 March 2025' },
     { placeholder: '{{TripName}}', display_name: 'Trip Name', category: 'trip', example_value: 'Classic Egypt Explorer' },
-    { placeholder: '{{BookingRef}}', display_name: 'Booking Reference', category: 'trip', example_value: 'T2E-2025-0342' },
+    { placeholder: '{{BookingRef}}', display_name: 'Booking Reference', category: 'trip', example_value: 'BK-2025-0342' },
     { placeholder: '{{Cities}}', display_name: 'Cities', category: 'trip', example_value: 'Cairo, Luxor, Aswan' },
     
     // Hotel

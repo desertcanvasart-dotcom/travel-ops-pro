@@ -8,6 +8,7 @@ import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages
 import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
 import { currencySymbol } from '@/lib/currency-totals'
 import { escapeHtml as esc } from '@/lib/html-escape'
+import { businessIdentity, identityFromOrg, mergeIdentity, monogram, type OrgIdentity } from '@/lib/org-identity'
 
 // ============================================
 // B2B QUOTE PDF GENERATION
@@ -34,7 +35,9 @@ function formatDate(dateStr: string, locale: 'en' | 'ja', tbd: string, format: '
 // Generate HTML template. labels is a pre-localized dict from getServerLocale +
 // lookupServerMessage at the route handler. Font is base64-embedded via
 // @font-face — no system-font dependency, no CDN.
-async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record<string, string>): Promise<string> {
+/** Whose paper this is. Passed in rather than read here, because the route
+ *  already knows which organization it is acting for. */
+async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record<string, string>, operator: OrgIdentity): Promise<string> {
   // Every amount on the PDF is in the quote's own currency (the org's rate currency since #148).
   const sym = currencySymbol(quote.currency || 'EUR')
   const tag = locale === 'ja' ? 'ja-JP' : 'en-US'
@@ -443,9 +446,9 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
     <!-- Header -->
     <header class="header">
       <div class="logo-section">
-        <div class="logo-circle">T2E</div>
+        ${operator.name ? `<div class="logo-circle">${esc(monogram(operator.name))}</div>` : ''}
         <div class="company-info">
-          <h1>${labels.brand}</h1>
+          ${operator.name ? `<h1>${esc(operator.name)}</h1>` : ''}
           <p>${labels.subtitle}</p>
         </div>
       </div>
@@ -617,9 +620,14 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
     <!-- Footer -->
     <footer class="footer">
       <div class="footer-card">
-        <h3>${labels.footerBrand}</h3>
-        <p>${labels.footerContact}</p>
-        <p class="tagline">${labels.footerTagline}</p>
+        ${operator.name ? `<h3>${esc(operator.name)}</h3>` : ''}
+        ${(() => {
+          const contact = [operator.email, operator.phone, operator.website]
+            .filter(Boolean)
+            .join(' • ')
+          return contact ? `<p>${esc(contact)}</p>` : ''
+        })()}
+        ${operator.tagline ? `<p class="tagline">${esc(operator.tagline)}</p>` : ''}
       </div>
     </footer>
   </div>
@@ -713,14 +721,31 @@ export async function GET(
       'cancellationPolicy', 'cancelGenerous', 'cancelMedium', 'cancelShort',
       'priceIncludes', 'includesItinerary', 'includesGuide', 'includesEntranceFees',
       'includesWater', 'notIncluded', 'excludesFlights', 'excludesPersonal',
-      'excludesInsurance', 'footerBrand', 'footerContact', 'footerTagline',
+      'excludesInsurance',
+      // NOT here any more: brand, footerBrand, footerContact, footerTagline.
+      // A company's name, phone number and tagline are not translations of
+      // anything — they were the first operator's, printed on every agency's
+      // quote in both languages, with a real phone number a customer would
+      // ring. They come from the organization now.
     ]
     const labels: Record<string, string> = Object.fromEntries(
       labelKeys.map(k => [k, lookupServerMessage(locale, `pdf.b2b.${k}`)])
     )
 
+    // The letterhead. One read: the row answers name, contact details AND
+    // tagline, and mergeIdentity fills any field the operator left blank from
+    // BUSINESS_* — exactly what orgIdentity() would do, without a second query.
+    const { data: orgRow } = await supabaseAdmin
+      .from('organizations')
+      .select('*')
+      .eq('id', orgId)
+      .maybeSingle()
+    const operator = orgRow
+      ? mergeIdentity(identityFromOrg(orgRow as Record<string, unknown>), businessIdentity())
+      : businessIdentity()
+
     // Generate HTML
-    const html = await generateQuoteHTML(finalQuote, locale, labels)
+    const html = await generateQuoteHTML(finalQuote, locale, labels, operator)
 
     // Launch Puppeteer
     const browser = await puppeteer.launch({
