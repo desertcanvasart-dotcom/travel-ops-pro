@@ -132,6 +132,11 @@ export async function POST(request: NextRequest) {
       tier: config.tier || 'standard',
       status: 'draft',
       cost_mode: 'manual',
+      // The product the grid was told it is pricing. Older grid saves wrote
+      // nothing here, which downstream read back as full-package — now the
+      // declared value round-trips, so Calculate-from-edit loads the same
+      // package the operator picked.
+      package_type: config.packageType || 'full-package',
       source: config.clientType === 'b2b' ? 'b2b_custom' : 'b2c_direct',
       partner_id: config.partnerId || null,
       partner_commission_percent: config.clientType === 'b2b' ? (config.marginPercent || 0) : 0,

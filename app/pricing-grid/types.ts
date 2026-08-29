@@ -1,3 +1,5 @@
+import type { PackageType } from '@/lib/package-types'
+
 // ============================================
 // PRICING GRID — Type Definitions
 // ============================================
@@ -13,6 +15,13 @@ export interface GridConfig {
   passport: PassportType
   tier: Tier
   clientType: ClientType
+  /** What the customer is buying — decides which day components the grid
+   *  requires. The grid was a full-package engine in disguise: it demanded
+   *  accommodation on every overnight and airport services on every arrival
+   *  whatever the product was (see lib/package-types.ts, AUT taxonomy
+   *  review). Older saved configs lack the field; consumers default it to
+   *  'full-package', which is exactly the old behaviour. */
+  packageType?: PackageType
   withGuide: boolean
   currency: string
   marginPercent: number

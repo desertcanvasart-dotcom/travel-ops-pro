@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { PACKAGE_TYPE_CONFIGS } from '@/lib/package-types'
 import type { GridConfig, GridTotals, Tier, ClientType, PassportType } from '../types'
 import { convertAmount } from '../lib/calculator'
 
@@ -141,6 +142,21 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
           >
             {TIERS.map(t => (
               <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+
+          {/* Package — what the customer is buying. Decides which day
+              components the completeness gate requires (a tours-only trip is
+              not blocked for unpriced hotels) and what the AI parser is told
+              to include. Full Package = the grid's historical behaviour. */}
+          <select
+            value={config.packageType ?? 'full-package'}
+            onChange={(e) => update({ packageType: e.target.value as GridConfig['packageType'] })}
+            title="Package type — decides which components each day requires"
+            className="px-2 py-1 text-sm border border-gray-200 rounded-lg font-medium bg-white focus:ring-2 focus:ring-blue-200 transition-all"
+          >
+            {PACKAGE_TYPE_CONFIGS.map(p => (
+              <option key={p.slug} value={p.slug}>{p.name}</option>
             ))}
           </select>
         </div>

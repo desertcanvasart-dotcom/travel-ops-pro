@@ -49,6 +49,7 @@ const DEFAULT_CONFIG: GridConfig = {
   passport: 'non_eu',
   tier: 'standard',
   clientType: 'b2c',
+  packageType: 'full-package',
   withGuide: true,
   currency: 'EUR',
   marginPercent: 25,
@@ -459,7 +460,7 @@ function PricingGridContent() {
       const res = await fetch('/api/pricing-grid/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, tier: config.tier, pax: config.pax })
+        body: JSON.stringify({ text, tier: config.tier, pax: config.pax, package_type: config.packageType })
       })
       const data = await res.json()
       if (data.success && data.days) {
@@ -542,6 +543,10 @@ function PricingGridContent() {
         currency: itn.currency || 'EUR',
         startDate: itn.start_date || prev.startDate,
         clientType: itn.source?.startsWith('b2b') ? 'b2b' : 'b2c',
+        // The itinerary's declared product decides what the gate requires.
+        // NULL (older grid saves never wrote one) = full-package, the shape
+        // the grid always assumed.
+        packageType: (itn.package_type as GridConfig['packageType']) || 'full-package',
         partnerId: itn.partner_id || null,
         itineraryId: itn.id,
         itineraryCode: itn.itinerary_code,
