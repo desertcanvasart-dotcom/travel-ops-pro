@@ -215,7 +215,11 @@ export default function QuotesListPage() {
           <button onClick={fetchQuotes} className="p-2 border rounded-lg hover:bg-gray-50" title={t('refresh')}>
             <RefreshCw className="w-4 h-4 text-gray-600" />
           </button>
-          <Link href="/tours/manage" className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] font-medium text-sm">
+          {/* A B2B quote starts from a tour variation (manage → calculator →
+              save), so this deliberately opens the tour manager. The label
+              says so — a button reading just "New Quote" that lands on the
+              template manager reads as a wrong link (audit AUT-M04). */}
+          <Link href="/tours/manage" title={t('newQuoteHint')} className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] font-medium text-sm">
             <Plus className="w-4 h-4" />{t('newQuote')}
           </Link>
         </div>

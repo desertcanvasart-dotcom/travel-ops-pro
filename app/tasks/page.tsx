@@ -1749,7 +1749,7 @@ export default function TasksPage() {
 
       {/* Footer */}
       <div className="text-center pt-4">
-        <p className="text-xs text-gray-400">© 2024 Autoura Operations System</p>
+        <p className="text-xs text-gray-400">© {new Date().getFullYear()} Autoura Operations System</p>
       </div>
     </div>
   )

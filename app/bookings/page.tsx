@@ -245,7 +245,7 @@ export default function BookingsPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('fields.dates')}</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('fields.passengers')}</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"></th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('fields.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -273,7 +273,11 @@ export default function BookingsPage() {
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-gray-400" />
                         <div>
-                          <span className="text-gray-700">{formatDate(booking.start_date)}</span>
+                          <span className="text-gray-700">
+                            {formatDate(booking.start_date)}
+                            {booking.end_date && booking.end_date !== booking.start_date &&
+                              ` – ${formatDate(booking.end_date)}`}
+                          </span>
                           {daysUntil >= 0 && daysUntil <= 7 && booking.status !== 'completed' && booking.status !== 'cancelled' && (
                             <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
                               daysUntil === 0 ? 'bg-red-100 text-red-700' :

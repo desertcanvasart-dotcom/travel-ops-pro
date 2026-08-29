@@ -267,6 +267,15 @@ export default function ReceiptsPage() {
   const totalReceipts = filteredPayments.length
   const totalAmount = filteredPayments.reduce((sum, p) => sum + p.amount, 0)
   const mainCurrency = filteredPayments[0]?.currency || 'EUR'
+  // This month, measured — the tile here used to be a hardcoded "100%
+  // Completed Payments", which an empty account displayed as a perfect
+  // ratio over zero records (audit AUT-L06). A receipt IS a completed
+  // payment, so a completion ratio of receipts says nothing by definition.
+  const now = new Date()
+  const receiptsThisMonth = filteredPayments.filter(p => {
+    const d = new Date(p.payment_date || p.created_at)
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+  }).length
 
   if (loading) {
     return (
@@ -382,8 +391,8 @@ export default function ReceiptsPage() {
                 <Check className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-900">100%</p>
-                <p className="text-xs text-gray-500">Completed Payments</p>
+                <p className="text-2xl font-bold text-gray-900">{receiptsThisMonth}</p>
+                <p className="text-xs text-gray-500">Received This Month</p>
               </div>
             </div>
           </div>

@@ -6137,7 +6137,7 @@
   "b2bQuotes": {
     "title": "B2B Quotes",
     "subtitle": "Manage saved quotations",
-    "newQuote": "New Quote",
+    "newQuote": "New Quote from Tour",
     "refresh": "Refresh",
     "searchPlaceholder": "Search quotes...",
     "allStatus": "All Status",
@@ -6209,7 +6209,8 @@
     "quoteConverted": "Quote Converted",
     "convertedDescription": "This quote has been converted to an itinerary. Review and confirm the itinerary to create a booking.",
     "viewItinerary": "View Itinerary",
-    "seasonPremium": "{season} premium ({percent}%)"
+    "seasonPremium": "{season} premium ({percent}%)",
+    "newQuoteHint": "A quote starts from a tour: pick a tour variation, then price and save it in the calculator."
   },
   "b2bPricingRules": {
     "title": "Transport Packages",
@@ -6526,7 +6527,8 @@
       "serviceDescription": "Service Description",
       "serviceDate": "Service Date",
       "quotedCost": "Quoted Cost",
-      "status": "Status"
+      "status": "Status",
+      "actions": "Actions"
     },
     "actions": {
       "view": "View",

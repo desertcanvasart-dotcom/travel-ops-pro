@@ -218,24 +218,33 @@ export default function ToursBrowsePage() {
             {tours.filter(t => t.uses_day_builder || t.pricing_mode === 'auto').length}
           </p>
         </div>
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">🏷️</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+        {/* Categories and Starting From describe OPTIONAL metadata. On an
+            install that fills neither, headline tiles reading "Categories 0"
+            and "Starting From —" above 27 listed packages look like a broken
+            page (audit AUT-L03). A stat about data nobody entered is not a
+            stat — the tile appears once the first tour carries the field. */}
+        {uniqueCategories.length > 0 && (
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">🏷️</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+            </div>
+            <p className="text-xs text-gray-500 mb-1">{t('stats.categories')}</p>
+            <p className="text-2xl font-semibold text-gray-900">{uniqueCategories.length}</p>
           </div>
-          <p className="text-xs text-gray-500 mb-1">{t('stats.categories')}</p>
-          <p className="text-2xl font-semibold text-gray-900">{uniqueCategories.length}</p>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">💶</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+        )}
+        {tours.some(t => t.starting_from) && (
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">💶</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+            </div>
+            <p className="text-xs text-gray-500 mb-1">{t('stats.startingFrom')}</p>
+            <p className="text-2xl font-semibold text-gray-900">
+              {formatWithConversion(Math.min(...tours.filter(t => t.starting_from).map(t => t.starting_from as number)), 'EUR')}
+            </p>
           </div>
-          <p className="text-xs text-gray-500 mb-1">{t('stats.startingFrom')}</p>
-          <p className="text-2xl font-semibold text-gray-900">
-            {tours.some(t => t.starting_from) ? formatWithConversion(Math.min(...tours.filter(t => t.starting_from).map(t => t.starting_from as number)), 'EUR') : '—'}
-          </p>
-        </div>
+        )}
       </div>
 
       {/* Search & Filters */}
@@ -697,7 +706,7 @@ export default function ToursBrowsePage() {
 
       {/* Footer */}
       <div className="mt-8 text-center">
-        <p className="text-xs text-gray-400">© 2026 Autoura Operations System</p>
+        <p className="text-xs text-gray-400">© {new Date().getFullYear()} Autoura Operations System</p>
       </div>
     </div>
   )

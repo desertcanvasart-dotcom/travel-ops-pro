@@ -56,7 +56,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     if (!body.partner_code) {
-      const prefix = (body.company_name || 'PARTNER').substring(0, 3).toUpperCase()
+      // Letters and digits only, from the name's real characters — the first
+      // three RAW characters of "QA Test Partner" are "QA ", which generated
+      // the code "QA -046": a space inside an identifier, breaking copy-paste
+      // and exact match everywhere it went (audit AUT-W06). A name with fewer
+      // than three usable characters falls back rather than padding oddly.
+      const usable = (body.company_name || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+      const prefix = usable.length >= 3 ? usable.substring(0, 3) : 'PTR'
       const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
       body.partner_code = `${prefix}-${random}`
     }
