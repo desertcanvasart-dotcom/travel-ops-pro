@@ -13,6 +13,7 @@
     "seed:e2e": "node scripts/seed-e2e.mjs",
     "migrate": "node scripts/migrate.mjs",
     "migrate:status": "node scripts/migrate.mjs --status",
+    "replay:schema": "node scripts/replay-schema.mjs",
     "verify:deploy": "node scripts/verify-deploy.mjs"
   },
   "dependencies": {
