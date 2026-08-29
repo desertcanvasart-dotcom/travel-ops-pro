@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -42,7 +43,7 @@ export default function RecordPaymentPage() {
     payment_method: 'bank_transfer',
     payment_status: 'completed',
     transaction_reference: '',
-    payment_date: new Date().toISOString().split('T')[0],
+    payment_date: todayLocal(),
     due_date: '',
     notes: ''
   })

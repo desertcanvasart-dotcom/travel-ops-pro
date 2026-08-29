@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback } from 'react'
 import { SUPPLIER_TYPES as CANONICAL_SUPPLIER_TYPES } from '@/lib/supplier-types'
 import { formatMoney, formatTotals, sumByCurrency } from '@/lib/currency-totals'
@@ -87,7 +88,7 @@ const initialFormData: FormData = {
   description: '',
   amount: 0,
   currency: 'EUR',
-  expense_date: new Date().toISOString().split('T')[0],
+  expense_date: todayLocal(),
   supplier_name: '',
   supplier_type: '',
   receipt_url: '',
@@ -294,7 +295,7 @@ export default function ExpensesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           status: 'paid', 
-          payment_date: new Date().toISOString().split('T')[0]
+          payment_date: todayLocal()
         })
       })
       if (response.ok) {
@@ -346,7 +347,7 @@ export default function ExpensesPage() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
-    link.download = `expenses_${new Date().toISOString().split('T')[0]}.csv`
+    link.download = `expenses_${todayLocal()}.csv`
     link.click()
   }
 

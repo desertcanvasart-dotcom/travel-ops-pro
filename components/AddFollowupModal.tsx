@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase'
 import { X, Clock, AlertCircle, Trash2 } from 'lucide-react'
@@ -231,7 +232,7 @@ export default function AddFollowupModal({
                 type="date"
                 value={formData.due_date}
                 onChange={(e) => handleChange('due_date', e.target.value)}
-                min={new Date().toISOString().split('T')[0]}
+                min={todayLocal()}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required
                 title={t('dueDate')}

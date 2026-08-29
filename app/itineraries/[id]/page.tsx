@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useEffect, useState, useMemo } from 'react'
 import { formatMoney } from '@/lib/currency-totals'
 import { useTranslations, useLocale } from 'next-intl'
@@ -615,7 +616,7 @@ export default function ViewItineraryPage() {
           discount_amount: 0,
           total_amount: effectiveTotalCost,
           currency: itinerary.currency || 'EUR',
-          issue_date: new Date().toISOString().split('T')[0],
+          issue_date: todayLocal(),
           due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           payment_terms: t('paymentDueWithin14Days'),
           notes: t('tripDatesNote', {

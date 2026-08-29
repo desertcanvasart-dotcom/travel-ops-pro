@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import React, { useState, useEffect, Fragment } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -168,7 +169,7 @@ export default function TourPriceCalculator() {
 
   // Form state
   const [numPax, setNumPax] = useState(2)
-  const [travelDate, setTravelDate] = useState(new Date().toISOString().split('T')[0])
+  const [travelDate, setTravelDate] = useState(todayLocal())
   const [isEurPassport, setIsEurPassport] = useState(true)
   const [marginPercent, setMarginPercent] = useState(25)
   // WHICH options the customer wants, not merely whether. This used to be one

@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useState } from 'react'
 import { X, Receipt, AlertCircle, CheckCircle } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -69,7 +70,7 @@ export default function AddExpenseFromItinerary({
     description: '',
     amount: 0,
     currency: 'EUR',
-    expense_date: new Date().toISOString().split('T')[0],
+    expense_date: todayLocal(),
     supplier_name: '',
     supplier_type: '',
     receipt_url: '',
@@ -84,7 +85,7 @@ export default function AddExpenseFromItinerary({
       description: '',
       amount: 0,
       currency: 'EUR',
-      expense_date: new Date().toISOString().split('T')[0],
+      expense_date: todayLocal(),
       supplier_name: '',
       supplier_type: '',
       receipt_url: '',

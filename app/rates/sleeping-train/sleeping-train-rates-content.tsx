@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
@@ -126,7 +127,7 @@ export default function SleepingTrainRatesContent() {
   }
 
   // Date helpers
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayLocal()
   const nextYear = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
   // Generate service code

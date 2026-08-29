@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -134,7 +135,7 @@ export default function SupplierInvoicesPage() {
     supplier_id: '',
     itinerary_id: '',
     client_invoice_id: '',
-    invoice_date: new Date().toISOString().split('T')[0],
+    invoice_date: todayLocal(),
     due_date: '',
     currency: 'EUR',
     tax_amount: '',
@@ -301,7 +302,7 @@ export default function SupplierInvoicesPage() {
       supplier_id: '',
       itinerary_id: '',
       client_invoice_id: '',
-      invoice_date: new Date().toISOString().split('T')[0],
+      invoice_date: todayLocal(),
       due_date: '',
       currency: 'EUR',
       tax_amount: '',
@@ -358,7 +359,7 @@ export default function SupplierInvoicesPage() {
         supplier_invoice_number: String(d.supplier_invoice_number || ''),
         supplier_name: String(matchedSupplier?.name || d.supplier_name || ''),
         supplier_id: matchedSupplier?.id || '',
-        invoice_date: String(d.invoice_date || new Date().toISOString().split('T')[0]),
+        invoice_date: String(d.invoice_date || todayLocal()),
         due_date: String(d.due_date || ''),
         currency: String(d.currency || 'EUR'),
         tax_amount: d.tax_amount ? String(d.tax_amount) : '',

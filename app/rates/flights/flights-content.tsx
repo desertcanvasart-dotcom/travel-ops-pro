@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
@@ -107,7 +108,7 @@ const initialFormData: FormData = {
   frequency: 'daily',
   season: '',
   rate_currency: '',
-  rate_valid_from: new Date().toISOString().split('T')[0],
+  rate_valid_from: todayLocal(),
   rate_valid_to: '2099-12-31',
   supplier_id: '',
   supplier_name: '',

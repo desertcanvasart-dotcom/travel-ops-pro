@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import {
@@ -186,7 +187,7 @@ export default function AccountsPayablePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           status: 'paid', 
-          payment_date: new Date().toISOString().split('T')[0]
+          payment_date: todayLocal()
         })
       })
       if (response.ok) {

@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useTranslations, useLocale } from 'next-intl'
@@ -1297,7 +1298,7 @@ export default function ItineraryEditorPage() {
                           subtotal: itinerary.total_cost,
                           total_amount: itinerary.total_cost,
                           currency: itinerary.currency || 'EUR',
-                          issue_date: new Date().toISOString().split('T')[0],
+                          issue_date: todayLocal(),
                           due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
                         })
                       })

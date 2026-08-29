@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { Search, X, Star, SlidersHorizontal } from 'lucide-react'
@@ -195,7 +196,7 @@ export function ClientFilters({ onFilterChange }: { onFilterChange: (filters: an
                 type="date"
                 value={filters.dateTo}
                 onChange={(e) => handleFilterChange('dateTo', e.target.value)}
-                max={new Date().toISOString().split('T')[0]}
+                max={todayLocal()}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 title={t('memberSinceTo')}
               />

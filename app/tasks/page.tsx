@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { useConfirmDialog, useConfirm } from '@/components/ConfirmDialog'
@@ -489,7 +490,7 @@ export default function TasksPage() {
 
   const isDueToday = (task: Task) => {
     if (!task.due_date) return false
-    const today = new Date().toISOString().split('T')[0]
+    const today = todayLocal()
     return task.due_date === today
   }
 

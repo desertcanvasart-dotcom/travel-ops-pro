@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useState, useEffect, use } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
@@ -160,7 +161,7 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
     try {
       const updateData: any = { status: newStatus }
       if (newStatus === 'paid' && !expense.payment_date) {
-        updateData.payment_date = new Date().toISOString().split('T')[0]
+        updateData.payment_date = todayLocal()
       }
 
       const response = await fetch(`/api/expenses/${expense.id}`, {
