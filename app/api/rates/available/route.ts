@@ -16,6 +16,9 @@ const supabaseAdmin = createActorAdminClient()
 interface AvailableRate {
   rate_type: string
   rate_id: string
+  /** The currency the row is entered in; null = the org rate currency. A
+   *  composite API must not strip this — see the attractions round-trip bug. */
+  rate_currency?: string | null
   rate_name: string
   rate_eur: number | null
   rate_non_eur: number | null
@@ -113,6 +116,7 @@ export async function GET(request: NextRequest) {
           rates.push({
             rate_type: 'transportation',
             rate_id: r.id,
+            rate_currency: (r as any).rate_currency ?? null,
             rate_name: r.route_name || r.service_type || `${r.origin_city} to ${r.destination_city}`,
             rate_eur: minRate,
             rate_non_eur: minRate,
@@ -130,6 +134,7 @@ export async function GET(request: NextRequest) {
           rates.push({
             rate_type: 'guide',
             rate_id: r.id,
+            rate_currency: (r as any).rate_currency ?? null,
             rate_name: `${r.guide_type || 'Guide'} - ${r.city}`,
             rate_eur: r.half_day_rate,
             rate_non_eur: r.half_day_rate,
@@ -147,6 +152,7 @@ export async function GET(request: NextRequest) {
           rates.push({
             rate_type: 'activity',
             rate_id: r.id,
+            rate_currency: (r as any).rate_currency ?? null,
             rate_name: `${r.activity_name}${r.city ? ` - ${r.city}` : ''}`,
             rate_eur: r.base_rate_eur,
             rate_non_eur: r.base_rate_non_eur,
@@ -164,6 +170,7 @@ export async function GET(request: NextRequest) {
           rates.push({
             rate_type: 'meal',
             rate_id: r.id,
+            rate_currency: (r as any).rate_currency ?? null,
             rate_name: `${r.restaurant_name} - ${r.meal_type} (${r.tier})`,
             rate_eur: r.base_rate_eur,
             rate_non_eur: r.base_rate_non_eur,
@@ -181,6 +188,7 @@ export async function GET(request: NextRequest) {
           rates.push({
             rate_type: 'accommodation',
             rate_id: r.id,
+            rate_currency: (r as any).rate_currency ?? null,
             rate_name: `${r.hotel_name} - ${r.room_type}`,
             rate_eur: r.rate_low_season_sgl,
             rate_non_eur: r.rate_low_season_sgl,
@@ -198,6 +206,7 @@ export async function GET(request: NextRequest) {
           rates.push({
             rate_type: 'cruise',
             rate_id: r.id,
+            rate_currency: (r as any).rate_currency ?? null,
             rate_name: `${r.ship_name} - ${r.cabin_type}`,
             rate_eur: r.rate_low_season,
             rate_non_eur: r.rate_low_season,

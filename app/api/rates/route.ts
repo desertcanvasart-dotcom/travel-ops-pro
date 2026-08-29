@@ -92,6 +92,9 @@ export async function GET(request: NextRequest) {
 
         data = (transportResult.data || []).map((rate: any) => ({
           service_code: rate.service_code || rate.id,
+          // The row's own entry currency — a transform must not strip it
+          // (the attractions round-trip bug, one route over).
+          rate_currency: rate.rate_currency ?? null,
           service_type: rate.service_type,
           city: rate.city,
           origin_city: rate.origin_city,
@@ -125,6 +128,9 @@ export async function GET(request: NextRequest) {
         // Transform guide data to match rates format
         data = (guideResult.data || []).map(guide => ({
           service_code: guide.id,
+          // Guides here come from the suppliers view, which has no per-rate
+          // currency; null = org rate currency, honestly.
+          rate_currency: null,
           guide_language: guide.languages?.[0] || 'English',
           guide_type: guide.specialties?.[0] || 'General',
           city: 'Cairo',
