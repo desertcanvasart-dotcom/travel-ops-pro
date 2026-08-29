@@ -241,6 +241,17 @@ export default function CommissionsPage() {
       })
 
       if (response.ok) {
+        // Show the saved row NOW — the refetch below reconciles ordering,
+        // filters and the summary totals, but on production it takes seconds,
+        // and until it landed the table kept claiming the commission did not
+        // exist (AUT-W03: "only appears after reload"). The summary card
+        // catches up with the refetch; the row is the did-it-save signal.
+        const { data: saved } = await response.json()
+        if (saved) {
+          setCommissions(prev =>
+            editingId ? prev.map(x => (x.id === saved.id ? saved : x)) : [saved, ...prev]
+          )
+        }
         setIsModalOpen(false)
         setEditingId(null)
         setFormData(initialFormData)
@@ -285,6 +296,7 @@ export default function CommissionsPage() {
     try {
       const response = await fetch(`/api/commissions/${id}`, { method: 'DELETE' })
       if (response.ok) {
+        setCommissions(prev => prev.filter(x => x.id !== id))
         fetchCommissions()
       }
     } catch (error) {
@@ -300,6 +312,8 @@ export default function CommissionsPage() {
         body: JSON.stringify({ status })
       })
       if (response.ok) {
+        const { data: saved } = await response.json()
+        if (saved) setCommissions(prev => prev.map(x => (x.id === saved.id ? saved : x)))
         fetchCommissions()
       }
     } catch (error) {

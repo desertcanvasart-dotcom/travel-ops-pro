@@ -257,6 +257,18 @@ export default function ExpensesPage() {
       })
 
       if (response.ok) {
+        // Show the saved row NOW, from the response the API already returns.
+        // The refetch below reconciles ordering, filters and totals — but on
+        // production it takes seconds, and until it lands the table kept
+        // showing the pre-save world: modal closed, "No expenses found",
+        // totals €0.00. The auditor read that as a failed save, reloaded,
+        // and filed it as "only appears after reload" (AUT-W03). Measured:
+        // POST 2.0s + refetch 1.3s of a table claiming the expense does not
+        // exist.
+        const saved = await response.json()
+        setExpenses(prev =>
+          editingExpense ? prev.map(x => (x.id === saved.id ? saved : x)) : [saved, ...prev]
+        )
         setIsModalOpen(false)
         fetchExpenses()
       } else {
@@ -278,6 +290,8 @@ export default function ExpensesPage() {
     try {
       const response = await fetch(`/api/expenses/${id}`, { method: 'DELETE' })
       if (response.ok) {
+        // Same window as the save: drop the row locally, reconcile behind.
+        setExpenses(prev => prev.filter(x => x.id !== id))
         fetchExpenses()
       } else {
         await dialog.alert(t('error'), t('failedToDeleteExpense'), 'warning')
@@ -299,6 +313,8 @@ export default function ExpensesPage() {
         })
       })
       if (response.ok) {
+        const saved = await response.json()
+        setExpenses(prev => prev.map(x => (x.id === saved.id ? saved : x)))
         fetchExpenses()
       }
     } catch (error) {
