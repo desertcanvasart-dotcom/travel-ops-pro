@@ -51,6 +51,12 @@
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.3
 
+-- Wrapped in a transaction so a failure leaves NOTHING behind.
+-- pg_dump does not do this itself (it is a psql --single-transaction flag), and
+-- without it a partial apply left a half-built database that then tripped the
+-- runner's own baseline guard: "this database already has the schema".
+BEGIN;
+
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -17743,4 +17749,4 @@ CREATE POLICY writing_rules_authenticated ON public.writing_rules TO authenticat
 -- PostgreSQL database dump complete
 --
 
-
+COMMIT;
