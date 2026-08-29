@@ -29,6 +29,13 @@ import { JOB_NAMES, SCHEDULED_IN_PROCESS } from '../lib/support/job-names.mjs'
 import { computePending, loadApplied } from './migrate-core.mjs'
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
+const PKG_VERSION = (() => {
+  try {
+    return JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version
+  } catch {
+    return 'unknown'
+  }
+})()
 const MIGRATIONS = path.join(ROOT, 'migrations')
 
 const args = new Set(process.argv.slice(2))
@@ -172,7 +179,7 @@ async function main() {
 
   const bundle = buildBundle({
     generatedAt: new Date().toISOString(),
-    version: 'unknown',
+    version: PKG_VERSION,
     sha: process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GIT_SHA ?? 'unknown',
     node: process.version,
     uptimeSeconds: null,

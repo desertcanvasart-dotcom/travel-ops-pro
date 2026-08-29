@@ -18,6 +18,7 @@
 import { NextResponse } from 'next/server'
 import { execSync } from 'child_process'
 import { version as appVersion } from '../../../package.json'
+import { isReleaseVersion } from '@/lib/support/bundle-core.mjs'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,6 +53,12 @@ export async function GET() {
     sha: resolved.sha,
     shaSource: resolved.shaSource,
     appVersion,
+    // A customer's install is supported against a TAG. This says whether the
+    // running build was cut as one — appVersion alone cannot, because a build
+    // from main after a release still carries the released version. The pair
+    // (appVersion, sha) is what identifies a build; verify-deploy compares the
+    // sha to the tag.
+    isRelease: isReleaseVersion(appVersion),
     nodeEnv: process.env.NODE_ENV,
     startedAt,
     uptimeSeconds: Math.round(process.uptime()),

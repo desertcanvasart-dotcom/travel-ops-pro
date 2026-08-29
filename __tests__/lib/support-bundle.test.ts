@@ -13,7 +13,7 @@ import { bearerMatches } from '@/lib/support/probe-auth'
 
 const baseParts = {
   generatedAt: '2026-08-29T12:00:00Z',
-  version: '0.1.1',
+  version: '2026.08.29', // a release — see the not-a-release case below
   sha: 'abc123',
   node: 'v20.20.2',
   uptimeSeconds: 100,
@@ -29,6 +29,19 @@ describe('bundleFindings', () => {
   it('says so plainly when nothing is wrong', () => {
     const b = buildBundle({ ...baseParts, env: { NEXT_PUBLIC_SUPABASE_URL: 'x', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'y', SUPABASE_SERVICE_ROLE_KEY: 'z' } })
     expect(bundleFindings(b)).toEqual(['No problems found by these checks.'])
+  })
+
+  it('says a build was not cut as a release, and gives the commit instead', () => {
+    // Support is offered against tags, so "which version is this?" must have a
+    // real answer or an explicit admission that it does not.
+    const b = buildBundle({
+      ...baseParts,
+      version: '0.1.1',
+      env: { NEXT_PUBLIC_SUPABASE_URL: 'x', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'y', SUPABASE_SERVICE_ROLE_KEY: 'z' },
+    })
+    const text = bundleFindings(b).join('\n')
+    expect(text).toMatch(/not cut as a release/)
+    expect(text).toMatch(/abc123/) // the sha, which is what identifies it instead
   })
 
   it('names missing required variables first — it is the likeliest cause', () => {

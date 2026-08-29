@@ -20,6 +20,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { requireRole } from '@/lib/auth/current-org'
 import { buildBundle, bundleFindings } from '@/lib/support/bundle'
 import { collectState } from '@/lib/support/collect'
+import { version as appVersion } from '../../../package.json'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,7 +32,10 @@ export async function GET() {
     const state = await collectState()
     const bundle = buildBundle({
       generatedAt: new Date().toISOString(),
-      version: process.env.npm_package_version ?? 'unknown',
+      // package.json, not npm_package_version: that is only set when the
+      // process was started by npm, and a customer running `node server.js`
+      // would report 'unknown' for no reason.
+      version: appVersion,
       sha: process.env.RAILWAY_GIT_COMMIT_SHA ?? process.env.GIT_SHA ?? 'unknown',
       node: process.version,
       uptimeSeconds: Math.round(process.uptime()),

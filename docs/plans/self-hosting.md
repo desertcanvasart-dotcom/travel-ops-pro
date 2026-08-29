@@ -1,6 +1,6 @@
 # Running Autoura on a customer's own server
 
-Status: **T1–T4 done; T5 outstanding.** Written
+Status: **T1–T5 done.** Written
 2026-08-28, revised 2026-08-29.
 
 This app is what gets installed on a customer's server. That is a different
@@ -270,8 +270,27 @@ tests come across unchanged; what differs is this app's vocabulary
 (`organizations` not `tenants`, roles not super-admin) and its in-process
 scheduler.
 
-**T5 — releases.** Tag one, so "which version is the customer running?" has an
-answer, and `/api/version` means something on their box.
+**T5 — releases.** ✅ **DONE.** Tag one, so "which version is the customer
+running?" has an answer, and `/api/version` means something on their box.
+
+> `npm run release` is the procedure as a command: it refuses a dirty tree, a
+> non-`main` branch, being out of sync, a commit CI has not passed, and a tag
+> that already exists. Releases are `vYYYY.MM.DD` and `package.json` carries the
+> same string, so `/api/version` reports a real identifier without needing git
+> in the runtime image — which Railway does not provide.
+>
+> **`appVersion` alone is not proof of a release**, because a build from `main`
+> after one still carries the released version. The pair (appVersion, sha) is
+> what identifies a build, so `verify-deploy --tag v2026.08.29` resolves the tag
+> and compares the deployed sha to it. `/api/version` reports `isRelease`, and
+> the support bundle says plainly when a build was not cut as a release.
+>
+> One definition of "is this a release" lives in `lib/support/bundle-core.mjs`
+> and is used by the release script, the endpoint and the bundle — three copies
+> of a version regex is how one of them starts disagreeing.
+>
+> **No tag has been cut yet.** The machinery is in place and `npm run release`
+> is a dry run by default; cutting the first release is a deliberate act.
 
 ## 5. Order, and why
 
@@ -279,7 +298,7 @@ T1 → T2 → T3 → T4 → T5, and the order is not negotiable in one place: **
 before T4.** A support bundle whose findings say "3 migrations pending" is only
 useful once applying those migrations is a command rather than an afternoon.
 
-T1–T4 are done, so **T5 (tagged releases) is next**, and it is unblocked: a release can be tagged because a fresh install is finally provable. T5 waits for T3, because
+All five phases are done. What remains is not a phase: **the operator's identity is hardcoded in 46 files** (see T2), and a second agency's customers would receive mail signed with this one's name. That gates a real customer install more than any of T1–T5 did. T5 waits for T3, because
 tagging a release that cannot be installed from scratch would be tagging a
 promise we have not checked — and T3 has just turned out to be the largest
 phase, not the routine one it was written as.

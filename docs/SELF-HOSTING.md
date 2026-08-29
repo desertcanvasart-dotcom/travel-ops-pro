@@ -20,7 +20,8 @@ discovered later.
 ## First install
 
 ```bash
-git clone <this repo>          # at a release tag, once T5 exists
+git clone <this repo>
+git fetch --tags && git checkout v2026.08.29   # a release, not main
 cd travel-ops-pro
 npm ci
 cp .env.example .env.local     # then fill it in
@@ -125,6 +126,36 @@ trace at all.
 
 On a fresh install, assume nothing outside this repository is calling anything.
 Check `job_runs` after the first day: a job with no rows has never run.
+
+## Releases
+
+Support is offered against **tags**, not against `main`. A release is
+`vYYYY.MM.DD` (with `-2`, `-3` … for a second cut the same day), and
+`package.json` carries the same version without the `v`.
+
+Cutting one is a command, so the checks cannot be skipped:
+
+```bash
+npm run release              # dry run — prints exactly what it would do
+npm run release -- --yes     # cut it
+```
+
+It refuses on a dirty tree, off `main`, out of sync with origin, when CI is not
+green on that exact commit, or when the tag already exists. **A released tag's
+meaning never changes** — the same rule as a released migration.
+
+**Checking what an install is actually running:**
+
+```bash
+npm run verify:deploy -- --url https://their-install --tag v2026.08.29
+```
+
+`GET /api/version` reports `appVersion`, the commit `sha`, and `isRelease`.
+`appVersion` alone is not proof: a build from `main` after a release still
+carries the released version. **The pair (appVersion, sha) identifies a build**,
+which is why `verify-deploy` compares the sha to the tag. The support bundle
+carries both, and `npm run doctor` says plainly when a build was not cut as a
+release.
 
 ## Upgrading
 

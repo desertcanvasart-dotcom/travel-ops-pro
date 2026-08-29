@@ -10,6 +10,7 @@
 //   npm run verify:deploy                          # target NEXT_PUBLIC_APP_URL
 //   npm run verify:deploy -- --url http://localhost:3000
 //   npm run verify:deploy -- --url https://autoura.net --sha <expected-sha>
+//   npm run verify:deploy -- --url https://their-install --tag v2026.08.29
 //
 // Expected SHA defaults to the local checkout's origin/main (falls back to
 // HEAD) — i.e. "is prod serving what's merged?".
@@ -57,7 +58,33 @@ function localSha() {
 const baseUrl = (arg('url') || envFromDotLocal('NEXT_PUBLIC_APP_URL') || 'http://localhost:3000')
   .replace(/\/$/, '')
 const expectedArg = arg('sha')
-const local = expectedArg ? { sha: expectedArg, ref: '--sha argument' } : localSha()
+
+/**
+ * `--tag v2026.08.29` resolves the tag to its commit, so "is this customer
+ * running the release we support?" is one command. T5 of
+ * docs/plans/self-hosting.md — a tag nobody can check a deployment against is
+ * just a label.
+ */
+function shaForTag(tag) {
+  try {
+    const out = execSync(`git rev-list -n 1 ${tag}`, {
+      cwd: ROOT,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).toString().trim()
+    if (/^[0-9a-f]{40}$/.test(out)) return { sha: out, ref: `tag ${tag}` }
+  } catch {
+    /* no such tag, or not a checkout */
+  }
+  console.error(`Could not resolve ${tag}. Run: git fetch --tags`)
+  process.exit(1)
+}
+
+const tagArg = arg('tag')
+const local = expectedArg
+  ? { sha: expectedArg, ref: '--sha argument' }
+  : tagArg
+    ? shaForTag(tagArg)
+    : localSha()
 
 let failures = 0
 const ok = (msg) => console.log(`  ✓ ${msg}`)
