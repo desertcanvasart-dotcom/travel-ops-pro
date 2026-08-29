@@ -4,14 +4,17 @@
 
 import type { GridDay, GridConfig, SlotValue, SelectedItem } from '../types'
 import { SLOT_DEFINITIONS } from '../types'
+import { normalizeServiceType } from '@/lib/service-types'
 
 // --- Slot → Service Type ---
 
 export const SLOT_TO_SERVICE_TYPE: Record<string, string> = {
   route: 'transportation',
   guide: 'guide',
-  airport_services: 'airport_services',
-  hotel_services: 'hotel_services',
+  // Slot ids keep their plural names; the SERVICE TYPE they emit is the
+  // canonical singular (lib/service-types.ts, AUT-L02).
+  airport_services: 'airport_service',
+  hotel_services: 'hotel_service',
   tipping: 'tips',
   boat_rides: 'activity',
   accommodation: 'accommodation',
@@ -28,11 +31,13 @@ export const SLOT_TO_SERVICE_TYPE: Record<string, string> = {
 // --- Service Type → Slot (reverse map with disambiguation) ---
 
 export function serviceTypeToSlotId(serviceType: string, serviceName: string, quantity: number, pax: number): string {
-  switch (serviceType) {
+  // Rows written before the taxonomy was unified may carry the plural
+  // spelling — normalize before matching (lib/service-types.ts).
+  switch (normalizeServiceType(serviceType)) {
     case 'transportation': return 'route'
     case 'guide': return 'guide'
-    case 'airport_services': return 'airport_services'
-    case 'hotel_services': return 'hotel_services'
+    case 'airport_service': return 'airport_services'
+    case 'hotel_service': return 'hotel_services'
     case 'tips': return 'tipping'
     case 'accommodation': return 'accommodation'
     case 'entrance': return 'entrance_fees'

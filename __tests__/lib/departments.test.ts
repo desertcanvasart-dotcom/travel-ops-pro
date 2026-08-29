@@ -5,6 +5,7 @@ import {
   SERVICE_TYPE_ROUTING,
   type DepartmentRow,
 } from '@/lib/departments'
+import { normalizeServiceType } from '@/lib/service-types'
 
 // ============================================
 // The bug this guards against: routing that fails SILENTLY. A service type
@@ -87,12 +88,16 @@ describe('resolveDepartment', () => {
       expect(fromTable?.name, type).toBe('Execution')
       expect(fromTable?.source, type).toBe('database')
 
-      // Against the OLD table they still reach the right team, but only via the
-      // code map — the safety net, not the table. That distinction is what
-      // buildRoutingReport surfaces.
+      // Against the OLD table: the plural spellings now NORMALIZE onto the
+      // singular entries the old table did list (the taxonomy is unified —
+      // lib/service-types.ts, AUT-L02), so they resolve from the DATABASE.
+      // Only the types the old table genuinely never listed use the code-map
+      // safety net.
       const fromOld = resolveDepartment(type, OLD_DEPARTMENTS)
       expect(fromOld?.name, type).toBe('Execution')
-      expect(fromOld?.source, type).toBe('fallback')
+      expect(fromOld?.source, type).toBe(
+        ['airport_services', 'hotel_services'].includes(type) ? 'database' : 'fallback'
+      )
     }
   })
 
@@ -160,17 +165,13 @@ describe('buildRoutingReport', () => {
   it('names exactly what the old table failed to own', () => {
     const report = buildRoutingReport(OBSERVED, OLD_DEPARTMENTS)
 
-    // Nothing is lost — the code map catches all five — but the table is stale
-    // and the report says so instead of reading as healthy.
+    // Nothing is lost, and the report is smaller than it used to be: the
+    // plural spellings now normalize onto the singular entries the old table
+    // DID list (AUT-L02), so only the three types it genuinely never owned
+    // reach the code-map safety net.
     expect(report.complete).toBe(true)
     expect(report.table_current).toBe(false)
-    expect(report.fallback).toEqual([
-      'activity',
-      'airport_services',
-      'hotel_services',
-      'supplies',
-      'tips',
-    ])
+    expect(report.fallback).toEqual(['activity', 'supplies', 'tips'])
   })
 
   it('reports a type nothing knows about as unrouted, not as a fallback', () => {
@@ -212,8 +213,13 @@ describe('the canonical map and the migration agree', () => {
   })
 
   it('covers every service type actually present in the data', () => {
+    // The map holds the CANON only; legacy rows reach it through
+    // normalizeServiceType, exactly as resolveDepartment does.
     for (const type of OBSERVED) {
-      expect(SERVICE_TYPE_ROUTING[type], `${type} is missing from SERVICE_TYPE_ROUTING`).toBeDefined()
+      expect(
+        SERVICE_TYPE_ROUTING[normalizeServiceType(type)],
+        `${type} is missing from SERVICE_TYPE_ROUTING`
+      ).toBeDefined()
     }
   })
 })
