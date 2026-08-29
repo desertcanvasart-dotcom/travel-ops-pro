@@ -26,6 +26,10 @@
 // The prelude below already removed every environmental excuse; what is left
 // is the real gap, and it is the gap a reconstructed baseline closes.
 //
+// It now models what the RUNNER does, not just what the files say — including
+// creating the tracker table first, because that is what a real install has
+// when the first migration runs.
+//
 // THAT IS NOW FIXED and this script is a CI gate. migrations/ holds the
 // baseline schema (a pg_dump of production, T3 step 1) plus anything added
 // after it; the 125 historical files moved to migrations/archive/ and are never
@@ -35,6 +39,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto'
 import { uuid_ossp } from '@electric-sql/pglite/contrib/uuid_ossp'
 import { readFileSync, readdirSync } from 'node:fs'
+import { TRACKER_BOOTSTRAP } from './migrate-core.mjs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
@@ -97,6 +102,14 @@ async function main() {
 
   const db = new PGlite({ extensions: { pgcrypto, uuid_ossp } })
   await db.exec(PRELUDE)
+
+  // The RUNNER creates schema_migrations before applying anything, so a real
+  // install already has that table when the first migration runs. Replaying
+  // without it missed a genuine bug: the baseline dump still contained
+  // `CREATE TABLE schema_migrations` (production had been baselined when the
+  // dump was taken), and a from-scratch install died on "already exists".
+  // A green replay must mean what a real install would do.
+  await db.exec(TRACKER_BOOTSTRAP)
 
   const applied = []
   const failed = []
