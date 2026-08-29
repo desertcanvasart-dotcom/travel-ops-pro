@@ -169,6 +169,22 @@ customer on?".
 > "find six defects" — **it dies on the first `ALTER TABLE` against a table
 > nothing created**, and it will keep dying until a schema exists to alter.
 
+**Measured, not predicted (2026-08-29).** `npm run replay:schema` now exists and
+replays every migration against a real Postgres:
+
+```
+applied  17 / 125      failed 107      exempt 1
+  102x  relation "..." does not exist
+    5x  function public.user_is_in_org(uuid) does not exist
+```
+
+The five are cascade — the migration defining that function is itself among the
+102. The harness stubs everything Supabase provides (the `auth` schema, the
+three API roles, `auth.users`, `auth.uid()`, pgcrypto, uuid-ossp) rather than
+exempting the files that need them, so no environmental excuse is left. **Every
+remaining failure has one cause: nothing creates the base tables.** Only one
+file is exempt, and only because PGlite does not ship `vector`.
+
 T3's real first task is therefore to **reconstruct the missing origin**, not to
 fix defects:
 
