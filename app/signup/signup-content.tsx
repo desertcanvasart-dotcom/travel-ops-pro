@@ -73,9 +73,10 @@ export default function SignupContent() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 text-white rounded-full text-2xl font-bold mb-4">
-            T2E
-          </div>
+          {/* No monogram here. It read "T2E" — the first operator's initials —
+              on the one page a NEW install shows before anybody has configured
+              anything, and this page has no session with which to look up whose
+              install it is. A heading beats somebody else's badge. */}
           <h1 className="text-3xl font-bold text-gray-900 mb-2">{t('createAccount')}</h1>
           <p className="text-gray-600">{t('joinPlatform')}</p>
         </div>

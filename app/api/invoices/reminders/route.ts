@@ -179,8 +179,8 @@ function generateReminderEmail(invoice: any, reminderType: string, locale: Recip
               </p>
 
               <p style="margin: 30px 0 0; color: #374151; font-size: 16px; line-height: 1.6;">
-                ${t('regards')}<br>
-                <strong>${t('team')}</strong>
+                ${t('regards')}${brand.name ? `<br>
+                <strong>${t('team', { company: brand.name })}</strong>` : ''}
               </p>
             </td>
           </tr>
@@ -188,9 +188,16 @@ function generateReminderEmail(invoice: any, reminderType: string, locale: Recip
           <!-- Footer -->
           <tr>
             <td style="background-color: #f9fafb; padding: 25px 40px; border-top: 1px solid #e5e7eb;">
-              <p style="margin: 0 0 10px; color: #6b7280; font-size: 13px; text-align: center;">
-                ${t('footerLocation')}
-              </p>
+              ${(() => {
+                // Was "Travel2Egypt | Cairo, Egypt" in both catalogues — the
+                // first operator's name and city on every agency's reminder.
+                // Composed from their own identity now, and omitted entirely
+                // when they have set none.
+                const line = [brand.name, brand.address].filter(Boolean).join(' | ')
+                return line ? `<p style="margin: 0 0 10px; color: #6b7280; font-size: 13px; text-align: center;">
+                ${line}
+              </p>` : ''
+              })()}
               <p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">
                 ${t('footerAutomated')}
               </p>

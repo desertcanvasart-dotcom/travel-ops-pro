@@ -1299,7 +1299,6 @@
     "portalNotifyFailed": "返信は保存されましたが、通知メールの送信に失敗しました。お客様はリンクを再度開いた場合のみ確認できます。"
   },
   "pdf": {
-    "brand": "Travel2Egypt",
     "quote": "見積",
     "date": "日付",
     "client": "お客様",
@@ -1380,7 +1379,7 @@
     },
     "tour": {
       "title": "ツアー",
-      "generatedBy": "Travel2Egyptツアービルダーで生成",
+      "generatedBy": "{company}で生成",
       "totalCost": "合計金額",
       "itinerary": "旅程",
       "tourCode": "ツアーコード",
@@ -1409,7 +1408,6 @@
       "printButton": "印刷 / PDFとして保存"
     },
     "b2b": {
-      "brand": "TRAVEL TO EGYPT",
       "subtitle": "B2Bパートナー見積",
       "issued": "発行日",
       "validUntil": "有効期限",
@@ -1454,10 +1452,7 @@
       "notIncluded": "含まれないもの",
       "excludesFlights": "国際航空券",
       "excludesPersonal": "個人費用とチップ",
-      "excludesInsurance": "旅行保険",
-      "footerBrand": "TRAVEL TO EGYPT",
-      "footerContact": "info@travel2egypt.org • +20 115 801 1600 • www.travel2egypt.org",
-      "footerTagline": "本物のエジプト体験のための信頼できるパートナー"
+      "excludesInsurance": "旅行保険"
     }
   },
   "itineraries": {
@@ -2178,7 +2173,6 @@
       "whatsappSentSuccessfully": "WhatsAppメッセージを送信しました！",
       "failedToSendWhatsApp": "WhatsAppメッセージの送信に失敗しました",
       "supplierPhoneNotAvailable": "サプライヤーの電話番号が利用できません",
-      "whatsappMessage": "件名: {supplierName} 様\n\n{documentType} #{documentNumber} を添付します\n\nゲスト: {clientName}\n日付: {date}\n\n受領確認をお願いします。\n\n敬具、\nTravel2Egypt",
       "asSpecified": "指定通り",
       "markedAsConfirmed": "確認済にしました！",
       "failedToUpdateStatus": "ステータスの更新に失敗しました",
@@ -3336,7 +3330,7 @@
     "role": "役職",
     "rolePlaceholder": "管理者、マネージャーなど",
     "companyName": "会社名",
-    "companyNamePlaceholder": "Travel2Egypt",
+    "companyNamePlaceholder": "会社名",
     "changePhoto": "写真を変更",
     "uploading": "アップロード中...",
     "photoUploadHint": "JPG、PNG 2MBまで",
@@ -3350,7 +3344,7 @@
     "connectGmail": "Gmailに接続",
     "disconnect": "切断",
     "emailSignature": "メール署名",
-    "signaturePlaceholder": "よろしくお願いいたします。\nイスラム・フセイン\nTravel2Egypt",
+    "signaturePlaceholder": "よろしくお願いいたします。\n担当者名\n会社名",
     "signatureHint": "この署名は送信するすべてのメールに追加されます。",
     "autoReply": "自動返信",
     "autoReplyDescription": "受信メールに自動的に返信",
@@ -7377,7 +7371,6 @@
     "failedToSendEmail": "メールの送信に失敗しました",
     "whatsappSentSuccessfully": "WhatsAppメッセージを送信しました！",
     "failedToSendWhatsApp": "WhatsAppメッセージの送信に失敗しました",
-    "whatsappMessage": "{supplierName}様、\n\nお客様{clientName}の{documentType}（{documentNumber}）をお送りします。\n\n日付: {date}\n\nよろしくお願いいたします。\nTravel2Egypt",
     "asSpecified": "指定通り",
     "markedAsConfirmed": "確認済みにしました！",
     "failedToUpdateStatus": "ステータスの更新に失敗しました",
@@ -7671,7 +7664,7 @@
       "cta": "お客様のエジプトでの夢を実現するお手伝いをいたします。ご質問やご予約のサポートにつきまして、いつでもお気軽にお問い合わせください。",
       "ctaDeposit": "ご予約を確定するには、このメールにご返信いただくか、WhatsApp またはお電話で直接ご連絡ください。30％のデポジットでご旅行が確定いたします。",
       "footerTagline": "エジプトの素晴らしさをご案内できることを楽しみにしております！🇪🇬✨",
-      "copyright": "© {year} Travel2Egypt.org - 忘れられない思い出をお作りします"
+      "copyright": "© {year} {company}"
     },
     "reminder": {
       "subject": {
@@ -7703,8 +7696,7 @@
       "paymentInstructions": "お支払い方法",
       "questions": "本請求書についてご不明な点がございましたら、お気軽にお問い合わせください。",
       "regards": "何卒よろしくお願いいたします。",
-      "team": "Travel2Egypt チーム",
-      "footerLocation": "Travel2Egypt｜エジプト・カイロ",
+      "team": "{company} チーム",
       "footerAutomated": "これは自動送信のお支払いリマインダーです。このメールには直接ご返信なさらないでください。"
     }
   },
