@@ -113,6 +113,19 @@ Jobs claim a slot in `cron_locks` before running, so two app instances behind a
 load balancer will not double-run them. The `/api/cron/*` endpoints can also be
 triggered externally with `CRON_SECRET` if you would rather drive them yourself.
 
+**Every run is now recorded in `job_runs`**, so "has this job ever run here?"
+has an answer from inside the app. That matters because the table above is not
+the whole story: **eight cron routes exist and the in-process scheduler
+schedules four.** The other four — `refresh-exchange-rates`, `send-reminders`,
+`task-reminders`, `dispatch-scheduled-sends` — depend on a caller this
+repository does not configure. On the reference deployment
+`refresh-exchange-rates` demonstrably runs, but only because exchange rates
+happen to stamp a timestamp on the data they write; the other three leave no
+trace at all.
+
+On a fresh install, assume nothing outside this repository is calling anything.
+Check `job_runs` after the first day: a job with no rows has never run.
+
 ## Upgrading
 
 ```bash

@@ -19,6 +19,8 @@
 // convention). Registered in lib/cron/scheduler.ts.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { withJobRun } from '@/lib/support/job-runs'
+import { createServerClient } from '@/lib/supabase-server'
 import { createClient } from '@supabase/supabase-js'
 import { TRAVELLER_DOCS_BUCKET } from '@/lib/portal/traveller-documents'
 
@@ -28,7 +30,7 @@ export const dynamic = 'force-dynamic'
  *  request that can time out halfway and leave you unsure what happened. */
 const BATCH = 50
 
-export async function GET(request: NextRequest) {
+async function getHandler(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
@@ -91,3 +93,9 @@ export async function GET(request: NextRequest) {
   console.log(`[cron] purge-traveller-documents: due=${rows.length} purged=${purged} failures=${failures.length}`)
   return NextResponse.json({ ok, due: rows.length, purged, failures })
 }
+
+// Recorded in job_runs so the support bundle can answer "has this job ever run
+// here?". Wrapping the ROUTE covers both the in-process scheduler (which calls
+// this handler directly) and any external caller. Fail-open: if the recording
+// cannot happen, the job still runs — see lib/support/job-runs.ts.
+export const GET = withJobRun('purge-traveller-documents', () => createServerClient(), getHandler)

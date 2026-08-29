@@ -18,6 +18,8 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { withJobRun } from '@/lib/support/job-runs'
+import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { processRunForMemory } from '@/lib/agent-memory'
@@ -35,7 +37,7 @@ function getSupabaseAdmin(): any {
   return _supabaseAdmin
 }
 
-export async function GET(request: NextRequest) {
+async function getHandler(request: NextRequest) {
   // Verify cron secret — same Bearer pattern as the other cron routes.
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
@@ -119,3 +121,9 @@ export async function GET(request: NextRequest) {
     duration_ms: Date.now() - startTime,
   })
 }
+
+// Recorded in job_runs so the support bundle can answer "has this job ever run
+// here?". Wrapping the ROUTE covers both the in-process scheduler (which calls
+// this handler directly) and any external caller. Fail-open: if the recording
+// cannot happen, the job still runs — see lib/support/job-runs.ts.
+export const GET = withJobRun('process-agent-memory', () => createServerClient(), getHandler)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { clientMessage } from '@/lib/api-errors'
+import { withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
+import { clientMessage } from '@/lib/api-errors'
 import { sendEmailInternal } from '@/lib/email-send'
 
 // Verify cron secret for security
@@ -87,7 +88,7 @@ function generateReminderEmail(invoice: any, reminderType: string): { subject: s
   return { subject, html }
 }
 
-export async function GET(request: NextRequest) {
+async function getHandler(request: NextRequest) {
   // Verify authorization
   const authHeader = request.headers.get('authorization')
   if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
@@ -203,4 +204,10 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
-} 
+}
+
+// Recorded in job_runs so the support bundle can answer "has this job ever run
+// here?". Wrapping the ROUTE covers both the in-process scheduler (which calls
+// this handler directly) and any external caller. Fail-open: if the recording
+// cannot happen, the job still runs — see lib/support/job-runs.ts.
+export const GET = withJobRun('send-reminders', () => createServerClient(), getHandler)

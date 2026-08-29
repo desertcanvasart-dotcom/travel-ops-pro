@@ -11,6 +11,8 @@
 // reads the trigger-written audit log, not the API.
 // ============================================
 import { NextRequest, NextResponse } from 'next/server'
+import { withJobRun } from '@/lib/support/job-runs'
+import { createServerClient } from '@/lib/supabase-server'
 import { createClient } from '@supabase/supabase-js'
 import { groupChanges, describeGroup, type AuditRow } from '@/lib/rate-change-digest'
 import { notifyOrgManagers } from '@/lib/notify-managers'
@@ -25,7 +27,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function GET(request: NextRequest) {
+async function getHandler(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET
   if (cronSecret && request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -85,3 +87,9 @@ export async function GET(request: NextRequest) {
   await supabase.from('cron_watermarks').upsert({ job: JOB, last_run_at: nextWatermark, updated_at: new Date().toISOString() })
   return NextResponse.json({ success: true, ...stats })
 }
+
+// Recorded in job_runs so the support bundle can answer "has this job ever run
+// here?". Wrapping the ROUTE covers both the in-process scheduler (which calls
+// this handler directly) and any external caller. Fail-open: if the recording
+// cannot happen, the job still runs — see lib/support/job-runs.ts.
+export const GET = withJobRun('rate-change-digest', () => createServerClient(), getHandler)

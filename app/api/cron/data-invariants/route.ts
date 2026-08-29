@@ -20,6 +20,8 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { withJobRun } from '@/lib/support/job-runs'
+import { createServerClient } from '@/lib/supabase-server'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmailInternal } from '@/lib/email-send'
 
@@ -65,7 +67,7 @@ function findDuplicates(rows: any[], keyFn: (r: any) => string): Map<string, any
   return new Map([...byKey].filter(([, v]) => v.length > 1))
 }
 
-export async function GET(request: NextRequest) {
+async function getHandler(request: NextRequest) {
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
@@ -214,3 +216,9 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ ok, violations, warnings, scanned, checkedAt: new Date().toISOString() })
 }
+
+// Recorded in job_runs so the support bundle can answer "has this job ever run
+// here?". Wrapping the ROUTE covers both the in-process scheduler (which calls
+// this handler directly) and any external caller. Fail-open: if the recording
+// cannot happen, the job still runs — see lib/support/job-runs.ts.
+export const GET = withJobRun('data-invariants', () => createServerClient(), getHandler)
