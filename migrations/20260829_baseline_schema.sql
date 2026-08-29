@@ -17749,4 +17749,45 @@ CREATE POLICY writing_rules_authenticated ON public.writing_rules TO authenticat
 -- PostgreSQL database dump complete
 --
 
+--
+-- ============================================================
+-- PRIVILEGES — not in the pg_dump, and the install fails without them
+-- ============================================================
+-- The dump is taken with --no-privileges, which strips every GRANT. On the
+-- database it was taken from that is invisible: the grants are already there.
+-- On a FRESH install it means service_role has no rights on anything, so the
+-- app renders its pages perfectly and then cannot read a single row:
+--
+--     permission denied for table organizations
+--
+-- Found by standing up a second install. The PGlite replay could never catch
+-- it, because that runs as a superuser where grants do not bite.
+--
+-- The posture below is the one archive/20260821_lock_public_schema.sql
+-- established and this schema still has:
+--
+--   service_role   everything. It bypasses RLS and the app uses it server-side.
+--   authenticated  everything at the GRANT layer; RLS is what actually decides.
+--   anon           USAGE on the schema and NOTHING ELSE. That migration revoked
+--                  every table privilege from anon after 47 resources turned
+--                  out to be readable by the anonymous internet. A fresh
+--                  install starts where that left off rather than repeating it.
+
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+
+GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO authenticated, service_role;
+
+-- Anything created later gets the same treatment, so a new table is not
+-- silently unreachable until somebody notices.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO authenticated, service_role;
+
+-- anon is granted nothing on tables, deliberately. Restoring a grant here
+-- reopens what that lockdown closed.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon;
+
 COMMIT;
