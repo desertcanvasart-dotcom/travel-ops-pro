@@ -1126,12 +1126,14 @@ export default function ItineraryEditorPage() {
       // and fabricated a €15 entrance fallback) has been retired. Open the grid
       // loaded with this itinerary so the operator prices it against real rates.
       console.log('📊 Opening pricing grid for this itinerary...')
+      // Keep the button busy through the navigation — a finally{} here
+      // re-enabled it while this page was still on screen (the AUT-W05 dead
+      // window). The page unmounts when the grid renders.
       router.push(`/pricing-grid?itinerary=${itineraryId}`)
 
     } catch (error: any) {
       console.error('❌ Error opening grid pricing:', error)
       await dialog.alert(tCommon('error'), t('failedToCalculatePricing', { error: error.message || tCommon('unknownError') }), 'warning')
-    } finally {
       setCalculating(false)
     }
   }

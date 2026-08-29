@@ -130,11 +130,20 @@ function NewClientForm() {
         .single()
 
       if (insertError) throw insertError
+      // Keep the button in its saving state THROUGH the navigation.
+      // router.push() does not await the destination page, so a finally{}
+      // here re-enabled "Create Client" while this wizard stayed on screen
+      // for the seconds /clients/[id] takes to render — a dead window with a
+      // live submit button, which the audit read as "no loading state, no
+      // disabled button, for roughly four seconds" and correctly flagged as
+      // a double-submit invitation (AUT-W05). The spinner had existed all
+      // along; resetting it on the success path is what erased it. This page
+      // unmounts when the profile renders, so loading never needs resetting
+      // on success.
       router.push(`/clients/${data.id}`)
     } catch (err: any) {
       console.error('Error creating client:', err)
       setError(err.message || t('failedToCreateClient'))
-    } finally {
       setLoading(false)
     }
   }
