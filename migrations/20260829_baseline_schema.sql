@@ -30,6 +30,13 @@
 -- real Supabase project. They are excluded so this file replays anywhere
 -- without pgvector.
 --
+-- schema_migrations IS NOT IN THIS FILE, deliberately. It belongs to the
+-- migration RUNNER, not to the application, and the runner creates it before
+-- applying anything (TRACKER_BOOTSTRAP in scripts/migrate-core.mjs). It was in
+-- the original dump only because production had already been baselined when
+-- the dump was taken — so a genuine from-scratch install died on
+-- `relation "schema_migrations" already exists`. Found by standing one up.
+--
 -- ON AN EXISTING DATABASE THIS MUST BE RECORDED, NOT RUN. It is not idempotent
 -- — it is a dump, full of bare CREATE TABLE. The runner refuses to apply it to
 -- a database that already has the schema and tells you to use --baseline
@@ -5367,14 +5374,6 @@ CREATE TABLE public.sales_agents (
 );
 
 
---
--- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.schema_migrations (
-    name text NOT NULL,
-    applied_at timestamp with time zone DEFAULT now() NOT NULL
-);
 
 
 --
@@ -7988,12 +7987,6 @@ ALTER TABLE ONLY public.sales_agents
     ADD CONSTRAINT sales_agents_pkey PRIMARY KEY (id);
 
 
---
--- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.schema_migrations
-    ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY (name);
 
 
 --
