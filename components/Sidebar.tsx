@@ -392,6 +392,8 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
       {/* Mobile Menu Button */}
       <button
         onClick={() => setIsMobileOpen(!isMobileOpen)}
+        aria-label={isMobileOpen ? 'Close menu' : 'Open menu'}
+        aria-expanded={isMobileOpen}
         className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-lg shadow-lg"
       >
         {isMobileOpen ? (
@@ -440,6 +442,8 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
+              aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-expanded={!isCollapsed}
               className="hidden lg:block p-1 hover:bg-gray-100 rounded transition-colors"
             >
               <ChevronRight

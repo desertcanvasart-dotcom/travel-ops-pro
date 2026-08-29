@@ -40,8 +40,14 @@ export function LanguageSelector({
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center gap-1 p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors"
           title={t('language')}
+          aria-label={t('language')}
         >
-          <span className="text-base">{localeFlags[currentLocale]}</span>
+          {/* The flag ALONE was the label — and Windows does not render
+              country-flag emoji, so there the button showed as an empty
+              square with a chevron (audit AUT-M02's "icon disappears").
+              The locale code is text and renders everywhere. */}
+          <span className="text-base" aria-hidden="true">{localeFlags[currentLocale]}</span>
+          <span className="text-xs font-medium uppercase">{currentLocale}</span>
           <ChevronDown className="w-3 h-3" />
         </button>
 

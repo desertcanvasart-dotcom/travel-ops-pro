@@ -1,7 +1,8 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
-import { useState, useEffect } from 'react'
+import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { SUPPLIER_FORM_FIELDS, type SupplierFormField } from '@/lib/suppliers/fields'
@@ -100,9 +101,14 @@ function MultiSelect({ options, value, onChange, placeholder, labelFor = (v) => 
   options: string[]; value: string[]; onChange: (v: string[]) => void; placeholder: string; labelFor?: (v: string) => string 
 }) {
   const [isOpen, setIsOpen] = useState(false)
-  
+  const rootRef = useRef<HTMLDivElement>(null)
+  // No backdrop. The old fixed-inset-0 layer closed the dropdown by EATING
+  // the click — with the role dropdown open, the first press on "Save
+  // Changes" did nothing but close it (audit AUT-W02). See the hook.
+  useDismissOnOutside(isOpen, rootRef, () => setIsOpen(false))
+
   return (
-    <div className="relative">
+    <div className="relative" ref={rootRef}>
       <div
         role="button"
         tabIndex={0}
@@ -134,7 +140,6 @@ function MultiSelect({ options, value, onChange, placeholder, labelFor = (v) => 
       </div>
       {isOpen && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
           <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
             {options.map(option => (
               <div
@@ -201,6 +206,10 @@ export default function SuppliersContent() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const rowMenuRef = useRef<HTMLDivElement>(null)
+  // Same swallowed-click backdrop as the role dropdown, one level up: with a
+  // row menu open, the first click anywhere else only closed the menu.
+  useDismissOnOutside(openMenuId !== null, rowMenuRef, () => setOpenMenuId(null))
   
   // View modal tabs
   const [viewTab, setViewTab] = useState<'details' | 'rates' | 'documents'>('details')
@@ -649,7 +658,7 @@ export default function SuppliersContent() {
                             </p>
                           </div>
                         </div>
-                        <div className="relative">
+                        <div className="relative" ref={openMenuId === supplier.id ? rowMenuRef : undefined}>
                           <button onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === supplier.id ? null : supplier.id) }} className="p-1 hover:bg-gray-100 rounded opacity-0 group-hover:opacity-100">
                             <MoreHorizontal className="w-4 h-4 text-gray-400" />
                           </button>
@@ -801,7 +810,6 @@ export default function SuppliersContent() {
         )}
       </div>
 
-      {openMenuId && <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />}
 
       {/* Add/Edit Modal */}
       {(showAddModal || showEditModal) && (

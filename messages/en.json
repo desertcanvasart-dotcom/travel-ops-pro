@@ -785,7 +785,8 @@
     "error": "Error",
     "firstContactNote": "First contact",
     "newTrip": "New Trip",
-    "createFirstTrip": "Create First Trip"
+    "createFirstTrip": "Create First Trip",
+    "subtitle": "Manage your client profiles and travel history"
   },
   "communications": {
     "title": "Communications",
