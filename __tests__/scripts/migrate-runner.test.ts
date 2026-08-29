@@ -349,6 +349,33 @@ describe('a migration must not be able to poison the session it runs in', () => 
   })
 })
 
+describe('the baseline carries privileges the dump strips', () => {
+  const sql = () => fs.readFileSync(path.join(MIGRATIONS, '20260829_baseline_schema.sql'), 'utf8')
+
+  it('grants service_role and authenticated access to the schema', () => {
+    // pg_dump --no-privileges strips every GRANT. Invisible on the database it
+    // came from; on a fresh install it means the app renders every page and
+    // then cannot read a row: "permission denied for table organizations".
+    // Found by standing up a second install; PGlite could never catch it,
+    // because the replay runs as a superuser.
+    expect(sql()).toMatch(/GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, service_role/)
+    expect(sql()).toMatch(/GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role/)
+  })
+
+  it('grants anon NOTHING on tables — that lockdown must not be undone', () => {
+    // archive/20260821_lock_public_schema.sql revoked every table privilege
+    // from anon after 47 resources turned out to be readable anonymously. A
+    // fresh install has to start where that left off.
+    const text = sql()
+    expect(text).not.toMatch(/GRANT [A-Z, ]*ON ALL TABLES IN SCHEMA public TO [^;]*\banon\b/)
+    expect(text).toMatch(/ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon/)
+  })
+
+  it('sets default privileges, so a later table is not silently unreachable', () => {
+    expect(sql()).toMatch(/ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO authenticated, service_role/)
+  })
+})
+
 describe('the baseline is atomic', () => {
   it('is wrapped in a transaction, so a failure leaves nothing behind', () => {
     // Without this a partial apply left a half-built database, which then
