@@ -72,7 +72,13 @@ const PRELUDE = `
   -- reference it by id for foreign keys.
   CREATE TABLE IF NOT EXISTS auth.users (
     id uuid PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
-    email text
+    email text,
+    -- Both of these are genuinely Supabase's, and both are read by the trigger
+    -- that turns a new auth user into a profile (and, on a virgin install, an
+    -- owner). Without them here the replay could not exercise the one thing a
+    -- fresh install does first.
+    raw_user_meta_data jsonb,
+    created_at timestamptz NOT NULL DEFAULT now()
   );
   -- auth.uid() is Supabase's "who is calling", read by 28 of these migrations
   -- inside RLS policies. It reads a request-scoped JWT claim that does not
@@ -166,6 +172,47 @@ async function main() {
   const FLOORS = { tables: 150, views: 15, indexes: 600, policies: 250, functions: 60 }
   const short = Object.entries(FLOORS).filter(([k, min]) => counts[k] < min)
 
+  // -------------------------------------------------------------------------
+  // THE FIRST SIGNUP
+  // -------------------------------------------------------------------------
+  // Counting tables proves a schema exists. It does not prove the install can
+  // be used, and at v2026.08.29-6 every count below passed on a database where
+  // the first person to sign up became a viewer of nothing: no profile, no
+  // organisation, no membership, and every page except the dashboard bouncing
+  // to /dashboard?error=unauthorized. The operator could not reach Settings to
+  // name their own agency, and could not pull a support bundle to find out why.
+  //
+  // So insert an auth user the way GoTrue does, and ask the schema what it did
+  // about it. This is the cheapest possible end-to-end fact: it needs no app,
+  // no server and no browser, and it is the first thing that happens on every
+  // install that ever succeeds.
+  const FIRST = '00000000-0000-4000-8000-0000000000ff'
+  const signup = { ok: false, detail: 'not run' }
+  try {
+    await db.exec(
+      `INSERT INTO auth.users (id, email, raw_user_meta_data)
+       VALUES ('${FIRST}', 'first-signup@example.test', '{"full_name": "First Owner"}'::jsonb);`
+    )
+    const { rows } = await db.query(`
+      SELECT
+        (SELECT count(*)::int FROM public.user_profiles WHERE id = '${FIRST}')       AS profile,
+        (SELECT count(*)::int FROM public.organizations)                             AS orgs,
+        (SELECT count(*)::int FROM public.organization_members
+          WHERE user_id = '${FIRST}' AND role = 'owner')                             AS owner
+    `)
+    const r = rows[0]
+    const missing = []
+    if (r.profile !== 1) missing.push('no user_profiles row')
+    if (r.orgs !== 1) missing.push(`${r.orgs} organisation(s), expected 1`)
+    if (r.owner !== 1) missing.push('not an owner of it')
+    signup.ok = missing.length === 0
+    signup.detail = signup.ok
+      ? 'profile created, organisation created, signed up as its owner'
+      : missing.join('; ')
+  } catch (error) {
+    signup.detail = String(error.message).split('\n')[0]
+  }
+
   console.log(`migrations:  ${files.length}`)
   console.log(`applied:     ${applied.length}`)
   console.log(`failed:      ${failed.length}`)
@@ -210,6 +257,14 @@ async function main() {
   console.log('--- schema built ---')
   for (const [k, v] of Object.entries(counts)) console.log(`  ${k.padEnd(10)} ${v}`)
 
+  console.log('')
+  console.log('--- the first signup ---')
+  console.log(`  ${signup.ok ? 'ok  ' : 'FAIL'}  ${signup.detail}`)
+  if (!signup.ok) {
+    console.log('  A fresh install whose first user is not the owner cannot be used:')
+    console.log('  membership is the only role authority, and no membership means viewer.')
+  }
+
   if (short.length) {
     console.log('')
     console.log('SCHEMA IS SHORT OF EXPECTATIONS:')
@@ -217,7 +272,7 @@ async function main() {
     console.log('The migrations applied without error but did not build what they should.')
   }
 
-  process.exitCode = failed.length === 0 && short.length === 0 ? 0 : 1
+  process.exitCode = failed.length === 0 && short.length === 0 && signup.ok ? 0 : 1
 }
 
 main().catch(err => {
