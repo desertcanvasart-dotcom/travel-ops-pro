@@ -92,7 +92,11 @@ export interface DigestNotice { title: string; message: string; link: string }
 export function describeGroup(g: DigestGroup, actorName: string | null, maxExamples = 3): DigestNotice {
   const meta = RATE_TABLES[g.table] ?? { page: '/rates', en: `${g.table} rows`, ja: g.table }
   const n = g.rows.length
-  const who = actorName ?? 'unknown user / 不明なユーザー'
+  // A null actor is not a mystery, it is a fact: auth.uid() was NULL and no
+  // actor header was sent — a write from outside the app (SQL editor, a
+  // script). Now that every in-app write path attributes itself (AUT-H04),
+  // say what null means instead of shrugging "unknown user" at the team.
+  const who = actorName ?? 'someone outside the app / アプリ外の操作'
   const title = `料金変更: ${meta.ja} ${n}件 — Rate change: ${n} ${meta.en}`
   const examples = g.rows.slice(0, maxExamples).map(describeChange)
   const rest = n > maxExamples ? `\n…and ${n - maxExamples} more / 他${n - maxExamples}件` : ''

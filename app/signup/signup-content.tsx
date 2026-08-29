@@ -166,7 +166,7 @@ export default function SignupContent() {
         </div>
 
         <p className="text-center text-sm text-gray-500 mt-6">
-          © 2025 Autoura. {t('allRightsReserved')}
+          © {new Date().getFullYear()} Autoura. {t('allRightsReserved')}
         </p>
       </div>
     </div>

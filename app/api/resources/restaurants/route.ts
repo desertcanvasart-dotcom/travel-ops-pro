@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
-import { createClient } from '@supabase/supabase-js'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Actor-attributed service-role client (lib/supabase-actor): rate-table
+// writes from here reach fn_rate_audit_trigger, and without the actor
+// header every one of them lands in rate_audit_log as changed_by NULL —
+// which the rate-change digest then reports as "unknown user /
+// 不明なユーザー" to the whole team (audit AUT-H04).
+const supabaseAdmin = createServerClient()
 
 export async function GET(request: NextRequest) {
   try {

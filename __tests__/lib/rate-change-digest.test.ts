@@ -35,9 +35,12 @@ describe('describeGroup', () => {
     expect(n.message).not.toContain('Site 5:')
     expect(n.link).toBe('/rates/attractions')
   })
-  it('says so when the actor is unknown, and falls back for an unmapped table', () => {
+  it('names what a null actor means, and falls back for an unmapped table', () => {
+    // Every in-app write path attributes itself (AUT-H04), so a null actor
+    // IS the information: the write came from outside the app. "unknown
+    // user" read as broken attribution; this reads as what happened.
     const n = describeGroup(groupChanges([row({ changed_by: null, table_name: 'hotel_contacts' })])[0], null)
-    expect(n.message).toContain('unknown user')
+    expect(n.message).toContain('someone outside the app')
     expect(n.link).toBe('/rates')
   })
 })

@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
@@ -10,10 +10,12 @@ import { currencySymbol } from '@/lib/currency-totals'
 // File: app/api/tours/variations/[id]/services/route.ts
 // ============================================
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Actor-attributed service-role client (lib/supabase-actor): rate-table
+// writes from here reach fn_rate_audit_trigger, and without the actor
+// header every one of them lands in rate_audit_log as changed_by NULL —
+// which the rate-change digest then reports as "unknown user /
+// 不明なユーザー" to the whole team (audit AUT-H04).
+const supabaseAdmin = createServerClient()
 
 async function getRateDetails(rateType: string, rateId: string) {
   // Rate amounts in the details text carry the org's rate-currency symbol, never a hard-coded euro.
