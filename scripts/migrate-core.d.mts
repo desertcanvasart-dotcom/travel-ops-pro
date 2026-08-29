@@ -49,6 +49,15 @@ export function loadApplied(
   options?: { create?: boolean },
 ): Promise<string[] | null>
 
+export function isBaselineFile(name: unknown): boolean
+
+/** Refuses to APPLY a baseline dump to a database that already has the schema. */
+export function checkBaselineSafety(
+  identity: DatabaseIdentity,
+  pending: readonly string[] | null | undefined,
+  options?: { baseline?: boolean },
+): { ok: true } | { ok: false; reason: string }
+
 export function checkTarget(
   identity: DatabaseIdentity,
   options?: { baseline?: boolean },

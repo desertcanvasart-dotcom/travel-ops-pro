@@ -4,74 +4,76 @@
 // the anonymous internet — because `CREATE OR REPLACE VIEW` silently drops the
 // option a previous migration had set.
 //
-// This test reads the migrations the way Postgres does — last definition wins —
-// and fails if the final word on any view isn't caller-rights.
+// This test used to reconstruct a timeline across 125 migration files and check
+// the last word on each view. Since the T3 squash it reads the BASELINE SCHEMA
+// instead — a pg_dump of the live database — which is a stronger check for the
+// same defect: it asserts what the database actually has, not what the sum of
+// the migrations should have produced. The two can disagree, and when they do
+// the database is the one that matters.
 import { describe, it, expect } from 'vitest'
 import fs from 'fs'
 import path from 'path'
 
-const MIGRATIONS = path.join(process.cwd(), 'migrations')
+const BASELINE = path.join(process.cwd(), 'migrations', '20260829_baseline_schema.sql')
 
-/** `CREATE [OR REPLACE] VIEW [public.]name` → view name, in file order. */
-const CREATE_VIEW = /create\s+(?:or\s+replace\s+)?view\s+(?:public\.)?([a-z_][a-z0-9_]*)/gi
-/** `ALTER VIEW [public.]name SET (security_invoker = on|true)` */
-const ALTER_INVOKER =
-  /alter\s+view\s+(?:public\.)?([a-z_][a-z0-9_]*)\s+set\s*\(\s*security_invoker\s*=\s*(?:on|true)\s*\)/gi
+/** `CREATE VIEW public.name WITH (...) AS` — pg_dump's rendering. */
+const CREATE_VIEW = /CREATE\s+(?:OR\s+REPLACE\s+)?VIEW\s+(?:public\.)?([a-z_][a-z0-9_]*)/gi
 
-type Event = { view: string; invoker: boolean; file: string; fileIndex: number; offset: number }
-
-function timeline(): Event[] {
-  const files = fs.readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort()
-  const events: Event[] = []
-
-  files.forEach((file, fileIndex) => {
-    const sql = fs.readFileSync(path.join(MIGRATIONS, file), 'utf8')
-
-    for (const m of sql.matchAll(CREATE_VIEW)) {
-      // Does THIS statement carry the option inline? Look ahead to the
-      // statement terminator only — a WITH clause on a later view doesn't count.
-      const stmt = sql.slice(m.index!, sql.indexOf(';', m.index!) + 1 || undefined)
-      const inline = /security_invoker\s*=\s*(?:on|true)/i.test(
-        // The WITH clause sits between the view name and AS.
-        stmt.slice(0, stmt.toLowerCase().indexOf(' as'))
-      )
-      events.push({ view: m[1].toLowerCase(), invoker: inline, file, fileIndex, offset: m.index! })
-    }
-
-    for (const m of sql.matchAll(ALTER_INVOKER)) {
-      events.push({ view: m[1].toLowerCase(), invoker: true, file, fileIndex, offset: m.index! })
-    }
-  })
-
-  // File order first, then position within the file — Postgres applies
-  // them in exactly that sequence, and last definition wins.
-  return events.sort((a, b) => a.fileIndex - b.fileIndex || a.offset - b.offset)
+/** Does this CREATE VIEW statement carry caller-rights, inline, before its AS? */
+function isInvoker(sql: string, at: number): boolean {
+  const semi = sql.indexOf(';', at)
+  const stmt = sql.slice(at, semi === -1 ? undefined : semi + 1)
+  const asIdx = stmt.toLowerCase().indexOf(' as')
+  // Only the WITH clause between the name and AS counts — a later view's
+  // option must not be credited to this one.
+  return /security_invoker\s*=\s*(?:on|true|'on'|'true')/i.test(
+    stmt.slice(0, asIdx === -1 ? undefined : asIdx),
+  )
 }
 
 describe('view security_invoker', () => {
-  it('leaves every view under caller rights after the last migration touching it', () => {
-    const last = new Map<string, Event>()
-    for (const e of timeline()) last.set(e.view, e)
+  const sql = fs.readFileSync(BASELINE, 'utf8')
 
-    const definerRights = [...last.values()].filter((e) => !e.invoker)
+  it('the baseline actually contains views (the matcher still matches)', () => {
+    expect([...sql.matchAll(CREATE_VIEW)].length).toBeGreaterThan(10)
+  })
 
+  it('every view runs under caller rights AFTER the last statement touching it', () => {
+    // Last-write-wins, and it matters here: pg_dump emits four of these views
+    // TWICE — once bare, then again as CREATE OR REPLACE ... WITH
+    // (security_invoker='on') in the _RETURN rule section, because they have
+    // circular dependencies. Judging the first occurrence alone reports four
+    // false positives; judging the last is what Postgres actually ends up with.
+    const lastIsInvoker = new Map<string, boolean>()
+    for (const m of sql.matchAll(CREATE_VIEW)) {
+      lastIsInvoker.set(m[1], isInvoker(sql, m.index!))
+    }
+    const definerRights = [...lastIsInvoker.entries()].filter(([, ok]) => !ok).map(([v]) => v)
     expect(
-      definerRights.map((e) => `${e.view} (last touched by ${e.file})`),
-      'views left running with definer rights — they bypass RLS on their source tables'
+      definerRights,
+      'views running with definer rights — they bypass RLS on their source tables',
     ).toEqual([])
   })
 
+  it('a view replaced without the option would still be caught', () => {
+    // The dropped-option regression is exactly CREATE OR REPLACE without WITH.
+    // Prove last-write-wins does not paper over it.
+    const replayed =
+      "CREATE VIEW public.x WITH (security_invoker='on') AS SELECT 1;\n" +
+      'CREATE OR REPLACE VIEW public.x AS SELECT 1;'
+    const seen = new Map<string, boolean>()
+    for (const m of replayed.matchAll(CREATE_VIEW)) seen.set(m[1], isInvoker(replayed, m.index!))
+    expect(seen.get('x')).toBe(false)
+  })
+
   it('detects the regression it was written for', () => {
-    // Guard against the matcher rotting into something that always passes:
-    // the historical bad statement must still read as definer-rights.
+    // Guard against the matcher rotting into something that always passes.
     const bad = 'CREATE OR REPLACE VIEW public.guides AS SELECT id FROM suppliers;'
-    const good = "CREATE OR REPLACE VIEW public.guides WITH (security_invoker = on) AS SELECT id FROM suppliers;"
-    const inline = (sql: string) => {
-      const m = [...sql.matchAll(CREATE_VIEW)][0]
-      const stmt = sql.slice(m.index!, sql.indexOf(';', m.index!) + 1)
-      return /security_invoker\s*=\s*(?:on|true)/i.test(stmt.slice(0, stmt.toLowerCase().indexOf(' as')))
-    }
-    expect(inline(bad)).toBe(false)
-    expect(inline(good)).toBe(true)
+    const good =
+      "CREATE OR REPLACE VIEW public.guides WITH (security_invoker = on) AS SELECT id FROM suppliers;"
+    const dumped = "CREATE VIEW public.guides WITH (security_invoker='on') AS SELECT id FROM suppliers;"
+    expect(isInvoker(bad, 0)).toBe(false)
+    expect(isInvoker(good, 0)).toBe(true)
+    expect(isInvoker(dumped, 0)).toBe(true)
   })
 })

@@ -116,6 +116,44 @@ export async function identifyDatabase(client) {
 }
 
 /**
+ * A baseline file is a `pg_dump` of the whole schema, not an incremental change.
+ *
+ * It is NOT idempotent — bare `CREATE TABLE`, `CREATE POLICY`, `CREATE INDEX`.
+ * Applying it to a database that already has the schema fails partway and
+ * leaves nothing recorded, which is loud but pointless. On such a database the
+ * correct action is to RECORD it (`--baseline`), because the schema is already
+ * there.
+ */
+export function isBaselineFile(name) {
+  return /_baseline_schema\.sql$/i.test(String(name))
+}
+
+/**
+ * Refuse to APPLY a baseline to a database that already has the schema.
+ *
+ * Pure, so the refusal is tested rather than only asserted in the CLI.
+ *
+ * @returns { ok: true } | { ok: false, reason: string }
+ */
+export function checkBaselineSafety(identity, pending, { baseline = false } = {}) {
+  if (baseline) return { ok: true } // recording, not running — always fine
+  const hasBaseline = (pending ?? []).some(isBaselineFile)
+  if (hasBaseline && identity.verdict === 'ours') {
+    return {
+      ok: false,
+      reason:
+        'REFUSING: this database already has the schema, and one of the pending\n' +
+        'files is the baseline dump. The baseline is not idempotent — applying it\n' +
+        'here would fail partway and record nothing.\n\n' +
+        'This database predates the baseline, so the schema is already present.\n' +
+        'Record it instead of running it:\n\n' +
+        '    node scripts/migrate.mjs --baseline\n',
+    }
+  }
+  return { ok: true }
+}
+
+/**
  * Should this run be allowed to write to this database?
  *
  * Pure, so the refusals are testable rather than only asserted in the CLI.
