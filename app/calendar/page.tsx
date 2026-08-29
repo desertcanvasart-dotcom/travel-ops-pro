@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { SkeletonPageHeader, SkeletonStatCards, SkeletonCalendarGrid } from '@/components/Skeleton'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
@@ -549,12 +550,12 @@ export default function CalendarPage() {
   const today = () => setCurrentDate(new Date())
 
   if (loading) {
+    // The month grid's own shape while trips load (AUT-H03).
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">{t('loading')}</p>
-        </div>
+      <div className="p-6 space-y-5" aria-busy="true" aria-label={t('loading')}>
+        <SkeletonPageHeader />
+        <SkeletonStatCards count={4} />
+        <SkeletonCalendarGrid />
       </div>
     )
   }

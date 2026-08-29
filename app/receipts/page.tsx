@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { SkeletonPageHeader, SkeletonStatCards, SkeletonTable } from '@/components/Skeleton'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
@@ -278,12 +279,13 @@ export default function ReceiptsPage() {
   }).length
 
   if (loading) {
+    // The page's own shape while payments load (AUT-H03): title, the three
+    // stat tiles, the receipts table.
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">Loading receipts...</p>
-        </div>
+      <div className="p-6 space-y-6" aria-busy="true" aria-label="Loading receipts">
+        <SkeletonPageHeader />
+        <SkeletonStatCards count={3} />
+        <SkeletonTable rows={8} />
       </div>
     )
   }
