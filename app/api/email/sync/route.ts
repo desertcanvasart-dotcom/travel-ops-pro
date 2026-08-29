@@ -5,6 +5,7 @@ import { getAuthenticatedGmail, GmailAuthError, getUserEmail } from '@/lib/gmail
 import type { EmailSyncOptions, EmailSyncResult } from '@/types/unified'
 import { createCopilotInboxEntry } from '@/lib/copilot-intake'
 import { getCurrentUserId } from '@/lib/auth/current-org'
+import { loadKnownContactEmails, looksAutomated } from '@/lib/email-scoping'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -171,6 +172,11 @@ export async function POST(request: NextRequest) {
       history_id: response.data.resultSizeEstimate?.toString() || null
     }
 
+    // The shared store holds correspondence, not the whole mailbox — see
+    // lib/email-scoping.ts. Loaded once per run, not per message.
+    const knownContacts = await loadKnownContactEmails(supabase)
+    let threadsSkipped = 0
+
     // Group messages by thread for processing
     const threadMessages: Map<string, any[]> = new Map()
 
@@ -229,6 +235,43 @@ export async function POST(request: NextRequest) {
           .select('id')
           .eq('thread_id', threadId)
           .single()
+
+        // A NEW thread enters the shared store only if it is correspondence.
+        // A thread already in the store keeps syncing regardless — whether it
+        // stays visible is the operator's call (is_hidden), and re-judging it
+        // here would silently undo that call. A thread the operator has
+        // written in is correspondence by definition, whoever the other side
+        // is — machine signals on the counterparty do not outweigh a reply.
+        if (!existingConv) {
+          const operatorWroteHere = messages.some(
+            (m: any) => getDirection(
+              (m.payload?.headers || []).find((h: any) => h.name?.toLowerCase() === 'from')?.value,
+              userEmail
+            ) === 'outbound'
+          )
+          const everyInboundAutomated = messages.every((m: any) => {
+            const hdrs: Record<string, string> = {}
+            for (const h of m.payload?.headers || []) {
+              if (h.name && typeof h.value === 'string') hdrs[h.name] = h.value
+            }
+            const fromValue = hdrs['From'] ?? hdrs['from'] ?? ''
+            if (getDirection(fromValue, userEmail) === 'outbound') return true // judge inbound only
+            return looksAutomated({
+              counterpartyEmail: extractEmailAddress(fromValue),
+              headers: hdrs,
+              labelIds: m.labelIds || [],
+            })
+          })
+          // Known contact and operator-participation each override the
+          // machine signals — booking systems legitimately write from
+          // no-reply@, and a thread you replied in is correspondence.
+          const store =
+            knownContacts.has(clientEmail) || operatorWroteHere || !everyInboundAutomated
+          if (!store) {
+            threadsSkipped++
+            continue
+          }
+        }
 
         let conversationId: string
 
@@ -409,6 +452,11 @@ export async function POST(request: NextRequest) {
       } catch (threadError) {
         console.error(`Error processing thread ${threadId}:`, threadError)
       }
+    }
+
+    result.threads_skipped = threadsSkipped
+    if (threadsSkipped > 0) {
+      console.log('[Email Sync] Skipped', threadsSkipped, 'machine-mail thread(s) — not correspondence')
     }
 
     // Update sync state

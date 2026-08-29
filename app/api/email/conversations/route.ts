@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUserId, requireRole } from '@/lib/auth/current-org'
 import type { EmailConversation } from '@/types/unified'
 
 // Use service role for API routes to bypass RLS
@@ -11,8 +12,15 @@ const supabase = createClient(
 )
 
 // GET /api/email/conversations - List email conversations
+//
+// Role-gated to match the /inbox page (middleware only gates PAGES, so
+// without this any authenticated account — viewer included — could read
+// every stored email body straight off the API).
 export async function GET(request: NextRequest) {
   try {
+    const forbidden = await requireRole(['admin', 'manager', 'agent'])
+    if (forbidden) return forbidden
+
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || 'active'
     const search = sanitizeSearchTerm(searchParams.get('search')) || ''
@@ -56,9 +64,20 @@ export async function GET(request: NextRequest) {
       query = query.eq('client_id', clientId)
     }
 
-    // Filter out hidden conversations unless explicitly requested
+    // Hidden conversations belong to the person whose mailbox this is.
+    // Hiding is how personal mail is kept personal (and how the pre-scoping
+    // backlog was cleaned up), so include_hidden must not become the loophole
+    // that shows a colleague what was hidden — it reveals only YOUR hidden
+    // threads, alongside everything shared.
     if (!includeHidden) {
       query = query.or('is_hidden.is.null,is_hidden.eq.false')
+    } else {
+      const sessionUserId = await getCurrentUserId()
+      query = sessionUserId
+        ? query.or(
+            `is_hidden.is.null,is_hidden.eq.false,and(is_hidden.eq.true,user_id.eq.${sessionUserId})`
+          )
+        : query.or('is_hidden.is.null,is_hidden.eq.false')
     }
 
     // Filter by assigned agent
@@ -118,7 +137,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User ID required', success: false }, { status: 400 })
     }
 
-    // Check if conversation exists (including hidden ones - we'll unhide it)
+    // Check if conversation exists — including hidden ones, which STAY hidden.
     const { data: existing } = await supabase
       .from('email_conversations')
       .select('*')
@@ -131,12 +150,15 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString()
       }
 
-      // Unhide if hidden
-      if (existing.is_hidden) {
-        updates.is_hidden = false
-        updates.hidden_at = null
-        updates.hidden_by = null
-      }
+      // Deliberately NOT un-hiding on activity. Hiding is how personal mail
+      // is kept personal (hidden threads are owner-only), so a new message
+      // arriving must not resurface the thread for the whole team — a 2FA
+      // sender writes again every time the operator logs into something.
+      // Un-hiding is an explicit action (PATCH action: 'unhide'), a decision,
+      // not a side effect. The removed block was also broken in fact: it
+      // wrote hidden_at/hidden_by, columns email_conversations does not have,
+      // so PostgREST rejected the WHOLE update with PGRST204 — the same bug
+      // class as the delete fix (#193), on the opposite path.
 
       if (subject && subject !== existing.subject) updates.subject = subject
       if (last_message_snippet) updates.last_message_snippet = last_message_snippet
@@ -221,9 +243,11 @@ export async function PATCH(request: NextRequest) {
     } else if (action === 'unarchive') {
       updateData.status = 'active'
     } else if (action === 'unhide') {
+      // is_hidden only — hidden_at/hidden_by do not exist on this table, and
+      // writing them made PostgREST reject the whole update (PGRST204), so
+      // explicit un-hide has never actually worked. See the DELETE handler's
+      // note; #193 fixed the hide half of this same defect.
       updateData.is_hidden = false
-      updateData.hidden_at = null
-      updateData.hidden_by = null
     } else if (action === 'assign') {
       updateData.assigned_team_member_id = updates.assigned_team_member_id
       updateData.assigned_at = new Date().toISOString()

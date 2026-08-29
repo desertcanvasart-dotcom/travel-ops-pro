@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
+import { requireRole } from '@/lib/auth/current-org'
 import type { EmailMessage, EmailMessageFormData } from '@/types/unified'
 
 // Use service role for API routes to bypass RLS
@@ -10,8 +11,14 @@ const supabase = createClient(
 )
 
 // GET /api/email/messages - Get messages for a conversation
+//
+// Full stored bodies of the operator's mail. Role-gated to match the /inbox
+// page — middleware only gates pages, and this is the rawest read there is.
 export async function GET(request: NextRequest) {
   try {
+    const forbidden = await requireRole(['admin', 'manager', 'agent'])
+    if (forbidden) return forbidden
+
     const { searchParams } = new URL(request.url)
     const conversationId = searchParams.get('conversation_id')
     const threadId = searchParams.get('thread_id')

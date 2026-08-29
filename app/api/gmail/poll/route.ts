@@ -3,6 +3,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { getCurrentUserId } from '@/lib/auth/current-org'
+import { loadKnownContactEmails, looksAutomated } from '@/lib/email-scoping'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -111,6 +112,12 @@ export async function GET(request: NextRequest) {
       // Fetch details for new messages
       const newMessages = []
 
+      // Gate on the shared store, not on the owner's view: the response below
+      // still lists every new message (it is the owner reading their own
+      // mailbox), but machine mail addressed to them personally must not be
+      // WRITTEN into tables the whole team reads. See lib/email-scoping.ts.
+      const knownContacts = newMessageIds.length > 0 ? await loadKnownContactEmails(supabase) : new Set<string>()
+
       for (const messageId of newMessageIds.slice(0, 10)) { // Limit to 10
         try {
           const message = await gmail.users.messages.get({
@@ -194,6 +201,25 @@ export async function GET(request: NextRequest) {
                 .single()
 
               let conversationId = existingConv?.id
+
+              // A NEW inbound thread enters the shared store only if it is
+              // correspondence — a known contact, or a sender that does not
+              // look like machinery. An existing thread keeps syncing; hiding
+              // it is the operator's decision, not the classifier's.
+              if (!conversationId && direction === 'inbound') {
+                const hdrs: Record<string, string> = {}
+                for (const h of headers) {
+                  if (h.name && typeof h.value === 'string') hdrs[h.name] = h.value
+                }
+                const automated = looksAutomated({
+                  counterpartyEmail: clientEmail,
+                  headers: hdrs,
+                  labelIds: (message.data.labelIds || []) as string[],
+                })
+                if (automated && !knownContacts.has(clientEmail)) {
+                  continue
+                }
+              }
 
               if (!conversationId) {
                 const { data: newConv } = await supabase
