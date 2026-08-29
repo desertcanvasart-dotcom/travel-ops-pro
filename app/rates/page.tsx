@@ -2,6 +2,7 @@
 
 import { todayLocal } from '@/lib/today'
 import { useEffect, useState } from 'react'
+import { RATES_TAB_ORDER, firstTabWithData, type RatesTab } from '@/lib/rates/first-tab-with-data'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
@@ -271,6 +272,17 @@ export default function RatesPage() {
         }
 
         setRates(combinedData)
+
+        // Open on a tab that HAS something — see lib/rates/first-tab-with-data
+        // (audit AUT-M01: the hub opened on an empty Transportation tab while
+        // its own counters showed data on other tabs).
+        const firstWithData = firstTabWithData(
+          Object.fromEntries(
+            RATES_TAB_ORDER.map(tab => [tab, combinedData[tab].length])
+          ) as Record<RatesTab, number>
+        )
+        if (firstWithData) setActiveTab(firstWithData)
+
         setLoading(false)
       } catch (err) {
         console.error('Error loading rates:', err)
