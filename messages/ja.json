@@ -1212,7 +1212,8 @@
     "error": "エラー",
     "firstContactNote": "初回問い合わせ",
     "newTrip": "新規旅程",
-    "createFirstTrip": "最初の旅程を作成"
+    "createFirstTrip": "最初の旅程を作成",
+    "subtitle": "顧客プロフィールと旅行履歴を管理"
   },
   "communications": {
     "title": "コミュニケーション",

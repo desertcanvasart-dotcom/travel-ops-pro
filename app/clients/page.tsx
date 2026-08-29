@@ -440,8 +440,12 @@ export default function ClientsPage() {
                 <Users className="w-5 h-5 text-gray-400" />
                 {t('title')}
               </h1>
+              {/* Was {t('searchPlaceholder')} — the search box's own
+                  placeholder ("Search clients...") rendered as the page
+                  subtitle, which read as a second, dead search control
+                  beside Add Client (audit AUT-L01). */}
               <p className="mt-1 text-xs text-gray-500">
-                {t('searchPlaceholder')}
+                {t('subtitle')}
               </p>
             </div>
             <Link
