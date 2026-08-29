@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
 import { useLocale, useTranslations } from 'next-intl'
 import { Globe, Check, ChevronDown } from 'lucide-react'
 import { locales, localeNames, localeFlags, type Locale } from '@/i18n/config'
@@ -22,6 +23,10 @@ export function LanguageSelector({
   const currentLocale = useLocale() as Locale
   const t = useTranslations('settings')
   const [isOpen, setIsOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  // Closes on any press outside WITHOUT the old invisible backdrop, which
+  // swallowed that press — see lib/use-dismiss-on-outside.ts (AUT-W02).
+  useDismissOnOutside(isOpen, rootRef, () => setIsOpen(false))
 
   const handleSelect = (locale: Locale) => {
     if (locale === currentLocale) {
@@ -34,7 +39,7 @@ export function LanguageSelector({
 
   if (variant === 'compact') {
     return (
-      <div className={`relative ${className}`}>
+      <div className={`relative ${className}`} ref={rootRef}>
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
@@ -53,7 +58,6 @@ export function LanguageSelector({
 
         {isOpen && (
           <>
-            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
             <div className={`absolute right-0 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1 ${dropdownPosition === 'above' ? 'bottom-full mb-1' : 'mt-1'}`}>
               {locales.map((locale) => (
                 <button
@@ -80,7 +84,7 @@ export function LanguageSelector({
 
   if (variant === 'dropdown') {
     return (
-      <div className={`relative ${className}`}>
+      <div className={`relative ${className}`} ref={rootRef}>
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
@@ -95,7 +99,6 @@ export function LanguageSelector({
 
         {isOpen && (
           <>
-            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
             <div className="absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
               {locales.map((locale) => (
                 <button

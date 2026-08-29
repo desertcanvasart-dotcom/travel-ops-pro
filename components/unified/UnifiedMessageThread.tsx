@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -251,6 +252,11 @@ export function UnifiedMessageThread({
   const [sendNotice, setSendNotice] = useState<string | null>(null)
   const [agents, setAgents] = useState<Agent[]>([])
   const [showAgentSelector, setShowAgentSelector] = useState(false)
+  const agentSelectorRef = useRef<HTMLDivElement>(null)
+  // No backdrops on these two popovers: the old fixed-inset-0 layers
+  // swallowed the press that closed them — see lib/use-dismiss-on-outside.ts
+  // (AUT-W02).
+  useDismissOnOutside(showAgentSelector, agentSelectorRef, () => setShowAgentSelector(false))
   const [assigningAgent, setAssigningAgent] = useState(false)
 
   // Action state (delete, archive, mark as read)
@@ -263,6 +269,8 @@ export function UnifiedMessageThread({
   const [isTranslating, setIsTranslating] = useState(false)
   const [customerLanguage, setCustomerLanguage] = useState('es')
   const [showLanguageSelector, setShowLanguageSelector] = useState(false)
+  const languageSelectorRef = useRef<HTMLDivElement>(null)
+  useDismissOnOutside(showLanguageSelector, languageSelectorRef, () => setShowLanguageSelector(false))
   const [incomingTranslations, setIncomingTranslations] = useState<Record<string, string>>({})
   const [translatingMessageIds, setTranslatingMessageIds] = useState<Set<string>>(new Set())
   const [showOriginalMap, setShowOriginalMap] = useState<Record<string, boolean>>({})
@@ -864,7 +872,7 @@ export function UnifiedMessageThread({
 
           <div className="flex items-center gap-1.5">
             {/* Agent Selector — not for portal: see isPortal above. */}
-            <div className="relative" hidden={isPortal}>
+            <div className="relative" hidden={isPortal} ref={agentSelectorRef}>
               <button
                 type="button"
                 onClick={() => setShowAgentSelector(!showAgentSelector)}
@@ -891,7 +899,6 @@ export function UnifiedMessageThread({
 
               {showAgentSelector && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowAgentSelector(false)} />
                   <div className="absolute right-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto">
                     <button
                       type="button"
@@ -1210,7 +1217,7 @@ export function UnifiedMessageThread({
               {translationEnabled ? t('translationOn') : t('translate')}
             </button>
             {translationEnabled && (
-              <div className="relative">
+              <div className="relative" ref={languageSelectorRef}>
                 <button
                   type="button"
                   onClick={() => setShowLanguageSelector(!showLanguageSelector)}
@@ -1222,7 +1229,6 @@ export function UnifiedMessageThread({
                 </button>
                 {showLanguageSelector && (
                   <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowLanguageSelector(false)} />
                     <div className="absolute bottom-full left-0 mb-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
                       {QUICK_LANGUAGES.filter(l => l.code !== 'en').map(lang => (
                         <button
