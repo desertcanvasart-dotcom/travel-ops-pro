@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -169,7 +170,7 @@ export default function ActivityRatesContent() {
       const lowest = Math.min(...rate.tiers.map(t => t.rate_eur))
       return `${formatRate(lowest)}+`
     }
-    return formatRate(rate.base_rate_eur)
+    return formatRateInRowCurrency(rate.base_rate_eur, rate, formatRate)
   }
 
   const [rates, setRates] = useState<ActivityRate[]>([])
@@ -918,7 +919,7 @@ export default function ActivityRatesContent() {
                       <span className="text-sm font-bold text-green-600">{displayRate(rate)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold">{rate.rate_currency}</span>}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm text-gray-600">{formatRate(rate.base_rate_non_eur)}</span>
+                      <span className="text-sm text-gray-600">{formatRateInRowCurrency(rate.base_rate_non_eur, rate, formatRate)}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${

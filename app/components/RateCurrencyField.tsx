@@ -12,6 +12,7 @@
 // Plan: docs/plans/per-rate-currency.md.
 
 import { useTranslations } from 'next-intl'
+import { formatMoney } from '@/lib/currency-totals'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 
 interface RateCurrencyFieldProps {
@@ -66,4 +67,25 @@ export function rateCurrencyPatch(
 /** Badge text for list rows: the row's own currency, or nothing. */
 export function rateCurrencyBadge(row: { rate_currency?: string | null }): string | null {
   return row?.rate_currency || null
+}
+
+/**
+ * A list row's amount, in the row's OWN currency.
+ *
+ * Every rates list used to render the raw stored number through the org
+ * formatter — "600" saved as EGP displayed as €600.00 with a small EGP badge
+ * beside it, which the operator read (reasonably) as "my pounds became
+ * euros; the currency didn't save". It had saved; the SYMBOL was lying.
+ * A row with its own currency now shows in that currency, unconverted —
+ * the number on screen is the number in the contract. Rows without one keep
+ * the org formatter (converted display), exactly as before.
+ */
+export function formatRateInRowCurrency(
+  amount: number | null | undefined,
+  row: { rate_currency?: string | null },
+  orgFormat: (amount: number) => string
+): string {
+  const n = Number(amount ?? 0)
+  if (row?.rate_currency) return formatMoney(n, row.rate_currency)
+  return orgFormat(n)
 }

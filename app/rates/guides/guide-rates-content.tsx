@@ -5,6 +5,7 @@ import { useEffect, useState, useMemo } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
@@ -798,10 +799,10 @@ export default function GuideRatesContent() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm font-bold text-green-600">{formatRate(rate.base_rate_eur)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
+                      <span className="text-sm font-bold text-green-600">{formatRateInRowCurrency(rate.base_rate_eur, rate, formatRate)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm text-gray-600">{formatRate(rate.base_rate_non_eur)}</span>
+                      <span className="text-sm text-gray-600">{formatRateInRowCurrency(rate.base_rate_non_eur, rate, formatRate)}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -863,7 +864,7 @@ export default function GuideRatesContent() {
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                   <div>
                     <p className="text-xs text-gray-500">{t('table.eurRate')}</p>
-                    <p className="text-lg font-bold text-green-600">{formatRate(rate.base_rate_eur)}</p>
+                    <p className="text-lg font-bold text-green-600">{formatRateInRowCurrency(rate.base_rate_eur, rate, formatRate)}</p>
                   </div>
                   <div className="flex gap-1">
                     <button
@@ -896,7 +897,7 @@ export default function GuideRatesContent() {
                   )}
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="text-sm font-bold text-green-600">{formatRate(rate.base_rate_eur)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
+                  <span className="text-sm font-bold text-green-600">{formatRateInRowCurrency(rate.base_rate_eur, rate, formatRate)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
                   }`}>

@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
@@ -758,7 +759,7 @@ export default function FlightsContent() {
                     </div>
                   </td>
                   <td className="px-4 py-2 text-right">
-                    <span className="text-sm font-medium text-gray-900">{formatRate(rate.base_rate_eur)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
+                    <span className="text-sm font-medium text-gray-900">{formatRateInRowCurrency(rate.base_rate_eur, rate, formatRate)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
                   </td>
                   <td className="px-4 py-2 text-center">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${

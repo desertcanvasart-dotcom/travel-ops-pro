@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -461,6 +462,8 @@ export default function AttractionsContent() {
       const { rate_currency: pickedCurrency, ...restFormData } = formData
       const submitData = {
         ...restFormData,
+        // One price, both passport columns — see the form's note.
+        non_eur_rate: formData.eur_rate,
         supplier_id: formData.supplier_id || null,
         language: activeLanguage,
         ...rateCurrencyPatch(pickedCurrency, editingAttraction?.rate_currency),
@@ -789,7 +792,6 @@ export default function AttractionsContent() {
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.category')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.city')}</th>
                   <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.eurRate')}</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.nonEurRate')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">
                     <span className="flex items-center justify-center gap-1">
                       <Sparkles className="w-3.5 h-3.5 text-orange-500" />
@@ -838,14 +840,9 @@ export default function AttractionsContent() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm font-bold text-green-600">
-                      {attraction.fee_type === 'free' ? 'FREE' : formatRate(attraction.eur_rate || 0)}
+                      {attraction.fee_type === 'free' ? 'FREE' : formatRateInRowCurrency(attraction.eur_rate || 0, attraction, formatRate)}
                       </span>
                       {attraction.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold">{attraction.rate_currency}</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="text-sm font-semibold text-primary-600">
-                      {attraction.fee_type === 'free' ? 'FREE' : formatRate(attraction.non_eur_rate || 0)}
-                      </span>
                     </td>
                     {/* NEW: Add-on toggle column */}
                     <td className="px-4 py-3 text-center">
@@ -1100,23 +1097,11 @@ export default function AttractionsContent() {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('form.nonEurRate')} *
-                    </label>
-                    <input
-                      type="number"
-                      name="non_eur_rate"
-                      value={formData.non_eur_rate}
-                      onChange={handleChange}
-                      step="0.01"
-                      min="0"
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                      placeholder="0.00"
-                    />
-                  </div>
-
+                  {/* One price. An entrance fee does not vary by passport —
+                      the EU/non-EU split is real only for hotels and cruises
+                      (operator, 2026-08-30). Both columns are written with
+                      the same value so the pricing engine's passport lookup
+                      keeps working unchanged. */}
                   <RateCurrencyField
                     value={formData.rate_currency}
                     onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}

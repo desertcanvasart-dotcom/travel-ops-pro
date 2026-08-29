@@ -25,7 +25,8 @@
 // bulk-sheet configs on 2026-08-27, not inferred from names: percentages,
 // capacities and durations are deliberately absent.
 
-import { fetchExchangeRates, getExchangeRate, type ExchangeRates } from '@/lib/currency-service'
+import { getExchangeRate, type ExchangeRates } from '@/lib/currency-service'
+import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
 import { roundToCurrency } from '@/lib/currency-totals'
 import { normaliseRateCurrency } from '@/lib/org-rate-currency'
 
@@ -105,7 +106,11 @@ export function createRateNormalizer(runCurrency: string, deps?: {
 
   const loadRates = () => {
     if (!ratesPromise) {
-      ratesPromise = (deps?.getRates ?? (() => fetchExchangeRates(run)))().catch(err => {
+      // The org's own exchange_rates table merged over the external API —
+      // the API alone is ECB rates, which do not include EGP, and treating
+      // the operator's first real EGP entrance fees as missing is how this
+      // line earned its comment (lib/rates/fx-source.ts).
+      ratesPromise = (deps?.getRates ?? fetchRunExchangeRates)().catch(err => {
         console.warn('[rate-currency] FX fetch failed — differing-currency rates will be treated as missing:', err instanceof Error ? err.message : String(err))
         return null
       })
