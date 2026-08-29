@@ -1,6 +1,7 @@
 # Running Autoura on a customer's own server
 
-Status: **plan, not built.** Written 2026-08-28.
+Status: **T1 built and applied to production; T2–T5 outstanding.** Written
+2026-08-28, revised 2026-08-29.
 
 This app is what gets installed on a customer's server. That is a different
 thing from being deployed to Railway by the people who wrote it, and the
@@ -17,8 +18,8 @@ make one do not exist:
 |---|---|
 | A list of what to configure | **absent** — no `.env.example` |
 | An install procedure | **absent** — no `docs/SELF-HOSTING.md` |
-| A way to build the schema | **absent** — 125 SQL files in `migrations/`, hand-pasted into the Supabase editor in whatever order somebody remembers |
-| A record of which migrations ran | **absent** — no tracker table, so "is this database up to date?" is unanswerable |
+| A way to build the schema | **partly** — `scripts/migrate.mjs` applies them in order (T1). But see T3: the files cannot build a schema from nothing |
+| A record of which migrations ran | **done** — `schema_migrations`; production baselined 2026-08-29 (125 recorded, 0 pending) |
 | Proof a fresh install works | **absent** — nobody has ever built this schema from zero |
 | A way to see what went wrong remotely | **absent** |
 
@@ -42,7 +43,10 @@ and portable, and porting beats reinventing:
 - A from-scratch replay test in CI that builds the whole schema against a real
   Postgres on every run. **On the sibling this found six defects in historical
   migrations** — including an index predicate no Postgres would ever accept —
-  none of which mattered until somebody installed from scratch.
+  none of which mattered until somebody installed from scratch. **That
+  experience does not transfer directly**: the sibling's migrations could build
+  its schema and merely did it wrong in six places. Ours cannot build one at
+  all — see T3.
 - `.env.example`, `docs/SELF-HOSTING.md`, tagged releases.
 - The support toolkit built this week: `doctor.mjs`, a redacted support bundle,
   `job_runs`, a gated deep health probe.
@@ -60,7 +64,7 @@ proving somebody configured cron correctly.
 
 ## 4. Phases
 
-**T1 — the migration runner and the tracker.** ✅ **BUILT.** Port `migrate.mjs` +
+**T1 — the migration runner and the tracker.** ✅ **DONE — built, merged (#263) and applied to production 2026-08-29.** Port `migrate.mjs` +
 `migrate-core.mjs`. Add `schema_migrations`. Baseline this database — record all
 125 existing files as applied without running them, since they already are.
 Until this exists nothing else can be trusted, including "which version is this
@@ -94,17 +98,75 @@ customer on?".
 >
 > Anything that writes names the target database and asks first, unless `--yes`.
 >
-> **Still to do on the operator's side:** run `--baseline` against production.
-> Nothing has been run against a real database yet.
+> **Baselined against production 2026-08-29:** `125 recorded, 0 pending`, and a
+> second `--baseline` is a clean no-op. The runner is now proven end to end
+> against a real database.
+>
+> **Connection note, because it cost an hour.** Supabase's *direct* host
+> `db.<ref>.supabase.co` is IPv6-only, and macOS `getaddrinfo` will not return
+> the AAAA record to `pg` — you get `ENOTFOUND` even with working IPv6. Use the
+> **session pooler**: username must carry the project ref
+> (`postgres.<ref>`), port **5432** (session), never 6543 (transaction mode
+> breaks the `BEGIN`/`COMMIT` these files carry). `DATABASE_URL` is read by
+> nothing but this runner — it is not set on Railway, and the app authenticates
+> with `SUPABASE_SERVICE_ROLE_KEY`, so resetting the Postgres password does not
+> affect production.
 
 **T2 — the install procedure.** `.env.example` (every variable this app reads,
 with which are required) and `docs/SELF-HOSTING.md` (prerequisites, first
 install, upgrading, what to do when a migration fails). Both largely a port.
 
-**T3 — prove a fresh install works.** The from-scratch replay in CI. Expect it
-to fail the first time and expect that to be the point: 125 migrations written
-against a database that already existed have never been asked to build one.
-Fixing what it finds is T3's actual work, and it cannot be estimated in advance.
+**T3 — prove a fresh install works.** The from-scratch replay in CI.
+
+> **This phase was scoped wrongly and the estimate below replaces it.** The
+> original text said to expect the replay to fail the first time and to treat
+> fixing what it found as T3's work — modelled on the sibling, where the same
+> test surfaced six defects in historical files. Measured on 2026-08-29, this
+> repository is not in that situation:
+>
+> | | |
+> |---|---|
+> | objects in production | 177 |
+> | of those, never created by any migration | **114** |
+> | `CREATE TABLE` statements across all 125 files | 59 |
+> | tables `ALTER`ed by a migration that never creates them | **36** |
+>
+> There is **no `CREATE TABLE` anywhere** for `itineraries`, `clients`,
+> `invoices`, `payments`, `suppliers`, `expenses`, `commissions`,
+> `notifications`, `b2b_partners` or `content_library`.
+>
+> `migrations/` is not a schema definition. It is a change log for a database
+> that already existed and was built by hand. A from-scratch replay will not
+> "find six defects" — **it dies on the first `ALTER TABLE` against a table
+> nothing created**, and it will keep dying until a schema exists to alter.
+
+T3's real first task is therefore to **reconstruct the missing origin**, not to
+fix defects:
+
+1. `pg_dump --schema-only --no-owner --no-privileges` the production database
+   and commit the result as the earliest migration. That file *is* the 114
+   objects nobody ever wrote a migration for.
+2. Replay = that baseline, then the 125 existing files in order. Only once that
+   runs green end to end does the replay start doing the job the sibling's does,
+   which is catching defects in new migrations.
+3. Expect the dump to need hand-editing: Supabase-managed surfaces (storage
+   buckets, `auth.*` references, extensions, realtime publications, grants)
+   do not replay cleanly against a bare Postgres. The sibling exempts seven
+   files for exactly this reason; budget for the same treatment here.
+
+**The trap, now that production is baselined (2026-08-29):** the tracker holds
+the 125 existing names. Adding a baseline-schema file makes it show as PENDING
+on production, and a plain `migrate` run would try to *apply* it — creating
+tables that already exist. So the baseline file must either be idempotent
+throughout (`CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE VIEW`) or be
+recorded on production without running, the same way `--baseline` records the
+others. Decide which before the file is committed, not after.
+
+**Estimate.** The original said this "cannot be estimated in advance", which was
+true when nobody had looked. It is now: step 1 is an afternoon, step 3 is the
+open-ended part, and neither can start until someone can run `pg_dump` against
+production — which needs the database password and a `postgresql` client
+version matching the server.
 
 **T4 — the support toolkit.** Port `doctor.mjs`, the support bundle, the deep
 health probe and `job_runs` from the sibling. The redaction rules and their
@@ -121,8 +183,10 @@ T1 → T2 → T3 → T4 → T5, and the order is not negotiable in one place: **
 before T4.** A support bundle whose findings say "3 migrations pending" is only
 useful once applying those migrations is a command rather than an afternoon.
 
-T2 can start alongside T1; T5 waits for T3, because tagging a release that
-cannot be installed from scratch would be tagging a promise we have not checked.
+T1 is done, so **T2 is the next thing to pick up**. T5 waits for T3, because
+tagging a release that cannot be installed from scratch would be tagging a
+promise we have not checked — and T3 has just turned out to be the largest
+phase, not the routine one it was written as.
 
 ## 6. What NOT to do
 
@@ -139,7 +203,7 @@ make a customer configure something they do not need.
 
 | Risk | Mitigation |
 |---|---|
-| The replay finds a lot | Expect it. It is T3's purpose, and every defect it finds is one a customer would have hit on day one instead |
-| Baselining the wrong database | The runner refuses `.env.local`'s project without an explicit override (the sibling's guard, ported with it) |
+| The replay finds a lot | Understated. It finds that 114 of 177 objects have no migration at all, so T3 begins by reconstructing a baseline schema from `pg_dump`, not by fixing defects. Measured 2026-08-29 — see T3 |
+| Baselining the wrong database | Built, but differently than described here: the runner refuses a database that looks like autoura-saas (`tenants` but no `organizations`), refuses `--baseline` on an empty database, and names the target and asks before any write. The sibling has no such guard to port — it was written here |
 | A customer installs from `main` rather than a tag | T5, and `/api/version` in the support bundle so we always know what they are running |
 | Two products drift into two support toolkits | Port T4 as a port, not a rewrite. The redaction rules are the part that must not diverge |
