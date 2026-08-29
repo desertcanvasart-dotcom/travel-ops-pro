@@ -20,7 +20,7 @@ install, but two things are worth knowing before you commit to one.
 
 ```bash
 git clone <this repo>
-git fetch --tags && git checkout v2026.08.29   # a release, not main
+git fetch --tags && git checkout <latest tag>   # a release, not main
 cd travel-ops-pro
 npm ci
 cp .env.example .env.local     # then fill it in
@@ -32,8 +32,8 @@ rather than maintained by hand, and a test fails if the two drift apart.
 Two entries there are easy to miss and both bite silently:
 
 - **`CRON_IN_PROCESS=true`** — required off Railway. See "Scheduled jobs".
-- **`REVIEW_URL`** — unset, your customers are sent to another agency's review
-  page. See "Known limitations".
+- **`REVIEW_URL`** — unset, the post-trip thank-you message carries no review
+  link at all. It no longer falls back to anyone else's.
 
 ### Build the schema
 
