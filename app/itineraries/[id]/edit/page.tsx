@@ -315,7 +315,6 @@ export default function ItineraryEditorPage() {
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
   // Day IDs whose Transport details panel is expanded (B3 rule flags).
   const [expandedTransportPanels, setExpandedTransportPanels] = useState<Set<string>>(new Set())
-  const [showAdvancedPackages, setShowAdvancedPackages] = useState(false)
   const [draggedDay, setDraggedDay] = useState<string | null>(null)
   
   // Services & Pricing State
@@ -1426,58 +1425,32 @@ export default function ItineraryEditorPage() {
 
       {/* PACKAGE TYPE SELECTOR */}
       <div className="bg-white rounded-xl p-5 mb-5 shadow-sm">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex items-center gap-2 mb-3">
           <h3 className="text-sm font-semibold text-gray-900">{t('packageType')}</h3>
-          <button
-            onClick={() => setShowAdvancedPackages(!showAdvancedPackages)}
-            className="text-sm text-gray-500 hover:text-[#647C47] flex items-center gap-1"
-          >
-            {showAdvancedPackages ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            {showAdvancedPackages ? t('hide') : t('show')} {t('advancedOptions')}
-          </button>
         </div>
-        
-        <div className="grid grid-cols-3 gap-3 mb-3">
-          {PACKAGE_TYPES.filter(p => !p.advanced).map(pkg => (
+
+        {/* Compact chips, one row, matching the pricing grid's package
+            picker — the big card grid took a third of the screen for a
+            one-line choice, and at chip size the old Advanced Options
+            toggle only hid four tiny buttons (it had Full Package, the
+            most common product, behind it). Each card's description lives
+            on as the chip's tooltip. */}
+        <div className="flex flex-wrap gap-1.5">
+          {PACKAGE_TYPES.map(pkg => (
             <button
               key={pkg.id}
               onClick={() => setItinerary({ ...itinerary, package_type: pkg.id })}
-              className={`p-4 rounded-xl border-2 text-center transition-all ${
+              title={t(`packageTypes.${pkg.id}.desc`)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
                 itinerary.package_type === pkg.id
-                  ? 'border-[#647C47] bg-[#e8ede3]'
-                  : 'border-gray-200 hover:border-[#b8c9a8] hover:bg-[#f4f7f1]'
+                  ? 'bg-[#647C47] border-[#4a5c35] text-white shadow-sm'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
               }`}
             >
-              <div className="text-2xl mb-1">{pkg.icon}</div>
-              <div className={`text-sm font-semibold ${itinerary.package_type === pkg.id ? 'text-[#4a5c35]' : 'text-gray-700'}`}>
-                {t(`packageTypes.${pkg.id}.name`)}
-              </div>
-              <div className="text-xs text-gray-500 mt-0.5">{t(`packageTypes.${pkg.id}.desc`)}</div>
+              {pkg.icon} {t(`packageTypes.${pkg.id}.name`)}
             </button>
           ))}
         </div>
-        
-        {showAdvancedPackages && (
-          <div className="grid grid-cols-3 gap-3 pt-3 border-t border-gray-200">
-            {PACKAGE_TYPES.filter(p => p.advanced).map(pkg => (
-              <button
-                key={pkg.id}
-                onClick={() => setItinerary({ ...itinerary, package_type: pkg.id })}
-                className={`p-4 rounded-xl border-2 text-center transition-all ${
-                  itinerary.package_type === pkg.id
-                    ? 'border-[#647C47] bg-[#e8ede3]'
-                    : 'border-gray-200 hover:border-[#b8c9a8] hover:bg-[#f4f7f1]'
-                }`}
-              >
-                <div className="text-2xl mb-1">{pkg.icon}</div>
-                <div className={`text-sm font-semibold ${itinerary.package_type === pkg.id ? 'text-[#4a5c35]' : 'text-gray-700'}`}>
-                  {t(`packageTypes.${pkg.id}.name`)}
-                </div>
-                <div className="text-xs text-gray-500 mt-0.5">{t(`packageTypes.${pkg.id}.desc`)}</div>
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* GUIDE TOGGLE */}
         <div className="mt-4 pt-4 border-t border-gray-200">
