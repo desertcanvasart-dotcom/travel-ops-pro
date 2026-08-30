@@ -89,8 +89,33 @@ export default function TourProgramsPage() {
           <li><strong>Variation Name</strong> &mdash; e.g., &ldquo;Standard English&rdquo; or &ldquo;Deluxe Japanese&rdquo;</li>
           <li><strong>Budget Tier</strong> &mdash; Standard, Deluxe, or Luxury</li>
           <li><strong>Language</strong> &mdash; Guide language for the tour</li>
-          <li><strong>Calculator Link</strong> &mdash; Click to open the B2B Price Calculator for this variation</li>
+          <li><strong>Options</strong> &mdash; The upgrades and add-ons this variation sells (see below)</li>
+          <li><strong>Price</strong> &mdash; Opens the B2B Price Calculator for this variation</li>
         </ul>
+      </section>
+
+      {/* Options & Upgrades */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Options &amp; Upgrades</h2>
+        <p className="text-gray-600 mb-3">
+          Optional extras &mdash; a balloon ride, an Abu Simbel excursion, a room upgrade &mdash; belong to a
+          <strong> variation</strong>, not to the programme as a whole: a Standard private trip and a Deluxe group
+          trip can sell different upgrades at different prices. Open them from
+          <strong> Tours &rarr; Tour Templates</strong>, expand the programme, and click <strong>Options</strong> on
+          the variation row.
+        </p>
+        <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li><strong>Included vs optional</strong> &mdash; move a service between the two; a service in the price
+            is costed like any other, an option is offered separately</li>
+          <li><strong>Option price</strong> &mdash; set one and that IS the price the customer pays: options are
+            priced <em>off-margin</em>, never marked up. Leave it blank and the option is priced from its cost plus
+            your usual margin, like everything else</li>
+        </ul>
+        <Tip>
+          Where an accepted option lands depends on one thing &mdash; whether the price has been agreed. Before:
+          it becomes a service on the quote or itinerary. After: it is a booking extra, because the booking total
+          is frozen and an extra has to move it deliberately (see <Link href="/docs/bookings" className="text-primary-600 hover:underline">Bookings</Link>).
+        </Tip>
       </section>
 
       {/* Template Status */}
