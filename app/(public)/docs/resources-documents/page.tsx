@@ -74,6 +74,8 @@ export default function ResourcesDocumentsPage() {
               <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">Itinerary PDF</td><td className="px-4 py-2.5">Day-by-day trip plan to send to clients</td></tr>
               <tr className="border-b border-gray-100 bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Invoice PDF</td><td className="px-4 py-2.5">Professional billing document</td></tr>
               <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">Contract</td><td className="px-4 py-2.5">Booking agreement with terms and conditions</td></tr>
+              <tr className="border-b border-gray-100 bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Ops Sheet</td><td className="px-4 py-2.5">Internal day-by-day run sheet for the operations team</td></tr>
+              <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">日程表</td><td className="px-4 py-2.5">Customer-facing Japanese day-schedule, per-customer template</td></tr>
               <tr className="border-b border-gray-100 bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Receipt</td><td className="px-4 py-2.5">Payment confirmation</td></tr>
               <tr><td className="px-4 py-2.5 font-medium">Supplier Documents</td><td className="px-4 py-2.5">Vouchers and confirmations for suppliers</td></tr>
             </tbody>

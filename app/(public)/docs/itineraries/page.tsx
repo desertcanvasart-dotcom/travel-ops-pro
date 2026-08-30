@@ -130,6 +130,9 @@ export default function ItinerariesPage() {
               <tr className="border-b border-gray-100 bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Generate Commissions</td><td className="px-4 py-2.5">Calculates commissions for all services</td></tr>
               <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">Generate Tasks</td><td className="px-4 py-2.5">Uses AI to create operational tasks</td></tr>
               <tr><td className="px-4 py-2.5 font-medium">Generate Documents</td><td className="px-4 py-2.5">Creates contracts and other documents</td></tr>
+              <tr className="bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Create Share Link</td><td className="px-4 py-2.5">A private live link for the client &mdash; see below</td></tr>
+              <tr><td className="px-4 py-2.5 font-medium">Ops Sheet</td><td className="px-4 py-2.5">Internal operations PDF &mdash; the day-by-day run sheet for your team</td></tr>
+              <tr className="bg-gray-50/50"><td className="px-4 py-2.5 font-medium">日程表 (Itinerary Doc)</td><td className="px-4 py-2.5">The customer-facing Japanese day-schedule document</td></tr>
             </tbody>
           </table>
         </div>
@@ -138,16 +141,57 @@ export default function ItinerariesPage() {
       {/* Assigning Resources */}
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Assigning Resources</h2>
-        <p className="text-gray-600 mb-3">On the itinerary detail page, you can assign:</p>
+        <p className="text-gray-600 mb-3">The assignment panel on the itinerary detail page covers every resource type, each with its own Add flow:</p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li>A <strong>Guide</strong> from your guides database (with language spoken, daily rate)</li>
-          <li>A <strong>Vehicle</strong> from your transportation database</li>
-          <li><strong>Pickup location</strong> and <strong>pickup time</strong></li>
+          <li><strong>Guides</strong> &mdash; language spoken and daily rate come from your guides database</li>
+          <li><strong>Vehicles</strong> &mdash; from your transportation database, with pickup location and time</li>
+          <li><strong>Hotels</strong> and <strong>Restaurants</strong></li>
+          <li><strong>Nile Cruises</strong></li>
+          <li><strong>Airport Assistants</strong> and <strong>Hotel Assistants</strong></li>
         </ul>
         <Tip>
-          The system checks for scheduling conflicts and warns you if a guide or vehicle is already booked on those dates.
+          Assignment is conflict-aware: the system checks the calendar and warns when a guide, vehicle or other resource is already booked on those dates.
         </Tip>
-        <ScreenshotPlaceholder caption="Resource assignment section showing guide and vehicle selection with conflict warnings" />
+        <ScreenshotPlaceholder caption="Resource assignment panel showing all resource types with conflict warnings" />
+      </section>
+
+      {/* Trip Owner */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Trip Owner</h2>
+        <p className="text-gray-600 mb-3">
+          Every itinerary names the <Link href="/docs/team-members" className="text-primary-600 hover:underline">team member</Link> responsible for it via the <strong>Trip owner</strong> dropdown on the detail page. An unowned trip shows &ldquo;Nobody owns this trip yet&rdquo; &mdash; treat that as a to-do, not a state: the owner is who the dashboard, follow-ups and your colleagues hold accountable.
+        </p>
+      </section>
+
+      {/* Client Share Links */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Client Share Links</h2>
+        <p className="text-gray-600 mb-3">
+          Instead of a PDF snapshot, <strong>Create Share Link</strong> gives the client a private live page of their itinerary:
+        </p>
+        <ol className="list-decimal list-inside space-y-2 text-gray-700">
+          <li>Click <strong>Create Share Link</strong> on the itinerary detail page</li>
+          <li>Copy the generated link (a long, unguessable address) and send it by WhatsApp or email</li>
+          <li>The client sees the trip laid out day by day &mdash; and when you edit the itinerary, their link shows the updated version, no re-sending</li>
+        </ol>
+        <ul className="list-disc list-inside space-y-1 text-gray-700 mt-3">
+          <li>The page is read-only and shows client-facing content only &mdash; never your costs, margins or internal notes</li>
+          <li>Links can be revoked from the same place; a revoked link stops working immediately</li>
+        </ul>
+        <Tip>
+          A share link is best while the trip is still being shaped &mdash; it always shows the latest version. Once things are agreed, the PDF is the fixed record.
+        </Tip>
+      </section>
+
+      {/* Trip documents */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Ops Sheet, Contract &amp; 日程表</h2>
+        <p className="text-gray-600 mb-3">Three documents generate from the itinerary, for three different readers:</p>
+        <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li><strong>Ops Sheet</strong> &mdash; the internal run sheet for your operations team: day by day, who is assigned, what is booked, pickup details. Never sent to the client.</li>
+          <li><strong>Contract</strong> &mdash; the booking agreement with terms, generated under your company letterhead (see <Link href="/docs/resources-documents" className="text-primary-600 hover:underline">Documents</Link>).</li>
+          <li><strong>日程表 (Itinerary Doc)</strong> &mdash; the customer-facing Japanese day-schedule: check-in/check-out pairing per stay, the 作成日 date, rendered with the customer&apos;s own template where one is set.</li>
+        </ul>
       </section>
 
       {/* Navigation */}
