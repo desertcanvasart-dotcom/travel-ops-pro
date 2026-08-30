@@ -824,6 +824,24 @@ export default function TourManagerContent() {
   const [showModal, setShowModal] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<TourTemplate | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('table')
+
+  /**
+   * A tour type's label, or the value itself made readable.
+   *
+   * next-intl returns the KEY PATH when a message is missing, and a key path
+   * is truthy — so `t(...) || raw` never fell back and a template carrying a
+   * value outside the app's own type list rendered literally as
+   * "tours.tourTypes.cultural" in the Type column. Seen in production.
+   */
+  const tourTypeLabel = (raw: string | null | undefined): string => {
+    if (!raw) return ''
+    const key = `tourTypes.${raw}`
+    const translated = t(key)
+    if (!translated || translated.endsWith(key)) {
+      return raw.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+    }
+    return translated
+  }
   const [toasts, setToasts] = useState<Toast[]>([])
   const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'basic' | 'details' | 'variations'>('basic')
@@ -1518,7 +1536,7 @@ export default function TourManagerContent() {
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium">
-                            {t(`tourTypes.${template.tour_type}`) || template.tour_type}
+                            {tourTypeLabel(template.tour_type)}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -1619,21 +1637,30 @@ export default function TourManagerContent() {
                                             and optional_price_override could
                                             not be set from anywhere in the app
                                             — see docs/plans/extras-and-upgrades.md §6a. */}
+                                        {/* LABELLED, not a bare icon. The
+                                            operator could not find where
+                                            options and upgrades are authored
+                                            (2026-08-30) — this 16px sparkle,
+                                            inside a collapsed programme card,
+                                            was the only entrance in the whole
+                                            app. A word costs nothing here. */}
                                         <Link
                                           href={`/tours/variations/${variation.id}/options`}
-                                          className="p-1.5 text-[#647C47] hover:bg-[#e8ede3] rounded transition-colors"
-                                          title="Options this programme sells"
+                                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-[#647C47] border border-[#b8c9a8] hover:bg-[#e8ede3] rounded transition-colors whitespace-nowrap"
+                                          title="Options and upgrades this programme sells"
                                           onClick={(e) => e.stopPropagation()}
                                         >
-                                          <Sparkles className="w-4 h-4" />
+                                          <Sparkles className="w-3.5 h-3.5" />
+                                          Options
                                         </Link>
                                         <Link
                                           href={`/b2b/calculator/${variation.id}`}
-                                          className="p-1.5 text-green-600 hover:bg-green-100 rounded transition-colors"
-                                          title="Calculate Price"
+                                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-green-700 border border-green-200 hover:bg-green-50 rounded transition-colors whitespace-nowrap"
+                                          title="Calculate price for this variation"
                                           onClick={(e) => e.stopPropagation()}
                                         >
-                                          <Calculator className="w-4 h-4" />
+                                          <Calculator className="w-3.5 h-3.5" />
+                                          Price
                                         </Link>
                                       </div>
                                     </div>
