@@ -89,10 +89,18 @@ describe('createRateNormalizer', () => {
     expect(n.misses).toHaveLength(1)
   })
 
-  it('an unknown currency code behaves as NULL — the org default, untouched', async () => {
+  it('an unknown currency code is NEUTRALISED, not passed through raw', async () => {
+    // This used to pin the softer choice — unknown code = org default,
+    // untouched. That let a row marked 'BTC' carry its raw 100 into a USD
+    // sum, which is exactly the never-guess failure this module's header
+    // promises to prevent. A PRESENT code we cannot honour is a miss:
+    // the row prices to nothing and the miss is reported, same as an
+    // unbackable conversion. (Absent/null still means the org default.)
     const rows = [{ id: 1, base_rate_eur: 100, rate_currency: 'BTC' }]
-    const n = usd({ getRates: async () => { throw new Error('must not be called') } })
-    expect(await n.normalize('meal_rates', rows)).toBe(rows)
+    const n = usd()
+    const out = await n.normalize('meal_rates', rows)
+    expect(out?.[0].base_rate_eur).toBeNull()
+    expect(n.misses).toEqual([{ table: 'meal_rates', id: 1, currency: 'BTC' }])
   })
 
   it('converts hotel season rates AND the flat fallback — 5000 EGP/night → $100', async () => {

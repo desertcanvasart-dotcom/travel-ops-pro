@@ -166,6 +166,16 @@ export function createRateNormalizer(runCurrency: string, deps?: {
     return copy as T
   }
 
+  // A rate_currency that is PRESENT but not in the vocabulary. It cannot be
+  // converted and it must not pass through raw — a row marked 'XXX' whose
+  // 1000 lands in a USD sum as $1000 is precisely the failure this module
+  // exists to prevent. Distinct from null/absent, which genuinely means
+  // "the org rate currency".
+  const unknownCurrency = (row: Record<string, unknown>): boolean => {
+    const v = row?.rate_currency
+    return v != null && String(v).trim() !== '' && normaliseRateCurrency(v) === null
+  }
+
   return {
     misses,
     async normalize(table, rows) {
@@ -173,12 +183,13 @@ export function createRateNormalizer(runCurrency: string, deps?: {
       // Fast path: nothing to convert → the very same array back.
       const needs = rows.some(r => {
         const cur = normaliseRateCurrency(r?.rate_currency)
-        return cur !== null && cur !== run
+        return (cur !== null && cur !== run) || unknownCurrency(r)
       })
       if (!needs) return rows
 
       const rates = await loadRates()
       return rows.map(row => {
+        if (unknownCurrency(row)) return neutralise(table, row)
         const cur = normaliseRateCurrency(row?.rate_currency)
         if (cur === null || cur === run) return row
         const factor = rates ? getExchangeRate(cur, run, rates) : null
