@@ -1,6 +1,7 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
+import { formatMoney } from '@/lib/currency-totals'
 import { useEffect, useState } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
@@ -565,18 +566,25 @@ export default function AttractionsContent() {
   const activeAttractions = attractions.filter(a => a.is_active).length
   const addonAttractions = attractions.filter(a => a.is_addon).length  // NEW
   const standardAttractions = attractions.filter(a => !a.is_addon).length  // NEW
-  const avgRate = attractions.length > 0 
-  // Only rows entered in the org currency average meaningfully — summing a
-  // raw 600 (EGP) with a raw 22 (org currency) produced the ¥44,817 header
-  // fiction. Rows with their own currency are excluded rather than
-  // converted: a stat, not an exchange desk.
-  ? (() => {
-      const orgRows = attractions.filter(a => !a.rate_currency)
-      return orgRows.length
-        ? (orgRows.reduce((sum, a) => sum + (a.eur_rate || 0), 0) / orgRows.length).toFixed(2)
-        : '—'
-    })()
-  : '0.00'
+  // An average is only meaningful within ONE currency — summing a raw 600
+  // (EGP) with a raw 22 (org currency) produced the ¥44,817 header fiction.
+  // Average the org-currency rows when there are any; otherwise, if every
+  // row shares a single entry currency (an all-EGP list, say), average in
+  // THAT currency; mixed currencies get an honest dash. Never converted:
+  // a stat, not an exchange desk. (And null, not '—', out of the compute —
+  // formatting a dash as a number was the ¥NaN card.)
+  const avgOf = (rows: Attraction[]) =>
+    rows.reduce((sum, a) => sum + (a.eur_rate || 0), 0) / rows.length
+  const avgRate: { amount: number; currency: string | null } | null = (() => {
+    if (attractions.length === 0) return null
+    const orgRows = attractions.filter(a => !a.rate_currency)
+    if (orgRows.length) return { amount: avgOf(orgRows), currency: null }
+    const currencies = new Set(attractions.map(a => a.rate_currency))
+    if (currencies.size === 1) {
+      return { amount: avgOf(attractions), currency: attractions[0].rate_currency! }
+    }
+    return null
+  })()
 
   if (loading) {
     return (
@@ -712,7 +720,13 @@ export default function AttractionsContent() {
               <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
             </div>
             <p className="text-xs text-gray-600">{t('stats.avgEurRate')}</p>
-            <p className="text-2xl font-bold text-gray-900">{formatRate(Number(avgRate))}</p>
+            <p className="text-2xl font-bold text-gray-900">
+              {avgRate === null
+                ? '—'
+                : avgRate.currency
+                  ? formatMoney(avgRate.amount, avgRate.currency)
+                  : formatRate(avgRate.amount)}
+            </p>
           </div>
         </div>
 
