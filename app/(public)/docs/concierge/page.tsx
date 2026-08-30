@@ -13,6 +13,15 @@ export default function ConciergeBriefsDocsPage() {
       </nav>
 
       <h1 className="text-3xl font-bold text-gray-900 mb-4">Concierge Briefs</h1>
+
+      {/* DOC-01 (gap analysis): the module is documented but can be switched
+          off per account — and a new user following this page would hunt for
+          a sidebar item that is not there. Say so before anything else. */}
+      <div className="mb-6 bg-amber-50 border-l-4 border-amber-400 rounded-r-lg p-4 text-sm text-amber-800">
+        <strong>Optional module.</strong> Concierge Briefs can be switched off per account. If you don&apos;t
+        see it in your sidebar under Communications, it is disabled for your organization — ask your
+        administrator to enable it. Everything below describes the module when it is on.
+      </div>
       <p className="text-gray-600 mb-8">
         Concierge Briefs are structured trip requests that arrive from an AI concierge or partner channel. Each brief carries the traveller details, dates, destinations, interests, and constraints already captured &mdash; so instead of re-keying an enquiry, you triage it against a response deadline and promote it straight into a conversation thread or an itinerary.
       </p>
