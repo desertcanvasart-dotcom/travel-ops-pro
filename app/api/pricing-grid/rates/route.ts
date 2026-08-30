@@ -3,6 +3,9 @@
 // structured by grid slot for dropdown population.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { createRateNormalizer } from '@/lib/rates/rate-currency'
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 
@@ -40,6 +43,37 @@ export async function GET(request: NextRequest) {
       supabase.from('b2b_transport_packages').select('*').eq('is_active', true),
       supabase.from('flight_rates').select('*').eq('is_active', true),
     ])
+
+    // NORMALISE EVERY ROW TO THE ORG RATE CURRENCY before any option is
+    // shaped. The engine paths have done this since per-rate-currency
+    // shipped; the grid read RAW rows — so an entrance fee entered as
+    // 600 EGP became "600" in the grid's run currency, summed beside USD
+    // rates into a total that was confidently wrong by ~50x. Same
+    // normalizer, same policy: a row whose currency cannot be converted is
+    // neutralised (prices to 0 and shows as such) rather than guessed.
+    const rateCurrency = await getOrgRateCurrency(supabase, await getCurrentOrgId())
+    const normalizer = createRateNormalizer(rateCurrency)
+    const [
+      nTransport, nGuides, nAirport, nHotelSvc, nTipping, nActivities,
+      nAccommodation, nEntrance, nMeals, nCruises, nCruisePkgs, nFlights,
+    ] = await Promise.all([
+      normalizer.normalize('transportation_rates', transportRates),
+      normalizer.normalize('guide_rates', guideRates),
+      normalizer.normalize('airport_staff_rates', airportRates),
+      normalizer.normalize('hotel_staff_rates', hotelServiceRates),
+      normalizer.normalize('tipping_rates', tippingRates),
+      normalizer.normalize('activity_rates', activityRates),
+      normalizer.normalize('accommodation_rates', accommodationRates),
+      normalizer.normalize('entrance_fees', entranceFees),
+      normalizer.normalize('meal_rates', mealRates),
+      normalizer.normalize('nile_cruises', cruiseRates),
+      normalizer.normalize('b2b_transport_packages', cruiseTransportPkgs),
+      normalizer.normalize('flight_rates', flightRates),
+    ])
+    if (normalizer.misses.length) {
+      console.warn('[pricing-grid rates] rows neutralised — currency not convertible:',
+        normalizer.misses.map(m => `${m.table}:${m.id}(${m.currency})`).join(', '))
+    }
 
     // Map to RateOption format per slot
     // Vehicle tiers: each transport row expands into up to 5 options (one per vehicle type)
@@ -89,21 +123,21 @@ export async function GET(request: NextRequest) {
     const rates = {
       route: [
         // Day tour vehicles (merged into route — all transport in one slot)
-        ...(transportRates || [])
+        ...(nTransport || [])
           .filter((r: any) => r.service_type === 'day_tour')
           .flatMap((r: any) => {
             const label = r.route_name || r.service_code || `${r.origin_city || r.city || ''} Day Tour`
             return expandTiers(r, label)
           }),
         // All other transport types (airport transfers, intercity, city transfers, dinner transfers, etc.)
-        ...(transportRates || [])
+        ...(nTransport || [])
           .filter((r: any) => r.service_type !== 'day_tour')
           .flatMap((r: any) => {
             const label = r.route_name || `${r.origin_city || ''} → ${r.destination_city || ''}`.trim() || r.service_code
             return expandTiers(r, label)
           }),
         // Cruise transport packages (bundled sightseeing vehicle for cruise days)
-        ...(cruiseTransportPkgs || []).map((r: any) => ({
+        ...(nCruisePkgs || []).map((r: any) => ({
           id: r.id,
           name: `${r.package_name} (${r.origin_city}→${r.destination_city}, ${r.duration_days}d)`,
           rateEur: toNum(r.sedan_rate),
@@ -120,7 +154,7 @@ export async function GET(request: NextRequest) {
         })),
       ],
 
-      guide: (guideRates || []).map((r: any) => ({
+      guide: (nGuides || []).map((r: any) => ({
         id: r.id,
         name: `${r.guide_language || 'Guide'} (${r.guide_type || 'Egyptologist'})`,
         rateEur: toNum(r.base_rate_eur || r.rate_eur),
@@ -129,7 +163,7 @@ export async function GET(request: NextRequest) {
         details: r.guide_language,
       })),
 
-      airport_services: (airportRates || []).map((r: any) => ({
+      airport_services: (nAirport || []).map((r: any) => ({
         id: r.id,
         name: `${r.airport_code} — ${r.direction || 'both'} (${r.airport_code})`,
         rateEur: toNum(r.rate_eur),
@@ -138,7 +172,7 @@ export async function GET(request: NextRequest) {
         details: `${r.direction || 'both'} | ${r.description || ''}`.trim(),
       })),
 
-      hotel_services: (hotelServiceRates || []).map((r: any) => {
+      hotel_services: (nHotelSvc || []).map((r: any) => {
         // Build a readable name from service_type + category + destination
         const typeLabel = (r.service_type || 'service').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
         const catLabel = r.hotel_category && r.hotel_category !== 'all' ? ` (${r.hotel_category})` : ''
@@ -154,7 +188,7 @@ export async function GET(request: NextRequest) {
         }
       }),
 
-      tipping: (tippingRates || []).map((r: any) => ({
+      tipping: (nTipping || []).map((r: any) => ({
         id: r.id,
         name: r.role || r.service_code || 'Tip',
         rateEur: toNum(r.rate_eur || r.amount_eur),
@@ -162,7 +196,7 @@ export async function GET(request: NextRequest) {
         details: r.description,
       })),
 
-      boat_rides: (activityRates || [])
+      boat_rides: (nActivities || [])
         .filter((r: any) => /boat|felucca|motor/i.test(r.activity_name || r.category || ''))
         .map((r: any) => ({
           id: r.id,
@@ -173,7 +207,7 @@ export async function GET(request: NextRequest) {
           details: r.pricing_type,
         })),
 
-      accommodation: (accommodationRates || []).map((r: any) => ({
+      accommodation: (nAccommodation || []).map((r: any) => ({
         id: r.id,
         name: `${r.property_name} ${r.city} (${r.tier} | ${r.board_basis || 'BB'})`,
         rateEur: toNum(r.pp_double_eur),
@@ -185,7 +219,7 @@ export async function GET(request: NextRequest) {
         single_supp_non_eur: toNum(r.single_supp_non_eur),
       })),
 
-      entrance_fees: (entranceFees || []).map((r: any) => ({
+      entrance_fees: (nEntrance || []).map((r: any) => ({
         id: r.id,
         name: r.attraction_name,
         rateEur: toNum(r.eur_rate),
@@ -194,7 +228,7 @@ export async function GET(request: NextRequest) {
         category: r.category,
       })),
 
-      flights: (flightRates || []).map((r: any) => ({
+      flights: (nFlights || []).map((r: any) => ({
         id: r.id,
         name: `${r.airline} ${r.route_from}→${r.route_to} (${r.cabin_class})`,
         rateEur: toNum(r.base_rate_eur) + toNum(r.tax_eur),
@@ -205,7 +239,7 @@ export async function GET(request: NextRequest) {
         route_to: r.route_to,
       })),
 
-      experiences: (activityRates || [])
+      experiences: (nActivities || [])
         .filter((r: any) => !/boat|felucca|motor/i.test(r.activity_name || r.category || ''))
         .map((r: any) => ({
           id: r.id,
@@ -216,7 +250,7 @@ export async function GET(request: NextRequest) {
           details: r.pricing_type,
         })),
 
-      meals: (mealRates || []).map((r: any) => ({
+      meals: (nMeals || []).map((r: any) => ({
         id: r.id,
         name: `${r.meal_type} - ${r.restaurant_name || 'Restaurant'} (${r.city})`,
         rateEur: toNum(r.base_rate_eur || r.rate_eur),
@@ -230,7 +264,7 @@ export async function GET(request: NextRequest) {
         { id: 'water-standard', name: 'Water Bottles', rateEur: 0.50, rateNonEur: 0.50, details: 'Per person per day' }
       ],
 
-      cruise: (cruiseRates || []).map((r: any) => ({
+      cruise: (nCruises || []).map((r: any) => ({
         id: r.id,
         name: `${r.ship_name} (${r.duration_nights}N, ${r.cabin_type})`,
         rateEur: toNum(r.rate_double_eur || r.rate_low_double_eur),

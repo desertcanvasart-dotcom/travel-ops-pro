@@ -6,6 +6,7 @@
 // 4. Returns grid days with slots pre-filled and matched to real rates
 
 import { NextRequest, NextResponse } from 'next/server'
+import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { PACKAGE_TYPE_CONFIGS, type PackageTypeConfig } from '@/lib/package-types'
 import { packageRules } from '@/lib/ai/package-prompt-rules'
 import { createServerClient } from '@/lib/supabase-server'
@@ -22,7 +23,7 @@ import { currencySymbol } from '@/lib/currency-totals'
 
 // `sym` is the org's rate-currency symbol: the AI reads these lines, so they
 // must say what the numbers are.
-async function buildRateCatalog(supabase: any, tier: string, sym: string) {
+async function buildRateCatalog(supabase: any, tier: string, sym: string, runRateCurrency: string) {
   // Use select('*') — specific column selects fail silently if a column name doesn't match
   const results = await Promise.all([
     supabase.from('transportation_rates').select('*').eq('is_active', true),
@@ -46,19 +47,50 @@ async function buildRateCatalog(supabase: any, tier: string, sym: string) {
   })
 
   const [
-    { data: transportRates },
-    { data: guideRates },
-    { data: airportRates },
-    { data: hotelServiceRates },
-    { data: tippingRates },
-    { data: activityRates },
-    { data: accommodationRates },
-    { data: entranceFees },
-    { data: mealRates },
-    { data: cruiseRates },
-    { data: cruiseTransportPkgs },
-    { data: flightRates },
+    { data: rawTransportRates },
+    { data: rawGuideRates },
+    { data: rawAirportRates },
+    { data: rawHotelServiceRates },
+    { data: rawTippingRates },
+    { data: rawActivityRates },
+    { data: rawAccommodationRates },
+    { data: rawEntranceFees },
+    { data: rawMealRates },
+    { data: rawCruiseRates },
+    { data: rawCruiseTransportPkgs },
+    { data: rawFlightRates },
   ] = results
+
+  // NORMALISE TO THE ORG RATE CURRENCY before the AI ever reads a number.
+  // The catalog labels every amount with the org's symbol (`sym`) and the
+  // auto-fill pass prices slots from these rows — raw EGP/JPY figures here
+  // would be summed as if they were the run currency (the grid-side twin of
+  // the engine's per-rate-currency handling).
+  const normalizer = createRateNormalizer(runRateCurrency)
+  const [
+    transportRates, guideRates, airportRates, hotelServiceRates,
+    tippingRates, activityRates, accommodationRates, entranceFees,
+    mealRates, cruiseRates, cruiseTransportPkgs, flightRates,
+  ] = await Promise.all([
+    normalizer.normalize('transportation_rates', rawTransportRates),
+    normalizer.normalize('guide_rates', rawGuideRates),
+    normalizer.normalize('airport_staff_rates', rawAirportRates),
+    normalizer.normalize('hotel_staff_rates', rawHotelServiceRates),
+    normalizer.normalize('tipping_rates', rawTippingRates),
+    normalizer.normalize('activity_rates', rawActivityRates),
+    normalizer.normalize('accommodation_rates', rawAccommodationRates),
+    normalizer.normalize('entrance_fees', rawEntranceFees),
+    normalizer.normalize('meal_rates', rawMealRates),
+    normalizer.normalize('nile_cruises', rawCruiseRates),
+    normalizer.normalize('b2b_transport_packages', rawCruiseTransportPkgs),
+    normalizer.normalize('flight_rates', rawFlightRates),
+    // The route has always treated these rows as `any` (select('*') shapes);
+    // the normalizer's generic narrows them — restore the historical looseness.
+  ]) as any[]
+  if (normalizer.misses.length) {
+    console.warn('[pricing-grid parse] rows neutralised — currency not convertible:',
+      normalizer.misses.map(m => `${m.table}:${m.id}(${m.currency})`).join(', '))
+  }
 
   // Build concise catalog strings for the AI prompt
   const catalog: Record<string, string> = {}
@@ -532,8 +564,9 @@ export async function POST(request: NextRequest) {
 
     // 1. Fetch all rates from DB
     // The org's rate-currency symbol: the catalogue the AI reads, and the logs, both say what the numbers are.
-    const sym = currencySymbol(await getOrgRateCurrency(supabase, await getCurrentOrgId()))
-    const { catalog, rawRates } = await buildRateCatalog(supabase, tier || 'standard', sym)
+    const runRateCurrency = await getOrgRateCurrency(supabase, await getCurrentOrgId())
+    const sym = currencySymbol(runRateCurrency)
+    const { catalog, rawRates } = await buildRateCatalog(supabase, tier || 'standard', sym, runRateCurrency)
 
     // 2. Build prompt with real rate IDs
     const systemPrompt = buildSystemPrompt(catalog, pkg)
