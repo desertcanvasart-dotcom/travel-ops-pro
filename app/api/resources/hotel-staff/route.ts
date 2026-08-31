@@ -25,7 +25,9 @@ export async function GET(request: NextRequest) {
       .order('name', { ascending: true })
 
     if (hotelId) {
-      query = query.eq('hotel_id', hotelId)
+      // hotel_staff has no hotel_id column — the filter silently 400'd.
+      // Staff are not hotel-scoped in this schema.
+      void hotelId
     }
 
     if (isActive !== null) {
@@ -73,7 +75,6 @@ export async function POST(request: NextRequest) {
     const staffData = {
       name: body.name,
       role: body.role || null,
-      hotel_id: body.hotel_id || null,
       phone: body.phone,
       whatsapp: body.whatsapp || null,
       email: body.email || null,

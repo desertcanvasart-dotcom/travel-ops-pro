@@ -96,10 +96,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid rate values', violations: _rateCheck.errors }, { status: 400 })
     }
 
+    // city is NOT NULL: `|| null` used to coerce a blank one and the insert
+
+    // then died on a constraint message the user could not act on.
+
+    if (!body.city) {
+
+      return NextResponse.json({ success: false, error: 'City is required' }, { status: 400 })
+
+    }
+
+
     const newFee = {
       service_code: body.service_code || `ENT-${Date.now().toString(36).toUpperCase()}`,
       attraction_name: body.attraction_name,
-      city: body.city || null,
+      city: body.city,
       fee_type: body.fee_type || 'standard',
       eur_rate: parseFloat(body.eur_rate) || 0,
       non_eur_rate: parseFloat(body.non_eur_rate) || 0,
@@ -107,8 +118,8 @@ export async function POST(request: NextRequest) {
       student_discount_percentage: body.student_discount_percentage || 50,
       child_discount_percent: body.child_discount_percent || 50,
       season: body.season || 'all_year',
-      rate_valid_from: body.rate_valid_from || null,
-      rate_valid_to: body.rate_valid_to || null,
+      rate_valid_from: body.rate_valid_from || new Date().toISOString().slice(0, 10),
+      rate_valid_to: body.rate_valid_to || '2099-12-31',
       category: body.category || null,
       notes: body.notes || null,
       ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
