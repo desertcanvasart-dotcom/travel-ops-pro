@@ -89,19 +89,17 @@ async function upsertClientPreferences(clientId: string, mapped: MappedBrief, su
       await supabase
         .from('client_preferences')
         .update({
-          interests: mapped.preferences.interests,
-          special_needs: mapped.preferences.special_needs,
-          preferred_tier: mapped.preferences.preferred_tier,
+          preferred_activities: mapped.preferences.interests,
+          health_considerations: mapped.preferences.special_needs,
+          typical_budget_range: mapped.preferences.preferred_tier,
         })
         .eq('client_id', clientId)
     } else {
       await supabase.from('client_preferences').insert({
         client_id: clientId,
-        preferred_accommodation_type: '3-star',
-        tour_pace_preference: 'moderate',
-        interests: mapped.preferences.interests,
-        special_needs: mapped.preferences.special_needs,
-        preferred_tier: mapped.preferences.preferred_tier,
+        preferred_activities: mapped.preferences.interests,
+        health_considerations: mapped.preferences.special_needs,
+        typical_budget_range: mapped.preferences.preferred_tier,
       })
     }
   } catch (e) {
@@ -114,9 +112,8 @@ async function addBriefNote(clientId: string, summary: string | null, revision: 
   try {
     await supabase.from('client_notes').insert({
       client_id: clientId,
-      note_text: `[Concierge brief — revision ${revision}] ${summary}`,
+      content: `[Concierge brief — revision ${revision}] ${summary}`,
       note_type: 'general',
-      is_internal: true,
     })
   } catch (e) {
     console.warn('[concierge] could not save client_notes (non-blocking):', e)

@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
         if (userEmail) {
           await supabase
             .from('gmail_tokens')
-            .update({ email_address: userEmail, updated_at: new Date().toISOString() })
+            .update({ email: userEmail, updated_at: new Date().toISOString() })
             .eq('user_id', user_id)
         }
       }

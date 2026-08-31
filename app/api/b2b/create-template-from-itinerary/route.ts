@@ -185,7 +185,6 @@ export async function POST(request: NextRequest) {
         itinerary: templateItinerary,
         is_active: true,
         is_featured: false,
-        source_itinerary_id: itinerary_id,
       })
       .select()
       .single()

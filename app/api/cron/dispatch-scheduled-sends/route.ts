@@ -79,8 +79,6 @@ async function run() {
     await supabaseAdmin.from('template_send_log').insert({
       template_id: row.template_id,
       client_id: row.recipient_type === 'client' ? row.recipient_id : null,
-      recipient_id: row.recipient_id,
-      recipient_type: row.recipient_type,
       channel: row.channel,
       recipient_email: row.channel === 'email' ? row.recipient_contact : null,
       recipient_phone: row.channel === 'whatsapp' ? row.recipient_contact : null,

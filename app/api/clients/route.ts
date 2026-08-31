@@ -87,6 +87,9 @@ export async function POST(request: NextRequest) {
 
     // Create client
     const clientData = {
+      preferred_accommodation_level: body.preferences?.accommodation_type || null,
+      special_interests: body.preferences?.interests || null,
+      accessibility_needs: body.preferences?.special_needs || null,
       org_id: orgId,
       first_name: body.first_name,
       last_name: body.last_name || body.first_name,
@@ -149,13 +152,17 @@ export async function POST(request: NextRequest) {
       await attempt('preferences', () =>
         supabase
           .from('client_preferences')
+          // Every column here previously named fields the table does not have
+          // (preferred_accommodation_type, tour_pace_preference, interests,
+          // special_needs, preferred_tier) — the insert 400'd on every client
+          // created with preferences, silently, since the wizard shipped.
+          // Mapped onto the columns that exist; accommodation level, interests
+          // and accessibility needs live on the clients row itself (below).
           .insert({
             client_id: newClient.id,
-            preferred_accommodation_type: body.preferences.accommodation_type || '3-star',
-            tour_pace_preference: body.preferences.tour_pace || 'moderate',
-            interests: body.preferences.interests || '',
-            special_needs: body.preferences.special_needs || null,
-            preferred_tier: body.preferences.tier || 'standard'
+            preferred_activities: body.preferences.interests || null,
+            health_considerations: body.preferences.special_needs || null,
+            typical_budget_range: body.preferences.tier || 'standard'
           })
       )
     }
@@ -166,9 +173,9 @@ export async function POST(request: NextRequest) {
           .from('client_notes')
           .insert({
             client_id: newClient.id,
-            note_text: body.note,
-            note_type: 'general',
-            is_internal: true
+            // note_text/is_internal are not columns; content is.
+            content: body.note,
+            note_type: 'general'
           })
       )
     }
