@@ -23,6 +23,15 @@ export interface ColumnDef {
   required: boolean
   exportOnly?: boolean         // e.g., id, created_at — included in export but not required for import
   allowedValues?: readonly string[]  // when set, the cell must match (case-insensitive)
+  // A column the FORM no longer asks for, kept so old files still import and
+  // exports still round-trip, but left out of the template so nobody fills in
+  // a field the UI cannot show them afterwards.
+  legacy?: boolean
+  // When this column is absent on import, copy that column's value into it.
+  // The forms mirror one price into both passport columns; an import through
+  // the slimmed template has to do the same, or it writes a row that is
+  // priced for one passport and blank for the other.
+  mirrorFrom?: string
 }
 
 export interface ValidationError {
@@ -70,6 +79,15 @@ export interface ImportPreview {
 
 function col(name: string, label: string, type: ColumnDef['type'], required: boolean, exportOnly = false): ColumnDef {
   return { name, label, type, required, exportOnly }
+}
+
+/**
+ * A passport-split rate column the form stopped collecting. Out of the
+ * template, never required, still imported when present, and mirrored from
+ * the primary rate when it is not.
+ */
+function legacyRate(name: string, label: string, mirrorFrom: string): ColumnDef {
+  return { name, label, type: 'number', required: false, legacy: true, mirrorFrom }
 }
 
 // Helper for an enum-constrained text column. Values are normalized to the
@@ -159,24 +177,24 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('area', 'Area', 'text', false),
       col('includes', 'Includes', 'text', false),
       // Vehicle rates
-      col('sedan_rate_eur', 'Sedan (EU passport)', 'number', false),
-      col('sedan_rate_non_eur', 'Sedan (non-EU passport)', 'number', false),
+      col('sedan_rate_eur', 'Sedan Rate', 'number', false),
+      legacyRate('sedan_rate_non_eur', 'Sedan Rate (non-EU passport, legacy)', 'sedan_rate_eur'),
       col('sedan_capacity_min', 'Sedan Cap Min', 'number', false),
       col('sedan_capacity_max', 'Sedan Cap Max', 'number', false),
-      col('minivan_rate_eur', 'Minivan (EU passport)', 'number', false),
-      col('minivan_rate_non_eur', 'Minivan (non-EU passport)', 'number', false),
+      col('minivan_rate_eur', 'Minivan Rate', 'number', false),
+      legacyRate('minivan_rate_non_eur', 'Minivan Rate (non-EU passport, legacy)', 'minivan_rate_eur'),
       col('minivan_capacity_min', 'Minivan Cap Min', 'number', false),
       col('minivan_capacity_max', 'Minivan Cap Max', 'number', false),
-      col('van_rate_eur', 'Van (EU passport)', 'number', false),
-      col('van_rate_non_eur', 'Van (non-EU passport)', 'number', false),
+      col('van_rate_eur', 'Van Rate', 'number', false),
+      legacyRate('van_rate_non_eur', 'Van Rate (non-EU passport, legacy)', 'van_rate_eur'),
       col('van_capacity_min', 'Van Cap Min', 'number', false),
       col('van_capacity_max', 'Van Cap Max', 'number', false),
-      col('minibus_rate_eur', 'Minibus (EU passport)', 'number', false),
-      col('minibus_rate_non_eur', 'Minibus (non-EU passport)', 'number', false),
+      col('minibus_rate_eur', 'Minibus Rate', 'number', false),
+      legacyRate('minibus_rate_non_eur', 'Minibus Rate (non-EU passport, legacy)', 'minibus_rate_eur'),
       col('minibus_capacity_min', 'Minibus Cap Min', 'number', false),
       col('minibus_capacity_max', 'Minibus Cap Max', 'number', false),
-      col('bus_rate_eur', 'Bus (EU passport)', 'number', false),
-      col('bus_rate_non_eur', 'Bus (non-EU passport)', 'number', false),
+      col('bus_rate_eur', 'Bus Rate', 'number', false),
+      legacyRate('bus_rate_non_eur', 'Bus Rate (non-EU passport, legacy)', 'bus_rate_eur'),
       col('bus_capacity_min', 'Bus Cap Min', 'number', false),
       col('bus_capacity_max', 'Bus Cap Max', 'number', false),
       season(), rateValidFrom(), rateValidTo(),
@@ -239,8 +257,8 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('attraction_name', 'Attraction Name', 'text', true),
       col('city', 'City', 'text', true),
       col('fee_type', 'Fee Type', 'text', false),
-      col('eur_rate', 'Rate (EU passport)', 'number', true),
-      col('non_eur_rate', 'Rate (non-EU passport)', 'number', true),
+      col('eur_rate', 'Rate', 'number', true),
+      legacyRate('non_eur_rate', 'Rate (non-EU passport, legacy)', 'eur_rate'),
       col('egyptian_rate', 'Egyptian Rate', 'number', false),
       col('student_discount_percentage', 'Student Discount %', 'number', false),
       col('child_discount_percent', 'Child Discount %', 'number', false),
@@ -549,6 +567,16 @@ export function validateImportData(
       }
     }
 
+    // Mirror before accepting: a file written from the current template has no
+    // non-EU column at all, and a consumer that reads it without falling back
+    // (lib/tourCalculator.ts) would price that traveller at zero.
+    for (const colDef of importableColumns) {
+      if (!colDef.mirrorFrom) continue
+      if (parsedRow[colDef.name] == null && parsedRow[colDef.mirrorFrom] != null) {
+        parsedRow[colDef.name] = parsedRow[colDef.mirrorFrom]
+      }
+    }
+
     if (rowValid) {
       validRows.push(parsedRow)
     }
@@ -622,7 +650,38 @@ function sampleDate(name: string): string {
 /** Sample money. A row where every number is 100 does not show which column is
  *  the headline rate and which is a supplement — and a rate card where peak
  *  costs the same as low is not one either. */
+// The per-vehicle bands lib/transport-rate-utils.ts falls back to. The sample
+// must agree with them: a template that put 100 in every capacity column
+// taught agencies that every vehicle seats exactly 100, and because
+// getTransportRateForPax() matches a band and then falls back to the first
+// tier whose max fits, EVERY group -- a couple or forty people -- came out
+// priced as a sedan.
+const SAMPLE_CAPACITY: Record<string, [number, number]> = {
+  sedan: [1, 2],
+  minivan: [3, 7],
+  van: [8, 12],
+  minibus: [13, 20],
+  bus: [21, 45],
+}
+
 function sampleNumber(name: string): string {
+  // Capacities are counts of people, not money.
+  const cap = name.match(/^([a-z]+)_capacity_(min|max)$/)
+  if (cap) {
+    const band = SAMPLE_CAPACITY[cap[1]]
+    if (band) return String(cap[2] === 'min' ? band[0] : band[1])
+    return cap[2] === 'min' ? '1' : '45'
+  }
+  if (/_capacity$|^capacity_/.test(name)) return '4'
+
+  // Percentages are not money either. 100 in a discount column reads as
+  // "everything is free".
+  if (/(percent|percentage)$/.test(name)) {
+    if (/child|infant/.test(name)) return '15'
+    if (/student/.test(name)) return '50'
+    return '10'
+  }
+
   // Supplements and reductions are a fraction of the rate they attach to.
   const role =
     /supp/.test(name) ? 0.5
@@ -677,14 +736,14 @@ function exampleValue(colDef: ColumnDef, config: RateTableConfig): string {
  *  ignores — id and the timestamps are export-only and would just be noise on
  *  a sheet somebody is filling in by hand. */
 export function getTemplateHeaders(config: RateTableConfig): string[] {
-  return config.columns.filter(c => !c.exportOnly).map(c => c.name)
+  return config.columns.filter(c => !c.exportOnly && !c.legacy).map(c => c.name)
 }
 
 /** The single example row, keyed by column name. */
 export function buildTemplateRow(config: RateTableConfig): Record<string, string> {
   const row: Record<string, string> = {}
   for (const colDef of config.columns) {
-    if (colDef.exportOnly) continue
+    if (colDef.exportOnly || colDef.legacy) continue
     row[colDef.name] = exampleValue(colDef, config)
   }
   return row
