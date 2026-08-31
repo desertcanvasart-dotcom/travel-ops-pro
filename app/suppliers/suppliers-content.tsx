@@ -2,6 +2,8 @@
 
 import { todayLocal } from '@/lib/today'
 import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
+import SupplierPropertiesPanel from '@/app/components/SupplierPropertiesPanel'
+import { propertyTypesForRoles } from '@/lib/supplier-properties'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
@@ -212,7 +214,7 @@ export default function SuppliersContent() {
   useDismissOnOutside(openMenuId !== null, rowMenuRef, () => setOpenMenuId(null))
   
   // View modal tabs
-  const [viewTab, setViewTab] = useState<'details' | 'rates' | 'documents'>('details')
+  const [viewTab, setViewTab] = useState<'details' | 'properties' | 'rates' | 'documents'>('details')
   const [supplierRates, setSupplierRates] = useState<TransportRate[]>([])
   const [loadingRates, setLoadingRates] = useState(false)
 
@@ -897,6 +899,9 @@ export default function SuppliersContent() {
             <div className="px-6 border-b border-gray-200">
               <div className="flex gap-6">
                 <button type="button" onClick={() => setViewTab('details')} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'details' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{t('details')}</button>
+                {propertyTypesForRoles(selectedSupplier.types?.length ? selectedSupplier.types : [selectedSupplier.type]).length > 0 && (
+                  <button type="button" onClick={() => setViewTab('properties')} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'properties' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{t('propertiesTab')}</button>
+                )}
                 {['transport', 'local_operator', 'driver'].includes(selectedSupplier.type) && (
                   <button type="button" onClick={() => setViewTab('rates')} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'rates' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                     {t('rates')} {supplierRates.length > 0 && <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 rounded text-xs">{supplierRates.length}</span>}
@@ -946,6 +951,13 @@ export default function SuppliersContent() {
                     </div>
                   )}
                 </div>
+              )}
+
+              {viewTab === 'properties' && (
+                <SupplierPropertiesPanel
+                  supplierId={selectedSupplier.id}
+                  supplierRoles={selectedSupplier.types?.length ? selectedSupplier.types : [selectedSupplier.type]}
+                />
               )}
 
               {viewTab === 'rates' && (

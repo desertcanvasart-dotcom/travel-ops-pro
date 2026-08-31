@@ -2104,14 +2104,14 @@
     "companiesOnly": "Companies Only",
     "partOf": "Part of {name}",
     "noPropertiesLinked": "No properties linked to this company",
-    "addProperty": "+ Add a property",
+    "addProperty": "Add property",
     "addAnotherProperty": "+ Add another property",
     "rating": "Rating",
     "starRating": "Star Rating",
     "services": "Services",
     "rates": "Rates",
     "noRatesFound": "No rates found for this supplier",
-    "propertyType": "Property Type",
+    "propertyType": "Type",
     "vehicleTypes": "Vehicle Types",
     "languages": "Languages",
     "shipName": "Ship Name",
@@ -2176,7 +2176,16 @@
     "detailsLiveInRates": "Languages, vehicles, routes and commissions are managed under Rates.",
     "commissionWePay": "We pay",
     "commissionWeReceive": "We receive",
-    "manageInCommissionRates": "Manage in Rates › Commissions"
+    "manageInCommissionRates": "Manage in Rates › Commissions",
+    "propertiesTab": "Properties",
+    "propertiesEmpty": "No properties yet. Add the ships, hotels or trains this supplier operates.",
+    "propertyName": "Name",
+    "propertyContact": "Contact",
+    "propertyCategory": "Category",
+    "propertyContactName": "Contact name",
+    "propertyContactPhone": "Contact phone",
+    "propertyContactEmail": "Contact email",
+    "editProperty": "Edit property"
   },
   "copilot": {
     "concierge": {
@@ -3733,7 +3742,8 @@
         "notesPlaceholder": "Any additional notes...",
         "cancel": "Cancel",
         "updateRate": "Update Rate",
-        "createRate": "Create Rate"
+        "createRate": "Create Rate",
+        "newShip": "+ New ship…"
       },
       "deleteModal": {
         "title": "Delete Cruise Rate",
