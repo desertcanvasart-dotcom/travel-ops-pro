@@ -341,9 +341,9 @@ export default function SuppliersContent() {
     setOpenMenuId(null)
   }
 
-  const handleView = (supplier: Supplier) => {
+  const handleView = (supplier: Supplier, tab: 'details' | 'properties' = 'details') => {
     setSelectedSupplier(supplier)
-    setViewTab('details')
+    setViewTab(tab)
     setSupplierRates([])
     setShowViewModal(true)
     setOpenMenuId(null)
@@ -369,10 +369,19 @@ export default function SuppliersContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
       })
-      if (!response.ok) throw new Error((await response.json()).error || 'Failed to create')
+      const created = await response.json()
+      if (!response.ok) throw new Error(created.error || 'Failed to create')
       setShowAddModal(false)
       setFormData({})
       fetchSuppliers()
+      // A cruise line, hotel or train operator was just created — open it on
+      // its Properties tab so the fleet can be added right away. Without this
+      // the tab was invisible until you happened to click the card
+      // (operator: "no properties anywhere", 2026-08-31).
+      const row: Supplier | undefined = created.data ?? created.supplier
+      if (row?.id && propertyTypesForRoles(row.types?.length ? row.types : [row.type]).length > 0) {
+        handleView(row, 'properties')
+      }
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -667,6 +676,9 @@ export default function SuppliersContent() {
                           {openMenuId === supplier.id && (
                             <div className="absolute right-0 top-8 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
                               <button type="button" onClick={(e) => { e.stopPropagation(); handleView(supplier) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"><Eye className="w-3.5 h-3.5" /> {t('view')}</button>
+                              {propertyTypesForRoles(supplier.types?.length ? supplier.types : [supplier.type]).length > 0 && (
+                                <button type="button" onClick={(e) => { e.stopPropagation(); handleView(supplier, 'properties'); setOpenMenuId(null) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"><Ship className="w-3.5 h-3.5" /> {t('propertiesTab')}</button>
+                              )}
                               <button type="button" onClick={(e) => { e.stopPropagation(); handleEdit(supplier) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"><Edit className="w-3.5 h-3.5" /> {t('edit')}</button>
                               <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteClick(supplier) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /> {t('delete')}</button>
                             </div>
