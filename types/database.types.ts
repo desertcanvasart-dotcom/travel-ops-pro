@@ -9415,6 +9415,7 @@ export interface Database {
           description: string | null
           supplier_id: string | null
           rate_currency: string | null
+          property_id: string | null
         }
         Insert: {
           id?: string
@@ -9437,6 +9438,7 @@ export interface Database {
           description?: string | null
           supplier_id?: string | null
           rate_currency?: string | null
+          property_id?: string | null
         }
         Update: {
           id?: string
@@ -9459,6 +9461,7 @@ export interface Database {
           description?: string | null
           supplier_id?: string | null
           rate_currency?: string | null
+          property_id?: string | null
         }
         Relationships: [
           {
@@ -9466,6 +9469,13 @@ export interface Database {
             columns: ["supplier_id"]
             isOneToOne: false
             referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sleeping_train_rates_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_properties"
             referencedColumns: ["id"]
           },
         ]
@@ -11635,6 +11645,7 @@ export interface Database {
           departure_times: string | null
           supplier_id: string | null
           rate_currency: string | null
+          property_id: string | null
         }
         Insert: {
           id?: string
@@ -11655,6 +11666,7 @@ export interface Database {
           departure_times?: string | null
           supplier_id?: string | null
           rate_currency?: string | null
+          property_id?: string | null
         }
         Update: {
           id?: string
@@ -11675,6 +11687,7 @@ export interface Database {
           departure_times?: string | null
           supplier_id?: string | null
           rate_currency?: string | null
+          property_id?: string | null
         }
         Relationships: [
           {
@@ -11682,6 +11695,13 @@ export interface Database {
             columns: ["supplier_id"]
             isOneToOne: false
             referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "train_rates_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_properties"
             referencedColumns: ["id"]
           },
         ]

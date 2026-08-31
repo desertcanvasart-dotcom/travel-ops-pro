@@ -115,11 +115,22 @@ export async function DELETE(
     const supabase = createServerClient()
     const { id } = await params
 
-    // Delete activities first
-    await supabase
-      .from('tour_day_activities')
-      .delete()
-      .eq('tour_day_id', id)
+    // Activities are keyed by (template_id, day_number), not by the day row's
+    // id — `.eq('tour_day_id', id)` filtered on a column that does not exist
+    // and 400'd, leaving activities behind every deleted day.
+    const { data: dayRow } = await supabase
+      .from('tour_days')
+      .select('tour_id, day_number')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (dayRow) {
+      await supabase
+        .from('tour_day_activities')
+        .delete()
+        .eq('template_id', dayRow.tour_id)
+        .eq('day_number', dayRow.day_number)
+    }
 
     // Delete day
     const { error } = await supabase
