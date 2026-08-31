@@ -12,8 +12,6 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const type = searchParams.get('type')
     const status = searchParams.get('status')
-    const isProperty = searchParams.get('is_property')
-    const parentId = searchParams.get('parent_supplier_id')
 
     let query = supabaseAdmin
       .from('suppliers')
@@ -36,17 +34,10 @@ export async function GET(request: NextRequest) {
       query = query.eq('status', status)
     }
 
-    // Filter by is_property (true = individual properties, false = parent companies)
-    if (isProperty === 'true') {
-      query = query.eq('is_property', true)
-    } else if (isProperty === 'false') {
-      query = query.eq('is_property', false)
-    }
-
-    // Filter by parent supplier (get all properties under a specific company)
-    if (parentId) {
-      query = query.eq('parent_supplier_id', parentId)
-    }
+    // The is_property / parent_supplier_id filters are gone with the columns:
+    // that was the 2026-08-22 supplier-IS-a-property model, retired unused.
+    // A supplier's assets now live in supplier_properties (see
+    // /api/suppliers/[id]/properties).
 
     const { data, error } = await query
 

@@ -2970,14 +2970,14 @@
     "companiesOnly": "会社のみ",
     "partOf": "{name}の一部",
     "noPropertiesLinked": "この会社にリンクされた物件はありません",
-    "addProperty": "+ 物件を追加",
+    "addProperty": "施設を追加",
     "addAnotherProperty": "+ 別の物件を追加",
     "rating": "評価",
     "starRating": "星評価",
     "services": "サービス",
     "rates": "料金",
     "noRatesFound": "このサプライヤーの料金が見つかりません",
-    "propertyType": "物件タイプ",
+    "propertyType": "種別",
     "vehicleTypes": "車両タイプ",
     "languages": "言語",
     "shipName": "船名",
@@ -3042,7 +3042,16 @@
     "detailsLiveInRates": "言語・車両・ルート・コミッションはレート画面で管理します。",
     "commissionWePay": "支払コミッション",
     "commissionWeReceive": "受取コミッション",
-    "manageInCommissionRates": "レート › コミッションで管理"
+    "manageInCommissionRates": "レート › コミッションで管理",
+    "propertiesTab": "施設・船舶",
+    "propertiesEmpty": "まだ登録がありません。このサプライヤーが運航・運営する船、ホテル、列車を追加してください。",
+    "propertyName": "名称",
+    "propertyContact": "連絡先",
+    "propertyCategory": "カテゴリー",
+    "propertyContactName": "担当者名",
+    "propertyContactPhone": "電話番号",
+    "propertyContactEmail": "メールアドレス",
+    "editProperty": "施設を編集"
   },
   "copilot": {
     "concierge": {
@@ -4826,7 +4835,8 @@
         "notesPlaceholder": "追加メモ...",
         "cancel": "キャンセル",
         "updateRate": "料金を更新",
-        "createRate": "料金を作成"
+        "createRate": "料金を作成",
+        "newShip": "+ 新しい船…"
       },
       "deleteModal": {
         "title": "クルーズ料金を削除",

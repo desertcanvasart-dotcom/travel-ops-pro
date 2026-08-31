@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSeasons, legacyColumnMirror } from '@/lib/rates/rate-seasons'
 import { createServerClient } from '@/lib/supabase-server'
+import { resolveShipProperty } from '@/lib/suppliers/resolve-property'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 
 export async function PUT(
@@ -34,6 +35,26 @@ export async function PUT(
         ...updateBody,
         seasons: cruiseSeasons,
         ...legacyColumnMirror(cruiseSeasons, 'cruise'),
+      }
+    }
+
+    // Re-link the ship when anything identifying it moved (PUT can patch, so
+    // read the row for whichever half the payload left out).
+    if ('ship_name' in updateBody || 'supplier_id' in updateBody || 'property_id' in updateBody) {
+      const { data: current } = await supabase
+        .from('nile_cruises')
+        .select('supplier_id, ship_name')
+        .eq('id', id)
+        .maybeSingle()
+      const ship = await resolveShipProperty(supabase, {
+        supplierId: 'supplier_id' in updateBody ? updateBody.supplier_id : current?.supplier_id,
+        shipName: 'ship_name' in updateBody ? updateBody.ship_name : current?.ship_name,
+        propertyId: updateBody.property_id,
+      })
+      updateBody = {
+        ...updateBody,
+        property_id: ship.property_id,
+        ...(ship.ship_name ? { ship_name: ship.ship_name } : {}),
       }
     }
 
