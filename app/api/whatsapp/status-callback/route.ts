@@ -43,9 +43,8 @@ export async function POST(request: NextRequest) {
       .from('whatsapp_messages')
       .update({
         status: messageStatus,
-        error_code: errorCode,
-        error_message: errorMessage,
-        updated_at: new Date().toISOString()
+
+        error_message: errorCode ? `[${errorCode}] ${errorMessage ?? ''}` : errorMessage,
       })
       .eq('message_sid', messageSid)
       .select('id')

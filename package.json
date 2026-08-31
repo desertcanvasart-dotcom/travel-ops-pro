@@ -16,7 +16,8 @@
     "replay:schema": "node scripts/replay-schema.mjs",
     "doctor": "node scripts/doctor.mjs",
     "release": "node scripts/release.mjs",
-    "verify:deploy": "node scripts/verify-deploy.mjs"
+    "verify:deploy": "node scripts/verify-deploy.mjs",
+    "types:generate": "node --env-file=.env.local scripts/generate-db-types.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",

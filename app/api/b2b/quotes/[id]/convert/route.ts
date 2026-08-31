@@ -166,8 +166,10 @@ export async function POST(
             email: quote.client_email,
             phone: quote.client_phone,
             nationality: quote.client_nationality,
-            source: 'b2b_quote',
-            notes: `Created from B2B quote ${quote.quote_number}`
+            // clients has no source/notes columns — lead_source and
+            // internal_notes are the real ones.
+            lead_source: 'b2b_quote',
+            internal_notes: `Created from B2B quote ${quote.quote_number}`
           })
           .select()
           .single()
@@ -216,7 +218,7 @@ export async function POST(
         deposit_amount: Math.round((quote.selling_price || 0) * 0.3),
         balance_due: Math.round((quote.selling_price || 0) * 0.7),
         payment_status: 'not_paid',
-        created_by: user_id,
+        user_id, // itineraries has user_id, not created_by
         notes: `Converted from B2B quote ${quote.quote_number}`,
         // B2B Partner fields
         partner_id: quote.partner_id || null,
@@ -256,7 +258,7 @@ export async function POST(
           title: tourDay?.title || `Day ${dayNum}`,
           description: tourDay?.description || '',
           city: tourDay?.city || '',
-          overnight_location: tourDay?.overnight_city || ''
+          overnight_city: tourDay?.overnight_city || ''
         })
         .select()
         .single()
