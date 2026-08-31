@@ -82,6 +82,36 @@ describe('rate CSV template matches the form', () => {
   })
 })
 
+// The passport split is real for exactly two things: hotels and Nile cruises,
+// where a room genuinely has two contracted prices. Their two-price data lives
+// in the SEPARATE rate-periods CSV (lib/rates/period-csv.ts), not here.
+// Everything else — transport, entrance fees, guides, meals, flights,
+// activities — is one price (operator, 2026-08-30).
+describe('only hotels and cruises keep a passport split', () => {
+  it('no rate table in this CSV offers a non-EU column', () => {
+    const offenders: string[] = []
+    for (const config of Object.values(RATE_TABLE_CONFIGS)) {
+      for (const c of config.columns) {
+        if (/non_eur/.test(c.name) && !c.legacy) {
+          offenders.push(`${config.tableName}.${c.name}`)
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('every dropped non-EU column mirrors the price beside it', () => {
+    for (const config of Object.values(RATE_TABLE_CONFIGS)) {
+      for (const c of config.columns) {
+        if (!/non_eur/.test(c.name) || !c.legacy) continue
+        expect(c.mirrorFrom, `${config.tableName}.${c.name}`).toBeTruthy()
+        const source = config.columns.find(x => x.name === c.mirrorFrom)
+        expect(source, `${c.mirrorFrom} must exist`).toBeTruthy()
+      }
+    }
+  })
+})
+
 describe('the dropped columns still round-trip', () => {
   it('exports them, so existing data is never lost', () => {
     expect(getExportHeaders(attractions)).toContain('non_eur_rate')

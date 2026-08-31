@@ -314,7 +314,15 @@ export default function GuideRatesContent() {
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...restFormData, ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency) })
+        // One price. A guide costs what a guide costs — the EU/non-EU split is
+        // real only for hotels and cruises (operator, 2026-08-30). Both columns
+        // are written so every consumer reads the same number; see
+        // lib/tourCalculator.ts, which does not fall back on its own.
+        body: JSON.stringify({
+          ...restFormData,
+          base_rate_non_eur: restFormData.base_rate_eur,
+          ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency),
+        })
       })
 
       const data = await response.json()
@@ -760,7 +768,6 @@ export default function GuideRatesContent() {
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.city')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.duration')}</th>
                   <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.eurRate')}</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.nonEurRate')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.status')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.actions')}</th>
                 </tr>
@@ -800,9 +807,6 @@ export default function GuideRatesContent() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm font-bold text-green-600">{formatRateInRowCurrency(rate.base_rate_eur, rate, formatRate)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="text-sm text-gray-600">{formatRateInRowCurrency(rate.base_rate_non_eur, rate, formatRate)}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -1123,18 +1127,6 @@ export default function GuideRatesContent() {
                       value={formData.base_rate_eur}
                       onChange={handleChange}
                       required
-                      min="0"
-                      step="0.01"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.nonEurRate')}</label>
-                    <input
-                      type="number"
-                      name="base_rate_non_eur"
-                      value={formData.base_rate_non_eur}
-                      onChange={handleChange}
                       min="0"
                       step="0.01"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
