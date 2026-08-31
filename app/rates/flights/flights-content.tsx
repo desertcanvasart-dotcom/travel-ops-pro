@@ -409,6 +409,9 @@ export default function FlightsContent() {
       const { rate_currency: pickedCurrency, ...restFormData } = formData
       const submitData = {
         ...restFormData,
+        // One price. A seat costs what a seat costs — the EU/non-EU split is
+        // real only for hotels and cruises (operator, 2026-08-30).
+        base_rate_non_eur: formData.base_rate_eur,
         ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency),
         supplier_id: formData.supplier_id || null,
         flight_number: formData.flight_number || null,
@@ -1165,23 +1168,6 @@ export default function FlightsContent() {
                         required
                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                       />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('nonEurRate')}
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">$</span>
-                      <input
-                        type="number"
-                        value={formData.base_rate_non_eur}
-                        onChange={(e) => setFormData(prev => ({ ...prev, base_rate_non_eur: parseFloat(e.target.value) || 0 }))}
-                        step="0.01"
-                        min="0"
-                        className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                      />
-                    </div>
                   </div>
 
                   <RateCurrencyField

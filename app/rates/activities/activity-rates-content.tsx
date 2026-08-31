@@ -432,7 +432,15 @@ export default function ActivityRatesContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify((() => {
           const { rate_currency: pickedCurrency, ...rest } = formData
-          return { ...rest, ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency) }
+          // One price. An activity costs what it costs — the EU/non-EU split
+          // is real only for hotels and cruises (operator, 2026-08-30). Tiers
+          // need no mirror: lib/rates/activity-tiers.ts already falls back to
+          // rate_eur when rate_non_eur is null.
+          return {
+            ...rest,
+            base_rate_non_eur: rest.base_rate_eur,
+            ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency),
+          }
         })())
       })
 
@@ -868,7 +876,6 @@ export default function ActivityRatesContent() {
                   <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.pricing')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.capacity')}</th>
                   <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.eurRate')}</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('table.nonEurRate')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.status')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('table.actions')}</th>
                 </tr>
@@ -917,9 +924,6 @@ export default function ActivityRatesContent() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm font-bold text-green-600">{displayRate(rate)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold">{rate.rate_currency}</span>}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="text-sm text-gray-600">{formatRateInRowCurrency(rate.base_rate_non_eur, rate, formatRate)}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -1333,14 +1337,6 @@ export default function ActivityRatesContent() {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.nonEurRate')} <span className="text-gray-400 font-normal">/pax</span></label>
-                          <input
-                            type="number" min="0.01" step="0.01" value={tier.rate_non_eur ?? ''}
-                            onChange={(e) => updateTier(i, { rate_non_eur: e.target.value === '' ? null : parseFloat(e.target.value) || 0 })}
-                            className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg"
-                          />
-                        </div>
-                        <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">Label</label>
                           <input
                             type="text" value={tier.label} placeholder={`${tier.min_pax || 1}-${tier.max_pax || '?'}`}
@@ -1395,25 +1391,6 @@ export default function ActivityRatesContent() {
                       value={formData.base_rate_eur}
                       onChange={handleChange}
                       required
-                      min="0"
-                      step="0.01"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('form.nonEurRate')}
-                      <span className="text-gray-400 font-normal ml-1">
-                        {formData.pricing_type === 'per_person' && '/ person'}
-                        {formData.pricing_type === 'per_unit' && `/ ${formData.unit_label || 'unit'}`}
-                        {formData.pricing_type === 'flat' && '/ total'}
-                      </span>
-                    </label>
-                    <input
-                      type="number"
-                      name="base_rate_non_eur"
-                      value={formData.base_rate_non_eur}
-                      onChange={handleChange}
                       min="0"
                       step="0.01"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"

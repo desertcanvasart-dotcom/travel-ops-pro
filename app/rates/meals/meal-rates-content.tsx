@@ -376,7 +376,9 @@ export default function MealRatesContent() {
         restaurant_type: formData.restaurant_type || null,
         city: formData.city || null,
         base_rate_eur: parseFloat(String(formData.base_rate_eur)) || 0,
-        base_rate_non_eur: parseFloat(String(formData.base_rate_non_eur)) || 0,
+        // One price. A meal costs what a meal costs — the EU/non-EU split is
+        // real only for hotels and cruises (operator, 2026-08-30).
+        base_rate_non_eur: parseFloat(String(formData.base_rate_eur)) || 0,
         ...rateCurrencyPatch(formData.rate_currency, editingRate?.rate_currency),
         season: formData.season || null,
         rate_valid_from: formData.rate_valid_from || null,
@@ -827,7 +829,6 @@ export default function MealRatesContent() {
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{tCommon('city')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{tCommon('tier')}</th>
                   <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{tCommon('eurRate')}</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{tCommon('nonEurRate')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{tCommon('status')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{tCommon('actions')}</th>
                 </tr>
@@ -867,9 +868,6 @@ export default function MealRatesContent() {
                       <span className="text-sm font-bold text-green-600">{formatRateInRowCurrency(rate.base_rate_eur, rate, formatRate)}</span>
                       {rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold">{rate.rate_currency}</span>}
                       {rate.per_person_rate && <span className="text-xs text-gray-400">/pp</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="text-sm text-gray-600">{formatRateInRowCurrency(rate.base_rate_non_eur, rate, formatRate)}</span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -1241,18 +1239,6 @@ export default function MealRatesContent() {
                       value={formData.base_rate_eur}
                       onChange={handleChange}
                       required
-                      min="0"
-                      step="0.01"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('nonEurRate')}</label>
-                    <input
-                      type="number"
-                      name="base_rate_non_eur"
-                      value={formData.base_rate_non_eur}
-                      onChange={handleChange}
                       min="0"
                       step="0.01"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
