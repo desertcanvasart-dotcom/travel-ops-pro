@@ -75,7 +75,9 @@ export async function POST(request: NextRequest) {
       // Basic info
       service_code: body.service_code || `ACC-${Date.now().toString(36).toUpperCase()}`,
       property_name: hotelProp.name || body.property_name,
-      property_id: hotelProp.property_id,
+      // Omitted when null so a database that has not run the phase-2 migration
+      // yet (CI, an install mid-upgrade) still saves the rate.
+      ...(hotelProp.property_id ? { property_id: hotelProp.property_id } : {}),
       property_type: body.property_type || 'hotel',
       city: body.city || null,
       board_basis: body.board_basis || 'BB',

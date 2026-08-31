@@ -63,7 +63,7 @@ export async function PUT(
       // Basic info
       service_code: body.service_code,
       property_name: hotelProp.name || body.property_name,
-      property_id: hotelProp.property_id,
+      ...(hotelProp.property_id ? { property_id: hotelProp.property_id } : {}),
       property_type: body.property_type || 'hotel',
       city: body.city || null,
       ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),

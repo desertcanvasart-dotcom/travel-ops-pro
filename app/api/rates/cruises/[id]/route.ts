@@ -54,7 +54,7 @@ export async function PUT(
       })
       updateBody = {
         ...updateBody,
-        property_id: ship.property_id,
+        ...(ship.property_id ? { property_id: ship.property_id } : {}),
         ...(ship.name ? { ship_name: ship.name } : {}),
       }
     }

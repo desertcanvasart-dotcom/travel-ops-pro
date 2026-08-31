@@ -77,7 +77,9 @@ export async function POST(request: NextRequest) {
       seasons: cruiseSeasons,
       ...legacyColumnMirror(cruiseSeasons, 'cruise'),
       supplier_id: supplierCheck.supplier_id,
-      property_id: ship.property_id,
+      // Omitted when null so a database that has not run the phase-1 migration
+      // yet still saves the rate.
+      ...(ship.property_id ? { property_id: ship.property_id } : {}),
       ...(ship.name ? { ship_name: ship.name } : {})
     }
 
