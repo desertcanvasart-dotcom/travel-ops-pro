@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { normaliseSleepingTrainCabin, SLEEPING_TRAIN_CABIN_ERROR } from '@/lib/rates/sleeping-train-cabins'
 import { clientMessage } from '@/lib/api-errors'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
@@ -61,6 +62,17 @@ export async function PUT(
     if (body.season !== undefined) updateData.season = body.season || null
     if (body.operator_name !== undefined) updateData.operator_name = body.operator_name || null
     if (body.supplier_id !== undefined) updateData.supplier_id = body.supplier_id || null
+    if (body.property_id !== undefined) {
+      // Optional explicit train link (Phase 3): explicit null clears it, and
+      // a stale id also resolves to null rather than saving a broken link.
+      const trainProp = await resolveRateProperty(supabaseAdmin, {
+        propertyType: 'train',
+        supplierId: body.supplier_id || null,
+        name: null,
+        propertyId: body.property_id,
+      })
+      updateData.property_id = trainProp.property_id
+    }
     if (body.description !== undefined) updateData.description = body.description || null
     if (body.notes !== undefined) updateData.notes = body.notes || null
     if (body.is_active !== undefined) updateData.is_active = body.is_active

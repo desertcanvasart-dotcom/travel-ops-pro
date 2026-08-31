@@ -3,6 +3,7 @@ import { normaliseSleepingTrainCabin, SLEEPING_TRAIN_CABIN_ERROR } from '@/lib/r
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
@@ -56,6 +57,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: SLEEPING_TRAIN_CABIN_ERROR }, { status: 400 })
     }
 
+    // Optional explicit link to one of the supplier's trains (Phase 3);
+    // a stale id resolves to null, and null is omitted so an unmigrated
+    // database still saves.
+    const trainProp = await resolveRateProperty(supabaseAdmin, {
+      propertyType: 'train',
+      supplierId: body.supplier_id || null,
+      name: null,
+      propertyId: body.property_id,
+    })
+
     const newRate = {
       service_code: body.service_code || `SLP-${Date.now().toString(36).toUpperCase()}`,
       origin_city: body.origin_city || null,
@@ -70,6 +81,7 @@ export async function POST(request: NextRequest) {
       season: body.season || null,
       operator_name: body.operator_name || null,
       supplier_id: body.supplier_id || null,
+      ...(trainProp.property_id ? { property_id: trainProp.property_id } : {}),
       description: body.description || null,
       notes: body.notes || null,
       ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
