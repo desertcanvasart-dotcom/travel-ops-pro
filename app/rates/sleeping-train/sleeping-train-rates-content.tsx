@@ -141,6 +141,7 @@ export default function SleepingTrainRatesContent() {
     return code
   }
 
+  const [trains, setTrains] = useState<{ id: string; name: string }[]>([])
   const [formData, setFormData] = useState({
     service_code: '',
     origin_city: '',
@@ -157,6 +158,7 @@ export default function SleepingTrainRatesContent() {
     operator_name: '',
     description: '',
     supplier_id: '',
+    property_id: '',
     notes: '',
     is_active: true
   })
@@ -216,6 +218,7 @@ export default function SleepingTrainRatesContent() {
       operator_name: '',
       description: '',
       supplier_id: '',
+    property_id: '',
       notes: '',
       is_active: true
     })
@@ -240,10 +243,22 @@ export default function SleepingTrainRatesContent() {
       operator_name: rate.operator_name || '',
       description: rate.description || '',
       supplier_id: rate.supplier_id || '',
+      property_id: (rate as { property_id?: string | null }).property_id || '',
       notes: rate.notes || '',
       is_active: rate.is_active
     })
+    void loadTrains(rate.supplier_id || '')
     setShowModal(true)
+  }
+
+  // The supplier's trains, for the optional picker.
+  const loadTrains = async (supplierId: string) => {
+    if (!supplierId) { setTrains([]); return }
+    try {
+      const res = await fetch(`/api/suppliers/${supplierId}/properties?type=train&active_only=true`)
+      const data = await res.json().catch(() => ({}))
+      setTrains(res.ok && data.success ? data.data : [])
+    } catch { setTrains([]) }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -269,7 +284,7 @@ export default function SleepingTrainRatesContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify((() => {
           const { rate_currency: pickedCurrency, ...rest } = formData
-          return { ...rest, ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency) }
+          return { ...rest, property_id: formData.property_id || null, ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency) }
         })())
       })
 
@@ -931,11 +946,28 @@ export default function SleepingTrainRatesContent() {
             <form noValidate onSubmit={handleSubmit} className="p-4 overflow-y-auto max-h-[calc(90vh-140px)]">
               <SupplierPicker
                 value={formData.supplier_id}
-                onChange={(supplier_id: string) => setFormData(prev => ({ ...prev, supplier_id }))}
+                onChange={(supplier_id: string) => { setFormData(prev => ({ ...prev, supplier_id, property_id: '' })); void loadTrains(supplier_id) }}
                 preferredType="train_operator"
                 preferredLabel="Train Operators"
                 className="mb-4"
               />
+              {/* Optional: WHICH of the supplier's trains this rate prices
+                  (supplier-HAS-properties, Phase 3). */}
+              {trains.length > 0 && formData.supplier_id && (
+                <div className="mb-4">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Train (optional)</label>
+                  <select
+                    value={formData.property_id}
+                    onChange={(e) => setFormData(prev => ({ ...prev, property_id: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  >
+                    <option value="">— Any / not specified —</option>
+                    {trains.map(tr => (
+                      <option key={tr.id} value={tr.id}>{tr.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {/* Route Info */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">

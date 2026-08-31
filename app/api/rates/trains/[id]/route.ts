@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { clientMessage } from '@/lib/api-errors'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 
@@ -51,6 +52,16 @@ export async function PUT(
     if (body.rate_valid_to !== undefined) updateData.rate_valid_to = body.rate_valid_to || null
     if (body.operator_name !== undefined) updateData.operator_name = body.operator_name || null
     if (body.supplier_id !== undefined) updateData.supplier_id = body.supplier_id || null
+    if (body.property_id !== undefined) {
+      const trainProp = await resolveRateProperty(supabaseAdmin, {
+        propertyType: 'train',
+        supplierId: body.supplier_id || null,
+        name: null,
+        propertyId: body.property_id,
+      })
+      // Explicit null clears the link; a stale id also resolves to null.
+      updateData.property_id = trainProp.property_id
+    }
     if (body.departure_times !== undefined) updateData.departure_times = body.departure_times || null
     if (body.description !== undefined) updateData.description = body.description || null
     if (body.notes !== undefined) updateData.notes = body.notes || null

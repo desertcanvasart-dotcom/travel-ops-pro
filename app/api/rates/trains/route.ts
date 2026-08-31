@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createActorAdminClient } from '@/lib/supabase-actor'
@@ -48,6 +49,13 @@ export async function POST(request: NextRequest) {
     if (!_rateCheck.ok) {
       return NextResponse.json({ error: 'Invalid rate values', violations: _rateCheck.errors }, { status: 400 })
     }
+    const trainProp = await resolveRateProperty(supabaseAdmin, {
+      propertyType: 'train',
+      supplierId: body.supplier_id || null,
+      name: null,
+      propertyId: body.property_id,
+    })
+
 
     const newRate = {
       service_code: body.service_code || `TRN-${Date.now().toString(36).toUpperCase()}`,
@@ -60,6 +68,10 @@ export async function POST(request: NextRequest) {
       rate_valid_to: body.rate_valid_to || null,
       operator_name: body.operator_name || null,
       supplier_id: body.supplier_id || null,
+      // Optional explicit link to one of the supplier's trains (Phase 3).
+      // Validated through the resolver's propertyId path — a stale id yields
+      // null — and omitted when absent so an unmigrated database still saves.
+      ...(trainProp.property_id ? { property_id: trainProp.property_id } : {}),
       departure_times: body.departure_times || null,
       description: body.description || null,
       notes: body.notes || null,
