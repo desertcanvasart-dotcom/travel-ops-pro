@@ -3464,7 +3464,8 @@
         "created": "{name} created!",
         "deleted": "{name} deleted!",
         "exportSuccess": "Exported {count} hotels to CSV"
-      }
+      },
+      "newHotelOption": "+ New hotel…"
     },
     "flights": {
       "title": "Flight Rates",

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSeasons, legacyColumnMirror } from '@/lib/rates/rate-seasons'
 import { createServerClient } from '@/lib/supabase-server'
-import { resolveShipProperty } from '@/lib/suppliers/resolve-property'
+import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 
 export async function PUT(
@@ -46,15 +46,16 @@ export async function PUT(
         .select('supplier_id, ship_name')
         .eq('id', id)
         .maybeSingle()
-      const ship = await resolveShipProperty(supabase, {
+      const ship = await resolveRateProperty(supabase, {
+        propertyType: 'ship',
         supplierId: 'supplier_id' in updateBody ? updateBody.supplier_id : current?.supplier_id,
-        shipName: 'ship_name' in updateBody ? updateBody.ship_name : current?.ship_name,
+        name: 'ship_name' in updateBody ? updateBody.ship_name : current?.ship_name,
         propertyId: updateBody.property_id,
       })
       updateBody = {
         ...updateBody,
-        property_id: ship.property_id,
-        ...(ship.ship_name ? { ship_name: ship.ship_name } : {}),
+        ...(ship.property_id ? { property_id: ship.property_id } : {}),
+        ...(ship.name ? { ship_name: ship.name } : {}),
       }
     }
 
