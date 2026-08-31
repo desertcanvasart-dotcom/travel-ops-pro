@@ -4449,7 +4449,8 @@
       "singleSupplement": "シングル追加",
       "singleSupplementFull": "シングルルーム追加料金",
       "tripleReduction": "トリプル減額",
-      "tripleReductionFull": "トリプルルーム減額"
+      "tripleReductionFull": "トリプルルーム減額",
+      "newHotelOption": "+ 新しいホテル…"
     },
     "guides": {
       "title": "ガイド料金",

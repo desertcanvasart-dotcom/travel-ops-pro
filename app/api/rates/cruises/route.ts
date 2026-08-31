@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { resolveShipProperty } from '@/lib/suppliers/resolve-property'
+import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSeasons, legacyColumnMirror } from '@/lib/rates/rate-seasons'
 import { validateRatePayload } from '@/lib/rate-validation'
@@ -65,9 +65,10 @@ export async function POST(request: NextRequest) {
     // Supplier-HAS-properties (Phase 1): link the rate to its ship, creating
     // the property under the supplier when it does not exist yet. The
     // property's canonical name wins over the payload spelling.
-    const ship = await resolveShipProperty(supabaseAdmin, {
+    const ship = await resolveRateProperty(supabaseAdmin, {
+      propertyType: 'ship',
       supplierId: supplierCheck.supplier_id,
-      shipName: body.ship_name,
+      name: body.ship_name,
       propertyId: body.property_id,
     })
 
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
       ...legacyColumnMirror(cruiseSeasons, 'cruise'),
       supplier_id: supplierCheck.supplier_id,
       property_id: ship.property_id,
-      ...(ship.ship_name ? { ship_name: ship.ship_name } : {})
+      ...(ship.name ? { ship_name: ship.name } : {})
     }
 
     // Check for existing rate with same natural key

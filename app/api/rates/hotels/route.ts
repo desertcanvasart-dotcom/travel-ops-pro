@@ -3,6 +3,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSeasons, legacyColumnMirror } from '@/lib/rates/rate-seasons'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
+import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
@@ -60,10 +61,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: supplierCheck.error }, { status: supplierCheck.status })
     }
 
+    // Supplier-HAS-properties (Phase 2): link the rate to its hotel, creating
+    // the property under the supplier when it does not exist yet. The
+    // property's canonical name wins over the payload spelling.
+    const hotelProp = await resolveRateProperty(supabaseAdmin, {
+      propertyType: 'hotel',
+      supplierId: supplierCheck.supplier_id,
+      name: body.property_name,
+      propertyId: body.property_id,
+    })
+
     const newHotel = {
       // Basic info
       service_code: body.service_code || `ACC-${Date.now().toString(36).toUpperCase()}`,
-      property_name: body.property_name,
+      property_name: hotelProp.name || body.property_name,
+      property_id: hotelProp.property_id,
       property_type: body.property_type || 'hotel',
       city: body.city || null,
       board_basis: body.board_basis || 'BB',

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSeasons, legacyColumnMirror } from '@/lib/rates/rate-seasons'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
+import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
@@ -51,10 +52,18 @@ export async function PUT(
       return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
     }
 
+    const hotelProp = await resolveRateProperty(supabaseAdmin, {
+      propertyType: 'hotel',
+      supplierId: supplierCheck.supplier_id,
+      name: body.property_name,
+      propertyId: body.property_id,
+    })
+
     const updateData = {
       // Basic info
       service_code: body.service_code,
-      property_name: body.property_name,
+      property_name: hotelProp.name || body.property_name,
+      property_id: hotelProp.property_id,
       property_type: body.property_type || 'hotel',
       city: body.city || null,
       ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
