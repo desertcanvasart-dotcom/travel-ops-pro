@@ -79,6 +79,14 @@ function makeQuery(rows: Row[], table?: string) {
       filtered = filtered.filter((r) => (val === null ? r[col] == null : r[col] === val))
       return builder
     },
+    gte(col: string, val: any) {
+      filtered = filtered.filter((r) => r[col] != null && r[col] >= val)
+      return builder
+    },
+    lte(col: string, val: any) {
+      filtered = filtered.filter((r) => r[col] != null && r[col] <= val)
+      return builder
+    },
     ilike(col: string, pattern: string) {
       const needle = String(pattern).replace(/%/g, '').toLowerCase()
       filtered = filtered.filter((r) =>
