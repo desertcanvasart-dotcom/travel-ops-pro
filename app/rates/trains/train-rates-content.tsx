@@ -669,6 +669,7 @@ export default function TrainRatesContent() {
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('class')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('duration')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('operatorName')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('train')}</th>
                   <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('rate')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('status')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('actions')}</th>
@@ -715,12 +716,17 @@ export default function TrainRatesContent() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      {/* Operator, and WHICH of its trains this rate prices.
-                          The link existed in the database but appeared on no
-                          screen, so a fleet could be recorded and never seen. */}
                       <span className="text-sm text-gray-600">{rate.operator_name || '—'}</span>
-                      {rate.supplier_properties?.name && (
-                        <span className="block text-xs text-gray-400">{rate.supplier_properties.name}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {/* WHICH of the operator's trains this rate prices, as its
+                          own labelled column. It began as a subline under the
+                          operator and was too easy to miss — the operator asked
+                          three times to see the train without opening the form. */}
+                      {rate.supplier_properties?.name ? (
+                        <span className="text-sm text-gray-700">{rate.supplier_properties.name}</span>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">

@@ -4960,7 +4960,8 @@
         "rateDeleted": "を削除しました。",
         "failedToSave": "料金の保存に失敗しました。もう一度お試しください。",
         "failedToDelete": "料金の削除に失敗しました。もう一度お試しください。"
-      }
+      },
+      "train": "列車"
     },
     "sleepingTrains": {
       "title": "寝台列車料金",
@@ -5077,7 +5078,8 @@
         "single": "シングル",
         "halfTwin": "ハーフツイン"
       },
-      "operator": "運行会社"
+      "operator": "運行会社",
+      "train": "列車"
     },
     "airportServices": {
       "title": "空港アシスタント",

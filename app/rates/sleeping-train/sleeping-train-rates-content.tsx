@@ -676,6 +676,7 @@ export default function SleepingTrainRatesContent() {
                   <th className="px-3 py-2 w-8"><input type="checkbox" aria-label="select all" checked={paginatedRates.length > 0 && bulk.selected.size === paginatedRates.length} onChange={() => bulk.toggleAll(paginatedRates.map(r => r.id))} /></th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('route')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('operator')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('train')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('cabin')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('schedule')}</th>
                   <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('oneWay')}</th>
@@ -700,12 +701,15 @@ export default function SleepingTrainRatesContent() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      {/* Operator, and WHICH of its trains this rate prices.
-                          This list showed neither — a sleeping-train rate could
-                          be fully linked and read as belonging to nobody. */}
                       <span className="text-sm text-gray-600">{rate.operator_name || '—'}</span>
-                      {rate.supplier_properties?.name && (
-                        <span className="block text-xs text-gray-400">{rate.supplier_properties.name}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {/* The train, as its own labelled column — see the note in
+                          the regular trains list. */}
+                      {rate.supplier_properties?.name ? (
+                        <span className="text-sm text-gray-700">{rate.supplier_properties.name}</span>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3">

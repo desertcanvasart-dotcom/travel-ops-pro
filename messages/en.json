@@ -3865,7 +3865,8 @@
         "rateDeleted": "has been deleted successfully.",
         "failedToSave": "Failed to save rate. Please try again.",
         "failedToDelete": "Failed to delete rate. Please try again."
-      }
+      },
+      "train": "Train"
     },
     "sleepingTrains": {
       "title": "Sleeping Train Rates",
@@ -3982,7 +3983,8 @@
         "single": "Single",
         "halfTwin": "Half Twin"
       },
-      "operator": "Operator"
+      "operator": "Operator",
+      "train": "Train"
     },
     "guides": {
       "title": "Guide Rates",
