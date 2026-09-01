@@ -6,7 +6,7 @@
  *
  * Source: live production schema via PostgREST OpenAPI
  * (see scripts/generate-db-types.mjs for why not `supabase gen types`).
- * Tables: 179
+ * Tables: 180
  */
 
 export type Json =
@@ -4998,6 +4998,7 @@ export interface Database {
           is_addon: boolean | null
           addon_note: string | null
           rate_currency: string | null
+          is_sellable_extra: boolean
         }
         Insert: {
           id?: string
@@ -5022,6 +5023,7 @@ export interface Database {
           is_addon?: boolean | null
           addon_note?: string | null
           rate_currency?: string | null
+          is_sellable_extra?: boolean
         }
         Update: {
           id?: string
@@ -5046,6 +5048,7 @@ export interface Database {
           is_addon?: boolean | null
           addon_note?: string | null
           rate_currency?: string | null
+          is_sellable_extra?: boolean
         }
         Relationships: [
           {
@@ -5219,6 +5222,69 @@ export interface Database {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      extras_catalogue: {
+        Row: {
+          id: string
+          org_id: string
+          name: string
+          description: string | null
+          category: string | null
+          supplier_cost: number | null
+          supplier_id: string | null
+          selling_price: number | null
+          unit: string
+          is_active: boolean
+          created_at: string
+          updated_at: string
+          created_by: string | null
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          name: string
+          description?: string | null
+          category?: string | null
+          supplier_cost?: number | null
+          supplier_id?: string | null
+          selling_price?: number | null
+          unit?: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          name?: string
+          description?: string | null
+          category?: string | null
+          supplier_cost?: number | null
+          supplier_id?: string | null
+          selling_price?: number | null
+          unit?: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+          created_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extras_catalogue_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extras_catalogue_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           },
         ]

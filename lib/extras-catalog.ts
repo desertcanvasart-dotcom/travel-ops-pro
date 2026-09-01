@@ -13,9 +13,14 @@
 //                     belonging to a specific programme, each with its own
 //                     cost_per_unit and an optional_price_override that is the
 //                     selling price the operator already decided on.
-//   ADD-ONS           entrance_fees where is_addon — things that can be added
-//                     to any trip. The flag has existed for a long time with
-//                     nothing to consume it; this is what it was for.
+//   ATTRACTION EXTRAS entrance_fees where is_sellable_extra — a site the
+//                     customer can pay to add (the pyramid interior). NOT
+//                     is_addon: that flag means "leave out of the automatic
+//                     price", which is a different decision and does not imply
+//                     this one (operator, 1 Sep).
+//   CATALOGUE EXTRAS  extras_catalogue — the things that are not attractions
+//                     at all: airport fast-track, extra luggage, late
+//                     check-out. Org-scoped and priced the same way.
 //
 // THE PICKER PRE-FILLS, IT DOES NOT COMMIT. Every price here is a suggestion
 // the office can change before the extra is offered, which is why an honest
@@ -25,7 +30,7 @@
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { roundToCurrency } from '@/lib/currency-totals'
 
-export type CatalogSourceKind = 'package_option' | 'entrance_fee'
+export type CatalogSourceKind = 'package_option' | 'entrance_fee' | 'catalogue_extra'
 
 export interface CatalogItem {
   source_kind: CatalogSourceKind

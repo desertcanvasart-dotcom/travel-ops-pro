@@ -273,7 +273,8 @@
     "activityLog": "操作ログ",
     "seasonalPremiums": "季節料金",
     "commissionRates": "コミッション",
-    "destinations": "デスティネーション"
+    "destinations": "デスティネーション",
+    "extras": "オプション"
   },
   "roles": {
     "admin": "管理者",
@@ -4655,9 +4656,9 @@
         "validityPeriod": "料金有効期間",
         "validFrom": "有効開始日",
         "validTo": "有効終了日",
-        "addonSettings": "アドオン設定",
-        "isAddon": "これはオプションのアドオンです",
-        "addonDescription": "アドオンは旅程価格に自動的に含まれません。顧客から明示的にリクエストされた場合のみ追加されます（例：ピラミッド内部入場、サウンド＆ライトショー、ラクダ乗り）。",
+        "addonSettings": "価格と販売",
+        "isAddon": "自動計算に含めない",
+        "addonDescription": "日程の自動価格計算から除外します。お客様のご要望があった場合のみ追加してください。（ギザ台地の見学と、ピラミッド内部への入場は別料金です。）",
         "addonNote": "アドオンメモ（内部用）",
         "addonNotePlaceholder": "例：顧客がピラミッド内部をリクエストした場合のみ含める",
         "notes": "備考",
@@ -4665,7 +4666,9 @@
         "activeStatus": "有効（旅程で利用可能）",
         "cancel": "キャンセル",
         "update": "観光地を更新",
-        "create": "観光地を作成"
+        "create": "観光地を作成",
+        "isSellableExtra": "予約時に有料オプションとして提供",
+        "sellableExtraDescription": "予約画面のオプション一覧に表示されます。上の設定とは独立しています。自動計算から外していても、販売対象とは限りません。"
       },
       "categories": {
         "temple": "神殿",
@@ -5667,6 +5670,37 @@
         "triple": "トリプル",
         "suite": "スイート"
       }
+    },
+    "extras": {
+      "title": "オプション",
+      "subtitle": "どの予約にも追加できる有料オプション（空港ファストトラック、追加手荷物、レイトチェックアウトなど）。特定のツアーに紐づくアップグレードは、ツアー → オプションで設定します。",
+      "add": "オプションを追加",
+      "addTitle": "オプションの新規作成",
+      "editTitle": "オプションの編集",
+      "empty": "まだ登録がありません。旅行に付随して販売するものを追加してください。",
+      "name": "名称",
+      "namePlaceholder": "空港ファストトラック",
+      "description": "説明",
+      "category": "カテゴリー",
+      "categoryPlaceholder": "空港",
+      "unit": "課金単位",
+      "perPerson": "1名あたり",
+      "perBooking": "1予約あたり",
+      "cost": "原価",
+      "price": "販売価格",
+      "costLabel": "原価（{currency}）",
+      "priceLabel": "販売価格（{currency}）",
+      "costHelp": "仕入先の見積もりが未定の場合は空欄にしてください。空欄は「未設定」であり、無料ではありません。",
+      "priceHelp": "価格を入力すると、その金額がそのままお客様の支払額になります（マージンは加算されません）。空欄の場合は原価に通常のマージンを加えて計算します。",
+      "active": "このオプションを提供する",
+      "unpriced": "未設定",
+      "editNamed": "{name} を編集",
+      "deleteNamed": "{name} を削除",
+      "save": "保存",
+      "cancel": "キャンセル",
+      "loadFailed": "オプションを読み込めませんでした。再読み込みしてください。",
+      "saveFailed": "オプションを保存できませんでした。",
+      "deleteFailed": "オプションを削除できませんでした。"
     }
   },
   "profitLoss": {
