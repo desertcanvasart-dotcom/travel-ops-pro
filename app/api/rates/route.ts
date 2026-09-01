@@ -207,7 +207,8 @@ export async function GET(request: NextRequest) {
         // ✅ Pull from sleeping_train_rates table
         const sleepingTrainsQuery = supabase
           .from('sleeping_train_rates')
-          .select('*')
+          // The rate names WHICH train it prices; the hub could not show it.
+          .select('*, supplier_properties(name)')
           .eq('is_active', true)
           .order('origin_city')
           .order('destination_city')
@@ -221,7 +222,8 @@ export async function GET(request: NextRequest) {
         // ✅ Pull from train_rates table
         const trainsQuery = supabase
           .from('train_rates')
-          .select('*')
+          // The rate names WHICH train it prices; the hub could not show it.
+          .select('*, supplier_properties(name)')
           .eq('is_active', true)
           .order('origin_city')
           .order('destination_city')

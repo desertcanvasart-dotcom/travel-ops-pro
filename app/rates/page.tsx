@@ -129,6 +129,8 @@ interface CruiseRate {
 }
 
 interface SleepingTrainRate {
+  /** Embedded from the property_id FK — the train this rate prices. */
+  supplier_properties?: { name: string } | null
   id: string
   service_code: string
   operator_name: string
@@ -146,6 +148,8 @@ interface SleepingTrainRate {
 }
 
 interface TrainRate {
+  /** Embedded from the property_id FK — the train this rate prices. */
+  supplier_properties?: { name: string } | null
   id: string
   service_code: string
   operator_name: string
@@ -1184,7 +1188,12 @@ export default function RatesPage() {
                       <td className="px-4 py-3">
                         <div>
                           <p className="text-sm font-medium text-gray-900">{rate.origin_city} → {rate.destination_city}</p>
-                          <p className="text-xs text-gray-500">{rate.operator_name}</p>
+                          <p className="text-xs text-gray-500">
+                            {rate.operator_name}
+                            {rate.supplier_properties?.name && (
+                              <span className="text-gray-400"> · {rate.supplier_properties.name}</span>
+                            )}
+                          </p>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -1241,7 +1250,12 @@ export default function RatesPage() {
                       <td className="px-4 py-3">
                         <div>
                           <p className="text-sm font-medium text-gray-900">{rate.origin_city} → {rate.destination_city}</p>
-                          <p className="text-xs text-gray-500">{rate.operator_name}</p>
+                          <p className="text-xs text-gray-500">
+                            {rate.operator_name}
+                            {rate.supplier_properties?.name && (
+                              <span className="text-gray-400"> · {rate.supplier_properties.name}</span>
+                            )}
+                          </p>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center">

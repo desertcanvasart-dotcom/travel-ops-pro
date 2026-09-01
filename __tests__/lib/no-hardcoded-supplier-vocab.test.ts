@@ -109,4 +109,18 @@ describe('no hardcoded supplier vocabulary', () => {
       ).toBe(false)
     }
   })
+
+  it('every screen that lists train rates names the train', () => {
+    // The link kept being stored and never shown. It reached the trains page
+    // in #317 and was still missing from the rates hub, where a train rate is
+    // listed with only its operator — so a fleet could be recorded, linked,
+    // and still invisible on the screen the operator actually opens first.
+    for (const rel of ['app/rates/trains/train-rates-content.tsx', 'app/rates/page.tsx']) {
+      const src = readFileSync(join(ROOT, rel), 'utf8')
+      expect(
+        src.includes('supplier_properties?.name'),
+        `${rel} lists train rates without naming which train each one prices`
+      ).toBe(true)
+    }
+  })
 })
