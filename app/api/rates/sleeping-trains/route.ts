@@ -4,6 +4,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
+import { operatorNameForSupplier } from '@/lib/suppliers/operator-name'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabaseAdmin
       .from('sleeping_train_rates')
-      .select('*')
+      .select('*, supplier_properties(name)')
       .order('origin_city')
 
     if (supplierId) query = query.eq('supplier_id', supplierId)
@@ -79,7 +80,8 @@ export async function POST(request: NextRequest) {
       rate_valid_from: body.rate_valid_from || null,
       rate_valid_to: body.rate_valid_to || null,
       season: body.season || null,
-      operator_name: body.operator_name || null,
+      // The supplier IS the operator (lib/suppliers/operator-name.ts).
+      operator_name: await operatorNameForSupplier(supabaseAdmin, body.supplier_id, body.operator_name),
       supplier_id: body.supplier_id || null,
       ...(trainProp.property_id ? { property_id: trainProp.property_id } : {}),
       description: body.description || null,

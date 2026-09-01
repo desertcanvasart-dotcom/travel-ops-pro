@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
+import { operatorNameForSupplier } from '@/lib/suppliers/operator-name'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createActorAdminClient } from '@/lib/supabase-actor'
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabaseAdmin
       .from('train_rates')
-      .select('*')
+      .select('*, supplier_properties(name)')
       .order('origin_city')
 
     if (supplierId) query = query.eq('supplier_id', supplierId)
@@ -66,7 +67,8 @@ export async function POST(request: NextRequest) {
       duration_hours: body.duration_hours ? parseFloat(body.duration_hours) : null,
       rate_valid_from: body.rate_valid_from || null,
       rate_valid_to: body.rate_valid_to || null,
-      operator_name: body.operator_name || null,
+      // The supplier IS the operator (lib/suppliers/operator-name.ts).
+      operator_name: await operatorNameForSupplier(supabaseAdmin, body.supplier_id, body.operator_name),
       supplier_id: body.supplier_id || null,
       // Optional explicit link to one of the supplier's trains (Phase 3).
       // Validated through the resolver's propertyId path — a stale id yields

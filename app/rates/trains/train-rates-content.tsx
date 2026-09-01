@@ -62,6 +62,8 @@ interface TrainRate {
   rate_valid_from?: string
   rate_valid_to?: string
   operator_name?: string
+  /** Embedded from the property_id FK — the train this rate prices. */
+  supplier_properties?: { name: string } | null
   supplier_id?: string
   departure_times?: string
   description?: string
@@ -703,7 +705,13 @@ export default function TrainRatesContent() {
                       )}
                     </td>
                     <td className="px-4 py-3">
+                      {/* Operator, and WHICH of its trains this rate prices.
+                          The link existed in the database but appeared on no
+                          screen, so a fleet could be recorded and never seen. */}
                       <span className="text-sm text-gray-600">{rate.operator_name || '—'}</span>
+                      {rate.supplier_properties?.name && (
+                        <span className="block text-xs text-gray-400">{rate.supplier_properties.name}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm font-bold text-green-600">{formatRateInRowCurrency(rate.rate_eur, rate, formatRate)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
@@ -974,21 +982,6 @@ export default function TrainRatesContent() {
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50"
                     />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.operator')}</label>
-                    {/* The operator IS the supplier. A hardcoded list used to
-                        sit here, and it taught the wrong model: it offered
-                        "Spanish Trains (Talgo)" as an OPERATOR when Talgo is
-                        one of ENR's trains. Seven of the eight live rates were
-                        filed against that string with no supplier at all, so
-                        none of them could reach the operator's fleet. */}
-                    <div className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700">
-                      {formData.operator_name || t('form.operatorFromSupplier')}
-                    </div>
-                    {formData.operator_name && !formData.supplier_id && (
-                      <p className="mt-1 text-xs text-amber-700">{t('form.operatorNotRecorded')}</p>
-                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.originCity')} *</label>
