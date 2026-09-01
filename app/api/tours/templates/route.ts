@@ -173,6 +173,37 @@ export async function POST(request: NextRequest) {
       exclusions: body.exclusions || []
     }
 
+    // Idempotency guard. The create form double-fires ~1s apart in the wild
+    // (confirmed in prod: two "Memphis, Sakkara & Dahshur Day Trip" templates
+    // 989ms apart, codes CAI-DAY-828 / CAI-DAY-778). A template's code is
+    // generated per request with no unique constraint, so nothing downstream
+    // dedupes it — the list then shows the tour twice. Before inserting, look
+    // for one just created with the same name and type and return THAT row
+    // instead of a twin. The window is short so a genuine same-name template
+    // made later still creates normally.
+    const dupWindowStart = new Date(Date.now() - 15_000).toISOString()
+    const { data: recent } = await supabaseAdmin
+      .from('tour_templates')
+      // Empty select() returns all columns, like the insert below.
+      .select()
+      .eq('template_name', body.template_name)
+      .eq('tour_type', body.tour_type)
+      .gte('created_at', dupWindowStart)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (recent) {
+      // The double-submit's second request: hand back the row the first one
+      // created (and its already-made 'en' version) rather than a twin.
+      return NextResponse.json({
+        success: true,
+        data: { ...recent, available_languages: ['en'] },
+        message: 'Template already created',
+        deduplicated: true,
+      })
+    }
+
     const { data, error } = await supabaseAdmin
       .from('tour_templates')
       .insert([templateData])
