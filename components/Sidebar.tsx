@@ -432,8 +432,11 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
               />
             </div>
             {!isCollapsed && (
+              // "Ops" distinguishes this operator app (autoura.net) from the
+              // getautoura.net SaaS at a glance — the two were confused in
+              // screenshots because both just read "Autoura".
               <span className="text-lg font-semibold text-primary-600">
-                Autoura
+                Autoura <span className="text-gray-400 font-normal">Ops</span>
               </span>
             )}
           </Link>
