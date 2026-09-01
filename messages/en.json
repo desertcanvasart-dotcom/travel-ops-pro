@@ -3821,7 +3821,6 @@
         "routeDetails": "Route Details",
         "serviceCode": "Service Code",
         "operator": "Operator",
-        "selectOperator": "Select Operator",
         "originCity": "Origin City",
         "selectOrigin": "Select Origin",
         "destinationCity": "Destination City",
@@ -3840,7 +3839,13 @@
         "notes": "Notes",
         "cancel": "Cancel",
         "update": "Update Rate",
-        "create": "Create Rate"
+        "create": "Create Rate",
+        "train": "Train",
+        "trainAny": "— Any / not specified —",
+        "trainPickSupplier": "Pick a supplier above to choose one of its trains",
+        "trainNone": "No trains recorded for this operator yet — add them on the supplier's Properties tab",
+        "operatorFromSupplier": "Set from the supplier above",
+        "operatorNotRecorded": "Not a recorded supplier — pick one above to link this rate to its fleet"
       },
       "deleteModal": {
         "title": "Delete Train Rate?",
@@ -3926,7 +3931,6 @@
         "routeCabinDetails": "Route & Cabin Details",
         "serviceCode": "Service Code",
         "operator": "Operator",
-        "selectOperator": "Select Operator",
         "originCity": "Origin City",
         "selectOrigin": "Select Origin",
         "destinationCity": "Destination City",
@@ -3947,7 +3951,13 @@
         "notes": "Notes",
         "cancel": "Cancel",
         "update": "Update Rate",
-        "create": "Create Rate"
+        "create": "Create Rate",
+        "train": "Train",
+        "trainAny": "— Any / not specified —",
+        "trainPickSupplier": "Pick a supplier above to choose one of its trains",
+        "trainNone": "No trains recorded for this operator yet — add them on the supplier's Properties tab",
+        "operatorFromSupplier": "Set from the supplier above",
+        "operatorNotRecorded": "Not a recorded supplier — pick one above to link this rate to its fleet"
       },
       "deleteModal": {
         "title": "Delete Sleeping Train Rate?",

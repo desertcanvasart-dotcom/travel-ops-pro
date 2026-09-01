@@ -4916,7 +4916,6 @@
         "routeDetails": "ルート詳細",
         "serviceCode": "サービスコード",
         "operator": "運行会社",
-        "selectOperator": "運行会社を選択",
         "originCity": "出発地",
         "selectOrigin": "出発地を選択",
         "destinationCity": "到着地",
@@ -4935,7 +4934,13 @@
         "notes": "備考",
         "cancel": "キャンセル",
         "update": "料金を更新",
-        "create": "料金を作成"
+        "create": "料金を作成",
+        "train": "列車",
+        "trainAny": "— 指定なし —",
+        "trainPickSupplier": "上でサプライヤーを選択すると、その列車を選べます",
+        "trainNone": "このオペレーターの列車はまだ登録されていません。サプライヤーの「プロパティ」タブで追加してください",
+        "operatorFromSupplier": "上のサプライヤーから設定されます",
+        "operatorNotRecorded": "サプライヤーとして未登録です。上で選択すると、この料金が車両に紐付きます"
       },
       "deleteModal": {
         "title": "電車料金を削除しますか？",
@@ -5021,7 +5026,6 @@
         "routeCabinDetails": "ルート＆キャビン詳細",
         "serviceCode": "サービスコード",
         "operator": "運行会社",
-        "selectOperator": "運行会社を選択",
         "originCity": "出発地",
         "selectOrigin": "出発地を選択",
         "destinationCity": "到着地",
@@ -5042,7 +5046,13 @@
         "notes": "備考",
         "cancel": "キャンセル",
         "update": "料金を更新",
-        "create": "料金を作成"
+        "create": "料金を作成",
+        "train": "列車",
+        "trainAny": "— 指定なし —",
+        "trainPickSupplier": "上でサプライヤーを選択すると、その列車を選べます",
+        "trainNone": "このオペレーターの列車はまだ登録されていません。サプライヤーの「プロパティ」タブで追加してください",
+        "operatorFromSupplier": "上のサプライヤーから設定されます",
+        "operatorNotRecorded": "サプライヤーとして未登録です。上で選択すると、この料金が車両に紐付きます"
       },
       "deleteModal": {
         "title": "寝台列車料金を削除しますか？",

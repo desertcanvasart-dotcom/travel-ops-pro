@@ -50,12 +50,6 @@ const CLASS_TYPES = [
   'Business Class'
 ]
 
-const OPERATORS = [
-  'Egyptian National Railways (ENR)',
-  'Spanish Trains (Talgo)',
-  'Private Operator'
-]
-
 interface TrainRate {
   id: string
   service_code: string
@@ -925,29 +919,45 @@ export default function TrainRatesContent() {
             <form noValidate onSubmit={handleSubmit} className="p-4 overflow-y-auto max-h-[calc(90vh-140px)]">
               <SupplierPicker
                 value={formData.supplier_id}
-                onChange={(supplier_id: string) => { setFormData(prev => ({ ...prev, supplier_id, property_id: '' })); void loadTrains(supplier_id) }}
+                onChange={(supplier_id, supplier) => {
+                  // Keep the denormalized operator_name in step with the
+                  // supplier rather than letting a second control disagree.
+                  setFormData(prev => ({ ...prev, supplier_id, property_id: '', operator_name: supplier?.name ?? '' }))
+                  void loadTrains(supplier_id)
+                }}
                 preferredType="train_operator"
                 preferredLabel="Train Operators"
                 className="mb-4"
               />
-              {/* Optional: WHICH of the supplier's trains this rate prices
-                  (supplier-HAS-properties, Phase 3). Rates carry no train
-                  name column, so this link is explicit and optional. */}
-              {trains.length > 0 && formData.supplier_id && (
-                <div className="mb-4">
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Train (optional)</label>
+              {/* WHICH of the supplier's trains this rate prices
+                  (supplier-HAS-properties, Phase 3). Always rendered, in three
+                  states. Hiding it whenever the supplier had no loaded trains
+                  meant an operator who had just added four of them opened this
+                  form, saw nothing at all, and reasonably concluded the
+                  properties had gone nowhere. */}
+              <div className="mb-4">
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.train')}</label>
+                {!formData.supplier_id ? (
+                  <p className="px-3 py-2 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg">
+                    {t('form.trainPickSupplier')}
+                  </p>
+                ) : trains.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg">
+                    {t('form.trainNone')}
+                  </p>
+                ) : (
                   <select
                     value={formData.property_id}
                     onChange={(e) => setFormData(prev => ({ ...prev, property_id: e.target.value }))}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                   >
-                    <option value="">— Any / not specified —</option>
+                    <option value="">{t('form.trainAny')}</option>
                     {trains.map(tr => (
                       <option key={tr.id} value={tr.id}>{tr.name}</option>
                     ))}
                   </select>
-                </div>
-              )}
+                )}
+              </div>
               {/* Route Info */}
               <div className="mb-4">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -967,17 +977,18 @@ export default function TrainRatesContent() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.operator')}</label>
-                    <select
-                      name="operator_name"
-                      value={formData.operator_name}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      <option value="">{t('form.selectOperator')}</option>
-                      {OPERATORS.map(op => (
-                        <option key={op} value={op}>{op}</option>
-                      ))}
-                    </select>
+                    {/* The operator IS the supplier. A hardcoded list used to
+                        sit here, and it taught the wrong model: it offered
+                        "Spanish Trains (Talgo)" as an OPERATOR when Talgo is
+                        one of ENR's trains. Seven of the eight live rates were
+                        filed against that string with no supplier at all, so
+                        none of them could reach the operator's fleet. */}
+                    <div className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-700">
+                      {formData.operator_name || t('form.operatorFromSupplier')}
+                    </div>
+                    {formData.operator_name && !formData.supplier_id && (
+                      <p className="mt-1 text-xs text-amber-700">{t('form.operatorNotRecorded')}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.originCity')} *</label>
