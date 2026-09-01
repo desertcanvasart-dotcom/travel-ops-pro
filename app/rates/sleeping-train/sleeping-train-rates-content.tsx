@@ -70,6 +70,8 @@ interface SleepingTrainRate {
   rate_valid_to?: string
   season?: string
   operator_name?: string
+  /** Embedded from the property_id FK — the train this rate prices. */
+  supplier_properties?: { name: string } | null
   supplier_id?: string
   description?: string
   notes?: string
@@ -673,6 +675,7 @@ export default function SleepingTrainRatesContent() {
                 <tr>
                   <th className="px-3 py-2 w-8"><input type="checkbox" aria-label="select all" checked={paginatedRates.length > 0 && bulk.selected.size === paginatedRates.length} onChange={() => bulk.toggleAll(paginatedRates.map(r => r.id))} /></th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('route')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('operator')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('cabin')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('schedule')}</th>
                   <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('oneWay')}</th>
@@ -695,6 +698,15 @@ export default function SleepingTrainRatesContent() {
                           <p className="text-xs text-gray-500">{rate.service_code}</p>
                         </div>
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {/* Operator, and WHICH of its trains this rate prices.
+                          This list showed neither — a sleeping-train rate could
+                          be fully linked and read as belonging to nobody. */}
+                      <span className="text-sm text-gray-600">{rate.operator_name || '—'}</span>
+                      {rate.supplier_properties?.name && (
+                        <span className="block text-xs text-gray-400">{rate.supplier_properties.name}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs font-medium">

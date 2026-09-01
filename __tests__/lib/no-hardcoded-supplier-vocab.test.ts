@@ -115,7 +115,14 @@ describe('no hardcoded supplier vocabulary', () => {
     // in #317 and was still missing from the rates hub, where a train rate is
     // listed with only its operator — so a fleet could be recorded, linked,
     // and still invisible on the screen the operator actually opens first.
-    for (const rel of ['app/rates/trains/train-rates-content.tsx', 'app/rates/page.tsx']) {
+    // Enumerated deliberately: the link had to be added by hand to each of
+    // these in turn, and the sleeping-train list was still missing it two
+    // rounds later — it showed neither the operator nor the train.
+    for (const rel of [
+      'app/rates/trains/train-rates-content.tsx',
+      'app/rates/sleeping-train/sleeping-train-rates-content.tsx',
+      'app/rates/page.tsx',
+    ]) {
       const src = readFileSync(join(ROOT, rel), 'utf8')
       expect(
         src.includes('supplier_properties?.name'),
