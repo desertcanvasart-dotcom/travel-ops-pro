@@ -1,6 +1,6 @@
 {
   "name": "travel-ops-pro",
-  "version": "2026.08.31-4",
+  "version": "2026.09.01",
   "private": true,
   "scripts": {
     "dev": "next dev",
