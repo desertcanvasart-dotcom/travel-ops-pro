@@ -273,7 +273,8 @@
     "activityLog": "Activity Log",
     "seasonalPremiums": "Seasonal Premiums",
     "commissionRates": "Commissions",
-    "destinations": "Destinations"
+    "destinations": "Destinations",
+    "extras": "Extras"
   },
   "roles": {
     "admin": "Admin",
@@ -4161,9 +4162,9 @@
         "validityPeriod": "Rate Validity Period",
         "validFrom": "Valid From",
         "validTo": "Valid To",
-        "addonSettings": "Add-on Settings",
-        "isAddon": "This is an optional add-on",
-        "addonDescription": "Add-ons are not automatically included in itinerary pricing. They're only added when explicitly requested by the customer (e.g., pyramid interior entry, Sound & Light shows, camel rides).",
+        "addonSettings": "Pricing & sale",
+        "isAddon": "Not included in the automatic price",
+        "addonDescription": "The engine leaves this out when pricing a day — include it only when the customer asks. (Standing on the Giza plateau is not the same as paying to enter a pyramid.)",
         "addonNote": "Add-on Note (internal)",
         "addonNotePlaceholder": "e.g., Only include if customer requests pyramid interior",
         "notes": "Notes",
@@ -4171,7 +4172,9 @@
         "activeStatus": "Active (available for itineraries)",
         "cancel": "Cancel",
         "update": "Update Attraction",
-        "create": "Create Attraction"
+        "create": "Create Attraction",
+        "isSellableExtra": "Offer as a paid extra at booking",
+        "sellableExtraDescription": "Appears in the extras picker on any booking. Independent of the setting above — a site can be left out of the automatic price without being something you sell."
       },
       "categories": {
         "temple": "Temple",
@@ -4831,6 +4834,37 @@
         "triple": "Triple",
         "suite": "Suite"
       }
+    },
+    "extras": {
+      "title": "Extras",
+      "subtitle": "Paid extras you can add to any booking — airport fast-track, extra luggage, a late check-out. Upgrades that belong to one programme are set on its variation, under Tours → Options.",
+      "add": "Add extra",
+      "addTitle": "New extra",
+      "editTitle": "Edit extra",
+      "empty": "No extras yet. Add the things you sell alongside a trip.",
+      "name": "Name",
+      "namePlaceholder": "Airport fast-track",
+      "description": "Description",
+      "category": "Category",
+      "categoryPlaceholder": "Airport",
+      "unit": "Charged",
+      "perPerson": "Per person",
+      "perBooking": "Per booking",
+      "cost": "Cost",
+      "price": "Price",
+      "costLabel": "What it costs us ({currency})",
+      "priceLabel": "What we charge ({currency})",
+      "costHelp": "Leave blank if the supplier has not quoted yet — blank means unpriced, not free.",
+      "priceHelp": "Set a price and that IS what the customer pays, with no margin added. Leave blank to price it from cost plus your usual margin.",
+      "active": "Offer this extra",
+      "unpriced": "Not priced",
+      "editNamed": "Edit {name}",
+      "deleteNamed": "Delete {name}",
+      "save": "Save",
+      "cancel": "Cancel",
+      "loadFailed": "Could not load extras. Please refresh.",
+      "saveFailed": "Could not save the extra.",
+      "deleteFailed": "Could not delete the extra."
     }
   },
   "profitLoss": {

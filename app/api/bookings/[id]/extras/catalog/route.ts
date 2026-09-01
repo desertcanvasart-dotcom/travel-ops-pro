@@ -7,9 +7,13 @@
 //                              the template this trip was built from. The
 //                              operator curates them per package, and each can
 //                              carry its own selling price.
-//   ADD-ONS                    entrance fees flagged is_addon — things that go
-//                              with any trip. The flag has been in the schema
-//                              for a long time with nothing to consume it.
+//   ATTRACTION EXTRAS          entrance fees flagged is_sellable_extra — a
+//                              site the customer can pay to add. Deliberately
+//                              NOT is_addon: that means "not auto-priced", a
+//                              different decision that does not imply this one.
+//   CATALOGUE EXTRAS           extras_catalogue — fast-track, luggage, late
+//                              check-out: sellable things that are not
+//                              attractions and never will be.
 //
 // Both are PRE-FILLS. Every price is a suggestion the office can change before
 // the option is offered, and anything that cannot be priced honestly comes
@@ -110,17 +114,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
   }
 
-  // ---------- add-ons that go with any trip ----------
+  // ---------- attraction extras (sellable sites) ----------
   const addonItems: CatalogItem[] = []
   const { data: addons, error: addonError } = await admin
     .from('entrance_fees')
-    .select('id, attraction_name, city, eur_rate, non_eur_rate, is_addon, is_active, addon_note, supplier_id')
+    .select('id, attraction_name, city, eur_rate, non_eur_rate, is_sellable_extra, is_active, addon_note, supplier_id')
     // NOT org-scoped, because entrance_fees has no org_id column — the rate
     // catalogue predates organisations and is shared, exactly as
     // /api/rates/attractions reads it. If that table is ever partitioned by
     // org, this query has to gain the filter with it.
-    .eq('is_addon', true)
-  if (addonError) console.error('extras catalog: entrance fee add-ons', addonError)
+    .eq('is_sellable_extra', true)
+  if (addonError) console.error('extras catalog: sellable attraction extras', addonError)
 
   for (const a of addons ?? []) {
     if (a.is_active === false) continue
@@ -140,13 +144,40 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     })
   }
 
+  // ---------- catalogue extras (not attractions) ----------
+  const catalogueItems: CatalogItem[] = []
+  const { data: catalogue, error: catalogueError } = await admin
+    .from('extras_catalogue')
+    .select('id, name, description, category, supplier_cost, supplier_id, selling_price, unit, is_active')
+    .eq('org_id', orgId)
+    .eq('is_active', true)
+  if (catalogueError) console.error('extras catalog: catalogue extras', catalogueError)
+
+  for (const c of catalogue ?? []) {
+    // Same pricing rule as a package option: a selling price the operator set
+    // IS the price (off-margin); blank means cost plus the org's margin.
+    const priced = price(c.supplier_cost, c.selling_price)
+    catalogueItems.push({
+      source_kind: 'catalogue_extra',
+      source_id: String(c.id),
+      title: String(c.name),
+      subtitle: [c.category, c.description, c.unit === 'per_booking' ? 'per booking' : 'per person']
+        .filter(Boolean)
+        .join(' · ') || null,
+      supplier_id: c.supplier_id ?? null,
+      ...priced,
+      currency: bookingCurrency,
+    })
+  }
+
   return NextResponse.json({
     currency: bookingCurrency,
     rate_currency: rateCurrency,
     margin_percent: marginPercent,
     groups: [
       { source: 'package', label: 'Options in this programme', items: packageItems },
-      { source: 'addon', label: 'Add-ons', items: addonItems },
+      { source: 'addon', label: 'Attraction extras', items: addonItems },
+      { source: 'catalogue', label: 'Extras', items: catalogueItems },
     ].filter(g => g.items.length > 0),
   })
 }

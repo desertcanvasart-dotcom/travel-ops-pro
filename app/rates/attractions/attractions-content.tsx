@@ -48,7 +48,8 @@ interface Attraction {
   category?: string
   notes?: string
   is_active: boolean
-  is_addon: boolean  // NEW: Add-on flag
+  is_addon: boolean          // not auto-priced — include only when asked
+  is_sellable_extra?: boolean // offer as a paid extra at booking
   addon_note?: string  // NEW: Optional note for add-ons
   supplier_id?: string
   supplier?: { id: string; name: string }
@@ -259,6 +260,7 @@ export default function AttractionsContent() {
     notes: '',
     is_active: true,
     is_addon: false,  // NEW
+    is_sellable_extra: false,
     addon_note: '',   // NEW
     supplier_id: ''
   })
@@ -407,6 +409,7 @@ export default function AttractionsContent() {
       notes: '',
       is_active: true,
       is_addon: false,
+      is_sellable_extra: false,
       addon_note: '',
       supplier_id: ''
     })
@@ -434,6 +437,7 @@ export default function AttractionsContent() {
       notes: attraction.notes || '',
       is_active: attraction.is_active,
       is_addon: attraction.is_addon || false,
+      is_sellable_extra: attraction.is_sellable_extra || false,
       addon_note: attraction.addon_note || '',
       supplier_id: attraction.supplier_id || ''
     })
@@ -1240,6 +1244,26 @@ export default function AttractionsContent() {
                       <span className="text-sm font-medium text-gray-900">{t('form.isAddon')}</span>
                       <p className="text-xs text-gray-600 mt-0.5">
                         {t('form.addonDescription')}
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Two decisions, deliberately separate (operator, 1 Sep):
+                      whether the engine prices it, and whether we sell it.
+                      One flag meant both, so protecting a price silently put
+                      the site on the customer's booking page. */}
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="is_sellable_extra"
+                      checked={formData.is_sellable_extra || false}
+                      onChange={handleCheckboxChange}
+                      className="w-5 h-5 mt-0.5 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-gray-900">{t('form.isSellableExtra')}</span>
+                      <p className="text-xs text-gray-600 mt-0.5">
+                        {t('form.sellableExtraDescription')}
                       </p>
                     </div>
                   </label>

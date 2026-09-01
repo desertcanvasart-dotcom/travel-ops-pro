@@ -74,6 +74,7 @@ export async function GET(
       notes: versionNotes ?? data.notes,
       is_active: data.is_active !== false,
       is_addon: data.is_addon || false,
+      is_sellable_extra: data.is_sellable_extra || false,
       addon_note: data.addon_note,
       supplier_id: data.supplier_id,
       // See the list route: this transform predates per-rate-currency and
@@ -117,6 +118,7 @@ export async function PUT(
       notes,
       is_active,
       is_addon,
+      is_sellable_extra,
       addon_note,
       supplier_id,
       language // optional: if non-English, save translatable fields to version table
@@ -145,6 +147,8 @@ export async function PUT(
       // Do NOT update attraction_name or notes in base record for non-English
       if (is_active !== undefined) updateData.is_active = is_active
       if (is_addon !== undefined) updateData.is_addon = is_addon
+    if (is_sellable_extra !== undefined) updateData.is_sellable_extra = is_sellable_extra
+      if (is_sellable_extra !== undefined) updateData.is_sellable_extra = is_sellable_extra
       if (addon_note !== undefined) updateData.addon_note = addon_note
       if (supplier_id !== undefined) updateData.supplier_id = supplier_id || null
 
@@ -216,6 +220,7 @@ export async function PUT(
     if (notes !== undefined) updateData.notes = notes
     if (is_active !== undefined) updateData.is_active = is_active
     if (is_addon !== undefined) updateData.is_addon = is_addon
+    if (is_sellable_extra !== undefined) updateData.is_sellable_extra = is_sellable_extra
     if (addon_note !== undefined) updateData.addon_note = addon_note
     if (supplier_id !== undefined) updateData.supplier_id = supplier_id || null
 

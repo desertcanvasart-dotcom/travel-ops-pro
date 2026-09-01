@@ -202,6 +202,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'fixedCosts', href: '/rates/fixed-costs', icon: Droplets },
       { labelKey: 'commissionRates', href: '/rates/commissions', icon: Percent },
       { labelKey: 'seasonalPremiums', href: '/rates/seasons', icon: CalendarRange },
+      { labelKey: 'extras', href: '/rates/extras', icon: Sparkles },
       { labelKey: 'pricingRules', href: '/b2b/pricing-rules', icon: Tags },
     ]
   },

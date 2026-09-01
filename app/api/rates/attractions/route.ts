@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
         notes: version?.notes ?? item.notes,
         is_active: item.is_active !== false, // Default to true if not set
         is_addon: item.is_addon || false,
+        is_sellable_extra: item.is_sellable_extra || false,
         addon_note: item.addon_note,
         supplier_id: item.supplier_id,
         // The currency the row is ENTERED in. This hand-maintained field
@@ -149,6 +150,7 @@ export async function POST(request: NextRequest) {
       notes,
       is_active,
       is_addon,
+      is_sellable_extra,
       addon_note,
       supplier_id
     } = body
@@ -179,6 +181,7 @@ export async function POST(request: NextRequest) {
       ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
       is_active: is_active !== false,
       is_addon: is_addon || false,
+      is_sellable_extra: is_sellable_extra || false,
       addon_note: addon_note || null,
       supplier_id: supplier_id || null
     }
