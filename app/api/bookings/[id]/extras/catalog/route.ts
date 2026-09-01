@@ -68,8 +68,25 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const convert: Converter = (amount, from, to) =>
     convertOnDate(fxIndex, amount, from, to, new Date().toISOString()).amount
 
-  const price = (cost: unknown, sellingOverride: unknown) =>
-    priceCatalogItem({ cost, sellingOverride, marginPercent, rateCurrency, bookingCurrency, convert })
+  // Per-row currency (operator, 1 Sep): a rate row may name the currency it
+  // was entered in, and it wins over the org's. An entrance fee stored as
+  // EGP 150 was being priced as if it were 150 of the ORG's currency (USD) —
+  // the picker literally read "converted from USD · we pay $150" for a row
+  // that says EGP. Rows with no rate_currency still fall back to the org's,
+  // which is what every rate table did before the column existed.
+  const price = (
+    cost: unknown,
+    sellingOverride: unknown,
+    row?: { rate_currency?: string | null }
+  ) =>
+    priceCatalogItem({
+      cost,
+      sellingOverride,
+      marginPercent,
+      rateCurrency: row?.rate_currency || rateCurrency,
+      bookingCurrency,
+      convert,
+    })
 
   // ---------- this programme's own options ----------
   const packageItems: CatalogItem[] = []
@@ -99,6 +116,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         if (!key || seen.has(key)) continue
         seen.add(key)
 
+        // tour_variation_services has no rate_currency column: org currency.
         const priced = price(s.cost_per_unit, s.optional_price_override)
         const variation = variationById.get(s.variation_id)
         packageItems.push({
@@ -118,7 +136,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const addonItems: CatalogItem[] = []
   const { data: addons, error: addonError } = await admin
     .from('entrance_fees')
-    .select('id, attraction_name, city, eur_rate, non_eur_rate, is_sellable_extra, is_active, addon_note, supplier_id')
+    .select('id, attraction_name, city, eur_rate, non_eur_rate, rate_currency, is_sellable_extra, is_active, addon_note, supplier_id')
     // NOT org-scoped, because entrance_fees has no org_id column — the rate
     // catalogue predates organisations and is shared, exactly as
     // /api/rates/attractions reads it. If that table is ever partitioned by
@@ -129,7 +147,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   for (const a of addons ?? []) {
     if (a.is_active === false) continue
     const { cost, basis } = entranceFeeBasis(a)
-    const priced = price(cost, null)
+    const priced = price(cost, null, a)
     addonItems.push({
       source_kind: 'entrance_fee',
       source_id: String(a.id),
@@ -156,6 +174,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   for (const c of catalogue ?? []) {
     // Same pricing rule as a package option: a selling price the operator set
     // IS the price (off-margin); blank means cost plus the org's margin.
+    // extras_catalogue is authored in the org's rate currency by design.
     const priced = price(c.supplier_cost, c.selling_price)
     catalogueItems.push({
       source_kind: 'catalogue_extra',
