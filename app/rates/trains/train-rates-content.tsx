@@ -33,6 +33,7 @@ import {
   Info
 } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { averageRateInOneCurrency, formatRateAverage } from '@/lib/currency-totals'
 
 // Egyptian cities with train stations
 const TRAIN_CITIES = [
@@ -351,9 +352,7 @@ export default function TrainRatesContent() {
 
   // Stats
   const activeRates = rates.filter(r => r.is_active).length
-  const avgRate = rates.length > 0
-    ? (rates.reduce((sum, r) => sum + (r.rate_eur || 0), 0) / rates.filter(r => (r.rate_eur || 0) > 0).length || 0).toFixed(0)
-    : '0'
+  const avgRate = averageRateInOneCurrency(rates, r => r.rate_eur, r => r.rate_currency)
   const uniqueRoutes = [...new Set(rates.map(r => `${r.origin_city}-${r.destination_city}`))].length
 
   // Get notification icon
@@ -526,7 +525,7 @@ export default function TrainRatesContent() {
             <span className="text-gray-400 font-bold">{currency}</span>
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{formatRate(Number(avgRate))}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatRateAverage(avgRate, formatRate)}</p>
           <p className="text-xs text-gray-600">{t('avgRate')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">

@@ -44,6 +44,7 @@ import RatePeriodsImportExport from '@/app/components/RatePeriodsImportExport'
 import RateSeasonsEditor from '@/components/rates/RateSeasonsEditor'
 import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { averageRateInOneCurrency, formatRateAverage } from '@/lib/currency-totals'
 
 // Hotel picker option that reveals the free-text input for a new hotel.
 const NEW_PROPERTY = '__new__'
@@ -783,9 +784,7 @@ export default function HotelsContent() {
   // Stats
   const activeRates = rates.filter(r => r.is_active).length
   const linkedRates = rates.filter(r => r.supplier_id).length
-  const avgRate = rates.length > 0 
-    ? (rates.reduce((sum, r) => sum + (r.pp_double_eur || 0), 0) / rates.filter(r => (r.pp_double_eur || 0) > 0).length || 0).toFixed(0)
-    : '0'
+  const avgRate = averageRateInOneCurrency(rates, r => r.pp_double_eur, r => r.rate_currency)
 
   // Prevent hydration mismatch
   // Hooks run before any early return: this page shows a spinner while it loads,
@@ -899,7 +898,7 @@ export default function HotelsContent() {
               <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
             </div>
             <p className="text-xs text-gray-600">{t('avgPPDblLow')}</p>
-            <p className="text-2xl font-bold text-gray-900">{formatRate(Number(avgRate))}</p>
+            <p className="text-2xl font-bold text-gray-900">{formatRateAverage(avgRate, formatRate)}</p>
           </div>
 
           <div className="bg-white p-3 rounded-lg shadow-md border border-gray-200">
