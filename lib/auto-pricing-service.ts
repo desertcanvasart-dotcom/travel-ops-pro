@@ -2296,7 +2296,9 @@ export async function calculateDayBasedPricing(
       isFreeDay: false,
     })
     for (const tipRole of dayTipRoles) {
-      const tipRate = tippingRates.getRate(tipRole.role, tipRole.context)
+      // Tips vary by place: the city picks the rate, falling back to the
+      // country-wide row when this city has none of its own.
+      const tipRate = tippingRates.getRate(tipRole.role, tipRole.context, day.city)
       if (tipRate > 0) {
         const totalTipCost = tipRate * tipRole.quantity
         fixedCosts += totalTipCost

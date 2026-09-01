@@ -5249,7 +5249,8 @@
         "context": "コンテキスト",
         "unit": "単位",
         "amount": "金額",
-        "description": "説明"
+        "description": "説明",
+        "anyCity": "全都市"
       },
       "modal": {
         "addTitle": "チップ料金を追加",
@@ -5263,7 +5264,8 @@
         "amount": "金額（{currency}）",
         "description": "説明",
         "descriptionPlaceholder": "例：終日ツアーガイドチップ",
-        "serviceCodePlaceholder": "空欄の場合は自動生成"
+        "serviceCodePlaceholder": "空欄の場合は自動生成",
+        "anyCity": "全都市（全国共通）"
       },
       "roleTypes": {
         "guide": "ガイド",

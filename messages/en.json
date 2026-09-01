@@ -4263,7 +4263,8 @@
         "context": "Context",
         "unit": "Unit",
         "amount": "Amount",
-        "description": "Description"
+        "description": "Description",
+        "anyCity": "Any city"
       },
       "modal": {
         "addTitle": "Add Tipping Rate",
@@ -4277,7 +4278,8 @@
         "amount": "Amount ({currency})",
         "description": "Description",
         "descriptionPlaceholder": "e.g., Full day tour guide tip",
-        "serviceCodePlaceholder": "Auto-generated if empty"
+        "serviceCodePlaceholder": "Auto-generated if empty",
+        "anyCity": "Any city (country-wide)"
       },
       "roleTypes": {
         "guide": "Guide",
