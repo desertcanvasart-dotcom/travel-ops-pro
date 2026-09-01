@@ -70,4 +70,43 @@ describe('no hardcoded supplier vocabulary', () => {
       'flights now has a SupplierPicker — drop it from KNOWN_UNMIGRATED and remove the AIRLINES list'
     ).toBe(false)
   })
+
+  it('a train form does not offer an operator field at all', () => {
+    // The form briefly showed the operator DERIVED from the supplier. That was
+    // still wrong: it filled only when the supplier selection changed, so
+    // opening an existing rate that already had a supplier showed a
+    // placeholder and saved null straight back over it — which is exactly what
+    // happened to the operator's first properly-linked rate (supplier ENR and
+    // train ENRILATED 3RD stored, operator_name null).
+    //
+    // The supplier IS the operator, so the form names it once. operator_name
+    // is stamped server-side on every write instead.
+    for (const rel of [
+      'app/rates/trains/train-rates-content.tsx',
+      'app/rates/sleeping-train/sleeping-train-rates-content.tsx',
+    ]) {
+      const src = readFileSync(join(ROOT, rel), 'utf8')
+      expect(
+        /name="operator_name"|form\.operatorFromSupplier|form\.selectOperator/.test(src),
+        `${rel} must not render an operator control — the supplier names it`
+      ).toBe(false)
+    }
+  })
+
+  it('every train rate write derives operator_name from the supplier', () => {
+    // A denormalized column the client can set is a column that drifts.
+    for (const rel of [
+      'app/api/rates/trains/route.ts',
+      'app/api/rates/trains/[id]/route.ts',
+      'app/api/rates/sleeping-trains/route.ts',
+      'app/api/rates/sleeping-trains/[id]/route.ts',
+    ]) {
+      const src = readFileSync(join(ROOT, rel), 'utf8')
+      expect(src, `${rel} must stamp operator_name from the supplier`).toContain('operatorNameForSupplier')
+      expect(
+        /operator_name\s*[:=]\s*body\.operator_name/.test(src),
+        `${rel} takes operator_name straight from the client — derive it instead`
+      ).toBe(false)
+    }
+  })
 })

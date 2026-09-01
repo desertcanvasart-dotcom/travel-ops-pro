@@ -3,6 +3,7 @@ import { normaliseSleepingTrainCabin, SLEEPING_TRAIN_CABIN_ERROR } from '@/lib/r
 import { clientMessage } from '@/lib/api-errors'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
+import { operatorNameForSupplier } from '@/lib/suppliers/operator-name'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
@@ -60,7 +61,17 @@ export async function PUT(
     if (body.rate_valid_from !== undefined) updateData.rate_valid_from = body.rate_valid_from || null
     if (body.rate_valid_to !== undefined) updateData.rate_valid_to = body.rate_valid_to || null
     if (body.season !== undefined) updateData.season = body.season || null
-    if (body.operator_name !== undefined) updateData.operator_name = body.operator_name || null
+    // The supplier IS the operator: derive the denormalized name rather
+    // than trusting the client, so the two can never disagree. Clearing the
+    // supplier clears the name — a name with no supplier is the orphan state
+    // this replaced. A payload naming neither (e.g. CSV) is left alone.
+    if (body.supplier_id !== undefined || body.operator_name !== undefined) {
+      updateData.operator_name = await operatorNameForSupplier(
+        supabaseAdmin,
+        body.supplier_id,
+        body.operator_name
+      )
+    }
     if (body.supplier_id !== undefined) updateData.supplier_id = body.supplier_id || null
     if (body.property_id !== undefined) {
       // Optional explicit train link (Phase 3): explicit null clears it, and
