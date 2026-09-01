@@ -59,10 +59,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const rateCurrency = await getOrgRateCurrency(supabaseAdmin, orgId)
     const fresh = await buildFrozenFx(rateCurrency, await getCurrentUserId(), 'reprice')
 
-    const { data: lines } = await supabaseAdmin
+    // itinerary_services hangs off DAYS, not the itinerary: there is no
+    // itinerary_id column, so both queries here 400'd and FX re-pricing
+    // silently found no lines to re-price.
+    const { data: dayRows } = await supabaseAdmin
+      .from('itinerary_days')
+      .select('id')
+      .eq('itinerary_id', id)
+    const dayIds = (dayRows ?? []).map(d => d.id)
+
+    const linesQuery = await supabaseAdmin
       .from('itinerary_services')
       .select('id, supplier_currency, supplier_cost_original, exchange_rate_used, total_cost')
-      .eq('itinerary_id', id)
+      .in('itinerary_day_id', dayIds.length ? dayIds : ['00000000-0000-0000-0000-000000000000'])
+    const lines = linesQuery.data
 
     const currency = itinerary.currency || 'EUR'
     const result = computeFxReprice(lines ?? [], currency, fresh)
@@ -74,7 +84,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .from('itinerary_services')
         .update({ exchange_rate_used: change.new_rate, total_cost: change.new_total })
         .eq('id', change.id)
-        .eq('itinerary_id', id)
+        .in('itinerary_day_id', dayIds)
       if (lineError) {
         return NextResponse.json(
           { success: false, error: `Re-price stopped at a line that would not save: ${lineError.message}. No snapshot was replaced.` },

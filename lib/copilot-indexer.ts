@@ -131,7 +131,8 @@ export async function indexEmailReply(args: IndexEmailReplyArgs): Promise<string
     const { data: inbound } = await supabase
       .from('email_messages')
       .select('subject, body_text, snippet, from_email, sent_at')
-      .eq('unified_conversation_id', conversationId)
+      // email_messages keys on conversation_id, not unified_conversation_id.
+      .eq('conversation_id', conversationId)
       .eq('direction', 'inbound')
       .lt('sent_at', before)
       .order('sent_at', { ascending: false })

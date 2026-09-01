@@ -43,8 +43,11 @@ export async function GET(request: NextRequest) {
     if (emailAddress) {
       const { data: client, error } = await supabase
         .from('clients')
+        // clients has no user_id column — this filter 400'd, so looking up a
+        // client by email address never returned anything. Ownership on this
+        // table is created_by; the lookup is by email, which is what the
+        // caller actually asked for.
         .select('id, name, email, phone, status')
-        .eq('user_id', userId)
         .ilike('email', emailAddress)
         .single()
 
@@ -184,8 +187,9 @@ export async function PUT(request: NextRequest) {
     // Get all clients for this user
     const { data: clients, error: clientError } = await supabase
       .from('clients')
+      // Same missing column as above; the email->client map is built from
+      // every client the caller can see (RLS already scopes it).
       .select('id, email')
-      .eq('user_id', userId)
 
     if (clientError) throw clientError
 

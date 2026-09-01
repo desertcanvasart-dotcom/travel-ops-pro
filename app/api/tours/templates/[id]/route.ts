@@ -198,16 +198,15 @@ export async function DELETE(
       .select('id')
       .eq('tour_id', id)
 
-    if (days && days.length > 0) {
-      const dayIds = days.map(d => d.id)
-
-      // Delete activities for these days
-      const { error: actErr } = await supabaseAdmin
-        .from('tour_day_activities')
-        .delete()
-        .in('tour_day_id', dayIds)
-      if (actErr) console.error('Error deleting day activities:', actErr)
-    }
+    // tour_day_activities links by template_id (+ day_number), NOT by a
+    // tour_day_id — that column does not exist, so this delete 400'd. The
+    // error was only logged, so the template vanished and its activities were
+    // orphaned behind it.
+    const { error: actErr } = await supabaseAdmin
+      .from('tour_day_activities')
+      .delete()
+      .eq('template_id', id)
+    if (actErr) console.error('Error deleting day activities:', actErr)
 
     // Delete days
     const { error: delDaysErr } = await supabaseAdmin
