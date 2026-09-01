@@ -398,7 +398,7 @@ export async function createCruiseItineraryServices(
       isFreeDay: false,
     })
     for (const tipRole of tipRoles) {
-      const tipRate = cruiseTippingRates.getRate(tipRole.role, tipRole.context)
+      const tipRate = cruiseTippingRates.getRate(tipRole.role, tipRole.context, dayCity)
       if (tipRate > 0) {
         const totalTipCost = tipRate * tipRole.quantity
         if (await insertService(dayData.day_number, {

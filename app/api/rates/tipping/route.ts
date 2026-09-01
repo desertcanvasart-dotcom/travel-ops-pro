@@ -48,6 +48,14 @@ export async function POST(request: NextRequest) {
     } else {
       existingQuery = existingQuery.is('context', null)
     }
+    // The city is part of the natural key. Without it a Cairo driver rate and
+    // an Aswan driver rate collide on (role_type, context) and the second
+    // silently OVERWRITES the first.
+    if (body.city) {
+      existingQuery = existingQuery.eq('city', body.city)
+    } else {
+      existingQuery = existingQuery.is('city', null)
+    }
     const { data: existing } = await existingQuery.limit(1)
 
     let data, error

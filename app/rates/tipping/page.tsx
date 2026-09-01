@@ -15,6 +15,7 @@ import { useCurrency } from '@/app/contexts/PreferencesContext'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import { averageRateInOneCurrency, formatRateAverage } from '@/lib/currency-totals'
+import CityOptions from '@/app/components/CityOptions'
 
 // ============================================
 // CONSTANTS
@@ -37,6 +38,8 @@ interface TippingRate {
   rate_unit: string
   rate_eur: number
   rate_currency?: string | null
+  /** Where this tip applies; blank = anywhere. */
+  city?: string | null
   description: string | null
   notes: string | null
   is_active: boolean
@@ -199,6 +202,7 @@ export default function TippingPage() {
     rate_unit: 'per_day',
     rate_eur: 0,
     rate_currency: '',
+    city: '',
     description: '',
     notes: '',
     is_active: true
@@ -254,6 +258,7 @@ export default function TippingPage() {
       rate_unit: 'per_day', 
       rate_eur: 0, 
       rate_currency: '',
+    city: '',
       description: '', 
       notes: '', 
       is_active: true 
@@ -270,6 +275,7 @@ export default function TippingPage() {
       rate_unit: rate.rate_unit,
       rate_eur: rate.rate_eur,
       rate_currency: rate.rate_currency || '',
+      city: rate.city || '',
       description: rate.description || '',
       notes: rate.notes || '',
       is_active: rate.is_active
@@ -495,6 +501,7 @@ export default function TippingPage() {
                   <th className="px-3 py-2 w-8"><input type="checkbox" aria-label="select all" checked={paginatedRates.length > 0 && bulk.selected.size === paginatedRates.length} onChange={() => bulk.toggleAll(paginatedRates.map(r => r.id))} /></th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-green-800">{t('table.role')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-green-800">{t('table.context')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-green-800">{tCommon('city')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-green-800">{t('table.unit')}</th>
                   <th className="px-4 py-2 text-right text-xs font-semibold text-green-800">{t('table.amount')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-green-800">{t('table.description')}</th>
@@ -521,6 +528,9 @@ export default function TippingPage() {
                     </td>
                     <td className="px-4 py-3 text-center text-xs text-gray-600">
                       {rate.context ? t(`contexts.${rate.context}`) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center text-sm text-gray-600">
+                      {rate.city || <span className="text-gray-400">{t('table.anyCity')}</span>}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs font-medium">
@@ -631,6 +641,22 @@ export default function TippingPage() {
                     ))}
                   </select>
                 </div>
+              </div>
+              <div>
+                {/* What a driver is tipped in Cairo is not what a driver is
+                    tipped in Aswan. Blank means the country-wide rate, which
+                    every row meant before this field existed — the engine
+                    prefers a city match and falls back to it. */}
+                <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('city')}</label>
+                <select
+                  name="city"
+                  value={formData.city}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
+                >
+                  <option value="">{t('form.anyCity')}</option>
+                  <CityOptions />
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

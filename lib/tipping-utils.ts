@@ -24,17 +24,28 @@ export type TipContext = 'day_tour' | 'half_day_tour' | 'cruise' | 'transfer' | 
 export interface ItemizedTipRate {
   role_type: TipRoleType
   context: TipContext | null
+  /** Where this rate applies; null = anywhere (the country-wide rate). */
+  city: string | null
   rate_eur: number          // Already tier-adjusted
   service_code: string
 }
 
 export interface ItemizedTippingRates {
   allRates: ItemizedTipRate[]
-  /** Get tier-adjusted rate for a role+context.
-   *  Falls back: exact role+context → role with context=null → 0 */
-  getRate: (role: TipRoleType, context?: TipContext) => number
-  /** Sum rates for multiple role lookups */
-  sumRates: (roles: Array<{ role: TipRoleType; context?: TipContext; quantity?: number }>) => number
+  /** Get the tier-adjusted rate for a role, in a city.
+   *
+   *  Most specific wins, and only ONE row is ever charged:
+   *    role+context+city → role+context anywhere →
+   *    role+city → role anywhere → 0
+   *
+   *  Omitting the city is the pre-city behaviour: only country-wide rows
+   *  match, so every existing itinerary prices exactly as before. */
+  getRate: (role: TipRoleType, context?: TipContext, city?: string | null) => number
+  /** Sum rates for multiple role lookups, all in the same city. */
+  sumRates: (
+    roles: Array<{ role: TipRoleType; context?: TipContext; quantity?: number }>,
+    city?: string | null
+  ) => number
 }
 
 export interface DayTipContext {
@@ -99,10 +110,33 @@ export async function getDailyTippingRate(
   }
   const rates = normalizer ? await normalizer.normalize('tipping_rates', data) : data
 
-  const baseDailyTips = (rates || []).reduce(
-    (sum: number, t: any) => t.rate_unit === 'per_day' ? sum + (parseFloat(t.rate_eur) || 0) : sum,
-    0
-  )
+  // ONE row per role+context, never a Cairo rate plus an Aswan rate on the
+  // same day. This path has no city to match on (it is the flat, trip-level
+  // estimate), so it charges the country-wide row for each group and skips
+  // groups that only have city-specific rows — an over-estimate would be
+  // invented money, and this helper cannot know which city to pick.
+  const perDay = (rates || []).filter((t: any) => t.rate_unit === 'per_day')
+  const groups = new Map<string, any[]>()
+  for (const t of perDay) {
+    const key = `${t.role_type ?? ''}|${t.context ?? ''}`
+    groups.set(key, [...(groups.get(key) ?? []), t])
+  }
+  let skipped = 0
+  let baseDailyTips = 0
+  for (const [, rows] of groups) {
+    const countryWide = rows.find((t: any) => !t.city)
+    if (countryWide) {
+      baseDailyTips += parseFloat(countryWide.rate_eur) || 0
+    } else {
+      skipped += 1
+    }
+  }
+  if (skipped > 0) {
+    console.warn(
+      `[Tipping] ${skipped} role(s) have only city-specific rates and were skipped by the flat ` +
+      `estimate — use getItemizedTippingRates(), which resolves per day and per city.`
+    )
+  }
 
   if (baseDailyTips === 0) {
     console.warn('⚠️ No per_day tipping rates found in tipping_rates table — tips will be €0')
@@ -148,6 +182,7 @@ export async function getItemizedTippingRates(
     .map((t: any) => ({
       role_type: t.role_type as TipRoleType,
       context: (t.context || null) as TipContext | null,
+      city: (t.city || null) as string | null,
       rate_eur: Math.round((parseFloat(t.rate_eur) || 0) * multiplier),
       service_code: t.service_code || `TIP-${(t.role_type || 'OTHER').toUpperCase()}`,
     }))
@@ -169,24 +204,45 @@ function buildEmptyRates(): ItemizedTippingRates {
 
 function buildRatesObject(allRates: ItemizedTipRate[]): ItemizedTippingRates {
   /**
-   * Look up the tier-adjusted rate for a role + optional context.
-   * Fallback chain: exact role+context → role with context=null → 0
+   * Look up the tier-adjusted rate for a role, in a city.
+   *
+   * Most specific first, and exactly ONE row is charged. That "one row" part
+   * is the whole point: the naive reading of a city column — sum every active
+   * row — would bill a Cairo driver tip AND an Aswan driver tip on every
+   * single day of the trip.
+   *
+   * Chain: role+context+city → role+context anywhere →
+   *        role+city → role anywhere → 0
+   *
+   * A blank city on a row keeps the meaning it has always had: anywhere. With
+   * no city passed in, only those rows match, so an itinerary priced before
+   * this column existed prices identically after it.
    */
-  const getRate = (role: TipRoleType, context?: TipContext): number => {
-    // 1. Try exact match (role + context)
-    if (context) {
-      const exact = allRates.find(r => r.role_type === role && r.context === context)
-      if (exact) return exact.rate_eur
+  const norm = (c?: string | null) => (c || '').trim().toLowerCase()
+
+  const getRate = (role: TipRoleType, context?: TipContext, city?: string | null): number => {
+    const here = norm(city)
+    const inCity = (r: ItemizedTipRate) => here !== '' && norm(r.city) === here
+    const anywhere = (r: ItemizedTipRate) => !r.city
+
+    const candidates: Array<(r: ItemizedTipRate) => boolean> = [
+      r => r.role_type === role && !!context && r.context === context && inCity(r),
+      r => r.role_type === role && !!context && r.context === context && anywhere(r),
+      r => r.role_type === role && !r.context && inCity(r),
+      r => r.role_type === role && !r.context && anywhere(r),
+    ]
+    for (const match of candidates) {
+      const hit = allRates.find(match)
+      if (hit) return hit.rate_eur
     }
-    // 2. Fallback to role with no context (default rate for that role)
-    const fallback = allRates.find(r => r.role_type === role && !r.context)
-    if (fallback) return fallback.rate_eur
-    // 3. No rate found
     return 0
   }
 
-  const sumRates = (roles: Array<{ role: TipRoleType; context?: TipContext; quantity?: number }>): number => {
-    return roles.reduce((sum, r) => sum + getRate(r.role, r.context) * (r.quantity || 1), 0)
+  const sumRates = (
+    roles: Array<{ role: TipRoleType; context?: TipContext; quantity?: number }>,
+    city?: string | null
+  ): number => {
+    return roles.reduce((sum, r) => sum + getRate(r.role, r.context, city) * (r.quantity || 1), 0)
   }
 
   return { allRates, getRate, sumRates }

@@ -1110,7 +1110,7 @@ export async function createLandItineraryServices(
         isFreeDay: false,
       })
       for (const tipRole of departureTipRoles) {
-        const tipRate = rates.tippingRates.getRate(tipRole.role, tipRole.context)
+        const tipRate = rates.tippingRates.getRate(tipRole.role, tipRole.context, departureCity)
         if (tipRate > 0) {
           const totalTipCost = tipRate * tipRole.quantity
           departureServices.push({
@@ -1730,7 +1730,7 @@ export async function createLandItineraryServices(
       isFreeDay,
     })
     for (const tipRole of dayTipRoles) {
-      const tipRate = rates.tippingRates.getRate(tipRole.role, tipRole.context)
+      const tipRate = rates.tippingRates.getRate(tipRole.role, tipRole.context, dayData.city || effectiveCity)
       if (tipRate > 0) {
         const totalTipCost = tipRate * tipRole.quantity
         services.push({
