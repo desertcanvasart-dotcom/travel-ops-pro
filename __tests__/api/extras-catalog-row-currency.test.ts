@@ -53,7 +53,11 @@ describe('extras catalog currency selection', () => {
     expect(asEgp.supplier_currency).toBe('EGP')
     expect(asEgp.unit_price).toBe(585)        // 150 × 1.3 × 3
     expect(asOrgUsd.unit_price).toBe(29250)   // what the picker was showing
-    expect(asEgp.unit_price).toBeLessThan(asOrgUsd.unit_price)
+    // Both are priced here, so narrow before comparing — unit_price is
+    // legitimately null when a rate is missing.
+    expect(asEgp.unit_price).not.toBeNull()
+    expect(asOrgUsd.unit_price).not.toBeNull()
+    expect(asEgp.unit_price!).toBeLessThan(asOrgUsd.unit_price!)
     expect(asEgp.price_note).toMatch(/converted from EGP/)
   })
 
