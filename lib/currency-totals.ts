@@ -96,6 +96,73 @@ export function formatMoney(amount: number, currency: string): string {
   })}`
 }
 
+export type RateAverage = { amount: number; currency: string | null }
+
+/**
+ * Average a rate column in ONE currency, or refuse to average at all.
+ *
+ * The same rule as sumByCurrency, one level up. An average across currencies
+ * is not a rougher version of the truth, it is a different number: summing a
+ * raw 600 (EGP) with a raw 22 (org currency) produced the ¥44,817 header
+ * fiction on the attractions page, and "Avg. Tip $600.00" for two rows stored
+ * as EGP 500 and EGP 700 is neither a dollar figure nor a number anybody
+ * typed (operator, 1 Sep).
+ *
+ * So: average the org-currency rows when there are any; otherwise, if every
+ * priced row shares one entry currency (an all-EGP list), average in THAT
+ * currency; mixed currencies get null, which the caller renders as a dash.
+ * Nothing is ever converted — this is a stat, not an exchange desk.
+ *
+ * Unpriced rows are excluded from both the sum AND the count, because a blank
+ * rate is a hole and not a 0. (Dividing by every row, holes included, is what
+ * the first version of this on the attractions page did.)
+ *
+ * Returns null — never the string '—' — so a caller cannot format a dash as
+ * a number. That mistake is where the ¥NaN card came from.
+ */
+export function averageRateInOneCurrency<T>(
+  items: T[] | null | undefined,
+  getAmount: (item: T) => unknown,
+  getCurrency: (item: T) => unknown
+): RateAverage | null {
+  const code = (item: T): string | null => {
+    const c = getCurrency(item)
+    return typeof c === 'string' && c.trim() ? c.trim().toUpperCase() : null
+  }
+  const priced = (items ?? []).filter(i => num(getAmount(i)) > 0)
+  if (priced.length === 0) return null
+
+  // Rounded to the currency's own precision, the same rule addToTotals
+  // follows: an average of ¥100 and ¥101 is ¥101, not ¥100.5.
+  const avg = (rows: T[], currency: string | null) => {
+    const mean = rows.reduce((sum, r) => sum + num(getAmount(r)), 0) / rows.length
+    if (!currency) return mean
+    const factor = currencyDecimals(currency) === 0 ? 1 : 100
+    return Math.round(mean * factor) / factor
+  }
+
+  const orgRows = priced.filter(i => code(i) === null)
+  if (orgRows.length) return { amount: avg(orgRows, null), currency: null }
+
+  const currencies = new Set(priced.map(code))
+  if (currencies.size === 1) {
+    const currency = code(priced[0])
+    return { amount: avg(priced, currency), currency }
+  }
+  return null
+}
+
+/** Render a RateAverage in its own currency, the org's, or an honest dash. */
+export function formatRateAverage(
+  average: RateAverage | null,
+  orgFormat: (amount: number) => string
+): string {
+  if (average === null) return '\u2014'
+  return average.currency
+    ? formatMoney(average.amount, average.currency)
+    : orgFormat(average.amount)
+}
+
 /**
  * Render totals for a single tile: "€1,200.00 + $300.00".
  *

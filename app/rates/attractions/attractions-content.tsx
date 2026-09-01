@@ -1,7 +1,7 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
-import { formatMoney } from '@/lib/currency-totals'
+import { averageRateInOneCurrency, formatRateAverage } from '@/lib/currency-totals'
 import { useEffect, useState } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
@@ -570,25 +570,11 @@ export default function AttractionsContent() {
   const activeAttractions = attractions.filter(a => a.is_active).length
   const addonAttractions = attractions.filter(a => a.is_addon).length  // NEW
   const standardAttractions = attractions.filter(a => !a.is_addon).length  // NEW
-  // An average is only meaningful within ONE currency — summing a raw 600
-  // (EGP) with a raw 22 (org currency) produced the ¥44,817 header fiction.
-  // Average the org-currency rows when there are any; otherwise, if every
-  // row shares a single entry currency (an all-EGP list, say), average in
-  // THAT currency; mixed currencies get an honest dash. Never converted:
-  // a stat, not an exchange desk. (And null, not '—', out of the compute —
-  // formatting a dash as a number was the ¥NaN card.)
-  const avgOf = (rows: Attraction[]) =>
-    rows.reduce((sum, a) => sum + (a.eur_rate || 0), 0) / rows.length
-  const avgRate: { amount: number; currency: string | null } | null = (() => {
-    if (attractions.length === 0) return null
-    const orgRows = attractions.filter(a => !a.rate_currency)
-    if (orgRows.length) return { amount: avgOf(orgRows), currency: null }
-    const currencies = new Set(attractions.map(a => a.rate_currency))
-    if (currencies.size === 1) {
-      return { amount: avgOf(attractions), currency: attractions[0].rate_currency! }
-    }
-    return null
-  })()
+  // This page's rule — average within ONE currency or not at all — is now the
+  // shared one in lib/currency-totals, because every other rates page had the
+  // very fiction it was written to stop. Moving it here also drops unpriced
+  // rows from the denominator, which the local version still counted.
+  const avgRate = averageRateInOneCurrency(attractions, a => a.eur_rate, a => a.rate_currency)
 
   if (loading) {
     return (
@@ -725,11 +711,7 @@ export default function AttractionsContent() {
             </div>
             <p className="text-xs text-gray-600">{t('stats.avgEurRate')}</p>
             <p className="text-2xl font-bold text-gray-900">
-              {avgRate === null
-                ? '—'
-                : avgRate.currency
-                  ? formatMoney(avgRate.amount, avgRate.currency)
-                  : formatRate(avgRate.amount)}
+              {formatRateAverage(avgRate, formatRate)}
             </p>
           </div>
         </div>

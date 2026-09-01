@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
-import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
@@ -14,6 +14,7 @@ import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rate
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
+import { averageRateInOneCurrency, formatRateAverage } from '@/lib/currency-totals'
 
 // ============================================
 // CONSTANTS
@@ -363,9 +364,7 @@ export default function TippingPage() {
     active: rates.filter(r => r.is_active).length,
     guides: rates.filter(r => r.role_type === 'guide').length,
     drivers: rates.filter(r => r.role_type === 'driver').length,
-    avgTip: rates.length > 0 
-      ? Math.round(rates.reduce((sum, r) => sum + r.rate_eur, 0) / rates.length)
-      : 0
+    avgTip: averageRateInOneCurrency(rates, r => r.rate_eur, r => r.rate_currency)
   }
 
   // Hooks run before any early return: this page shows a spinner while it loads,
@@ -446,7 +445,7 @@ export default function TippingPage() {
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
             <p className="text-xs text-gray-600">{t('stats.avgTip')}</p>
-            <p className="text-2xl font-bold text-green-600">{formatRate(stats.avgTip)}</p>
+            <p className="text-2xl font-bold text-green-600">{formatRateAverage(stats.avgTip, formatRate)}</p>
           </div>
         </div>
 
@@ -529,7 +528,7 @@ export default function TippingPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                      {formatRate(rate.rate_eur)}
+                      {formatRateInRowCurrency(rate.rate_eur, rate, formatRate)}
                       {rate.rate_currency && (
                         <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>
                       )}

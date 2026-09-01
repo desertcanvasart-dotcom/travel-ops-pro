@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
-import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -15,6 +15,7 @@ import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rate
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
+import { averageRateInOneCurrency, formatRateAverage } from '@/lib/currency-totals'
 
 // ============================================
 // CONSTANTS
@@ -399,12 +400,7 @@ export default function AirportServicesPage() {
     // Average across PRICED rows only. Summing unpriced rows and dividing by
     // every row reports an average nobody charges — and after the rate_eur
     // column became nullable, `sum + null` would quietly count them as 0.
-    avgRate: (() => {
-      const priced = rates.map(r => r.rate_eur).filter((v): v is number => v != null && v > 0)
-      return priced.length > 0
-        ? Math.round(priced.reduce((sum, v) => sum + v, 0) / priced.length)
-        : 0
-    })()
+    avgRate: averageRateInOneCurrency(rates, r => r.rate_eur, r => r.rate_currency)
   }
 
   // Hooks run before any early return: this page shows a spinner while it loads,
@@ -485,7 +481,7 @@ export default function AirportServicesPage() {
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
             <p className="text-xs text-gray-600">{tCommon('avgRate')}</p>
-            <p className="text-2xl font-bold text-green-600">{formatRate(stats.avgRate)}</p>
+            <p className="text-2xl font-bold text-green-600">{formatRateAverage(stats.avgRate, formatRate)}</p>
           </div>
         </div>
 
@@ -589,7 +585,7 @@ export default function AirportServicesPage() {
                         <span className="text-gray-400 font-normal italic">{tCommon('notPriced')}</span>
                       ) : (
                         <>
-                          {formatRate(rate.rate_eur)}
+                          {formatRateInRowCurrency(rate.rate_eur, rate, formatRate)}
                           {rate.rate_currency && (
                             <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>
                           )}
