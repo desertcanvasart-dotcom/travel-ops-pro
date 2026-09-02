@@ -124,6 +124,8 @@ interface PriceCalculationResult {
   // deliverable only when complete; holes are surfaced, never fabricated away.
   complete?: boolean
   holes?: { kind: string; message: string }[]
+  /** Engine warnings (unmatched attractions, skipped guides, …). */
+  warnings?: string[]
 }
 
 // Catalogue extras chosen for this quote. Only ACTIVE rows of this org come
@@ -658,6 +660,11 @@ export async function POST(request: NextRequest) {
         // present an under-backed rate sheet as final.
         complete: autoPriceResult.complete,
         holes: autoPriceResult.holes?.map(h => ({ kind: h.kind, message: h.message })),
+        // The engine's warnings — every "no entrance fee found for …", every
+        // skipped guide — travelled only with a FAILED pricing. A quote that
+        // priced $343 for an 8-day deluxe cruise looked complete because
+        // nobody could see the eleven lines it could not price.
+        warnings: autoPriceResult.warnings ?? [],
       }
 
       console.log('🎉 B2B Price calculated via auto-pricing:', {

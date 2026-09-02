@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
     if (body.service_code) {
       const { data } = await supabaseAdmin
         .from('entrance_fees')
-        .select('id')
+        .select('*')
         .eq('service_code', body.service_code)
         .limit(1)
       existing = data
@@ -156,19 +156,19 @@ export async function POST(request: NextRequest) {
       existing = data
     }
 
-    let data, error
+    // A create never updates. The natural-key match used to be UPDATED in
+    // place — so "Duplicate this rate, change the season, save" rewrote the
+    // original and nothing new appeared (the train-rates overwrite, same class,
+    // #325). An exact duplicate is answered with the existing row instead.
     if (existing?.length) {
-      // Update existing record — only update non-translatable fields to protect versions
-      const { attraction_name: _name, notes: _notes, ...nonTranslatableFields } = newFee
-      const result = await supabaseAdmin
-        .from('entrance_fees')
-        .update({ ...nonTranslatableFields, updated_at: new Date().toISOString() })
-        .eq('id', existing[0].id)
-        .select('*')
-        .single()
-      data = result.data
-      error = result.error
-    } else {
+      return NextResponse.json({
+        success: false,
+        error: 'A rate with these details already exists. Edit that rate, or change what makes this one different (supplier, period, class, city) before saving.',
+        existing: existing[0],
+      }, { status: 409 })
+    }
+    let data, error
+    {
       // Insert new record
       const result = await supabaseAdmin
         .from('entrance_fees')
@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data, updated: !!existing?.length })
+    return NextResponse.json({ success: true, data, updated: false })
   } catch (error: any) {
     console.error('POST entrance_fees catch error:', error)
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
