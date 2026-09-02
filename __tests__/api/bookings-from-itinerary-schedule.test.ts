@@ -75,3 +75,18 @@ describe('POST /api/bookings from an itinerary', () => {
     expect(rows[0].balance_due_date).toBe('2026-10-21')
   })
 })
+
+describe('no route hand-rolls a booking deposit', () => {
+  it('the itinerary status route has no 30% literal and uses the shared builder', () => {
+    // THE actual source of BKG-2026-0001..0004: confirming an itinerary
+    // auto-creates its booking in app/api/itineraries/[id]/route.ts, and that
+    // block computed deposit = total × 0.3 with no schedule at all.
+    const { readFileSync } = require('fs') as typeof import('fs')
+    const { join } = require('path') as typeof import('path')
+    const src = readFileSync(join(__dirname, '..', '..', 'app', 'api', 'itineraries', '[id]', 'route.ts'), 'utf8')
+    expect(src).not.toMatch(/\*\s*0\.3\b/)
+    expect(src).toContain('buildBookingRow({')
+    expect(src).toContain('paymentRuleFrom(orgTerms)')
+    expect(src).toContain('populateSuppliersFromItinerary(')
+  })
+})
