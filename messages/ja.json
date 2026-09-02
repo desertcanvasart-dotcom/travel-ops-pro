@@ -1812,7 +1812,9 @@
       "unassigned": "未割り当て",
       "noMembersInDept": "この部門にメンバーがいません",
       "generate": "タスクを生成",
-      "opsSheet": "オペレーションシート"
+      "opsSheet": "オペレーションシート",
+      "pdfNeedsDays": "この旅程にはまだ日程がないため、見積PDFに載せる内容がありません。先にエディターで日程を追加してください。",
+      "pdfTooltip": "この旅程の日程と料金から作成する見積PDF"
     },
     "editAction": "編集",
     "share": {
