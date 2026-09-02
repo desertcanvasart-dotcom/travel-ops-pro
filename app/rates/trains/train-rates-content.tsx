@@ -280,6 +280,16 @@ export default function TrainRatesContent() {
 
       const data = await response.json()
 
+      if (response.status === 409 && data.existing) {
+        // This exact rate (route, class, train, supplier, period) is already
+        // recorded. The server no longer overwrites it from a create — it
+        // used to, and prices vanished. Keep what was typed, switch the
+        // modal to editing the existing row, and let the user decide.
+        showNotification('error', 'Already recorded', `${data.error} Your values are kept: "Update" will change that rate.`)
+        setEditingRate(data.existing)
+        return
+      }
+
       if (!response.ok || !data.success) {
         showNotification('error', 'Error', data.error || 'Failed to save rate')
         return

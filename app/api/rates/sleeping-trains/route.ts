@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { normaliseSleepingTrainCabin, SLEEPING_TRAIN_CABIN_ERROR } from '@/lib/rates/sleeping-train-cabins'
 import { clientMessage } from '@/lib/api-errors'
+import { whereNullable, describeValidity } from '@/lib/rates/natural-key'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
@@ -90,62 +91,51 @@ export async function POST(request: NextRequest) {
       is_active: body.is_active !== false
     }
 
-    // Check for existing rate with same natural key
+    // The FULL natural key, or a create silently overwrites (lib/rates/natural-key.ts).
+    // Origin + destination + cabin_type + supplier was the old key: it had no
+    // train and no validity period, so a second train's price on the same route
+    // REPLACED the first (2026-08-31 / 2026-09-02, thirteen creates, zero inserts).
     let existingQuery = supabaseAdmin
       .from('sleeping_train_rates')
-      .select('id')
-    if (newRate.origin_city) {
-      existingQuery = existingQuery.ilike('origin_city', newRate.origin_city)
-    } else {
-      existingQuery = existingQuery.is('origin_city', null)
-    }
-    if (newRate.destination_city) {
-      existingQuery = existingQuery.ilike('destination_city', newRate.destination_city)
-    } else {
-      existingQuery = existingQuery.is('destination_city', null)
-    }
-    if (newRate.cabin_type) {
-      existingQuery = existingQuery.eq('cabin_type', newRate.cabin_type)
-    } else {
-      existingQuery = existingQuery.is('cabin_type', null)
-    }
-    // A rate belongs to a supplier: two companies may quote the same service,
-    // and a key that ignores the supplier makes the second overwrite the first.
-    if (newRate.supplier_id) {
-      existingQuery = existingQuery.eq('supplier_id', newRate.supplier_id)
-    } else {
-      existingQuery = existingQuery.is('supplier_id', null)
-    }
+      .select('*')
+    existingQuery = whereNullable(existingQuery, 'origin_city', newRate.origin_city, { ilike: true })
+    existingQuery = whereNullable(existingQuery, 'destination_city', newRate.destination_city, { ilike: true })
+    existingQuery = whereNullable(existingQuery, 'cabin_type', newRate.cabin_type)
+    // A rate belongs to a supplier: two companies may quote the same service.
+    existingQuery = whereNullable(existingQuery, 'supplier_id', newRate.supplier_id)
+    // ...and to ONE of that supplier's trains.
+    existingQuery = whereNullable(existingQuery, 'property_id', trainProp.property_id)
+    // ...for ONE validity period. Next season's price is a new row, not an edit.
+    existingQuery = whereNullable(existingQuery, 'rate_valid_from', newRate.rate_valid_from)
+    existingQuery = whereNullable(existingQuery, 'rate_valid_to', newRate.rate_valid_to)
     const { data: existing } = await existingQuery.limit(1)
 
-    let data, error
     if (existing?.length) {
-      // Update existing record
-      const result = await supabaseAdmin
-        .from('sleeping_train_rates')
-        .update({ ...newRate, updated_at: new Date().toISOString() })
-        .eq('id', existing[0].id)
-        .select('*')
-        .single()
-      data = result.data
-      error = result.error
-    } else {
-      // Insert new record
-      const result = await supabaseAdmin
-        .from('sleeping_train_rates')
-        .insert(newRate)
-        .select('*')
-        .single()
-      data = result.data
-      error = result.error
+      // Never update from a create. The form switches to editing THIS row so
+      // nothing the user typed is lost — but the overwrite is now their call.
+      const train = trainProp.name ? `"${trainProp.name}" ` : ''
+      // Name the row as it is RECORDED (canonical spelling), not as typed.
+      const hit = existing[0]
+      const where = `${hit.origin_city ?? '?'} → ${hit.destination_city ?? '?'} (${hit.cabin_type ?? 'any cabin'})`
+      return NextResponse.json({
+        success: false,
+        error: `A ${train}rate for ${where}${describeValidity(hit.rate_valid_from, hit.rate_valid_to)} already exists. Edit that rate instead of creating a second one.`,
+        existing: existing[0],
+      }, { status: 409 })
     }
+
+    const { data, error } = await supabaseAdmin
+      .from('sleeping_train_rates')
+      .insert(newRate)
+      .select('*')
+      .single()
 
     if (error) {
       console.error('POST sleeping_train_rates error:', error)
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data, updated: !!existing?.length })
+    return NextResponse.json({ success: true, data, updated: false }, { status: 201 })
   } catch (error: any) {
     console.error('POST sleeping_train_rates catch error:', error)
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
