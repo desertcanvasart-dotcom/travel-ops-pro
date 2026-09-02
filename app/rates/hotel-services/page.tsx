@@ -21,7 +21,7 @@ import { averageRateInOneCurrency, formatRateAverage } from '@/lib/currency-tota
 // CONSTANTS
 // ============================================
 
-const SERVICE_TYPES = ['porter', 'checkin_assist', 'full_service', 'concierge']
+const SERVICE_TYPES = ['porter', 'checkin_assist', 'checkout_assist', 'full_service', 'concierge']
 const HOTEL_CATEGORIES = ['budget', 'standard', 'deluxe', 'luxury', 'all']
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
@@ -566,6 +566,7 @@ export default function HotelServicesPage() {
                         rate.service_type === 'concierge' ? 'bg-amber-100 text-amber-800' :
                         rate.service_type === 'full_service' ? 'bg-blue-100 text-blue-800' :
                         rate.service_type === 'checkin_assist' ? 'bg-purple-100 text-purple-800' :
+                        rate.service_type === 'checkout_assist' ? 'bg-indigo-100 text-indigo-800' :
                         'bg-rose-100 text-rose-800'
                       }`}>
                         {t(`serviceTypes.${rate.service_type}`)}

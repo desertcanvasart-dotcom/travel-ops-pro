@@ -1603,7 +1603,7 @@ export async function getAirportServiceRate(
  * Get hotel service rate
  */
 export async function getHotelServiceRate(
-  serviceType: 'checkin_assist' | 'porter' | 'full_service',
+  serviceType: 'checkin_assist' | 'checkout_assist' | 'porter' | 'full_service',
   tier: ServiceTier,
   /** Converts rows entered in another currency into the run currency —
    *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
@@ -2224,9 +2224,13 @@ export async function calculateDayBasedPricing(
   // full-service rows were never read. A full-service row now covers either
   // event when no dedicated row exists. Charged per event, matching how the
   // dedicated rows were always charged.
+  //
+  // Check-out has its own type since 2026-09-03 (checkout_assist, entered
+  // beside check-in on the Hotel Assistants page); a porter row still
+  // covers a check-out day for offices that filed it that way.
   const resolveHotelServiceRate = (
-    serviceType: 'checkin_assist' | 'porter' | 'full_service'
-  ): { rate: number | null; rowExists: boolean; via: 'dedicated' | 'full_service' } => {
+    serviceType: 'checkin_assist' | 'checkout_assist' | 'porter' | 'full_service'
+  ): { rate: number | null; rowExists: boolean; via: 'dedicated' | 'porter' | 'full_service' } => {
     const category = getTierCategory(tier)
     const matches = (type: string) =>
       hotelStaffRows.find(
@@ -2236,6 +2240,10 @@ export async function calculateDayBasedPricing(
       )
     const dedicated = matches(serviceType)
     if (dedicated) return { rate: usableRate(dedicated.rate_eur), rowExists: true, via: 'dedicated' }
+    if (serviceType === 'checkout_assist') {
+      const porter = matches('porter')
+      if (porter) return { rate: usableRate(porter.rate_eur), rowExists: true, via: 'porter' }
+    }
     if (serviceType !== 'full_service') {
       const full = matches('full_service')
       if (full) return { rate: usableRate(full.rate_eur), rowExists: true, via: 'full_service' }
@@ -2464,7 +2472,7 @@ export async function calculateDayBasedPricing(
     }
 
     if (day.services.hotel_checkout) {
-      const found = resolveHotelServiceRate('porter')
+      const found = resolveHotelServiceRate('checkout_assist')
       const rate = found.rate
       if (rate != null) {
         fixedCosts += rate
@@ -2472,7 +2480,10 @@ export async function calculateDayBasedPricing(
           id: `day${day.day}-hotel-checkout`,
           dayNumber: day.day,
           serviceType: 'hotel_service',
-          serviceName: found.via === 'full_service' ? 'Hotel Assistance — check-out (full service)' : 'Hotel Check-out & Porter',
+          serviceName:
+            found.via === 'full_service' ? 'Hotel Assistance — check-out (full service)'
+            : found.via === 'porter' ? 'Hotel Check-out & Porter'
+            : 'Hotel Check-out Assistance',
           quantity: 1,
           quantityMode: 'fixed',
           unitCost: rate,
@@ -2487,10 +2498,10 @@ export async function calculateDayBasedPricing(
           reason: found.rowExists ? 'unpriced' : 'missing',
           dayNumber: day.day,
           city: day.city,
-          lookupAttempted: `hotel_staff_rates porter tier=${tier}`,
+          lookupAttempted: `hotel_staff_rates checkout_assist|porter tier=${tier}`,
           message: found.rowExists
-            ? `The hotel check-out/porter service rate (${tier}) has no price. Open it in Rates → Hotel Services and set one.`
-            : `No hotel check-out/porter service rate (${tier}). Add it in Rates → Hotel Services.`,
+            ? `The hotel check-out assistance rate (${tier}) has no price. Open it in Rates → Hotel Assistants and set one.`
+            : `No hotel check-out assistance rate (${tier}). Add it in Rates → Hotel Assistants.`,
         })
       }
     }

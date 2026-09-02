@@ -5213,7 +5213,8 @@
         "porter": "ポーター",
         "checkin_assist": "チェックインアシスト",
         "full_service": "フルサービス",
-        "concierge": "コンシェルジュ"
+        "concierge": "コンシェルジュ",
+        "checkout_assist": "チェックアウトアシスト"
       },
       "hotelCategories": {
         "budget": "バジェット",
