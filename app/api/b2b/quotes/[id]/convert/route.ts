@@ -5,6 +5,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { templateDaysToItineraryDays } from '@/lib/itineraries/template-days'
 
 // ============================================
 // B2B QUOTE CONVERT TO ITINERARY API
@@ -46,7 +47,7 @@ export async function POST(
           id, variation_name, variation_code, tier, group_type, inclusions, exclusions,
           tour_templates (
             id, template_name, template_code, duration_days, duration_nights, cities_covered,
-            tour_days (id, day_number, title, description, city, overnight_city, meals_included)
+            itinerary
           )
         ),
         b2b_partners (id, company_name, partner_code, commission_percent)
@@ -55,6 +56,10 @@ export async function POST(
       .single()
 
     if (quoteError || !quote) {
+      // The quote passed quoteInOrg() a moment ago, so a failure HERE is the
+      // query, not the id — log it as such, or the next embed mistake reads
+      // as a missing quote again.
+      console.error('B2B convert: quote fetch failed:', quoteError)
       return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
     }
 
@@ -239,27 +244,25 @@ export async function POST(
     // an incomplete itinerary). This delete/insert chain isn't a DB transaction,
     // so on any error we roll back by deleting the just-created itinerary (and
     // its days/services) and leave the quote unconverted, so it can be retried.
-    const tourDays = template?.tour_days || []
+    // The programme lives on tour_templates.itinerary (JSONB), NOT in
+    // tour_days — that table is a legacy one keyed by tour_id with no
+    // relationship to templates, and embedding it made the quote fetch above
+    // fail outright (lib/itineraries/template-days.ts).
+    const plannedDays = templateDaysToItineraryDays(
+      template?.itinerary,
+      startDate.toISOString().split('T')[0],
+      template?.duration_days || 1
+    )
     const servicesSnapshot = quote.services_snapshot || []
     const insertedDayIds: string[] = []
     let conversionError: string | null = null
 
-    for (let dayNum = 1; dayNum <= (template?.duration_days || 1); dayNum++) {
-      const tourDay = tourDays.find((d: any) => d.day_number === dayNum)
-      const dayDate = new Date(startDate)
-      dayDate.setDate(dayDate.getDate() + dayNum - 1)
+    for (const planned of plannedDays) {
+      const dayNum = planned.day_number
 
       const { data: itinDay, error: dayError } = await supabaseAdmin
         .from('itinerary_days')
-        .insert({
-          itinerary_id: itinerary.id,
-          day_number: dayNum,
-          date: dayDate.toISOString().split('T')[0],
-          title: tourDay?.title || `Day ${dayNum}`,
-          description: tourDay?.description || '',
-          city: tourDay?.city || '',
-          overnight_city: tourDay?.overnight_city || ''
-        })
+        .insert({ itinerary_id: itinerary.id, ...planned })
         .select()
         .single()
 
@@ -287,7 +290,9 @@ export async function POST(
             total_cost: service.line_total,
             margin_percent: quote.margin_percent,
             selling_price: service.line_total * (1 + (quote.margin_percent || 25) / 100),
-            currency: 'EUR',
+            // The currency the quote was priced in — a USD quote must not
+            // produce EUR service lines under a USD itinerary.
+            currency: quote.currency || 'EUR',
             status: 'pending'
           })))
         if (svcError) {
