@@ -37,6 +37,7 @@ import {
 
 import { LanguageIndicator } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
+import AttractionPicker from '@/components/AttractionPicker'
 
 // ============================================
 // INTERFACES
@@ -106,6 +107,10 @@ interface ItineraryDay {
   meals: string[]
   city?: string
   is_cruise_day?: boolean // Uses bundled cruise transport package
+  /** Free-text sights, as printed on the documents. */
+  attractions?: string[]
+  /** entrance_fees ids — the tickets the pricing engine charges for the day. */
+  attraction_ids?: string[]
 }
 
 interface Toast {
@@ -562,6 +567,16 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
                     🍽️ {day.meals.join(', ')}
                   </p>
                 )}
+                {/* Tickets for the day, picked from the fee table — what the
+                    pricing engine charges; the wording stays on the documents. */}
+                <div className="mt-2">
+                  <AttractionPicker
+                    city={day.city}
+                    selectedIds={day.attraction_ids ?? []}
+                    onChange={(ids) => onChange(itinerary.map((d, i) => (i === index ? { ...d, attraction_ids: ids } : d)))}
+                    compact
+                  />
+                </div>
               </div>
               <button
                 type="button"
