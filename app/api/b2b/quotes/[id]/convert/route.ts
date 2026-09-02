@@ -5,7 +5,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
-import { templateDaysToItineraryDays } from '@/lib/itineraries/template-days'
+import { templateDaysToItineraryDays, packageTypeForTemplate } from '@/lib/itineraries/template-days'
 
 // ============================================
 // B2B QUOTE CONVERT TO ITINERARY API
@@ -47,7 +47,7 @@ export async function POST(
           id, variation_name, variation_code, tier, group_type, inclusions, exclusions,
           tour_templates (
             id, template_name, template_code, duration_days, duration_nights, cities_covered,
-            itinerary
+            tour_type, itinerary
           )
         ),
         b2b_partners (id, company_name, partner_code, commission_percent)
@@ -213,7 +213,12 @@ export async function POST(
         num_adults: quote.num_adults,
         num_children: quote.num_children || 0,
         status: 'quoted',
-        package_type: 'custom',
+        // package_type is an ENUM; 'custom' was not a member and the insert
+        // failed for every template quote (lib/itineraries/template-days.ts).
+        package_type: packageTypeForTemplate(template),
+        // The programme this trip follows — so the 日程表 button is already
+        // linked and does not ask again.
+        template_id: template?.id ?? null,
         tier: variation?.tier || 'standard',
         total_cost: quote.selling_price,
         supplier_cost: quote.total_cost,
@@ -234,6 +239,9 @@ export async function POST(
       .single()
 
     if (itinError || !itinerary) {
+      // The database's reason must reach the log: this exact insert failed
+      // for weeks on an enum value and nothing said so.
+      console.error('B2B convert: itinerary insert failed:', itinError)
       return NextResponse.json({ error: 'Failed to create itinerary' }, { status: 500 })
     }
     // Prod drops client_id on INSERT — keep the converted trip on its client.

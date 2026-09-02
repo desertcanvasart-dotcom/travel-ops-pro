@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { templateDaysToItineraryDays, addDays } from '@/lib/itineraries/template-days'
+import { templateDaysToItineraryDays, addDays, packageTypeForTemplate } from '@/lib/itineraries/template-days'
 
 // "Convert to Itinerary" answered "Quote not found" for every quote in
 // production (2026-09-02, QT-2026-00001, seen live). The quote had passed the
@@ -104,5 +104,36 @@ describe('the convert route reads the programme from the template, never tour_da
     }
     const offenders = walk(join(ROOT, 'app', 'api')).filter(f => /tour_templates\s*\([\s\S]*?tour_days\s*\(/.test(readFileSync(f, 'utf8')))
     expect(offenders).toEqual([])
+  })
+
+  it('writes an enum member for package_type, never "custom", and links the template', () => {
+    // Second failure in the same flow, one step later: itineraries.package_type
+    // is a Postgres enum and the route wrote 'custom'. Found by replaying the
+    // schema locally — the route reported only "Failed to create itinerary".
+    expect(src).not.toMatch(/package_type:\s*'custom'/)
+    expect(src).toContain('package_type: packageTypeForTemplate(template)')
+    expect(src).toMatch(/template_id:\s*template\?\.id/)
+  })
+})
+
+describe('packageTypeForTemplate', () => {
+  const ENUM = ['day-trips', 'tours-only', 'land-package', 'full-package', 'cruise-land', 'shore-excursions', 'cruise-package']
+
+  it('a single-day tour type is a day trip', () => {
+    for (const t of ['day_tour', 'half_day', 'stopover']) expect(packageTypeForTemplate({ tour_type: t, duration_days: 1 })).toBe('day-trips')
+    expect(packageTypeForTemplate({ tour_type: 'multi_day', duration_days: 1 })).toBe('day-trips')
+  })
+
+  it('a cruise programme is cruise + land; anything else keeps the full-package assumption', () => {
+    expect(packageTypeForTemplate({ tour_type: 'cruise', duration_days: 8 })).toBe('cruise-land')
+    expect(packageTypeForTemplate({ tour_type: 'land', duration_days: 8 })).toBe('full-package')
+    expect(packageTypeForTemplate({ tour_type: 'cultural', duration_days: 5 })).toBe('full-package')
+    expect(packageTypeForTemplate(null)).toBe('full-package')
+  })
+
+  it('only ever answers with a member of the database enum', () => {
+    for (const t of ['day_tour', 'cruise', 'land', 'multi_day', 'cultural', 'weird', '', undefined]) {
+      expect(ENUM).toContain(packageTypeForTemplate({ tour_type: t as string, duration_days: 5 }))
+    }
   })
 })

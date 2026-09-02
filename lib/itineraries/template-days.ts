@@ -116,3 +116,31 @@ export function templateDaysToItineraryDays(
   }
   return rows
 }
+
+// ---------- package type ----------
+// itineraries.package_type is a Postgres ENUM (day-trips | tours-only |
+// land-package | full-package | cruise-land | shore-excursions |
+// cruise-package). The convert route used to write 'custom' — not a member —
+// so every template conversion died at the itinerary insert with a bare
+// "Failed to create itinerary" (found by replaying the schema locally; the
+// route logs nothing of the database's reason).
+//
+// Same signal the pricing engine reads (lib/auto-pricing-service.ts): a
+// single-day tour_type is a day trip; a cruise programme is cruise + land;
+// everything else keeps the engine's historical full-package assumption.
+
+export const SINGLE_DAY_TOUR_TYPES = ['day_tour', 'half_day', 'stopover'] as const
+
+export type ItineraryPackageType =
+  | 'day-trips' | 'tours-only' | 'land-package' | 'full-package'
+  | 'cruise-land' | 'shore-excursions' | 'cruise-package'
+
+export function packageTypeForTemplate(
+  template: { tour_type?: string | null; duration_days?: number | null } | null | undefined
+): ItineraryPackageType {
+  const type = (template?.tour_type ?? '').toLowerCase()
+  if ((SINGLE_DAY_TOUR_TYPES as readonly string[]).includes(type)) return 'day-trips'
+  if ((template?.duration_days ?? 0) === 1) return 'day-trips'
+  if (type === 'cruise') return 'cruise-land'
+  return 'full-package'
+}
