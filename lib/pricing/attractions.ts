@@ -48,8 +48,9 @@ export interface AttractionResolution {
   missingIds: { day: number; id: string }[]
 }
 
-/** alias (lowercased) → canonical attraction name. */
+/** alias (lowercased) → canonical fee name, or several joined with " + ". */
 export type AliasMap = Map<string, string>
+export const CANONICAL_JOINER = ' + '
 
 export function buildAliasMap(rows: { alias: string; canonical_name: string }[] | null | undefined): AliasMap {
   const m: AliasMap = new Map()
@@ -140,17 +141,22 @@ export function resolveAttractions(
       if (seenText.has(key)) continue
       seenText.add(key)
 
+      // One sentence can name several tickets ("王家の谷、ツタンカーメン王墓入場"
+      // is the Valley AND Tutankhamun's tomb): the alias table joins the fee
+      // names with " + " and every one of them is charged.
       const canonical = aliases.get(key)
-      const row =
-        (canonical ? (matchExact(fees, canonical) ?? matchByName(fees, canonical)) : null) ??
-        matchExact(fees, text) ??
-        matchByName(fees, text)
-
-      if (row) {
-        if (!seen.has(row.id)) take(row, d.day, text)
-      } else {
-        out.unresolved.push({ day: d.day, text })
+      const names = canonical ? canonical.split(CANONICAL_JOINER).map(n => n.trim()).filter(Boolean) : []
+      let hit = false
+      for (const name of names) {
+        const row = matchExact(fees, name) ?? matchByName(fees, name)
+        if (row) { hit = true; take(row, d.day, text) }
+        else out.unresolved.push({ day: d.day, text: `${text} → ${name}` })
       }
+      if (hit || names.length > 0) continue
+
+      const row = matchExact(fees, text) ?? matchByName(fees, text)
+      if (row) take(row, d.day, text)
+      else out.unresolved.push({ day: d.day, text })
     }
   }
   return out

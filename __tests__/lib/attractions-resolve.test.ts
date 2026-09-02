@@ -8,13 +8,17 @@ const FEES = [
   { id: 'memnon', attraction_name: 'Colossi of Memnon', eur_rate: 0, non_eur_rate: 0 },
   { id: 'dah1', attraction_name: 'Dahshur', eur_rate: 200, non_eur_rate: 200 },
   { id: 'horus', attraction_name: 'The Temple Of Horus', eur_rate: 550, non_eur_rate: 550 },
+  { id: 'tut', attraction_name: 'Tutankhamun Tomb', eur_rate: 700, non_eur_rate: 700 },
+  { id: 'red', attraction_name: 'The Red Pyramid', eur_rate: 200, non_eur_rate: 200 },
 ]
 
 const ALIASES = buildAliasMap([
   { alias: 'スフィンクスと河岸神殿見学', canonical_name: 'Giza plateau' },
   { alias: '3大ピラミッドを見渡せるパノラマポイントでの写真撮影', canonical_name: 'Giza plateau' },
   { alias: 'クフ王のピラミッドに入場(確定）', canonical_name: 'Khufu' },
-  { alias: '王家の谷、ツタンカーメン王墓入場', canonical_name: 'Valley of the Kings' },
+  { alias: '王家の谷、ツタンカーメン王墓入場', canonical_name: 'Valley of the Kings + Tutankhamun Tomb' },
+  { alias: '屈折ピラミッドと赤ピラミッド見学へ', canonical_name: 'Dahshur + The Red Pyramid' },
+  { alias: 'ミイラ室込み', canonical_name: 'Egyptian Museum + Mummies Hall' },
   { alias: 'エジプトの数ある遺跡の中でも、最も保存状態のいい遺跡です。', canonical_name: 'The Temple Of Horus' },
 ])
 
@@ -36,7 +40,20 @@ describe('resolveAttractions', () => {
   it('matches a canonical name whole, ignoring articles, case and punctuation', () => {
     // alias says "Valley of the Kings", fee row is "Valley Of Kings"; neither contains the other
     const r = resolveAttractions([{ day: 3, attractions: ['王家の谷、ツタンカーメン王墓入場'] }], FEES, ALIASES, true)
-    expect(r.tickets.map(t => t.id)).toEqual(['vok'])
+    expect(r.tickets.map(t => t.id)).toEqual(['vok', 'tut'])
+  })
+
+  it('one sentence can carry several tickets, and a missing one is named in the warning', () => {
+    const r = resolveAttractions(
+      [{ day: 2, attractions: ['屈折ピラミッドと赤ピラミッド見学へ'] }, { day: 3, attractions: ['ミイラ室込み'] }],
+      FEES, ALIASES, false
+    )
+    expect(r.tickets.map(t => t.id)).toEqual(['dah1', 'red'])
+    // "Egyptian Museum" is not in this fixture's fee table, Mummies Hall is not either
+    expect(r.unresolved).toEqual([
+      { day: 3, text: 'ミイラ室込み → Egyptian Museum' },
+      { day: 3, text: 'ミイラ室込み → Mummies Hall' },
+    ])
   })
 
   it('ids win, are exact, are charged once per trip, and silence the wording on their day', () => {
