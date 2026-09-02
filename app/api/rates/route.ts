@@ -4,6 +4,25 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getOrgRateCurrency, normaliseRateCurrency } from '@/lib/org-rate-currency'
+import { createRateNormalizer, type RateCurrencyTable } from '@/lib/rates/rate-currency'
+
+// Which rate table each ?type= reads, for the in_org_currency conversion below.
+// Types missing here (guide = a VIEW over suppliers, service_fee) carry no
+// per-row currency and pass through unchanged.
+const TYPE_TABLE: Record<string, RateCurrencyTable> = {
+  accommodation: 'accommodation_rates',
+  meal: 'meal_rates',
+  entrance: 'entrance_fees',
+  transportation: 'transportation_rates',
+  airport_staff: 'airport_staff_rates',
+  hotel_staff: 'hotel_staff_rates',
+  cruises: 'nile_cruises',
+  sleeping_trains: 'sleeping_train_rates',
+  trains: 'train_rates',
+  tipping: 'tipping_rates',
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,7 +38,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    let data = []
+    let data: any[] = []
     let error = null
 
     switch (type) {
@@ -262,6 +281,29 @@ export async function GET(request: NextRequest) {
         data: [],
         count: 0
       })
+    }
+
+    // A PRICING screen may ask for the rows in the org's rate currency
+    // (in_org_currency=true). The tour-builder's selectors sum what they get
+    // and post it to /api/tours/calculate, which adds numbers up in memory —
+    // so a raw 5000 EGP dinner became 5000 dollars in the sidebar. Converted
+    // here, once, through the engine's own normaliser; each converted row
+    // says what it was entered in, and an unconvertible one comes back
+    // unpriced. Without the flag — the rates hub — rows stay as typed: a
+    // rates TABLE never converts.
+    const table = TYPE_TABLE[type]
+    if (searchParams.get('in_org_currency') === 'true' && table) {
+      const run = await getOrgRateCurrency(supabase, await getCurrentOrgId())
+      const normalizer = createRateNormalizer(run)
+      const converted = (await normalizer.normalize(table, data as Record<string, unknown>[])) || []
+      const missed = new Set(normalizer.misses.map(m => String(m.id)))
+      data = converted.map((row, i) => {
+        const original = normaliseRateCurrency((data[i] as any)?.rate_currency)
+        if (missed.has(String(row.id))) return { ...row, converted_from: (data[i] as any)?.rate_currency ?? null, conversion_missing: true }
+        if (original && original !== run) return { ...row, rate_currency: run, converted_from: original }
+        return row
+      })
+      return NextResponse.json({ success: true, data, count: data.length, currency: run })
     }
 
     return NextResponse.json({

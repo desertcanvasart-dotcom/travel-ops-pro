@@ -140,4 +140,22 @@ describe('row-currency display', () => {
       'Label the column "Rate" with no currency, or name the ROW\'s currency (row.rate_currency || rateCurrency).'
     ).toEqual([])
   })
+
+  it('every tour-builder rate fetch asks for rows in the org currency', () => {
+    // Shape 6: the tour-builder is a PRICING screen — it sums what it fetches
+    // and posts the sum to /api/tours/calculate. A raw row there is not a
+    // display slip, it is a wrong total (a 5000 EGP dinner summed as $5000).
+    // /api/rates?type=…&in_org_currency=true converts once, server-side.
+    const violations: string[] = []
+    for (const file of walk(join(ROOT, 'app', 'tour-builder'))) {
+      const src = readFileSync(file, 'utf8')
+      for (const m of src.matchAll(/\/api\/rates\?type=[^`'"]*/g)) {
+        if (!m[0].includes('in_org_currency=true')) {
+          const line = src.slice(0, m.index!).split('\n').length
+          violations.push(`${rel(file)}:${line} — ${m[0]}`)
+        }
+      }
+    }
+    expect(violations, 'Append &in_org_currency=true — the builder must never price raw rows.').toEqual([])
+  })
 })

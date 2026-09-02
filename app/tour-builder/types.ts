@@ -116,6 +116,9 @@ export interface Tour {
   
   // Rate Types (imported from existing system)
   export interface AccommodationRate {
+  /** Set by /api/rates?in_org_currency=true when the row was converted. */
+  converted_from?: string | null
+  conversion_missing?: boolean
     id: string
     service_code: string
     property_name: string
@@ -135,6 +138,9 @@ export interface Tour {
   }
   
   export interface MealRate {
+  /** Set by /api/rates?in_org_currency=true when the row was converted. */
+  converted_from?: string | null
+  conversion_missing?: boolean
     id: string
     service_code: string
     restaurant_name: string
@@ -149,6 +155,9 @@ export interface Tour {
   }
   
   export interface GuideRate {
+  /** Set by /api/rates?in_org_currency=true when the row was converted. */
+  converted_from?: string | null
+  conversion_missing?: boolean
     id: string
     service_code: string
     guide_language: string
@@ -189,6 +198,9 @@ export interface Tour {
 
 // Entrance Fees
     export interface EntranceFee {
+  /** Set by /api/rates?in_org_currency=true when the row was converted. */
+  converted_from?: string | null
+  conversion_missing?: boolean
     id: string
     service_code: string
     attraction_name: string

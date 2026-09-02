@@ -3,8 +3,12 @@
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { fmtMoney, times, convertedFrom } from '@/app/tour-builder/lib/money'
 
 interface ServiceFee {
+  /** Set by /api/rates?in_org_currency=true when the row was converted. */
+  converted_from?: string | null
+  conversion_missing?: boolean
   id: string
   service_code: string
   service_name: string
@@ -38,6 +42,7 @@ export default function AdditionalServices({
   onServicesChange
 }: AdditionalServicesProps) {
   const { rateSymbol } = useCurrency()
+  const money = (n: number | null | undefined) => fmtMoney(rateSymbol, n)
   const t = useTranslations('tourBuilder.services')
   const [services, setServices] = useState<ServiceFee[]>([])
   const [loading, setLoading] = useState(false)
@@ -53,7 +58,7 @@ export default function AdditionalServices({
   const fetchServices = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/rates?type=service_fee&city=${city}`)
+      const response = await fetch(`/api/rates?type=service_fee&city=${city}&in_org_currency=true`)
       const data = await response.json()
       
       if (data.success) {
@@ -96,7 +101,7 @@ export default function AdditionalServices({
 
   const calculateServiceCost = (selectedService: SelectedService) => {
     const { service, quantity } = selectedService
-    const rate = isEuroPassport ? service.base_rate_eur : service.base_rate_non_eur
+    const rate = (isEuroPassport ? service.base_rate_eur : service.base_rate_non_eur) ?? 0
     
     switch (service.rate_type) {
       case 'per_person':
@@ -203,7 +208,7 @@ export default function AdditionalServices({
 
                         <div className="text-right">
                           <div className="font-semibold text-sm text-gray-900">
-                            {isSelected ? `${rateSymbol}${cost.toFixed(2)}` : `${rateSymbol}${(isEuroPassport ? service.base_rate_eur : service.base_rate_non_eur).toFixed(2)}`}
+                            {isSelected ? money(cost) : money(isEuroPassport ? service.base_rate_eur : service.base_rate_non_eur)}
                           </div>
                           <div className="text-xs text-gray-500">
                             {service.rate_type === 'per_person' && t('perPerson', { pax })}
@@ -228,7 +233,7 @@ export default function AdditionalServices({
                   {t('totalServices')}
                 </span>
                 <span className="text-xl font-bold text-green-700">
-                  {rateSymbol}{getTotalCost().toFixed(2)}
+                  {money(getTotalCost())}
                 </span>
               </div>
               <div className="text-xs text-green-700 mt-1">

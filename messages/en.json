@@ -5626,7 +5626,8 @@
       "boardFB": "(Full Board)",
       "boardAI": "(All Inclusive)",
       "totalForPax": "Total for {pax} pax",
-      "showingProperties": "Showing {filtered}/{total} properties in {city}"
+      "showingProperties": "Showing {filtered}/{total} properties in {city}",
+      "convertedFrom": "converted from {currency}"
     },
     "meals": {
       "lunch": "Lunch",
@@ -5640,7 +5641,8 @@
       "noMeal": "No {mealType}",
       "skipMeal": "Skip {mealType} for this day",
       "perPerson": "/person",
-      "optionsInCity": "{count} {mealType} options in {city}"
+      "optionsInCity": "{count} {mealType} options in {city}",
+      "convertedFrom": "converted from {currency}"
     },
     "services": {
       "title": "Additional Services",
@@ -5653,7 +5655,8 @@
       "vehicles": "vehicles",
       "perDay": "per day",
       "totalServices": "Total Additional Services",
-      "servicesSelected": "{count} services selected"
+      "servicesSelected": "{count} services selected",
+      "convertedFrom": "converted from {currency}"
     },
     "activities": {
       "title": "Activities",
@@ -5674,7 +5677,8 @@
       "notesPlaceholder": "Add timing, special instructions, etc...",
       "activityCost": "Activity Cost",
       "totalActivitiesCost": "Total Activities Cost ({count})",
-      "total": "Total"
+      "total": "Total",
+      "convertedFrom": "converted from {currency}"
     },
     "cities": {
       "Abu Simbel": "Abu Simbel",

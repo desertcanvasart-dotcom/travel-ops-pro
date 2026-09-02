@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { MealRate } from '../types'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { fmtMoney, times, convertedFrom } from '@/app/tour-builder/lib/money'
 
 interface MealSelectorProps {
   city: string
@@ -23,6 +24,7 @@ export default function MealSelector({
   onSelect
 }: MealSelectorProps) {
   const { rateSymbol } = useCurrency()
+  const money = (n: number | null | undefined) => fmtMoney(rateSymbol, n)
   const t = useTranslations('tourBuilder.meals')
   const [meals, setMeals] = useState<MealRate[]>([])
   const [loading, setLoading] = useState(false)
@@ -44,7 +46,7 @@ export default function MealSelector({
   const fetchMeals = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/rates?type=meal&city=${city}&meal_type=${mealType}`)
+      const response = await fetch(`/api/rates?type=meal&city=${city}&meal_type=${mealType}&in_org_currency=true`)
       const data = await response.json()
       
       if (data.success) {
@@ -75,7 +77,7 @@ export default function MealSelector({
   // Calculate total price
   const getPrice = (meal: MealRate) => {
     const ratePerPerson = isEuroPassport ? meal.base_rate_eur : meal.base_rate_non_eur
-    return pax * ratePerPerson
+    return times(ratePerPerson, pax)
   }
 
   if (!city) {
@@ -191,13 +193,13 @@ export default function MealSelector({
                   </div>
                   <div className="text-right ml-4">
                     <div className="font-bold text-gray-900 text-sm">
-                      {rateSymbol}{getPrice(meal).toFixed(2)}
+                      {money(getPrice(meal))}
                     </div>
                     <div className="text-xs text-gray-500">
                       {pax} pax
                     </div>
                     <div className="text-xs text-gray-400">
-                      {rateSymbol}{(isEuroPassport ? meal.base_rate_eur : meal.base_rate_non_eur).toFixed(2)}{t('perPerson')}
+                      {money(isEuroPassport ? meal.base_rate_eur : meal.base_rate_non_eur)}{t('perPerson')}{convertedFrom(meal) && <span className="ml-1 text-[10px] text-amber-700">({t('convertedFrom', { currency: convertedFrom(meal) ?? '' })})</span>}
                     </div>
                   </div>
                 </div>
@@ -221,10 +223,10 @@ export default function MealSelector({
             </div>
             <div className="text-right">
               <div className="text-lg font-bold text-green-900">
-                {rateSymbol}{getPrice(selectedMeal).toFixed(2)}
+                {money(getPrice(selectedMeal))}
               </div>
               <div className="text-xs text-green-700">
-                {pax} pax × {rateSymbol}{(isEuroPassport ? selectedMeal.base_rate_eur : selectedMeal.base_rate_non_eur).toFixed(2)}
+                {pax} pax × {money(isEuroPassport ? selectedMeal.base_rate_eur : selectedMeal.base_rate_non_eur)}
               </div>
             </div>
           </div>
