@@ -7168,7 +7168,15 @@
     "operatorPrice": "設定価格",
     "couldNotPrice": "料金を算出できなかった項目",
     "pricingNotes": "料金計算メモ",
-    "couldNotPriceHint": "これらは合計に含まれていません。レート（または別名）を登録してから再計算してください。"
+    "couldNotPriceHint": "これらは合計に含まれていません。レート（または別名）を登録してから再計算してください。",
+    "pricingTier": "料金ティア",
+    "tierHint": "このプログラムは{tier}として取り込まれました。変更しない限りスタンダードで計算します。",
+    "tiers": {
+      "budget": "バジェット",
+      "standard": "スタンダード",
+      "deluxe": "デラックス",
+      "luxury": "ラグジュアリー"
+    }
   },
   "bookings": {
     "title": "予約管理",
