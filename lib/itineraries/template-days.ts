@@ -25,6 +25,9 @@ export interface TemplateDay {
   description?: string | null
   overnight_city?: string | null
   attractions?: string[] | null
+  /** entrance_fees ids picked for the day — pricing reads these; the
+   *  documents keep reading the wording above. */
+  attraction_ids?: string[] | null
   /** e.g. ['lunch', 'dinner'] — breakfast is a hotel matter, not listed. */
   meals?: string[] | null
   is_cruise_day?: boolean | null

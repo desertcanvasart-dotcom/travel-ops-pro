@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl'
 import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileSpreadsheet, TrendingUp, AlertCircle, UserPlus, Save, X, CheckCircle2, Building2, User, Mail, Phone, FileText, ChevronDown, ChevronUp, Pencil, Plane, Ship, MapPin, Plus, RotateCcw, Tag } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { currencySymbol } from '@/lib/currency-totals'
+import AttractionPicker from '@/components/AttractionPicker'
 
 // ============================================
 // B2B TOUR PRICE CALCULATOR PAGE
@@ -130,6 +131,8 @@ interface TemplateItineraryDay {
   overnight_city: string | null
   is_cruise_day: boolean
   attractions: string[]
+  /** entrance_fees ids — the tickets the engine prices; wording above is for the documents. */
+  attraction_ids?: string[]
   accommodation_type: string // 'hotel' | 'cruise' | 'none'
   services: {
     airport_arrival: boolean
@@ -288,6 +291,7 @@ export default function TourPriceCalculator() {
           overnight_city: d.overnight_city || null,
           is_cruise_day: d.is_cruise_day || false,
           attractions: Array.isArray(d.attractions) ? d.attractions : [],
+          attraction_ids: Array.isArray(d.attraction_ids) ? d.attraction_ids.filter(Boolean) : [],
           accommodation_type: d.accommodation_type || 'hotel',
           services: {
             airport_arrival: d.services?.airport_arrival || false,
@@ -358,6 +362,15 @@ export default function TourPriceCalculator() {
       const updated = [...prev]
       const attractions = [...(updated[dayIndex].attractions || []), attraction.trim()]
       updated[dayIndex] = { ...updated[dayIndex], attractions }
+      return updated
+    })
+    setHasUnsavedChanges(true)
+  }
+
+  const setAttractionIds = (dayIndex: number, ids: string[]) => {
+    setEditableDays(prev => {
+      const updated = [...prev]
+      updated[dayIndex] = { ...updated[dayIndex], attraction_ids: ids }
       return updated
     })
     setHasUnsavedChanges(true)
@@ -1083,6 +1096,15 @@ export default function TourPriceCalculator() {
                                 <Tag className="w-3 h-3 inline mr-1" />
                                 {t('attractions')} ({(day.attractions || []).length})
                               </label>
+                              {/* Tickets picked from the fee table: what the engine prices. */}
+                              <div className="mb-2">
+                                <AttractionPicker
+                                  city={day.city}
+                                  selectedIds={day.attraction_ids ?? []}
+                                  onChange={(ids) => setAttractionIds(index, ids)}
+                                  compact
+                                />
+                              </div>
                               {(day.attractions || []).length > 0 && (
                                 <div className="flex flex-wrap gap-2 mb-2">
                                   {(day.attractions || []).map((attr, ai) => (
