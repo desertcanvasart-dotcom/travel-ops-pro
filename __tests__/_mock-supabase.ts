@@ -152,5 +152,8 @@ function makeQuery(rows: Row[], table?: string) {
 export function createMockClient() {
   return {
     from: (table: string) => makeQuery(currentTables[table] ?? [], table),
+    // Routes call database functions (generate_booking_code, …); tests that
+    // exercise them need "no answer" rather than "no such method".
+    rpc: async (_fn: string, _args?: Record<string, unknown>) => ({ data: null, error: null }),
   }
 }

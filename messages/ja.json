@@ -178,7 +178,9 @@
     "uponReceiptSignedContract": "署名済み契約書とデポジットの受領をもって発効。",
     "contractExpiration": "契約終了日",
     "completionOfTourServices": "ツアーサービス完了時",
-    "contractGovernedByEgyptianLaw": "本契約はエジプト法に準拠し、両当事者を拘束します。"
+    "contractGovernedByEgyptianLaw": "本契約はエジプト法に準拠し、両当事者を拘束します。",
+    "paymentTermsFromRule": "ご予約確定のため、予約後{dueDays}日以内に{percent}%の申込金をお支払いください。残金は出発の{beforeDays}日前までにお支払いください。",
+    "companyNameMissing": "会社名が設定されていません。設定 → 会社情報で入力すると、契約書や請求書に印字されます。"
   },
   "navigation": {
     "main": "メイン",

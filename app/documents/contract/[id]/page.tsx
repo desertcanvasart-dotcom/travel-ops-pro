@@ -12,19 +12,54 @@ import { generateContractPDF } from '@/lib/contract-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 
+// The columns /api/itineraries/[id] actually returns. The prefill used to read
+// num_travelers, tour_name and parsed_data.duration — none of which exist on
+// an itinerary — so every contract opened as "Custom Egypt Tour", duration
+// "N/A", with the traveller count blank (operator, 2 Sep, ITN-26-009).
 interface Itinerary {
   id: string
   itinerary_code: string
   client_name: string
   client_email: string
   client_phone?: string
-  num_travelers: number
+  num_adults?: number | null
+  num_children?: number | null
+  num_infants?: number | null
+  num_travelers?: number | null
   start_date: string
   end_date: string
+  total_days?: number | null
   total_cost: number
-  tour_name: string
-  destinations: string
-  parsed_data: any
+  trip_name?: string | null
+  destinations?: string | string[] | null
+  deposit_amount?: number | null
+  inclusions?: string[] | null
+  exclusions?: string[] | null
+}
+
+/** "8 days / 7 nights" from the trip's own day count, or from its dates. */
+function describeDuration(itin: Itinerary): string {
+  let days = Number(itin.total_days) || 0
+  if (!days && itin.start_date && itin.end_date) {
+    const a = new Date(itin.start_date + 'T00:00:00Z').getTime()
+    const b = new Date(itin.end_date + 'T00:00:00Z').getTime()
+    if (Number.isFinite(a) && Number.isFinite(b) && b >= a) days = Math.round((b - a) / 86400000) + 1
+  }
+  if (!days) return ''
+  const nights = Math.max(0, days - 1)
+  return `${days} ${days === 1 ? 'day' : 'days'} / ${nights} ${nights === 1 ? 'night' : 'nights'}`
+}
+
+/** The party, counted from the itinerary's own fields. */
+function countTravellers(itin: Itinerary): number {
+  const n = (Number(itin.num_adults) || 0) + (Number(itin.num_children) || 0) + (Number(itin.num_infants) || 0)
+  return n || Number(itin.num_travelers) || 0
+}
+
+/** Destinations as one line, whatever shape the column holds. */
+function describeDestinations(d: Itinerary['destinations']): string {
+  if (Array.isArray(d)) return d.filter(Boolean).join(', ')
+  return (d ?? '').toString().trim()
 }
 
 interface ContractData {
@@ -153,6 +188,30 @@ export default function ContractPage() {
     }
   }, [params.id])
 
+  // The operator's payment rule — deposit %, days to pay it, days before
+  // departure for the balance — is set in Settings. The contract used to open
+  // on a 10% deposit "in cash upon arrival", which is nobody's terms here.
+  useEffect(() => {
+    let alive = true
+    fetch('/api/settings/payment-terms')
+      .then(r => r.json())
+      .then(j => {
+        if (!alive || !j?.success) return
+        const rule = { ...(j.defaults ?? {}), ...Object.fromEntries(Object.entries(j.terms ?? {}).filter(([, v]) => v != null)) }
+        const pct = Number(rule.deposit_percent)
+        const dueDays = Number(rule.deposit_due_days)
+        const beforeDays = Number(rule.balance_due_days_before_departure)
+        if (!Number.isFinite(pct)) return
+        setContractData(prev => ({
+          ...prev,
+          depositPercentage: pct,
+          paymentTerms: t('paymentTermsFromRule', { percent: pct, dueDays, beforeDays }),
+        }))
+      })
+      .catch(() => { /* the editable default stays */ })
+    return () => { alive = false }
+  }, [t])
+
   const fetchItinerary = async (id: string) => {
     try {
       const response = await fetch(`/api/itineraries/${id}`)
@@ -164,15 +223,18 @@ export default function ContractPage() {
         
         setContractData(prev => ({
           ...prev,
-          contractNumber: `TC-2025-${itin.id.slice(0, 8).toUpperCase()}`,
+          contractNumber: `TC-${new Date().getFullYear()}-${itin.itinerary_code || itin.id.slice(0, 8).toUpperCase()}`,
           clientName: itin.client_name,
           clientEmail: itin.client_email || '',
-          numTravelers: itin.num_travelers,
-          tourPackage: itin.tour_name || 'Custom Egypt Tour',
+          numTravelers: countTravellers(itin) || prev.numTravelers,
+          // The trip's own name; a blank stays blank rather than a made-up one.
+          tourPackage: itin.trip_name || '',
           startDate: itin.start_date,
           endDate: itin.end_date,
-          duration: itin.parsed_data?.duration || 'N/A',
-          destinations: itin.destinations || 'Cairo, Luxor, Aswan',
+          duration: describeDuration(itin),
+          // Cities from the record. Nothing invented: three cities the trip
+          // may never visit is not a default, it is a wrong contract.
+          destinations: describeDestinations(itin.destinations),
           totalCost: itin.total_cost,
           ...(itin.inclusions?.length > 0 && { inclusions: itin.inclusions }),
           ...(itin.exclusions?.length > 0 && { exclusions: itin.exclusions })
@@ -596,6 +658,9 @@ This contract is governed by the laws of Egypt.
                     className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
                     placeholder={t('companyName')}
                   />
+                  {company && !contractData.serviceProvider && (
+                    <p className="text-xs text-amber-700 mt-1">{t('companyNameMissing')}</p>
+                  )}
                   <input
                     type="text"
                     value={contractData.providerWebsite}

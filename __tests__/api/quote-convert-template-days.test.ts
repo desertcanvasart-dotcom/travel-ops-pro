@@ -219,3 +219,13 @@ describe('serviceLineForItinerary', () => {
     expect(r.notes).toBe('sightseeing · category: water')
   })
 })
+
+describe('the convert route writes the operator’s deposit, never a hardcoded split', () => {
+  it('has no 30/70 literals left and reads the payment rule', () => {
+    const src = readFileSync(join(ROOT, 'app', 'api', 'b2b', 'quotes', '[id]', 'convert', 'route.ts'), 'utf8')
+    expect(src).not.toMatch(/\*\s*0\.3\b/)
+    expect(src).not.toMatch(/\*\s*0\.7\b/)
+    expect(src).toContain('paymentRuleFrom(orgTerms)')
+    expect(src).toContain('computeDeposit(')
+  })
+})

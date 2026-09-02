@@ -5,6 +5,8 @@ import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { paymentRuleFrom } from '@/lib/payment-schedule'
+import { computeDeposit } from '@/lib/booking-creation'
 import { templateDaysToItineraryDays, packageTypeForTemplate, serviceLineForItinerary } from '@/lib/itineraries/template-days'
 
 // ============================================
@@ -38,6 +40,18 @@ export async function POST(
     // TENANT BOUNDARY — converting someone else's quote would create an
     // itinerary in OUR org from THEIR priced work.
     if (!(await quoteInOrg(supabaseAdmin, id, orgId))) return quoteNotFound()
+
+    // The operator's payment rule (Settings → payment terms; 20/3/60 when
+    // unset). The deposit written on the itinerary used to be a hardcoded
+    // 30%, and the booking made from it inherited that figure — so the
+    // schedule the office actually works to never reached either record.
+    const { data: orgTerms } = await supabaseAdmin
+      .from('organizations')
+      .select('deposit_percent, deposit_due_days, balance_due_days_before_departure')
+      .eq('id', orgId)
+      .maybeSingle()
+    const paymentRule = paymentRuleFrom(orgTerms)
+    const depositOf = (selling: number | null | undefined) => computeDeposit(Number(selling) || 0, paymentRule.deposit_percent).depositAmount
 
     const { data: quote, error: quoteError } = await supabaseAdmin
       .from('tour_quotes')
@@ -96,8 +110,8 @@ export async function POST(
           supplier_cost: quote.total_cost,
           profit: quote.margin_amount,
           margin_percent: quote.margin_percent,
-          deposit_amount: Math.round((quote.selling_price || 0) * 0.3),
-          balance_due: Math.round((quote.selling_price || 0) * 0.7),
+          deposit_amount: depositOf(quote.selling_price),
+          balance_due: Math.round(((quote.selling_price || 0) - depositOf(quote.selling_price)) * 100) / 100,
           payment_status: 'not_paid',
           partner_id: quote.partner_id || null,
           partner_commission_percent: partnerInfo?.commission_percent || 0,
@@ -225,8 +239,8 @@ export async function POST(
         profit: quote.margin_amount,
         margin_percent: quote.margin_percent,
         currency: quote.currency || 'EUR',
-        deposit_amount: Math.round((quote.selling_price || 0) * 0.3),
-        balance_due: Math.round((quote.selling_price || 0) * 0.7),
+        deposit_amount: depositOf(quote.selling_price),
+        balance_due: Math.round(((quote.selling_price || 0) - depositOf(quote.selling_price)) * 100) / 100,
         payment_status: 'not_paid',
         user_id, // itineraries has user_id, not created_by
         notes: `Converted from B2B quote ${quote.quote_number}`,
