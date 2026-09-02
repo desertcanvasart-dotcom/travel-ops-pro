@@ -225,6 +225,17 @@ export interface BuildBookingRowInput {
  * Build the bookings insert row. Pure — no I/O, so the money arithmetic and the
  * field mapping are testable without a database.
  */
+/**
+ * Stamped into the POST /api/bookings response so a deployment can be PROVEN
+ * to run this builder. On 2026-09-02 production wrote bookings with a 30%
+ * deposit, balance = total − deposit and no schedule — a row shape this file
+ * stopped producing on 2026-08-16 — through two consecutive fresh deploys
+ * whose /api/version reported the right commit. One backend, no database
+ * trigger, no rewrite: the compiled route was older than its source. A
+ * changed source hash forces a recompile; the marker shows it happened.
+ */
+export const BOOKING_ROW_BUILDER = 'schedule-2026-09-02'
+
 export function buildBookingRow(input: BuildBookingRowInput): Record<string, unknown> {
   const { orgId, bookingCode, itinerary, depositPercent, quote } = input
   const total = Number(input.total ?? itinerary.total_cost ?? 0)
