@@ -3748,7 +3748,8 @@
       "showingProperties": "{city}の{filtered}/{total}件の施設を表示",
       "perPerson": "1名あたり",
       "person": "名",
-      "persons": "名"
+      "persons": "名",
+      "convertedFrom": "{currency}から換算"
     },
     "meals": {
       "lunch": "ランチ",
@@ -3762,7 +3763,8 @@
       "noMeal": "{mealType}なし",
       "skipMeal": "この日の{mealType}をスキップ",
       "perPerson": "/人",
-      "optionsInCity": "{city}の{count}件の{mealType}オプション"
+      "optionsInCity": "{city}の{count}件の{mealType}オプション",
+      "convertedFrom": "{currency}から換算"
     },
     "services": {
       "title": "追加サービス",
@@ -3775,7 +3777,8 @@
       "vehicles": "台",
       "perDay": "1日あたり",
       "totalServices": "追加サービス合計",
-      "servicesSelected": "{count}件のサービスを選択"
+      "servicesSelected": "{count}件のサービスを選択",
+      "convertedFrom": "{currency}から換算"
     },
     "activities": {
       "title": "アクティビティ",
@@ -3796,7 +3799,8 @@
       "notesPlaceholder": "時間、特別な指示などを追加...",
       "activityCost": "アクティビティ費用",
       "totalActivitiesCost": "アクティビティ合計費用（{count}件）",
-      "total": "合計"
+      "total": "合計",
+      "convertedFrom": "{currency}から換算"
     },
     "cities": {
       "Abu Simbel": "アブ・シンベル",

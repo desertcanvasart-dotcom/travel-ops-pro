@@ -3,8 +3,12 @@
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { fmtMoney, times, convertedFrom } from '@/app/tour-builder/lib/money'
 
 interface EntranceFee {
+  /** Set by /api/rates?in_org_currency=true when the row was converted. */
+  converted_from?: string | null
+  conversion_missing?: boolean
   id: string
   service_code: string
   attraction_name: string
@@ -16,6 +20,9 @@ interface EntranceFee {
 }
 
 interface Transportation {
+  /** Set by /api/rates?in_org_currency=true when the row was converted. */
+  converted_from?: string | null
+  conversion_missing?: boolean
   id: string
   service_code: string
   vehicle_type: string
@@ -51,6 +58,7 @@ export default function ActivityBuilder({
   onActivitiesChange
 }: ActivityBuilderProps) {
   const { rateSymbol } = useCurrency()
+  const money = (n: number | null | undefined) => fmtMoney(rateSymbol, n)
   const t = useTranslations('tourBuilder.activities')
   const [entrances, setEntrances] = useState<EntranceFee[]>([])
   const [transportations, setTransportations] = useState<Transportation[]>([])
@@ -69,8 +77,8 @@ export default function ActivityBuilder({
     setLoading(true)
     try {
       const [entrancesRes, transportsRes] = await Promise.all([
-        fetch(`/api/rates?type=entrance&city=${city}`),
-        fetch(`/api/rates?type=transportation&city=${city}`)
+        fetch(`/api/rates?type=entrance&city=${city}&in_org_currency=true`),
+        fetch(`/api/rates?type=transportation&city=${city}&in_org_currency=true`)
       ])
 
       const [entrancesData, transportsData] = await Promise.all([
@@ -155,7 +163,7 @@ export default function ActivityBuilder({
     if (activity.entrances && activity.entrances.length > 0) {
       activity.entrances.forEach(entrance => {
         const rate = isEuroPassport ? entrance.eur_rate : entrance.non_eur_rate
-        cost += pax * rate
+        cost += pax * (rate ?? 0)
       })
     }
     
@@ -163,7 +171,7 @@ export default function ActivityBuilder({
       const rate = isEuroPassport
         ? activity.transportation.base_rate_eur
         : activity.transportation.base_rate_non_eur
-      cost += rate
+      cost += rate ?? 0
     }
     
     return cost
@@ -298,10 +306,10 @@ export default function ActivityBuilder({
                             </div>
                             <div className="text-right ml-3">
                               <div className="font-semibold text-sm text-gray-900">
-                                {rateSymbol}{rate.toFixed(2)}
+                                {money(rate)}{convertedFrom(entrance) && <span className="ml-1 text-[10px] text-amber-700">({t('convertedFrom', { currency: convertedFrom(entrance) ?? '' })})</span>}
                               </div>
                               <div className="text-xs text-gray-500">
-                                {rateSymbol}{(pax * rate).toFixed(2)} {t('total')}
+                                {money(times(rate, pax))} {t('total')}
                               </div>
                             </div>
                           </label>
@@ -338,7 +346,7 @@ export default function ActivityBuilder({
                       const rate = isEuroPassport ? transport.base_rate_eur : transport.base_rate_non_eur
                       return (
                         <option key={transport.id} value={transport.id}>
-                          {transport.vehicle_type} ({transport.capacity_min}-{transport.capacity_max} pax) - {rateSymbol}{rate}
+                          {transport.vehicle_type} ({transport.capacity_min}-{transport.capacity_max} pax) - {money(rate)}
                         </option>
                       )
                     })}
@@ -368,7 +376,7 @@ export default function ActivityBuilder({
               <div className="bg-blue-50 border border-blue-200 rounded p-3 flex justify-between items-center">
                 <span className="text-sm font-medium text-blue-900">{t('activityCost')}:</span>
                 <span className="text-lg font-bold text-blue-700">
-                  {rateSymbol}{calculateActivityCost(activity).toFixed(2)}
+                  {money(calculateActivityCost(activity))}
                 </span>
               </div>
             </div>
@@ -382,7 +390,7 @@ export default function ActivityBuilder({
                   {t('totalActivitiesCost', { count: activities.length })}
                 </span>
                 <span className="text-2xl font-bold text-green-700">
-                  {rateSymbol}{getTotalCost().toFixed(2)}
+                  {money(getTotalCost())}
                 </span>
               </div>
             </div>
