@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { templateDaysToItineraryDays, addDays } from '@/lib/itineraries/template-days'
+import { templateDaysToItineraryDays, addDays, packageTypeForTemplate, itineraryServiceType } from '@/lib/itineraries/template-days'
+import { SERVICE_TYPES } from '@/lib/service-types'
 
 // "Convert to Itinerary" answered "Quote not found" for every quote in
 // production (2026-09-02, QT-2026-00001, seen live). The quote had passed the
@@ -104,5 +105,77 @@ describe('the convert route reads the programme from the template, never tour_da
     }
     const offenders = walk(join(ROOT, 'app', 'api')).filter(f => /tour_templates\s*\([\s\S]*?tour_days\s*\(/.test(readFileSync(f, 'utf8')))
     expect(offenders).toEqual([])
+  })
+
+  it('writes an enum member for package_type, never "custom", and links the template', () => {
+    // Second failure in the same flow, one step later: itineraries.package_type
+    // is a Postgres enum and the route wrote 'custom'. Found by replaying the
+    // schema locally — the route reported only "Failed to create itinerary".
+    expect(src).not.toMatch(/package_type:\s*'custom'/)
+    expect(src).toContain('package_type: packageTypeForTemplate(template)')
+    expect(src).toMatch(/template_id:\s*template\?\.id/)
+  })
+})
+
+describe('packageTypeForTemplate', () => {
+  const ENUM = ['day-trips', 'tours-only', 'land-package', 'full-package', 'cruise-land', 'shore-excursions', 'cruise-package']
+
+  it('a single-day tour type is a day trip', () => {
+    for (const t of ['day_tour', 'half_day', 'stopover']) expect(packageTypeForTemplate({ tour_type: t, duration_days: 1 })).toBe('day-trips')
+    expect(packageTypeForTemplate({ tour_type: 'multi_day', duration_days: 1 })).toBe('day-trips')
+  })
+
+  it('a cruise programme is cruise + land; anything else keeps the full-package assumption', () => {
+    expect(packageTypeForTemplate({ tour_type: 'cruise', duration_days: 8 })).toBe('cruise-land')
+    expect(packageTypeForTemplate({ tour_type: 'land', duration_days: 8 })).toBe('full-package')
+    expect(packageTypeForTemplate({ tour_type: 'cultural', duration_days: 5 })).toBe('full-package')
+    expect(packageTypeForTemplate(null)).toBe('full-package')
+  })
+
+  it('only ever answers with a member of the database enum', () => {
+    for (const t of ['day_tour', 'cruise', 'land', 'multi_day', 'cultural', 'weird', '', undefined]) {
+      expect(ENUM).toContain(packageTypeForTemplate({ tour_type: t as string, duration_days: 5 }))
+    }
+  })
+
+  it('writes only columns itinerary_services actually has', () => {
+    // Third failure in this route: the service-line insert wrote
+    // supplier_cost / margin_percent / selling_price / currency / status —
+    // none of which exist. The write-contract guard skips payloads built by
+    // a map(), which is exactly how this one is built, so pin it here.
+    const src = readFileSync(join(ROOT, 'app', 'api', 'b2b', 'quotes', '[id]', 'convert', 'route.ts'), 'utf8')
+    const types = readFileSync(join(ROOT, 'types', 'database.types.ts'), 'utf8')
+    const m = types.match(/^ {6}itinerary_services: \{\n {8}Row: \{\n([\s\S]*?)\n {8}\}/m)!
+    const live = new Set([...m[1].matchAll(/^ {10}([a-z_0-9]+)\??:/gm)].map(x => x[1]))
+    const start = src.indexOf(".from('itinerary_services')")
+    const block = src.slice(start, src.indexOf('}))', start))
+    const keys = [...block.matchAll(/^\s{14}([a-z_]+):/gm)].map(x => x[1])
+    expect(keys.length).toBeGreaterThan(5)
+    expect(keys.filter(k => !live.has(k))).toEqual([])
+  })
+})
+
+describe('itineraryServiceType', () => {
+  // Fourth failure in the route, found in the local replay: the CHECK on
+  // itinerary_services.service_type rejected 'water' (bottled water lines)
+  // and 'other', and the whole conversion rolled back.
+  it('maps every category the saved quote QT-2026-00002 carries to an accepted type', () => {
+    for (const c of ['airport_service', 'hotel_service', 'transportation', 'tips', 'accommodation', 'water']) {
+      expect(SERVICE_TYPES).toContain(itineraryServiceType(c))
+    }
+    expect(itineraryServiceType('water')).toBe('supplies')
+    expect(itineraryServiceType('extras_catalogue')).toBe('extra')
+  })
+
+  it('falls back to the catch-all, never to a confident wrong guess', () => {
+    expect(itineraryServiceType('other')).toBe('extra')
+    expect(itineraryServiceType('zeppelin')).toBe('extra')
+    expect(itineraryServiceType(undefined)).toBe('extra')
+  })
+
+  it('the route uses it for every service line', () => {
+    const src = readFileSync(join(ROOT, 'app', 'api', 'b2b', 'quotes', '[id]', 'convert', 'route.ts'), 'utf8')
+    expect(src).toContain('service_type: serviceType')
+    expect(src).not.toMatch(/service_type:\s*service\.service_category/)
   })
 })

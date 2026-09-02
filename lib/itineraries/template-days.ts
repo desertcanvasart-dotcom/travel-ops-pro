@@ -116,3 +116,68 @@ export function templateDaysToItineraryDays(
   }
   return rows
 }
+
+// ---------- package type ----------
+// itineraries.package_type is a Postgres ENUM (day-trips | tours-only |
+// land-package | full-package | cruise-land | shore-excursions |
+// cruise-package). The convert route used to write 'custom' — not a member —
+// so every template conversion died at the itinerary insert with a bare
+// "Failed to create itinerary" (found by replaying the schema locally; the
+// route logs nothing of the database's reason).
+//
+// Same signal the pricing engine reads (lib/auto-pricing-service.ts): a
+// single-day tour_type is a day trip; a cruise programme is cruise + land;
+// everything else keeps the engine's historical full-package assumption.
+
+export const SINGLE_DAY_TOUR_TYPES = ['day_tour', 'half_day', 'stopover'] as const
+
+export type ItineraryPackageType =
+  | 'day-trips' | 'tours-only' | 'land-package' | 'full-package'
+  | 'cruise-land' | 'shore-excursions' | 'cruise-package'
+
+export function packageTypeForTemplate(
+  template: { tour_type?: string | null; duration_days?: number | null } | null | undefined
+): ItineraryPackageType {
+  const type = (template?.tour_type ?? '').toLowerCase()
+  if ((SINGLE_DAY_TOUR_TYPES as readonly string[]).includes(type)) return 'day-trips'
+  if ((template?.duration_days ?? 0) === 1) return 'day-trips'
+  if (type === 'cruise') return 'cruise-land'
+  return 'full-package'
+}
+
+// ---------- service type ----------
+// itinerary_services.service_type is CHECK-constrained to the canonical
+// vocabulary (lib/service-types.ts). A quote line's service_category is the
+// engine's word for the same thing and is looser: bottled water is 'water',
+// a catalogue extra is 'extras_catalogue'. A stranger has to become
+// SOMETHING the constraint accepts or the whole conversion rolls back — so
+// the fallback is 'extra' (the catch-all the vocabulary already has), never
+// a confident wrong guess like 'transportation'.
+
+import { SERVICE_TYPES, normalizeServiceType } from '@/lib/service-types'
+
+const CATEGORY_ALIASES: Record<string, (typeof SERVICE_TYPES)[number]> = {
+  water: 'supplies',
+  supply: 'supplies',
+  extras_catalogue: 'extra',
+  extras: 'extra',
+  option: 'extra',
+  optional: 'extra',
+  flights: 'flight',
+  entrances: 'entrance',
+  entrance_fee: 'entrance',
+  entrance_fees: 'entrance',
+  activities: 'activity',
+  cruises: 'cruise',
+  meals: 'meal',
+  guides: 'guide',
+  tip: 'tips',
+  transport: 'transportation',
+  hotel: 'accommodation',
+}
+
+export function itineraryServiceType(category: string | null | undefined): (typeof SERVICE_TYPES)[number] {
+  const t = normalizeServiceType(category)
+  if ((SERVICE_TYPES as readonly string[]).includes(t)) return t as (typeof SERVICE_TYPES)[number]
+  return CATEGORY_ALIASES[t] ?? 'extra'
+}
