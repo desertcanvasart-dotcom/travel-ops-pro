@@ -6,12 +6,15 @@ import { RATES_TAB_ORDER, firstTabWithData, type RatesTab } from '@/lib/rates/fi
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 
 // ============================================
 // INTERFACES
 // ============================================
 
 interface BaseRate {
+  /** The row's own entry currency; null = org rate currency (lib/rates/rate-currency.ts). */
+  rate_currency?: string | null
   id?: string
   service_code: string
   city?: string
@@ -83,6 +86,8 @@ interface MealRate extends BaseRate {
 }
 
 interface AirportStaffRate {
+  /** The row's own entry currency; null = org rate currency (lib/rates/rate-currency.ts). */
+  rate_currency?: string | null
   id: string
   service_code: string
   airport_code: string
@@ -97,6 +102,8 @@ interface AirportStaffRate {
 }
 
 interface HotelStaffRate {
+  /** The row's own entry currency; null = org rate currency (lib/rates/rate-currency.ts). */
+  rate_currency?: string | null
   id: string
   service_code: string
   service_type: string
@@ -109,6 +116,8 @@ interface HotelStaffRate {
 }
 
 interface CruiseRate {
+  /** The row's own entry currency; null = org rate currency (lib/rates/rate-currency.ts). */
+  rate_currency?: string | null
   id: string
   cruise_code: string
   ship_name: string
@@ -129,6 +138,8 @@ interface CruiseRate {
 }
 
 interface SleepingTrainRate {
+  /** The row's own entry currency; null = org rate currency (lib/rates/rate-currency.ts). */
+  rate_currency?: string | null
   /** Embedded from the property_id FK — the train this rate prices. */
   supplier_properties?: { name: string } | null
   id: string
@@ -148,6 +159,8 @@ interface SleepingTrainRate {
 }
 
 interface TrainRate {
+  /** The row's own entry currency; null = org rate currency (lib/rates/rate-currency.ts). */
+  rate_currency?: string | null
   /** Embedded from the property_id FK — the train this rate prices. */
   supplier_properties?: { name: string } | null
   id: string
@@ -165,6 +178,8 @@ interface TrainRate {
 }
 
 interface TippingRate {
+  /** The row's own entry currency; null = org rate currency (lib/rates/rate-currency.ts). */
+  rate_currency?: string | null
   id: string
   service_code: string
   role_type: string
@@ -879,19 +894,19 @@ export default function RatesPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                          {rate.sedan_rate_eur ? formatRate(Number(rate.sedan_rate_eur)) : <span className="text-gray-300 font-normal">—</span>}
+                          {rate.sedan_rate_eur ? formatRateInRowCurrency(Number(rate.sedan_rate_eur), rate, formatRate) : <span className="text-gray-300 font-normal">—</span>}
                         </td>
                         <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                          {rate.minivan_rate_eur ? formatRate(Number(rate.minivan_rate_eur)) : <span className="text-gray-300 font-normal">—</span>}
+                          {rate.minivan_rate_eur ? formatRateInRowCurrency(Number(rate.minivan_rate_eur), rate, formatRate) : <span className="text-gray-300 font-normal">—</span>}
                         </td>
                         <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                          {rate.van_rate_eur ? formatRate(Number(rate.van_rate_eur)) : <span className="text-gray-300 font-normal">—</span>}
+                          {rate.van_rate_eur ? formatRateInRowCurrency(Number(rate.van_rate_eur), rate, formatRate) : <span className="text-gray-300 font-normal">—</span>}
                         </td>
                         <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                          {rate.minibus_rate_eur ? formatRate(Number(rate.minibus_rate_eur)) : <span className="text-gray-300 font-normal">—</span>}
+                          {rate.minibus_rate_eur ? formatRateInRowCurrency(Number(rate.minibus_rate_eur), rate, formatRate) : <span className="text-gray-300 font-normal">—</span>}
                         </td>
                         <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                          {rate.bus_rate_eur ? formatRate(Number(rate.bus_rate_eur)) : <span className="text-gray-300 font-normal">—</span>}
+                          {rate.bus_rate_eur ? formatRateInRowCurrency(Number(rate.bus_rate_eur), rate, formatRate) : <span className="text-gray-300 font-normal">—</span>}
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-600">{rate.supplier_name || '-'}</td>
                       </tr>
@@ -937,8 +952,8 @@ export default function RatesPage() {
                           {rate.tour_duration?.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-green-600">{formatRate(Number(rate.base_rate_eur || rate.eur_rate || 0))}</td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">{formatRate(Number(rate.base_rate_non_eur || rate.non_eur_rate || 0))}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold text-green-600">{formatRateInRowCurrency(Number(rate.base_rate_eur || rate.eur_rate || 0), rate, formatRate)}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">{formatRateInRowCurrency(Number(rate.base_rate_non_eur || rate.non_eur_rate || 0), rate, formatRate)}</td>
                     </tr>
                   ))}
                   {paginatedRates.guides.length === 0 && (
@@ -982,10 +997,10 @@ export default function RatesPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        {formatRate(Number(rate.base_rate_eur || rate.eur_rate || 0))}
+                        {formatRateInRowCurrency(Number(rate.base_rate_eur || rate.eur_rate || 0), rate, formatRate)}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">
-                        {formatRate(Number(rate.base_rate_non_eur || rate.non_eur_rate || 0))}
+                        {formatRateInRowCurrency(Number(rate.base_rate_non_eur || rate.non_eur_rate || 0), rate, formatRate)}
                       </td>
                     </tr>
                   ))}
@@ -1034,10 +1049,10 @@ export default function RatesPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        {formatRate(Number(rate.base_rate_eur))}
+                        {formatRateInRowCurrency(Number(rate.base_rate_eur), rate, formatRate)}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">
-                        {formatRate(Number(rate.base_rate_non_eur))}
+                        {formatRateInRowCurrency(Number(rate.base_rate_non_eur), rate, formatRate)}
                       </td>
                     </tr>
                   ))}
@@ -1075,8 +1090,8 @@ export default function RatesPage() {
                           {rate.city}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-green-600">{formatRate(Number(rate.base_rate_eur || rate.eur_rate || 0))}</td>
-                      <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">{formatRate(Number(rate.base_rate_non_eur || rate.non_eur_rate || 0))}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold text-green-600">{formatRateInRowCurrency(Number(rate.base_rate_eur || rate.eur_rate || 0), rate, formatRate)}</td>
+                      <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">{formatRateInRowCurrency(Number(rate.base_rate_non_eur || rate.non_eur_rate || 0), rate, formatRate)}</td>
                     </tr>
                   ))}
                   {paginatedRates.meals.length === 0 && (
@@ -1146,13 +1161,13 @@ export default function RatesPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        {formatRate(rate.rate_single_eur)}
+                        {formatRateInRowCurrency(rate.rate_single_eur, rate, formatRate)}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-blue-600">
-                        {formatRate(rate.rate_double_eur)}
+                        {formatRateInRowCurrency(rate.rate_double_eur, rate, formatRate)}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-purple-600">
-                        {rate.rate_triple_eur ? formatRate(rate.rate_triple_eur) : '-'}
+                        {rate.rate_triple_eur ? formatRateInRowCurrency(rate.rate_triple_eur, rate, formatRate) : '-'}
                       </td>
                     </tr>
                   ))}
@@ -1210,10 +1225,10 @@ export default function RatesPage() {
                         {rate.arrival_time || '-'}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        {formatRate(rate.rate_oneway_eur)}
+                        {formatRateInRowCurrency(rate.rate_oneway_eur, rate, formatRate)}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-purple-600">
-                        {rate.rate_roundtrip_eur ? formatRate(rate.rate_roundtrip_eur) : '-'}
+                        {rate.rate_roundtrip_eur ? formatRateInRowCurrency(rate.rate_roundtrip_eur, rate, formatRate) : '-'}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600">
                         {rate.meals_included || 'Dinner & Breakfast'}
@@ -1272,7 +1287,7 @@ export default function RatesPage() {
                         {rate.departure_times || '-'}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        {formatRate(rate.rate_eur)}
+                        {formatRateInRowCurrency(rate.rate_eur, rate, formatRate)}
                       </td>
                     </tr>
                   ))}
@@ -1331,7 +1346,7 @@ export default function RatesPage() {
                         {rate.description || '-'}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        {formatRate(rate.rate_eur)}
+                        {formatRateInRowCurrency(rate.rate_eur, rate, formatRate)}
                       </td>
                     </tr>
                   ))}
@@ -1388,7 +1403,7 @@ export default function RatesPage() {
                         {rate.description || '-'}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        {formatRate(rate.rate_eur)}
+                        {formatRateInRowCurrency(rate.rate_eur, rate, formatRate)}
                       </td>
                     </tr>
                   ))}
@@ -1446,7 +1461,7 @@ export default function RatesPage() {
                         {rate.description || '-'}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        {formatRate(rate.rate_eur)}
+                        {formatRateInRowCurrency(rate.rate_eur, rate, formatRate)}
                       </td>
                     </tr>
                   ))}

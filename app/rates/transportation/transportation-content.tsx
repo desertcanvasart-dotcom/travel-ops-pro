@@ -6,7 +6,7 @@ import CityOptions from '@/app/components/CityOptions'
 import { useTranslations } from 'next-intl'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
-import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
 import {
   Search,
@@ -925,7 +925,7 @@ export default function TransportationContent() {
                           <tr className="text-[10px] uppercase tracking-wider text-gray-400">
                             <th className="text-left py-1 font-medium">{t('vehicle')}</th>
                             <th className="text-center py-1 font-medium">{t('pax')}</th>
-                            <th className="text-right py-1 font-medium">{t('rateHeader', { currency: rateCurrency })}</th>
+                            <th className="text-right py-1 font-medium">{t('rateHeader', { currency: rate.rate_currency || rateCurrency })}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -938,7 +938,7 @@ export default function TransportationContent() {
                                 <tr key={tier.key} className="border-t border-gray-50">
                                   <td className="py-1.5 text-xs font-medium text-gray-700">{t(tier.labelKey)}</td>
                                   <td className="py-1.5 text-xs text-center text-gray-500">{capMin}-{capMax}</td>
-                                  <td className="py-1.5 text-xs text-right font-medium text-gray-900">{formatRate(eurRate)}</td>
+                                  <td className="py-1.5 text-xs text-right font-medium text-gray-900">{formatRateInRowCurrency(eurRate, rate, formatRate)}</td>
                                 </tr>
                               )
                             })
@@ -1034,7 +1034,7 @@ export default function TransportationContent() {
                         return (
                           <td key={tier.key} className="px-3 py-2 text-right text-sm">
                             {eurRate != null && eurRate > 0 ? (
-                              <span className="font-medium text-gray-900">{formatRate(eurRate)}</span>
+                              <span className="font-medium text-gray-900">{formatRateInRowCurrency(eurRate, rate, formatRate)}</span>
                             ) : (
                               <span className="text-gray-300">—</span>
                             )}
@@ -1145,7 +1145,7 @@ export default function TransportationContent() {
                             <span key={tier.key}>
                               {idx > 0 && <span className="mx-0.5 text-gray-300">|</span>}
                               <span className="text-gray-400">{t(tier.labelKey)}:</span>{' '}
-                              <span className="font-medium text-gray-700">{formatRate(eurRate)}</span>
+                              <span className="font-medium text-gray-700">{formatRateInRowCurrency(eurRate, rate, formatRate)}</span>
                             </span>
                           )
                         })

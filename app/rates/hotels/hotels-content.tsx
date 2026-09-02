@@ -43,7 +43,7 @@ import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import RatePeriodsImportExport from '@/app/components/RatePeriodsImportExport'
 import RateSeasonsEditor from '@/components/rates/RateSeasonsEditor'
 import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
-import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { averageRateInOneCurrency, formatRateAverage } from '@/lib/currency-totals'
 
 // Hotel picker option that reveals the free-text input for a new hotel.
@@ -1073,12 +1073,12 @@ export default function HotelsContent() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm font-bold text-green-600">
-                          {formatRate(rate.pp_double_eur || 0)}
+                          {formatRateInRowCurrency(rate.pp_double_eur || 0, rate, formatRate)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm text-orange-600">
-                          {formatRate(rate.high_pp_double_eur || 0)}
+                          {formatRateInRowCurrency(rate.high_pp_double_eur || 0, rate, formatRate)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -1200,15 +1200,15 @@ export default function HotelsContent() {
                     <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-100">
                       <div className="text-center">
                         <p className="text-xs text-blue-600 font-medium">{t('low')}</p>
-                        <p className="text-sm font-bold text-gray-700">{formatRate(rate.pp_double_eur || 0)}</p>
+                        <p className="text-sm font-bold text-gray-700">{formatRateInRowCurrency(rate.pp_double_eur || 0, rate, formatRate)}</p>
                       </div>
                       <div className="text-center">
                         <p className="text-xs text-orange-600 font-medium">{t('high')}</p>
-                        <p className="text-sm font-bold text-gray-700">{formatRate(rate.high_pp_double_eur || 0)}</p>
+                        <p className="text-sm font-bold text-gray-700">{formatRateInRowCurrency(rate.high_pp_double_eur || 0, rate, formatRate)}</p>
                       </div>
                       <div className="text-center">
                         <p className="text-xs text-red-600 font-medium">{t('peak')}</p>
-                        <p className="text-sm font-bold text-gray-700">{formatRate(rate.peak_pp_double_eur || 0)}</p>
+                        <p className="text-sm font-bold text-gray-700">{formatRateInRowCurrency(rate.peak_pp_double_eur || 0, rate, formatRate)}</p>
                       </div>
                     </div>
                   </div>
@@ -1272,7 +1272,7 @@ export default function HotelsContent() {
                     )}
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="text-sm font-bold text-green-600">{formatRate(rate.pp_double_eur || 0)}</span>
+                    <span className="text-sm font-bold text-green-600">{formatRateInRowCurrency(rate.pp_double_eur || 0, rate, formatRate)}</span>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => handleEdit(rate)}
@@ -1579,7 +1579,7 @@ export default function HotelsContent() {
               <div className="mb-6">
                 <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">4</span>
-                  {tPeriods('titleWithCurrency', { currency: rateCurrency })}
+                  {tPeriods('titleWithCurrency', { currency: formData.rate_currency || rateCurrency })}
                 </h3>
                 <RateSeasonsEditor
                   entity="accommodation"

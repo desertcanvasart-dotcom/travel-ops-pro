@@ -4141,7 +4141,7 @@
       "tueThuSat": "火/木/土",
       "weekly": "週1回",
       "charterOnDemand": "チャーター/オンデマンド",
-      "rateHeader": "料金（{currency}）"
+      "rateHeader": "料金"
     },
     "transportation": {
       "title": "交通料金",

@@ -87,7 +87,7 @@ export default function FixedCostsPage() {
       })
       const data = await res.json()
       if (data.success) {
-        showNotice('success', `${cost.cost_type} rate updated to ${rateSymbol}${parseFloat(editValue).toFixed(2)}`)
+        showNotice('success', `${cost.cost_type} rate updated to ${editCurrency || cost.rate_currency || rateSymbol}${parseFloat(editValue).toFixed(2)}`)
         setEditingId(null)
         fetchCosts()
       } else {
@@ -159,7 +159,7 @@ export default function FixedCostsPage() {
       })
       const data = await res.json()
       if (data.success) {
-        showNotice('success', `"${newCostType}" added at ${rateSymbol}${parseFloat(newCostRate).toFixed(2)} per person/day`)
+        showNotice('success', `"${newCostType}" added at ${newCostCurrency || rateSymbol}${parseFloat(newCostRate).toFixed(2)} per person/day`)
         setShowAddForm(false)
         setNewCostType('')
         setNewCostRate('')
@@ -278,7 +278,7 @@ export default function FixedCostsPage() {
                     {isEditing ? (
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1">
-                          <span className="text-lg font-bold text-gray-400">{rateSymbol}</span>
+                          <span className="text-lg font-bold text-gray-400">{editCurrency || cost.rate_currency || rateSymbol}</span>
                           <input
                             type="number"
                             value={editValue}
