@@ -100,8 +100,12 @@ export default function RateSeasonsEditor({
 }: Props) {
   const t = useTranslations('rates.ratePeriods')
 
-  const fieldLabel = (field: string): string =>
-    t(`fields.${field.replace(/_non_eur$|_eur$/, '')}`)
+  // A cruise period is entered the hotel way, so its base rate reads
+  // "PP Dbl" like a hotel's, not the cabin word the column is stored under.
+  const fieldLabel = (field: string): string => {
+    const base = field.replace(/_non_eur$|_eur$/, '')
+    return t(`fields.${entity === 'cruise' && base === 'double' ? 'pp_double' : base}`)
+  }
 
   const update = (index: number, patch: Partial<RateSeason>) =>
     onChange(seasons.map((s, i) => (i === index ? { ...s, ...patch } : s)))
