@@ -1195,17 +1195,24 @@ export async function getCruiseRates(
       .eq('tier', tier)
       .eq('is_active', true)
 
-    if (embarkCity) {
-      query = query.ilike('embark_city', `%${embarkCity}%`)
-    }
-
     // The operator's preferred ship first — the star on the cruise rates page
     // is how they say which boat a programme sails on. It used to be
     // whichever row PostgREST returned first.
-    const { data: rawCruises, error } = await query
-      .order('is_preferred', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(1)
+    const preferredFirst = (q: typeof query) =>
+      q.order('is_preferred', { ascending: false }).order('created_at', { ascending: false }).limit(1)
+
+    // A programme's cruise days are usually filed under "Nile Cruise", not a
+    // port, so an embarkation filter that matches nothing is retried without
+    // it: the preferred standard ship, whichever way it sails. A port that IS
+    // named (Luxor, Aswan) still narrows the choice.
+    let { data: rawCruises, error } = embarkCity
+      ? await preferredFirst(query.ilike('embark_city', `%${embarkCity}%`))
+      : await preferredFirst(query)
+    if (!error && embarkCity && (!rawCruises || rawCruises.length === 0)) {
+      ;({ data: rawCruises, error } = await preferredFirst(
+        supabaseAdmin.from('nile_cruises').select('*').eq('tier', tier).eq('is_active', true)
+      ))
+    }
     const cruises = normalizer && rawCruises ? await normalizer.normalize('nile_cruises', rawCruises) as typeof rawCruises : rawCruises
 
     if (error || !cruises || cruises.length === 0) {
@@ -1280,8 +1287,10 @@ export async function getHotelRates(
       .eq('tier', tier)
       .eq('is_active', true)
       .ilike('city', `%${city}%`)
-      // Preferred hotel first (the star on the hotels page), newest as the tie-break.
-      .order('is_preferred', { ascending: false })
+      // Newest first. Hotels have NO preferred flag (the star is a cruises
+      // column only); ordering by is_preferred here made PostgREST reject the
+      // query and every hotel night in production went unpriced for a day
+      // (2026-09-02). __tests__/lib/engine-order-columns.test.ts guards it.
       .order('created_at', { ascending: false })
       .limit(1)
     const hotels = normalizer && rawHotels ? await normalizer.normalize('accommodation_rates', rawHotels) as typeof rawHotels : rawHotels

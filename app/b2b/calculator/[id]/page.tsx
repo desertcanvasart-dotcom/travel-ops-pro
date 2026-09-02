@@ -201,6 +201,21 @@ export default function TourPriceCalculator() {
   const [availableExtras, setAvailableExtras] = useState<CatalogueExtraOption[]>([])
   const [selectedExtraIds, setSelectedExtraIds] = useState<string[]>([])
   useEffect(() => {
+    fetch('/api/rates/guides')
+      .then(r => r.json())
+      .then(j => {
+        const langs: string[] = []
+        for (const row of (j?.data ?? []) as { guide_language?: string; is_active?: boolean }[]) {
+          const l = (row.guide_language ?? '').trim()
+          if (l && row.is_active !== false && !langs.includes(l)) langs.push(l)
+        }
+        setGuideLanguages(langs)
+        setGuideLanguage(prev => prev || langs[0] || 'English')
+      })
+      .catch(() => setGuideLanguage(prev => prev || 'English'))
+  }, [])
+
+  useEffect(() => {
     fetch('/api/extras-catalogue?active_only=true')
       .then(r => r.json())
       .then(d => { if (d?.success) setAvailableExtras(d.data || []) })
@@ -247,6 +262,11 @@ export default function TourPriceCalculator() {
   // the operator picks another tier on purpose.
   const [variationTier, setVariationTier] = useState<string>('standard')
   const [importedTier, setImportedTier] = useState<string>('')
+  // Guide language. The engine defaulted to English and this office holds
+  // Japanese guide contracts only, so every quote carried a guide hole.
+  // Offered from the languages that HAVE a guide rate, first one preselected.
+  const [guideLanguages, setGuideLanguages] = useState<string[]>([])
+  const [guideLanguage, setGuideLanguage] = useState<string>('')
 
   // Itinerary editor state
   const [templateId, setTemplateId] = useState<string | null>(null)
@@ -464,7 +484,8 @@ export default function TourPriceCalculator() {
           selected_optional_ids: optionalIds,
           extras: selectedExtraIds,
           tour_leader_included: tourLeaderIncluded,
-          tier: variationTier
+          tier: variationTier,
+          language: guideLanguage || 'English'
         })
       })
       const data = await res.json()
@@ -501,6 +522,7 @@ export default function TourPriceCalculator() {
           margin_percent: marginPercent,
           tour_leader_included: tourLeaderIncluded,
           tier: variationTier,
+          language: guideLanguage || 'English',
           extras: selectedExtraIds
         })
       })
@@ -791,6 +813,23 @@ export default function TourPriceCalculator() {
                 {importedTier && importedTier !== variationTier && (
                   <p className="text-xs text-gray-500 mt-1">{t('tierHint', { tier: t(`tiers.${importedTier}`) })}</p>
                 )}
+              </div>
+
+              {/* Guide language — from the languages a guide rate exists for */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <User className="w-4 h-4 inline mr-1" />{t('guideLanguage')}
+                </label>
+                <select
+                  value={guideLanguage}
+                  onChange={(e) => setGuideLanguage(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg bg-white"
+                  data-testid="guide-language"
+                >
+                  {(guideLanguages.length ? guideLanguages : ['English']).map(l => (
+                    <option key={l} value={l}>{l}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Profit Margin */}

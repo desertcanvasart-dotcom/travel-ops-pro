@@ -6591,7 +6591,8 @@
       "standard": "Standard",
       "deluxe": "Deluxe",
       "luxury": "Luxury"
-    }
+    },
+    "guideLanguage": "Guide language"
   },
   "bookings": {
     "title": "Bookings",
