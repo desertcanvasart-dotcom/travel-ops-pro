@@ -4278,7 +4278,7 @@
         "context": "Context",
         "noContext": "No specific context",
         "rateUnit": "Rate Unit",
-        "amount": "Amount ({currency})",
+        "amount": "Amount",
         "description": "Description",
         "descriptionPlaceholder": "e.g., Full day tour guide tip",
         "serviceCodePlaceholder": "Auto-generated if empty",

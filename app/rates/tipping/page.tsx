@@ -673,7 +673,7 @@ export default function TippingPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.amount', { currency: rateCurrency })} *</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.amount')} *</label>
                   <input
                     type="number"
                     name="rate_eur"

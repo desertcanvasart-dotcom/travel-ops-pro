@@ -5264,7 +5264,7 @@
         "context": "コンテキスト",
         "noContext": "コンテキストなし",
         "rateUnit": "料金単位",
-        "amount": "金額（{currency}）",
+        "amount": "金額",
         "description": "説明",
         "descriptionPlaceholder": "例：終日ツアーガイドチップ",
         "serviceCodePlaceholder": "空欄の場合は自動生成",
