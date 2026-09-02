@@ -12,6 +12,7 @@ import { generateItineraryPDF } from '@/lib/pdf-generator'
 import { useCompanyInfo } from '@/lib/use-company-info'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import GenerateNitteiButton from '@/components/GenerateNitteiButton'
+import GenerateOpsSheetButton from '@/components/GenerateOpsSheetButton'
 import ResourceAssignmentV2 from '@/app/components/ResourceAssignmentV2'
 import ResourceSummaryCard from '@/app/components/ResourceSummaryCard'
 import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
@@ -1546,18 +1547,9 @@ export default function ViewItineraryPage() {
               itineraryCode={itinerary.itinerary_code}
             />
             {/* The ENG. ITIN. worksheet the ground operator runs the trip from.
-                A plain link, not a handler: the route streams the PDF and the
-                browser's tab is the right place for a document. Office-held
-                fields (guides, file no.) print as ruled blanks to write in. */}
-            <a
-              href={`/api/documents/operations-sheet?itinerary_id=${itinerary.id}&format=pdf`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="h-10 px-4 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-2"
-            >
-              <FileText className="w-4 h-4" />
-              {t('opsSheet')}
-            </a>
+                Asks for the office-held header facts (file no., guides,
+                flights) once, then opens the document in a new tab. */}
+            <GenerateOpsSheetButton itineraryId={itinerary.id} itineraryCode={itinerary.itinerary_code} />
             {/* The customer-facing 日程表, generated from this trip: programme
                 text from the linked programme, traveller and dates from here. */}
             <GenerateNitteiButton

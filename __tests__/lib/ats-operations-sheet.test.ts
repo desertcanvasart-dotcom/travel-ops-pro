@@ -198,6 +198,8 @@ describe('atsOperationsSheet template', () => {
       size: 'A4',
       orientation: 'portrait',
       margin: '10mm',
+      // Room for the running footer, drawn in the margin (see the footer test).
+      footerHeight: '16mm',
     })
   })
 
@@ -233,5 +235,21 @@ describe('atsOperationsSheet template', () => {
     expect(html).not.toContain('<script>alert')
     expect(html).toContain('&lt;script&gt;')
     expect(html).toContain('&amp; co')
+  })
+
+  it('keeps the footer out of the printed flow — it is drawn in the page margin', () => {
+    // Seen on DEMO-PORTAL-001 (9 days): the sheet filled page one exactly, and
+    // the footer line was the only thing on page two. A footer in the flow is
+    // a footer that can be the only thing on a second page; in the margin it
+    // takes no flow space at all.
+    const html = atsOperationsSheet.render(build())
+    expect(html).toMatch(/@media print \{ \.foot \{ display: none; \} \}/)
+    expect(atsOperationsSheet.page.footerHeight).toBeTruthy()
+    const footer = atsOperationsSheet.footer!(build())
+    expect(footer).toContain(build().tour_code!)
+    expect(footer).toContain('to be confirmed by the office')
+    // Chromium renders a footer template in its own document: no stylesheet,
+    // so the styling has to travel inline with an explicit size.
+    expect(footer).toMatch(/font-size:\s*\d/)
   })
 })

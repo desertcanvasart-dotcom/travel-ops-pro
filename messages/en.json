@@ -1424,7 +1424,26 @@
     },
     "fromProgramme": "Start from a programme",
     "fromScratch": "Build from scratch",
-    "fromProgrammeHint": "Links the trip to the programme, fills in the name if you have not, and sets the end date from its length. The day plan is still built in the itinerary or the quote."
+    "fromProgrammeHint": "Links the trip to the programme, fills in the name if you have not, and sets the end date from its length. The day plan is still built in the itinerary or the quote.",
+    "opsSheet": {
+      "button": "Ops Sheet",
+      "tooltip": "Operations sheet for the ground team, built from this trip’s days",
+      "title": "Generate operations sheet",
+      "hint": "The day grid and hotel block come from this trip. The fields below are office-held: whatever you type prints in the header, anything left blank prints as a ruled blank to write in.",
+      "fileNo": "File no.",
+      "groupRef": "Group ref.",
+      "confirmedDate": "Confirmed date",
+      "finalDate": "Final date",
+      "rooms": "Rooms",
+      "cairoGuide": "Cairo guide",
+      "upperGuide": "Upper Egypt guide",
+      "mobile": "Mobile",
+      "flightIn": "Flight in",
+      "flightOut": "Flight out",
+      "remarks": "Remarks",
+      "pdf": "Open PDF",
+      "preview": "Preview (HTML)"
+    }
   },
   "payments": {
     "loadingPayments": "Loading payments...",

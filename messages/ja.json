@@ -1851,7 +1851,26 @@
     },
     "fromProgramme": "ツアープログラムから作成",
     "fromScratch": "白紙から作成",
-    "fromProgrammeHint": "プログラムと紐付け、旅程名が未入力なら補完し、日数から終了日を設定します。日程の中身は旅程画面または見積で作成します。"
+    "fromProgrammeHint": "プログラムと紐付け、旅程名が未入力なら補完し、日数から終了日を設定します。日程の中身は旅程画面または見積で作成します。",
+    "opsSheet": {
+      "button": "Ops Sheet",
+      "tooltip": "この旅程の日程から作成する現地手配用オペレーションシート",
+      "title": "オペレーションシートを作成",
+      "hint": "日程表とホテル欄はこの旅程から取り込みます。以下はオフィス側で管理する項目です。入力した内容がヘッダーに印字され、空欄は手書き用の罫線として印字されます。",
+      "fileNo": "ファイル番号",
+      "groupRef": "グループ参照",
+      "confirmedDate": "確認日",
+      "finalDate": "最終日",
+      "rooms": "部屋数",
+      "cairoGuide": "カイロガイド",
+      "upperGuide": "上エジプトガイド",
+      "mobile": "携帯",
+      "flightIn": "到着便",
+      "flightOut": "出発便",
+      "remarks": "備考",
+      "pdf": "PDFを開く",
+      "preview": "プレビュー (HTML)"
+    }
   },
   "payments": {
     "loadingPayments": "支払を読み込み中...",
