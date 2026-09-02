@@ -86,6 +86,15 @@ interface PricingResult {
   } | null
 }
 
+// A sellable catalogue extra (Rates → Extras), as /api/extras-catalogue returns it.
+interface CatalogueExtraOption {
+  id: string
+  name: string
+  supplier_cost: number | null
+  selling_price: number | null
+  unit: 'per_person' | 'per_booking'
+}
+
 interface RateSheetRow {
   pax: number
   total_cost: number
@@ -178,6 +187,19 @@ export default function TourPriceCalculator() {
   // docs/plans/extras-and-upgrades.md §5a.
   const [selectedOptionals, setSelectedOptionals] = useState<string[]>([])
   const [tourLeaderIncluded, setTourLeaderIncluded] = useState(false)
+  // Catalogue extras (Rates → Extras) offered on this quote — priced through
+  // the engine: cost + this quote's margin, or the operator's set price as-is.
+  const [availableExtras, setAvailableExtras] = useState<CatalogueExtraOption[]>([])
+  const [selectedExtraIds, setSelectedExtraIds] = useState<string[]>([])
+  useEffect(() => {
+    fetch('/api/extras-catalogue?active_only=true')
+      .then(r => r.json())
+      .then(d => { if (d?.success) setAvailableExtras(d.data || []) })
+      .catch(err => console.error('Failed to fetch extras:', err))
+  }, [])
+  const { rateSymbol: extrasRateSymbol } = useCurrency()
+  const toggleExtra = (id: string) =>
+    setSelectedExtraIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))
 
   // Rate sheet range
   const [paxFrom, setPaxFrom] = useState(1)
@@ -408,6 +430,7 @@ export default function TourPriceCalculator() {
           is_eur_passport: isEurPassport,
           margin_percent: marginPercent,
           selected_optional_ids: optionalIds,
+          extras: selectedExtraIds,
           tour_leader_included: tourLeaderIncluded,
           tier: variationTier
         })
@@ -445,7 +468,8 @@ export default function TourPriceCalculator() {
           is_eur_passport: isEurPassport,
           margin_percent: marginPercent,
           tour_leader_included: tourLeaderIncluded,
-          tier: variationTier
+          tier: variationTier,
+          extras: selectedExtraIds
         })
       })
       const data = await res.json()
@@ -732,6 +756,43 @@ export default function TourPriceCalculator() {
               {/* Optional extras are chosen ONE BY ONE, in the results panel
                   where their names and prices are visible — a switch here
                   priced options the operator could not see. */}
+
+              {/* Catalogue extras — priced through the engine like any line:
+                  cost + this quote's margin, or the operator's set price as-is.
+                  Ported from autoura-saas; the programme's own OPTIONS stay in
+                  the results panel, chosen one by one. */}
+              {availableExtras.length > 0 && (
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <p className="text-sm font-medium text-gray-700 mb-1">{t('extrasTitle')}</p>
+                  <p className="text-xs text-gray-500 mb-2">{t('extrasHint')}</p>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    {availableExtras.map(x => {
+                      const unpriced = x.supplier_cost == null && x.selling_price == null
+                      const label = x.selling_price != null
+                        ? `${extrasRateSymbol} ${x.selling_price} · ${t('extrasSetPrice')}`
+                        : x.supplier_cost != null
+                        ? `${extrasRateSymbol} ${x.supplier_cost} · ${t('extrasCostPlusMargin')}`
+                        : t('extrasNotPriced')
+                      return (
+                        <label key={x.id} className="flex items-start gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedExtraIds.includes(x.id)}
+                            onChange={() => toggleExtra(x.id)}
+                            className="w-4 h-4 mt-0.5 text-[#647C47] rounded"
+                          />
+                          <span className="text-sm leading-tight">
+                            {x.name}
+                            <span className={`block text-xs ${unpriced ? 'text-red-600' : 'text-gray-500'}`}>
+                              {label} · {x.unit === 'per_person' ? t('extrasPerPerson') : t('extrasPerBooking')}
+                            </span>
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Calculate Button */}
               <button
@@ -1247,13 +1308,15 @@ export default function TourPriceCalculator() {
                               </td>
                               <td className="px-4 py-2 text-center">
                                 <span className={`px-2 py-0.5 rounded text-xs ${
-                                  service.rate_source === 'stored'
+                                  service.rate_source === 'extras_catalogue'
+                                    ? 'bg-purple-100 text-purple-700'
+                                    : service.rate_source === 'stored'
                                     ? 'bg-gray-100'
                                     : service.rate_source === 'manual'
                                     ? 'bg-yellow-100 text-yellow-700'
                                     : 'bg-green-100 text-green-700'
                                 }`}>
-                                  {service.rate_type || service.rate_source}
+                                  {service.rate_source === 'extras_catalogue' ? t('extraBadge') : (service.rate_type || service.rate_source)}
                                 </span>
                               </td>
                               <td className="px-4 py-2 text-center text-gray-500">{service.quantity_mode}</td>
