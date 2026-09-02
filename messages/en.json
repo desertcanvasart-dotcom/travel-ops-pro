@@ -4444,7 +4444,8 @@
         "porter": "Porter",
         "checkin_assist": "Check-in Assist",
         "full_service": "Full Service",
-        "concierge": "Concierge"
+        "concierge": "Concierge",
+        "checkout_assist": "Check-out Assist"
       },
       "hotelCategories": {
         "budget": "Budget",
