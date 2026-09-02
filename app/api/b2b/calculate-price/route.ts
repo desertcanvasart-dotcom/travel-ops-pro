@@ -10,6 +10,9 @@ import { currencySymbol } from '@/lib/currency-totals'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { parseOptionalSelection, isOptionalSelected } from '@/lib/b2b/optional-selection'
+// Catalogue extras chosen at QUOTE time — same rule as options: cost + margin,
+// or the operator's set price as-is. Ported from autoura-saas.
+import { priceExtras, type CatalogueExtra, type ExtraSelection, type ExtrasPricing, type MoneyBlock } from '@/lib/pricing/extras-pricing'
 import {
   serviceQuantity,
   optionalContribution,
@@ -120,6 +123,87 @@ interface PriceCalculationResult {
   // deliverable only when complete; holes are surfaced, never fabricated away.
   complete?: boolean
   holes?: { kind: string; message: string }[]
+}
+
+// Catalogue extras chosen for this quote. Only ACTIVE rows of this org come
+// back; a withdrawn or foreign id is therefore a hole downstream, never a sale.
+async function loadExtras(orgId: string | null | undefined, ids: string[]): Promise<CatalogueExtra[]> {
+  if (!orgId || ids.length === 0) return []
+  const { data, error } = await supabaseAdmin
+    .from('extras_catalogue')
+    .select('id, name, supplier_cost, selling_price, unit')
+    .eq('org_id', orgId)
+    .eq('is_active', true)
+    .in('id', ids)
+  if (error) {
+    console.error('Error loading extras_catalogue:', error)
+    return []
+  }
+  return (data || []) as unknown as CatalogueExtra[]
+}
+
+// Fold priced extras into a FINISHED result, so both engine branches treat
+// them identically. The result's selling price already carries the seasonal
+// demand premium, and that premium "is about the DATE, taken on the whole
+// trip" (lib/b2b/optional-pricing) — so it is applied to the extras too,
+// pinned price included, and season_uplift grows by exactly that amount.
+// Lines join services (and so services_snapshot); any hole makes the quote
+// incomplete; the rate sheet is re-totalled at every pax count.
+function foldExtras(
+  result: PriceCalculationResult,
+  catalogue: CatalogueExtra[],
+  selections: ExtraSelection[]
+): PriceCalculationResult {
+  if (selections.length === 0) return result
+  const m = result.margin_percent
+  const upliftPct = result.season_uplift?.percent ?? 0
+  const r2 = (n: number) => Math.round(n * 100) / 100
+
+  // What the extras add BEFORE the premium: cost-only lines at the quote's
+  // margin, pinned lines at their price.
+  const preUplift = (p: ExtrasPricing) => p.margined_cost * (1 + m / 100) + p.pinned_sell
+  const fold = (b: MoneyBlock, pax: number, p: ExtrasPricing): MoneyBlock => {
+    const delta = preUplift(p)
+    const sellingPrice = b.sellingPrice + delta * (1 + upliftPct / 100)
+    return {
+      totalCost: r2(b.totalCost + p.cost_total),
+      marginAmount: r2(b.marginAmount + p.margined_cost * (m / 100) + p.pinned_margin),
+      sellingPrice: r2(sellingPrice),
+      pricePerPerson: r2(sellingPrice / Math.max(1, pax)),
+    }
+  }
+
+  const p = priceExtras(catalogue, selections, result.num_pax)
+  const top = fold(
+    { totalCost: result.total_cost, marginAmount: result.margin_amount, sellingPrice: result.selling_price, pricePerPerson: result.price_per_person },
+    result.num_pax, p
+  )
+  const delta = preUplift(p)
+
+  type PaxBlock = (MoneyBlock & Record<string, unknown>) | undefined
+  const pax_pricing_table = result.pax_pricing_table?.map((row) => {
+    const rp = priceExtras(catalogue, selections, row.numPax)
+    const f = (b: PaxBlock) => (b ? { ...b, ...fold(b, row.numPax, rp) } : b)
+    return { ...row, withoutLeader: f(row.withoutLeader), withLeader: f(row.withLeader) }
+  })
+
+  const holes = [...(result.holes ?? []), ...p.holes]
+  return {
+    ...result,
+    services: [...result.services, ...p.lines],
+    subtotal_cost: r2(result.subtotal_cost + p.cost_total),
+    total_cost: top.totalCost,
+    margin_amount: top.marginAmount,
+    selling_price: top.sellingPrice,
+    price_per_person: top.pricePerPerson,
+    base_selling_price: result.base_selling_price != null ? r2(result.base_selling_price + delta) : result.base_selling_price,
+    season_uplift: result.season_uplift
+      ? { ...result.season_uplift, amount: r2(result.season_uplift.amount + delta * (upliftPct / 100)), base: r2(result.season_uplift.base + delta) }
+      : result.season_uplift,
+    pax_pricing_table,
+    holes,
+    complete: (result.complete ?? true) && holes.length === 0,
+  }
 }
 
 // Get transport package for cruise sightseeing (kept for package deals)
@@ -298,6 +382,8 @@ export async function POST(request: NextRequest) {
       is_eur_passport = true,
       margin_percent: requestedMargin = null,  // resolved below: request → org default → 25
       partner_id = null,
+      // Catalogue extras chosen for THIS quote (ids, or {id} objects).
+      extras = [],
       // include_optionals / selected_optional_ids are read off `body` by
       // parseOptionalSelection below, not destructured here.
       language = 'English',
@@ -309,6 +395,15 @@ export async function POST(request: NextRequest) {
     // WHICH optional services the customer is buying, not merely whether. The
     // old boolean priced every option or none — see lib/b2b/optional-selection.
     const optionalSelection = parseOptionalSelection(body)
+
+    // Extras: accept ids or {id} objects; anything else is ignored, not trusted.
+    const isSelection = (e: unknown): e is ExtraSelection =>
+      typeof e === 'object' && e !== null &&
+      typeof (e as { id?: unknown }).id === 'string' && (e as { id: string }).id.length > 0
+    const extraSelections: ExtraSelection[] = (Array.isArray(extras) ? extras : [])
+      .map((e: unknown) => (typeof e === 'string' ? { id: e } : e))
+      .filter(isSelection)
+    const extrasCatalogue = await loadExtras(await getCurrentOrgId(), extraSelections.map((e) => e.id))
 
     // Determine if using passenger breakdown or simple num_pax
     const usePassengerBreakdown = num_adults !== undefined && num_adults !== null
@@ -570,7 +665,7 @@ export async function POST(request: NextRequest) {
         hasAgeBasedPricing: !!result.age_based_pricing
       })
 
-      return NextResponse.json({ success: true, data: result })
+      return NextResponse.json({ success: true, data: foldExtras(result, extrasCatalogue, extraSelections) })
     }
 
     // ============================================
@@ -924,7 +1019,7 @@ export async function POST(request: NextRequest) {
       selling: sellingPrice
     })
 
-    return NextResponse.json({ success: true, data: result })
+    return NextResponse.json({ success: true, data: foldExtras(result, extrasCatalogue, extraSelections) })
   } catch (error: any) {
     console.error('❌ Error calculating tour price:', error)
     return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
