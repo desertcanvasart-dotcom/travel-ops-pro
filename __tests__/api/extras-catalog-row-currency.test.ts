@@ -61,6 +61,30 @@ describe('extras catalog currency selection', () => {
     expect(asEgp.price_note).toMatch(/converted from EGP/)
   })
 
+  it('catalogue extras (not only attractions) pass their row to price()', () => {
+    // migration 20260902 gave extras_catalogue its own rate_currency. Until
+    // then the route said "authored in the org's rate currency by design" and
+    // priced every catalogue row as USD.
+    expect(ROUTE).toMatch(/price\(c\.supplier_cost,\s*c\.selling_price,\s*c\)/)
+    expect(ROUTE).not.toMatch(/authored in the org's rate currency by design/)
+  })
+
+  it('the quote engine converts catalogue extras at the fetch boundary', () => {
+    // An EGP extra folded into a USD quote must arrive in USD — through the
+    // same normaliser every other rate table uses, and declared in its map.
+    const engine = readFileSync(join(ROOT, 'app', 'api', 'b2b', 'calculate-price', 'route.ts'), 'utf8')
+    expect(engine).toMatch(/normalize\('extras_catalogue'/)
+    const map = readFileSync(join(ROOT, 'lib', 'rates', 'rate-currency.ts'), 'utf8')
+    expect(map).toMatch(/extras_catalogue:\s*\['supplier_cost',\s*'selling_price'\]/)
+  })
+
+  it('the catalogue API accepts rate_currency on create and update', () => {
+    for (const p of ['route.ts', '[id]/route.ts']) {
+      const src = readFileSync(join(ROOT, 'app', 'api', 'extras-catalogue', p), 'utf8')
+      expect(src, p).toMatch(/'rate_currency',/)
+    }
+  })
+
   it('a row with no currency still uses the org rate currency', () => {
     const r = priceCatalogItem({
       cost: 100, marginPercent: 30, rateCurrency: 'USD', bookingCurrency: 'JPY', convert: fx,

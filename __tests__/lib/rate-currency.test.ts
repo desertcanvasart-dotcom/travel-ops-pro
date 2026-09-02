@@ -36,6 +36,18 @@ describe('createRateNormalizer', () => {
     expect(rows[0].base_rate_eur).toBe(5000)
   })
 
+  it('converts a catalogue extra: 2500 EGP cost / 4000 EGP pinned price → $50 / $80', async () => {
+    // migration 20260902 — the last rate table without a per-row currency.
+    // The pinned selling_price is money in the same currency as the cost, so
+    // an EGP fast-track must not join a USD quote as 4000 dollars.
+    const rows = [{ id: 'x1', supplier_cost: 2500, selling_price: 4000, unit: 'per_person', rate_currency: 'EGP' }]
+    const [r] = (await usd().normalize('extras_catalogue', rows))!
+    expect(r.supplier_cost).toBe(50)
+    expect(r.selling_price).toBe(80)
+    expect(r.unit).toBe('per_person')
+    expect(rows[0].supplier_cost).toBe(2500)
+  })
+
   it('converts a JPY flight and leaves EGP-and-USD rows each correct in one batch', async () => {
     const rows = [
       { id: 'jp', base_rate_eur: 48000, tax_eur: 3000, rate_currency: 'JPY' },
@@ -158,7 +170,7 @@ describe('createRateNormalizer', () => {
     // converting a capacity by 50x would be as wrong as not converting a price.
     for (const cols of Object.values(RATE_MONETARY_COLUMNS)) {
       for (const c of cols) {
-        expect(c).toMatch(/rate|cost|fee|tax|pp_double|supp|red/)
+        expect(c).toMatch(/rate|cost|fee|tax|price|pp_double|supp|red/)
         expect(c).not.toMatch(/capacity|duration|pax|percent|kg|minutes/)
       }
     }

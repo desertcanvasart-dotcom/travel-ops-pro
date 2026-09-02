@@ -166,7 +166,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const catalogueItems: CatalogItem[] = []
   const { data: catalogue, error: catalogueError } = await admin
     .from('extras_catalogue')
-    .select('id, name, description, category, supplier_cost, supplier_id, selling_price, unit, is_active')
+    .select('*')
     .eq('org_id', orgId)
     .eq('is_active', true)
   if (catalogueError) console.error('extras catalog: catalogue extras', catalogueError)
@@ -174,8 +174,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   for (const c of catalogue ?? []) {
     // Same pricing rule as a package option: a selling price the operator set
     // IS the price (off-margin); blank means cost plus the org's margin.
-    // extras_catalogue is authored in the org's rate currency by design.
-    const priced = price(c.supplier_cost, c.selling_price)
+    // The row names its own currency (migration 20260902); blank = the org's.
+    const priced = price(c.supplier_cost, c.selling_price, c)
     catalogueItems.push({
       source_kind: 'catalogue_extra',
       source_id: String(c.id),

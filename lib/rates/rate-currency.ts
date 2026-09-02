@@ -66,6 +66,9 @@ export const RATE_MONETARY_COLUMNS = {
     'rate_single_eur', 'rate_double_eur', 'rate_triple_eur', 'rate_suite_eur',
   ],
   b2b_transport_packages: ['sedan_rate', 'minivan_rate', 'van_rate', 'minibus_rate', 'bus_rate'],
+  // Catalogue extras (migration 20260902): a pinned selling_price is money in
+  // the same currency as the cost, so both convert together.
+  extras_catalogue: ['supplier_cost', 'selling_price'],
 } as const
 
 export type RateCurrencyTable = keyof typeof RATE_MONETARY_COLUMNS

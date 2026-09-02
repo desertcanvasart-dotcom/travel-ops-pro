@@ -7,12 +7,16 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export const dynamic = 'force-dynamic'
 
-const COLS =
-  'id, org_id, name, description, category, supplier_cost, supplier_id, selling_price, unit, is_active, created_at, updated_at'
+// '*' on purpose: rate_currency arrives by migration (20260902) and the page
+// must keep loading on a database that has not run it yet.
+const COLS = '*'
 
 const WRITABLE = [
   'name', 'description', 'category', 'supplier_cost', 'supplier_id',
   'selling_price', 'unit', 'is_active',
+  // Only ever sent when the user picked a currency or cleared one
+  // (rateCurrencyPatch), so an unmigrated database still saves.
+  'rate_currency',
 ] as const
 
 function numberOrNull(v: unknown): number | null {
@@ -32,7 +36,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const record: Record<string, unknown> = {}
     for (const k of WRITABLE) {
       if (!(k in body)) continue
-      record[k] = k === 'supplier_cost' || k === 'selling_price' ? numberOrNull(body[k]) : body[k]
+      record[k] = k === 'supplier_cost' || k === 'selling_price' ? numberOrNull(body[k])
+        : k === 'rate_currency' ? (body[k] || null)
+        : body[k]
     }
     if ('name' in record) {
       record.name = String(record.name ?? '').trim()
