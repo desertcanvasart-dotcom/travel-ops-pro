@@ -8,8 +8,7 @@ import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
-import {
-  Search,
+import { Copy, Search,
   Plus,
   Edit2,
   Trash2,
@@ -420,6 +419,16 @@ export default function TransportationContent() {
     setFormData(initialFormData)
     setError(null)
     setIsModalOpen(true)
+  }
+
+  // Duplicate: open the ADD form pre-filled from this row. The identity
+  // field is cleared so the save creates a new record; everything else is
+  // there to change. Operator request 2026-09-02 — most rates are entered as
+  // near-copies of an existing one.
+  const handleClone = (rate: TransportationRate) => {
+    openEditModal(rate)
+    setEditingRate(null)
+    setFormData(prev => ({ ...prev, service_code: '' }))
   }
 
   const openEditModal = (rate: TransportationRate) => {
@@ -903,6 +912,9 @@ export default function TransportationContent() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1 ml-2">
+                          <button type="button" onClick={() => handleClone(rate)} className="p-1 text-gray-500 hover:text-primary-600 rounded" title={tCommon('duplicate')} aria-label={tCommon('duplicate')}>
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
                           <button onClick={() => openEditModal(rate)} className="p-1 text-gray-400 hover:text-[#647C47] transition-colors" title="Edit">
                             <Edit2 className="h-3.5 w-3.5" />
                           </button>
@@ -1060,6 +1072,9 @@ export default function TransportationContent() {
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center justify-center gap-1">
+                          <button type="button" onClick={() => handleClone(rate)} className="p-1 text-gray-500 hover:text-primary-600 rounded" title={tCommon('duplicate')} aria-label={tCommon('duplicate')}>
+                            <Copy className="h-3.5 w-3.5" />
+                          </button>
                           <button onClick={() => openEditModal(rate)} className="p-1 text-gray-400 hover:text-[#647C47] transition-colors" title="Edit">
                             <Edit2 className="h-3.5 w-3.5" />
                           </button>
@@ -1155,6 +1170,9 @@ export default function TransportationContent() {
                     </div>
 
                     <div className="flex items-center gap-1">
+                      <button type="button" onClick={() => handleClone(rate)} className="p-1 text-gray-500 hover:text-primary-600 rounded" title={tCommon('duplicate')} aria-label={tCommon('duplicate')}>
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
                       <button onClick={() => openEditModal(rate)} className="p-1 text-gray-400 hover:text-[#647C47] transition-colors" title="Edit">
                         <Edit2 className="h-3.5 w-3.5" />
                       </button>

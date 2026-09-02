@@ -12,8 +12,7 @@ import { useSearchParams } from 'next/navigation'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
-import {
-  BedDouble,
+import { Copy, BedDouble,
   Plus,
   Search,
   Edit,
@@ -221,6 +220,16 @@ export default function SleepingTrainRatesContent() {
       is_active: true
     })
     setShowModal(true)
+  }
+
+  // Duplicate: open the ADD form pre-filled from this row. The identity
+  // field is cleared so the save creates a new record; everything else is
+  // there to change. Operator request 2026-09-02 — most rates are entered as
+  // near-copies of an existing one.
+  const handleClone = (rate: SleepingTrainRate) => {
+    handleEdit(rate)
+    setEditingRate(null)
+    setFormData(prev => ({ ...prev, service_code: '' }))
   }
 
   const handleEdit = (rate: SleepingTrainRate) => {
@@ -756,6 +765,9 @@ export default function SleepingTrainRatesContent() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
+                        <button type="button" onClick={() => handleClone(rate)} className="p-1 text-gray-500 hover:text-primary-600 rounded" title={tCommon('duplicate')} aria-label={tCommon('duplicate')}>
+                          <Copy className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => handleEdit(rate)}
                           className="p-1.5 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded"
@@ -822,6 +834,9 @@ export default function SleepingTrainRatesContent() {
                     </p>
                   </div>
                   <div className="flex gap-1">
+                    <button type="button" onClick={() => handleClone(rate)} className="p-1 text-gray-500 hover:text-primary-600 rounded" title={tCommon('duplicate')} aria-label={tCommon('duplicate')}>
+                      <Copy className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => handleEdit(rate)}
                       className="p-2 text-gray-600 hover:text-primary-600 hover:bg-primary-50 rounded"
@@ -860,6 +875,9 @@ export default function SleepingTrainRatesContent() {
                     {rate.is_active ? t('active') : t('inactive')}
                   </span>
                   <div className="flex gap-1">
+                    <button type="button" onClick={() => handleClone(rate)} className="p-1 text-gray-500 hover:text-primary-600 rounded" title={tCommon('duplicate')} aria-label={tCommon('duplicate')}>
+                      <Copy className="w-4 h-4" />
+                    </button>
                     <button onClick={() => handleEdit(rate)} className="p-1 text-gray-400 hover:text-primary-600">
                       <Edit className="w-4 h-4" />
                     </button>

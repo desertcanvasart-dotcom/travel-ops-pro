@@ -10,12 +10,14 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import CityOptions from '@/app/components/CityOptions'
 import { Loader2, Pencil, Plus, Ship, Building2, TrainFront, Trash2, X } from 'lucide-react'
 import {
   PROPERTY_TYPE_LABELS,
   propertyTypesForRoles,
   type PropertyType,
   type SupplierProperty,
+  PROPERTY_CATEGORIES,
 } from '@/lib/supplier-properties'
 
 const TYPE_ICONS: Record<PropertyType, typeof Ship> = {
@@ -193,11 +195,27 @@ export default function SupplierPropertiesPanel({ supplierId, supplierRoles }: P
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">{t('city')}</label>
-              <input value={draft.city} onChange={e => setDraft({ ...draft, city: e.target.value })} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
+              {/* The org's own city vocabulary (Settings → Destinations), the same
+                  list every rate form offers — free text here produced "Luxor",
+                  "luxor" and "LXR" for one place. */}
+              <select value={draft.city} onChange={e => setDraft({ ...draft, city: e.target.value })} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg">
+                <option value="">—</option>
+                {draft.city && <option value={draft.city} hidden>{draft.city}</option>}
+                <CityOptions />
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">{t('propertyCategory')}</label>
-              <input value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })} placeholder="5★ deluxe" className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
+              <select value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg">
+                <option value="">—</option>
+                {/* A category recorded before the list existed stays selectable. */}
+                {draft.category && !PROPERTY_CATEGORIES[draft.property_type as PropertyType]?.includes(draft.category) && (
+                  <option value={draft.category}>{draft.category}</option>
+                )}
+                {(PROPERTY_CATEGORIES[draft.property_type as PropertyType] ?? []).map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">{t('propertyContactName')}</label>

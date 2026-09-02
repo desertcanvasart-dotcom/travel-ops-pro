@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Loader2, Pencil, Plus, Trash2, X, Sparkles } from 'lucide-react'
+import { Loader2, Pencil, Plus, Trash2, X, Sparkles, Copy } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
@@ -52,6 +52,7 @@ const EMPTY: Draft = {
 
 export default function ExtrasPage() {
   const t = useTranslations('rates.extras')
+  const tCommon = useTranslations('common')
   const { rateCurrency } = useCurrency()
   const dialog = useConfirmDialog()
   const [extras, setExtras] = useState<Extra[]>([])
@@ -167,6 +168,23 @@ export default function ExtrasPage() {
                         {x.unit === 'per_booking' ? t('perBooking') : t('perPerson')}
                       </td>
                       <td className="px-4 py-2 text-right whitespace-nowrap">
+                        <button
+                          type="button"
+                          aria-label={tCommon('duplicate')}
+                          title={tCommon('duplicate')}
+                          onClick={() => setDraft({
+                            // no id: the save creates a new extra
+                            name: `${x.name} (copy)`, description: x.description || '',
+                            category: x.category || '',
+                            supplier_cost: x.supplier_cost?.toString() ?? '',
+                            selling_price: x.selling_price?.toString() ?? '',
+                            rate_currency: x.rate_currency || '',
+                            unit: x.unit, is_active: x.is_active,
+                          })}
+                          className="p-1.5 text-gray-400 hover:text-primary-600"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
                         <button
                           type="button"
                           aria-label={t('editNamed', { name: x.name })}

@@ -1,4 +1,5 @@
 'use client'
+import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,32 +46,8 @@ const TIER_OPTIONS = [
 // ============================================
 // EGYPTIAN CITIES
 // ============================================
-const EGYPTIAN_CITIES = [
-  'Cairo',
-  'Giza',
-  'Alexandria',
-  'Luxor',
-  'Aswan',
-  'Hurghada',
-  'Sharm El Sheikh',
-  'Dahab',
-  'Marsa Alam',
-  'El Gouna',
-  'Siwa',
-  'Fayoum',
-  'Port Said',
-  'Suez',
-  'Ismailia',
-  'Taba',
-  'Nuweiba',
-  'Safaga',
-  'Ain Sokhna',
-  'Ras Sudr',
-  'Saint Catherine',
-  'Bahariya Oasis',
-  'Kharga Oasis',
-  'Dakhla Oasis'
-]
+// One list for the whole app (lib/constants/egypt-cities.ts).
+const EGYPTIAN_CITIES: readonly string[] = EGYPT_CITIES
 
 // ============================================
 // INTERFACES

@@ -5,8 +5,7 @@ import CityOptions from '@/app/components/CityOptions'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import {
-  Settings2, Plus, Edit, Trash2, X, Save, Loader2,
+import { Copy, Settings2, Plus, Edit, Trash2, X, Save, Loader2,
   Car, AlertCircle, CheckCircle2,
   ChevronDown, ChevronUp
 } from 'lucide-react'
@@ -107,6 +106,7 @@ export default function B2BPricingRulesPage() {
   const pkgRate = (amount: number | null | undefined, pkg: { rate_currency?: string | null }) =>
     formatRateInRowCurrency(amount, pkg, formatRate)
   const t = useTranslations('b2bPricingRules')
+  const tDup = useTranslations('common')
   const [transportPackages, setTransportPackages] = useState<TransportPackage[]>([])
   const [loading, setLoading] = useState(true)
   const [toasts, setToasts] = useState<Toast[]>([])
@@ -174,6 +174,16 @@ export default function B2BPricingRulesPage() {
     setEditingPackage(null)
     setPackageForm(DEFAULT_PACKAGE_FORM)
     setShowPackageModal(true)
+  }
+
+  // Duplicate: open the ADD form pre-filled from this row. The identity
+  // field is cleared so the save creates a new record; everything else is
+  // there to change. Operator request 2026-09-02 — most rates are entered as
+  // near-copies of an existing one.
+  const handleClonePackage = (pkg: TransportPackage) => {
+    handleEditPackage(pkg)
+    setEditingPackage(null)
+    setPackageForm(prev => ({ ...prev, package_code: '' }))
   }
 
   const handleEditPackage = (pkg: TransportPackage) => {
@@ -399,6 +409,9 @@ export default function B2BPricingRulesPage() {
                         </div>
                         
                         <div className="flex items-center gap-1 ml-4">
+                          <button type="button" onClick={() => handleClonePackage(pkg)} className="p-1 text-gray-500 hover:text-primary-600 rounded" title={tDup('duplicate')} aria-label={tDup('duplicate')}>
+                            <Copy className="w-4 h-4" />
+                          </button>
                           <button onClick={() => handleEditPackage(pkg)} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded">
                             <Edit className="w-4 h-4" />
                           </button>
