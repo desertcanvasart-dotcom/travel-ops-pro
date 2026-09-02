@@ -718,7 +718,7 @@ export default function AirportServicesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.rateEur', { currency: rateCurrency })} *</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.rateEur')} *</label>
                   <input
                     type="number"
                     name="rate_eur"
@@ -728,7 +728,7 @@ export default function AirportServicesPage() {
                     step="0.01"
                     required
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
-                    title={t('form.rateEur', { currency: rateCurrency })}
+                    title={t('form.rateEur')}
                   />
                 </div>
               </div>
