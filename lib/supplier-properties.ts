@@ -40,3 +40,16 @@ export const PROPERTY_TYPE_LABELS: Record<PropertyType, string> = {
   hotel: 'Hotel',
   train: 'Train',
 }
+
+/**
+ * Category choices per property type. A property's category was free text
+ * ("5★ deluxe" as a placeholder), so the same hotel class was spelled five
+ * ways across the fleet. These are the words the rate tables and the pricing
+ * engine already use: ship categories match nile_cruises (budget/standard/
+ * deluxe/luxury), hotel classes carry the star band the tier maps onto.
+ */
+export const PROPERTY_CATEGORIES: Record<PropertyType, readonly string[]> = {
+  hotel: ['3★ standard', '4★ superior', '4★ deluxe', '5★ deluxe', '5★ luxury'],
+  ship: ['budget', 'standard', 'deluxe', 'luxury'],
+  train: ['standard', 'express', 'VIP', 'sleeper'],
+}

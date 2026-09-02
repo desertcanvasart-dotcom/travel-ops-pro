@@ -10,8 +10,7 @@ import { useSearchParams } from 'next/navigation'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
-import {
-  Building2,
+import { Copy, Building2,
   Plus,
   Search,
   Edit,
@@ -594,6 +593,16 @@ export default function HotelsContent() {
   }
 
   // Open modal for editing
+  // Duplicate: open the ADD form pre-filled from this row. The identity
+  // field is cleared so the save creates a new record; everything else is
+  // there to change. Operator request 2026-09-02 — most rates are entered as
+  // near-copies of an existing one.
+  const handleClone = (rate: AccommodationRate) => {
+    handleEdit(rate)
+    setEditingRate(null)
+    setFormData(prev => ({ ...prev, service_code: '' }))
+  }
+
   const handleEdit = (rate: AccommodationRate) => {
     setEditingRate(rate)
     
@@ -1092,6 +1101,9 @@ export default function HotelsContent() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1">
+                          <button type="button" onClick={() => handleClone(rate)} className="p-1 text-gray-500 hover:text-primary-600 rounded" title={tCommon('duplicate')} aria-label={tCommon('duplicate')}>
+                            <Copy className="w-4 h-4" />
+                          </button>
                           <button
                             onClick={() => handleEdit(rate)}
                             className="p-1.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
@@ -1214,6 +1226,9 @@ export default function HotelsContent() {
                   </div>
 
                   <div className="flex border-t border-gray-200 divide-x divide-gray-200">
+                    <button type="button" onClick={() => handleClone(rate)} className="p-1 text-gray-500 hover:text-primary-600 rounded" title={tCommon('duplicate')} aria-label={tCommon('duplicate')}>
+                      <Copy className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => handleEdit(rate)}
                       className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
@@ -1274,6 +1289,9 @@ export default function HotelsContent() {
                   <div className="flex items-center gap-4">
                     <span className="text-sm font-bold text-green-600">{formatRateInRowCurrency(rate.pp_double_eur || 0, rate, formatRate)}</span>
                     <div className="flex items-center gap-1">
+                      <button type="button" onClick={() => handleClone(rate)} className="p-1 text-gray-500 hover:text-primary-600 rounded" title={tCommon('duplicate')} aria-label={tCommon('duplicate')}>
+                        <Copy className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => handleEdit(rate)}
                         className="p-1 text-gray-400 hover:text-primary-600 transition-colors"

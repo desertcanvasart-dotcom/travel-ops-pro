@@ -1,4 +1,5 @@
 'use client'
+import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 
 import { todayLocal } from '@/lib/today'
 import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
@@ -62,14 +63,9 @@ type SortField = 'name' | 'type' | 'city' | 'status'
 type SortDirection = 'asc' | 'desc'
 
 // Constants - FULL EGYPTIAN CITIES LIST (36 cities)
-const EGYPTIAN_CITIES = [
-  'Alamein', 'Alexandria', 'Aswan', 'Asyut', 'Bahariya', 'Beni Suef', 'Cairo',
-  'Dahab', 'Dakhla', 'Edfu', 'El Arish', 'El Balyana', 'El Gouna', 'El Quseir',
-  'El Tor', 'Esna', 'Farafra', 'Fayoum', 'Giza', 'Hurghada', 'Ismailia', 'Kharga', 
-  'Kom Ombo', 'Luxor', 'Marsa Alam', 'Minya', 'Nuweiba', 'Port Said', 'Qena', 
-  'Rafah', 'Rosetta (Rashid)', 'Safaga', 'Saint Catherine', 'Sharm El Sheikh', 
-  'Sheikh Zuweid', 'Siwa', 'Sohag', 'Suez', 'Taba'
-]
+// One list for the whole app (lib/constants/egypt-cities.ts) — this page's
+// own copy was missing Abu Simbel, among others.
+const EGYPTIAN_CITIES: readonly string[] = EGYPT_CITIES
 
 // Supplier type configuration
   const TYPE_CONFIG: Record<string, { icon: any; label: string; singular: string; color: string; borderColor: string }> = {

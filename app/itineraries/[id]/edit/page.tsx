@@ -1,4 +1,5 @@
 'use client'
+import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 
 import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useMemo } from 'react'
@@ -178,10 +179,9 @@ interface Supplier {
 // CONSTANTS
 // ============================================
 
-const CITIES = [
-  'Cairo', 'Giza', 'Luxor', 'Aswan', 'Alexandria',
-  'Hurghada', 'Sharm El Sheikh', 'Dahab', 'Siwa', 'Marsa Alam', 'El Gouna'
-]
+// One list for the whole app (lib/constants/egypt-cities.ts) — this page's
+// own copy was missing Abu Simbel, among others.
+const CITIES: readonly string[] = EGYPT_CITIES
 
 const CITY_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
   'Cairo': { bg: 'bg-olive-100', text: 'text-olive-700', dot: 'bg-olive-500' },

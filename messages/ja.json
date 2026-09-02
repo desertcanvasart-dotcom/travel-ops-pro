@@ -47,7 +47,8 @@
     "backToList": "一覧に戻る",
     "saved": "保存しました",
     "unknownError": "不明なエラー",
-    "saving": "保存中…"
+    "saving": "保存中…",
+    "duplicate": "複製"
   },
   "contract": {
     "loadingContract": "契約書を読み込み中...",
@@ -3974,7 +3975,8 @@
       "noDataReturned": "データが返されませんでした",
       "rateCurrency": "レート通貨",
       "rateCurrencyDefault": "組織の既定通貨",
-      "rateCurrencyHint": "サプライヤー契約書に記載されている通貨です。契約書に別段の記載がない限り既定のままにしてください。価格計算は自動的に換算されます。"
+      "rateCurrencyHint": "サプライヤー契約書に記載されている通貨です。契約書に別段の記載がない限り既定のままにしてください。価格計算は自動的に換算されます。",
+      "duplicate": "複製"
     },
     "hub": {
       "title": "料金管理",

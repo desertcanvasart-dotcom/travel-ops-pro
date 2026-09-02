@@ -10,8 +10,7 @@ import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import {
-  Search, Plus, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
+import { Copy, Search, Plus, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Building2, Sparkles
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
@@ -417,6 +416,16 @@ export default function AttractionsContent() {
   }
 
   // Open modal for editing
+  // Duplicate: open the ADD form pre-filled from this row. The identity
+  // field is cleared so the save creates a new record; everything else is
+  // there to change. Operator request 2026-09-02 — most rates are entered as
+  // near-copies of an existing one.
+  const handleClone = (attraction: Attraction) => {
+    handleEdit(attraction)
+    setEditingAttraction(null)
+    setFormData(prev => ({ ...prev, service_code: '' }))
+  }
+
   const handleEdit = (attraction: Attraction) => {
     setEditingAttraction(attraction)
     setFormData({
@@ -881,6 +890,9 @@ export default function AttractionsContent() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
+                        <button type="button" onClick={() => handleClone(attraction)} className="p-1 text-gray-500 hover:text-primary-600 rounded" title={tCommon('duplicate')} aria-label={tCommon('duplicate')}>
+                          <Copy className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => handleEdit(attraction)}
                           className="p-1 text-gray-500 hover:text-amber-600 hover:bg-amber-50 rounded"

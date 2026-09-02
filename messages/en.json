@@ -47,7 +47,8 @@
     "backToList": "Back to List",
     "saved": "Saved",
     "unknownError": "Unknown error",
-    "saving": "Saving…"
+    "saving": "Saving…",
+    "duplicate": "Duplicate"
   },
   "contract": {
     "loadingContract": "Loading contract...",
@@ -3302,7 +3303,8 @@
       "toOf": "–{end} of {total}",
       "rateCurrency": "Rate currency",
       "rateCurrencyDefault": "Organisation default",
-      "rateCurrencyHint": "The currency this supplier's contract is written in. Leave on the default unless the contract says otherwise — pricing converts automatically."
+      "rateCurrencyHint": "The currency this supplier's contract is written in. Leave on the default unless the contract says otherwise — pricing converts automatically.",
+      "duplicate": "Duplicate"
     },
     "meals": {
       "title": "Meal Rates",

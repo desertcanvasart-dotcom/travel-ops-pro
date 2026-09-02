@@ -3,7 +3,8 @@
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { useEffect, useState } from 'react'
-import { Droplets, Coins, Plus, Edit, Save, X, Check, Loader2, AlertTriangle, Settings, Trash2 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
+import { Droplets, Coins, Plus, Edit, Copy, Save, X, Check, Loader2, AlertTriangle, Settings, Trash2 } from 'lucide-react'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { useConfirm } from '@/components/ConfirmDialog'
@@ -35,6 +36,7 @@ const HIDDEN_COST_TYPES = ['Daily Tips']
 
 export default function FixedCostsPage() {
   const { rateSymbol, rateCurrency } = useCurrency()
+  const tCommon = useTranslations('common')
   const [costs, setCosts] = useState<FixedCost[]>([])
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -323,6 +325,23 @@ export default function FixedCostsPage() {
                           </div>
                           <p className="text-xs text-gray-500 mt-0.5">per person / per day</p>
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Duplicate: the add form, pre-filled from this row.
+                            setNewCostType(`${cost.cost_type} (copy)`)
+                            setNewCostRate(String(cost.cost_per_person_per_day))
+                            setNewCostCurrency(cost.rate_currency || '')
+                            setNewCostDescription(cost.description || '')
+                            setShowAddForm(true)
+                            window.scrollTo({ top: 0, behavior: 'smooth' })
+                          }}
+                          className="p-2 text-gray-400 hover:text-[#647C47] hover:bg-[#647C47]/10 rounded-lg transition-colors"
+                          title={tCommon('duplicate')}
+                          aria-label={tCommon('duplicate')}
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => {
                             setEditingId(cost.id)

@@ -196,14 +196,14 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'tourGuides', href: '/rates/guides', icon: Users },
       { labelKey: 'activities', href: '/rates/activities', icon: Ticket },
       { labelKey: 'transportation', href: '/rates/transportation', icon: Truck },
+      { labelKey: 'pricingRules', href: '/b2b/pricing-rules', icon: Tags },
       { labelKey: 'airportServices', href: '/rates/airport-services', icon: Plane },
       { labelKey: 'hotelServices', href: '/rates/hotel-services', icon: ConciergeBell },
       { labelKey: 'tipping', href: '/rates/tipping', icon: DollarSign },
+      { labelKey: 'seasonalPremiums', href: '/rates/seasons', icon: CalendarRange },
       { labelKey: 'fixedCosts', href: '/rates/fixed-costs', icon: Droplets },
       { labelKey: 'commissionRates', href: '/rates/commissions', icon: Percent },
-      { labelKey: 'seasonalPremiums', href: '/rates/seasons', icon: CalendarRange },
       { labelKey: 'extras', href: '/rates/extras', icon: Sparkles },
-      { labelKey: 'pricingRules', href: '/b2b/pricing-rules', icon: Tags },
     ]
   },
   {

@@ -10,8 +10,7 @@ import { useTranslations } from 'next-intl'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
-import {
-  Search,
+import { Copy, Search,
   Plus,
   Edit2,
   Trash2,
@@ -325,6 +324,16 @@ export default function FlightsContent() {
     setFormData(initialFormData)
     setError(null)
     setIsModalOpen(true)
+  }
+
+  // Duplicate: open the ADD form pre-filled from this row. The identity
+  // field is cleared so the save creates a new record; everything else is
+  // there to change. Operator request 2026-09-02 — most rates are entered as
+  // near-copies of an existing one.
+  const handleClone = (rate: FlightRate) => {
+    openEditModal(rate)
+    setEditingRate(null)
+    setFormData(prev => ({ ...prev, service_code: '' }))
   }
 
   const openEditModal = (rate: FlightRate) => {
@@ -784,6 +793,9 @@ export default function FlightsContent() {
                   </td>
                   <td className="px-4 py-2 text-right">
                     <div className="flex items-center justify-end gap-1">
+                      <button type="button" onClick={() => handleClone(rate)} className="p-1 text-gray-500 hover:text-primary-600 rounded" title={tCommon('duplicate')} aria-label={tCommon('duplicate')}>
+                        <Copy className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => openEditModal(rate)}
                         className="p-1 text-gray-400 hover:text-[#647C47] transition-colors"

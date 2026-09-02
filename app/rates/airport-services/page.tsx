@@ -6,8 +6,7 @@ import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import {
-  Plane, Plus, Search, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
+import { Copy, Plane, Plus, Search, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
@@ -283,6 +282,16 @@ export default function AirportServicesPage() {
       is_active: true
     })
     setShowModal(true)
+  }
+
+  // Duplicate: open the ADD form pre-filled from this row. The identity
+  // field is cleared so the save creates a new record; everything else is
+  // there to change. Operator request 2026-09-02 — most rates are entered as
+  // near-copies of an existing one.
+  const handleClone = (rate: AirportStaffRate) => {
+    handleEdit(rate)
+    setEditingRate(null)
+    setFormData(prev => ({ ...prev, service_code: '' }))
   }
 
   const handleEdit = (rate: AirportStaffRate) => {
@@ -604,6 +613,9 @@ export default function AirportServicesPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
+                        <button type="button" onClick={() => handleClone(rate)} className="p-1 text-gray-500 hover:text-primary-600 rounded" title={tCommon('duplicate')} aria-label={tCommon('duplicate')}>
+                          <Copy className="w-4 h-4" />
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleEdit(rate)}

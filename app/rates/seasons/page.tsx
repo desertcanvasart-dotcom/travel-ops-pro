@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
-import { CalendarRange, Plus, Trash2, X, Check, Loader2, Info, ChevronLeft, CalendarPlus, Pencil } from 'lucide-react'
+import { CalendarRange, Plus, Trash2, X, Check, Loader2, Info, ChevronLeft, CalendarPlus, Pencil, Copy } from 'lucide-react'
 import { SEASON_COLOURS } from '@/lib/pricing/season-admin'
 
 // ============================================
@@ -440,6 +440,21 @@ export default function PricingSeasonsPage() {
                         }`}
                       >
                         {season.is_active ? tCommon('active') : tCommon('inactive')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Duplicate: the add form, pre-filled from this season.
+                          setNewName(`${season.name} (copy)`)
+                          setNewPercent(formatPercent(Number(season.uplift_percent)))
+                          setNewColour(season.colour)
+                          setShowAddSeason(true)
+                        }}
+                        className="p-1.5 text-gray-400 hover:text-[#647C47]"
+                        aria-label={tCommon('duplicate')}
+                        title={tCommon('duplicate')}
+                      >
+                        <Copy className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => startEditing(season)}

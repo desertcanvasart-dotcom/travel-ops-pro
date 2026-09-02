@@ -68,6 +68,7 @@ const CITY_OPTIONS = [
   { value: 'Giza', label: 'Giza' },
   { value: 'Luxor', label: 'Luxor' },
   { value: 'Aswan', label: 'Aswan' },
+  { value: 'Abu Simbel', label: 'Abu Simbel' },
   { value: 'Alexandria', label: 'Alexandria' },
   { value: 'Hurghada', label: 'Hurghada' },
   { value: 'Sharm El Sheikh', label: 'Sharm El Sheikh' },
