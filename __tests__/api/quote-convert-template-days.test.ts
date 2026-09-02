@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { templateDaysToItineraryDays, addDays, packageTypeForTemplate, itineraryServiceType } from '@/lib/itineraries/template-days'
+import { templateDaysToItineraryDays, addDays, packageTypeForTemplate, itineraryServiceType, serviceLineForItinerary } from '@/lib/itineraries/template-days'
 import { SERVICE_TYPES } from '@/lib/service-types'
 
 // "Convert to Itinerary" answered "Quote not found" for every quote in
@@ -147,9 +147,9 @@ describe('packageTypeForTemplate', () => {
     const types = readFileSync(join(ROOT, 'types', 'database.types.ts'), 'utf8')
     const m = types.match(/^ {6}itinerary_services: \{\n {8}Row: \{\n([\s\S]*?)\n {8}\}/m)!
     const live = new Set([...m[1].matchAll(/^ {10}([a-z_0-9]+)\??:/gm)].map(x => x[1]))
-    const start = src.indexOf(".from('itinerary_services')")
-    const block = src.slice(start, src.indexOf('}))', start))
-    const keys = [...block.matchAll(/^\s{14}([a-z_]+):/gm)].map(x => x[1])
+    expect(src).toContain('serviceLineForItinerary(service')
+    const row = serviceLineForItinerary({ service_name: 'x', service_category: 'water', line_total: 2, quantity: 1, quantity_mode: 'per_pax' }, { dayId: 'd', pax: 2, marginPercent: 25, currency: 'USD' })
+    const keys = Object.keys(row)
     expect(keys.length).toBeGreaterThan(5)
     expect(keys.filter(k => !live.has(k))).toEqual([])
   })
@@ -173,9 +173,49 @@ describe('itineraryServiceType', () => {
     expect(itineraryServiceType(undefined)).toBe('extra')
   })
 
-  it('the route uses it for every service line', () => {
+  it('the route builds every service line through the helper', () => {
     const src = readFileSync(join(ROOT, 'app', 'api', 'b2b', 'quotes', '[id]', 'convert', 'route.ts'), 'utf8')
-    expect(src).toContain('service_type: serviceType')
+    expect(src).toContain('serviceLineForItinerary(service')
     expect(src).not.toMatch(/service_type:\s*service\.service_category/)
+  })
+})
+
+describe('serviceLineForItinerary', () => {
+  // Fifth failure: a 2-pax quote of $1,317.26 converted into a $793.26
+  // itinerary. The snapshot's per_pax lines carry the per-person amount at
+  // quantity 1; the quote total multiplies them by the party. Reconciled
+  // against QT-2026-00002: fixed 269.26 + per_pax 524.00 × 2 = 1317.26.
+  const opts = { dayId: 'day-1', pax: 2, marginPercent: 25, currency: 'USD' }
+
+  it('multiplies a per-person line by the party', () => {
+    const r = serviceLineForItinerary({ service_name: 'Hotel', service_category: 'accommodation', quantity: 1, quantity_mode: 'per_pax', unit_cost: 170, line_total: 170 }, opts)
+    expect(r.quantity).toBe(2)
+    expect(r.rate_eur).toBe(170)
+    expect(r.total_cost).toBe(340)
+    expect(r.client_price).toBe(425)
+    expect(r.supplier_currency).toBe('USD')
+    expect(r.supplier_cost_original).toBe(340)
+  })
+
+  it('charges a fixed line once whatever the party', () => {
+    const r = serviceLineForItinerary({ service_name: 'Sedan', service_category: 'transportation', quantity: 1, quantity_mode: 'fixed', unit_cost: 79.31, line_total: 79.31 }, opts)
+    expect(r.quantity).toBe(1)
+    expect(r.total_cost).toBe(79.31)
+  })
+
+  it('reconciles the whole QT-2026-00002 shape: fixed + per_pax × pax', () => {
+    const lines = [
+      ...Array(7).fill({ service_name: 'Water', service_category: 'water', quantity: 1, quantity_mode: 'per_pax', line_total: 2 }),
+      ...Array(3).fill({ service_name: 'Hotel', service_category: 'accommodation', quantity: 1, quantity_mode: 'per_pax', line_total: 170 }),
+      { service_name: 'Sedan', service_category: 'transportation', quantity: 1, quantity_mode: 'fixed', line_total: 269.26 },
+    ]
+    const total = lines.map(l => serviceLineForItinerary(l, opts).total_cost).reduce((a, b) => a + b, 0)
+    expect(Math.round(total * 100) / 100).toBe(1317.26)
+  })
+
+  it('maps the category onto the constrained vocabulary and remembers the original', () => {
+    const r = serviceLineForItinerary({ service_name: 'Water', service_category: 'water', quantity: 1, quantity_mode: 'per_pax', line_total: 2, pricing_note: 'sightseeing' }, opts)
+    expect(r.service_type).toBe('supplies')
+    expect(r.notes).toBe('sightseeing · category: water')
   })
 })
