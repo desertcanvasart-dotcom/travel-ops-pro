@@ -181,3 +181,67 @@ export function itineraryServiceType(category: string | null | undefined): (type
   if ((SERVICE_TYPES as readonly string[]).includes(t)) return t as (typeof SERVICE_TYPES)[number]
   return CATEGORY_ALIASES[t] ?? 'extra'
 }
+
+// ---------- service lines ----------
+// A quote's services_snapshot line is what the engine priced ONE unit at:
+// a `per_pax` line (hotel night, bottled water, entrance) carries the
+// per-person amount and quantity 1; the quote's total multiplies it by the
+// party. The conversion copied line_total straight into the itinerary, so a
+// 2-pax quote of $1,317 became a $793 itinerary — every per-person line
+// counted once — and the page's automatic cost mode then rebuilt the total
+// from those lines and showed $991 against a quote that sold at $1,646.
+
+export interface SnapshotLine {
+  service_id?: string | null
+  service_name: string
+  service_category?: string | null
+  quantity?: number | null
+  quantity_mode?: string | null
+  unit_cost?: number | null
+  line_total?: number | null
+  pricing_note?: string | null
+  day_number?: number | null
+}
+
+export interface ItineraryServiceRow {
+  itinerary_day_id: string
+  service_type: string
+  service_code: string | null
+  service_name: string
+  quantity: number
+  rate_eur: number
+  total_cost: number
+  client_price: number
+  supplier_currency: string
+  supplier_cost_original: number
+  exchange_rate_used: number
+  notes: string | null
+}
+
+/** One itinerary_services row for one quote line, for a party of `pax`. */
+export function serviceLineForItinerary(
+  line: SnapshotLine,
+  opts: { dayId: string; pax: number; marginPercent: number; currency: string }
+): ItineraryServiceRow {
+  const units = Math.max(1, Number(line.quantity) || 1)
+  const perUnit = Number(line.line_total) / units || Number(line.unit_cost) || 0
+  const party = Math.max(1, Math.floor(opts.pax || 1))
+  const quantity = (line.quantity_mode ?? 'per_pax') === 'per_pax' ? units * party : units
+  const total = Math.round(perUnit * quantity * 100) / 100
+  const serviceType = itineraryServiceType(line.service_category)
+  const remapped = serviceType !== normalizeServiceType(line.service_category)
+  return {
+    itinerary_day_id: opts.dayId,
+    service_type: serviceType,
+    service_code: line.service_id ?? null,
+    service_name: line.service_name,
+    quantity,
+    rate_eur: Math.round(perUnit * 100) / 100,
+    total_cost: total,
+    client_price: Math.round(total * (1 + (opts.marginPercent || 0) / 100) * 100) / 100,
+    supplier_currency: opts.currency,
+    supplier_cost_original: total,
+    exchange_rate_used: 1,
+    notes: [line.pricing_note, remapped ? `category: ${line.service_category}` : null].filter(Boolean).join(' · ') || null,
+  }
+}

@@ -5,8 +5,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
-import { normalizeServiceType } from '@/lib/service-types'
-import { templateDaysToItineraryDays, packageTypeForTemplate, itineraryServiceType } from '@/lib/itineraries/template-days'
+import { templateDaysToItineraryDays, packageTypeForTemplate, serviceLineForItinerary } from '@/lib/itineraries/template-days'
 
 // ============================================
 // B2B QUOTE CONVERT TO ITINERARY API
@@ -295,29 +294,15 @@ export async function POST(
           // selling_price / currency / status — none of which exist — and the
           // write-contract guard never saw it because the payload is built by
           // a map, not an object literal. Third failure in the same route.
-          .insert(dayServices.map((service: any) => {
-            const qty = service.quantity || 1
-            const lineTotal = Number(service.line_total) || 0
-            // service_type is CHECK-constrained; 'water' and 'other' were
-            // rejected and rolled the whole conversion back.
-            const serviceType = itineraryServiceType(service.service_category)
-            const remapped = serviceType !== normalizeServiceType(service.service_category)
-            return {
-              itinerary_day_id: itinDay.id,
-              service_type: serviceType,
-              service_code: service.service_id ?? null,
-              service_name: service.service_name,
-              quantity: qty,
-              // Unit cost and line cost, in the currency the quote was priced in.
-              rate_eur: lineTotal / qty,
-              total_cost: lineTotal,
-              client_price: lineTotal * (1 + (quote.margin_percent || 25) / 100),
-              supplier_currency: quote.currency || 'EUR',
-              supplier_cost_original: lineTotal,
-              exchange_rate_used: 1,
-              notes: [service.pricing_note, remapped ? `category: ${service.service_category}` : null].filter(Boolean).join(' · ') || null,
-            }
-          }))
+          // One row per quote line, per-person lines multiplied by the party
+          // (lib/itineraries/template-days.ts — the fifth failure in this route
+          // was a $793 itinerary for a $1,317 quote).
+          .insert(dayServices.map((service: any) => serviceLineForItinerary(service, {
+            dayId: itinDay.id,
+            pax: (quote.num_adults || 0) + (quote.num_children || 0),
+            marginPercent: quote.margin_percent || 25,
+            currency: quote.currency || 'EUR',
+          })))
         if (svcError) {
           conversionError = svcError.message
           break
