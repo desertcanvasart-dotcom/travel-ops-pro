@@ -684,7 +684,15 @@ export default function ViewItineraryPage() {
   })
 
   const handlePreviewPDF = async (showBreakdown = true) => {
-    if (!itinerary || days.length === 0) return
+    if (!itinerary) return
+    // A quote PDF is built from the itinerary's days. With none there is
+    // nothing to put in it — and a button that returns in silence reads as
+    // broken (the operator's report on the DEMO-EXT fixture, which has no
+    // days). Say so, once, and stop.
+    if (days.length === 0) {
+      await dialog.alert(t('pdf'), t('pdfNeedsDays'), 'info')
+      return
+    }
 
     setGeneratingPDF(true)
     try {
@@ -1571,8 +1579,9 @@ export default function ViewItineraryPage() {
             <button
               onClick={() => handlePreviewPDF()}
               disabled={generatingPDF}
+              title={days.length === 0 ? t('pdfNeedsDays') : t('pdfTooltip')}
               className={`h-10 px-4 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2 ${
-                generatingPDF ? 'opacity-50 cursor-not-allowed' : ''
+                generatingPDF ? 'opacity-50 cursor-not-allowed' : days.length === 0 ? 'opacity-60' : ''
               }`}
             >
               {generatingPDF ? (

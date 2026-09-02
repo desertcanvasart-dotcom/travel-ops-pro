@@ -1385,7 +1385,9 @@
       "pleaseEnterValidCost": "Please enter a valid cost",
       "quoteSentWhatsApp": "Quote sent via WhatsApp! ✅",
       "sendViaEmail": "Send via email",
-      "sendingEmail": "Sending email..."
+      "sendingEmail": "Sending email...",
+      "pdfNeedsDays": "This itinerary has no days yet, so there is nothing to put in a quote PDF. Add days in the editor first.",
+      "pdfTooltip": "Quote PDF built from this itinerary’s days and prices"
     },
     "editAction": "Edit",
     "share": {
