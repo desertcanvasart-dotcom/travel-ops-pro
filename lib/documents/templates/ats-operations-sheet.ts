@@ -127,7 +127,23 @@ export const atsOperationsSheet: DocumentTemplate<OperationsSheetContext> = {
   label: 'Cairo operations sheet (ENG. ITIN.)',
   description:
     'The English worksheet the selling office sends to the Cairo ground company: party size, flights, guides, day-by-day programme with meals, and the hotel block.',
-  page: { size: 'A4', orientation: 'portrait', margin: '10mm' },
+  // 16mm at the foot: the 10mm margin plus room for the running footer,
+  // which Chromium draws INSIDE the margin (see footer() below).
+  page: { size: 'A4', orientation: 'portrait', margin: '10mm', footerHeight: '16mm' },
+
+  /**
+   * The running footer — tour code left, the times note right — drawn by the
+   * renderer in the bottom margin of every page. It used to be a block at
+   * the end of the body: on a full sheet it was the one thing that did not
+   * fit, and the ground team got a second page holding nothing but this
+   * line. In the margin it takes no flow space, so it cannot spill.
+   */
+  footer(context: OperationsSheetContext): string {
+    return `<div style="width:100%;margin:0 10mm;font-family:'Helvetica Neue',Arial,'Hiragino Sans','Yu Gothic','Noto Sans JP',sans-serif;font-size:7pt;color:#444;display:flex;justify-content:space-between;">
+      <span>${esc(context.tour_code || '')}</span>
+      <span>Times shown as 【00:00】 are to be confirmed by the office.</span>
+    </div>`
+  },
 
   render(context: OperationsSheetContext): string {
     return `<!doctype html>
@@ -230,6 +246,8 @@ export const atsOperationsSheet: DocumentTemplate<OperationsSheetContext> = {
   .hotels th { text-align: center; }
   .hotels td:first-child, .hotels th:first-child { width: 44pt; }
 
+  /* The HTML preview keeps the note inline; the PDF draws it in the page
+     margin (footer() above) — so in print this block must take no space. */
   .foot {
     margin-top: 8pt;
     font-size: 7pt;
@@ -237,6 +255,7 @@ export const atsOperationsSheet: DocumentTemplate<OperationsSheetContext> = {
     display: flex;
     justify-content: space-between;
   }
+  @media print { .foot { display: none; } }
 </style>
 </head>
 <body>

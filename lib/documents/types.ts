@@ -22,9 +22,22 @@ export interface DocumentPage {
   orientation: 'portrait' | 'landscape'
   /** CSS length applied to all four sides, e.g. '12mm'. */
   margin: string
+  /**
+   * Height reserved BELOW the content for a running footer (see
+   * DocumentTemplate.footer). The bottom page margin grows to this so the
+   * footer lives in the margin and never takes space in the flow — a footer
+   * in the flow is a footer that can be the only thing on a second page.
+   */
+  footerHeight?: string
 }
 
 export interface DocumentTemplate<Context> {
+  /**
+   * Optional running footer, printed inside the reserved bottom margin on
+   * every page. Chromium renders it in its own document: inline styles only,
+   * an explicit font-size, and none of the page's CSS.
+   */
+  footer?(context: Context): string
   /** Stable slug — used in the render URL and stored on generated documents. */
   readonly slug: string
   /** Shown in the documents UI. */

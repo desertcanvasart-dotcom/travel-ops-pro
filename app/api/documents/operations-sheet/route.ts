@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const pdf = await renderHtmlToPdf(html, template.page)
+    const pdf = await renderHtmlToPdf(html, template.page, template.footer?.(context))
     const filename = `${context.tour_code || 'operations-sheet'}-ops.pdf`
 
     return new NextResponse(pdf as any, {

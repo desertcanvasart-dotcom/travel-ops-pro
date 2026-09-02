@@ -27,21 +27,21 @@ import type { DocumentPage } from './types'
  */
 const SETTLE_TIMEOUT_MS = 45_000
 
-export async function renderHtmlToPdf(html: string, page: DocumentPage): Promise<Buffer> {
+export async function renderHtmlToPdf(html: string, page: DocumentPage, footerHtml?: string): Promise<Buffer> {
   // Observed in production the minute after a deploy: the first request timed
   // out at the ceiling and returned a 500, and the very next one rendered in
   // 7s. Whoever taps a document first should not be the one who pays for the
   // container being cold, so one failed attempt is retried — by then Chromium
   // is warm and the retry is the ordinary path.
   try {
-    return await renderOnce(html, page)
+    return await renderOnce(html, page, footerHtml)
   } catch (error) {
     console.warn('PDF render failed, retrying once on a warm browser:', error)
-    return await renderOnce(html, page)
+    return await renderOnce(html, page, footerHtml)
   }
 }
 
-async function renderOnce(html: string, page: DocumentPage): Promise<Buffer> {
+async function renderOnce(html: string, page: DocumentPage, footerHtml?: string): Promise<Buffer> {
   const browser = await puppeteer.launch({
     headless: true,
     args: [
@@ -72,14 +72,21 @@ async function renderOnce(html: string, page: DocumentPage): Promise<Buffer> {
     })
     await tab.evaluateHandle('document.fonts.ready')
 
+    // A running footer is drawn by Chromium inside the bottom margin, so the
+    // margin has to be tall enough to hold it. The template asks for that
+    // height; the content never sees it.
+    const footer = footerHtml && page.footerHeight ? { html: footerHtml, height: page.footerHeight } : null
     const pdf = await tab.pdf({
       format: page.size,
       landscape: page.orientation === 'landscape',
       printBackground: true,
+      ...(footer
+        ? { displayHeaderFooter: true, headerTemplate: '<span></span>', footerTemplate: footer.html }
+        : {}),
       margin: {
         top: page.margin,
         right: page.margin,
-        bottom: page.margin,
+        bottom: footer ? footer.height : page.margin,
         left: page.margin,
       },
     })
