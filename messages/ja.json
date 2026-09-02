@@ -7176,7 +7176,8 @@
       "standard": "スタンダード",
       "deluxe": "デラックス",
       "luxury": "ラグジュアリー"
-    }
+    },
+    "guideLanguage": "ガイド言語"
   },
   "bookings": {
     "title": "予約管理",
