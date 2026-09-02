@@ -96,4 +96,48 @@ describe('row-currency display', () => {
         'and render it with formatRateAverage(), which averages within one currency or not at all.'
     ).toEqual([])
   })
+
+  it('no rates page formats a row amount with the bare org formatter', () => {
+    // Shape 4, found by the operator on the transportation cards (2026-09-02):
+    // `{formatRate(eurRate)}` — the org formatter called directly on a row's
+    // stored number. 101 EGP rows rendered as "$2,126.00" under a "RATE (USD)"
+    // header. No symbol pasted, no badge beside it, no average — so rules 1–3
+    // all let it through. The only correct call in a currency-aware file is
+    // formatRateInRowCurrency(amount, row, formatRate) — which PASSES
+    // formatRate and never calls it — or formatRateAverage() for a stat.
+    // The one allowed `formatRate(` is its own definition.
+    const violations: string[] = []
+    for (const { file, src } of currencyAwareFiles('app/rates')) {
+      const lines = src.split('\n')
+      lines.forEach((line, i) => {
+        if (!/\bformatRate\(/.test(line)) return
+        if (/const formatRate\s*=/.test(line)) return
+        if (/formatRateInRowCurrency\(|formatRateAverage\(/.test(line)) return
+        violations.push(`${rel(file)}:${i + 1} — ${line.trim().slice(0, 90)}`)
+      })
+    }
+    expect(
+      violations,
+      'These format a row amount in the org currency. The row carries its own rate_currency: ' +
+        'use formatRateInRowCurrency(amount, row, formatRate).'
+    ).toEqual([])
+  })
+
+  it('no rates page labels an amount column or field with the org currency', () => {
+    // Shape 5: `t('rateHeader', { currency: rateCurrency })` above rows that
+    // each carry their own currency. A header can name a currency only when
+    // every amount under it is in that currency — a per-row card may say
+    // `rate.rate_currency || rateCurrency`; a mixed table says nothing.
+    const violations: string[] = []
+    for (const { file, src } of currencyAwareFiles('app/rates')) {
+      for (const m of src.matchAll(/\{\s*currency:\s*rateCurrency\s*\}/g)) {
+        const line = src.slice(0, m.index!).split('\n').length
+        violations.push(`${rel(file)}:${line} — label interpolates the org currency`)
+      }
+    }
+    expect(
+      violations,
+      'Label the column "Rate" with no currency, or name the ROW\'s currency (row.rate_currency || rateCurrency).'
+    ).toEqual([])
+  })
 })

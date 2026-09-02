@@ -168,7 +168,7 @@ export default function ActivityRatesContent() {
   const displayRate = (rate: ActivityRate) => {
     if (rate.pricing_type === 'tiered' && rate.tiers?.length) {
       const lowest = Math.min(...rate.tiers.map(t => t.rate_eur))
-      return `${formatRate(lowest)}+`
+      return `${formatRateInRowCurrency(lowest, rate, formatRate)}+`
     }
     return formatRateInRowCurrency(rate.base_rate_eur, rate, formatRate)
   }

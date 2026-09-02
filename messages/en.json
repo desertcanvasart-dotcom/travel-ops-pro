@@ -3546,7 +3546,7 @@
       "tueThuSat": "Tue/Thu/Sat",
       "weekly": "Weekly",
       "charterOnDemand": "Charter/On Demand",
-      "rateHeader": "Rate ({currency})"
+      "rateHeader": "Rate"
     },
     "transportation": {
       "title": "Transportation Rates",

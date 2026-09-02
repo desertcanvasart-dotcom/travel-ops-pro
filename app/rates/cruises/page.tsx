@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
@@ -922,13 +922,13 @@ export default function CruisesPage() {
                       <TierBadge tier={cruise.tier} t={t} />
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                      {formatRate(cruise.rate_single_eur)}
+                      {formatRateInRowCurrency(cruise.rate_single_eur, cruise, formatRate)}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-blue-600">
-                      {formatRate(cruise.rate_double_eur)}
+                      {formatRateInRowCurrency(cruise.rate_double_eur, cruise, formatRate)}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-purple-600">
-                      {cruise.rate_triple_eur ? formatRate(cruise.rate_triple_eur) : '-'}
+                      {cruise.rate_triple_eur ? formatRateInRowCurrency(cruise.rate_triple_eur, cruise, formatRate) : '-'}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -1197,7 +1197,7 @@ export default function CruisesPage() {
               <div>
                 <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs">3</span>
-                  {tPeriods('titleWithCurrency', { currency: rateCurrency })}
+                  {tPeriods('titleWithCurrency', { currency: formData.rate_currency || rateCurrency })}
                 </h4>
                 <RateSeasonsEditor
                   entity="cruise"
