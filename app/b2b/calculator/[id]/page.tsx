@@ -5,7 +5,7 @@ import React, { useState, useEffect, Fragment } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileSpreadsheet, TrendingUp, AlertCircle, UserPlus, Save, X, CheckCircle2, Building2, User, Mail, Phone, FileText, ChevronDown, ChevronUp, Pencil, Plane, Ship, MapPin, Plus, RotateCcw, Tag } from 'lucide-react'
+import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileSpreadsheet, TrendingUp, AlertCircle, UserPlus, Save, X, CheckCircle2, Building2, User, Mail, Phone, FileText, ChevronDown, ChevronUp, Pencil, Plane, Ship, MapPin, Plus, RotateCcw, Tag, Star } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { currencySymbol } from '@/lib/currency-totals'
 import AttractionPicker from '@/components/AttractionPicker'
@@ -240,8 +240,13 @@ export default function TourPriceCalculator() {
     notes: ''
   })
 
-  // Variation tier (from DB via calculator-init)
+  // Pricing tier. ALWAYS standard by default (operator, 2026-09-03): the
+  // office's contracts are standard-tier, and a programme imported as
+  // "Deluxe" used to be priced at a tier with no rates, so the quote came
+  // back with nine holes. The variation's own tier is shown as a hint and
+  // the operator picks another tier on purpose.
   const [variationTier, setVariationTier] = useState<string>('standard')
+  const [importedTier, setImportedTier] = useState<string>('')
 
   // Itinerary editor state
   const [templateId, setTemplateId] = useState<string | null>(null)
@@ -280,7 +285,7 @@ export default function TourPriceCalculator() {
       if (data.success) {
         setTemplateId(data.template_id)
         setTemplateName(data.template_name || '')
-        if (data.tier) setVariationTier(data.tier)
+        if (data.tier) setImportedTier(String(data.tier))
         // Ensure each day has the full enriched structure
         const days: TemplateItineraryDay[] = (data.itinerary || []).map((d: any, i: number) => ({
           day: d.day || i + 1,
@@ -766,6 +771,26 @@ export default function TourPriceCalculator() {
                   <option value="eur">{t('europeanPassport')}</option>
                   <option value="non-eur">{t('nonEuropeanPassport')}</option>
                 </select>
+              </div>
+
+              {/* Pricing tier — standard unless chosen otherwise */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <Star className="w-4 h-4 inline mr-1" />{t('pricingTier')}
+                </label>
+                <select
+                  value={variationTier}
+                  onChange={(e) => setVariationTier(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg bg-white"
+                  data-testid="pricing-tier"
+                >
+                  {(['budget', 'standard', 'deluxe', 'luxury'] as const).map(tier => (
+                    <option key={tier} value={tier}>{t(`tiers.${tier}`)}</option>
+                  ))}
+                </select>
+                {importedTier && importedTier !== variationTier && (
+                  <p className="text-xs text-gray-500 mt-1">{t('tierHint', { tier: t(`tiers.${importedTier}`) })}</p>
+                )}
               </div>
 
               {/* Profit Margin */}

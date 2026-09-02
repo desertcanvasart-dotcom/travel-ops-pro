@@ -1129,21 +1129,9 @@ export default function AttractionsContent() {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                   />
 
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('form.egyptianRate')}
-                    </label>
-                    <input
-                      type="number"
-                      name="egyptian_rate"
-                      value={formData.egyptian_rate}
-                      onChange={handleChange}
-                      step="0.01"
-                      min="0"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                      placeholder="0.00"
-                    />
-                  </div>
+                  {/* No Egyptian-resident rate: the office does not sell to
+                      Egyptian passport holders (operator, 2026-09-03). The
+                      column stays for the importer; the form writes 0. */}
                 </div>
               </div>
 

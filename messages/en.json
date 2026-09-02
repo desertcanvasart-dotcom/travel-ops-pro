@@ -6583,7 +6583,15 @@
     "operatorPrice": "set price",
     "couldNotPrice": "Could not be priced",
     "pricingNotes": "Pricing notes",
-    "couldNotPriceHint": "These lines are missing from the total. Add the rate (or the alias) and calculate again."
+    "couldNotPriceHint": "These lines are missing from the total. Add the rate (or the alias) and calculate again.",
+    "pricingTier": "Pricing tier",
+    "tierHint": "This programme was imported as {tier}. Standard is used unless you choose otherwise.",
+    "tiers": {
+      "budget": "Budget",
+      "standard": "Standard",
+      "deluxe": "Deluxe",
+      "luxury": "Luxury"
+    }
   },
   "bookings": {
     "title": "Bookings",

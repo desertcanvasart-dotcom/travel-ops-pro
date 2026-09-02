@@ -233,7 +233,11 @@ export async function POST(
         // The programme this trip follows — so the 日程表 button is already
         // linked and does not ask again.
         template_id: template?.id ?? null,
-        tier: variation?.tier || 'standard',
+        // Standard at all times (operator, 2026-09-03): the quote was priced
+        // at the standard tier by default, so the trip is labelled the same
+        // way. The variation's imported tier ("Deluxe") is not a rate level
+        // the office holds contracts for; the edit page can still change it.
+        tier: 'standard',
         total_cost: quote.selling_price,
         supplier_cost: quote.total_cost,
         profit: quote.margin_amount,

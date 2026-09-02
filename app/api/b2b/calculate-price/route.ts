@@ -485,7 +485,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const effectiveTier = (variation.tier || tier) as ServiceTier
+    // The tier the CALLER asks for, standard when it asks for none. The
+    // variation's own tier used to win here, so a programme imported as
+    // "Deluxe" was priced at a tier the office holds no rates for and the
+    // quote came back with nine holes (operator, 2026-09-03: standard is the
+    // default at all times; another tier is a deliberate choice on the page).
+    const effectiveTier = (tier || 'standard') as ServiceTier
     const template = variation.tour_templates as any
     const templateId = template?.id
 
