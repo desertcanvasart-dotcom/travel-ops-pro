@@ -1334,7 +1334,7 @@
       "sendQuote": "Send Quote",
       "invoice": "Invoice",
       "contract": "Contract",
-      "pdf": "PDF",
+      "pdf": "Quote PDF",
       "generating": "Generating...",
       "creating": "Creating...",
       "sendQuoteToClient": "Send Quote to Client",
@@ -1370,7 +1370,6 @@
       "paymentDueWithin14Days": "Payment due within 14 days",
       "tripDatesNote": "Trip dates: {startDate} – {endDate}",
       "failedToCreateInvoice": "Failed to create invoice",
-      "opsSheet": "Ops Sheet",
       "clientEmailRequired": "The client's email address is required. Add it in edit mode.",
       "clientPhoneRequired": "The client's phone number is required for WhatsApp. Add it in edit mode.",
       "emailSentSuccessfully": "Email sent successfully! ✅",
@@ -1404,7 +1403,7 @@
       "copyFailed": "Could not copy — select the link and copy it manually."
     },
     "nittei": {
-      "button": "Itinerary Doc (日程表)",
+      "button": "Customer 日程表",
       "title": "Generate 日程表",
       "hint": "Prefilled from this trip — whatever is in the boxes is what prints. The programme is remembered for next time.",
       "programme": "Programme",
@@ -1426,7 +1425,7 @@
     "fromScratch": "Build from scratch",
     "fromProgrammeHint": "Links the trip to the programme, fills in the name if you have not, and sets the end date from its length. The day plan is still built in the itinerary or the quote.",
     "opsSheet": {
-      "button": "Ops Sheet",
+      "button": "Ground Ops Sheet",
       "tooltip": "Operations sheet for the ground team, built from this trip’s days",
       "title": "Generate operations sheet",
       "hint": "The day grid and hotel block come from this trip. The fields below are office-held: whatever you type prints in the header, anything left blank prints as a ruled blank to write in.",
