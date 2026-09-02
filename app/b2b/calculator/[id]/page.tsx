@@ -200,6 +200,11 @@ export default function TourPriceCalculator() {
       .catch(err => console.error('Failed to fetch extras:', err))
   }, [])
   const { rateSymbol: extrasRateSymbol, rateCurrency: extrasRateCurrency } = useCurrency()
+  // Every amount on this page is in the currency the engine priced in —
+  // the org's rate currency. It used to be a hardcoded euro sign in 18
+  // places, so USD-priced quotes read as euros here and as dollars on the
+  // saved quote's page.
+  const sym = currencySymbol(result?.currency || extrasRateCurrency)
   // A row in another currency shows its code, never the org symbol.
   const extraMoney = (x: { rate_currency?: string | null }, n: number) =>
     x.rate_currency && x.rate_currency !== extrasRateCurrency ? `${x.rate_currency} ${n}` : `${extrasRateSymbol} ${n}`
@@ -534,6 +539,9 @@ export default function TourPriceCalculator() {
             ...result.services,
             ...(result.optional_services || []).filter(s => s.is_selected),
           ],
+          // The currency the engine priced in (the org's rate currency). Without
+          // it the quotes route used to default to EUR.
+          currency: result.currency,
           total_cost: result.total_cost,
           margin_percent: result.margin_percent,
           margin_amount: result.margin_amount,
@@ -1174,7 +1182,7 @@ export default function TourPriceCalculator() {
                   <div className="mb-4 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
                     <strong>{t('group')}:</strong> {t('totalPax', { total: result.num_pax, paying: result.num_paying_pax })}
                     {result.tour_leader_cost && (
-                      <span className="ml-2">&bull; <strong>{t('tlCost')}:</strong> &euro;{result.tour_leader_cost.toFixed(2)}</span>
+                      <span className="ml-2">&bull; <strong>{t('tlCost')}:</strong> {sym}{result.tour_leader_cost.toFixed(2)}</span>
                     )}
                   </div>
                 )}
@@ -1182,19 +1190,19 @@ export default function TourPriceCalculator() {
                 <div className="grid grid-cols-4 gap-4">
                   <div className="bg-gray-50 rounded-lg p-4">
                     <p className="text-xs text-gray-500 mb-1">{t('totalCost')}</p>
-                    <p className="text-xl font-bold">&euro;{result.total_cost.toFixed(2)}</p>
+                    <p className="text-xl font-bold">{sym}{result.total_cost.toFixed(2)}</p>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-4">
                     <p className="text-xs text-gray-500 mb-1">{t('margin')} ({result.margin_percent}%)</p>
-                    <p className="text-xl font-bold text-green-600">&euro;{result.margin_amount.toFixed(2)}</p>
+                    <p className="text-xl font-bold text-green-600">{sym}{result.margin_amount.toFixed(2)}</p>
                   </div>
                   <div className="bg-[#647C47]/10 rounded-lg p-4">
                     <p className="text-xs text-gray-500 mb-1">{t('sellingPrice')}</p>
-                    <p className="text-xl font-bold text-[#647C47]">&euro;{result.selling_price.toFixed(2)}</p>
+                    <p className="text-xl font-bold text-[#647C47]">{sym}{result.selling_price.toFixed(2)}</p>
                   </div>
                   <div className="bg-[#647C47]/10 rounded-lg p-4">
                     <p className="text-xs text-gray-500 mb-1">{t('perPerson')}</p>
-                    <p className="text-xl font-bold text-[#647C47]">&euro;{result.price_per_person.toFixed(2)}</p>
+                    <p className="text-xl font-bold text-[#647C47]">{sym}{result.price_per_person.toFixed(2)}</p>
                   </div>
                 </div>
 
@@ -1229,7 +1237,7 @@ export default function TourPriceCalculator() {
                         {t('singleSupplement')}
                       </span>
                       <span className="text-lg font-bold text-amber-700">
-                        &euro;{result.single_supplement.toFixed(2)}
+                        {sym}{result.single_supplement.toFixed(2)}
                       </span>
                     </div>
                     <p className="text-xs text-amber-600 mt-1">
@@ -1299,7 +1307,7 @@ export default function TourPriceCalculator() {
                               </div>
                             </td>
                             <td className="px-4 py-2 text-right font-medium text-gray-700">
-                              &euro;{dayTotal.toFixed(2)}
+                              {sym}{dayTotal.toFixed(2)}
                             </td>
                           </tr>
                           {/* Individual service rows */}
@@ -1326,8 +1334,8 @@ export default function TourPriceCalculator() {
                               </td>
                               <td className="px-4 py-2 text-center text-gray-500">{service.quantity_mode}</td>
                               <td className="px-4 py-2 text-right">{service.quantity}</td>
-                              <td className="px-4 py-2 text-right">&euro;{service.unit_cost.toFixed(2)}</td>
-                              <td className="px-4 py-2 text-right font-medium">&euro;{service.line_total.toFixed(2)}</td>
+                              <td className="px-4 py-2 text-right">{sym}{service.unit_cost.toFixed(2)}</td>
+                              <td className="px-4 py-2 text-right font-medium">{sym}{service.line_total.toFixed(2)}</td>
                             </tr>
                           ))}
                         </Fragment>
@@ -1337,21 +1345,21 @@ export default function TourPriceCalculator() {
                   <tfoot className="bg-gray-50 font-medium">
                     <tr>
                       <td colSpan={5} className="px-4 py-2 text-right">{t('subtotal')}:</td>
-                      <td className="px-4 py-2 text-right">&euro;{result.subtotal_cost.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right">{sym}{result.subtotal_cost.toFixed(2)}</td>
                     </tr>
                     {result.tour_leader_included && result.tour_leader_cost && (
                       <tr>
                         <td colSpan={5} className="px-4 py-2 text-right text-blue-600">{t('tourLeaderCost')}:</td>
-                        <td className="px-4 py-2 text-right text-blue-600">&euro;{result.tour_leader_cost.toFixed(2)}</td>
+                        <td className="px-4 py-2 text-right text-blue-600">{sym}{result.tour_leader_cost.toFixed(2)}</td>
                       </tr>
                     )}
                     <tr>
                       <td colSpan={5} className="px-4 py-2 text-right text-green-600">{t('margin')} ({result.margin_percent}%):</td>
-                      <td className="px-4 py-2 text-right text-green-600">&euro;{result.margin_amount.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right text-green-600">{sym}{result.margin_amount.toFixed(2)}</td>
                     </tr>
                     <tr className="text-lg">
                       <td colSpan={5} className="px-4 py-2 text-right text-[#647C47]">{t('total')}:</td>
-                      <td className="px-4 py-2 text-right text-[#647C47]">&euro;{result.selling_price.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right text-[#647C47]">{sym}{result.selling_price.toFixed(2)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -1446,10 +1454,10 @@ export default function TourPriceCalculator() {
                         {row.pax}
                         {tourLeaderIncluded && <span className="text-xs text-blue-500 ml-1">(+1)</span>}
                       </td>
-                      <td className="px-4 py-2 text-right">&euro;{row.total_cost.toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right text-green-600">&euro;{row.margin_amount.toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right font-medium">&euro;{row.selling_price.toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right font-bold text-[#647C47]">&euro;{row.price_per_person.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right">{sym}{row.total_cost.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right text-green-600">{sym}{row.margin_amount.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right font-medium">{sym}{row.selling_price.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right font-bold text-[#647C47]">{sym}{row.price_per_person.toFixed(2)}</td>
                       <td className="px-4 py-2 text-right text-amber-600">
                         {row.single_supplement != null ? `\u20AC${row.single_supplement.toFixed(2)}` : '\u2014'}
                       </td>
@@ -1581,7 +1589,7 @@ export default function TourPriceCalculator() {
                 </div>
                 <div className="flex justify-between pt-2 border-t mt-2">
                   <span className="text-gray-600">{t('summarySellingPrice')}:</span>
-                  <span className="font-bold text-[#647C47]">&euro;{result?.selling_price.toFixed(2)}</span>
+                  <span className="font-bold text-[#647C47]">{sym}{result?.selling_price.toFixed(2)}</span>
                 </div>
               </div>
             </div>
