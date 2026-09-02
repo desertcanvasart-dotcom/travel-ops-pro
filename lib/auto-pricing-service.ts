@@ -44,6 +44,7 @@ import { priceAcrossPax } from '@/lib/pricing/pax-range'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { ratesForTravelDate } from '@/lib/rates/rate-seasons'
 import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
+import { tripAccommodationCost, type NightRates } from '@/lib/pricing/rooming'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -205,6 +206,8 @@ export interface DayPricingResult {
   // Accommodation breakdown
   hotelNights: number
   cruiseNights: number
+  /** Each night's contract figures, for the rooming rule (lib/pricing/rooming.ts). */
+  accommodationNights: NightRates[]
   
   // Single supplement (one number for whole tour)
   singleSupplement: number
@@ -1107,15 +1110,18 @@ export function resolveHotelRatesForDate(
   row: HotelOrCruiseRow,
   isEurPassport: boolean,
   travelDate?: string | null
-): { ppdNight: number; singleSuppNight: number; seasonName: string | null } {
+): { ppdNight: number; singleSuppNight: number; tripleRedNight: number; seasonName: string | null } {
   const suffix = isEurPassport ? 'eur' : 'non_eur'
   const hit = ratesForTravelDate(row, 'accommodation', travelDate)
   const ppd = hit ? hit.rates[`pp_double_${suffix}`] : (row[`pp_double_${suffix}`] || 0)
   const supp = hit ? hit.rates[`single_supp_${suffix}`] : (row[`single_supp_${suffix}`] || 0)
+  const red = hit ? hit.rates[`triple_red_${suffix}`] : (row[`triple_red_${suffix}`] || 0)
   return {
     ppdNight: Number(ppd) || 0,
     // A negative supplement is a data-entry slip, never a discount.
     singleSuppNight: Math.max(0, Number(supp) || 0),
+    // Reduction per person in a triple (lib/pricing/rooming.ts).
+    tripleRedNight: Math.max(0, Number(red) || 0),
     seasonName: hit?.season.name ?? null,
   }
 }
@@ -1127,7 +1133,7 @@ export function resolveCruiseRatesForDate(
   row: HotelOrCruiseRow,
   isEurPassport: boolean,
   travelDate?: string | null
-): { ppdNight: number; singleSuppNight: number; seasonName: string | null } {
+): { ppdNight: number; singleSuppNight: number; tripleRedNight: number; seasonName: string | null } {
   const suffix = isEurPassport ? 'eur' : 'non_eur'
   const hit = ratesForTravelDate(row, 'cruise', travelDate)
   // The legacy flat columns are EUR-only, so a non-EUR passport on a row with
@@ -1138,9 +1144,17 @@ export function resolveCruiseRatesForDate(
   const single = hit
     ? hit.rates[`single_${suffix}`]
     : (row[`rate_low_single_${suffix}`] || (isEurPassport ? row.rate_single_eur : 0) || 0)
+  const triple = hit
+    ? hit.rates[`triple_${suffix}`]
+    : (row[`rate_low_triple_${suffix}`] || (isEurPassport ? row.rate_triple_eur : 0) || 0)
+  const dbl = Number(double) || 0
   return {
-    ppdNight: Number(double) || 0,
-    singleSuppNight: Math.max(0, (Number(single) || 0) - (Number(double) || 0)),
+    ppdNight: dbl,
+    singleSuppNight: Math.max(0, (Number(single) || 0) - dbl),
+    // The triple cabin rate is per person; the reduction is what it saves
+    // against the double. A triple rate of 0 means "no triple cabin" — no
+    // reduction, not a free cabin.
+    tripleRedNight: (Number(triple) || 0) > 0 ? Math.max(0, dbl - (Number(triple) || 0)) : 0,
     seasonName: hit?.season.name ?? null,
   }
 }
@@ -2005,6 +2019,7 @@ export async function calculateDayBasedPricing(
       hotelNights: 0,
       cruiseNights: 0,
       singleSupplement: 0,
+      accommodationNights: [],
       services: [],
       paxPricing: [],
       currency: params.rateCurrency ?? DEFAULT_RATE_CURRENCY,
@@ -2464,6 +2479,10 @@ export async function calculateDayBasedPricing(
   // ============================================
 
   let accommodationPPD = 0
+  // Every night's three contract figures, for the rooming rule below
+  // (lib/pricing/rooming.ts): a solo traveller pays the supplement, a triple
+  // takes the reduction. The per-person lines stay per-person-in-double.
+  const accommodationNights: NightRates[] = []
 
   // Hotel PPD — use overnight_city for day trips (e.g., Alexandria day trip sleeps in Cairo)
   for (const day of hotelDays) {
@@ -2474,6 +2493,7 @@ export async function calculateDayBasedPricing(
       const nightly = resolveHotelRatesForDate(
         hotelRate.row, isEurPassport, dateForDay(day.day)
       )
+      accommodationNights.push({ ppd: nightly.ppdNight, singleSupp: nightly.singleSuppNight, tripleRed: nightly.tripleRedNight })
       accommodationPPD += nightly.ppdNight
       services.push({
         id: `day${day.day}-hotel`,
@@ -2509,6 +2529,7 @@ export async function calculateDayBasedPricing(
     const nightly = cruiseDays.map(day =>
       resolveCruiseRatesForDate(cruiseRates.row, isEurPassport, dateForDay(day.day))
     )
+    for (const n of nightly) accommodationNights.push({ ppd: n.ppdNight, singleSupp: n.singleSuppNight, tripleRed: n.tripleRedNight })
     const cruiseTotal = nightly.reduce((sum, n) => sum + n.ppdNight, 0)
     const periodsUsed = [...new Set(nightly.map(n => n.seasonName).filter(Boolean))]
     // One line for the sailing, so unitCost is the per-night average whenever
@@ -2636,7 +2657,11 @@ export async function calculateDayBasedPricing(
     })
   }
 
-  const perPaxCosts = accommodationPPD + entranceFeesPerPax + externalMealsPerPax + waterPerPax
+  // Accommodation is NOT in the per-person line any more: it goes through
+  // the rooming rule per party size (accommodationAt below). Everything
+  // else still scales linearly with pax.
+  const perPaxCosts = entranceFeesPerPax + externalMealsPerPax + waterPerPax
+  const accommodationAt = (pax: number) => tripAccommodationCost(pax, accommodationNights)
 
   debugLog(`📊 Fixed costs: €${fixedCosts.toFixed(2)} | Per-pax costs: €${perPaxCosts.toFixed(2)}`)
 
@@ -2836,6 +2861,7 @@ export async function calculateDayBasedPricing(
     marginPercent,
     transportAt: transportAtPax,
     tourLeaderCost: accommodationPPD + singleSupplement + entranceFeesPerPax + externalMealsPerPax + waterPerPax,
+    accommodationAt,
     paxFrom: PAX_COUNTS[0],
     paxTo: PAX_COUNTS[PAX_COUNTS.length - 1],
   })
@@ -2864,6 +2890,7 @@ export async function calculateDayBasedPricing(
     hotelNights,
     cruiseNights,
     singleSupplement: Math.round(singleSupplement * 100) / 100,
+    accommodationNights,
     services,
     paxPricing,
     currency: params.rateCurrency ?? DEFAULT_RATE_CURRENCY,
@@ -3090,6 +3117,8 @@ export interface PricingResult {
   // a rate sheet is deliverable only when complete; holes are never fabricated.
   complete: boolean
   holes: PricingHole[]
+  /** Each night's contract figures, for the rooming adjustment line (lib/pricing/rooming.ts). */
+  accommodationNights?: NightRates[]
 }
 
 /**
@@ -3321,6 +3350,7 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
     warnings: dayResult.warnings,
     paxPricingTable: paxTableWithSeason(dayResult.paxPricing, { season, currency: dayResult.currency }),
     singleSupplement: dayResult.singleSupplement,
+    accommodationNights: dayResult.accommodationNights,
     complete: dayResult.complete,
     holes: dayResult.holes
   }
@@ -3736,6 +3766,7 @@ export async function calculatePricingWithPassengerBreakdown(
     warnings: dayResult.warnings,
     paxPricingTable: paxTableWithSeason(dayResult.paxPricing, { season, currency: dayResult.currency }),
     singleSupplement: dayResult.singleSupplement,
+    accommodationNights: dayResult.accommodationNights,
     ageBasedPricing,
     complete: dayResult.complete,
     holes: dayResult.holes

@@ -13,6 +13,7 @@ import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { parseOptionalSelection, isOptionalSelected } from '@/lib/b2b/optional-selection'
 // Catalogue extras chosen at QUOTE time — same rule as options: cost + margin,
 // or the operator's set price as-is. Ported from autoura-saas.
+import { roomingAdjustment } from '@/lib/pricing/rooming'
 import { priceExtras, type CatalogueExtra, type ExtraSelection, type ExtrasPricing, type MoneyBlock } from '@/lib/pricing/extras-pricing'
 import {
   serviceQuantity,
@@ -593,6 +594,30 @@ export async function POST(request: NextRequest) {
         day_number: s.dayNumber,
         pricing_note: s.notes
       }))
+
+      // The per-person accommodation lines are per-person-in-double. A solo
+      // traveller pays the single supplement and a party with a triple takes
+      // the reduction (lib/pricing/rooming.ts); that difference is one line
+      // of its own so the quote's lines still add up to its total.
+      const rooming = roomingAdjustment(num_pax, autoPriceResult.accommodationNights ?? [])
+      if (rooming !== 0) {
+        convertedServices.push({
+          service_id: 'rooming-adjustment',
+          service_name: rooming > 0 ? 'Single supplement (solo traveller)' : 'Triple reduction (three sharing)',
+          service_category: 'accommodation',
+          rate_type: 'accommodation',
+          rate_source: rooming > 0 ? 'single_supplement' : 'triple_reduction',
+          quantity_mode: 'fixed',
+          quantity: 1,
+          unit_cost: rooming,
+          line_total: rooming,
+          is_optional: false,
+          day_number: null,
+          pricing_note: rooming > 0
+            ? 'Room of one: per-person-in-double plus the contract\'s single supplement'
+            : 'Room of three: each pays per-person-in-double minus the contract\'s triple reduction',
+        })
+      }
 
       const convertedOptional: CalculatedService[] = autoPriceResult.optionalServices.map(s => ({
         service_id: s.id,
