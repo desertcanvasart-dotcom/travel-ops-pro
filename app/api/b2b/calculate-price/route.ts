@@ -6,6 +6,7 @@ import { makeDayTourVehicleFinder } from '@/lib/rates/day-tour-vehicle'
 import { calculateAutoPricing, calculatePricingWithPassengerBreakdown, ServiceTier, CHILD_DISCOUNT_PERCENT, loadSeasonWindows } from '@/lib/auto-pricing-service'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
+import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
@@ -127,11 +128,16 @@ interface PriceCalculationResult {
 
 // Catalogue extras chosen for this quote. Only ACTIVE rows of this org come
 // back; a withdrawn or foreign id is therefore a hole downstream, never a sale.
-async function loadExtras(orgId: string | null | undefined, ids: string[]): Promise<CatalogueExtra[]> {
+// A row entered in another currency (rate_currency) is converted into the run
+// currency here, at the fetch boundary, like every other rate table — an EGP
+// fast-track must not join a USD total as if it were dollars. `select('*')`
+// on purpose: the column arrives by migration and the route must keep working
+// on a database that has not run it yet.
+async function loadExtras(orgId: string | null | undefined, ids: string[], runCurrency: string): Promise<CatalogueExtra[]> {
   if (!orgId || ids.length === 0) return []
   const { data, error } = await supabaseAdmin
     .from('extras_catalogue')
-    .select('id, name, supplier_cost, selling_price, unit')
+    .select('*')
     .eq('org_id', orgId)
     .eq('is_active', true)
     .in('id', ids)
@@ -139,7 +145,12 @@ async function loadExtras(orgId: string | null | undefined, ids: string[]): Prom
     console.error('Error loading extras_catalogue:', error)
     return []
   }
-  return (data || []) as unknown as CatalogueExtra[]
+  const normalizer = createRateNormalizer(runCurrency)
+  const rows = await normalizer.normalize('extras_catalogue', (data || []) as Record<string, unknown>[])
+  for (const miss of normalizer.misses) {
+    console.warn(`[calculate-price] extra ${miss.id} is in ${miss.currency} and could not be converted — treated as unpriced`)
+  }
+  return (rows || []) as unknown as CatalogueExtra[]
 }
 
 // Fold priced extras into a FINISHED result, so both engine branches treat
@@ -403,7 +414,7 @@ export async function POST(request: NextRequest) {
     const extraSelections: ExtraSelection[] = (Array.isArray(extras) ? extras : [])
       .map((e: unknown) => (typeof e === 'string' ? { id: e } : e))
       .filter(isSelection)
-    const extrasCatalogue = await loadExtras(await getCurrentOrgId(), extraSelections.map((e) => e.id))
+    const extrasCatalogue = await loadExtras(await getCurrentOrgId(), extraSelections.map((e) => e.id), rateCurrency)
 
     // Determine if using passenger breakdown or simple num_pax
     const usePassengerBreakdown = num_adults !== undefined && num_adults !== null

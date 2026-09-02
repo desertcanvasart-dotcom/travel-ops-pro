@@ -17,6 +17,7 @@ import { useTranslations } from 'next-intl'
 import { Loader2, Pencil, Plus, Trash2, X, Sparkles } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 
 interface Extra {
   id: string
@@ -25,6 +26,8 @@ interface Extra {
   category: string | null
   supplier_cost: number | null
   selling_price: number | null
+  /** The currency cost and price were entered in; null = the org's rate currency. */
+  rate_currency?: string | null
   unit: 'per_person' | 'per_booking'
   is_active: boolean
 }
@@ -36,13 +39,15 @@ type Draft = {
   category: string
   supplier_cost: string
   selling_price: string
+  /** '' = org default (the RateCurrencyField convention). */
+  rate_currency: string
   unit: 'per_person' | 'per_booking'
   is_active: boolean
 }
 
 const EMPTY: Draft = {
   name: '', description: '', category: '',
-  supplier_cost: '', selling_price: '', unit: 'per_person', is_active: true,
+  supplier_cost: '', selling_price: '', rate_currency: '', unit: 'per_person', is_active: true,
 }
 
 export default function ExtrasPage() {
@@ -76,7 +81,11 @@ export default function ExtrasPage() {
         {
           method: draft.id ? 'PUT' : 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(draft),
+          body: JSON.stringify((() => {
+            const { rate_currency: picked, ...rest } = draft
+            const editing = draft.id ? extras.find(x => x.id === draft.id) : undefined
+            return { ...rest, ...rateCurrencyPatch(picked, editing?.rate_currency) }
+          })()),
         }
       )
       const data = await res.json().catch(() => ({}))
@@ -95,9 +104,10 @@ export default function ExtrasPage() {
     await load()
   }
 
-  /** Blank stays blank: an unpriced extra says so rather than showing 0. */
-  const money = (n: number | null) =>
-    n == null ? <span className="text-gray-400">{t('unpriced')}</span> : `${rateCurrency} ${n}`
+  /** Blank stays blank: an unpriced extra says so rather than showing 0.
+   *  A row names its own currency; the org's is only the default. */
+  const money = (n: number | null, row: { rate_currency?: string | null }) =>
+    n == null ? <span className="text-gray-400">{t('unpriced')}</span> : `${row.rate_currency || rateCurrency} ${n}`
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -151,8 +161,8 @@ export default function ExtrasPage() {
                         {x.description && <p className="text-xs text-gray-500">{x.description}</p>}
                       </td>
                       <td className="px-4 py-2 text-sm text-gray-600">{x.category || '—'}</td>
-                      <td className="px-4 py-2 text-sm text-right tabular-nums">{money(x.supplier_cost)}</td>
-                      <td className="px-4 py-2 text-sm text-right tabular-nums font-medium">{money(x.selling_price)}</td>
+                      <td className="px-4 py-2 text-sm text-right tabular-nums">{money(x.supplier_cost, x)}</td>
+                      <td className="px-4 py-2 text-sm text-right tabular-nums font-medium">{money(x.selling_price, x)}</td>
                       <td className="px-4 py-2 text-sm text-gray-600">
                         {x.unit === 'per_booking' ? t('perBooking') : t('perPerson')}
                       </td>
@@ -165,6 +175,7 @@ export default function ExtrasPage() {
                             category: x.category || '',
                             supplier_cost: x.supplier_cost?.toString() ?? '',
                             selling_price: x.selling_price?.toString() ?? '',
+                            rate_currency: x.rate_currency || '',
                             unit: x.unit, is_active: x.is_active,
                           })}
                           className="p-1.5 text-gray-400 hover:text-primary-600"
@@ -224,19 +235,24 @@ export default function ExtrasPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{t('costLabel', { currency: rateCurrency })}</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">{t('costLabel')}</label>
               <input type="number" min="0" step="0.01" value={draft.supplier_cost}
                 onChange={e => setDraft({ ...draft, supplier_cost: e.target.value })}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
               <p className="text-xs text-gray-500 mt-1">{t('costHelp')}</p>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">{t('priceLabel', { currency: rateCurrency })}</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">{t('priceLabel')}</label>
               <input type="number" min="0" step="0.01" value={draft.selling_price}
                 onChange={e => setDraft({ ...draft, selling_price: e.target.value })}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
               <p className="text-xs text-gray-500 mt-1">{t('priceHelp')}</p>
             </div>
+            <RateCurrencyField
+              value={draft.rate_currency}
+              onChange={v => setDraft({ ...draft, rate_currency: v })}
+              className="md:col-span-2"
+            />
             <label className="flex items-center gap-2 md:col-span-2">
               <input type="checkbox" checked={draft.is_active}
                 onChange={e => setDraft({ ...draft, is_active: e.target.checked })}

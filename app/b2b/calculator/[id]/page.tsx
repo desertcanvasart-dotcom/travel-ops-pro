@@ -92,6 +92,8 @@ interface CatalogueExtraOption {
   name: string
   supplier_cost: number | null
   selling_price: number | null
+  /** The currency the row was entered in; null = the org's rate currency. */
+  rate_currency?: string | null
   unit: 'per_person' | 'per_booking'
 }
 
@@ -197,7 +199,10 @@ export default function TourPriceCalculator() {
       .then(d => { if (d?.success) setAvailableExtras(d.data || []) })
       .catch(err => console.error('Failed to fetch extras:', err))
   }, [])
-  const { rateSymbol: extrasRateSymbol } = useCurrency()
+  const { rateSymbol: extrasRateSymbol, rateCurrency: extrasRateCurrency } = useCurrency()
+  // A row in another currency shows its code, never the org symbol.
+  const extraMoney = (x: { rate_currency?: string | null }, n: number) =>
+    x.rate_currency && x.rate_currency !== extrasRateCurrency ? `${x.rate_currency} ${n}` : `${extrasRateSymbol} ${n}`
   const toggleExtra = (id: string) =>
     setSelectedExtraIds(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]))
 
@@ -769,9 +774,9 @@ export default function TourPriceCalculator() {
                     {availableExtras.map(x => {
                       const unpriced = x.supplier_cost == null && x.selling_price == null
                       const label = x.selling_price != null
-                        ? `${extrasRateSymbol} ${x.selling_price} · ${t('extrasSetPrice')}`
+                        ? `${extraMoney(x, x.selling_price)} · ${t('extrasSetPrice')}`
                         : x.supplier_cost != null
-                        ? `${extrasRateSymbol} ${x.supplier_cost} · ${t('extrasCostPlusMargin')}`
+                        ? `${extraMoney(x, x.supplier_cost)} · ${t('extrasCostPlusMargin')}`
                         : t('extrasNotPriced')
                       return (
                         <label key={x.id} className="flex items-start gap-2 cursor-pointer">
