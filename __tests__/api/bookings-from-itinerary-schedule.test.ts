@@ -58,6 +58,8 @@ describe('POST /api/bookings from an itinerary', () => {
     expect(b.balance_due_date).toBe('2026-10-06')
     expect(b.currency).toBe('USD')
     expect(json.data.deposit_percent).toBe(20)
+    // The response names the builder that ran — how a deploy is proven.
+    expect(json.builder).toBe('schedule-2026-09-02')
   })
 
   it('takes the operator’s own percentage when one is set', async () => {

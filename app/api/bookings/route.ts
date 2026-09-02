@@ -9,6 +9,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { paymentRuleFrom } from '@/lib/payment-schedule'
 import {
+  BOOKING_ROW_BUILDER,
   buildBookingRow,
   populateSuppliersFromItinerary,
   DEFAULT_DEPOSIT_PERCENT,
@@ -202,7 +203,9 @@ export async function POST(request: NextRequest) {
       console.error('Booking created but supplier manifest failed:', suppliers.error)
     }
 
-    return NextResponse.json({ success: true, data: booking }, { status: 201 })
+    // `builder` names the row builder that produced this booking — see the
+    // constant's comment in lib/booking-creation.ts.
+    return NextResponse.json({ success: true, data: booking, builder: BOOKING_ROW_BUILDER }, { status: 201 })
   } catch (error: unknown) {
     console.error('Bookings POST error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
