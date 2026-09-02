@@ -7962,5 +7962,14 @@
     "deleteMessage": "「{name}」をこのプログラムから削除します。すでに販売済みの旅程は影響を受けません。",
     "couldNotSave": "保存できませんでした。",
     "couldNotDelete": "削除できませんでした。"
+  },
+  "attractionPicker": {
+    "add": "入場券を選択",
+    "remove": "削除",
+    "searchPlaceholder": "観光地・都市で検索…",
+    "close": "閉じる",
+    "loading": "入場料を読み込み中…",
+    "none": "該当する観光地なし",
+    "unknown": "（入場料から削除済み）"
   }
 }

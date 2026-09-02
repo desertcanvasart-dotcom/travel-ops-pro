@@ -45,6 +45,7 @@ import { usableRate } from '@/lib/pricing/usable-rate'
 import { ratesForTravelDate } from '@/lib/rates/rate-seasons'
 import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
 import { tripAccommodationCost, type NightRates } from '@/lib/pricing/rooming'
+import { resolveAttractions, buildAliasMap } from '@/lib/pricing/attractions'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -104,6 +105,9 @@ export interface ItineraryDay {
     dinner: MealStatus
   }
   attractions: string[]
+  /** entrance_fees ids picked from the fee table — exact tickets for the
+   *  day; the wording above is then documentation only (lib/pricing/attractions). */
+  attraction_ids?: string[]
   services: {
     airport_arrival: boolean
     airport_departure: boolean
@@ -786,6 +790,7 @@ export function parseItinerary(itineraryData: any, opts?: {
       accommodation_type: day.accommodation_type || inferAccommodationType(day, itineraryData),
       meals,
       attractions,
+      attraction_ids: Array.isArray(day.attraction_ids) ? day.attraction_ids.filter(Boolean).map(String) : undefined,
       services,
       // Parse transport overrides if present
       transport: day.transport || undefined,
@@ -2118,6 +2123,7 @@ export async function calculateDayBasedPricing(
     entranceFeeCache,
     airportStaffRows,
     hotelStaffRows,
+    attractionAliases,
   ] = await Promise.all([
     buildTransportCache(rateNormalizer),
     // Fetch cruise transport packages from b2b_transport_packages
@@ -2148,6 +2154,13 @@ export async function calculateDayBasedPricing(
       .eq('is_active', true)
       .then(({ data }) => rateNormalizer.normalize('hotel_staff_rates', data || []))
       .then(rows => rows || []),
+    // Wording the office has taught the alias table (Japanese programme
+    // sentences → canonical fee names); see lib/pricing/attractions.ts
+    supabaseAdmin
+      .from('attraction_aliases')
+      .select('alias, canonical_name')
+      .eq('is_active', true)
+      .then(({ data }) => buildAliasMap(data as { alias: string; canonical_name: string }[] | null)),
   ])
 
   // A rate whose currency could not be backed by an FX rate was neutralised
@@ -2568,32 +2581,33 @@ export async function calculateDayBasedPricing(
   // attractions are matched in memory here — was a per-attraction query
   // (+ full-table scan on each miss) inside the loop below.
 
-  for (const day of itinerary) {
-    for (const attraction of day.attractions) {
-      if (processedAttractions.has(attraction.toLowerCase())) continue
-      processedAttractions.add(attraction.toLowerCase())
-
-      const fee = findEntranceFeeInList(entranceFeeCache, attraction, isEurPassport)
-      if (fee && fee.rate > 0) {
-        entranceFeesPerPax += fee.rate
-        services.push({
-          id: `entrance-${fee.id}`,
-          dayNumber: day.day,
-          serviceType: 'entrance',
-          serviceName: fee.name,
-          quantity: 1,
-          quantityMode: 'per_pax',
-          unitCost: fee.rate,
-          lineTotal: fee.rate,
-          rateSource: 'entrance_fees',
-          isPerPax: true,
-          isOptional: false,
-          notes: isEurPassport ? 'EUR rate' : 'non-EUR rate'
-        })
-      } else {
-        warnings.push(`No entrance fee found for "${attraction}"`)
-      }
-    }
+  const resolved = resolveAttractions(itinerary, entranceFeeCache, attractionAliases, isEurPassport)
+  for (const fee of resolved.tickets) {
+    processedAttractions.add(fee.name.toLowerCase())
+    // A free site (rate 0, e.g. Colossi of Memnon) is a resolved visit with
+    // nothing to charge — not a missing rate.
+    if (fee.rate <= 0) continue
+    entranceFeesPerPax += fee.rate
+    services.push({
+      id: `entrance-${fee.id}`,
+      dayNumber: fee.day,
+      serviceType: 'entrance',
+      serviceName: fee.name,
+      quantity: 1,
+      quantityMode: 'per_pax',
+      unitCost: fee.rate,
+      lineTotal: fee.rate,
+      rateSource: 'entrance_fees',
+      isPerPax: true,
+      isOptional: false,
+      notes: isEurPassport ? 'EUR rate' : 'non-EUR rate'
+    })
+  }
+  for (const miss of resolved.unresolved) {
+    warnings.push(`No entrance fee found for "${miss.text}"`)
+  }
+  for (const miss of resolved.missingIds) {
+    warnings.push(`Day ${miss.day}: picked attraction ${miss.id} is no longer in the entrance fees table`)
   }
 
   // ----- External Meals (per pax) -----

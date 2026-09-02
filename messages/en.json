@@ -7377,5 +7377,14 @@
     "deleteMessage": "“{name}” will be removed from this programme. Trips already sold keep what they bought.",
     "couldNotSave": "Could not save that.",
     "couldNotDelete": "Could not delete it."
+  },
+  "attractionPicker": {
+    "add": "Pick ticket",
+    "remove": "Remove",
+    "searchPlaceholder": "Search sites or city…",
+    "close": "Close",
+    "loading": "Loading entrance fees…",
+    "none": "No matching site",
+    "unknown": "(removed from fees)"
   }
 }
