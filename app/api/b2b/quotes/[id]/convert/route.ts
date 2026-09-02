@@ -5,7 +5,8 @@ import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
-import { templateDaysToItineraryDays, packageTypeForTemplate } from '@/lib/itineraries/template-days'
+import { normalizeServiceType } from '@/lib/service-types'
+import { templateDaysToItineraryDays, packageTypeForTemplate, itineraryServiceType } from '@/lib/itineraries/template-days'
 
 // ============================================
 // B2B QUOTE CONVERT TO ITINERARY API
@@ -289,20 +290,34 @@ export async function POST(
       if (dayServices.length > 0) {
         const { error: svcError } = await supabaseAdmin
           .from('itinerary_services')
-          .insert(dayServices.map((service: any) => ({
-            itinerary_day_id: itinDay.id,
-            service_type: service.service_category || 'other',
-            service_name: service.service_name,
-            supplier_cost: service.line_total / (service.quantity || 1),
-            quantity: service.quantity || 1,
-            total_cost: service.line_total,
-            margin_percent: quote.margin_percent,
-            selling_price: service.line_total * (1 + (quote.margin_percent || 25) / 100),
-            // The currency the quote was priced in — a USD quote must not
-            // produce EUR service lines under a USD itinerary.
-            currency: quote.currency || 'EUR',
-            status: 'pending'
-          })))
+          // The columns itinerary_services actually has (types/database.types.ts):
+          // this insert used to write supplier_cost / margin_percent /
+          // selling_price / currency / status — none of which exist — and the
+          // write-contract guard never saw it because the payload is built by
+          // a map, not an object literal. Third failure in the same route.
+          .insert(dayServices.map((service: any) => {
+            const qty = service.quantity || 1
+            const lineTotal = Number(service.line_total) || 0
+            // service_type is CHECK-constrained; 'water' and 'other' were
+            // rejected and rolled the whole conversion back.
+            const serviceType = itineraryServiceType(service.service_category)
+            const remapped = serviceType !== normalizeServiceType(service.service_category)
+            return {
+              itinerary_day_id: itinDay.id,
+              service_type: serviceType,
+              service_code: service.service_id ?? null,
+              service_name: service.service_name,
+              quantity: qty,
+              // Unit cost and line cost, in the currency the quote was priced in.
+              rate_eur: lineTotal / qty,
+              total_cost: lineTotal,
+              client_price: lineTotal * (1 + (quote.margin_percent || 25) / 100),
+              supplier_currency: quote.currency || 'EUR',
+              supplier_cost_original: lineTotal,
+              exchange_rate_used: 1,
+              notes: [service.pricing_note, remapped ? `category: ${service.service_category}` : null].filter(Boolean).join(' · ') || null,
+            }
+          }))
         if (svcError) {
           conversionError = svcError.message
           break

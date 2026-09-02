@@ -144,3 +144,40 @@ export function packageTypeForTemplate(
   if (type === 'cruise') return 'cruise-land'
   return 'full-package'
 }
+
+// ---------- service type ----------
+// itinerary_services.service_type is CHECK-constrained to the canonical
+// vocabulary (lib/service-types.ts). A quote line's service_category is the
+// engine's word for the same thing and is looser: bottled water is 'water',
+// a catalogue extra is 'extras_catalogue'. A stranger has to become
+// SOMETHING the constraint accepts or the whole conversion rolls back — so
+// the fallback is 'extra' (the catch-all the vocabulary already has), never
+// a confident wrong guess like 'transportation'.
+
+import { SERVICE_TYPES, normalizeServiceType } from '@/lib/service-types'
+
+const CATEGORY_ALIASES: Record<string, (typeof SERVICE_TYPES)[number]> = {
+  water: 'supplies',
+  supply: 'supplies',
+  extras_catalogue: 'extra',
+  extras: 'extra',
+  option: 'extra',
+  optional: 'extra',
+  flights: 'flight',
+  entrances: 'entrance',
+  entrance_fee: 'entrance',
+  entrance_fees: 'entrance',
+  activities: 'activity',
+  cruises: 'cruise',
+  meals: 'meal',
+  guides: 'guide',
+  tip: 'tips',
+  transport: 'transportation',
+  hotel: 'accommodation',
+}
+
+export function itineraryServiceType(category: string | null | undefined): (typeof SERVICE_TYPES)[number] {
+  const t = normalizeServiceType(category)
+  if ((SERVICE_TYPES as readonly string[]).includes(t)) return t as (typeof SERVICE_TYPES)[number]
+  return CATEGORY_ALIASES[t] ?? 'extra'
+}
