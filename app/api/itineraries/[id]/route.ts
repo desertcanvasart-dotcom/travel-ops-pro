@@ -3,6 +3,8 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { buildFrozenFx, parseFrozenFx } from '@/lib/itinerary-fx'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
+import { paymentRuleFrom } from '@/lib/payment-schedule'
+import { buildBookingRow, populateSuppliersFromItinerary } from '@/lib/booking-creation'
 
 // Server-side admin client — bypasses RLS for reliable reads/writes
 const supabase = createAdminClient(
@@ -180,34 +182,31 @@ export async function PUT(
           const { data: codeData } = await supabaseAdmin.rpc('generate_booking_code')
           const bookingCode = codeData || `BKG-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`
 
-          // Calculate deposit (30% default)
-          const depositAmount = (data.total_cost || 0) * 0.3
-          const balanceDue = (data.total_cost || 0) - depositAmount
-
-          // Create booking directly with admin client
+          // The SAME row builder as POST /api/bookings, with the operator's
+          // payment rule. This block used to hand-roll the row — deposit 30%,
+          // balance = total − deposit, no deposit percent, no due dates — so
+          // every booking born from a status change carried a schedule the
+          // office does not work to, and the Create Booking button, arriving
+          // seconds later, answered "already exists" (2026-09-02, BKG-2026-
+          // 0001..0004). Two entry points, one row shape.
+          const { data: orgTerms } = await supabaseAdmin
+            .from('organizations')
+            .select('deposit_percent, deposit_due_days, balance_due_days_before_departure')
+            .eq('id', orgId)
+            .maybeSingle()
+          const paymentRule = paymentRuleFrom(orgTerms)
           const { data: newBooking, error: bookingError } = await supabaseAdmin
             .from('bookings')
-            .insert({
-              org_id: orgId,
-              booking_code: bookingCode,
-              itinerary_id: id,
-              client_name: data.client_name,
-              client_email: data.client_email,
-              client_phone: data.client_phone,
-              trip_name: data.trip_name,
-              start_date: data.start_date,
-              end_date: data.end_date,
-              num_adults: data.num_adults || 1,
-              num_children: data.num_children || 0,
-              total_cost: data.total_cost || 0,
-              currency: data.currency || 'EUR',
-              tier: data.tier,
-              status: 'pending',
-              deposit_amount: depositAmount,
-              balance_due: balanceDue,
-              assigned_guide_id: data.assigned_guide_id,
-              assigned_vehicle_id: data.assigned_vehicle_id,
-            })
+            .insert(
+              buildBookingRow({
+                orgId,
+                bookingCode,
+                itinerary: data,
+                depositPercent: paymentRule.deposit_percent,
+                partnerName: null,
+                paymentRule,
+              })
+            )
             .select()
             .single()
 
@@ -215,41 +214,10 @@ export async function PUT(
             console.error('⚠️ Failed to create booking:', bookingError)
           } else {
             console.log('✅ Auto-created booking for confirmed itinerary:', id, 'Code:', bookingCode)
-
-            // Populate suppliers from itinerary services
+            // Supplier manifest, shared with the bookings routes.
             if (newBooking) {
-              const { data: days } = await supabaseAdmin
-                .from('itinerary_days')
-                .select('id, date, day_number')
-                .eq('itinerary_id', id)
-                .order('day_number', { ascending: true })
-
-              if (days && days.length > 0) {
-                const dayIds = days.map(d => d.id)
-                const { data: services } = await supabaseAdmin
-                  .from('itinerary_services')
-                  .select('*, itinerary_day_id')
-                  .in('itinerary_day_id', dayIds)
-
-                if (services && services.length > 0) {
-                  const supplierStatuses = services.map(service => {
-                    const day = days.find(d => d.id === service.itinerary_day_id)
-                    return {
-                      booking_id: newBooking.id,
-                      supplier_type: service.service_type || 'other',
-                      supplier_name: service.service_name || service.supplier_name || 'Unknown',
-                      service_description: service.notes,
-                      service_date: day?.date,
-                      quoted_cost: service.total_cost,
-                      status: 'pending'
-                    }
-                  })
-
-                  await supabaseAdmin
-                    .from('booking_supplier_status')
-                    .insert(supplierStatuses)
-                }
-              }
+              const suppliers = await populateSuppliersFromItinerary(supabaseAdmin, newBooking.id, id)
+              if (suppliers.error) console.error('Booking created but supplier manifest failed:', suppliers.error)
             }
           }
         }
