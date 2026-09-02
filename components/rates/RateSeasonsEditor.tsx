@@ -30,10 +30,57 @@ const FIELD_GROUPS: Record<RateSeasonEntity, Array<{ suffix: 'eur' | 'non_eur'; 
     { suffix: 'eur', fields: ['pp_double_eur', 'single_supp_eur', 'triple_red_eur'] },
     { suffix: 'non_eur', fields: ['pp_double_non_eur', 'single_supp_non_eur', 'triple_red_non_eur'] },
   ],
+  // Cruises are ENTERED the hotel way — per person in double, single
+  // supplement, triple reduction — and STORED as the cabin rates the engine
+  // reads (single/double/triple/suite per person per night). The two virtual
+  // fields below convert on the way in and out (operator decision,
+  // 2026-09-02: "align it with hotels, keep it per night").
   cruise: [
-    { suffix: 'eur', fields: ['single_eur', 'double_eur', 'triple_eur', 'suite_eur'] },
-    { suffix: 'non_eur', fields: ['single_non_eur', 'double_non_eur', 'triple_non_eur', 'suite_non_eur'] },
+    { suffix: 'eur', fields: ['double_eur', 'single_supp_eur', 'triple_red_eur', 'suite_eur'] },
+    { suffix: 'non_eur', fields: ['double_non_eur', 'single_supp_non_eur', 'triple_red_non_eur', 'suite_non_eur'] },
   ],
+}
+
+/** Cruise virtual fields → the stored cabin rate they are derived from. */
+const CRUISE_VIRTUAL: Record<string, { base: string; stored: string; sign: 1 | -1 }> = {
+  single_supp_eur: { base: 'double_eur', stored: 'single_eur', sign: 1 },
+  single_supp_non_eur: { base: 'double_non_eur', stored: 'single_non_eur', sign: 1 },
+  triple_red_eur: { base: 'double_eur', stored: 'triple_eur', sign: -1 },
+  triple_red_non_eur: { base: 'double_non_eur', stored: 'triple_non_eur', sign: -1 },
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100
+
+/** What the form shows for a field: stored value, or the derived supplement/reduction. */
+function displayValue(entity: RateSeasonEntity, rates: Record<string, number>, field: string): number {
+  const v = entity === 'cruise' ? CRUISE_VIRTUAL[field] : undefined
+  if (!v) return rates[field] ?? 0
+  const base = Number(rates[v.base]) || 0
+  const stored = Number(rates[v.stored]) || 0
+  // A triple rate of 0 means "no triple cabin": show no reduction rather than
+  // a reduction equal to the whole double rate.
+  if (v.sign === -1 && stored <= 0) return 0
+  return r2((stored - base) * v.sign)
+}
+
+/** Write a shown value back into the stored cabin rates. */
+function storeValue(entity: RateSeasonEntity, rates: Record<string, number>, field: string, value: number): Record<string, number> {
+  const v = entity === 'cruise' ? CRUISE_VIRTUAL[field] : undefined
+  if (!v) {
+    const next = { ...rates, [field]: value }
+    // Changing the double moves single and triple with it so the supplement
+    // and reduction the operator typed stay what they typed.
+    if (entity === 'cruise' && /^double_/.test(field)) {
+      for (const [virt, def] of Object.entries(CRUISE_VIRTUAL)) {
+        if (def.base !== field) continue
+        const shown = displayValue(entity, rates, virt)
+        next[def.stored] = def.sign === -1 && (Number(rates[def.stored]) || 0) <= 0 ? 0 : r2(value + shown * def.sign)
+      }
+    }
+    return next
+  }
+  const base = Number(rates[v.base]) || 0
+  return { ...rates, [v.stored]: r2(base + value * v.sign) }
 }
 
 const emptyRates = (entity: RateSeasonEntity): Record<string, number> =>
@@ -53,15 +100,19 @@ export default function RateSeasonsEditor({
 }: Props) {
   const t = useTranslations('rates.ratePeriods')
 
-  const fieldLabel = (field: string): string =>
-    t(`fields.${field.replace(/_non_eur$|_eur$/, '')}`)
+  // A cruise period is entered the hotel way, so its base rate reads
+  // "PP Dbl" like a hotel's, not the cabin word the column is stored under.
+  const fieldLabel = (field: string): string => {
+    const base = field.replace(/_non_eur$|_eur$/, '')
+    return t(`fields.${entity === 'cruise' && base === 'double' ? 'pp_double' : base}`)
+  }
 
   const update = (index: number, patch: Partial<RateSeason>) =>
     onChange(seasons.map((s, i) => (i === index ? { ...s, ...patch } : s)))
 
   const updateRate = (index: number, field: string, raw: string) =>
     update(index, {
-      rates: { ...seasons[index].rates, [field]: raw === '' ? 0 : Number(raw) },
+      rates: storeValue(entity, seasons[index].rates, field, raw === '' ? 0 : Number(raw)),
     })
 
   const addPeriod = () => {
@@ -184,7 +235,7 @@ export default function RateSeasonsEditor({
                         min={0}
                         step="0.01"
                         disabled={disabled}
-                        value={season.rates[field] ?? 0}
+                        value={displayValue(entity, season.rates, field)}
                         onChange={e => updateRate(index, field, e.target.value)}
                         className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#647C47]"
                       />

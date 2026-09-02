@@ -60,8 +60,10 @@ test('rate periods editor is on the cruises form too', async ({ page }) => {
 
   await page.getByRole('button', { name: /add period/i }).click()
   const card = page.getByTestId('rate-period').first()
-  // Cruises price by cabin, so a period carries four rates per passport set.
-  await expect(card.getByText('Single').first()).toBeVisible()
+  // Cruises are entered the hotel way (PP double, single supp., triple red.)
+  // plus a suite rate: four figures per passport set.
+  await expect(card.getByText(/Sgl Supp/i).first()).toBeVisible()
+  await expect(card.getByText(/Tpl Red/i).first()).toBeVisible()
   await expect(card.getByText('Suite').first()).toBeVisible()
   await expect(card.locator('input[type="number"]')).toHaveCount(8)
 

@@ -42,6 +42,13 @@ export interface PaxRangeCoreInput {
   transportAt: (pax: number) => number
   /** Whole-trip add-on for the +1 tour leader (single room + their own per-person costs). */
   tourLeaderCost: number
+  /**
+   * Whole-trip accommodation for a party of `pax` under the rooming rule
+   * (lib/pricing/rooming.ts): singles pay the supplement, a triple takes the
+   * reduction. When given, `perPerson` must EXCLUDE accommodation. When
+   * omitted the arithmetic is the historical pax × per-person one.
+   */
+  accommodationAt?: (pax: number) => number
   paxFrom?: number
   paxTo?: number
 }
@@ -57,6 +64,7 @@ function round2(n: number): number {
  */
 export function priceAcrossPax(input: PaxRangeCoreInput): PaxPricingRow[] {
   const { groupFixed, perPerson, marginPercent, transportAt, tourLeaderCost } = input
+  const accommodationAt = input.accommodationAt ?? (() => 0)
   const from = Math.max(1, input.paxFrom ?? 1)
   const to = Math.max(from, input.paxTo ?? 40)
   const rate = marginPercent / 100
@@ -69,13 +77,13 @@ export function priceAcrossPax(input: PaxRangeCoreInput): PaxPricingRow[] {
     // reassociates the floats and shifts the last cent on some inputs.
 
     // ----- Without tour leader -----
-    const totalNoLeader = groupFixed + transportAt(pax) + perPerson * pax
+    const totalNoLeader = groupFixed + transportAt(pax) + perPerson * pax + accommodationAt(pax)
     const marginNoLeader = totalNoLeader * rate
     const sellingNoLeader = totalNoLeader + marginNoLeader
     const ppNoLeader = pax > 0 ? sellingNoLeader / pax : 0
 
     // ----- With tour leader (+1 transport seat, single room, own per-person) -----
-    const totalLeader = groupFixed + transportAt(pax + 1) + perPerson * pax + tourLeaderCost
+    const totalLeader = groupFixed + transportAt(pax + 1) + perPerson * pax + accommodationAt(pax) + tourLeaderCost
     const marginLeader = totalLeader * rate
     const sellingLeader = totalLeader + marginLeader
     const ppLeader = pax > 0 ? sellingLeader / pax : 0

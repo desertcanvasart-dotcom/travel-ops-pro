@@ -3707,7 +3707,10 @@
         "double": "Double",
         "triple": "Triple",
         "status": "Status",
-        "actions": "Actions"
+        "actions": "Actions",
+        "ppDouble": "PP Double",
+        "singleSupp": "Single supp.",
+        "tripleRed": "Triple red."
       },
       "status": {
         "active": "Active",

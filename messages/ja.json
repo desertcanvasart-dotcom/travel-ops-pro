@@ -4806,7 +4806,10 @@
         "double": "ダブル",
         "triple": "トリプル",
         "status": "ステータス",
-        "actions": "操作"
+        "actions": "操作",
+        "ppDouble": "1人あたり(2名1室)",
+        "singleSupp": "シングル追加",
+        "tripleRed": "トリプル割引"
       },
       "status": {
         "active": "有効",

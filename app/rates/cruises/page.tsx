@@ -883,9 +883,9 @@ export default function CruisesPage() {
                   <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.nights')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.cabin')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.tier')}</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">{t('table.single')}</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">{t('table.double')}</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">{t('table.triple')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">{t('table.ppDouble')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">{t('table.singleSupp')}</th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">{t('table.tripleRed')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.status')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.actions')}</th>
                 </tr>
@@ -933,13 +933,14 @@ export default function CruisesPage() {
                       <TierBadge tier={cruise.tier} t={t} />
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                      {formatRateInRowCurrency(cruise.rate_single_eur, cruise, formatRate)}
+                      {/* Stored as cabin rates; shown the hotel way. */}
+                      {formatRateInRowCurrency(Math.max(0, (cruise.rate_single_eur || 0) - (cruise.rate_double_eur || 0)), cruise, formatRate)}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-blue-600">
                       {formatRateInRowCurrency(cruise.rate_double_eur, cruise, formatRate)}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-purple-600">
-                      {cruise.rate_triple_eur ? formatRateInRowCurrency(cruise.rate_triple_eur, cruise, formatRate) : '-'}
+                      {cruise.rate_triple_eur ? formatRateInRowCurrency(Math.max(0, (cruise.rate_double_eur || 0) - cruise.rate_triple_eur), cruise, formatRate) : '-'}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
