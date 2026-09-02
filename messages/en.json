@@ -178,7 +178,9 @@
     "uponReceiptSignedContract": "Upon receipt of signed contract and deposit payment.",
     "contractExpiration": "Contract Expiration",
     "completionOfTourServices": "Completion of tour services",
-    "contractGovernedByEgyptianLaw": "This contract is governed by the laws of Egypt and is binding upon both parties."
+    "contractGovernedByEgyptianLaw": "This contract is governed by the laws of Egypt and is binding upon both parties.",
+    "paymentTermsFromRule": "A {percent}% deposit is due within {dueDays} days of booking to secure the reservation. The remaining balance is due {beforeDays} days before departure.",
+    "companyNameMissing": "Your company name is not set. Add it under Settings → Company so it prints on contracts and invoices."
   },
   "navigation": {
     "main": "Main",
