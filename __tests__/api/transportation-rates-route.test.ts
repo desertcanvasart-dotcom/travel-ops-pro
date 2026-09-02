@@ -93,19 +93,20 @@ describe('POST /api/rates/transportation — service_code is part of the natural
     expect(rows.find((r) => r.id === 't-highdam').sedan_rate_eur).toBe(55)
   })
 
-  it('updates the matching named route on a case-insensitive service_code match', async () => {
+  it('refuses an exact duplicate (case-insensitive service_code) with the existing row — never updates', async () => {
     const { status, json } = await post({
       service_type: 'city_tour', city: 'Aswan', duration: 'full_day',
       service_code: 'aswan-high-dam-hotel', sedan_rate_eur: 70,
     })
 
-    expect(status).toBe(200)
-    expect(json.updated).toBe(true)
-    expect(json.data.id).toBe('t-highdam')
+    expect(status).toBe(409)
+    expect(json.success).toBe(false)
+    expect(json.existing.id).toBe('t-highdam')
 
     const rows = await rowsViaQuery()
     expect(rows).toHaveLength(2)
-    expect(rows.find((r) => r.id === 't-highdam').sedan_rate_eur).toBe(70)
+    // The original keeps its rate: a create never rewrites a row.
+    expect(rows.find((r) => r.id === 't-highdam').sedan_rate_eur).toBe(55)
     // The sibling named route is untouched.
     expect(rows.find((r) => r.id === 't-docks').sedan_rate_eur).toBe(40)
   })
@@ -126,7 +127,7 @@ describe('POST /api/rates/transportation — service_code is part of the natural
     expect(rows.find((r) => r.id === 't-cai-alex-2').sedan_rate_eur).toBe(150)
   })
 
-  it('updates the exact intercity variant whose service_code matches', async () => {
+  it('refuses to overwrite the intercity variant whose service_code matches', async () => {
     setMockTables({ transportation_rates: structuredClone(INTERCITY_VARIANTS), suppliers: [] })
 
     const { status, json } = await post({
@@ -134,15 +135,15 @@ describe('POST /api/rates/transportation — service_code is part of the natural
       service_code: 'CAI-ALEX-VIA-WADI', sedan_rate_eur: 160,
     })
 
-    expect(status).toBe(200)
-    expect(json.updated).toBe(true)
-    expect(json.data.id).toBe('t-cai-alex-2')
+    expect(status).toBe(409)
+    expect(json.existing.id).toBe('t-cai-alex-2')
     const rows = await rowsViaQuery()
     expect(rows).toHaveLength(2)
+    expect(rows.find((r) => r.id === 't-cai-alex-2').sedan_rate_eur).toBe(150)
     expect(rows.find((r) => r.id === 't-cai-alex-1').sedan_rate_eur).toBe(120)
   })
 
-  it('still dedups when no service_code is sent and the generated code matches an existing row', async () => {
+  it('still detects the duplicate when no service_code is sent and the generated code matches — and refuses it', async () => {
     // generateServiceCode('Aswan', city_tour, full_day) -> ASWAN-FULL-CTOUR
     setMockTables({
       transportation_rates: [
@@ -159,9 +160,10 @@ describe('POST /api/rates/transportation — service_code is part of the natural
       service_type: 'city_tour', city: 'Aswan', duration: 'full_day', sedan_rate_eur: 50,
     })
 
-    expect(status).toBe(200)
-    expect(json.updated).toBe(true)
-    expect(json.data.id).toBe('t-generated')
-    expect((await rowsViaQuery())).toHaveLength(1)
+    expect(status).toBe(409)
+    expect(json.existing.id).toBe('t-generated')
+    const rows = await rowsViaQuery()
+    expect(rows).toHaveLength(1)
+    expect(rows[0].sedan_rate_eur).toBe(45)
   })
 })

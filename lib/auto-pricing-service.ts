@@ -1180,7 +1180,13 @@ export async function getCruiseRates(
       query = query.ilike('embark_city', `%${embarkCity}%`)
     }
 
-    const { data: rawCruises, error } = await query.limit(1)
+    // The operator's preferred ship first — the star on the cruise rates page
+    // is how they say which boat a programme sails on. It used to be
+    // whichever row PostgREST returned first.
+    const { data: rawCruises, error } = await query
+      .order('is_preferred', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
     const cruises = normalizer && rawCruises ? await normalizer.normalize('nile_cruises', rawCruises) as typeof rawCruises : rawCruises
 
     if (error || !cruises || cruises.length === 0) {
@@ -1255,6 +1261,8 @@ export async function getHotelRates(
       .eq('tier', tier)
       .eq('is_active', true)
       .ilike('city', `%${city}%`)
+      // Preferred hotel first (the star on the hotels page), newest as the tie-break.
+      .order('is_preferred', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(1)
     const hotels = normalizer && rawHotels ? await normalizer.normalize('accommodation_rates', rawHotels) as typeof rawHotels : rawHotels

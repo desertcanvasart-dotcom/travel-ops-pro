@@ -7162,7 +7162,10 @@
     "extrasPerPerson": "1名あたり",
     "extrasPerBooking": "1予約あたり",
     "day": "日目",
-    "operatorPrice": "設定価格"
+    "operatorPrice": "設定価格",
+    "couldNotPrice": "料金を算出できなかった項目",
+    "pricingNotes": "料金計算メモ",
+    "couldNotPriceHint": "これらは合計に含まれていません。レート（または別名）を登録してから再計算してください。"
   },
   "bookings": {
     "title": "予約管理",

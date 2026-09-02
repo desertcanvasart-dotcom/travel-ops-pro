@@ -6577,7 +6577,10 @@
     "extrasPerPerson": "per person",
     "extrasPerBooking": "per booking",
     "day": "Day",
-    "operatorPrice": "set price"
+    "operatorPrice": "set price",
+    "couldNotPrice": "Could not be priced",
+    "pricingNotes": "Pricing notes",
+    "couldNotPriceHint": "These lines are missing from the total. Add the rate (or the alias) and calculate again."
   },
   "bookings": {
     "title": "Bookings",

@@ -22,6 +22,10 @@ import { currencySymbol } from '@/lib/currency-totals'
 // ============================================
 
 interface PricingResult {
+  /** From the hardened engine: false when any line below could not be priced. */
+  complete?: boolean
+  holes?: { kind: string; message: string }[]
+  warnings?: string[]
   variation_id: string
   variation_name: string
   template_name: string
@@ -1183,6 +1187,33 @@ export default function TourPriceCalculator() {
                     <strong>{t('group')}:</strong> {t('totalPax', { total: result.num_pax, paying: result.num_paying_pax })}
                     {result.tour_leader_cost && (
                       <span className="ml-2">&bull; <strong>{t('tlCost')}:</strong> {sym}{result.tour_leader_cost.toFixed(2)}</span>
+                    )}
+                  </div>
+                )}
+
+                {/* What the engine could NOT price. Until now this travelled only
+                    with a failed calculation, so an 8-day deluxe cruise priced
+                    at $343 — no cabin, no guide, no entrance fees — looked
+                    complete. A total that hides its holes is a wrong total. */}
+                {((result.holes && result.holes.length > 0) || (result.warnings && result.warnings.length > 0)) && (
+                  <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4">
+                    <p className="text-sm font-semibold text-amber-900">
+                      {t('couldNotPrice')}
+                      {result.holes && result.holes.length > 0 && <span className="ml-2 text-xs font-normal text-amber-800">({result.holes.length})</span>}
+                    </p>
+                    <p className="text-xs text-amber-800 mt-1">{t('couldNotPriceHint')}</p>
+                    {result.holes && result.holes.length > 0 && (
+                      <ul className="mt-2 space-y-0.5 text-sm text-amber-900 list-disc pl-5">
+                        {result.holes.map((h, i) => <li key={`h-${i}`}><span className="font-mono text-xs mr-1">{h.kind}</span>{h.message}</li>)}
+                      </ul>
+                    )}
+                    {result.warnings && result.warnings.length > 0 && (
+                      <details className="mt-2">
+                        <summary className="text-xs text-amber-800 cursor-pointer">{t('pricingNotes')} ({result.warnings.length})</summary>
+                        <ul className="mt-1 space-y-0.5 text-xs text-amber-900 list-disc pl-5">
+                          {result.warnings.map((w, i) => <li key={`w-${i}`}>{w}</li>)}
+                        </ul>
+                      </details>
                     )}
                   </div>
                 )}

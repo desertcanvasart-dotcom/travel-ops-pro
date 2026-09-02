@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
     // Check for existing rate with same natural key
     let existingQuery = supabaseAdmin
       .from('nile_cruises')
-      .select('id')
+      .select('*')
       .ilike('ship_name', newCruise.ship_name)
     if (newCruise.cabin_type) {
       existingQuery = existingQuery.eq('cabin_type', newCruise.cabin_type)
@@ -100,18 +100,19 @@ export async function POST(request: NextRequest) {
     }
     const { data: existing } = await existingQuery.limit(1)
 
-    let data, error
+    // A create never updates. The natural-key match used to be UPDATED in
+    // place — so "Duplicate this rate, change the season, save" rewrote the
+    // original and nothing new appeared (the train-rates overwrite, same class,
+    // #325). An exact duplicate is answered with the existing row instead.
     if (existing?.length) {
-      // Update existing record
-      const result = await supabaseAdmin
-        .from('nile_cruises')
-        .update({ ...newCruise, updated_at: new Date().toISOString() })
-        .eq('id', existing[0].id)
-        .select(`*, supplier:supplier_id (id, name)`)
-        .single()
-      data = result.data
-      error = result.error
-    } else {
+      return NextResponse.json({
+        success: false,
+        error: 'A rate with these details already exists. Edit that rate, or change what makes this one different (supplier, period, class, city) before saving.',
+        existing: existing[0],
+      }, { status: 409 })
+    }
+    let data, error
+    {
       // Insert new record
       const result = await supabaseAdmin
         .from('nile_cruises')
@@ -124,7 +125,7 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error
 
-    return NextResponse.json({ success: true, data, updated: !!existing?.length })
+    return NextResponse.json({ success: true, data, updated: false })
   } catch (error: any) {
     console.error('Error creating cruise:', error)
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })

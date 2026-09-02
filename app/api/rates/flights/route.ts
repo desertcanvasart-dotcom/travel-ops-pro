@@ -166,25 +166,26 @@ export async function POST(request: NextRequest) {
     // Check for existing rate with same natural key
     const existingQuery = supabaseAdmin
       .from('flight_rates')
-      .select('id')
+      .select('*')
       .ilike('route_from', newRate.route_from)
       .ilike('route_to', newRate.route_to)
       .ilike('airline', newRate.airline)
       .eq('cabin_class', newRate.cabin_class)
     const { data: existing } = await existingQuery.limit(1)
 
-    let data, error
+    // A create never updates. The natural-key match used to be UPDATED in
+    // place — so "Duplicate this rate, change the season, save" rewrote the
+    // original and nothing new appeared (the train-rates overwrite, same class,
+    // #325). An exact duplicate is answered with the existing row instead.
     if (existing?.length) {
-      // Update existing record
-      const result = await supabaseAdmin
-        .from('flight_rates')
-        .update({ ...newRate, updated_at: new Date().toISOString() })
-        .eq('id', existing[0].id)
-        .select('*')
-        .single()
-      data = result.data
-      error = result.error
-    } else {
+      return NextResponse.json({
+        success: false,
+        error: 'A rate with these details already exists. Edit that rate, or change what makes this one different (supplier, period, class, city) before saving.',
+        existing: existing[0],
+      }, { status: 409 })
+    }
+    let data, error
+    {
       // Insert new record
       const result = await supabaseAdmin
         .from('flight_rates')
@@ -200,7 +201,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data, updated: !!existing?.length }, { status: existing?.length ? 200 : 201 })
+    return NextResponse.json({ success: true, data, updated: false }, { status: existing?.length ? 200 : 201 })
   } catch (error: any) {
     console.error('POST flight_rates catch error:', error)
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
