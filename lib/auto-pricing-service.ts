@@ -125,6 +125,9 @@ export interface ItineraryDay {
   // NEW: Nile Cruise package flag - when true, uses bundled transport package
   // instead of calculating individual transport costs for this day
   is_cruise_day?: boolean
+  /** The whole day is spent travelling to or from the destination (an
+   *  overnight flight): no bed, no transfer, no assistance, no guide. */
+  in_transit?: boolean
 
   // B3 (2026-06-23): per-day transport rule flags.
 
@@ -781,13 +784,26 @@ export function parseItinerary(itineraryData: any, opts?: {
       services.guide_required = false
     }
 
+    // Where the party sleeps. The programme's overnight_kind is the office's
+    // own word for it and wins over the imported accommodation_type: a night
+    // "in flight" books no bed, and the last day never has one (the trip
+    // ends that day). Before this, NMS803-CR-ABS slept in a Cairo hotel on
+    // the overnight flight from Japan AND on departure day — two nights the
+    // customer would never be sold.
+    const overnightKind = String(day.overnight_kind ?? '').toLowerCase()
+    const noBed = NO_BED_KINDS.has(overnightKind) || isLastDay
+    // A day spent entirely in the air, with no city and nothing to see, is
+    // outside the destination: no arrival transfer, no hotel assistance.
+    const inTransit = NO_BED_KINDS.has(overnightKind) && !day.city && attractions.length === 0
+
     return {
       day: day.day || index + 1,
       title: day.title || `Day ${index + 1}`,
       description: day.description || '',
       city: day.city || inferCityFromTitle(day.title || '', opts?.defaultCity),
       overnight_city: day.overnight_city || undefined,
-      accommodation_type: day.accommodation_type || inferAccommodationType(day, itineraryData),
+      accommodation_type: noBed ? 'none' : (day.accommodation_type || inferAccommodationType(day, itineraryData)),
+      in_transit: inTransit || undefined,
       meals,
       attractions,
       attraction_ids: Array.isArray(day.attraction_ids) ? day.attraction_ids.filter(Boolean).map(String) : undefined,
@@ -1052,6 +1068,10 @@ function inferCityFromTitle(title: string, defaultCity: string = 'Cairo'): strin
 /**
  * Infer accommodation type from day data and context
  */
+/** overnight_kind values that mean "no bed tonight" (mirrors
+ *  lib/itineraries/template-days.ts NO_BED). */
+const NO_BED_KINDS = new Set(['none', 'flight', 'in_flight', 'airport'])
+
 function inferAccommodationType(day: any, allDays: any[]): AccommodationType {
   if (day.accommodation_type) {
     return day.accommodation_type
@@ -2340,7 +2360,8 @@ export async function calculateDayBasedPricing(
     const isTransferOnlyDay = !hasSightseeing && hasAirportToday
     const dayTipRoles = determineTipRolesForDay({
       hasGuide: hasSightseeing,
-      hasDriver: !day.is_cruise_day,
+        // No driver on a day in the air.
+      hasDriver: !day.is_cruise_day && !day.in_transit,
       hasAirportService: hasAirportToday,
       airportServiceCount: airportCount,
       hasHotelNight,
@@ -2517,6 +2538,18 @@ export async function calculateDayBasedPricing(
   // takes the reduction. The per-person lines stay per-person-in-double.
   const accommodationNights: NightRates[] = []
 
+  // A hotel or ship with dated periods that none of covers this night is
+  // priced from its base columns — which may be last year's, or zero. Say
+  // so once per property: the Al Farida's only period ended 31 Oct and a
+  // 3 Nov sailing priced silently from the base row (2026-09-03).
+  const noPeriodWarned = new Set<string>()
+  const warnIfNoPeriod = (row: { seasons?: unknown } | null | undefined, seasonName: string | null, name: string, date: string | null | undefined) => {
+    const periods = Array.isArray(row?.seasons) ? row!.seasons as unknown[] : []
+    if (periods.length === 0 || seasonName || noPeriodWarned.has(name)) return
+    noPeriodWarned.add(name)
+    warnings.push(`No rate period on ${name} covers ${date ?? 'the travel date'} — priced from its base rate. Add the period in Rates.`)
+  }
+
   // Hotel PPD — use overnight_city for day trips (e.g., Alexandria day trip sleeps in Cairo)
   for (const day of hotelDays) {
     const hotelCity = day.overnight_city || day.city
@@ -2526,6 +2559,7 @@ export async function calculateDayBasedPricing(
       const nightly = resolveHotelRatesForDate(
         hotelRate.row, isEurPassport, dateForDay(day.day)
       )
+      warnIfNoPeriod(hotelRate.row, nightly.seasonName, hotelRate.hotelName, dateForDay(day.day))
       accommodationNights.push({ ppd: nightly.ppdNight, singleSupp: nightly.singleSuppNight, tripleRed: nightly.tripleRedNight })
       accommodationPPD += nightly.ppdNight
       services.push({
@@ -2559,9 +2593,11 @@ export async function calculateDayBasedPricing(
   // Cruise PPD — each night at its own period's rate, so a sailing that crosses
   // into peak is not billed at the rate of the night it embarked.
   if (cruiseRates && cruiseNights > 0) {
-    const nightly = cruiseDays.map(day =>
-      resolveCruiseRatesForDate(cruiseRates.row, isEurPassport, dateForDay(day.day))
-    )
+    const nightly = cruiseDays.map(day => {
+      const n = resolveCruiseRatesForDate(cruiseRates.row, isEurPassport, dateForDay(day.day))
+      warnIfNoPeriod(cruiseRates.row, n.seasonName, cruiseRates.shipName, dateForDay(day.day))
+      return n
+    })
     for (const n of nightly) accommodationNights.push({ ppd: n.ppdNight, singleSupp: n.singleSuppNight, tripleRed: n.tripleRedNight })
     const cruiseTotal = nightly.reduce((sum, n) => sum + n.ppdNight, 0)
     const periodsUsed = [...new Set(nightly.map(n => n.seasonName).filter(Boolean))]
@@ -3250,7 +3286,10 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
     isEurPassport,
     language,
     marginPercent,
-    rateCurrency: params.rateCurrency
+    rateCurrency: params.rateCurrency,
+    // The travel date decides which rate period each night prices at; the
+    // wrappers dropped it, so every dated period was ignored (2026-09-03).
+    travelDate: params.travelDate
   })
 
   if (!dayResult.success) {
@@ -3667,7 +3706,10 @@ export async function calculatePricingWithPassengerBreakdown(
     isEurPassport,
     language,
     marginPercent,
-    rateCurrency: params.rateCurrency
+    rateCurrency: params.rateCurrency,
+    // The travel date decides which rate period each night prices at; the
+    // wrappers dropped it, so every dated period was ignored (2026-09-03).
+    travelDate: params.travelDate
   })
 
   if (!dayResult.success) {
