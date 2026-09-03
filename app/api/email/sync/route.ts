@@ -260,6 +260,8 @@ export async function POST(request: NextRequest) {
               counterpartyEmail: extractEmailAddress(fromValue),
               headers: hdrs,
               labelIds: m.labelIds || [],
+              subject: hdrs['Subject'] ?? hdrs['subject'] ?? '',
+              snippet: m.snippet ?? '',
             })
           })
           // Known contact and operator-participation each override the

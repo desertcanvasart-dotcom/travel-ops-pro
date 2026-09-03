@@ -53,10 +53,12 @@ describe('tour_quotes — insert paths', () => {
     return /\.from\(\s*['"]tour_quotes['"]\s*\)[\s\S]{0,200}?\.insert\(/.test(src)
   })
 
-  it('are the two we know about — a new one must stamp org_id and be listed here', () => {
+  it('are the three we know about — a new one must stamp org_id and be listed here', () => {
     expect(inserts).toEqual([
       'app/api/b2b/quote-from-itinerary/route.ts',
       'app/api/b2b/quotes/route.ts',
+      // The website order form → one draft quote (2026-09-03).
+      'app/api/intake/order-form/route.ts',
     ])
   })
 

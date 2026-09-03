@@ -8,7 +8,7 @@
 // it: machine mail addressed to the operator personally never enters the
 // shared store; people and known business contacts always do.
 import { describe, it, expect } from 'vitest'
-import { looksAutomated, shouldStoreThread } from '@/lib/email-scoping'
+import { looksAutomated, looksLikeOrderForm, shouldStoreThread } from '@/lib/email-scoping'
 
 describe('looksAutomated', () => {
   it('catches a verification code the standard way — Auto-Submitted (RFC 3834)', () => {
@@ -101,5 +101,21 @@ describe('shouldStoreThread', () => {
         false
       )
     ).toBe(false)
+  })
+})
+
+describe('the website order form is correspondence', () => {
+  // tour-up.jp sends the お問合せフォーム from a system address. That is the
+  // office's next customer, not a notification: the subject names the form.
+  it('a no-reply sender with the form subject is stored', () => {
+    const input = { counterpartyEmail: 'noreply@tour-up.jp', headers: { 'Auto-Submitted': 'auto-generated' }, labelIds: ['CATEGORY_UPDATES'], subject: '【お問合せフォーム】申込み NEK803-ABCR' }
+    expect(looksLikeOrderForm(input)).toBe(true)
+    expect(looksAutomated(input)).toBe(false)
+    expect(shouldStoreThread(input, false)).toBe(true)
+  })
+  it('the same sender without the form markers is still machinery', () => {
+    const input = { counterpartyEmail: 'noreply@tour-up.jp', headers: {}, labelIds: [], subject: 'Your weekly digest' }
+    expect(looksLikeOrderForm(input)).toBe(false)
+    expect(looksAutomated(input)).toBe(true)
   })
 })
