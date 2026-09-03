@@ -19,6 +19,7 @@ import {
   Globe, DollarSign, FileText, Check, TrainFront, Plane, ConciergeBell, BellRing
 } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import SupplierImportExport from '@/components/suppliers/SupplierImportExport'
 
 // Types
 interface Supplier {
@@ -561,6 +562,7 @@ export default function SuppliersContent() {
                 ))}
               </div>
               <div className="w-px h-6 bg-gray-200" />
+              <SupplierImportExport onImported={fetchSuppliers} />
               <button type="button" onClick={handleExport} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
                 <Download className="w-4 h-4" /> {t('export')}
               </button>

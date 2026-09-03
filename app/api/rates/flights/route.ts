@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { AIRLINE_CODES, knownAirlineCode } from '@/lib/airline-codes'
 
 // ============================================
 // FLIGHT RATES API - Full CRUD
@@ -15,24 +16,7 @@ const supabaseAdmin = createActorAdminClient()
 const FLIGHT_TYPES = ['domestic', 'international'] as const
 const CABIN_CLASSES = ['economy', 'business', 'first'] as const
 
-const AIRLINES = [
-  { code: 'MS', name: 'EgyptAir' },
-  { code: 'NP', name: 'Nile Air' },
-  { code: 'SM', name: 'Air Cairo' },
-  { code: 'FZ', name: 'FlyDubai' },
-  { code: 'EK', name: 'Emirates' },
-  { code: 'QR', name: 'Qatar Airways' },
-  { code: 'TK', name: 'Turkish Airlines' },
-  { code: 'LH', name: 'Lufthansa' },
-  { code: 'BA', name: 'British Airways' },
-  { code: 'AF', name: 'Air France' },
-  { code: 'KL', name: 'KLM' },
-  { code: 'EY', name: 'Etihad' },
-  { code: 'SV', name: 'Saudia' },
-  { code: 'RJ', name: 'Royal Jordanian' },
-  { code: 'ME', name: 'Middle East Airlines' },
-  { code: 'G9', name: 'Air Arabia' }
-] as const
+// Carrier codes live in lib/airline-codes.ts (a code map, not a supplier list).
 
 const FREQUENCIES = [
   'daily',
@@ -90,7 +74,7 @@ export async function GET(request: NextRequest) {
       options: {
         flightTypes: FLIGHT_TYPES,
         cabinClasses: CABIN_CLASSES,
-        airlines: AIRLINES,
+        airlines: AIRLINE_CODES,
         frequencies: FREQUENCIES
       }
     })
@@ -313,10 +297,7 @@ export async function DELETE(request: NextRequest) {
 // ============================================
 
 function getAirlineCode(airlineName: string): string {
-  const airline = AIRLINES.find(a => 
-    a.name.toLowerCase() === airlineName.toLowerCase()
-  )
-  return airline?.code || airlineName.substring(0, 2).toUpperCase()
+  return knownAirlineCode(airlineName)
 }
 
 function generateServiceCode(data: any): string {

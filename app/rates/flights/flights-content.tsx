@@ -10,6 +10,8 @@ import { useTranslations } from 'next-intl'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
+import SupplierPicker from '@/components/rates/SupplierPicker'
+import { knownAirlineCode } from '@/lib/airline-codes'
 import { Copy, Search,
   Plus,
   Edit2,
@@ -35,6 +37,7 @@ interface FlightRate {
   route_from: string
   route_to: string
   airline: string
+  airline_code?: string | null
   flight_number: string | null
   flight_type: 'domestic' | 'international'
   cabin_class: 'economy' | 'business' | 'first'
@@ -87,6 +90,9 @@ interface FormData {
   rate_valid_to: string
   supplier_id: string
   supplier_name: string
+  /** Two-letter IATA code, on the rate row. Prefilled from the airline's
+   *  name when it is one we know; typed for any other carrier. */
+  airline_code: string
   notes: string
   is_active: boolean
 }
@@ -95,7 +101,7 @@ const initialFormData: FormData = {
   service_code: '',
   route_from: 'Cairo',
   route_to: 'Aswan',
-  airline: 'EgyptAir',
+  airline: '',
   flight_number: '',
   flight_type: 'domestic',
   cabin_class: 'economy',
@@ -112,30 +118,11 @@ const initialFormData: FormData = {
   rate_valid_to: '2099-12-31',
   supplier_id: '',
   supplier_name: '',
+  airline_code: '',
   notes: '',
   is_active: true
 }
 
-// Common airlines in Egypt
-const AIRLINES = [
-  { code: 'MS', name: 'EgyptAir' },
-  { code: 'NP', name: 'Nile Air' },
-  { code: 'SM', name: 'Air Cairo' },
-  { code: 'FZ', name: 'FlyDubai' },
-  { code: 'EK', name: 'Emirates' },
-  { code: 'QR', name: 'Qatar Airways' },
-  { code: 'TK', name: 'Turkish Airlines' },
-  { code: 'LH', name: 'Lufthansa' },
-  { code: 'BA', name: 'British Airways' },
-  { code: 'AF', name: 'Air France' },
-  { code: 'KL', name: 'KLM' },
-  { code: 'EY', name: 'Etihad' },
-  { code: 'SV', name: 'Saudia' },
-  { code: 'RJ', name: 'Royal Jordanian' },
-  { code: 'ME', name: 'Middle East Airlines' },
-  { code: 'G9', name: 'Air Arabia' },
-  { code: 'Other', name: 'Other' }
-]
 
 const FLIGHT_TYPES = [
   { value: 'domestic', label: 'Domestic' },
@@ -211,11 +198,11 @@ export default function FlightsContent() {
       const response = await fetch('/api/suppliers?status=active')
       if (response.ok) {
         const result = await response.json()
-        // Filter to airline-related suppliers. transport_company was a
-        // legacy fallback bundle for road transport; flights belong to
-        // airlines/agents only post-vocab-migration.
-        const airlineSuppliers = (result.data || []).filter((s: Supplier) =>
-          ['airline', 'travel_agent'].includes(s.type)
+        // The carriers on file: suppliers with the air-carrier role (the
+        // vocabulary value is 'air_carrier'; the old filter asked for
+        // 'airline', which no supplier has ever had, so this list was empty).
+        const airlineSuppliers = (result.data || []).filter((s: any) =>
+          ((s.types?.length ? s.types : [s.type]) as string[]).includes('air_carrier')
         )
         setSuppliers(airlineSuppliers)
       }
@@ -261,10 +248,11 @@ export default function FlightsContent() {
     if (!from || !to) return ''
     const fromCode = from.substring(0, 3).toUpperCase()
     const toCode = to.substring(0, 3).toUpperCase()
-    const airlineCode = AIRLINES.find(a => a.name === airline)?.code || airline.substring(0, 2).toUpperCase()
+    const airlineCode = (airline || '').trim().toUpperCase() || 'XX'
     const classCode = cabinClass.charAt(0).toUpperCase()
     return `FLT-${airlineCode}-${fromCode}-${toCode}-${classCode}`
   }
+
 
   const handleRouteChange = (field: 'route_from' | 'route_to', value: string) => {
     setFormData(prev => {
@@ -272,7 +260,7 @@ export default function FlightsContent() {
       updated.service_code = generateServiceCode(
         field === 'route_from' ? value : prev.route_from,
         field === 'route_to' ? value : prev.route_to,
-        prev.airline,
+        prev.airline_code,
         prev.cabin_class
       )
       // Auto-detect flight type
@@ -284,11 +272,29 @@ export default function FlightsContent() {
     })
   }
 
-  const handleAirlineChange = (airline: string) => {
+  /** The airline IS the supplier: one pick sets the carrier's name, its
+   *  supplier link and (when we know it) its IATA code. */
+  const handleAirlinePick = (supplierId: string, supplier: { id: string; name: string } | null) => {
+    setFormData(prev => {
+      const name = supplier?.name ?? ''
+      const code = name ? knownAirlineCode(name) : ''
+      return {
+        ...prev,
+        supplier_id: supplierId,
+        supplier_name: name,
+        airline: name,
+        airline_code: code,
+        service_code: generateServiceCode(prev.route_from, prev.route_to, code, prev.cabin_class),
+      }
+    })
+  }
+
+  const handleAirlineCodeChange = (raw: string) => {
+    const code = raw.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 3)
     setFormData(prev => ({
       ...prev,
-      airline,
-      service_code: generateServiceCode(prev.route_from, prev.route_to, airline, prev.cabin_class)
+      airline_code: code,
+      service_code: generateServiceCode(prev.route_from, prev.route_to, code, prev.cabin_class),
     }))
   }
 
@@ -296,16 +302,7 @@ export default function FlightsContent() {
     setFormData(prev => ({
       ...prev,
       cabin_class: cabinClass,
-      service_code: generateServiceCode(prev.route_from, prev.route_to, prev.airline, cabinClass)
-    }))
-  }
-
-  const handleSupplierChange = (supplierId: string) => {
-    const supplier = suppliers.find(s => s.id === supplierId)
-    setFormData(prev => ({
-      ...prev,
-      supplier_id: supplierId,
-      supplier_name: supplier?.name || ''
+      service_code: generateServiceCode(prev.route_from, prev.route_to, prev.airline_code, cabinClass)
     }))
   }
 
@@ -358,8 +355,11 @@ export default function FlightsContent() {
       rate_currency: rate.rate_currency || '',
       rate_valid_from: rate.rate_valid_from,
       rate_valid_to: rate.rate_valid_to,
-      supplier_id: rate.supplier_id || '',
-      supplier_name: rate.supplier_name || rate.supplier?.name || '',
+      // A rate saved before the airline was a supplier has a name and no
+      // link: point it at the carrier of that name, if one is on file now.
+      supplier_id: rate.supplier_id || suppliers.find(s => s.name.toLowerCase() === (rate.airline || '').toLowerCase())?.id || '',
+      supplier_name: rate.supplier_name || rate.supplier?.name || rate.airline || '',
+      airline_code: rate.airline_code || knownAirlineCode(rate.airline || ''),
       notes: rate.notes || '',
       is_active: rate.is_active
     })
@@ -653,8 +653,8 @@ export default function FlightsContent() {
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
             <option value="">{t('allAirlines')}</option>
-            {AIRLINES.map(airline => (
-              <option key={airline.code} value={airline.name}>{airline.name}</option>
+            {[...new Set(rates.map(r => r.airline).filter(Boolean))].sort().map(name => (
+              <option key={name} value={name}>{name}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -961,39 +961,35 @@ export default function FlightsContent() {
                   {t('supplierSection')}
                 </h3>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('airline')} <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.airline}
-                      onChange={(e) => handleAirlineChange(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    >
-                      {AIRLINES.map(airline => (
-                        <option key={airline.code} value={airline.name}>{airline.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('linkToSupplier')}
-                    </label>
-                    <select
+                {/* The airline is a supplier with the air-carrier role — the
+                    same model as hotels, cruises and trains. The two-letter
+                    code lives on the rate and builds the service code. */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-2">
+                    <SupplierPicker
                       value={formData.supplier_id}
-                      onChange={(e) => handleSupplierChange(e.target.value)}
+                      onChange={handleAirlinePick}
+                      preferredType="air_carrier"
+                      preferredLabel={t('airlines')}
+                      label={`${t('airline')} *`}
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    >
-                      <option value="">{t('selectSupplier')}</option>
-                      {suppliers.map(supplier => (
-                        <option key={supplier.id} value={supplier.id}>
-                          {supplier.name}
-                        </option>
-                      ))}
-                    </select>
+                    />
+                    {!formData.supplier_id && (
+                      <p className="text-xs text-gray-500 mt-1">{t('airlineHint')}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                      {t('airlineCode')}
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.airline_code}
+                      onChange={(e) => handleAirlineCodeChange(e.target.value)}
+                      maxLength={3}
+                      placeholder="MS"
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md font-mono uppercase focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                    />
                   </div>
                 </div>
               </div>
