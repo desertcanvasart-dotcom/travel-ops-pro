@@ -1542,6 +1542,19 @@ export default function ViewItineraryPage() {
                 </>
               )}
             </button>
+            <Link
+              href={`/documents/contract/${itinerary.id}`}
+              className="h-10 px-4 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium flex items-center gap-2"
+            >
+              <FileText className="w-4 h-4" />
+              {t('contract')}
+            </Link>
+            <AddExpenseFromItinerary
+              itineraryId={itinerary.id}
+              itineraryCode={itinerary.itinerary_code}
+              clientName={itinerary.client_name}
+              onExpenseAdded={() => setExpenseRefreshTrigger(prev => prev + 1)}
+            />
             <GenerateDocumentsButton
               itineraryId={itinerary.id}
               itineraryCode={itinerary.itinerary_code}
@@ -1561,13 +1574,6 @@ export default function ViewItineraryPage() {
                 setItinerary(prev => (prev ? { ...prev, template_id: tid } : prev))
               }
             />
-            <Link
-              href={`/documents/contract/${itinerary.id}`}
-              className="h-10 px-4 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium flex items-center gap-2"
-            >
-              <FileText className="w-4 h-4" />
-              {t('contract')}
-            </Link>
             <button
               onClick={() => handlePreviewPDF()}
               disabled={generatingPDF}
@@ -1588,41 +1594,6 @@ export default function ViewItineraryPage() {
                 </>
               )}
             </button>
-            <AddExpenseFromItinerary
-              itineraryId={itinerary.id}
-              itineraryCode={itinerary.itinerary_code}
-              clientName={itinerary.client_name}
-              onExpenseAdded={() => setExpenseRefreshTrigger(prev => prev + 1)}
-            />
-            {existingBooking ? (
-              <Link
-                href={`/bookings/${existingBooking.id}`}
-                className="h-10 px-4 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-2"
-                title={t('viewBooking')}
-              >
-                <Briefcase className="w-4 h-4" />
-                {existingBooking.booking_code}
-              </Link>
-            ) : itinerary.status === 'confirmed' && (
-              <button
-                onClick={handleCreateBooking}
-                disabled={creatingBooking}
-                className={`h-10 px-4 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-2 ${creatingBooking ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title={t('createBooking')}
-              >
-                {creatingBooking ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>{t('creating')}</span>
-                  </>
-                ) : (
-                  <>
-                    <Briefcase className="w-4 h-4" />
-                    {t('createBooking')}
-                  </>
-                )}
-              </button>
-            )}
             <button
               onClick={handleOpenTaskDialog}
               disabled={generatingTasks}
@@ -1641,6 +1612,36 @@ export default function ViewItineraryPage() {
                 </>
               )}
             </button>
+            {/* The booking sits at the far right on its own (operator, 2026-09-03). */}
+            {existingBooking ? (
+              <Link
+                href={`/bookings/${existingBooking.id}`}
+                className="ml-auto h-10 px-4 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-2"
+                title={t('viewBooking')}
+              >
+                <Briefcase className="w-4 h-4" />
+                {existingBooking.booking_code}
+              </Link>
+            ) : itinerary.status === 'confirmed' && (
+              <button
+                onClick={handleCreateBooking}
+                disabled={creatingBooking}
+                className={`ml-auto h-10 px-4 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-2 ${creatingBooking ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={t('createBooking')}
+              >
+                {creatingBooking ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>{t('creating')}</span>
+                  </>
+                ) : (
+                  <>
+                    <Briefcase className="w-4 h-4" />
+                    {t('createBooking')}
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
 
