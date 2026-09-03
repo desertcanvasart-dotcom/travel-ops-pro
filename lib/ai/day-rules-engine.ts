@@ -269,14 +269,38 @@ export function applyB2BDayRules(days: any[], packageType?: string): any[] {
     p => p.slug === (packageType ?? 'full-package')
   )?.includes ?? PACKAGE_TYPE_CONFIGS.find(p => p.slug === 'full-package')!.includes
 
+  // The arrival and departure flags belong to the first and last day IN the
+  // destination. A programme that starts with an overnight flight from
+  // Japan (day.in_transit, set by the engine's mapper) arrives on its
+  // second day; forcing an airport pickup, a hotel check-in and a transfer
+  // onto the flight day sold three services on a day the party was in the
+  // air (NMS803-CR-ABS, 2026-09-03).
+  const inDestination = days.map(d => !d.in_transit)
+  const firstIndex = inDestination.indexOf(true)
+  const lastIndex = inDestination.lastIndexOf(true)
+
   return days.map((day, index) => {
     const corrected = { ...day }
-    const isFirstDay = index === 0
-    const isLastDay = index === totalDays - 1
+    const isFirstDay = index === firstIndex
+    const isLastDay = index === lastIndex
 
     // Ensure services object exists
     if (!corrected.services) {
       corrected.services = {}
+    }
+
+    if (day.in_transit) {
+      // Nothing is bought on a day in the air.
+      corrected.attractions = []
+      corrected.services = {
+        ...corrected.services,
+        airport_arrival: false,
+        airport_departure: false,
+        hotel_checkin: false,
+        hotel_checkout: false,
+        guide_required: false,
+      }
+      return corrected
     }
 
     // First day: force arrival flags — where the package sells them.
