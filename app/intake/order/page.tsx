@@ -7,7 +7,7 @@
 // The page shows what was read (programme, dates, party, traveller, price
 // and any holes) and writes ONE draft quote plus the client on confirm.
 // Nothing is written on preview.
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
@@ -35,7 +35,17 @@ function decodeParam(v: string | null): string {
   try { return decodeURIComponent(escape(atob(v))) } catch { return v }
 }
 
+// useSearchParams() bails out of prerendering; Next requires a Suspense
+// boundary around it for the production build.
 export default function OrderIntakePage() {
+  return (
+    <Suspense fallback={null}>
+      <OrderIntakeInner />
+    </Suspense>
+  )
+}
+
+function OrderIntakeInner() {
   const t = useTranslations('orderIntake')
   const params = useSearchParams()
   const [text, setText] = useState('')
