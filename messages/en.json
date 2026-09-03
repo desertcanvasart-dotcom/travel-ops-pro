@@ -2209,7 +2209,25 @@
     "propertyContactName": "Contact name",
     "propertyContactPhone": "Contact phone",
     "propertyContactEmail": "Contact email",
-    "editProperty": "Edit property"
+    "editProperty": "Edit property",
+    "import": {
+      "sample": "Sample CSV",
+      "sampleHint": "Download the sheet to fill in",
+      "import": "Import CSV",
+      "previewTitle": "Check before importing",
+      "doneTitle": "Import finished",
+      "willAdd": "{count} of {total} rows will be added as new suppliers.",
+      "alreadyOnFile": "{count} already on file — left unchanged (edit them on their page)",
+      "rowsWithErrors": "{count} rows cannot be imported",
+      "line": "Line {line}",
+      "notInserted": "{count} could not be inserted",
+      "exampleSkipped": "The example row from the sample sheet was skipped.",
+      "inserted": "{count} suppliers added.",
+      "confirm": "Import {count}",
+      "importing": "Importing…",
+      "cancel": "Cancel",
+      "close": "Close"
+    }
   },
   "copilot": {
     "concierge": {
@@ -3570,7 +3588,9 @@
       "tueThuSat": "Tue/Thu/Sat",
       "weekly": "Weekly",
       "charterOnDemand": "Charter/On Demand",
-      "rateHeader": "Rate"
+      "rateHeader": "Rate",
+      "airlineCode": "Airline code",
+      "airlineHint": "Pick the carrier from your suppliers. Add a missing airline under Suppliers with the Air Carrier role."
     },
     "transportation": {
       "title": "Transportation Rates",

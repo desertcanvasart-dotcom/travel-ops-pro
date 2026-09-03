@@ -25,7 +25,10 @@ const ROOT = join(__dirname, '..', '..')
 // used to build flight numbers — so replacing it is a feature, not a rename.
 // 17 air carriers already exist as real suppliers. Remove this entry when
 // flights joins the model; do not add to it.
-const KNOWN_UNMIGRATED = new Set(['app/rates/flights/flights-content.tsx'])
+// Flights joined the model on 2026-09-03: the airline is a supplier with the
+// air-carrier role; the IATA code sits on the rate (lib/airline-codes.ts is a
+// code map, not a carrier list). Nothing is exempt any more.
+const KNOWN_UNMIGRATED = new Set<string>()
 
 function walk(dir: string, out: string[] = []): string[] {
   let entries: string[]
@@ -61,14 +64,12 @@ describe('no hardcoded supplier vocabulary', () => {
     ).toEqual([])
   })
 
-  it('the flights exception is still real, so it cannot be forgotten quietly', () => {
-    // If flights gains a SupplierPicker, the exemption above is obsolete and
-    // this test says so rather than letting it sit forever.
+  it('flights picks the airline as a supplier and keeps no carrier list', () => {
     const src = readFileSync(join(ROOT, 'app/rates/flights/flights-content.tsx'), 'utf8')
-    expect(
-      src.includes('SupplierPicker'),
-      'flights now has a SupplierPicker — drop it from KNOWN_UNMIGRATED and remove the AIRLINES list'
-    ).toBe(false)
+    expect(src.includes('SupplierPicker')).toBe(true)
+    expect(src.includes('preferredType="air_carrier"')).toBe(true)
+    expect(/const AIRLINES\s*=/.test(src)).toBe(false)
+    expect(src.includes('linkToSupplier')).toBe(false)
   })
 
   it('a train form does not offer an operator field at all', () => {

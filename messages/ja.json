@@ -3075,7 +3075,25 @@
     "propertyContactName": "担当者名",
     "propertyContactPhone": "電話番号",
     "propertyContactEmail": "メールアドレス",
-    "editProperty": "施設を編集"
+    "editProperty": "施設を編集",
+    "import": {
+      "sample": "サンプルCSV",
+      "sampleHint": "記入用のシートをダウンロード",
+      "import": "CSVインポート",
+      "previewTitle": "インポート前の確認",
+      "doneTitle": "インポート完了",
+      "willAdd": "{total}行のうち{count}行を新規サプライヤーとして追加します。",
+      "alreadyOnFile": "{count}件は登録済みのため変更しません（各ページで編集してください）",
+      "rowsWithErrors": "{count}行はインポートできません",
+      "line": "{line}行目",
+      "notInserted": "{count}件を登録できませんでした",
+      "exampleSkipped": "サンプルシートの例示行はスキップしました。",
+      "inserted": "{count}件のサプライヤーを追加しました。",
+      "confirm": "{count}件をインポート",
+      "importing": "インポート中…",
+      "cancel": "キャンセル",
+      "close": "閉じる"
+    }
   },
   "copilot": {
     "concierge": {
@@ -4169,7 +4187,9 @@
       "tueThuSat": "火/木/土",
       "weekly": "週1回",
       "charterOnDemand": "チャーター/オンデマンド",
-      "rateHeader": "料金"
+      "rateHeader": "料金",
+      "airlineCode": "航空会社コード",
+      "airlineHint": "サプライヤーから航空会社を選択してください。未登録の航空会社は「サプライヤー」に「航空会社」の役割で追加します。"
     },
     "transportation": {
       "title": "交通料金",
