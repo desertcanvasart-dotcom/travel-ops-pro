@@ -1,5 +1,6 @@
 'use client'
 
+import { looksLikeTourUpOrder } from '@/lib/intake/tour-up-order'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
 import { useAuth } from '@/app/contexts/AuthContext'
@@ -559,6 +560,23 @@ ${bodyText}`
     
     // Use base64 encoding to avoid URL issues with special characters
     const encodedConversation = btoa(unescape(encodeURIComponent(conversationText)))
+
+    // An order from the website's form is a document, not a conversation:
+    // it goes to the order intake, which reads it label by label and builds
+    // the quote from the ready-made programme it names.
+    if (looksLikeTourUpOrder(bodyText)) {
+      // Line breaks are the form's structure — keep them for the intake.
+      const bodyLines = selectedEmail.body
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(p|div|tr|li|h\d)>/gi, '\n')
+        .replace(/<[^>]*>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+        .replace(/[ \t]+\n/g, '\n')
+        .trim()
+      window.location.href = `/intake/order?text=${encodeURIComponent(btoa(unescape(encodeURIComponent(bodyLines))))}`
+      return
+    }
     
     const params = new URLSearchParams({ 
       conversation: encodedConversation, 

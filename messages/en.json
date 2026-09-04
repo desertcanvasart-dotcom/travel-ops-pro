@@ -277,7 +277,8 @@
     "seasonalPremiums": "Seasonal Premiums",
     "commissionRates": "Commissions",
     "destinations": "Destinations",
-    "extras": "Extras"
+    "extras": "Extras",
+    "orderIntake": "Order Intake"
   },
   "roles": {
     "admin": "Admin",
@@ -7416,5 +7417,41 @@
     "loading": "Loading entrance fees…",
     "none": "No matching site",
     "unknown": "(removed from fees)"
+  },
+  "orderIntake": {
+    "title": "Order intake",
+    "subtitle": "Paste the order email from the website form. The programme it names is priced for that party and date, and one draft quote is created for you to review.",
+    "placeholder": "Paste the whole order email here…",
+    "read": "Read the order",
+    "notAnOrder": "This text does not read as the order form.",
+    "programme": "Programme",
+    "tourCode": "Tour code",
+    "matched": "Matched to",
+    "noMatch": "No programme with this code",
+    "departure": "Departure",
+    "or": "or",
+    "party": "Party",
+    "partyValue": "{adults} adults, {children} children",
+    "traveller": "Traveller",
+    "name": "Name",
+    "birth": "Birth date",
+    "contact": "Contact",
+    "client": "Client",
+    "newClient": "New — will be created",
+    "companions": "Companions",
+    "requests": "Requests",
+    "price": "Price",
+    "cost": "Cost",
+    "selling": "Selling ({margin}% margin)",
+    "perPerson": "Per person",
+    "holes": "{count} lines could not be priced — the quote is created without them",
+    "createQuote": "Create the draft quote",
+    "createClientAndQuote": "Create client and draft quote",
+    "created": "Draft quote {quote} created.",
+    "clientCreated": "The client was created from the form.",
+    "clientLinked": "Linked to the existing client.",
+    "openQuote": "Open the quote",
+    "another": "Read another order",
+    "failed": "The order could not be saved."
   }
 }

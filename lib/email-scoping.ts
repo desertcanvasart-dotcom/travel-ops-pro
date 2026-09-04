@@ -32,6 +32,7 @@
 
 export {
   looksAutomated,
+  looksLikeOrderForm,
   shouldStoreThread,
   type EmailClassifierInput,
 } from './email-scoping-core.mjs'

@@ -215,6 +215,8 @@ export async function GET(request: NextRequest) {
                   counterpartyEmail: clientEmail,
                   headers: hdrs,
                   labelIds: (message.data.labelIds || []) as string[],
+                  subject: hdrs['Subject'] ?? hdrs['subject'] ?? '',
+                  snippet: message.data.snippet ?? '',
                 })
                 if (automated && !knownContacts.has(clientEmail)) {
                   continue

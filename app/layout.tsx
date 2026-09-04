@@ -28,8 +28,11 @@ export default function RootLayout({
   // ACCEPTS input, which makes showing them the operator's navigation worse
   // than merely untidy.
   const publicPrefixes = ['/share/', '/portal/']
+  // '/order' is the hosted order form: like /share and /portal a CUSTOMER
+  // page, but at a fixed path rather than behind a token.
+  const customerPages = ['/order']
   const isPublicPage =
-    publicPages.includes(pathname) || publicPrefixes.some(p => pathname.startsWith(p))
+    publicPages.includes(pathname) || customerPages.includes(pathname) || publicPrefixes.some(p => pathname.startsWith(p))
 
   // A CUSTOMER page — token-gated, no session, never will have one. It mounts
   // none of the operator providers, because AuthProvider and
@@ -39,11 +42,11 @@ export default function RootLayout({
   // re-rendering to make the page feel broken.
   //
   // The marketing pages keep the providers — some of them use translations.
-  const isCustomerPage = publicPrefixes.some(p => pathname.startsWith(p))
+  const isCustomerPage = customerPages.includes(pathname) || publicPrefixes.some(p => pathname.startsWith(p))
 
   if (isCustomerPage) {
     return (
-      <html lang={pathname.startsWith('/portal/') ? 'ja' : 'en'} suppressHydrationWarning>
+      <html lang={pathname.startsWith('/portal/') || customerPages.includes(pathname) ? 'ja' : 'en'} suppressHydrationWarning>
         <body className={inter.className} suppressHydrationWarning>
           <main className="min-h-screen">{children}</main>
         </body>

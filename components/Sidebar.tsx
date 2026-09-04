@@ -62,8 +62,7 @@ import {
   Building2,
   ScrollText,
   ReceiptText,
-  HandCoins,
-} from 'lucide-react'
+  HandCoins, ClipboardPaste } from 'lucide-react'
 import { LanguageSelector } from '@/components/LanguageSelector'
 
 interface SidebarProps {
@@ -176,6 +175,7 @@ const navigationConfig: NavConfig[] = [
     items: [
       { labelKey: 'pricingGrid', href: '/pricing-grid', icon: Calculator },
       { labelKey: 'b2bQuotes', href: '/b2b/quotes', icon: FileText },
+      { labelKey: 'orderIntake', href: '/intake/order', icon: ClipboardPaste },
       { labelKey: 'b2cQuotes', href: '/b2c/quotes', icon: FileText },
       { labelKey: 'partners', href: '/b2b/partners', icon: Handshake },
     ]

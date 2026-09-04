@@ -80,6 +80,13 @@ export const RATE_LIMITS = {
     limit: 60,         // requests
     windowMs: 60000,   // per minute
   },
+  // The public order form (/order → /api/public/order-form). One submit is
+  // one order; a customer correcting a typo resubmits two or three times.
+  // Anything past a handful in ten minutes is a script, not a traveller.
+  orderForm: {
+    limit: 5,          // submits
+    windowMs: 600000,  // per 10 minutes
+  },
 }
 
 // ============================================

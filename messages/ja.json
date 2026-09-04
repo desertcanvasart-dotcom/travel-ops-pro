@@ -277,7 +277,8 @@
     "seasonalPremiums": "季節料金",
     "commissionRates": "コミッション",
     "destinations": "デスティネーション",
-    "extras": "オプション"
+    "extras": "オプション",
+    "orderIntake": "申込み取り込み"
   },
   "roles": {
     "admin": "管理者",
@@ -8001,5 +8002,41 @@
     "loading": "入場料を読み込み中…",
     "none": "該当する観光地なし",
     "unknown": "（入場料から削除済み）"
+  },
+  "orderIntake": {
+    "title": "申込み取り込み",
+    "subtitle": "ウェブサイトの申込みフォームのメールを貼り付けてください。指定されたプログラムをその人数・出発日で見積り、確認用の見積り下書きを1件作成します。",
+    "placeholder": "申込みメールの全文をここに貼り付け…",
+    "read": "申込みを読み取る",
+    "notAnOrder": "申込みフォームとして読み取れませんでした。",
+    "programme": "プログラム",
+    "tourCode": "ツアーコード",
+    "matched": "該当プログラム",
+    "noMatch": "このコードのプログラムがありません",
+    "departure": "出発日",
+    "or": "または",
+    "party": "参加人数",
+    "partyValue": "大人{adults}名、子供{children}名",
+    "traveller": "代表者",
+    "name": "お名前",
+    "birth": "生年月日",
+    "contact": "連絡先",
+    "client": "顧客",
+    "newClient": "新規（作成されます）",
+    "companions": "同行者",
+    "requests": "ご要望",
+    "price": "料金",
+    "cost": "原価",
+    "selling": "販売価格（マージン{margin}%）",
+    "perPerson": "1名あたり",
+    "holes": "{count}行が見積りできませんでした（見積りはそれらを除いて作成されます）",
+    "createQuote": "見積り下書きを作成",
+    "createClientAndQuote": "顧客と見積り下書きを作成",
+    "created": "見積り下書き {quote} を作成しました。",
+    "clientCreated": "フォームの内容から顧客を作成しました。",
+    "clientLinked": "既存の顧客に紐付けました。",
+    "openQuote": "見積りを開く",
+    "another": "別の申込みを読む",
+    "failed": "申込みを保存できませんでした。"
   }
 }
