@@ -8054,5 +8054,20 @@
     "openQuote": "見積りを開く",
     "another": "別の申込みを読む",
     "failed": "申込みを保存できませんでした。"
+  },
+  "travelLeg": {
+    "mode": {
+      "ground": "車",
+      "flight": "飛行機",
+      "train": "列車",
+      "sleeping_train": "寝台列車"
+    },
+    "needsPrevCity": "ルート検索には前日と当日の都市が必要です。",
+    "needsNextCity": "当日と翌日の都市が必要です（寝台列車は翌朝到着）。",
+    "loading": "読み込み中…",
+    "pickOne": "該当 {count} 件 — 列車を選択…",
+    "auto": "自動",
+    "noRate": "このルートの料金がありません。Rates で登録してください。",
+    "label": "移動手段"
   }
 }

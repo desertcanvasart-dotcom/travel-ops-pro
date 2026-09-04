@@ -9,6 +9,7 @@ import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileS
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { currencySymbol } from '@/lib/currency-totals'
 import AttractionPicker from '@/components/AttractionPicker'
+import TravelLegPicker from '@/components/TravelLegPicker'
 
 // ============================================
 // B2B TOUR PRICE CALCULATOR PAGE
@@ -133,6 +134,10 @@ interface TemplateItineraryDay {
   attractions: string[]
   /** entrance_fees ids — the tickets the engine prices; wording above is for the documents. */
   attraction_ids?: string[]
+  /** How the day travels: 'ground' (default) | 'flight' | 'train' | 'sleeping_train'. */
+  transport_type?: string
+  /** The exact ticket row when several serve the route (operator picks THE train). */
+  transport_rate_id?: string
   accommodation_type: string // 'hotel' | 'cruise' | 'none'
   services: {
     airport_arrival: boolean
@@ -176,6 +181,7 @@ function AttractionInput({ onAdd, placeholder }: { onAdd: (name: string) => void
 export default function TourPriceCalculator() {
   const { rateSymbol } = useCurrency()
   const t = useTranslations('b2bCalculator')
+  const tLeg = useTranslations('travelLeg')
   const params = useParams()
   const variationId = params?.id as string
 
@@ -392,6 +398,19 @@ export default function TourPriceCalculator() {
       const updated = [...prev]
       const attractions = [...(updated[dayIndex].attractions || []), attraction.trim()]
       updated[dayIndex] = { ...updated[dayIndex], attractions }
+      return updated
+    })
+    setHasUnsavedChanges(true)
+  }
+
+  const setTravelLeg = (dayIndex: number, mode: string, rateId: string | undefined) => {
+    setEditableDays(prev => {
+      const updated = [...prev]
+      updated[dayIndex] = {
+        ...updated[dayIndex],
+        transport_type: mode === 'ground' ? undefined : mode,
+        transport_rate_id: rateId,
+      }
       return updated
     })
     setHasUnsavedChanges(true)
@@ -1201,6 +1220,19 @@ export default function TourPriceCalculator() {
                                   </label>
                                 ))}
                               </div>
+                            </div>
+
+                            {/* Row 5b: How the day travels (leg pricing) */}
+                            <div>
+                              <label className="block text-xs font-medium text-gray-600 mb-2">{tLeg('label')}</label>
+                              <TravelLegPicker
+                                mode={day.transport_type}
+                                rateId={day.transport_rate_id}
+                                prevCity={editableDays[index - 1]?.city ?? null}
+                                city={day.city}
+                                nextCity={editableDays[index + 1]?.city ?? null}
+                                onChange={(mode, rateId) => setTravelLeg(index, mode, rateId)}
+                              />
                             </div>
 
                             {/* Row 6: Attractions */}

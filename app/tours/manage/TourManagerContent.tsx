@@ -38,6 +38,7 @@ import {
 import { LanguageIndicator } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
 import AttractionPicker from '@/components/AttractionPicker'
+import TravelLegPicker from '@/components/TravelLegPicker'
 
 // ============================================
 // INTERFACES
@@ -575,6 +576,18 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
                     selectedIds={day.attraction_ids ?? []}
                     onChange={(ids) => onChange(itinerary.map((d, i) => (i === index ? { ...d, attraction_ids: ids } : d)))}
                     compact
+                  />
+                </div>
+                {/* How the day travels — a marked leg prices a per-person
+                    ticket instead of a road vehicle. */}
+                <div className="mt-2">
+                  <TravelLegPicker
+                    mode={(day as { transport_type?: string }).transport_type}
+                    rateId={(day as { transport_rate_id?: string }).transport_rate_id}
+                    prevCity={itinerary[index - 1]?.city ?? null}
+                    city={day.city}
+                    nextCity={itinerary[index + 1]?.city ?? null}
+                    onChange={(mode, rateId) => onChange(itinerary.map((d, i) => (i === index ? { ...d, transport_type: mode === 'ground' ? undefined : mode, transport_rate_id: rateId } : d)))}
                   />
                 </div>
               </div>

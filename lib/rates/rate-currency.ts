@@ -48,9 +48,9 @@ export const RATE_MONETARY_COLUMNS = {
   tipping_rates: ['rate_eur'],
   airport_staff_rates: ['rate_eur'],
   hotel_staff_rates: ['rate_eur'],
-  flight_rates: ['base_rate_eur', 'base_rate_non_eur', 'tax_eur', 'tax_non_eur'],
-  train_rates: ['rate_eur'],
-  sleeping_train_rates: ['rate_oneway_eur', 'rate_roundtrip_eur'],
+  flight_rates: ['base_rate_eur', 'base_rate_non_eur', 'tax_eur', 'tax_non_eur', 'guide_rate'],
+  train_rates: ['rate_eur', 'guide_rate'],
+  sleeping_train_rates: ['rate_oneway_eur', 'rate_roundtrip_eur', 'guide_rate'],
   fixed_daily_costs: ['cost_per_person_per_day'],
   // The deferred three (migration 20260827_rate_currency_hotels_cruises).
   // Hotels and cruises price from dated periods in `seasons` — handled like

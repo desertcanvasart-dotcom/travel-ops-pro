@@ -7469,5 +7469,20 @@
     "openQuote": "Open the quote",
     "another": "Read another order",
     "failed": "The order could not be saved."
+  },
+  "travelLeg": {
+    "mode": {
+      "ground": "Road",
+      "flight": "Flight",
+      "train": "Day train",
+      "sleeping_train": "Sleeping train"
+    },
+    "needsPrevCity": "Needs the previous day’s city and this day’s city to find the route.",
+    "needsNextCity": "Needs this day’s city and the next day’s city (the sleeper wakes there).",
+    "loading": "Loading rates…",
+    "pickOne": "Pick the exact one ({count} serve this route)…",
+    "auto": "Auto",
+    "noRate": "No rate for this route — add it in Rates, or the day prices as a hole.",
+    "label": "Travel"
   }
 }
