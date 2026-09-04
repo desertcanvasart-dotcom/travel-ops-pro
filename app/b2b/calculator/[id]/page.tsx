@@ -602,6 +602,8 @@ export default function TourPriceCalculator() {
           price_per_person: result.price_per_person,
           tour_leader_included: tourLeaderIncluded,
           tour_leader_cost: result.tour_leader_cost || null,
+          guide_grade: guideGrade,
+          guide_mode: guideMode,
           single_supplement: result.single_supplement || null,
           is_eur_passport: isEurPassport,
           // What the quote was priced in, if anything — the operator's own

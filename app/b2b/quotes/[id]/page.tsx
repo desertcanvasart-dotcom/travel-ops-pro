@@ -37,6 +37,8 @@ interface Quote {
   num_adults: number
   num_children: number
   tour_leader_included: boolean
+  guide_grade?: string | null
+  guide_mode?: string | null
   tour_leader_cost: number | null
   single_supplement: number | null
   is_eur_passport: boolean
@@ -373,7 +375,7 @@ export default function QuoteDetailPage() {
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-xs text-gray-500 mb-1">{t('travelers')}</p>
-                <p className="text-sm font-semibold">{quote.num_adults} pax{quote.tour_leader_included && <span className="text-blue-600"> (+1 TL)</span>}</p>
+                <p className="text-sm font-semibold">{quote.num_adults} pax{quote.tour_leader_included && <span className="text-blue-600"> (+1 TL)</span>}{quote.guide_mode === 'throughout' && <span className="text-[#647C47]"> (+1 Guide{quote.guide_grade === 'senior' ? ' · Senior' : ''})</span>}{quote.guide_mode !== 'throughout' && quote.guide_grade === 'senior' && <span className="text-[#647C47]"> (Senior guide)</span>}</p>
               </div>
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="text-xs text-gray-500 mb-1">{t('travelDate')}</p>
