@@ -20,7 +20,7 @@ import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import RatePeriodsImportExport from '@/app/components/RatePeriodsImportExport'
 import RateSeasonsEditor from '@/components/rates/RateSeasonsEditor'
 import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
-import { averageRateInOneCurrency, formatRateAverage } from '@/lib/currency-totals'
+import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
 
 // ============================================
 // CONSTANTS
@@ -712,7 +712,7 @@ export default function CruisesPage() {
     active: cruises.filter(c => c.is_active).length,
     preferred: cruises.filter(c => c.is_preferred).length,
     ships: new Set(cruises.map(c => c.ship_name)).size,
-    avgRate: averageRateInOneCurrency(cruises, c => c.rate_double_eur, c => c.rate_currency)
+    avgRate: averageRatesByCurrency(cruises, c => c.rate_double_eur, c => c.rate_currency)
   }
 
   // Hooks run before any early return: this page shows a spinner while it loads,
@@ -808,7 +808,7 @@ export default function CruisesPage() {
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
             <p className="text-xs text-gray-600">{t('stats.avgDoubleRate')}</p>
-            <p className="text-2xl font-bold text-purple-600">{formatRateAverage(stats.avgRate, formatRate)}</p>
+            <p className="text-2xl font-bold text-purple-600">{formatRateAverages(stats.avgRate, formatRate)}</p>
           </div>
         </div>
 

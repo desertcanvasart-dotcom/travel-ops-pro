@@ -1,7 +1,7 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
-import { averageRateInOneCurrency, formatRateAverage } from '@/lib/currency-totals'
+import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
 import { useEffect, useState } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
@@ -583,7 +583,7 @@ export default function AttractionsContent() {
   // shared one in lib/currency-totals, because every other rates page had the
   // very fiction it was written to stop. Moving it here also drops unpriced
   // rows from the denominator, which the local version still counted.
-  const avgRate = averageRateInOneCurrency(attractions, a => a.eur_rate, a => a.rate_currency)
+  const avgRate = averageRatesByCurrency(attractions, a => a.eur_rate, a => a.rate_currency)
 
   if (loading) {
     return (
@@ -720,7 +720,7 @@ export default function AttractionsContent() {
             </div>
             <p className="text-xs text-gray-600">{t('stats.avgEurRate')}</p>
             <p className="text-2xl font-bold text-gray-900">
-              {formatRateAverage(avgRate, formatRate)}
+              {formatRateAverages(avgRate, formatRate)}
             </p>
           </div>
         </div>

@@ -34,7 +34,7 @@ import { Copy, BedDouble,
   Info
 } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
-import { averageRateInOneCurrency, formatRateAverage } from '@/lib/currency-totals'
+import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
 
 // Sleeping train routes (Cairo-Luxor-Aswan corridor)
 const SLEEPER_CITIES = [
@@ -380,7 +380,7 @@ export default function SleepingTrainRatesContent() {
 
   // Stats
   const activeRates = rates.filter(r => r.is_active).length
-  const avgOneway = averageRateInOneCurrency(rates, r => r.rate_oneway_eur, r => r.rate_currency)
+  const avgOneway = averageRatesByCurrency(rates, r => r.rate_oneway_eur, r => r.rate_currency)
   const uniqueRoutes = [...new Set(rates.map(r => `${r.origin_city}-${r.destination_city}`))].length
 
   // Get notification icon
@@ -553,7 +553,7 @@ export default function SleepingTrainRatesContent() {
             <span className="text-gray-400 font-bold">{currency}</span>
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{formatRateAverage(avgOneway, formatRate)}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatRateAverages(avgOneway, formatRate)}</p>
           <p className="text-xs text-gray-600">{t('avgOneway')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">

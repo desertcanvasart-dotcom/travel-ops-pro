@@ -35,7 +35,7 @@ import { Copy, Utensils,
   Star
 } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
-import { averageRateInOneCurrency, formatRateAverage } from '@/lib/currency-totals'
+import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
 
 // Egyptian cities
 
@@ -492,7 +492,7 @@ export default function MealRatesContent() {
   // Stats
   const activeRates = rates.filter(r => r.is_active).length
   const linkedRates = rates.filter(r => r.supplier_id).length
-  const avgRate = averageRateInOneCurrency(rates, r => r.base_rate_eur, r => r.rate_currency)
+  const avgRate = averageRatesByCurrency(rates, r => r.base_rate_eur, r => r.rate_currency)
   const uniqueCities = [...new Set(rates.map(r => r.city).filter(Boolean))].length
 
   // Get tier badge
@@ -690,7 +690,7 @@ export default function MealRatesContent() {
             <span className="text-gray-400 font-bold">{currency}</span>
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{formatRateAverage(avgRate, formatRate)}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatRateAverages(avgRate, formatRate)}</p>
           <p className="text-xs text-gray-600">{t('avgRate')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
