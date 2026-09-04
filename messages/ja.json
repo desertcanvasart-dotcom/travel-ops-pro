@@ -7912,7 +7912,10 @@
     "delete": "削除",
     "deleteConfirm": "部署「{name}」を削除しますか？メンバーやタスクが紐づいていない場合のみ削除できます。",
     "deleteBlocked": "削除不可：メンバー{count}名",
-    "deleteBlockedHint": "先にチームメンバー画面でこの部署の{count}名を別の部署に移してください。タスク履歴のある部署は無効化のみ可能です。"
+    "deleteBlockedHint": "先にチームメンバー画面でこの部署の{count}名を別の部署に移してください。タスク履歴のある部署は無効化のみ可能です。",
+    "customTypePlaceholder": "カスタムサービス種別を追加…",
+    "addCustomType": "追加",
+    "customTypeNote": "カスタム種別は、サービス種別が完全一致するタスクをこの部署に振り分けます（英数字と _ のみ）。"
   },
   "activity": {
     "title": "操作ログ",
