@@ -46,6 +46,10 @@ const LANGUAGES = [
 const GUIDE_TYPES = [
   { value: 'licensed', label: 'Licensed Guide' },
   { value: 'egyptologist', label: 'Egyptologist' },
+  // The two GRADES the pricing engine selects by (2026-09-04): 'egyptologist'
+  // and 'senior'. The rest stay for filtering/records but the engine only
+  // asks for these two.
+  { value: 'senior', label: 'Senior Egyptologist' },
   { value: 'local', label: 'Local Guide' },
   { value: 'specialist', label: 'Specialist' },
   { value: 'driver_guide', label: 'Driver Guide' }
@@ -55,7 +59,10 @@ const TOUR_DURATIONS = [
   { value: 'half_day', label: 'Half Day (4h)' },
   { value: 'full_day', label: 'Full Day (8h)' },
   { value: 'extended', label: 'Extended (10h+)' },
-  { value: 'hourly', label: 'Hourly' }
+  { value: 'hourly', label: 'Hourly' },
+  // A throughout guide's arrival/departure day with no sightseeing bills at
+  // this rate — the engine asks for it by tour_duration 'meet_greet'.
+  { value: 'meet_greet', label: 'Meet & Assist day' }
 ]
 
 interface Guide {

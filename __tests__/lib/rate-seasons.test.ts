@@ -79,6 +79,7 @@ describe('sanitizeSeasons', () => {
     expect(out![0].rates).toEqual({
       single_eur: 120, double_eur: 0, triple_eur: 0, suite_eur: 0,
       single_non_eur: 0, double_non_eur: 0, triple_non_eur: 0, suite_non_eur: 0,
+      guide_rate: 0,
     })
   })
 })

@@ -3323,7 +3323,9 @@
       "rateCurrency": "Rate currency",
       "rateCurrencyDefault": "Organisation default",
       "rateCurrencyHint": "The currency this supplier's contract is written in. Leave on the default unless the contract says otherwise — pricing converts automatically.",
-      "duplicate": "Duplicate"
+      "duplicate": "Duplicate",
+      "guideFare": "Guide fare (throughout guide)",
+      "guideFareHint": "Blank = the guide pays the customer rate; 0 = rides free."
     },
     "meals": {
       "title": "Meal Rates",
@@ -4070,13 +4072,15 @@
         "egyptologist": "Egyptologist",
         "local": "Local Guide",
         "specialist": "Specialist",
-        "driver_guide": "Driver Guide"
+        "driver_guide": "Driver Guide",
+        "senior": "Senior Egyptologist"
       },
       "tourDurations": {
         "half_day": "Half Day (4h)",
         "full_day": "Full Day (8h)",
         "extended": "Extended (10h+)",
-        "hourly": "Hourly"
+        "hourly": "Hourly",
+        "meet_greet": "Meet & Assist day"
       },
       "form": {
         "basicInfo": "Basic Information",
@@ -4896,8 +4900,10 @@
         "single": "Single",
         "double": "Double",
         "triple": "Triple",
-        "suite": "Suite"
-      }
+        "suite": "Suite",
+        "guide_rate": "Guide bed / night"
+      },
+      "throughoutGuide": "Throughout guide (+1)"
     },
     "extras": {
       "title": "Extras",
@@ -6614,7 +6620,14 @@
       "deluxe": "Deluxe",
       "luxury": "Luxury"
     },
-    "guideLanguage": "Guide language"
+    "guideLanguage": "Guide language",
+    "guideOptions": "Guide",
+    "guideGradeEgyptologist": "Egyptologist",
+    "guideGradeSenior": "Senior Egyptologist",
+    "guideModeSpot": "Spot (per city)",
+    "guideModeThroughout": "Throughout (+1)",
+    "guideModeSpotHint": "A city guide on sightseeing days only.",
+    "guideModeThroughoutHint": "One guide with the group day 1 to the end: daily fee, bed at each property’s guide rate, an extra seat; meals charged for groups of 3 or fewer."
   },
   "bookings": {
     "title": "Bookings",
