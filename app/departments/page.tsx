@@ -29,7 +29,10 @@ export default function DepartmentsPage() {
   const t = useTranslations('departments')
   const confirmDialog = useConfirm()
   const [departments, setDepartments] = useState<Department[]>([])
-  const [members, setMembers] = useState<Record<string, number>>({})
+  // WHO is in each department, not just how many — the count alone sent the
+  // operator to the Team Members page to answer "which two?", so the names
+  // show on hover over the count.
+  const [members, setMembers] = useState<Record<string, string[]>>({})
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [savedId, setSavedId] = useState<string | null>(null)
@@ -72,13 +75,13 @@ export default function DepartmentsPage() {
       setDepartments(deptRows)
       setSavedTypes(snapshot(deptRows))
       const memberData = await memberRes.json().catch(() => null)
-      const rows: Array<{ department_id: string | null }> =
+      const rows: Array<{ department_id: string | null; name?: string }> =
         memberData?.data || memberData?.members || []
-      const counts: Record<string, number> = {}
+      const byDept: Record<string, string[]> = {}
       for (const m of rows) {
-        if (m.department_id) counts[m.department_id] = (counts[m.department_id] || 0) + 1
+        if (m.department_id) (byDept[m.department_id] ??= []).push(m.name || '?')
       }
-      setMembers(counts)
+      setMembers(byDept)
     } catch (err: any) {
       setError(err.message || 'Failed to load')
     } finally {
@@ -242,7 +245,21 @@ export default function DepartmentsPage() {
                   value={dept.name}
                   onChange={e => patch(dept.id, { name: e.target.value })}
                 />
-                <span className="text-xs text-gray-400">{t('memberCount', { count: members[dept.id] ?? 0 })}</span>
+                {/* Hovering the count answers "which members?" in place. A
+                    popover, not a title attribute — the native tooltip is
+                    slow to appear and invisible on touch-ish trackpads. */}
+                <span className="relative group text-xs text-gray-400 cursor-default">
+                  <span className={(members[dept.id]?.length ?? 0) > 0 ? 'underline decoration-dotted underline-offset-2' : ''}>
+                    {t('memberCount', { count: members[dept.id]?.length ?? 0 })}
+                  </span>
+                  {(members[dept.id]?.length ?? 0) > 0 && (
+                    <span className="pointer-events-none absolute right-0 top-full mt-1.5 z-20 hidden group-hover:block min-w-max max-h-48 overflow-y-auto bg-gray-900 text-white rounded-lg px-3 py-2 shadow-lg">
+                      {members[dept.id].map((name, i) => (
+                        <span key={`${name}-${i}`} className="block whitespace-nowrap leading-5">{name}</span>
+                      ))}
+                    </span>
+                  )}
+                </span>
                 <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
                   <input
                     type="checkbox"
@@ -331,7 +348,7 @@ export default function DepartmentsPage() {
                 {/* Delete is always visible; a department with members shows
                     WHY it cannot be deleted instead of hiding the option (the
                     server re-checks members AND tasks regardless). */}
-                {(members[dept.id] ?? 0) === 0 ? (
+                {(members[dept.id]?.length ?? 0) === 0 ? (
                   <button
                     onClick={() => remove(dept)}
                     className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700"
@@ -339,8 +356,8 @@ export default function DepartmentsPage() {
                     <Trash2 className="w-3.5 h-3.5" /> {t('delete')}
                   </button>
                 ) : (
-                  <span className="flex items-center gap-1 text-xs text-gray-400" title={t('deleteBlockedHint', { count: members[dept.id] })}>
-                    <Trash2 className="w-3.5 h-3.5" /> {t('deleteBlocked', { count: members[dept.id] })}
+                  <span className="flex items-center gap-1 text-xs text-gray-400" title={t('deleteBlockedHint', { count: members[dept.id].length })}>
+                    <Trash2 className="w-3.5 h-3.5" /> {t('deleteBlocked', { count: members[dept.id].length })}
                   </span>
                 )}
               </div>
