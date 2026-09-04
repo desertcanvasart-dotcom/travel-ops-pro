@@ -3,6 +3,7 @@
 // structured by grid slot for dropdown population.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { seasonsForRow } from '@/lib/rates/rate-seasons'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
@@ -217,6 +218,9 @@ export async function GET(request: NextRequest) {
         board_basis: r.board_basis || 'BB',
         single_supp_eur: toNum(r.single_supp_eur),
         single_supp_non_eur: toNum(r.single_supp_non_eur),
+        // The throughout guide's bed, from the first rate period — the same
+        // period the headline pp_double columns mirror. 0 = not entered.
+        guide_rate: toNum(seasonsForRow(r, 'accommodation')[0]?.rates?.guide_rate),
       })),
 
       entrance_fees: (nEntrance || []).map((r: any) => ({
@@ -237,6 +241,8 @@ export async function GET(request: NextRequest) {
         details: `${r.airline} | ${r.flight_number || ''} | ${r.cabin_class}`,
         route_from: r.route_from,
         route_to: r.route_to,
+        // Guide fare for the "+1" seat; null = he pays the customer fare.
+        guide_rate: r.guide_rate == null ? null : toNum(r.guide_rate),
       })),
 
       experiences: (nActivities || [])
@@ -274,6 +280,8 @@ export async function GET(request: NextRequest) {
         single_rate_non_eur: toNum(r.rate_single_non_eur || r.rate_low_single_non_eur),
         duration_nights: r.duration_nights,
         ship_category: r.ship_category,
+        // The throughout guide's cabin per night, first rate period.
+        guide_rate: toNum(seasonsForRow(r, 'cruise')[0]?.rates?.guide_rate),
       })),
     }
 

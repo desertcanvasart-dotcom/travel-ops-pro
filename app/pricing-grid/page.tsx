@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import type { GridConfig, GridDay, AllRates, SlotValue, GridTotals } from './types'
 import { SLOT_DEFINITIONS } from './types'
-import { calculateGrandTotals, calculateDay } from './lib/calculator'
+import { calculateGrandTotals, calculateDay, countMissingGuideBeds } from './lib/calculator'
 import type { SeasonWindow } from '@/lib/pricing/season-uplift'
 import { mapServicesToSlots } from './lib/slot-mapping'
 import GridHeader from './components/GridHeader'
@@ -48,6 +48,7 @@ const DEFAULT_CONFIG: GridConfig = {
   pax: 2,
   passport: 'non_eu',
   tier: 'standard',
+  guideMode: 'spot',
   clientType: 'b2c',
   packageType: 'full-package',
   withGuide: true,
@@ -649,6 +650,7 @@ function PricingGridContent() {
                 margin_percent: config.marginPercent,
                 is_eur_passport: config.passport === 'eu',
                 language: 'English',
+                guide_mode: config.guideMode ?? 'spot',
               })
             })
             const quoteData = await quoteRes.json()
@@ -808,6 +810,14 @@ function PricingGridContent() {
               />
             ))}
           </div>
+
+          {/* A throughout quote with nights whose hotel has no guide rate is
+              missing the guide's bed — say so, never price it silently at 0. */}
+          {countMissingGuideBeds(days, config) > 0 && (
+            <div className="mb-3 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-800">
+              Throughout guide: {countMissingGuideBeds(days, config)} night(s) have no guide bed rate on the chosen hotel/cruise — fill "Guide bed / night" on its rate periods, or this quote is missing his bed.
+            </div>
+          )}
 
           {/* Grand Summary + Save */}
           <GridSummary
