@@ -108,7 +108,13 @@ export async function createTestItinerary(suffix: string): Promise<TestItinerary
 
   const start = new Date(Date.now() + 120 * 86_400_000).toISOString().slice(0, 10)
   const end = new Date(Date.now() + 121 * 86_400_000).toISOString().slice(0, 10)
-  const code = runCode(suffix)
+  // Salted per CALL, not just per run: a spec that timed out mid-test leaves
+  // its row behind (cleanup is by the returned id, which the crash never
+  // reached), and a Playwright RETRY in the same run then collided with it on
+  // the unique itinerary_code (run 33910332424, 2026-09-04). The salt keeps
+  // every attempt's code unique while the E2ERUN- prefix still marks the
+  // leftover for the manual sweep.
+  const code = `${runCode(suffix)}-${Math.random().toString(36).slice(2, 6)}`
 
   const [itin] = await rest('itineraries', {
     method: 'POST',
