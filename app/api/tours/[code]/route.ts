@@ -33,6 +33,7 @@ const VARIATION_SELECT = `
     duration_days,
     duration_nights,
     cities_covered,
+    itinerary,
     tour_categories (category_name)
   )
 `
@@ -40,6 +41,27 @@ const VARIATION_SELECT = `
 /** The destination line shown on the tour: its cities, or 'Various'. */
 function destinationFromCities(cities: unknown): string {
   return Array.isArray(cities) && cities.length ? cities.join(', ') : 'Various'
+}
+
+/** A template's own JSONB itinerary → the detail page's day shape. Used by
+ *  the no-variation fallback AND by the variation path when the variation
+ *  has no rows of its own — imported catalogue programmes keep their days on
+ *  the template, and a variation created for pricing must not blank them
+ *  (NMS803, 2026-09-05: 8 days in the template, 0 in the variation, page
+ *  showed an empty itinerary). */
+function templateDailyItinerary(itinerary: unknown) {
+  const days = Array.isArray(itinerary) ? itinerary : []
+  return days.map((day: any) => ({
+    day_number: day.day,
+    day_title: day.title,
+    day_description: day.description,
+    city: day.city,
+    overnight_city: day.overnight_city,
+    breakfast_included: Array.isArray(day.meals) && day.meals.includes('breakfast'),
+    lunch_included: Array.isArray(day.meals) && day.meals.includes('lunch'),
+    dinner_included: Array.isArray(day.meals) && day.meals.includes('dinner'),
+    is_cruise_day: day.is_cruise_day || false
+  }))
 }
 
 export async function GET(
@@ -130,18 +152,7 @@ export async function GET(
       }
 
       const tpl = template as any
-      const templateItinerary = Array.isArray(tpl.itinerary) ? tpl.itinerary : []
-      const dailyItinerary = templateItinerary.map((day: any) => ({
-        day_number: day.day,
-        day_title: day.title,
-        day_description: day.description,
-        city: day.city,
-        overnight_city: day.overnight_city,
-        breakfast_included: Array.isArray(day.meals) && day.meals.includes('breakfast'),
-        lunch_included: Array.isArray(day.meals) && day.meals.includes('lunch'),
-        dinner_included: Array.isArray(day.meals) && day.meals.includes('dinner'),
-        is_cruise_day: day.is_cruise_day || false
-      }))
+      const dailyItinerary = templateDailyItinerary(tpl.itinerary)
 
       return NextResponse.json({
         success: true,
@@ -200,18 +211,23 @@ export async function GET(
       .eq('variation_id', variation.id)
       .order('day_number', { ascending: true })
 
-    const dailyItinerary = (varItinerary || []).map(day => ({
-      day_number: day.day_number,
-      day_title: day.day_title || day.title,
-      day_description: day.day_description || day.description,
-      city: day.city,
-      overnight_city: day.overnight_city,
-      breakfast_included: day.breakfast_included,
-      lunch_included: day.lunch_included,
-      dinner_included: day.dinner_included,
-      // Cruise package day flag - uses bundled transport package
-      is_cruise_day: day.is_cruise_day || false
-    }))
+    const dailyItinerary = (varItinerary && varItinerary.length > 0)
+      ? varItinerary.map(day => ({
+          day_number: day.day_number,
+          day_title: day.day_title || day.title,
+          day_description: day.day_description || day.description,
+          city: day.city,
+          overnight_city: day.overnight_city,
+          breakfast_included: day.breakfast_included,
+          lunch_included: day.lunch_included,
+          dinner_included: day.dinner_included,
+          // Cruise package day flag - uses bundled transport package
+          is_cruise_day: day.is_cruise_day || false
+        }))
+      // A variation with no day rows of its own shows the TEMPLATE's days —
+      // imported programmes keep their itinerary there, and creating a
+      // pricing variation must not blank the page.
+      : templateDailyItinerary(variation.tour_templates?.itinerary)
 
     // Combine services - prefer new system, fall back to legacy
     const services = variationServices && variationServices.length > 0
