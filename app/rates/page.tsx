@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
+import { hotelPpDouble } from '@/lib/rates/hotel-display-rate'
 
 // ============================================
 // INTERFACES
@@ -64,13 +65,17 @@ interface AccommodationRate extends BaseRate {
   board_basis?: string
   tier?: string
   single_supplement_eur?: number
-  single_supplement_non_eur?: number  
+  single_supplement_non_eur?: number
   high_season_rate_eur?: number
   high_season_rate_non_eur?: number
   low_season_rate_eur?: number
   low_season_rate_non_eur?: number
   base_rate_eur: number
   base_rate_non_eur: number
+  /** Dated rate periods (lib/rates/rate-seasons) — where hotel prices actually live. */
+  seasons?: unknown
+  pp_double_eur?: number
+  pp_double_non_eur?: number
 }
 
 interface MealRate extends BaseRate {
@@ -534,18 +539,6 @@ export default function RatesPage() {
               >
                 🖨️ {t('print')}
               </button>
-              <Link
-                href="/rates"
-                className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors print:hidden font-medium"
-              >
-                ← {t('resources')}
-              </Link>
-              <Link
-                href="/"
-                className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors print:hidden font-medium"
-              >
-                🏠 {t('home')}
-              </Link>
             </div>
           </div>
         </div>
@@ -1049,10 +1042,10 @@ export default function RatesPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                        {formatRateInRowCurrency(Number(rate.base_rate_eur), rate, formatRate)}
+                        {formatRateInRowCurrency(hotelPpDouble(rate).eur, rate, formatRate)}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-bold text-primary-600">
-                        {formatRateInRowCurrency(Number(rate.base_rate_non_eur), rate, formatRate)}
+                        {formatRateInRowCurrency(hotelPpDouble(rate).nonEur, rate, formatRate)}
                       </td>
                     </tr>
                   ))}

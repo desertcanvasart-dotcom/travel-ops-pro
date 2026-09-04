@@ -51,6 +51,16 @@ describe('rates hub data sources', () => {
     expect(block).not.toContain("from('restaurant_contacts')")
   })
 
+  it('guides read guide_rates, never the guides supplier view', () => {
+    // Same class, third instance (2026-09-04): the guides VIEW over suppliers
+    // has no language and no price (languages/daily_rate are null on every
+    // row), so the hub showed each guide as 'English' at 0 while guide_rates
+    // held Japanese guides with real prices.
+    const block = caseBlock('guide')
+    expect(block).toContain("from('guide_rates')")
+    expect(block).not.toContain("from('guides')")
+  })
+
   it('no rate type fabricates a zero price for a row that carries none', () => {
     // A literal `base_rate_eur: 0` in this route means a record with no price
     // is being presented as one that costs nothing.

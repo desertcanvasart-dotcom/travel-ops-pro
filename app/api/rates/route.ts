@@ -136,30 +136,23 @@ export async function GET(request: NextRequest) {
         break
 
       case 'guide':
-        // ✅ Pull from guides table
+        // The RATE table, not the guides supplier view. The view has no
+        // language or price on it (languages/daily_rate are null on every
+        // row), so this hub showed each guide as 'English' at 0 while the
+        // guide rates page — and the pricing engine — read guide_rates with
+        // the real language and rate. Same class as the accommodation fix
+        // above: two screens, two answers.
         const guideQuery = supabase
-          .from('guides')
+          .from('guide_rates')
           .select('*')
           .eq('is_active', true)
-        
+
+        if (city) {
+          guideQuery.ilike('city', city)
+        }
+
         const guideResult = await guideQuery
-        
-        // Transform guide data to match rates format
-        data = (guideResult.data || []).map(guide => ({
-          service_code: guide.id,
-          // Guides here come from the suppliers view, which has no per-rate
-          // currency; null = org rate currency, honestly.
-          rate_currency: null,
-          guide_language: guide.languages?.[0] || 'English',
-          guide_type: guide.specialties?.[0] || 'General',
-          city: 'Cairo',
-          tour_duration: 'full_day',
-          notes: `${guide.name} - ${guide.certification_number || ''}`,
-          base_rate_eur: guide.daily_rate || 0,
-          base_rate_non_eur: guide.daily_rate || 0,
-          eur_rate: guide.daily_rate || 0,
-          non_eur_rate: guide.daily_rate || 0
-        }))
+        data = guideResult.data || []
         error = guideResult.error
         break
 
