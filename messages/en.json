@@ -3323,7 +3323,9 @@
       "rateCurrency": "Rate currency",
       "rateCurrencyDefault": "Organisation default",
       "rateCurrencyHint": "The currency this supplier's contract is written in. Leave on the default unless the contract says otherwise — pricing converts automatically.",
-      "duplicate": "Duplicate"
+      "duplicate": "Duplicate",
+      "guideFare": "Guide fare (throughout guide)",
+      "guideFareHint": "Blank = the guide pays the customer rate; 0 = rides free."
     },
     "meals": {
       "title": "Meal Rates",

@@ -3753,7 +3753,11 @@ export function calculateAgeBasedPricing(
   marginPercent: number = 25,
   flightCostPerPerson: number = 0,
   /** Label only — what the rate tables are in. */
-  currency: string = DEFAULT_RATE_CURRENCY
+  currency: string = DEFAULT_RATE_CURRENCY,
+  /** A throughout guide's seat on the same flights ("+1", 2026-09-04). His
+   *  fare may differ from the customer's — null fare = he pays the customer
+   *  fare. Omitted entirely = no guide flying. */
+  guideFlight?: { seats: number; farePerSeat: number | null }
 ): AgeBasedPricingResult {
   const { numAdults, numChildren, numInfants } = passengers
   const totalPassengers = numAdults + numChildren + numInfants
@@ -3770,7 +3774,10 @@ export function calculateAgeBasedPricing(
 
   // Flight costs: everyone pays (infants might pay 10% of adult fare in real scenarios)
   // For simplicity, we'll use full fare for all. This can be customized.
-  const flightTotal = flightCostPerPerson * totalPassengers
+  const guideFlightTotal = guideFlight
+    ? guideFlight.seats * (guideFlight.farePerSeat ?? flightCostPerPerson)
+    : 0
+  const flightTotal = flightCostPerPerson * totalPassengers + guideFlightTotal
 
   // Total cost before margin
   const tourSubtotal = adultsSubtotal + childrenSubtotal + infantsSubtotal
@@ -3813,13 +3820,22 @@ export function calculateAgeBasedPricing(
     })
   }
 
-  if (flightTotal > 0) {
+  if (flightCostPerPerson * totalPassengers > 0) {
     breakdown.push({
       category: 'Flights',
       count: totalPassengers,
       rate: Math.round(flightCostPerPerson * 100) / 100,
-      subtotal: Math.round(flightTotal * 100) / 100,
+      subtotal: Math.round(flightCostPerPerson * totalPassengers * 100) / 100,
       note: 'Per person'
+    })
+  }
+  if (guideFlightTotal > 0) {
+    breakdown.push({
+      category: 'Throughout Guide — flights',
+      count: guideFlight!.seats,
+      rate: Math.round((guideFlight!.farePerSeat ?? flightCostPerPerson) * 100) / 100,
+      subtotal: Math.round(guideFlightTotal * 100) / 100,
+      note: guideFlight!.farePerSeat != null ? 'Guide fare' : 'Customer fare (no guide fare entered)'
     })
   }
 
@@ -3878,12 +3894,13 @@ export function composeAgeBasedPricing(
   tourLeaderIncluded: boolean,
   flightCostPerPerson: number = 0,
   /** Label only — what the rate tables are in. */
-  currency: string = DEFAULT_RATE_CURRENCY
+  currency: string = DEFAULT_RATE_CURRENCY,
+  guideFlight?: { seats: number; farePerSeat: number | null }
 ): ComposedAgeBasedPricing {
   const refPax = paxRow.numPax || 2
   // PRE-margin per-person cost from the reference pax row (no leader).
   const baseAdultCost = paxRow.withoutLeader.totalCost / refPax
-  const ageBasedPricing = calculateAgeBasedPricing(baseAdultCost, passengers, marginPercent, flightCostPerPerson, currency)
+  const ageBasedPricing = calculateAgeBasedPricing(baseAdultCost, passengers, marginPercent, flightCostPerPerson, currency, guideFlight)
 
   const leaderCost = tourLeaderIncluded
     ? Math.max(0, paxRow.withLeader.totalCost - paxRow.withoutLeader.totalCost)
@@ -3905,7 +3922,7 @@ export function composeAgeBasedPricing(
  * Combines the day-based pricing with passenger breakdown
  */
 export async function calculatePricingWithPassengerBreakdown(
-  params: PricingParams & { passengers: PassengerBreakdown; flightCostPerPerson?: number }
+  params: PricingParams & { passengers: PassengerBreakdown; flightCostPerPerson?: number; guideFlightCostPerPerson?: number }
 ): Promise<PricingResult & { ageBasedPricing?: AgeBasedPricingResult }> {
   const {
     templateId,
@@ -3993,7 +4010,12 @@ export async function calculatePricingWithPassengerBreakdown(
     marginPercent,
     tourLeaderIncluded,
     flightCostPerPerson,
-    dayResult.currency
+    dayResult.currency,
+    // A throughout guide flies with the group: one more seat, at his own fare
+    // when given, else the customer fare (a ticket always has a public price).
+    params.guideMode === 'throughout' && flightCostPerPerson > 0
+      ? { seats: 1, farePerSeat: params.guideFlightCostPerPerson ?? null }
+      : undefined
   )
   const ageBasedPricing = composed.ageBasedPricing
   const tourLeaderCost = composed.tourLeaderCost

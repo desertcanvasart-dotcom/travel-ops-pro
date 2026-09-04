@@ -69,6 +69,10 @@ export async function PUT(
     if (updates.base_rate_eur !== undefined) {
       updates.base_rate_eur = parseFloat(updates.base_rate_eur) || 0
     }
+    // Throughout-guide fare: blank clears back to NULL = pays the customer rate.
+    if (updates.guide_rate !== undefined) {
+      updates.guide_rate = updates.guide_rate === '' || updates.guide_rate === null ? null : parseFloat(updates.guide_rate)
+    }
     if (updates.base_rate_non_eur !== undefined) {
       updates.base_rate_non_eur = parseFloat(updates.base_rate_non_eur) || 0
     }

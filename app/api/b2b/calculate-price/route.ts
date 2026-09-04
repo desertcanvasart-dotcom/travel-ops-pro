@@ -565,7 +565,8 @@ export async function POST(request: NextRequest) {
           tourLeaderIncluded: tour_leader_included,
           guideGrade,
           guideMode,
-          flightCostPerPerson: flight_cost_per_person
+          flightCostPerPerson: flight_cost_per_person,
+          guideFlightCostPerPerson: typeof body.guide_flight_cost_per_person === 'number' ? body.guide_flight_cost_per_person : undefined
         })
       } else {
         // Call standard auto-pricing service

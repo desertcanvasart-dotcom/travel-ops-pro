@@ -79,6 +79,12 @@ export async function POST(request: NextRequest) {
       description: body.description || null,
       notes: body.notes || null,
       ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
+      // Throughout-guide fare (migration 20260904_guide_fares): NULL = the
+      // guide pays the customer rate. Included only when sent, so an
+      // unmigrated database still saves.
+      ...(body.guide_rate !== undefined && body.guide_rate !== null && body.guide_rate !== ''
+        ? { guide_rate: parseFloat(body.guide_rate) }
+        : {}),
       is_active: body.is_active !== false
     }
 

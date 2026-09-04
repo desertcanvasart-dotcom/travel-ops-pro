@@ -61,6 +61,7 @@ interface SleepingTrainRate {
   destination_city: string
   cabin_type: string
   rate_oneway_eur: number
+  guide_rate?: number | null
   rate_roundtrip_eur?: number
   rate_currency?: string | null
   departure_time?: string
@@ -145,6 +146,7 @@ export default function SleepingTrainRatesContent() {
     destination_city: '',
     cabin_type: '',
     rate_oneway_eur: 0,
+    guide_rate: '' as string | number,
     rate_roundtrip_eur: 0,
     rate_currency: '',
     departure_time: '',
@@ -205,6 +207,7 @@ export default function SleepingTrainRatesContent() {
       destination_city: '',
       cabin_type: '',
       rate_oneway_eur: 0,
+      guide_rate: '' as string | number,
       rate_roundtrip_eur: 0,
       rate_currency: '',
       departure_time: '',
@@ -240,6 +243,7 @@ export default function SleepingTrainRatesContent() {
       destination_city: rate.destination_city || '',
       cabin_type: rate.cabin_type || '',
       rate_oneway_eur: rate.rate_oneway_eur || 0,
+      guide_rate: rate.guide_rate ?? '',
       rate_roundtrip_eur: rate.rate_roundtrip_eur || 0,
       rate_currency: rate.rate_currency || '',
       departure_time: rate.departure_time || '',
@@ -1151,6 +1155,19 @@ export default function SleepingTrainRatesContent() {
                       required
                       min="0"
                       step="0.01"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1" title={tCommon('guideFareHint')}>{tCommon('guideFare')}</label>
+                    <input
+                      type="number"
+                      name="guide_rate"
+                      value={formData.guide_rate}
+                      onChange={handleChange}
+                      min="0"
+                      step="0.01"
+                      placeholder="—"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     />
                   </div>

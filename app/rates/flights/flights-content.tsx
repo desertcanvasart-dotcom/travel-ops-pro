@@ -42,6 +42,7 @@ interface FlightRate {
   flight_type: 'domestic' | 'international'
   cabin_class: 'economy' | 'business' | 'first'
   base_rate_eur: number
+  guide_rate?: number | null
   base_rate_non_eur: number
   baggage_kg: number | null
   departure_time: string | null
@@ -78,6 +79,7 @@ interface FormData {
   flight_type: 'domestic' | 'international'
   cabin_class: 'economy' | 'business' | 'first'
   base_rate_eur: number
+  guide_rate?: number | null
   base_rate_non_eur: number
   baggage_kg: number
   departure_time: string
@@ -106,6 +108,7 @@ const initialFormData: FormData = {
   flight_type: 'domestic',
   cabin_class: 'economy',
   base_rate_eur: 0,
+  guide_rate: '' as unknown as number | null,
   base_rate_non_eur: 0,
   baggage_kg: 23,
   departure_time: '',
@@ -345,6 +348,7 @@ export default function FlightsContent() {
       flight_type: rate.flight_type,
       cabin_class: rate.cabin_class,
       base_rate_eur: rate.base_rate_eur,
+      guide_rate: rate.guide_rate ?? ('' as unknown as number | null),
       base_rate_non_eur: rate.base_rate_non_eur || 0,
       baggage_kg: rate.baggage_kg || 23,
       departure_time: rate.departure_time || '',
@@ -1174,6 +1178,21 @@ export default function FlightsContent() {
                         step="0.01"
                         min="0"
                         required
+                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                      />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5" title={tCommon('guideFareHint')}>
+                      {tCommon('guideFare')}
+                    </label>
+                    <input
+                        type="number"
+                        value={formData.guide_rate ?? ''}
+                        onChange={(e) => setFormData(prev => ({ ...prev, guide_rate: (e.target.value === '' ? '' : parseFloat(e.target.value)) as unknown as number | null }))}
+                        step="0.01"
+                        min="0"
+                        placeholder="—"
                         className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                       />
                   </div>

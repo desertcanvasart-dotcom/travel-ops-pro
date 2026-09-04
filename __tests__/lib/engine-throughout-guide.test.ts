@@ -132,3 +132,27 @@ describe('guide grades', () => {
     expect(guideHoles(r).some((h: any) => /guide_type=senior/.test(h.lookupAttempted))).toBe(true)
   })
 })
+
+import { calculateAgeBasedPricing } from '@/lib/auto-pricing-service'
+
+describe('throughout guide on flights (+1 seat)', () => {
+  const pax = { numAdults: 2, numChildren: 0, numInfants: 0 }
+
+  it('adds one seat at the guide fare when given', () => {
+    const r = calculateAgeBasedPricing(100, pax, 0, 200, 'USD', { seats: 1, farePerSeat: 120 })
+    expect(r.flightTotal).toBe(200 * 2 + 120)
+    expect(r.breakdown.find(b => b.category === 'Throughout Guide — flights')).toMatchObject({ count: 1, rate: 120 })
+  })
+
+  it('falls back to the customer fare when no guide fare is entered (a ticket always has a public price)', () => {
+    const r = calculateAgeBasedPricing(100, pax, 0, 200, 'USD', { seats: 1, farePerSeat: null })
+    expect(r.flightTotal).toBe(200 * 3)
+    expect(r.breakdown.find(b => b.category === 'Throughout Guide — flights')?.note).toMatch(/Customer fare/)
+  })
+
+  it('without a guide, flight math is untouched', () => {
+    const r = calculateAgeBasedPricing(100, pax, 0, 200, 'USD')
+    expect(r.flightTotal).toBe(400)
+    expect(r.breakdown.some(b => /Throughout/.test(b.category))).toBe(false)
+  })
+})

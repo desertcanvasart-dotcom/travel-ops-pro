@@ -47,6 +47,8 @@ export async function PUT(
     if (body.rate_currency !== undefined) updateData.rate_currency = body.rate_currency || null
     if (body.origin_city !== undefined) updateData.origin_city = body.origin_city || null
     if (body.destination_city !== undefined) updateData.destination_city = body.destination_city || null
+    // Throughout-guide berth fare: blank clears back to NULL = pays the customer rate.
+    if (body.guide_rate !== undefined) updateData.guide_rate = body.guide_rate === '' || body.guide_rate === null ? null : parseFloat(body.guide_rate)
     if (body.cabin_type !== undefined) {
       const cabin = normaliseSleepingTrainCabin(body.cabin_type)
       if (!cabin) {

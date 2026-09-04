@@ -56,6 +56,7 @@ interface TrainRate {
   destination_city: string
   class_type: string
   rate_eur: number
+  guide_rate?: number | null
   rate_currency?: string | null
   duration_hours?: number
   rate_valid_from?: string
@@ -138,6 +139,7 @@ export default function TrainRatesContent() {
     destination_city: '',
     class_type: '',
     rate_eur: 0,
+    guide_rate: '' as string | number,
     rate_currency: '',
     duration_hours: '',
     rate_valid_from: today,
@@ -196,6 +198,7 @@ export default function TrainRatesContent() {
       destination_city: '',
       class_type: '',
       rate_eur: 0,
+      guide_rate: '' as string | number,
       rate_currency: '',
       duration_hours: '',
       rate_valid_from: today,
@@ -229,6 +232,7 @@ export default function TrainRatesContent() {
       destination_city: rate.destination_city || '',
       class_type: rate.class_type || '',
       rate_eur: rate.rate_eur || 0,
+      guide_rate: rate.guide_rate ?? '',
       rate_currency: rate.rate_currency || '',
       duration_hours: rate.duration_hours?.toString() || '',
       rate_valid_from: rate.rate_valid_from || today,
@@ -1118,6 +1122,19 @@ export default function TrainRatesContent() {
                       required
                       min="0"
                       step="0.01"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1" title={tCommon('guideFareHint')}>{tCommon('guideFare')}</label>
+                    <input
+                      type="number"
+                      name="guide_rate"
+                      value={formData.guide_rate}
+                      onChange={handleChange}
+                      min="0"
+                      step="0.01"
+                      placeholder="—"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     />
                   </div>

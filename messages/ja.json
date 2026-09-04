@@ -3995,7 +3995,9 @@
       "rateCurrency": "レート通貨",
       "rateCurrencyDefault": "組織の既定通貨",
       "rateCurrencyHint": "サプライヤー契約書に記載されている通貨です。契約書に別段の記載がない限り既定のままにしてください。価格計算は自動的に換算されます。",
-      "duplicate": "複製"
+      "duplicate": "複製",
+      "guideFare": "ガイド運賃（スルーガイド）",
+      "guideFareHint": "空欄＝お客様と同運賃、0＝無料。"
     },
     "hub": {
       "title": "料金管理",

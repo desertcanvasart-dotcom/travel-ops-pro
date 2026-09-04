@@ -48,6 +48,8 @@ export async function PUT(
     if (body.destination_city !== undefined) updateData.destination_city = body.destination_city || null
     if (body.class_type !== undefined) updateData.class_type = body.class_type || null
     if (body.rate_eur !== undefined) updateData.rate_eur = parseFloat(body.rate_eur) || 0
+    // Throughout-guide fare: blank clears back to NULL = pays the customer rate.
+    if (body.guide_rate !== undefined) updateData.guide_rate = body.guide_rate === '' || body.guide_rate === null ? null : parseFloat(body.guide_rate)
     if (body.duration_hours !== undefined) updateData.duration_hours = body.duration_hours ? parseFloat(body.duration_hours) : null
     if (body.rate_valid_from !== undefined) updateData.rate_valid_from = body.rate_valid_from || null
     if (body.rate_valid_to !== undefined) updateData.rate_valid_to = body.rate_valid_to || null
