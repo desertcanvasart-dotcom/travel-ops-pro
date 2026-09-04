@@ -182,6 +182,11 @@ export async function POST(request: NextRequest) {
       // New fields
       tour_leader_included = false,
       tour_leader_cost,
+      // Which guide model priced this quote (migration 20260904_guide_mode_on
+      // _quotes). Stored only when non-default, so NULL always reads as the
+      // defaults and an unmigrated database still saves.
+      guide_grade,
+      guide_mode,
       single_supplement,
       is_eur_passport = true,
       season,
@@ -239,6 +244,8 @@ export async function POST(request: NextRequest) {
         currency,
         tour_leader_included,
         tour_leader_cost,
+        ...(guide_grade === 'senior' ? { guide_grade } : {}),
+        ...(guide_mode === 'throughout' ? { guide_mode } : {}),
         single_supplement,
         is_eur_passport,
         season,
