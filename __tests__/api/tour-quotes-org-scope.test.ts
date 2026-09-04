@@ -57,8 +57,10 @@ describe('tour_quotes — insert paths', () => {
     expect(inserts).toEqual([
       'app/api/b2b/quote-from-itinerary/route.ts',
       'app/api/b2b/quotes/route.ts',
-      // The website order form → one draft quote (2026-09-03).
-      'app/api/intake/order-form/route.ts',
+      // The order intake's one insert, shared by the operator's paste route
+      // and the public /api/public/order-form door (2026-09-04; was
+      // app/api/intake/order-form/route.ts until the pipeline was extracted).
+      'lib/intake/process-order.ts',
     ])
   })
 

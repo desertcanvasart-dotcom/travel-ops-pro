@@ -222,6 +222,58 @@ export function parseTourUpOrder(raw: string): TourUpOrder | null {
   }
 }
 
+// ---------- the canonical order document ----------
+// Our own hosted order form (/order) submits structured fields; this renders
+// them as the SAME label-and-value document the office email carries, so the
+// parser above stays the one reader of orders however they arrive. Layout is
+// deliberate, tuned to the parser: ご住所 is followed by a labelled line (its
+// multiline capture stops at the next "label:"); the romaji name is the LAST
+// お名前 line and the word ローマ字 appears nowhere (the parser slices from
+// max(indexOf('ローマ字'), lastIndexOf('お名前')) — a ローマ字 later in the
+// text would move the slice past the name); companions therefore use 氏名;
+// ご要望 comes dead last because free text runs to the end of the document.
+// formatTourUpOrder(o) then parseTourUpOrder() must round-trip —
+// __tests__/lib/tour-up-format.test.ts holds that promise.
+
+function jaDate(iso: string | undefined): string {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-').map(Number)
+  return `${y}年${m}月${d}日`
+}
+
+export function formatTourUpOrder(o: TourUpOrder): string {
+  const lines: (string | null)[] = [
+    '【お問合せフォーム】',
+    '',
+    `問合せ種別：${o.inquiryType || '申込み'}`,
+    `ツアーコード：${o.tourCode}`,
+    o.tourTitle ? `ツアータイトル：${o.tourTitle}` : null,
+    `出発日（第1希望）：${jaDate(o.departureDate1)}`,
+    o.departureDate2 ? `出発日（第2希望）：${jaDate(o.departureDate2)}` : null,
+    o.departureAirport ? `出発地：${o.departureAirport}` : null,
+    `参加人数：大人 ${o.adults}人 子供 ${o.children}人`,
+    o.contactMethod ? `希望連絡方法：${o.contactMethod === 'phone' ? '電話' : 'メール'}` : null,
+    `メールアドレス：${o.email}`,
+    o.phone ? `電話番号：${o.phone}` : null,
+    o.lead.lastNameKanji || o.lead.firstNameKanji
+      ? `お名前（漢字）：姓 ${o.lead.lastNameKanji ?? ''} 名 ${o.lead.firstNameKanji ?? ''}`.trimEnd() : null,
+    o.lead.lastNameKana || o.lead.firstNameKana
+      ? `お名前（カナ）：セイ ${o.lead.lastNameKana ?? ''} メイ ${o.lead.firstNameKana ?? ''}`.trimEnd() : null,
+    o.lead.gender ? `性別：${o.lead.gender === 'female' ? '女' : '男'}` : null,
+    o.lead.birthDate ? `生年月日：${jaDate(o.lead.birthDate)}` : null,
+    o.postalCode || o.prefecture || o.address
+      ? `ご住所：〒${o.postalCode ?? ''} ${o.prefecture ?? ''}${o.address ?? ''}`.trimEnd() : null,
+    `お名前：姓 ${o.lead.lastNameRomaji} 名 ${o.lead.firstNameRomaji}`,
+  ]
+  o.companions.forEach((c, i) => {
+    lines.push('', `同行者${i + 1}`, `氏名：姓 ${c.lastNameRomaji} 名 ${c.firstNameRomaji}`)
+    if (c.gender) lines.push(`性別：${c.gender === 'female' ? '女' : '男'}`)
+    if (c.birthDate) lines.push(`生年月日：${jaDate(c.birthDate)}`)
+  })
+  if (o.requests) lines.push('', `ご要望・質問など：${o.requests}`)
+  return lines.filter(l => l !== null).join('\n') + '\n'
+}
+
 // ---------- programme matching ----------
 // The form's code and the loaded programme's code are the same product
 // written by two hands: NEK803-ABCR on the website, NEK803-CR-ABS in the

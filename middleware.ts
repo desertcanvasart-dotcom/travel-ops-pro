@@ -288,7 +288,10 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
   // input — the traveller fills in their own passport and contact details there
   // instead of returning a form by fax. Same shape: the page resolves the token
   // with the service role and 404s on anything else.
-  const publicRoutes = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/invite/accept', '/terms', '/privacy', '/contact', '/docs', '/about', '/integrations', '/share', '/portal']
+  // '/order' is the hosted order form — the tour-up.jp inquiry form served by
+  // us. The visitor is a customer with no account; the page only renders a
+  // form, and its submit endpoint (/api/public/order-form) defends itself.
+  const publicRoutes = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/invite/accept', '/terms', '/privacy', '/contact', '/docs', '/about', '/integrations', '/share', '/portal', '/order']
   const isPublicRoute = publicRoutes.some(route => 
     request.nextUrl.pathname === route || 
     (route !== '/' && request.nextUrl.pathname.startsWith(route))
@@ -335,6 +338,11 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     // list/create/delete handlers rely on this session gate and stay behind it.
     '/api/invitations/verify',
     '/api/invitations/accept',
+    // The hosted order form's submit. The visitor is a customer, not a user,
+    // and never will be. EXACT route; it rate-limits per IP, carries a
+    // honeypot, validates every field with hard caps, and answers the
+    // customer with received-or-not only — never the operator's numbers.
+    '/api/public/order-form',
   ]
   const isSelfAuthApi = apiSelfAuthPrefixes.some(p => request.nextUrl.pathname.startsWith(p))
 
