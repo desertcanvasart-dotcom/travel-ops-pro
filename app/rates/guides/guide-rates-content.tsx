@@ -34,7 +34,7 @@ import { Copy, Users,
   Info
 } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
-import { averageRateInOneCurrency, formatRateAverage } from '@/lib/currency-totals'
+import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
 
 // Egyptian cities
 
@@ -43,16 +43,13 @@ const LANGUAGES = [
   'Russian', 'Chinese', 'Japanese', 'Portuguese', 'Dutch', 'Polish'
 ]
 
+// The two GRADES — the only guide types the operator sells and the only ones
+// the pricing engine selects by (operator, 2026-09-04: "remove any other
+// type"). A legacy row with an old type still DISPLAYS (its label key kept in
+// the messages), but new rates are one of these two.
 const GUIDE_TYPES = [
-  { value: 'licensed', label: 'Licensed Guide' },
   { value: 'egyptologist', label: 'Egyptologist' },
-  // The two GRADES the pricing engine selects by (2026-09-04): 'egyptologist'
-  // and 'senior'. The rest stay for filtering/records but the engine only
-  // asks for these two.
-  { value: 'senior', label: 'Senior Egyptologist' },
-  { value: 'local', label: 'Local Guide' },
-  { value: 'specialist', label: 'Specialist' },
-  { value: 'driver_guide', label: 'Driver Guide' }
+  { value: 'senior', label: 'Senior Egyptologist' }
 ]
 
 const TOUR_DURATIONS = [
@@ -165,7 +162,7 @@ export default function GuideRatesContent() {
   const [formData, setFormData] = useState({
     service_code: '',
     guide_language: 'English',
-    guide_type: 'licensed',
+    guide_type: 'egyptologist',
     city: '',
     tour_duration: 'full_day',
     base_rate_eur: 0,
@@ -262,7 +259,7 @@ export default function GuideRatesContent() {
     setFormData({
       service_code: generateServiceCode(),
       guide_language: 'English',
-      guide_type: 'licensed',
+      guide_type: 'egyptologist',
       city: '',
       tour_duration: 'full_day',
       base_rate_eur: 0,
@@ -293,7 +290,7 @@ export default function GuideRatesContent() {
     setFormData({
       service_code: rate.service_code || '',
       guide_language: rate.guide_language || 'English',
-      guide_type: rate.guide_type || 'licensed',
+      guide_type: rate.guide_type || 'egyptologist',
       city: rate.city || '',
       tour_duration: rate.tour_duration || 'full_day',
       base_rate_eur: rate.base_rate_eur || 0,
@@ -418,7 +415,7 @@ export default function GuideRatesContent() {
   // Stats
   const activeRates = rates.filter(r => r.is_active).length
   const linkedRates = rates.filter(r => r.supplier_id).length
-  const avgRate = averageRateInOneCurrency(rates, r => r.base_rate_eur, r => r.rate_currency)
+  const avgRate = averageRatesByCurrency(rates, r => r.base_rate_eur, r => r.rate_currency)
   const uniqueCities = [...new Set(rates.map(r => r.city).filter(Boolean))].length
 
   // Get guide name by ID
@@ -613,7 +610,7 @@ export default function GuideRatesContent() {
             <span className="text-gray-400 font-bold">{currency}</span>
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{formatRateAverage(avgRate, formatRate)}</p>
+          <p className="text-2xl font-bold text-gray-900">{formatRateAverages(avgRate, formatRate)}</p>
           <p className="text-xs text-gray-600">{t('stats.avgDailyRate')}</p>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">

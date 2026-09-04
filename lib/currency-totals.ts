@@ -163,6 +163,52 @@ export function formatRateAverage(
     : orgFormat(average.amount)
 }
 
+export type RateAverageBucket = RateAverage & { count: number }
+
+/**
+ * Per-currency averages — the mixed-list answer averageRateInOneCurrency
+ * refuses to give. Same honesty rule (nothing is ever converted, unpriced
+ * rows are excluded); instead of a dash, a mixed list gets one true number
+ * PER currency: 16 EGP meals and 2 USD meals read "E£812 · $23", which is
+ * what the operator's list actually says (Meal Rates card, 2026-09-04).
+ * Buckets are ordered by row count, biggest first; org-currency rows (no
+ * entry currency) form their own bucket with currency null.
+ */
+export function averageRatesByCurrency<T>(
+  items: T[] | null | undefined,
+  getAmount: (item: T) => unknown,
+  getCurrency: (item: T) => unknown
+): RateAverageBucket[] {
+  const buckets = new Map<string, T[]>()
+  for (const item of items ?? []) {
+    if (num(getAmount(item)) <= 0) continue
+    const c = getCurrency(item)
+    const code = typeof c === 'string' && c.trim() ? c.trim().toUpperCase() : ''
+    const rows = buckets.get(code)
+    if (rows) rows.push(item)
+    else buckets.set(code, [item])
+  }
+  const out: RateAverageBucket[] = []
+  for (const [code, rows] of buckets) {
+    const currency = code || null
+    const mean = rows.reduce((sum, r) => sum + num(getAmount(r)), 0) / rows.length
+    const factor = currency && currencyDecimals(currency) === 0 ? 1 : 100
+    out.push({ amount: Math.round(mean * factor) / factor, currency, count: rows.length })
+  }
+  return out.sort((a, b) => b.count - a.count)
+}
+
+/** "E£812.00 · $23.00" — or a dash when nothing is priced. */
+export function formatRateAverages(
+  buckets: RateAverageBucket[],
+  orgFormat: (amount: number) => string
+): string {
+  if (buckets.length === 0) return '—'
+  return buckets
+    .map(b => (b.currency ? formatMoney(b.amount, b.currency) : orgFormat(b.amount)))
+    .join(' · ')
+}
+
 /**
  * Render totals for a single tile: "€1,200.00 + $300.00".
  *
