@@ -4541,13 +4541,15 @@
         "egyptologist": "エジプト学者",
         "local": "ローカルガイド",
         "specialist": "専門ガイド",
-        "driver_guide": "ドライバーガイド"
+        "driver_guide": "ドライバーガイド",
+        "senior": "シニアエジプト学者"
       },
       "tourDurations": {
         "half_day": "半日（4時間）",
         "full_day": "終日（8時間）",
         "extended": "延長（10時間以上）",
-        "hourly": "時間単位"
+        "hourly": "時間単位",
+        "meet_greet": "送迎・アシストのみ"
       },
       "form": {
         "basicInfo": "基本情報",
@@ -5736,8 +5738,10 @@
         "single": "シングル",
         "double": "ダブル",
         "triple": "トリプル",
-        "suite": "スイート"
-      }
+        "suite": "スイート",
+        "guide_rate": "ガイド宿泊 / 泊"
+      },
+      "throughoutGuide": "スルーガイド（+1）"
     },
     "extras": {
       "title": "オプション",
@@ -7199,7 +7203,14 @@
       "deluxe": "デラックス",
       "luxury": "ラグジュアリー"
     },
-    "guideLanguage": "ガイド言語"
+    "guideLanguage": "ガイド言語",
+    "guideOptions": "ガイド",
+    "guideGradeEgyptologist": "エジプト学者",
+    "guideGradeSenior": "シニアエジプト学者",
+    "guideModeSpot": "スポット（都市ごと）",
+    "guideModeThroughout": "スルー（+1）",
+    "guideModeSpotHint": "観光日のみ都市ガイドが同行します。",
+    "guideModeThroughoutHint": "初日から最終日まで1名のガイドが同行：毎日のガイド料、各施設のガイド料金での宿泊、車両の追加席。3名以下のグループはガイドの食事も計上されます。"
   },
   "bookings": {
     "title": "予約管理",

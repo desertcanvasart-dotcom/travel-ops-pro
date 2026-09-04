@@ -402,8 +402,14 @@ export async function POST(request: NextRequest) {
       // parseOptionalSelection below, not destructured here.
       language = 'English',
       tier = 'standard',
-      tour_leader_included = false
+      tour_leader_included = false,
+      // Guide options (2026-09-04): grade picks the guide_rates row;
+      // 'throughout' prices the operator's "+1" — see PricingParams.guideMode.
+      guide_grade = 'egyptologist',
+      guide_mode = 'spot'
     } = body
+    const guideGrade = guide_grade === 'senior' ? 'senior' as const : 'egyptologist' as const
+    const guideMode = guide_mode === 'throughout' ? 'throughout' as const : 'spot' as const
     const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(supabaseAdmin, await getCurrentOrgId()) })
 
     // WHICH optional services the customer is buying, not merely whether. The
@@ -557,6 +563,8 @@ export async function POST(request: NextRequest) {
           mealPlan: 'lunch_only',
           includeAccommodation: (template?.duration_days || 1) > 1,
           tourLeaderIncluded: tour_leader_included,
+          guideGrade,
+          guideMode,
           flightCostPerPerson: flight_cost_per_person
         })
       } else {
@@ -573,7 +581,9 @@ export async function POST(request: NextRequest) {
           marginPercent: effectiveMargin,
           mealPlan: 'lunch_only',
           includeAccommodation: (template?.duration_days || 1) > 1,
-          tourLeaderIncluded: tour_leader_included
+          tourLeaderIncluded: tour_leader_included,
+          guideGrade,
+          guideMode
         })
       }
 

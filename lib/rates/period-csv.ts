@@ -49,6 +49,9 @@ const RATE_LABELS: Record<string, string> = {
   double_non_eur: 'Double (non-EU passport)',
   triple_non_eur: 'Triple (non-EU passport)',
   suite_non_eur: 'Suite (non-EU passport)',
+  // The property's special per-night rate for a throughout guide ("+1") —
+  // one number, no passport split. Blank prices as a hole, never a free bed.
+  guide_rate: 'Guide Bed / Night',
 }
 
 export interface PeriodSheetConfig {

@@ -244,6 +244,27 @@ export default function RateSeasonsEditor({
                 </div>
               </div>
             ))}
+
+            {/* The property's special rate for a throughout guide travelling
+                with the group ("+1"). One number — no passport split, the
+                guide is Egyptian either way. Blank prices as a hole. */}
+            <div className="mb-2 last:mb-0">
+              <p className="text-xs font-medium text-gray-600 mb-1">{t('throughoutGuide')}</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">{t('fields.guide_rate')}</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    disabled={disabled}
+                    value={season.rates.guide_rate ?? 0}
+                    onChange={e => updateRate(index, 'guide_rate', e.target.value)}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#647C47]"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         ))}
       </div>

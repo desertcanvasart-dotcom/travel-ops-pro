@@ -43,19 +43,22 @@ describe('the sheet shape', () => {
   })
 
   it('carries every rate field for its catalog', () => {
-    expect(periodHeaders(HOTEL)).toHaveLength(5 + 6)
-    expect(periodHeaders(CRUISE)).toHaveLength(5 + 8)
+    // +1 on each: the throughout-guide bed rate (2026-09-04).
+    expect(periodHeaders(HOTEL)).toHaveLength(5 + 7)
+    expect(periodHeaders(CRUISE)).toHaveLength(5 + 9)
     expect(periodHeaders(CRUISE)).toContain('Suite (non-EU passport)')
+    expect(periodHeaders(HOTEL)).toContain('Guide Bed / Night')
+    expect(periodHeaders(CRUISE)).toContain('Guide Bed / Night')
   })
 
   it('round-trips: export then import gives the same periods back', () => {
     const seasons = [
       { name: 'Summer', from: '2026-05-01', to: '2026-09-30',
         rates: { pp_double_eur: 55, single_supp_eur: 28, triple_red_eur: 5,
-                 pp_double_non_eur: 50, single_supp_non_eur: 25, triple_red_non_eur: 5 } },
+                 pp_double_non_eur: 50, single_supp_non_eur: 25, triple_red_non_eur: 5, guide_rate: 0 } },
       { name: 'Christmas', from: '2026-12-20', to: '2027-01-05',
         rates: { pp_double_eur: 140, single_supp_eur: 75, triple_red_eur: 10,
-                 pp_double_non_eur: 135, single_supp_non_eur: 72, triple_red_non_eur: 10 } },
+                 pp_double_non_eur: 135, single_supp_non_eur: 72, triple_red_non_eur: 10, guide_rate: 0 } },
     ]
     const rows = periodsToRows(HOTEL, { key: 'ACC-1', displayName: 'Steigenberger', seasons })
     expect(rows).toHaveLength(2)
@@ -166,7 +169,7 @@ describe('parsePeriodRows', () => {
     expect(byKey.get('CR-1')![0]).toEqual({
       name: 'High', from: '2026-10-01', to: '2026-12-19',
       rates: { single_eur: 160, double_eur: 130, triple_eur: 115, suite_eur: 240,
-               single_non_eur: 155, double_non_eur: 125, triple_non_eur: 110, suite_non_eur: 235 },
+               single_non_eur: 155, double_non_eur: 125, triple_non_eur: 110, suite_non_eur: 235, guide_rate: 0 },
     })
   })
 })

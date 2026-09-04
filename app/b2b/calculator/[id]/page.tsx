@@ -196,6 +196,11 @@ export default function TourPriceCalculator() {
   // docs/plans/extras-and-upgrades.md §5a.
   const [selectedOptionals, setSelectedOptionals] = useState<string[]>([])
   const [tourLeaderIncluded, setTourLeaderIncluded] = useState(false)
+  // Guide options (2026-09-04): grade = which guide_rates row; mode 'throughout'
+  // prices the operator's "+1" guide (fee every day, bed at the property's
+  // guide rate, extra seat) — distinct from the tour leader above.
+  const [guideGrade, setGuideGrade] = useState<'egyptologist' | 'senior'>('egyptologist')
+  const [guideMode, setGuideMode] = useState<'spot' | 'throughout'>('spot')
   // Catalogue extras (Rates → Extras) offered on this quote — priced through
   // the engine: cost + this quote's margin, or the operator's set price as-is.
   const [availableExtras, setAvailableExtras] = useState<CatalogueExtraOption[]>([])
@@ -484,6 +489,8 @@ export default function TourPriceCalculator() {
           selected_optional_ids: optionalIds,
           extras: selectedExtraIds,
           tour_leader_included: tourLeaderIncluded,
+          guide_grade: guideGrade,
+          guide_mode: guideMode,
           tier: variationTier,
           language: guideLanguage || 'English'
         })
@@ -521,6 +528,8 @@ export default function TourPriceCalculator() {
           is_eur_passport: isEurPassport,
           margin_percent: marginPercent,
           tour_leader_included: tourLeaderIncluded,
+          guide_grade: guideGrade,
+          guide_mode: guideMode,
           tier: variationTier,
           language: guideLanguage || 'English',
           extras: selectedExtraIds
@@ -764,6 +773,44 @@ export default function TourPriceCalculator() {
                   {tourLeaderIncluded
                     ? t('tourLeaderCostDistributed')
                     : t('standardCalculation')}
+                </p>
+              </div>
+
+              {/* Guide grade + mode (spot vs throughout "+1") */}
+              <div className="bg-gray-50 rounded-lg p-3">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <UserPlus className="w-4 h-4 inline mr-1" />{t('guideOptions')}
+                </label>
+                <select
+                  value={guideGrade}
+                  onChange={(e) => setGuideGrade(e.target.value === 'senior' ? 'senior' : 'egyptologist')}
+                  className="w-full px-3 py-2 mb-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#647C47] outline-none bg-white"
+                >
+                  <option value="egyptologist">{t('guideGradeEgyptologist')}</option>
+                  <option value="senior">{t('guideGradeSenior')}</option>
+                </select>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setGuideMode('spot')}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      guideMode === 'spot' ? 'bg-[#647C47] text-white' : 'bg-white border text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {t('guideModeSpot')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGuideMode('throughout')}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      guideMode === 'throughout' ? 'bg-[#647C47] text-white' : 'bg-white border text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {t('guideModeThroughout')}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  {guideMode === 'throughout' ? t('guideModeThroughoutHint') : t('guideModeSpotHint')}
                 </p>
               </div>
 

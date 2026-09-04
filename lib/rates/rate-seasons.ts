@@ -26,15 +26,21 @@ export interface RateSeason {
   rates: Record<string, number>
 }
 
-/** The rate fields each catalog's periods carry, in display order. */
+/** The rate fields each catalog's periods carry, in display order.
+ *  `guide_rate` is the property's special per-night rate for a throughout
+ *  guide travelling with the group (the operator's "+1") — one number, no
+ *  passport split, because the guide is Egyptian either way. 0 = not
+ *  entered, which prices as a HOLE, never a free bed. */
 export const RATE_FIELDS = {
   accommodation: [
     'pp_double_eur', 'single_supp_eur', 'triple_red_eur',
     'pp_double_non_eur', 'single_supp_non_eur', 'triple_red_non_eur',
+    'guide_rate',
   ],
   cruise: [
     'single_eur', 'double_eur', 'triple_eur', 'suite_eur',
     'single_non_eur', 'double_non_eur', 'triple_non_eur', 'suite_non_eur',
+    'guide_rate',
   ],
 } as const
 
