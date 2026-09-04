@@ -7327,7 +7327,10 @@
     "delete": "Delete",
     "deleteConfirm": "Delete department \"{name}\"? Only possible while nothing references it.",
     "deleteBlocked": "Delete — blocked: {count} members",
-    "deleteBlockedHint": "Reassign this department's {count} member(s) on the Team Members page first; departments with task history can only be deactivated."
+    "deleteBlockedHint": "Reassign this department's {count} member(s) on the Team Members page first; departments with task history can only be deactivated.",
+    "customTypePlaceholder": "Add custom service type…",
+    "addCustomType": "Add",
+    "customTypeNote": "Custom types route tasks whose service type matches exactly; letters, numbers and _ only."
   },
   "activity": {
     "title": "Activity Log",

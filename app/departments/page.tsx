@@ -45,6 +45,15 @@ export default function DepartmentsPage() {
   // attribute: a disabled button gets no pointer events, so the old tooltip
   // never rendered and the rule was invisible.
   const [notice, setNotice] = useState<{ id: string; text: string } | null>(null)
+  // Per-card draft for a custom service type. The vocabulary is open by
+  // design: the server accepts any snake_case token (sanitizeServiceTypes)
+  // and routing matches whatever the table owns — the known chips are just
+  // the types the app generates today.
+  const [customDraft, setCustomDraft] = useState<Record<string, string>>({})
+
+  /** Same shape the server's sanitizer produces, plus friendly space/dash→_. */
+  const normalizeCustomType = (s: string) =>
+    s.trim().toLowerCase().replace(/[\s\-]+/g, '_').replace(/[^a-z0-9_]/g, '')
 
   const snapshot = (rows: Department[]) =>
     Object.fromEntries(
@@ -179,6 +188,21 @@ export default function DepartmentsPage() {
     })
   }
 
+  const addCustomType = (dept: Department) => {
+    const type = normalizeCustomType(customDraft[dept.id] ?? '')
+    if (!type) return
+    setCustomDraft(prev => ({ ...prev, [dept.id]: '' }))
+    if ((dept.service_types ?? []).includes(type)) return
+    // Exclusivity applies to custom types like any other — one active owner.
+    const owner = ownerOf(type, dept.id)
+    if (owner) {
+      setNotice({ id: dept.id, text: t('blockedNotice', { type, name: owner }) })
+      return
+    }
+    setNotice(null)
+    patch(dept.id, { service_types: [...(dept.service_types ?? []), type] })
+  }
+
   if (loading) {
     return (
       <div className="p-6 flex items-center gap-2 text-sm text-gray-500">
@@ -264,6 +288,23 @@ export default function DepartmentsPage() {
                     </button>
                   )
                 })}
+                <span className="inline-flex items-center gap-1">
+                  <input
+                    className="w-40 px-2.5 py-1 rounded-full text-xs border border-dashed border-gray-300 focus:border-[#647C47] focus:outline-none"
+                    placeholder={t('customTypePlaceholder')}
+                    value={customDraft[dept.id] ?? ''}
+                    onChange={e => setCustomDraft(prev => ({ ...prev, [dept.id]: e.target.value }))}
+                    onKeyDown={e => e.key === 'Enter' && addCustomType(dept)}
+                    title={t('customTypeNote')}
+                  />
+                  <button
+                    onClick={() => addCustomType(dept)}
+                    disabled={!normalizeCustomType(customDraft[dept.id] ?? '')}
+                    className="px-2.5 py-1 rounded-full text-xs border border-gray-300 text-gray-600 hover:border-[#647C47] disabled:opacity-40"
+                  >
+                    <span className="inline-flex items-center gap-1"><Plus className="w-3 h-3" />{t('addCustomType')}</span>
+                  </button>
+                </span>
               </div>
               {notice?.id === dept.id && (
                 <p className="-mt-2 mb-3 px-2.5 py-1.5 rounded border border-amber-200 bg-amber-50 text-xs text-amber-800">
