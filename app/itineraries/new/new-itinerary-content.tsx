@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Check, User, Plane, Users, FileText, Map } from 'lucide-react'
 import { usePreferences } from '@/app/contexts/PreferencesContext'
+import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
+import { currencySymbol } from '@/lib/currency-totals'
 import {
   applyTemplate,
   deriveEndDate,
@@ -385,11 +387,7 @@ export default function NewItineraryContent() {
                   onChange={handleChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 >
-                  <option value="EUR">EUR (€)</option>
-                  <option value="USD">USD ($)</option>
-                  <option value="GBP">GBP (£)</option>
-                  <option value="EGP">EGP (E£)</option>
-                  <option value="JPY">JPY (¥)</option>
+                  {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c} ({currencySymbol(c)})</option>)}
                 </select>
               </div>
             </div>

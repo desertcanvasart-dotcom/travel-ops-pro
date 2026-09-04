@@ -41,6 +41,7 @@ import { LanguageSelector } from '@/components/LanguageSelector'
 import { SignatureEditor } from '@/components/email/RichTextEditor'
 import PaymentTermsCard from '@/app/components/PaymentTermsCard'
 import CompanyProfileCard from '@/app/components/CompanyProfileCard'
+import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 
 // ============================================
 // TYPES
@@ -1031,7 +1032,7 @@ function SettingsContent() {
         </p>
 
         <div className="flex gap-2">
-          {['EUR', 'USD', 'GBP', 'EGP', 'JPY'].map((currency) => {
+          {RATE_CURRENCIES.map((currency) => {
             const isSelected = userPreferences.default_currency === currency
             const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
 

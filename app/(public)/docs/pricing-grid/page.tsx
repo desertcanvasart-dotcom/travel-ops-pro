@@ -9,12 +9,12 @@ export default function PricingGridPage() {
       <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6">
         <Link href="/docs" className="hover:text-primary-600 transition-colors">Docs</Link>
         <ChevronRight className="w-4 h-4" />
-        <span className="text-gray-900 font-medium">Pricing Grid</span>
+        <span className="text-gray-900 font-medium">Quote Builder</span>
       </nav>
 
-      <h1 className="text-3xl font-bold text-gray-900 mb-4">Pricing Grid</h1>
+      <h1 className="text-3xl font-bold text-gray-900 mb-4">Quote Builder</h1>
       <p className="text-gray-600 mb-8">
-        The Pricing Grid is the single pricing engine behind Autoura. You build a tour day by day, drop services into fixed slots, and the grid prices the whole trip in real time &mdash; for one group or across a range of group sizes. The same engine powers both B2C quotes and B2B rate sheets, so the numbers always agree.
+        The Quote Builder is the single pricing engine behind Autoura. You build a tour day by day, drop services into fixed slots, and the grid prices the whole trip in real time &mdash; for one group or across a range of group sizes. The same engine powers both B2C quotes and B2B rate sheets, so the numbers always agree.
       </p>
 
       {/* Setting Up */}

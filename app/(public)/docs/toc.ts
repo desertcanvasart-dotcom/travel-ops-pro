@@ -149,7 +149,7 @@ export const CATEGORIES: DocCategory[] = [
   {
     label: 'Sales & Pricing',
     items: [
-      { href: '/docs/pricing-grid', icon: Calculator, title: 'Pricing Grid', description: 'Interactive pricing calculator for comparing rates across tiers, dates, and group sizes.' },
+      { href: '/docs/pricing-grid', icon: Calculator, title: 'Quote Builder', description: 'Interactive pricing calculator for comparing rates across tiers, dates, and group sizes.' },
       { href: '/docs/b2b-pricing', icon: Briefcase, title: 'B2B Pricing', description: 'B2B price calculator with rate sheets, pax tables, and single supplement.' },
       { href: '/docs/b2b-quotes', icon: FileCheck, title: 'B2B Quotes', description: 'Save, manage, and export B2B quotes with PDF generation.' },
       { href: '/docs/quote-revisions', icon: GitBranch, title: 'Quote Revisions', description: 'Versioned B2B quotes — snapshot, compare side-by-side, revert, plus bulk status operations.' },

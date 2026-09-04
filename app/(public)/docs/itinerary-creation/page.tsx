@@ -14,7 +14,7 @@ export default function ItineraryCreationPage() {
 
       <h1 className="text-3xl font-bold text-gray-900 mb-4">Itinerary Creation</h1>
       <p className="text-gray-600 mb-8">
-        Autoura offers two connected paths for creating itineraries. The <strong>WhatsApp Parser</strong> extracts client details from a conversation and hands off to the <strong>Pricing Grid</strong>, where you build the full day-by-day itinerary with services, rates, and live pricing.
+        Autoura offers two connected paths for creating itineraries. The <strong>WhatsApp Parser</strong> extracts client details from a conversation and hands off to the <strong>Quote Builder</strong>, where you build the full day-by-day itinerary with services, rates, and live pricing.
       </p>
 
       {/* Two Paths */}
@@ -23,17 +23,17 @@ export default function ItineraryCreationPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div className="border border-gray-200 rounded-lg p-4">
             <h3 className="font-semibold text-gray-900 mb-2">WhatsApp Parser</h3>
-            <p className="text-sm text-gray-600 mb-2">Paste a conversation to extract client metadata &mdash; name, nationality, dates, group size, and budget level. The parser then redirects to the Pricing Grid with the conversation pre-loaded.</p>
+            <p className="text-sm text-gray-600 mb-2">Paste a conversation to extract client metadata &mdash; name, nationality, dates, group size, and budget level. The parser then redirects to the Quote Builder with the conversation pre-loaded.</p>
             <p className="text-xs text-gray-400">Sidebar: Communication &rarr; WhatsApp Parser</p>
           </div>
           <div className="border border-gray-200 rounded-lg p-4">
-            <h3 className="font-semibold text-gray-900 mb-2">Pricing Grid</h3>
+            <h3 className="font-semibold text-gray-900 mb-2">Quote Builder</h3>
             <p className="text-sm text-gray-600 mb-2">The full itinerary builder. Accepts text, file uploads, or existing itineraries. AI parses input into a day-by-day grid with 14+ service slots, each linked to your rate tables.</p>
-            <p className="text-xs text-gray-400">Sidebar: Operations &rarr; Pricing Grid</p>
+            <p className="text-xs text-gray-400">Sidebar: Operations &rarr; Quote Builder</p>
           </div>
         </div>
         <Tip>
-          <strong>Quick start:</strong> You can go directly to the Pricing Grid without the WhatsApp Parser. Paste text, upload a file, or load an existing itinerary &mdash; the Grid handles all three.
+          <strong>Quick start:</strong> You can go directly to the Quote Builder without the WhatsApp Parser. Paste text, upload a file, or load an existing itinerary &mdash; the Grid handles all three.
         </Tip>
       </section>
 
@@ -41,7 +41,7 @@ export default function ItineraryCreationPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Trip Settings</h2>
         <p className="text-gray-600 mb-3">
-          The settings bar at the top of the Pricing Grid controls all pricing calculations:
+          The settings bar at the top of the Quote Builder controls all pricing calculations:
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
@@ -92,7 +92,7 @@ export default function ItineraryCreationPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Three Input Methods</h2>
         <p className="text-gray-600 mb-4">
-          At the bottom of the Pricing Grid, three input methods are available side by side:
+          At the bottom of the Quote Builder, three input methods are available side by side:
         </p>
 
         <div className="space-y-4">
@@ -118,7 +118,7 @@ export default function ItineraryCreationPage() {
           </div>
         </div>
 
-        <DocScreenshot src="/docs/itinerary-creation/parser-review.jpg" alt="Pricing Grid showing trip settings, live quote, client details, and the three input methods" />
+        <DocScreenshot src="/docs/itinerary-creation/parser-review.jpg" alt="Quote Builder showing trip settings, live quote, client details, and the three input methods" />
       </section>
 
       {/* Service Slots */}

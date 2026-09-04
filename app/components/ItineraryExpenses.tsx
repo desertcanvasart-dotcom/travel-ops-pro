@@ -68,12 +68,9 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   rejected: { label: 'Rejected', color: 'text-red-700', bg: 'bg-red-100' }
 }
 
-const CURRENCY_SYMBOLS: Record<string, string> = {
-  EUR: '€',
-  USD: '$',
-  GBP: '£',
-  EGP: 'E£'
-}
+// From the ONE symbols map — the local copy lacked JPY, so a yen expense
+// printed its code instead of ¥ (2026-09-04).
+import { CURRENCY_SYMBOLS } from '@/lib/currency-service'
 
 export default function ItineraryExpenses({
   itineraryId,

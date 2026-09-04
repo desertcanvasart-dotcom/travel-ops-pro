@@ -5,6 +5,8 @@ import { useRouter, useParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { ArrowLeft, Save } from 'lucide-react'
+import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
+import { currencySymbol } from '@/lib/currency-totals'
 
 interface Payment {
   id: string
@@ -221,10 +223,7 @@ export default function EditPaymentPage() {
                 onChange={handleChange}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
-                <option value="EUR">EUR (€)</option>
-                <option value="USD">USD ($)</option>
-                <option value="GBP">GBP (£)</option>
-                <option value="JPY">JPY (¥)</option>
+                {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c} ({currencySymbol(c)})</option>)}
               </select>
             </div>
 

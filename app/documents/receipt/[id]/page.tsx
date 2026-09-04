@@ -23,6 +23,7 @@ import {
 import { generateReceiptPDF, downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
+import { formatMoney } from '@/lib/currency-totals'
 
 interface Payment {
   id: string
@@ -145,10 +146,9 @@ export default function ReceiptPage() {
     }
   }
 
-  const formatCurrency = (amount: number, currency: string) => {
-    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£' }
-    return `${symbols[currency] || currency} ${amount.toFixed(2)}`
-  }
+  // Shared formatter: knows every supported symbol (the local map lacked
+  // JPY) and the zero-decimal currencies (¥100, never ¥100.00).
+  const formatCurrency = (amount: number, currency: string) => formatMoney(amount, currency)
 
   if (loading) {
     return (

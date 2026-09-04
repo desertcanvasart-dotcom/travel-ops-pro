@@ -4,6 +4,8 @@ import { todayLocal } from '@/lib/today'
 import { useState } from 'react'
 import { X, Receipt, AlertCircle, CheckCircle } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
+import { currencySymbol } from '@/lib/currency-totals'
 
 interface AddExpenseFromItineraryProps {
   itineraryId: string
@@ -226,10 +228,7 @@ export default function AddExpenseFromItinerary({
                       className="w-20 px-2 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
                       title={tCommon('currency')}
                     >
-                      <option value="EUR">€</option>
-                      <option value="USD">$</option>
-                      <option value="EGP">E£</option>
-                      <option value="JPY">¥</option>
+                      {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c} ({currencySymbol(c)})</option>)}
                     </select>
                     <input
                       type="number"

@@ -5,6 +5,8 @@ import { useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
+import { currencySymbol } from '@/lib/currency-totals'
 import {
   User, Mail, Phone, MapPin, Globe, Building, CreditCard, Tag,
   Star, Bell, Heart, ArrowLeft, Save, X, ChevronRight
@@ -643,10 +645,7 @@ function NewClientForm() {
                   onChange={(e) => handleInputChange('currency_preference', e.target.value)}
                   className={selectClass}
                 >
-                  <option value="EUR">EUR (€)</option>
-                  <option value="USD">USD ($)</option>
-                  <option value="GBP">GBP (£)</option>
-                  <option value="JPY">JPY (¥)</option>
+                  {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c} ({currencySymbol(c)})</option>)}
                 </select>
               </div>
             </div>

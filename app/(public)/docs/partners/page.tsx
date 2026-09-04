@@ -29,7 +29,7 @@ export default function PartnersPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Partners in the Quoting Flow</h2>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
-          <li>In the <Link href="/docs/pricing-grid" className="text-primary-600 hover:underline">Pricing Grid</Link>, switching to <strong>B2B</strong> lets you pick the partner; the saved quote and itinerary carry the partner and the commission percentage</li>
+          <li>In the <Link href="/docs/pricing-grid" className="text-primary-600 hover:underline">Quote Builder</Link>, switching to <strong>B2B</strong> lets you pick the partner; the saved quote and itinerary carry the partner and the commission percentage</li>
           <li><Link href="/docs/b2b-quotes" className="text-primary-600 hover:underline">B2B Quotes</Link> list, filter and export by partner</li>
           <li>Deactivating a partner keeps history but removes them from pickers</li>
         </ul>

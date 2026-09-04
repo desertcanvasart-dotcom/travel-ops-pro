@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import type { GridConfig, GridTotals, Tier, ClientType, PassportType } from '../types'
 import { convertAmount } from '../lib/calculator'
+import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
+import { currencySymbol } from '@/lib/currency-totals'
 
 interface GridHeaderProps {
   config: GridConfig
@@ -24,7 +26,9 @@ const TIERS: { value: Tier; label: string }[] = [
   { value: 'luxury', label: 'Luxury' },
 ]
 
-const CURRENCIES = ['EUR', 'USD', 'GBP', 'EGP']
+// The ONE currency vocabulary (lib/org-rate-currency) — this list used to
+// be a four-entry copy that silently lacked JPY (operator, 2026-09-04).
+const CURRENCIES = RATE_CURRENCIES
 
 const DEFAULT_MARGINS: Record<ClientType, number> = {
   b2b: 10,
@@ -34,7 +38,7 @@ const DEFAULT_MARGINS: Record<ClientType, number> = {
 export default function GridHeader({ config, onChange, totals }: GridHeaderProps) {
   const [partners, setPartners] = useState<B2BPartner[]>([])
   const update = (partial: Partial<GridConfig>) => onChange({ ...config, ...partial })
-  const sym = config.currency === 'EUR' ? '\u20AC' : config.currency === 'USD' ? '$' : config.currency === 'GBP' ? '\u00A3' : config.currency === 'EGP' ? 'E\u00A3' : config.currency
+  const sym = currencySymbol(config.currency)
   const fmt = (n: number) => n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const cv = (n: number) => convertAmount(n, config.exchangeRate)
 
