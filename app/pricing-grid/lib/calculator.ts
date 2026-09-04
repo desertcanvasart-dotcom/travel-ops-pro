@@ -35,11 +35,34 @@ const PP_SLOT_IDS = new Set([
 
 export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
   const { pax, passport } = config
+  // The throughout "+1" (operator model, 2026-09-04): the guide's own bed,
+  // meals and seats join the GROUP costs — computed purely from what the
+  // day's slots already selected, never fetched here.
+  const throughout = config.guideMode === 'throughout' && config.withGuide
   let groupTotal = 0
   let perPersonTotal = 0
 
   for (const slot of day.slots) {
     const cost = slotTotal(slot, passport)
+
+    if (throughout) {
+      if ((slot.slotId === 'accommodation' || slot.slotId === 'cruise') && slot.selectedItems.length > 0) {
+        // His bed at the property's guide rate. 0 = not entered — nothing is
+        // added and countMissingGuideBeds() surfaces the gap.
+        groupTotal += Number(slot.selectedItems[0].guideRate) || 0
+      }
+      if (slot.slotId === 'flights') {
+        // One more seat per picked flight, at the guide fare when entered,
+        // else the customer fare (a ticket always has a public price).
+        groupTotal += slot.selectedItems.reduce(
+          (sum, item) => sum + (item.guideRate != null ? Number(item.guideRate) || 0 : getRate(item, passport)), 0)
+      }
+      if (slot.slotId === 'meals' && pax <= 3) {
+        // Restaurants feed the guide free from 4 paying pax; at 3 or fewer
+        // his plate is one more portion at the same rates.
+        groupTotal += cost
+      }
+    }
 
     if (GROUP_SLOT_IDS.has(slot.slotId)) {
       // Group: guide slot respects the withGuide toggle
@@ -215,6 +238,7 @@ function resolveTransportRate(
  */
 function aggregateNonTransport(days: GridDay[], config: GridConfig) {
   const { passport, withGuide } = config
+  const throughout = config.guideMode === 'throughout' && withGuide
   let groupFixed = 0
   let perPerson = 0
   let singleSupplement = 0
@@ -222,6 +246,22 @@ function aggregateNonTransport(days: GridDay[], config: GridConfig) {
   for (const day of days) {
     for (const slot of day.slots) {
       if (slot.slotId === 'route') continue // transport is pax-dependent — handled separately
+
+      if (throughout) {
+        if ((slot.slotId === 'accommodation' || slot.slotId === 'cruise') && slot.selectedItems.length > 0) {
+          groupFixed += Number(slot.selectedItems[0].guideRate) || 0
+        }
+        if (slot.slotId === 'flights') {
+          groupFixed += slot.selectedItems.reduce(
+            (sum, item) => sum + (item.guideRate != null ? Number(item.guideRate) || 0 : getRate(item, passport)), 0)
+        }
+        // Guide meals at the CONFIGURED group size — the sheet keeps this
+        // fixed line at every pax count, the same documented approximation
+        // the auto engine makes; the quote's own pax is always exact.
+        if (slot.slotId === 'meals' && config.pax <= 3) {
+          groupFixed += slotTotal(slot, passport)
+        }
+      }
 
       if (GROUP_SLOT_IDS.has(slot.slotId)) {
         if (slot.slotId === 'guide' && !withGuide) continue
@@ -301,7 +341,12 @@ export function calculatePaxRange(
     groupFixed,
     perPerson,
     marginPercent: safeMargin,
-    transportAt: (pax) => transportForPax(days, config, pax, tierIndex),
+    // The throughout guide is one more body in the vehicle — the same
+    // pax+1 sizing the auto engine and the tour-leader variant use.
+    transportAt: (pax) => transportForPax(
+      days, config,
+      pax + (config.guideMode === 'throughout' && config.withGuide ? 1 : 0),
+      tierIndex),
     tourLeaderCost: perPerson + singleSupplement,
     paxFrom: opts?.paxFrom,
     paxTo: opts?.paxTo,
@@ -327,6 +372,22 @@ export function calculatePaxRange(
     singleSupplement: round2(singleSupplement),
     currency: config.currency,
   }
+}
+
+/** Nights whose chosen hotel/cruise has NO guide rate entered — a throughout
+ *  quote is missing his bed on these, and the summary must say so rather
+ *  than silently pricing the bed at zero. */
+export function countMissingGuideBeds(days: GridDay[], config: GridConfig): number {
+  if (!(config.guideMode === 'throughout' && config.withGuide)) return 0
+  let missing = 0
+  for (const day of days) {
+    for (const slot of day.slots) {
+      if ((slot.slotId === 'accommodation' || slot.slotId === 'cruise') && slot.selectedItems.length > 0) {
+        if (!(Number(slot.selectedItems[0].guideRate) > 0)) missing++
+      }
+    }
+  }
+  return missing
 }
 
 // --- Currency Conversion ---

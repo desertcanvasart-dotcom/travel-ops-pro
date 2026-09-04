@@ -52,6 +52,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
           // carry these and the gate falls through to its count-based path.
           serviceType: opt.service_type,
           pricingClass: opt.pricing_class,
+          guideRate: opt.guide_rate,
         }]
       })
     }
@@ -69,6 +70,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
       rateNonEur: opt.rateNonEur,
       serviceType: opt.service_type,
       pricingClass: opt.pricing_class,
+      guideRate: opt.guide_rate,
     }
     const items: SelectedItem[] = [item]
     if (definition.slotId === 'accommodation' && (opt as any).single_supp_eur) {

@@ -114,6 +114,51 @@ export function mapSlotsToServices(day: GridDay, config: GridConfig): ServiceIns
     }
   }
 
+  // The throughout guide's own money (2026-09-04) — synthetic GROUP rows so
+  // the saved itinerary (and the B2B quote built from it) carries what the
+  // grid's totals already include. Their `slot:throughout_guide` tag names
+  // no real slot, so mapServicesToSlots skips them on reload instead of
+  // doubling them back into the day's picks.
+  if (config.guideMode === 'throughout' && config.withGuide) {
+    const passportRate = (item: { rateEur: number; rateNonEur: number }) =>
+      config.passport === 'eu' ? item.rateEur : item.rateNonEur
+    for (const slot of day.slots) {
+      if ((slot.slotId === 'accommodation' || slot.slotId === 'cruise') && slot.selectedItems.length > 0) {
+        const bed = Number(slot.selectedItems[0].guideRate) || 0
+        if (bed > 0) {
+          services.push({
+            service_type: SLOT_TO_SERVICE_TYPE[slot.slotId],
+            service_name: `Throughout Guide — bed (${slot.selectedItems[0].name})`,
+            quantity: 1, rate_eur: bed, rate_non_eur: bed, total_cost: bed,
+            notes: 'slot:throughout_guide|bed',
+          })
+        }
+      }
+      if (slot.slotId === 'flights') {
+        for (const item of slot.selectedItems) {
+          const fare = item.guideRate != null ? Number(item.guideRate) || 0 : passportRate(item)
+          services.push({
+            service_type: 'flight',
+            service_name: `Throughout Guide — seat (${item.name})`,
+            quantity: 1, rate_eur: fare, rate_non_eur: fare, total_cost: fare,
+            notes: 'slot:throughout_guide|seat',
+          })
+        }
+      }
+      if (slot.slotId === 'meals' && config.pax <= 3) {
+        for (const item of slot.selectedItems) {
+          const rate = passportRate(item)
+          services.push({
+            service_type: 'meal',
+            service_name: `Throughout Guide — ${item.name}`,
+            quantity: 1, rate_eur: item.rateEur, rate_non_eur: item.rateNonEur, total_cost: rate,
+            notes: 'slot:throughout_guide|meal',
+          })
+        }
+      }
+    }
+  }
+
   return services
 }
 

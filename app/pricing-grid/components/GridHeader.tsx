@@ -196,6 +196,27 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
             {config.withGuide ? 'Guide' : 'No Guide'}
           </button>
 
+          {/* Spot vs Throughout ("+1") — only meaningful with a guide. In
+              throughout mode the guide's bed (chosen hotel/cruise row's guide
+              rate), his meals for groups of 3 or fewer, and a seat on every
+              flight pick are added automatically; the rate sheet sizes
+              vehicles at pax+1. Meet/assist days: pick the "Meet & Assist
+              day" guide row on those days. */}
+          {config.withGuide && (
+            <button
+              type="button"
+              onClick={() => update({ guideMode: (config.guideMode ?? 'spot') === 'throughout' ? 'spot' : 'throughout' })}
+              title="Spot: the guide is only what the guide slot holds. Throughout (+1): he travels with the group — bed, meals (groups ≤3), flight seats and a vehicle seat are added automatically."
+              className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-all whitespace-nowrap ${
+                (config.guideMode ?? 'spot') === 'throughout'
+                  ? 'bg-[#647C47]/10 border-[#647C47]/40 text-[#4a5c35] hover:bg-[#647C47]/20'
+                  : 'bg-gray-100 border-gray-200 text-gray-500 hover:bg-gray-150'
+              }`}
+            >
+              {(config.guideMode ?? 'spot') === 'throughout' ? 'Throughout (+1)' : 'Spot'}
+            </button>
+          )}
+
           <div className="w-px h-5 bg-gray-200" />
 
           {/* Currency */}

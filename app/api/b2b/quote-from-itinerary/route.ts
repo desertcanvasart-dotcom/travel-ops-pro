@@ -174,6 +174,9 @@ export async function POST(request: NextRequest) {
       partner_id = null,
       margin_percent: requestedMargin = null,  // resolved below: request → org default → 25
       tour_leader_included = false,
+      // Which guide model priced this quote (see #361); stored only when
+      // non-default so NULL always reads as spot.
+      guide_mode,
       is_eur_passport = true,
       language = 'English',
     } = body
@@ -492,6 +495,7 @@ export async function POST(request: NextRequest) {
         partner_id: partner_id || null,
         trip_name: itinerary.trip_name || 'Custom Tour',
         source: 'whatsapp_b2b',
+        ...(guide_mode === 'throughout' ? { guide_mode } : {}),
         client_name: itinerary.client_name || null,
         client_email: itinerary.client_email || null,
         client_phone: itinerary.client_phone || null,

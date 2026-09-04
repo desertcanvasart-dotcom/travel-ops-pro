@@ -23,6 +23,14 @@ export interface GridConfig {
    *  'full-package', which is exactly the old behaviour. */
   packageType?: PackageType
   withGuide: boolean
+  /** 'spot' (default): the guide is only what the guide slot holds — the
+   *  historical behaviour. 'throughout': the "+1" travels with the group
+   *  (operator model, 2026-09-04) — his bed is added from the chosen
+   *  hotel/cruise row's guide rate, his meals when the group is 3 or fewer,
+   *  one seat on every flight slot pick (at the row's guide fare when
+   *  entered), and the rate sheet sizes vehicles at pax+1. Meet/assist days
+   *  stay manual: pick the "Meet & Assist day" guide row on those days. */
+  guideMode?: 'spot' | 'throughout'
   currency: string
   marginPercent: number
   exchangeRate: number | null  // EUR → target currency
@@ -146,6 +154,7 @@ export interface SelectedItem {
   // path. See app/pricing-grid/lib/grid-completeness.ts.
   serviceType?: string         // e.g. 'airport_transfer' / 'day_tour' / 'intercity_transfer' on route slot
   pricingClass?: PricingClass  // 'mandatory' / 'optional' / 'free' on entrance_fees
+  guideRate?: number | null    // throughout-guide money on this pick (bed / guide fare) — see RateOption.guide_rate
 }
 
 export interface SlotValue {
@@ -203,6 +212,10 @@ export interface RateOption {
   // vehicle as group size grows — the one cost that is non-linear in pax.
   capacity_min?: number
   capacity_max?: number
+  /** Throughout-guide money riding on this option: the hotel/cruise bed per
+   *  night (first rate period's guide_rate — the same period the headline
+   *  pp_double mirrors), or the flight's guide fare (null = customer fare). */
+  guide_rate?: number | null
 }
 
 export interface AllRates {
