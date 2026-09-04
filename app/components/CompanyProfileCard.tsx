@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Building2, Loader2, Check, Upload } from 'lucide-react'
 import { isPlaceholderOrgName } from '@/lib/org-name'
+import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 
 interface Office {
   label: string
@@ -262,7 +263,7 @@ export default function CompanyProfileCard() {
             value={form.rate_currency}
             onChange={e => set('rate_currency', e.target.value)}
           >
-            {['EUR', 'USD', 'GBP', 'EGP', 'JPY'].map(c => (
+            {RATE_CURRENCIES.map(c => (
               <option key={c} value={c}>{c}</option>
             ))}
           </select>

@@ -8,6 +8,8 @@ import Link from 'next/link'
 import { ArrowLeft, Save } from 'lucide-react'
 import { usePreferences } from '@/app/contexts/PreferencesContext'
 import { formatMoney } from '@/lib/currency-totals'
+import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
+import { currencySymbol } from '@/lib/currency-totals'
 
 interface Itinerary {
   id: string
@@ -269,10 +271,7 @@ export default function RecordPaymentPage() {
                 onChange={handleChange}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
-                <option value="EUR">EUR (€)</option>
-                <option value="USD">USD ($)</option>
-                <option value="GBP">GBP (£)</option>
-                <option value="JPY">JPY (¥)</option>
+                {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c} ({currencySymbol(c)})</option>)}
               </select>
             </div>
 

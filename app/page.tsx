@@ -768,7 +768,7 @@ export default function AutouraHomepage() {
           {/* Screenshot Placeholder */}
           <AnimatedSection delay={100}>
             <div className="max-w-5xl mx-auto mb-10 sm:mb-12">
-              <img src="/mockups/pricing-grid.png" alt="Autoura Pricing Grid — day-by-day calculator" className="w-full rounded-2xl shadow-lg border border-stone-200" />
+              <img src="/mockups/pricing-grid.png" alt="Autoura Quote Builder — day-by-day calculator" className="w-full rounded-2xl shadow-lg border border-stone-200" />
             </div>
           </AnimatedSection>
 

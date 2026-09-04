@@ -23,6 +23,8 @@ import Link from 'next/link'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 import { usePreferences } from '@/app/contexts/PreferencesContext'
+import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
+import { currencySymbol } from '@/lib/currency-totals'
 
 interface Invoice {
   id: string
@@ -1003,10 +1005,7 @@ export default function InvoicesContent() {
                     onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value }))}
                     className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm bg-white"
                   >
-                    <option value="EUR">EUR (€)</option>
-                    <option value="USD">USD ($)</option>
-                    <option value="GBP">GBP (£)</option>
-                    <option value="JPY">JPY (¥)</option>
+                    {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c} ({currencySymbol(c)})</option>)}
                   </select>
                 </div>
                 <div>

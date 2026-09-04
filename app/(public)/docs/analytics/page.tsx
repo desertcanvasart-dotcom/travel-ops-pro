@@ -87,7 +87,7 @@ export default function AnalyticsPage() {
           All Docs
         </Link>
         <Link href="/docs/pricing-grid" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          Next: Pricing Grid
+          Next: Quote Builder
           <ChevronRight className="w-4 h-4" />
         </Link>
       </div>
