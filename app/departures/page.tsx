@@ -20,7 +20,8 @@ import {
   Trash2,
   Eye,
   Clock,
-  MapPin
+  MapPin,
+  Copy
 } from 'lucide-react'
 
 // ============================================
@@ -205,6 +206,28 @@ export default function DeparturesPage() {
     } finally {
       setCreating(false)
     }
+  }
+
+  // ============================================
+  // CLONE DEPARTURE
+  // ============================================
+  // A clone is "the same tour again, on a new date": the create modal opens
+  // pre-filled from the source row with the date left blank, so the operator
+  // picks the date and presses Create — nothing is written until then.
+
+  const handleClone = (departure: TourDeparture) => {
+    setNewDeparture({
+      template_id: departure.template_id ?? '',
+      tour_name: departure.tour_name,
+      start_date: '',
+      duration_days: departure.duration_days,
+      max_pax: departure.max_pax,
+      min_pax: departure.min_pax,
+      price_per_person: departure.price_per_person != null ? String(departure.price_per_person) : '',
+      status: departure.status === 'cancelled' || departure.status === 'full' ? 'open' : departure.status,
+    })
+    setError(null)
+    setShowCreateModal(true)
   }
 
   // ============================================
@@ -481,6 +504,14 @@ export default function DeparturesPage() {
                           <option value="cancelled">Cancelled</option>
                         </select>
                       )}
+
+                      <button
+                        onClick={() => handleClone(departure)}
+                        className="p-1.5 text-gray-400 hover:text-[#647C47] hover:bg-gray-100 rounded transition-colors"
+                        title="Clone — same tour, pick a new date"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
 
                       <button
                         onClick={() => handleDelete(departure.id)}
