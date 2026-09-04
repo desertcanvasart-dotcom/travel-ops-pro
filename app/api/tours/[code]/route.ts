@@ -12,6 +12,36 @@ import { createServerClient } from '@/lib/supabase-server'
 // rate-table RLS tightening closes.
 const supabase = createServerClient()
 
+// One select for every variation lookup below. NO `destinations` embed: the
+// multi-destination campaign renamed the old destinations table to
+// destinations_legacy_2025 (tour_templates.primary_destination_id still
+// points there), so PostgREST has no tour_templates→destinations
+// relationship and an embed of it fails the WHOLE query with PGRST200 — this
+// route 404'd every tour, variation path and template fallback alike, from
+// that rename until 2026-09-04. The displayed destination comes from
+// cities_covered instead, which is what the data actually carries.
+const VARIATION_SELECT = `
+  *,
+  tour_templates (
+    id,
+    template_code,
+    template_name,
+    short_description,
+    long_description,
+    highlights,
+    main_attractions,
+    duration_days,
+    duration_nights,
+    cities_covered,
+    tour_categories (category_name)
+  )
+`
+
+/** The destination line shown on the tour: its cities, or 'Various'. */
+function destinationFromCities(cities: unknown): string {
+  return Array.isArray(cities) && cities.length ? cities.join(', ') : 'Various'
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ code: string }> }
@@ -24,22 +54,7 @@ export async function GET(
     // First, try to find by variation_code
     const { data: varByCode, error: varCodeError } = await supabase
       .from('tour_variations')
-      .select(`
-        *,
-        tour_templates (
-          id,
-          template_code,
-          template_name,
-          short_description,
-          long_description,
-          highlights,
-          main_attractions,
-          duration_days,
-          duration_nights,
-          tour_categories (category_name),
-          destinations (destination_name)
-        )
-      `)
+      .select(VARIATION_SELECT)
       .eq('variation_code', code)
       .single()
 
@@ -53,22 +68,7 @@ export async function GET(
         // Try to find by template_id and get the first variation
         const { data: varByTemplateId } = await supabase
           .from('tour_variations')
-          .select(`
-            *,
-            tour_templates (
-              id,
-              template_code,
-              template_name,
-              short_description,
-              long_description,
-              highlights,
-              main_attractions,
-              duration_days,
-              duration_nights,
-              tour_categories (category_name),
-              destinations (destination_name)
-            )
-          `)
+          .select(VARIATION_SELECT)
           .eq('template_id', code)
           .order('tier', { ascending: true })
           .limit(1)
@@ -88,22 +88,7 @@ export async function GET(
         if (template) {
           const { data: varByTemplate } = await supabase
             .from('tour_variations')
-            .select(`
-              *,
-              tour_templates (
-                id,
-                template_code,
-                template_name,
-                short_description,
-                long_description,
-                highlights,
-                main_attractions,
-                duration_days,
-                duration_nights,
-                tour_categories (category_name),
-                destinations (destination_name)
-              )
-            `)
+            .select(VARIATION_SELECT)
             .eq('template_id', template.id)
             .order('tier', { ascending: true })
             .limit(1)
@@ -132,8 +117,7 @@ export async function GET(
           id, template_code, template_name, short_description, long_description,
           highlights, main_attractions, duration_days, duration_nights,
           itinerary, cities_covered,
-          tour_categories (category_name),
-          destinations (destination_name)
+          tour_categories (category_name)
         `)
         .eq(isTemplateUUID ? 'id' : 'template_code', code)
         .single()
@@ -167,11 +151,7 @@ export async function GET(
           template_name: tpl.template_name,
           template_code: tpl.template_code,
           category_name: tpl.tour_categories?.category_name || 'Uncategorized',
-          destination_name:
-            tpl.destinations?.destination_name ||
-            (Array.isArray(tpl.cities_covered) && tpl.cities_covered.length
-              ? tpl.cities_covered.join(', ')
-              : 'Various'),
+          destination_name: destinationFromCities(tpl.cities_covered),
           duration_days: tpl.duration_days,
           duration_nights: tpl.duration_nights || 0,
           short_description: tpl.short_description,
@@ -250,7 +230,7 @@ export async function GET(
       template_name: variation.tour_templates?.template_name,
       template_code: variation.tour_templates?.template_code,
       category_name: variation.tour_templates?.tour_categories?.category_name || 'Uncategorized',
-      destination_name: variation.tour_templates?.destinations?.destination_name || 'Various',
+      destination_name: destinationFromCities(variation.tour_templates?.cities_covered),
       duration_days: variation.tour_templates?.duration_days,
       duration_nights: variation.tour_templates?.duration_nights || 0,
       short_description: variation.tour_templates?.short_description,
