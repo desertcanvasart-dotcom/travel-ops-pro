@@ -4903,7 +4903,7 @@
         "suite": "Suite",
         "guide_rate": "Guide bed / night"
       },
-      "throughoutGuide": "Throughout guide (+1)"
+      "throughoutGuide": "Throughout guide"
     },
     "extras": {
       "title": "Extras",
@@ -6625,7 +6625,7 @@
     "guideGradeEgyptologist": "Egyptologist",
     "guideGradeSenior": "Senior Egyptologist",
     "guideModeSpot": "Spot (per city)",
-    "guideModeThroughout": "Throughout (+1)",
+    "guideModeThroughout": "Throughout",
     "guideModeSpotHint": "A city guide on sightseeing days only.",
     "guideModeThroughoutHint": "One guide with the group day 1 to the end: daily fee, bed at each property’s guide rate, an extra seat; meals charged for groups of 3 or fewer."
   },

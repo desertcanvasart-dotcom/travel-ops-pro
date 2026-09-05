@@ -24,7 +24,6 @@ export const SUPPLIER_REFERENCE_CHECKS = [
   { table: 'itinerary_services',      column: 'sold_by_supplier_id', label: 'trip services sold' },
   { table: 'booking_supplier_status', column: 'supplier_id',        label: 'booking statuses' },
   { table: 'supplier_documents',      column: 'supplier_id',        label: 'documents' },
-  { table: 'suppliers',               column: 'parent_supplier_id', label: 'child properties' },
 ] as const
 
 export type ReferenceCount = { label: string; count: number }

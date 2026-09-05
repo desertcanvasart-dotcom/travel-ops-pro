@@ -5743,7 +5743,7 @@
         "suite": "スイート",
         "guide_rate": "ガイド宿泊 / 泊"
       },
-      "throughoutGuide": "スルーガイド（+1）"
+      "throughoutGuide": "スルーガイド"
     },
     "extras": {
       "title": "オプション",
@@ -7210,7 +7210,7 @@
     "guideGradeEgyptologist": "エジプト学者",
     "guideGradeSenior": "シニアエジプト学者",
     "guideModeSpot": "スポット（都市ごと）",
-    "guideModeThroughout": "スルー（+1）",
+    "guideModeThroughout": "スルー",
     "guideModeSpotHint": "観光日のみ都市ガイドが同行します。",
     "guideModeThroughoutHint": "初日から最終日まで1名のガイドが同行：毎日のガイド料、各施設のガイド料金での宿泊、車両の追加席。3名以下のグループはガイドの食事も計上されます。"
   },

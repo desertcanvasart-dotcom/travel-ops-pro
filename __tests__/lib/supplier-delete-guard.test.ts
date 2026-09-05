@@ -26,8 +26,11 @@ describe('describeBlockers', () => {
     for (const t of ['guide_rates', 'transportation_rates', 'hotel_staff_rates']) expect(tables).not.toContain(t)
   })
 
-  it('treats a parent company with properties as referenced', () => {
-    const parent = SUPPLIER_REFERENCE_CHECKS.find((c) => c.column === 'parent_supplier_id')
-    expect(parent?.table).toBe('suppliers')
+  it('does not query the dropped supplier-IS-property column', () => {
+    // suppliers.parent_supplier_id was dropped by 20260831_supplier_properties.sql.
+    // A check against a missing column errors, reads as count 0, and passes
+    // silently — dead weight. Properties now live in supplier_properties with
+    // ON DELETE CASCADE, so the guard has nothing to count there.
+    expect(SUPPLIER_REFERENCE_CHECKS.some((c) => String(c.column) === 'parent_supplier_id')).toBe(false)
   })
 })
