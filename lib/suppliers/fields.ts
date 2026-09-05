@@ -75,9 +75,8 @@ export const SUPPLIER_WRITABLE_FIELDS = [
  *  The DATA stays on existing rows; nothing here is dropped from the table. */
 export const SUPPLIER_RETIRED_FORM_FIELDS = [
   'phone2', 'payment_terms', 'bank_details',
-  'vehicle_types', 'routes', 'ship_name', 'cabin_count', 'star_rating',
-  'property_type', 'cuisine_types', 'capacity', 'daily_rate',
-  'is_property', 'parent_supplier_id',
+  'vehicle_types', 'routes', 'cabin_count', 'star_rating',
+  'cuisine_types', 'capacity', 'daily_rate',
 ] as const
 
 export const COMMISSION_DIRECTIONS = ['payable', 'receivable'] as const
