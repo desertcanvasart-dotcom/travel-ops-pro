@@ -42,6 +42,7 @@ import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import RatePeriodsImportExport from '@/app/components/RatePeriodsImportExport'
 import RateSeasonsEditor from '@/components/rates/RateSeasonsEditor'
 import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
+import { hotelPpDoubleRange } from '@/lib/rates/hotel-display-rate'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
 
@@ -1080,14 +1081,17 @@ export default function HotelsContent() {
                           {rate.board_basis || 'BB'}
                         </span>
                       </td>
+                      {/* Low/High = cheapest/dearest priced PERIOD. The legacy
+                          high_pp_double_eur column is never written by the
+                          periods editor and read as $0.00 on every row. */}
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm font-bold text-green-600">
-                          {formatRateInRowCurrency(rate.pp_double_eur || 0, rate, formatRate)}
+                          {formatRateInRowCurrency(hotelPpDoubleRange(rate).low.eur, rate, formatRate)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm text-orange-600">
-                          {formatRateInRowCurrency(rate.high_pp_double_eur || 0, rate, formatRate)}
+                          {formatRateInRowCurrency(hotelPpDoubleRange(rate).high.eur, rate, formatRate)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -1210,17 +1214,20 @@ export default function HotelsContent() {
                     )}
 
                     <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-100">
+                      {/* Low/High span every priced period; the third cell
+                          counts them — the fixed "Peak" column is never
+                          written by the periods editor. */}
                       <div className="text-center">
                         <p className="text-xs text-blue-600 font-medium">{t('low')}</p>
-                        <p className="text-sm font-bold text-gray-700">{formatRateInRowCurrency(rate.pp_double_eur || 0, rate, formatRate)}</p>
+                        <p className="text-sm font-bold text-gray-700">{formatRateInRowCurrency(hotelPpDoubleRange(rate).low.eur, rate, formatRate)}</p>
                       </div>
                       <div className="text-center">
                         <p className="text-xs text-orange-600 font-medium">{t('high')}</p>
-                        <p className="text-sm font-bold text-gray-700">{formatRateInRowCurrency(rate.high_pp_double_eur || 0, rate, formatRate)}</p>
+                        <p className="text-sm font-bold text-gray-700">{formatRateInRowCurrency(hotelPpDoubleRange(rate).high.eur, rate, formatRate)}</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-xs text-red-600 font-medium">{t('peak')}</p>
-                        <p className="text-sm font-bold text-gray-700">{formatRateInRowCurrency(rate.peak_pp_double_eur || 0, rate, formatRate)}</p>
+                        <p className="text-xs text-gray-500 font-medium">{tPeriods('title')}</p>
+                        <p className="text-sm font-bold text-gray-700">{hotelPpDoubleRange(rate).periods}</p>
                       </div>
                     </div>
                   </div>

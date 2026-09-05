@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hotelPpDouble } from '@/lib/rates/hotel-display-rate'
+import { hotelPpDouble, hotelPpDoubleRange } from '@/lib/rates/hotel-display-rate'
 
 // The rates hub's hotel price. Every accommodation_rates row saved by the
 // current editor has NULL base_rate columns and its price on `seasons` —
@@ -42,5 +42,40 @@ describe('hotelPpDouble', () => {
     expect(hotelPpDouble({ pp_double_eur: 70, pp_double_non_eur: 75 })).toEqual({ eur: 70, nonEur: 75 })
     expect(hotelPpDouble({ base_rate_eur: 60, base_rate_non_eur: 65 })).toEqual({ eur: 60, nonEur: 65 })
     expect(hotelPpDouble({ base_rate_eur: null, base_rate_non_eur: null })).toEqual({ eur: 0, nonEur: 0 })
+  })
+})
+
+// The hotels list's Low / High pair. It read pp_double_eur (mirrored from the
+// FIRST period on save) and high_pp_double_eur (never written since periods
+// became a dated list) — so every row showed High $0.00 beside a real Low
+// (operator, 2026-09-06). Low/High now span the priced periods.
+describe('hotelPpDoubleRange', () => {
+  it('reads the cheapest and dearest priced period, whatever order they are stored in', () => {
+    const row = {
+      pp_double_eur: 100, high_pp_double_eur: 0, // the live column shape
+      seasons: [
+        seasonRow('2026-05-01', '2026-10-31', 100, 100),
+        seasonRow('2026-11-01', '2026-12-20', 120, 125),
+        seasonRow('2026-12-21', '2027-01-05', 180, 190),
+        seasonRow('2027-01-06', '2027-04-30', 120, 125),
+      ],
+    }
+    expect(hotelPpDoubleRange(row)).toEqual({
+      low: { eur: 100, nonEur: 100 },
+      high: { eur: 180, nonEur: 190 },
+      periods: 4,
+    })
+  })
+
+  it('skips unpriced periods — a 0 is a hole, never the Low', () => {
+    const row = { seasons: [seasonRow('2026-01-01', '2026-06-30', 0, 0), seasonRow('2026-07-01', '2026-12-31', 90, 95)] }
+    expect(hotelPpDoubleRange(row)).toEqual({ low: { eur: 90, nonEur: 95 }, high: { eur: 90, nonEur: 95 }, periods: 2 })
+    expect(hotelPpDoubleRange({ seasons: [seasonRow('2026-01-01', '2026-06-30', 0, 0)] }).high).toEqual({ eur: 0, nonEur: 0 })
+  })
+
+  it('a row still on columns reports its one price on both ends and 0 periods', () => {
+    expect(hotelPpDoubleRange({ pp_double_eur: 70, pp_double_non_eur: 75 })).toEqual({
+      low: { eur: 70, nonEur: 75 }, high: { eur: 70, nonEur: 75 }, periods: 0,
+    })
   })
 })
