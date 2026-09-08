@@ -7,6 +7,7 @@ import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurre
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import { useTranslations } from 'next-intl'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useSearchParams } from 'next/navigation'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
@@ -77,6 +78,7 @@ const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function TrainRatesContent() {
   const t = useTranslations('rates.trains')
+  const trainClassLabel = useVocabLabel('train_class')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
 
@@ -605,7 +607,7 @@ export default function TrainRatesContent() {
           >
             <option value="">{t('allClasses')}</option>
             {CLASS_TYPES.map(cls => (
-              <option key={cls} value={cls}>{cls}</option>
+              <option key={cls} value={cls}>{trainClassLabel(cls, cls)}</option>
             ))}
           </select>
 
@@ -715,7 +717,7 @@ export default function TrainRatesContent() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs font-medium">
-                        {rate.class_type || '—'}
+                        {rate.class_type ? trainClassLabel(rate.class_type, rate.class_type) : '—'}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -806,7 +808,7 @@ export default function TrainRatesContent() {
 
                 <div className="flex items-center gap-2 mb-2">
                   <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs">
-                    {rate.class_type}
+                    {trainClassLabel(rate.class_type, rate.class_type)}
                   </span>
                   {rate.duration_hours && (
                     <span className="text-xs text-gray-500 flex items-center gap-1">
@@ -852,7 +854,7 @@ export default function TrainRatesContent() {
                     {rate.origin_city} → {rate.destination_city}
                   </span>
                   <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-xs">
-                    {rate.class_type}
+                    {trainClassLabel(rate.class_type, rate.class_type)}
                   </span>
                   {rate.duration_hours && (
                     <span className="text-sm text-gray-500">{rate.duration_hours}h</span>
@@ -1072,7 +1074,7 @@ export default function TrainRatesContent() {
                     >
                       <option value="">{t('form.selectClass')}</option>
                       {CLASS_TYPES.map(cls => (
-                        <option key={cls} value={cls}>{cls}</option>
+                        <option key={cls} value={cls}>{trainClassLabel(cls, cls)}</option>
                       ))}
                     </select>
                   </div>
