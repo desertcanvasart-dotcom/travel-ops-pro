@@ -5,6 +5,7 @@ import type { GridConfig, GridTotals, Tier, ClientType, PassportType } from '../
 import { convertAmount } from '../lib/calculator'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
+import { useTierLabel } from '@/hooks/useTierLabel'
 
 interface GridHeaderProps {
   config: GridConfig
@@ -36,6 +37,7 @@ const DEFAULT_MARGINS: Record<ClientType, number> = {
 }
 
 export default function GridHeader({ config, onChange, totals }: GridHeaderProps) {
+  const tierLabel = useTierLabel()
   const [partners, setPartners] = useState<B2BPartner[]>([])
   const update = (partial: Partial<GridConfig>) => onChange({ ...config, ...partial })
   const sym = currencySymbol(config.currency)
@@ -144,7 +146,7 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
             className="px-2 py-1 text-sm border border-gray-200 rounded-lg font-medium bg-white focus:ring-2 focus:ring-blue-200 transition-all"
           >
             {TIERS.map(t => (
-              <option key={t.value} value={t.value}>{t.label}</option>
+              <option key={t.value} value={t.value}>{tierLabel(t.value, t.label)}</option>
             ))}
           </select>
 
