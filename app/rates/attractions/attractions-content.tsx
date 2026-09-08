@@ -8,6 +8,7 @@ import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Copy, Search, Plus, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
@@ -212,6 +213,7 @@ function getLanguageFromCookie(): string {
 
 export default function AttractionsContent() {
   const t = useTranslations('rates.attractions')
+  const attractionCategoryLabel = useVocabLabel('attraction_category')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const dialog = useConfirmDialog()
@@ -757,7 +759,7 @@ export default function AttractionsContent() {
               >
                 <option value="all">{t('allCategories')}</option>
                 {categories.map(cat => (
-                  <option key={cat} value={cat}>{t(`categories.${cat}`)}</option>
+                  <option key={cat} value={cat}>{attractionCategoryLabel(cat, t(`categories.${cat}`))}</option>
                 ))}
               </select>
             </div>
@@ -847,7 +849,7 @@ export default function AttractionsContent() {
                     <td className="px-4 py-3">
                       {attraction.category && (
                         <span className="px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-xs font-medium capitalize">
-                          {t(`categories.${attraction.category}`)}
+                          {attractionCategoryLabel(attraction.category, t(`categories.${attraction.category}`))}
                         </span>
                       )}
                     </td>
@@ -1058,7 +1060,7 @@ export default function AttractionsContent() {
                     >
                       <option value="">{t('form.selectCategory')}</option>
                       {categoryOptions.map(cat => (
-                        <option key={cat} value={cat}>{t(`categories.${cat}`)}</option>
+                        <option key={cat} value={cat}>{attractionCategoryLabel(cat, t(`categories.${cat}`))}</option>
                       ))}
                     </select>
                   </div>
