@@ -6,6 +6,7 @@ import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
@@ -327,6 +328,7 @@ function Pagination({
 export default function HotelsContent() {
   const t = useTranslations('rates.hotels')
   const tierLabel = useTierLabel()
+  const boardBasisLabel = useVocabLabel('board_basis')
   const tPeriods = useTranslations('rates.ratePeriods')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
@@ -1473,7 +1475,7 @@ export default function HotelsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
                       {BOARD_BASIS_OPTIONS_CONFIG.map(opt => (
-                        <option key={opt.value} value={opt.value}>{t(`boardTypes.${opt.labelKey}`)}</option>
+                        <option key={opt.value} value={opt.value}>{boardBasisLabel(opt.value, t(`boardTypes.${opt.labelKey}`))}</option>
                       ))}
                     </select>
                   </div>

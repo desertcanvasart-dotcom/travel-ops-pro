@@ -24,7 +24,9 @@ export function useVocabLabel(kind: VocabularyKind): (key: string | null | undef
   const { all } = useVocabulary(kind)
   return (key, fallback) => {
     if (!key) return fallback
-    const item = all.find(i => i.key === key)
+    // Vocabulary keys are lowercase by constraint; some stored codes are not
+    // (e.g. board_basis 'BB'), so normalise before matching.
+    const item = all.find(i => i.key === key.toLowerCase())
     if (!item) return fallback
     const override = locale === 'ja' ? item.label_ja : item.label
     return override && override.trim() ? override : fallback
