@@ -7,6 +7,7 @@ import { todayLocal } from '@/lib/today'
 import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useConfirm } from '@/components/ConfirmDialog'
+import { useTierLabel } from '@/hooks/useTierLabel'
 import { useSearchParams } from 'next/navigation'
 import Papa from 'papaparse'
 import {
@@ -103,9 +104,10 @@ type ViewMode = 'table' | 'cards' | 'compact'
 
 function TierBadge({ tier }: { tier: string | null }) {
   const tierConfig = TIER_OPTIONS.find(t => t.value === tier) || TIER_OPTIONS[1]
+  const tierLabel = useTierLabel()
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig.color}`}>
-      {tierConfig.label}
+      {tierLabel(tierConfig.value, tierConfig.label)}
     </span>
   )
 }
@@ -150,6 +152,7 @@ function ToastNotification({ toast, onClose }: { toast: Toast; onClose: () => vo
 export default function RestaurantsContent() {
   const { rateSymbol, rateCurrency } = useCurrency()
   const confirmDialog = useConfirm()
+  const tierLabel = useTierLabel()
   const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
@@ -1210,7 +1213,7 @@ export default function RestaurantsContent() {
                         }`}
                       >
                         {tier.value === 'luxury' && <Crown className="w-3.5 h-3.5" />}
-                        {tier.label}
+                        {tierLabel(tier.value, tier.label)}
                       </button>
                     ))}
                   </div>

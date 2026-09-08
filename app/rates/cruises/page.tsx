@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
+import { useTierLabel } from '@/hooks/useTierLabel'
 import Link from 'next/link'
 import { Copy, Ship, Plus, Search, Edit, Trash2, X, Check, ChevronDown, AlertCircle, CheckCircle2, Crown, Star,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Calendar
@@ -202,10 +203,11 @@ interface CruiseFormData {
 
 function TierBadge({ tier, t }: { tier: string | null; t: (key: string) => string }) {
   const tierConfig = TIER_OPTIONS_CONFIG.find(tc => tc.value === tier) || TIER_OPTIONS_CONFIG[1]
+  const tierLabel = useTierLabel()
 
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig.color}`}>
-      {t(`tiers.${tierConfig.labelKey}`)}
+      {tierLabel(tierConfig.value, t(`tiers.${tierConfig.labelKey}`))}
     </span>
   )
 }
@@ -335,6 +337,7 @@ function Pagination({
 export default function CruisesPage() {
   const t = useTranslations('rates.cruises')
   const tCommon = useTranslations('rates.common')
+  const tierLabel = useTierLabel()
   const tPeriods = useTranslations('rates.ratePeriods')
   const dialog = useConfirmDialog()
   const { formatWithConversion, rateCurrency } = useCurrency()
@@ -1170,7 +1173,7 @@ export default function CruisesPage() {
                       }`}
                     >
                       {tier.value === 'luxury' && <Crown className="w-3.5 h-3.5" />}
-                      {t(`tiers.${tier.labelKey}`)}
+                      {tierLabel(tier.value, t(`tiers.${tier.labelKey}`))}
                     </button>
                   ))}
                 </div>
