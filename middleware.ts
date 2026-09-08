@@ -291,7 +291,7 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
   // '/order' is the hosted order form — the tour-up.jp inquiry form served by
   // us. The visitor is a customer with no account; the page only renders a
   // form, and its submit endpoint (/api/public/order-form) defends itself.
-  const publicRoutes = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/invite/accept', '/terms', '/privacy', '/contact', '/docs', '/about', '/integrations', '/share', '/portal', '/order', '/guide']
+  const publicRoutes = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/invite/accept', '/terms', '/privacy', '/contact', '/docs', '/about', '/integrations', '/share', '/portal', '/order', '/guide', '/staff']
   const isPublicRoute = publicRoutes.some(route => 
     request.nextUrl.pathname === route || 
     (route !== '/' && request.nextUrl.pathname.startsWith(route))
@@ -331,6 +331,10 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     // The route validates the token, checks revocation and expiry, rate-limits
     // by IP, and writes only allowlisted fields.
     '/api/portal/',
+    // Staff tap-links: the driver/guide has no login. The route validates the
+    // token against an active staff_link on a live (non-cancelled) assignment,
+    // derives org/itinerary/actor server-side, and rate-limits per assignment.
+    '/api/staff/',
     // Invitation verify/accept: the invitee has NO session yet by definition
     // (they clicked the emailed link; accept runs right after signUp). Both
     // routes authenticate by the unguessable invitation token and check
