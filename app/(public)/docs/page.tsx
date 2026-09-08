@@ -14,6 +14,14 @@ export default function DocsHub() {
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">
             Everything you need to know about using Autoura. From getting started to advanced workflows, find step-by-step guides for every feature.
           </p>
+          <div className="mt-8">
+            <a
+              href="/guide/ja.html"
+              className="inline-flex items-center gap-2 rounded-lg border border-primary-300 bg-primary-50 px-5 py-2.5 text-sm font-semibold text-primary-700 hover:bg-primary-100 transition-colors"
+            >
+              🇯🇵 日本語ガイド（操作ウォークスルー）
+            </a>
+          </div>
         </div>
       </section>
 

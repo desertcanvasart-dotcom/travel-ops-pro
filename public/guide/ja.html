@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autoura 操作ガイド（日本語）</title>
+<meta name="description" content="Autoura 業務システムの詳細ウォークスルー（日本語・画面操作つき）">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+  :root {
+    --ground: #F6F3EC; --surface: #FFFDF7; --surface-2: #F1ECE0;
+    --ink: #23281C; --ink-soft: #565d48; --ink-faint: #8a8f7c;
+    --brand: #647C47; --brand-deep: #46592f; --brand-soft: #e7ecdc;
+    --sand: #B08420; --sand-soft: #f3e9cf;
+    --border: #E2DCCC; --border-strong: #d0c8b2;
+    --shadow: 0 1px 2px rgba(35,40,28,.05), 0 8px 28px rgba(35,40,28,.06);
+    --maxw: 1040px;
+  }
+  :root:not([data-theme="light"]) { @media (prefers-color-scheme: dark) {
+    --ground: #16180F; --surface: #1F2318; --surface-2: #262b1d;
+    --ink: #ECEADD; --ink-soft: #b6bba4; --ink-faint: #868b73;
+    --brand: #A2B77E; --brand-deep: #b8cd94; --brand-soft: #2c331f;
+    --sand: #D8B255; --sand-soft: #33301f;
+    --border: #333829; --border-strong: #454b37;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  }}
+  :root[data-theme="dark"] {
+    --ground: #16180F; --surface: #1F2318; --surface-2: #262b1d;
+    --ink: #ECEADD; --ink-soft: #b6bba4; --ink-faint: #868b73;
+    --brand: #A2B77E; --brand-deep: #b8cd94; --brand-soft: #2c331f;
+    --sand: #D8B255; --sand-soft: #33301f;
+    --border: #333829; --border-strong: #454b37;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink);
+    font-family: "Noto Sans JP", system-ui, "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    line-height: 1.85; font-feature-settings: "palt" 1; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+  .mono { font-family: "IBM Plex Mono", monospace; font-size: .9em; }
+  code { font-family:"IBM Plex Mono",monospace; background: var(--surface-2); padding: 1px 6px;
+    border-radius: 5px; font-size: .85em; color: var(--brand-deep); }
+
+  /* Header */
+  header { border-bottom: 1px solid var(--border);
+    background: radial-gradient(120% 140% at 88% -30%, var(--brand-soft) 0%, transparent 55%), var(--surface); }
+  .head-inner { padding: 52px 24px 40px; max-width: var(--maxw); margin: 0 auto; }
+  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .22em; color: var(--brand-deep);
+    text-transform: uppercase; margin: 0 0 18px; display: flex; align-items: center; gap: 12px; }
+  .eyebrow::before { content: ""; width: 30px; height: 2px; background: var(--sand); }
+  h1 { font-family: "Noto Serif JP", serif; font-weight: 700; font-size: clamp(28px, 4.6vw, 42px);
+    line-height: 1.3; margin: 0 0 16px; text-wrap: balance; }
+  h1 .en { display:block; font-family:"Noto Sans JP",sans-serif; font-weight: 500;
+    font-size: clamp(12px,1.5vw,15px); letter-spacing: .18em; color: var(--ink-faint); margin-top: 12px; }
+  .lede { font-size: 16.5px; color: var(--ink-soft); max-width: 64ch; margin: 0; }
+  .client-tag { display: inline-flex; align-items: baseline; gap: 10px; margin-top: 26px;
+    padding: 10px 18px; border: 1px solid var(--border-strong); border-radius: 999px;
+    background: var(--surface); font-size: 13px; color: var(--ink-soft); flex-wrap: wrap; }
+  .client-tag strong { color: var(--ink); font-weight: 700; }
+
+  /* How-to-read strip */
+  .howread { display:grid; grid-template-columns: repeat(auto-fit, minmax(210px,1fr)); gap: 12px;
+    margin: 26px 0 4px; }
+  .howread div { background: var(--surface); border: 1px solid var(--border); border-radius: 11px;
+    padding: 13px 16px; font-size: 13px; color: var(--ink-soft); }
+  .howread b { color: var(--ink); font-weight: 700; display:block; margin-bottom: 2px; font-size: 13.5px; }
+  .k-howto { color: var(--brand-deep); } .k-tip { color: var(--sand); }
+
+  /* TOC */
+  nav.toc { padding: 30px 0 6px; }
+  nav.toc ol { list-style: none; margin: 0; padding: 0;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); gap: 10px; }
+  nav.toc a { display: flex; align-items: baseline; gap: 12px; text-decoration: none; padding: 12px 15px;
+    border: 1px solid var(--border); border-radius: 11px; background: var(--surface); color: var(--ink);
+    transition: border-color .15s, transform .15s; }
+  nav.toc a:hover { border-color: var(--brand); transform: translateY(-1px); }
+  nav.toc .n { font-family: "Noto Serif JP", serif; font-weight: 700; color: var(--sand); font-size: 14px;
+    font-variant-numeric: tabular-nums; min-width: 1.4em; }
+  nav.toc .t { font-size: 13.5px; font-weight: 500; line-height: 1.5; }
+
+  /* Worked-example band */
+  .example { margin: 28px 0 6px; border: 1px solid var(--border-strong); border-radius: 16px;
+    background: linear-gradient(180deg, var(--sand-soft), var(--surface) 70%); padding: 26px 26px 22px;
+    box-shadow: var(--shadow); }
+  .example h2 { font-family:"Noto Serif JP",serif; font-size: 20px; margin: 0 0 4px; }
+  .example .sub { color: var(--ink-faint); font-size: 13px; margin: 0 0 18px; }
+  .flow { display:grid; gap: 0; }
+  .flow .f { display:grid; grid-template-columns: 26px 1fr; gap: 14px; padding: 9px 0; align-items: baseline;
+    border-top: 1px dashed var(--border-strong); }
+  .flow .f:first-child { border-top: none; }
+  .flow .fn { font-family:"IBM Plex Mono",monospace; font-weight: 500; color: var(--brand); font-size: 13px; }
+  .flow .ft { font-size: 14px; color: var(--ink-soft); }
+  .flow .ft b { color: var(--ink); }
+
+  /* Sections */
+  main { padding: 22px 0 30px; }
+  section.step { padding: 40px 0; border-top: 1px solid var(--border); scroll-margin-top: 16px; }
+  .step-head { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 18px; }
+  .step-num { font-family:"Noto Serif JP",serif; font-weight: 700; font-variant-numeric: tabular-nums;
+    font-size: clamp(32px, 5.5vw, 48px); line-height: .95; color: var(--brand); flex: none;
+    width: 1.7em; text-align: right; }
+  .step-titles { flex: 1; min-width: 0; padding-top: 4px; }
+  .step-titles h2 { font-family:"Noto Serif JP",serif; font-weight: 600; font-size: clamp(20px, 3vw, 27px);
+    margin: 0 0 4px; line-height: 1.4; text-wrap: balance; }
+  .step-titles .en { font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-faint); font-weight: 500; }
+  .step-body { margin-left: calc(1.7em + 20px); }
+  @media (max-width: 640px){ .step-body { margin-left: 0; } .step-num { font-size: 30px; width: auto; } }
+  .step-body > p { margin: 0 0 18px; color: var(--ink-soft); font-size: 15px; max-width: 66ch; }
+  .step-body > p strong { color: var(--ink); font-weight: 700; }
+  .subhead { font-weight: 700; font-size: 14px; color: var(--brand-deep); margin: 22px 0 10px;
+    display:flex; align-items:center; gap:8px; }
+  .subhead::before { content:""; width: 6px; height: 6px; border-radius: 2px; background: var(--sand); }
+
+  /* How-to ordered steps */
+  ol.howto { counter-reset: h; list-style: none; margin: 0 0 4px; padding: 0; display: grid; gap: 8px; }
+  ol.howto li { counter-increment: h; display: grid; grid-template-columns: 26px 1fr; gap: 13px;
+    align-items: start; font-size: 14.5px; color: var(--ink-soft); }
+  ol.howto li::before { content: counter(h); font-family:"IBM Plex Mono",monospace; font-size: 12px; font-weight:500;
+    color: #fff; background: var(--brand); width: 24px; height: 24px; border-radius: 7px;
+    display: grid; place-items: center; }
+  ol.howto li b { color: var(--ink); font-weight: 700; }
+
+  /* Points */
+  .points { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border);
+    border-radius: 13px; overflow: hidden; box-shadow: var(--shadow); margin-top: 6px; }
+  .point { background: var(--surface); padding: 14px 18px; display: grid;
+    grid-template-columns: 168px 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 620px){ .point { grid-template-columns: 1fr; gap: 3px; } }
+  .point .k { font-weight: 700; font-size: 13px; color: var(--brand-deep); }
+  .point .v { font-size: 14px; color: var(--ink-soft); line-height: 1.7; }
+  .point .v b { color: var(--ink); font-weight: 700; }
+
+  .tip { margin-top: 16px; padding: 13px 16px 13px 18px; border-radius: 11px; background: var(--sand-soft);
+    border: 1px solid var(--border-strong); border-left: 4px solid var(--sand); font-size: 13.5px; color: var(--ink-soft); }
+  .tip b { color: var(--ink); }
+  .tip.info { background: var(--brand-soft); border-left-color: var(--brand); }
+
+  /* pill list (inline chips) */
+  .pills { display:flex; flex-wrap:wrap; gap: 7px; margin: 6px 0 4px; }
+  .pill { font-size: 12.5px; padding: 4px 11px; border-radius: 999px; background: var(--surface-2);
+    border: 1px solid var(--border); color: var(--ink-soft); }
+
+  /* Reference */
+  .ref { padding: 46px 0 10px; border-top: 2px solid var(--border-strong); }
+  .ref h2 { font-family:"Noto Serif JP",serif; font-size: 24px; font-weight: 600; margin: 0 0 6px; }
+  .ref .sub { color: var(--ink-faint); font-size: 14px; margin: 0 0 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(256px, 1fr)); gap: 14px; }
+  .rcard { background: var(--surface); border: 1px solid var(--border); border-radius: 13px; padding: 19px; }
+  .rcard h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; }
+  .rcard .en { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-faint); }
+  .rcard p { margin: 9px 0 0; font-size: 13px; color: var(--ink-soft); line-height: 1.7; }
+
+  /* roles table */
+  .tbl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); margin-top: 6px; }
+  table { border-collapse: collapse; width: 100%; min-width: 520px; background: var(--surface); font-size: 13.5px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--surface-2); font-weight: 700; font-size: 12px; color: var(--ink-faint); letter-spacing: .03em; }
+  tr:last-child td { border-bottom: none; }
+  td b { color: var(--ink); }
+
+  .integ { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 15px; border-radius: 999px;
+    border: 1px solid var(--border-strong); background: var(--surface); font-size: 13px; color: var(--ink-soft); }
+  .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); }
+  .chip.beta .dot { background: var(--sand); }
+  .chip small { color: var(--ink-faint); }
+
+  footer { border-top: 1px solid var(--border); margin-top: 28px; }
+  .foot-inner { padding: 30px 24px 48px; max-width: var(--maxw); margin: 0 auto; color: var(--ink-faint);
+    font-size: 12.5px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  a.top { color: var(--brand-deep); text-decoration: none; font-weight: 500; }
+  a.top:hover { text-decoration: underline; }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 4px; }
+  @media (prefers-reduced-motion: reduce){ * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<header id="top">
+  <div class="head-inner">
+    <p class="eyebrow">オペレーション・ウォークスルー / 詳細版</p>
+    <h1>Autoura 操作ガイド — 問い合わせから請求まで
+      <span class="en">TRAVEL OPERATIONS PLATFORM &mdash; A GUIDED WALKTHROUGH</span>
+    </h1>
+    <p class="lede">エジプト手配業務を、ひとつのシステムで。本ガイドは実際の業務フローに沿って、各機能の<strong>画面操作の手順</strong>と<strong>できること</strong>を具体的に解説します。はじめての方は上から順に、慣れた方は目次から必要な項目へ。</p>
+    <div class="client-tag"><strong>Autoura</strong>&nbsp;<span style="color:var(--ink-faint)">|&nbsp; 旅行手配業務プラットフォーム &nbsp;/&nbsp; 見積・予約・請求を一気通貫</span></div>
+
+    <div class="howread">
+      <div><b class="k-howto">▸ 手順</b>実際に画面で行う操作を、番号つきで示します。</div>
+      <div><b>ポイント</b>その機能でできることを一覧で示します。</div>
+      <div><b class="k-tip">ヒント</b>実務でのコツや注意点です。</div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="toc" aria-label="目次">
+    <ol>
+      <li><a href="#s1"><span class="n">01</span><span class="t">問い合わせの一元受信</span></a></li>
+      <li><a href="#s2"><span class="n">02</span><span class="t">AI による返信ドラフト</span></a></li>
+      <li><a href="#s3"><span class="n">03</span><span class="t">行程と見積の作成</span></a></li>
+      <li><a href="#s4"><span class="n">04</span><span class="t">自動料金計算のしくみ</span></a></li>
+      <li><a href="#s5"><span class="n">05</span><span class="t">B2B 見積と改訂履歴</span></a></li>
+      <li><a href="#s6"><span class="n">06</span><span class="t">予約・出発・キャパシティ</span></a></li>
+      <li><a href="#s7"><span class="n">07</span><span class="t">お客様ポータル</span></a></li>
+      <li><a href="#s8"><span class="n">08</span><span class="t">請求・入金・会計</span></a></li>
+      <li><a href="#ref"><span class="n">＋</span><span class="t">基盤機能・権限・連携</span></a></li>
+    </ol>
+  </nav>
+
+  <!-- Worked example -->
+  <div class="example">
+    <h2>実例で見る、全体の流れ</h2>
+    <p class="sub">田中様ご一行（3名・日本国籍＝非EU）／ 3月出発・カイロ→ルクソール 5日間 の一件が、システムをどう通っていくか。</p>
+    <div class="flow">
+      <div class="f"><div class="fn">01</div><div class="ft">田中様が <b>WhatsApp</b> で問い合わせ。メッセージが受信箱に自動着信し、AI が氏名・日程・3名・国籍・ご要望を抽出。</div></div>
+      <div class="f"><div class="fn">02</div><div class="ft">AI が空き状況を確認して<b>返信案</b>を作成。担当者が文面を確認して送信。</div></div>
+      <div class="f"><div class="fn">03</div><div class="ft">会話から<b>見積ビルダー</b>で5日間の行程を生成。各サービスがレート表と連動し、料金が即時に算出。</div></div>
+      <div class="f"><div class="fn">04</div><div class="ft">人数3名に合わせ<b>車両クラスを自動選定</b>、非EU旅券の入場料、3月のクルーズ料金を反映。未設定料金は警告表示。</div></div>
+      <div class="f"><div class="fn">05</div><div class="ft">行程をワンクリックで<b>見積書</b>に。修正のたびに版が残り、いつでも比較・復元が可能。</div></div>
+      <div class="f"><div class="fn">06</div><div class="ft">ご成約後は<b>予約</b>に変換。ガイド・車両・ホテルを割り当て、サプライヤー確認番号を記録。</div></div>
+      <div class="f"><div class="fn">07</div><div class="ft">田中様へ<b>専用リンク</b>を送付。ご本人がパスポートを添付し、質問も送れる（申込書の代替）。</div></div>
+      <div class="f"><div class="fn">08</div><div class="ft"><b>請求書</b>を発行し入金を記録。領収書を自動生成、出発前に旅行ごとの損益を確認。</div></div>
+    </div>
+  </div>
+
+  <main>
+    <!-- 01 -->
+    <section class="step" id="s1">
+      <div class="step-head"><div class="step-num">01</div>
+        <div class="step-titles"><h2>問い合わせの一元受信</h2><div class="en">Unified Inbox &amp; WhatsApp Parser</div></div></div>
+      <div class="step-body">
+        <p>WhatsApp・メール（Gmail）・お客様ポータルからのメッセージが<strong>ひとつの受信箱</strong>に集約されます。WhatsApp は双方向で、お客様の返信も自動で着信。届いた会話から <strong>AI パーサー</strong>が予約に必要な情報をまとめて抽出し、そのまま見積作成へ引き渡します。</p>
+
+        <div class="subhead">受信箱での操作</div>
+        <ol class="howto">
+          <li>サイドバーの <b>WhatsApp 受信箱</b> を開く（左に会話一覧、右に選択した会話）。</li>
+          <li>会話を選び、下部に返信を入力して<b>送信</b>。</li>
+          <li>必要に応じて <b>担当者へ割当</b>・<b>クイック返信</b>・<b>返信言語の選択</b>・<b>顧客レコードへのリンク／新規作成</b>を実行。</li>
+          <li>その会話から<b>見積書・請求書・契約書・領収書を直接送付</b>できます。</li>
+        </ol>
+
+        <div class="subhead">AI パーサーで見積の下地をつくる</div>
+        <ol class="howto">
+          <li>ダッシュボードの <b>WhatsApp を解析</b>（またはサイドバーの WhatsApp パーサー）を開く。</li>
+          <li>会話テキストを貼り付けて <b>解析</b> をクリック。</li>
+          <li>抽出結果を確認し、<b>行程を作成</b> をクリックすると料金つきの行程が生成されます。</li>
+        </ol>
+        <div class="subhead">AI が抽出する項目</div>
+        <div class="pills">
+          <span class="pill">氏名・メール・電話</span><span class="pill">国籍・旅券区分</span><span class="pill">希望日程</span>
+          <span class="pill">人数（大人・子供・幼児）</span><span class="pill">目的地・ご興味</span><span class="pill">予算帯</span><span class="pill">特別なご要望</span>
+        </div>
+        <div class="tip info">各抽出項目には <b>信頼度スコア</b> が付き、AI がどの程度確信しているかが分かります。貼り付けるだけで下書きが整うため、問い合わせを見積に変える最短ルートです。</div>
+      </div>
+    </section>
+
+    <!-- 02 -->
+    <section class="step" id="s2">
+      <div class="step-head"><div class="step-num">02</div>
+        <div class="step-titles"><h2>AI が返信案を作成、送信は人が承認</h2><div class="en">WhatsApp AI Agent &amp; Copilot</div></div></div>
+      <div class="step-body">
+        <p>WhatsApp AI エージェントは、返信を書く前に<strong>貴社の実データを参照（ツール呼び出し）</strong>します。作成されるのは常に<strong>下書きの提案</strong>で、会話に保存され承認を待ちます。<strong>AI が自動で送信することはありません</strong>。この機能は既定でオフ、組織ごとに明示的に有効化します。</p>
+
+        <div class="subhead">エージェントが参照できること（読み取り専用）</div>
+        <div class="points">
+          <div class="point"><div class="k">お客様の旅程検索</div><div class="v">紐づく顧客の行程・予約を、日付とステータス付きで確認。</div></div>
+          <div class="point"><div class="k">行程の照会</div><div class="v">特定の旅程の日別内容と料金を参照。</div></div>
+          <div class="point"><div class="k">空き状況の確認</div><div class="v">希望日のキャパシティと、範囲内のグループ出発を確認。<b>提供できない日付を約束しません</b>。</div></div>
+          <div class="point"><div class="k">人へエスカレーション</div><div class="v">苦情・キャンセル・返金・金銭・急ぎの案件は、推測せず担当者へ引き継ぎ。</div></div>
+        </div>
+        <div class="tip">各提案には<b>信頼度と根拠（使用したツール）</b>が示されます。機微な内容（苦情・返金・当日依頼など）は、AI が判断を避けて人へエスカレーションします。</div>
+
+        <div class="subhead">AI コパイロット — 自社ナレッジに基づく回答（RAG）</div>
+        <p style="margin-top:2px">受信メッセージはコパイロットの共有受信箱に集まり、AI が<strong>意味で関連する社内情報を検索</strong>して下書きを提案します。すべて承認制で、送信は必ず人が行います。ナレッジは <b>Copilot Knowledge</b> で管理します。</p>
+        <div class="pills">
+          <span class="pill">FAQ（想定問答）</span><span class="pill">Policy（キャンセル・返金規定）</span><span class="pill">Tour（ツアー説明）</span><span class="pill">Other（その他）</span>
+        </div>
+        <div class="tip info"><b>エージェントメモリ：</b>承認した返信や業務のパターン（顧客の好み・価格傾向・サプライヤー情報）を AI が学習し、行程生成に反映。使うほど貴社らしい提案に近づきます。設定は不要です。</div>
+      </div>
+    </section>
+
+    <!-- 03 -->
+    <section class="step" id="s3">
+      <div class="step-head"><div class="step-num">03</div>
+        <div class="step-titles"><h2>行程と見積の作成</h2><div class="en">Quote Builder &amp; Itineraries</div></div></div>
+      <div class="step-body">
+        <p>見積ビルダーは Autoura の中核となる<strong>唯一の料金エンジン</strong>です。日別にサービスを枠へ入れると、旅行全体の料金がリアルタイムで計算されます。同じエンジンが B2C 見積と B2B レートシートの両方を動かすため、<strong>数字が常に一致</strong>します。</p>
+
+        <div class="subhead">3つの入力方法</div>
+        <ol class="howto">
+          <li><b>テキストを貼り付け</b> — WhatsApp・メール・手配メモから、AI が都市・観光・サービスを読み取り日別グリッドを生成。</li>
+          <li><b>ファイルをアップロード</b> — PDF・画像（PNG/JPG/WebP）・DOCX を、ビジョン解析で同じグリッドへ。</li>
+          <li><b>読み込み／手動作成</b> — 既存の行程IDを読み込んで再料金、または「＋」で日を追加し一から作成。</li>
+        </ol>
+
+        <div class="subhead">上部の「トリップ設定」が全計算を制御</div>
+        <div class="points">
+          <div class="point"><div class="k">PAX（人数）</div><div class="v">車両選定・一人当たり原価・宿泊按分に影響。</div></div>
+          <div class="point"><div class="k">開始日</div><div class="v">ホテル・クルーズのシーズン（期間別）料金を決定。</div></div>
+          <div class="point"><div class="k">旅券区分</div><div class="v">EU / 非EU。入場料など一部サービスの料金が変わります。</div></div>
+          <div class="point"><div class="k">ティア</div><div class="v">Budget / Standard / Deluxe / Luxury。使用するホテルやサービス水準を制御。</div></div>
+          <div class="point"><div class="k">料金モード</div><div class="v">B2C（直販）/ B2B（代理店）。B2B ではパートナー選択とレートシート生成が有効化。</div></div>
+          <div class="point"><div class="k">通貨</div><div class="v">EUR / USD / GBP / EGP / JPY。全レートを換算して表示。</div></div>
+          <div class="point"><div class="k">マージン%</div><div class="v">利益率。総原価に適用して販売価格を算出。</div></div>
+        </div>
+        <div class="tip">設定を変えるたびに、<b>一人当たり原価・総原価・マージン・一人当たり販売額・販売総額</b>が即座に再計算されます。</div>
+
+        <div class="subhead">日別サービス枠（最大14）</div>
+        <div class="pills">
+          <span class="pill">送迎・ルート</span><span class="pill">ガイド</span><span class="pill">宿泊</span><span class="pill">食事</span><span class="pill">入場料</span>
+          <span class="pill">アクティビティ</span><span class="pill">国内航空</span><span class="pill">ナイルクルーズ</span><span class="pill">空港サービス</span><span class="pill">チップ</span><span class="pill">水・備品</span>
+        </div>
+        <p style="margin-top:12px">AI が各サービスを料金DBの最適レートに割り当てます。修正が必要なのは、AI の推測が外れた枠や、別案にしたい枠だけ。<b>デイタイプのプリセット</b>（到着／観光／移動／クルーズ／フリー／出発）が、その日に必要な内容の初期値を用意します。</p>
+
+        <div class="subhead">行程詳細ページからのアクション</div>
+        <div class="pills">
+          <span class="pill">PDF ダウンロード</span><span class="pill">WhatsApp で送付</span><span class="pill">メール送付</span>
+          <span class="pill">請求書を生成</span><span class="pill">予約に変換</span><span class="pill">コミッション生成</span><span class="pill">タスクを生成（AI）</span>
+        </div>
+        <div class="tip info">子供（4〜12歳）は50%割引、幼児（0〜3歳）は航空以外無料など、人数の内訳も料金に反映されます。料金DBを最新に保てば、<b>Auto モード</b>で即時かつ正確に価格が出ます。</div>
+      </div>
+    </section>
+
+    <!-- 04 -->
+    <section class="step" id="s4">
+      <div class="step-head"><div class="step-num">04</div>
+        <div class="step-titles"><h2>自動料金計算のしくみ</h2><div class="en">Rate Management &amp; Auto-Pricing</div></div></div>
+      <div class="step-body">
+        <p>料金エンジンは原価を<strong>3種類</strong>に分けて計算します。これにより、人数が変わっても正しく再計算されます。</p>
+        <div class="points">
+          <div class="point"><div class="k">固定費</div><div class="v">人数に関わらず一定：ガイド料・チップ・空港サービス。グループで按分。</div></div>
+          <div class="point"><div class="k">一人当たり費用</div><div class="v">人数に比例：宿泊（1泊単価）・入場料・食事・水・ナイルクルーズ。</div></div>
+          <div class="point"><div class="k">輸送費</div><div class="v">グループ規模で段階的に変化。<b>セダン→ミニバン→バン→ミニバス→バス</b>と車両クラスを自動選定。</div></div>
+        </div>
+
+        <div class="subhead">エジプト手配ならではの取り扱い</div>
+        <div class="points">
+          <div class="point"><div class="k">16 の料金区分</div><div class="v">ホテル・ナイルクルーズ・寝台列車・航空・入場料・ガイド・送迎・チップほか。</div></div>
+          <div class="point"><div class="k">期間別レート</div><div class="v">ホテルとクルーズは、契約どおり<b>何期間でも</b>日付別に料金設定が可能。</div></div>
+          <div class="point"><div class="k">旅券別料金</div><div class="v">EU / 非EU の区分で、入場料などを自動的に出し分け。</div></div>
+          <div class="point"><div class="k">クルーズ客室</div><div class="v">シングル/ダブル/トリプル/スイート別に1名1泊で計算し、<b>最も安価で有効な組み合わせ</b>を自動選定。</div></div>
+          <div class="point"><div class="k">カバレッジ確認</div><div class="v">料金が未設定のサービスは、見積提示前に<b>警告</b>として表示。空欄を「0円」と誤認しません。</div></div>
+        </div>
+        <div class="tip">輸送費だけは人数に対して直線的に増えません。グリッドが人数ごとに適切な車両クラスへ自動で切り替えるため、手計算は不要です。</div>
+      </div>
+    </section>
+
+    <!-- 05 -->
+    <section class="step" id="s5">
+      <div class="step-head"><div class="step-num">05</div>
+        <div class="step-titles"><h2>B2B 見積と改訂履歴</h2><div class="en">B2B Quotes &amp; Revisions</div></div></div>
+      <div class="step-body">
+        <p>B2B 料金計算では、<strong>1〜40名</strong>の各グループ規模の一人当たり料金を、<strong>ツアーリーダー同行（+0 / +1）</strong>やシングルサプルメント込みで一括算出します。旅行会社向けの<strong>レートシート</strong>をそのまま作成できます。</p>
+
+        <div class="subhead">レートシートの作成</div>
+        <ol class="howto">
+          <li>ツアーのバリエーションを選び、人数・出発日・旅券区分・マージンを設定。</li>
+          <li><b>価格を計算</b> — サマリー、シングルサプルメント、日別の原価内訳が表示。</li>
+          <li>人数の <b>From〜To（1〜40）</b> を指定し <b>レートシート生成</b>。各人数の 原価／マージン／販売額／一人当たり／サプルメント が表に。</li>
+          <li><b>CSV エクスポート</b> でパートナーへ共有、または <b>見積として保存</b>。</li>
+        </ol>
+
+        <div class="subhead">見積書（PDF）と改訂履歴</div>
+        <div class="points">
+          <div class="point"><div class="k">参照コード</div><div class="v">保存時に一意のコードを付与。ステータス（Draft / Sent / Confirmed / Expired）で管理。</div></div>
+          <div class="point"><div class="k">PDF 出力</div><div class="v">会社ロゴ・料金表・サプルメント・約款入り。<b>日本語フォント対応</b>で日本の取引先向けも正しく表示。</div></div>
+          <div class="point"><div class="k">改訂の自動記録</div><div class="v">編集やステータス変更のたびに<b>全体をスナップショット</b>。誰がいつ変更したかも記録。</div></div>
+          <div class="point"><div class="k">2版の比較</div><div class="v">任意の2版を<b>項目単位で差分表示</b>。変わった箇所と件数だけを明示。</div></div>
+          <div class="point"><div class="k">復元</div><div class="v">過去の版へ1操作で戻せます（復元自体も新しい版として記録＝何も失われない）。<b>マネージャー以上</b>。</div></div>
+        </div>
+        <div class="tip">複数の見積をまとめて操作できます（<b>一括ステータス更新・一括削除</b>）。一括操作もマネージャー以上の権限が必要です。</div>
+      </div>
+    </section>
+
+    <!-- 06 -->
+    <section class="step" id="s6">
+      <div class="step-head"><div class="step-num">06</div>
+        <div class="step-titles"><h2>予約・出発・キャパシティ</h2><div class="en">Bookings, Departures &amp; Capacity</div></div></div>
+      <div class="step-body">
+        <p>お客様が行程を確定したら<strong>予約に変換</strong>。予約はオペレーション面（サプライヤー確認・入金・進行状況）を管理します。</p>
+
+        <div class="subhead">予約のステータスとサプライヤー確認</div>
+        <ol class="howto">
+          <li>予約を開き <b>行程から同期</b> で、紐づく行程の全サービスを取り込む。</li>
+          <li><b>サプライヤー</b>タブで各サービス（ホテル・ガイド・送迎…）の確認状況を更新：Pending → Requested → <b>Confirmed（確認番号を入力）</b>。問題は Issues。</li>
+          <li>予約全体のステータスは Pending → Supplier Confirmed → Payment Received → <b>Ready</b> → In Progress → Completed と進行。</li>
+        </ol>
+
+        <div class="subhead">出発（グループ）とキャパシティ</div>
+        <div class="points">
+          <div class="point"><div class="k">出発の作成</div><div class="v">テンプレートから、または独自ツアーで。日程・最少/最大人数・一人当たり価格・締切日を設定。</div></div>
+          <div class="point"><div class="k">ステータス</div><div class="v">Draft（準備）→ Open（受付）→ Limited（残少）→ Full（満席）→ <b>Guaranteed（催行決定）</b>／Cancelled。</div></div>
+          <div class="point"><div class="k">キャパシティ</div><div class="v">日付ごとに「同時催行できるグループ数」を設定。空き状況を自動算出。</div></div>
+          <div class="point"><div class="k">ライブ空き状況</div><div class="v">要求日程・人数に対し <b>Available / Limited / Busy / Blackout</b> をお客様向け文面で返答。</div></div>
+        </div>
+        <div class="tip info">この空き状況は画面表示だけでなく、<b>WhatsApp AI エージェント</b>とリソース割当にも供給されます。AI も担当者と同じライブの数字を見るため、<b>提供できない日を確約しない／ダブルブッキングしない</b>設計です。</div>
+        <div class="tip">カレンダーは全ツアーを月・週・タイムラインで表示し、<b>ドラッグでの日程変更と重複の自動検知</b>に対応します。</div>
+      </div>
+    </section>
+
+    <!-- 07 -->
+    <section class="step" id="s7">
+      <div class="step-head"><div class="step-num">07</div>
+        <div class="step-titles"><h2>お客様ポータル</h2><div class="en">Traveller Portal</div></div></div>
+      <div class="step-body">
+        <p>ポータルは<strong>お客様が見る画面</strong>です。リンクを送るだけで、お客様がご自身で情報を入力し、パスポートを添付し、質問できます。郵送して回収していた<strong>海外旅行参加申込書に代わる</strong>ものです。<strong>アカウントもパスワードも不要</strong>——リンク自体が認証情報です。</p>
+
+        <div class="subhead">リンクの送り方</div>
+        <ol class="howto">
+          <li>予約を開き <b>お客様ポータル</b> パネルを表示。</li>
+          <li>記入方法を選ぶ：<b>ファミリー</b>（予約全体で1リンク）／<b>個別</b>（旅行者ごとの専用リンク・他の同行者は閲覧不可）。</li>
+        </ol>
+
+        <div class="subhead">パスポート・書類の添付</div>
+        <div class="points">
+          <div class="point"><div class="k">パスポート</div><div class="v">1点（新規添付で置き換え）。対応形式 PDF/JPEG/PNG/WEBP/<b>HEIC</b>（iPhone 撮影に対応）、1ファイル10MBまで。</div></div>
+          <div class="point"><div class="k">その他の書類</div><div class="v">ラベル付きで最大6点（ビザ申請・保険証など）。</div></div>
+          <div class="point"><div class="k">安全な保管</div><div class="v"><b>非公開ストレージ</b>に保管。開くと<b>5分で失効するリンク</b>を発行。閲覧できるのは<b>マネージャー／管理者のみ</b>（エージェントは書類を見ずに予約対応可）。</div></div>
+          <div class="point"><div class="k">自動削除</div><div class="v">旅行終了後にスキャン画像を<b>自動削除</b>。削除予定日は各行に表示。削除日はアップロード時に固定（日程変更で延長されません）。</div></div>
+        </div>
+
+        <div class="subhead">ポータル・メッセージ</div>
+        <p style="margin-top:2px">お客様は自分の予約ページの「お問い合わせ」から質問できます。送信前に<strong>営業時間</strong>が表示され、時間外なら次の開始時刻を<strong>お客様のタイムゾーン</strong>で案内。最初の質問には自動で受領確認が返ります。担当者は<strong>統合受信箱の「ポータル」タブ</strong>（または予約ページ）で回答。返信するとお客様には<strong>ページへのリンク</strong>がメールされます（内容そのものはメールに載せません——パスポートや支払いに関わるため）。</p>
+        <div class="tip">営業時間は<b>拠点ごと</b>（それぞれの稼働曜日・タイムゾーン）で設定できます。拠点が国をまたぐ体制でも、平均化せず正確に案内されます。</div>
+      </div>
+    </section>
+
+    <!-- 08 -->
+    <section class="step" id="s8">
+      <div class="step-head"><div class="step-num">08</div>
+        <div class="step-titles"><h2>請求・入金・会計</h2><div class="en">Invoices, Payments &amp; Finance</div></div></div>
+      <div class="step-body">
+        <p>行程からそのまま<strong>請求書</strong>を作成し、入金・残高・売掛を管理します。多通貨に対応し、出発前に<strong>旅行ごとの損益（P&amp;L）</strong>を確認できます。</p>
+
+        <div class="subhead">請求書の作成と操作</div>
+        <ol class="howto">
+          <li>行程を開き <b>請求書を生成</b>（全明細を引き継ぎ）。または請求書ページから手動作成。</li>
+          <li>種別を選ぶ：<b>Standard（全額）／ Deposit（内金・通常30%）／ Final（残額）</b>。</li>
+          <li>詳細ページで <b>支払進捗バー</b>と入金履歴を確認。<b>PDF ダウンロード・WhatsApp/メール送付・入金記録・リマインダー送信・残額請求書作成</b>が可能。</li>
+        </ol>
+
+        <div class="subhead">領収書・売掛・レポート</div>
+        <div class="points">
+          <div class="point"><div class="k">領収書</div><div class="v">入金から<b>自動生成</b>（手作業不要）。請求書入金／行程入金の両方を一覧化。ブランド入り PDF、WhatsApp 送付に対応。</div></div>
+          <div class="point"><div class="k">売掛（AR）</div><div class="v">お客様別の<b>年齢分析（30/60/90日）</b>と残高、リマインダーの起点。</div></div>
+          <div class="point"><div class="k">損益（P&amp;L）</div><div class="v">サプライヤー原価と販売額から、旅行ごとの粗利を出発前に把握。</div></div>
+          <div class="point"><div class="k">財務レポート</div><div class="v">5タブ（概況／売上／キャッシュフロー／税サマリー／コミッション）。前年比・四半期・月次グラフ、CSV/PDF 出力。</div></div>
+          <div class="point"><div class="k">会計連携（ベータ）</div><div class="v">QuickBooks / Xero への<b>プッシュ専用</b>同期を提供中（ベータ）。</div></div>
+        </div>
+        <div class="tip">税サマリーの VAT 等はあくまで計画用の概算です。申告前には必ず会計士にご確認ください。</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Reference -->
+  <div class="ref" id="ref">
+    <h2>基盤機能・権限・連携</h2>
+    <p class="sub">ワークフロー以外にも、日々の運営を支えるしくみがそろっています。</p>
+
+    <div class="subhead" style="font-size:15px">役割と権限（ログインアカウント）</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>役割</th><th>できること</th></tr></thead>
+        <tbody>
+          <tr><td><b>オーナー</b></td><td>常にすべて。譲渡のみで、招待はできません。新規インストールで<b>最初にサインアップした人</b>が自動的にオーナーに。</td></tr>
+          <tr><td><b>管理者</b></td><td>設定・ユーザー管理・監査ログ・財務設定を含むすべて。</td></tr>
+          <tr><td><b>マネージャー</b></td><td>オペレーション＋財務：レート・財務レポート・領収書・支払・コミッション・P&amp;L（ただしユーザー管理と会社設定は不可）。</td></tr>
+          <tr><td><b>エージェント</b></td><td>日々の販売業務：顧客・行程・請求・入金・タスク・受信箱・ツアー・フォローアップ。</td></tr>
+          <tr><td><b>閲覧者</b></td><td>ダッシュボードのみ。役割未設定時の既定（権限は「閉じる」方向で安全側）。</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tip info" style="margin-top:14px"><b>「ユーザー管理」と「チームメンバー」は別物です。</b>ユーザー管理＝ログインできる人と権限。チームメンバー＝業務を担う人（タスク割当・案件所有・部門）。Autoura を開かないドライバーは、ログインなしのチームメンバーで構いません。ログインが必要な人は、チームメンバー行の <b>Invite to system</b> で招待します。</div>
+
+    <div class="grid" style="margin-top:26px">
+      <div class="rcard"><div class="en">Dashboard</div><h3>ダッシュボード</h3><p>顧客数・要対応フォローアップ・作成見積・30日以内の出発を一目で。「WhatsApp を解析」など主要操作へのボタンも。</p></div>
+      <div class="rcard"><div class="en">Tasks</div><h3>タスク</h3><p>カンバン／表／リスト表示。優先度・期日・担当。割当時に<b>自動通知</b>。完了分はアーカイブ。</p></div>
+      <div class="rcard"><div class="en">Departments</div><h3>部門ルーティング</h3><p>サービス種別ごとに担当部門を所有。行程からタスク生成時、宿泊は予約課、航空券は航空課…と<b>自動振り分け</b>。</p></div>
+      <div class="rcard"><div class="en">Message Templates</div><h3>メッセージテンプレート</h3><p>WhatsApp／メールの定型文。<span class="mono">{{Name}}</span> などの<b>差し込み</b>が実データで自動補完。日本語テンプレート多数。</p></div>
+      <div class="rcard"><div class="en">Multi-Language</div><h3>多言語（EN / JP）</h3><p>UI をワンクリック切替。行程は日英を別々に保持し、生成時に自動振り分け。PDF・メールも日本語対応。</p></div>
+      <div class="rcard"><div class="en">Content Library</div><h3>コンテンツライブラリ</h3><p>観光地・アクティビティの説明文をティア別に再利用。執筆ルールも一元管理。</p></div>
+      <div class="rcard"><div class="en">Suppliers &amp; Documents</div><h3>サプライヤー／書類</h3><p>ガイド・車両・ホテル・レストラン・空港係員を管理し、請求書・契約書・バウチャー・領収書を生成。</p></div>
+      <div class="rcard"><div class="en">Activity Log</div><h3>監査ログ</h3><p>誰が・いつ・何を・どのエンドポイント・IP まで記録。絞り込み可能・編集不可の証跡。</p></div>
+    </div>
+
+    <div class="subhead" style="font-size:15px; margin-top:34px">AI のしくみ（安心のために）</div>
+    <div class="points">
+      <div class="point"><div class="k">ドラフト方式</div><div class="v">AI は下書きまで。<b>自動送信・自動変更はしません</b>。最終判断は必ず人が行います。</div></div>
+      <div class="point"><div class="k">根拠のある回答</div><div class="v">貴社のナレッジと実データのみを参照（組織内スコープ）。出典を示します。</div></div>
+      <div class="point"><div class="k">信頼度とエスカレーション</div><div class="v">確信度を提示し、機微な案件は人へ引き継ぎ。</div></div>
+      <div class="point"><div class="k">学習</div><div class="v">承認済みの返信や業務パターンを学び、提案が貴社らしくなっていきます。</div></div>
+    </div>
+
+    <h2 style="margin-top:40px">連携（インテグレーション）</h2>
+    <p class="sub">既存のツールとつなぎ、会話・連絡・会計をひとつの流れに。</p>
+    <div class="integ">
+      <span class="chip"><span class="dot"></span>WhatsApp Business（Twilio 経由）</span>
+      <span class="chip"><span class="dot"></span>Gmail（Google Workspace）</span>
+      <span class="chip"><span class="dot"></span>Claude AI（Anthropic）</span>
+      <span class="chip beta"><span class="dot"></span>QuickBooks / Xero <small>&nbsp;ベータ・プッシュ専用</small></span>
+    </div>
+    <div class="tip" style="margin-top:22px"><b>ご注意：</b>会計ソフト連携（QuickBooks / Xero）は現在<b>ベータ</b>提供です。Autoura が正となり会計側へ<b>書き出す（プッシュ専用）</b>方式で、カード決済そのものは Autoura では扱いません。</div>
+  </div>
+</div>
+
+<footer>
+  <div class="foot-inner">
+    <span>Autoura — Travel Operations Platform ／ 操作ガイド（詳細版）</span>
+    <a class="top" href="#top">▲ ページ先頭へ</a>
+  </div>
+</footer>
+
+</body>
+</html>
