@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { useTranslations } from 'next-intl'
 import { useVehicleLabel } from '@/hooks/useVehicleLabel'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
@@ -247,6 +248,7 @@ function getMinRate(rate: TransportationRate): number {
 export default function TransportationContent() {
   const t = useTranslations('rates.transportation')
   const vehicleLabel = useVehicleLabel()
+  const serviceTypeLabel = useVocabLabel('transport_service_type')
   // The banner lives at the top of a long modal; the save button is at the
   // bottom. Without this, a refusal is written where nobody is looking.
   const errorRef = useRef<HTMLDivElement | null>(null)
@@ -804,7 +806,7 @@ export default function TransportationContent() {
           >
             <option value="">{t('allServiceTypes')}</option>
             {SERVICE_TYPES.map(type => (
-              <option key={type.value} value={type.value}>{t(type.labelKey)}</option>
+              <option key={type.value} value={type.value}>{serviceTypeLabel(type.value, t(type.labelKey))}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -879,7 +881,7 @@ export default function TransportationContent() {
                 const isIntercity = needsDestinationCity(rate.service_type)
                 const supplierName = rate.supplier?.name || rate.supplier_name
                 const serviceType = SERVICE_TYPES.find(st => st.value === rate.service_type)
-                const serviceLabel = serviceType ? t(serviceType.labelKey) : rate.service_type
+                const serviceLabel = serviceType ? serviceTypeLabel(serviceType.value, t(serviceType.labelKey)) : rate.service_type
 
                 return (
                   <div
@@ -1014,7 +1016,7 @@ export default function TransportationContent() {
               <tbody className="divide-y divide-gray-100">
                 {paginatedRates.map((rate, index) => {
                   const serviceType = SERVICE_TYPES.find(st => st.value === rate.service_type)
-                  const serviceLabel = serviceType ? t(serviceType.labelKey) : rate.service_type
+                  const serviceLabel = serviceType ? serviceTypeLabel(serviceType.value, t(serviceType.labelKey)) : rate.service_type
                   const supplierName = rate.supplier?.name || rate.supplier_name
                   const isIntercity = needsDestinationCity(rate.service_type)
 
@@ -1124,7 +1126,7 @@ export default function TransportationContent() {
             {paginatedRates.map((rate) => {
               const activeTiers = getActiveTiers(rate)
               const serviceType = SERVICE_TYPES.find(st => st.value === rate.service_type)
-              const serviceLabel = serviceType ? t(serviceType.labelKey) : rate.service_type
+              const serviceLabel = serviceType ? serviceTypeLabel(serviceType.value, t(serviceType.labelKey)) : rate.service_type
               const isIntercity = needsDestinationCity(rate.service_type)
               const cityDisplay = isIntercity && rate.destination_city
                 ? `${translateCity(rate.city)} → ${translateCity(rate.destination_city)}`
@@ -1364,7 +1366,7 @@ export default function TransportationContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       {SERVICE_TYPES.map(type => (
-                        <option key={type.value} value={type.value}>{t(type.labelKey)}</option>
+                        <option key={type.value} value={type.value}>{serviceTypeLabel(type.value, t(type.labelKey))}</option>
                       ))}
                     </select>
                   </div>

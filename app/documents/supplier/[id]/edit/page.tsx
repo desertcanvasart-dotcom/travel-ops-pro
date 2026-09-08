@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Save, Plus, X, MapPin, Ticket, Calculator, Building2, Route, Utensils, UserCheck } from 'lucide-react'
@@ -124,6 +125,7 @@ interface Supplier {
 }
 
 export default function EditSupplierDocumentPage() {
+  const serviceTypeLabel = useVocabLabel('transport_service_type')
   const { rateCurrency } = useCurrency()
   const t = useTranslations('supplierDocumentEdit')
   const params = useParams()
@@ -1207,7 +1209,7 @@ export default function EditSupplierDocumentPage() {
                           </td>
                           <td className="px-4 py-3">
                             <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
-                              {SERVICE_TYPE_LABELS[route.service_type] || route.service_type.replace(/_/g, ' ')}
+                              {serviceTypeLabel(route.service_type, SERVICE_TYPE_LABELS[route.service_type] || route.service_type.replace(/_/g, ' '))}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
@@ -1316,7 +1318,7 @@ export default function EditSupplierDocumentPage() {
                           <div key={type}>
                             <div className="bg-gray-50 px-4 py-1.5 border-b border-gray-100">
                               <span className="text-xs font-semibold text-gray-600 uppercase">
-                                {SERVICE_TYPE_LABELS[type] || type.replace(/_/g, ' ')}
+                                {serviceTypeLabel(type, SERVICE_TYPE_LABELS[type] || type.replace(/_/g, ' '))}
                               </span>
                             </div>
                             {rates.map(rate => (
