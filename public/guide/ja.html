@@ -114,13 +114,19 @@
     display:flex; align-items:center; gap:8px; }
   .subhead::before { content:""; width: 6px; height: 6px; border-radius: 2px; background: var(--sand); }
 
-  /* How-to ordered steps */
-  ol.howto { counter-reset: h; list-style: none; margin: 0 0 4px; padding: 0; display: grid; gap: 8px; }
-  ol.howto li { counter-increment: h; display: grid; grid-template-columns: 26px 1fr; gap: 13px;
-    align-items: start; font-size: 14.5px; color: var(--ink-soft); }
-  ol.howto li::before { content: counter(h); font-family:"IBM Plex Mono",monospace; font-size: 12px; font-weight:500;
+  /* How-to ordered steps.
+     NOTE: the number is an absolutely-positioned ::before, and the li is a
+     normal block — NOT a grid. A grid li fragments its mixed text + <b> into
+     separate grid items, shoving bold phrases into the number column where CJK
+     then wraps one character per line (visible in print especially). */
+  ol.howto { counter-reset: h; list-style: none; margin: 0 0 4px; padding: 0;
+    display: flex; flex-direction: column; gap: 9px; }
+  ol.howto li { counter-increment: h; position: relative; padding-left: 37px; min-height: 24px;
+    font-size: 14.5px; color: var(--ink-soft); }
+  ol.howto li::before { content: counter(h); position: absolute; left: 0; top: .1em;
+    font-family:"IBM Plex Mono",monospace; font-size: 12px; font-weight:500;
     color: #fff; background: var(--brand); width: 24px; height: 24px; border-radius: 7px;
-    display: grid; place-items: center; }
+    display: flex; align-items: center; justify-content: center; }
   ol.howto li b { color: var(--ink); font-weight: 700; }
 
   /* Points */
@@ -175,6 +181,16 @@
   a.top:hover { text-decoration: underline; }
   :focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 4px; }
   @media (prefers-reduced-motion: reduce){ * { transition: none !important; } }
+
+  /* Print / PDF: keep each row whole so nothing splits awkwardly across pages. */
+  @media print {
+    body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    ol.howto li, .point, .flow .f, .agenda .ai, .env, tr, .rcard,
+    .howread > div, nav.toc li, .integ .chip, .tip, .example,
+    .step-head, .subhead { break-inside: avoid; page-break-inside: avoid; }
+    .subhead, .step-head { break-after: avoid; page-break-after: avoid; }
+    section.step { border-top-color: #d9d4c4; }
+  }
 </style>
 </head>
 <body>
