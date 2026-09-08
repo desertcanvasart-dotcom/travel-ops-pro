@@ -22,7 +22,7 @@ export function useTierLabel(): (key: string | null | undefined, fallback: strin
   const { all } = useVocabulary('tier')
   return (key, fallback) => {
     if (!key) return fallback
-    const item = all.find(i => i.key === key)
+    const item = all.find(i => i.key === key.toLowerCase())
     if (!item) return fallback
     const override = locale === 'ja' ? item.label_ja : item.label
     return override && override.trim() ? override : fallback

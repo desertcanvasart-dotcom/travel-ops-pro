@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { AccommodationRate } from '../types'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { fmtMoney, times, convertedFrom } from '@/app/tour-builder/lib/money'
@@ -24,6 +25,7 @@ export default function AccommodationSelector({
   const { rateSymbol } = useCurrency()
   const money = (n: number | null | undefined) => fmtMoney(rateSymbol, n)
   const t = useTranslations('tourBuilder.accommodation')
+  const boardBasisLabel = useVocabLabel('board_basis')
   const [accommodations, setAccommodations] = useState<AccommodationRate[]>([])
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState({
@@ -115,10 +117,10 @@ export default function AccommodationSelector({
           className="text-xs px-2 py-1 border border-gray-300 rounded"
         >
           <option value="all">{t('allBoardBasis')}</option>
-          <option value="BB">BB {t('boardBB')}</option>
-          <option value="HB">HB {t('boardHB')}</option>
-          <option value="FB">FB {t('boardFB')}</option>
-          <option value="AI">AI {t('boardAI')}</option>
+          <option value="BB">BB {boardBasisLabel('BB', t('boardBB'))}</option>
+          <option value="HB">HB {boardBasisLabel('HB', t('boardHB'))}</option>
+          <option value="FB">FB {boardBasisLabel('FB', t('boardFB'))}</option>
+          <option value="AI">AI {boardBasisLabel('AI', t('boardAI'))}</option>
         </select>
 
         <select
