@@ -5,6 +5,7 @@ import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { Copy, DollarSign, Plus, Search, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
@@ -176,6 +177,9 @@ function Pagination({
 
 export default function TippingPage() {
   const t = useTranslations('rates.tipping')
+  const tippingRoleLabel = useVocabLabel('tipping_role')
+  const tippingContextLabel = useVocabLabel('tipping_context')
+  const tippingUnitLabel = useVocabLabel('tipping_unit')
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
   const { formatWithConversion, rateCurrency } = useCurrency()
@@ -331,8 +335,8 @@ export default function TippingPage() {
   }
 
   const handleDelete = async (rate: TippingRate) => {
-    const roleName = t(`roleTypes.${rate.role_type}`)
-    const contextName = rate.context ? ` (${t(`contexts.${rate.context}`)})` : ''
+    const roleName = tippingRoleLabel(rate.role_type, t(`roleTypes.${rate.role_type}`))
+    const contextName = rate.context ? ` (${tippingContextLabel(rate.context, t(`contexts.${rate.context}`))})` : ''
 
     const confirmed = await dialog.confirmDelete(t('title'),
       t('deleteConfirm', { role: roleName, context: contextName })
@@ -483,7 +487,7 @@ export default function TippingPage() {
             >
               <option value="all">{t('allRoles')}</option>
               {ROLE_TYPES.map(r => (
-                <option key={r} value={r}>{t(`roleTypes.${r}`)}</option>
+                <option key={r} value={r}>{tippingRoleLabel(r, t(`roleTypes.${r}`))}</option>
               ))}
             </select>
             <button
@@ -532,18 +536,18 @@ export default function TippingPage() {
                         rate.role_type === 'restaurant' ? 'bg-amber-100 text-amber-800' :
                         'bg-gray-100 text-gray-700'
                       }`}>
-                        {t(`roleTypes.${rate.role_type}`)}
+                        {tippingRoleLabel(rate.role_type, t(`roleTypes.${rate.role_type}`))}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center text-xs text-gray-600">
-                      {rate.context ? t(`contexts.${rate.context}`) : '-'}
+                      {rate.context ? tippingContextLabel(rate.context, t(`contexts.${rate.context}`)) : '-'}
                     </td>
                     <td className="px-4 py-3 text-center text-sm text-gray-600">
                       {rate.city || <span className="text-gray-400">{t('table.anyCity')}</span>}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs font-medium">
-                        {t(`rateUnits.${rate.rate_unit}`)}
+                        {tippingUnitLabel(rate.rate_unit, t(`rateUnits.${rate.rate_unit}`))}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
@@ -635,7 +639,7 @@ export default function TippingPage() {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
                   >
                     {ROLE_TYPES.map(r => (
-                      <option key={r} value={r}>{t(`roleTypes.${r}`)}</option>
+                      <option key={r} value={r}>{tippingRoleLabel(r, t(`roleTypes.${r}`))}</option>
                     ))}
                   </select>
                 </div>
@@ -649,7 +653,7 @@ export default function TippingPage() {
                   >
                     <option value="">{t('form.noContext')}</option>
                     {CONTEXTS.map(c => (
-                      <option key={c} value={c}>{t(`contexts.${c}`)}</option>
+                      <option key={c} value={c}>{tippingContextLabel(c, t(`contexts.${c}`))}</option>
                     ))}
                   </select>
                 </div>
@@ -680,7 +684,7 @@ export default function TippingPage() {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
                   >
                     {RATE_UNITS.map(u => (
-                      <option key={u} value={u}>{t(`rateUnits.${u}`)}</option>
+                      <option key={u} value={u}>{tippingUnitLabel(u, t(`rateUnits.${u}`))}</option>
                     ))}
                   </select>
                 </div>
