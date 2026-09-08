@@ -5,6 +5,7 @@ import { useEffect, useState, useRef } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
+import { useTierLabel } from '@/hooks/useTierLabel'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
@@ -193,10 +194,11 @@ function ToastNotification({ toast, onClose }: { toast: Toast; onClose: () => vo
 }
 
 function TierBadge({ tier, t }: { tier: string | undefined; t: (key: string) => string }) {
+  const tierLabel = useTierLabel()
   const tierConfig = TIER_OPTIONS_CONFIG.find(tc => tc.value === tier) || TIER_OPTIONS_CONFIG[1]
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig.color}`}>
-      {t(`tiers.${tierConfig.labelKey}`)}
+      {tierLabel(tier ?? tierConfig.value, t(`tiers.${tierConfig.labelKey}`))}
     </span>
   )
 }
@@ -324,6 +326,7 @@ function Pagination({
 
 export default function HotelsContent() {
   const t = useTranslations('rates.hotels')
+  const tierLabel = useTierLabel()
   const tPeriods = useTranslations('rates.ratePeriods')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
@@ -973,7 +976,7 @@ export default function HotelsContent() {
               >
                 <option value="all">{t('allTiers')}</option>
                 {TIER_OPTIONS_CONFIG.map(tier => (
-                  <option key={tier.value} value={tier.value}>{t(`tiers.${tier.labelKey}`)}</option>
+                  <option key={tier.value} value={tier.value}>{tierLabel(tier.value, t(`tiers.${tier.labelKey}`))}</option>
                 ))}
               </select>
               <Crown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -1589,7 +1592,7 @@ export default function HotelsContent() {
                       }`}
                     >
                       {tier.value === 'luxury' && <Crown className="w-3.5 h-3.5 inline mr-1" />}
-                      {t(`tiers.${tier.labelKey}`)}
+                      {tierLabel(tier.value, t(`tiers.${tier.labelKey}`))}
                     </button>
                   ))}
                 </div>
