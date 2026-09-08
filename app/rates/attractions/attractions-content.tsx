@@ -214,6 +214,7 @@ function getLanguageFromCookie(): string {
 export default function AttractionsContent() {
   const t = useTranslations('rates.attractions')
   const attractionCategoryLabel = useVocabLabel('attraction_category')
+  const attractionFeeLabel = useVocabLabel('attraction_fee_type')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const dialog = useConfirmDialog()
@@ -1076,7 +1077,7 @@ export default function AttractionsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
                       {feeTypeOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>{t(`feeTypes.${opt.value}`)}</option>
+                        <option key={opt.value} value={opt.value}>{attractionFeeLabel(opt.value, t(`feeTypes.${opt.value}`))}</option>
                       ))}
                     </select>
                   </div>
