@@ -7,6 +7,7 @@ import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { Copy, ConciergeBell, Plus, Search, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
@@ -177,6 +178,7 @@ function Pagination({
 
 export default function HotelServicesPage() {
   const t = useTranslations('rates.hotelServices')
+  const hotelServiceLabel = useVocabLabel('hotel_service_type')
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
   const { formatWithConversion, rateCurrency } = useCurrency()
@@ -344,7 +346,7 @@ export default function HotelServicesPage() {
   }
 
   const handleDelete = async (rate: HotelStaffRate) => {
-    const serviceName = t(`serviceTypes.${rate.service_type}`)
+    const serviceName = hotelServiceLabel(rate.service_type, t(`serviceTypes.${rate.service_type}`))
     const categoryName = t(`hotelCategories.${rate.hotel_category}`)
 
     const confirmed = await dialog.confirmDelete(t('deleteModal.title'),
@@ -502,7 +504,7 @@ export default function HotelServicesPage() {
             >
               <option value="all">{t('filters.allServices')}</option>
               {SERVICE_TYPES.map(s => (
-                <option key={s} value={s}>{t(`serviceTypes.${s}`)}</option>
+                <option key={s} value={s}>{hotelServiceLabel(s, t(`serviceTypes.${s}`))}</option>
               ))}
             </select>
             <select
@@ -569,7 +571,7 @@ export default function HotelServicesPage() {
                         rate.service_type === 'checkout_assist' ? 'bg-indigo-100 text-indigo-800' :
                         'bg-rose-100 text-rose-800'
                       }`}>
-                        {t(`serviceTypes.${rate.service_type}`)}
+                        {hotelServiceLabel(rate.service_type, t(`serviceTypes.${rate.service_type}`))}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -694,7 +696,7 @@ export default function HotelServicesPage() {
                     title={t('form.serviceType')}
                   >
                     {SERVICE_TYPES.map(s => (
-                      <option key={s} value={s}>{t(`serviceTypes.${s}`)}</option>
+                      <option key={s} value={s}>{hotelServiceLabel(s, t(`serviceTypes.${s}`))}</option>
                     ))}
                   </select>
                 </div>

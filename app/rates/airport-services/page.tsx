@@ -6,6 +6,7 @@ import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { Copy, Plane, Plus, Search, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
@@ -191,6 +192,7 @@ function Pagination({
 
 export default function AirportServicesPage() {
   const t = useTranslations('rates.airportServices')
+  const airportServiceLabel = useVocabLabel('airport_service_type')
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
   const { formatWithConversion, rateCurrency } = useCurrency()
@@ -355,7 +357,7 @@ export default function AirportServicesPage() {
   }
 
   const handleDelete = async (rate: AirportStaffRate) => {
-    const serviceName = t(`serviceTypes.${rate.service_type}`)
+    const serviceName = airportServiceLabel(rate.service_type, t(`serviceTypes.${rate.service_type}`))
     const airportName = getAirportName(rate.airport_code)
 
     const confirmed = await dialog.confirmDelete(t('deleteModal.title'),
@@ -525,7 +527,7 @@ export default function AirportServicesPage() {
             >
               <option value="all">{t('filters.allServices')}</option>
               {SERVICE_TYPES.map(s => (
-                <option key={s} value={s}>{t(`serviceTypes.${s}`)}</option>
+                <option key={s} value={s}>{airportServiceLabel(s, t(`serviceTypes.${s}`))}</option>
               ))}
             </select>
             <button
@@ -575,7 +577,7 @@ export default function AirportServicesPage() {
                         rate.service_type === 'customs_assist' ? 'bg-purple-100 text-purple-800' :
                         'bg-sky-100 text-sky-800'
                       }`}>
-                        {t(`serviceTypes.${rate.service_type}`)}
+                        {airportServiceLabel(rate.service_type, t(`serviceTypes.${rate.service_type}`))}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -709,7 +711,7 @@ export default function AirportServicesPage() {
                     title={t('form.serviceType')}
                   >
                     {SERVICE_TYPES.map(s => (
-                      <option key={s} value={s}>{t(`serviceTypes.${s}`)}</option>
+                      <option key={s} value={s}>{airportServiceLabel(s, t(`serviceTypes.${s}`))}</option>
                     ))}
                   </select>
                 </div>
