@@ -7,6 +7,7 @@ import SupplierPropertiesPanel from '@/app/components/SupplierPropertiesPanel'
 import { propertyTypesForRoles } from '@/lib/supplier-properties'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import Link from 'next/link'
 import { SUPPLIER_FORM_FIELDS, type SupplierFormField } from '@/lib/suppliers/fields'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -177,6 +178,7 @@ function MultiSelect({ options, value, onChange, placeholder, labelFor = (v) => 
 export default function SuppliersContent() {
   const { rateSymbol } = useCurrency()
   const t = useTranslations('suppliers')
+  const supplierTypeLabel = useVocabLabel('supplier_type')
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -475,7 +477,7 @@ export default function SuppliersContent() {
           value={Array.isArray(value) ? value : []}
           onChange={(v) => setFormData(prev => ({ ...prev, types: v, type: v.includes(prev.type) ? prev.type : v[0] }))}
           placeholder={t('selectOption', { field: fieldLabel(field) })}
-          labelFor={(k) => getTypeConfig(k).singular}
+          labelFor={(k) => supplierTypeLabel(k, getTypeConfig(k).singular)}
         />
       )
     }
@@ -663,7 +665,7 @@ export default function SuppliersContent() {
                           <div>
                             <h3 className="text-sm font-semibold text-gray-900">{supplier.name}</h3>
                             <p className="text-xs text-gray-500">
-                              {config.singular}{supplier.city && ` • ${supplier.city}`}
+                              {supplierTypeLabel(supplier.type, config.singular)}{supplier.city && ` • ${supplier.city}`}
                             </p>
                           </div>
                         </div>
@@ -896,7 +898,7 @@ export default function SuppliersContent() {
                 })()}
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">{selectedSupplier.name}</h2>
-                  <p className="text-sm text-gray-500">{(selectedSupplier.types?.length ? selectedSupplier.types : [selectedSupplier.type]).map(r => getTypeConfig(r).singular).join(' · ')}</p>
+                  <p className="text-sm text-gray-500">{(selectedSupplier.types?.length ? selectedSupplier.types : [selectedSupplier.type]).map(r => supplierTypeLabel(r, getTypeConfig(r).singular)).join(' · ')}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
