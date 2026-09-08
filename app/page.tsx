@@ -279,7 +279,7 @@ const platformStages = [
   {
     step: 6,
     headline: 'From Invoice to P&L in Real Time',
-    description: 'Generate multi-currency invoices directly from itineraries and sync them to QuickBooks or Xero. Track deposits, balances, and AR aging (30/60/90 days). See per-trip profit and loss before departure. Auto-calculated commissions for every agent.',
+    description: 'Generate multi-currency invoices directly from itineraries, with push-only sync to QuickBooks or Xero in beta. Track deposits, balances, and AR aging (30/60/90 days). See per-trip profit and loss before departure. Auto-calculated commissions for every agent.',
     screenshotNote: 'Capture /financial-reports showing P&L chart, cash flow, and AR aging',
     mockupImage: '/mockups/financial-reports.png',
     icon: BarChart3,
@@ -383,7 +383,7 @@ const capabilityClusters = [
       'Per-trip P&L visible before departure',
       'AR aging reports (30/60/90 days)',
       'Auto-calculated commissions per booking',
-      'QuickBooks and Xero sync for invoices and payments (in development)',
+      'QuickBooks and Xero push-only sync for invoices and payments (beta)',
     ],
     badge: 'Accounting-ready',
   },
