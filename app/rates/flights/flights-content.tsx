@@ -7,6 +7,7 @@ import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
@@ -167,6 +168,9 @@ const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function FlightsContent() {
   const t = useTranslations('rates.flights')
+  const flightTypeLabel = useVocabLabel('flight_type')
+  const flightCabinLabel = useVocabLabel('flight_cabin')
+  const flightFrequencyLabel = useVocabLabel('flight_frequency')
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
 
@@ -672,7 +676,7 @@ export default function FlightsContent() {
           >
             <option value="">{t('allTypes')}</option>
             {FLIGHT_TYPES.map(type => (
-              <option key={type.value} value={type.value}>{type.label}</option>
+              <option key={type.value} value={type.value}>{flightTypeLabel(type.value, type.label)}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -686,7 +690,7 @@ export default function FlightsContent() {
           >
             <option value="">{t('allClasses')}</option>
             {CABIN_CLASSES.map(cls => (
-              <option key={cls.value} value={cls.value}>{cls.label}</option>
+              <option key={cls.value} value={cls.value}>{flightCabinLabel(cls.value, cls.label)}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -758,7 +762,7 @@ export default function FlightsContent() {
                         ? 'bg-purple-100 text-purple-800'
                         : 'bg-gray-100 text-gray-700'
                     }`}>
-                      {rate.cabin_class.charAt(0).toUpperCase() + rate.cabin_class.slice(1)}
+                      {flightCabinLabel(rate.cabin_class, rate.cabin_class.charAt(0).toUpperCase() + rate.cabin_class.slice(1))}
                     </span>
                   </td>
                   <td className="px-4 py-2">
@@ -1078,7 +1082,7 @@ export default function FlightsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       {CABIN_CLASSES.map(cls => (
-                        <option key={cls.value} value={cls.value}>{cls.label}</option>
+                        <option key={cls.value} value={cls.value}>{flightCabinLabel(cls.value, cls.label)}</option>
                       ))}
                     </select>
                   </div>
@@ -1154,7 +1158,7 @@ export default function FlightsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       {FREQUENCIES.map(freq => (
-                        <option key={freq.value} value={freq.value}>{freq.label}</option>
+                        <option key={freq.value} value={freq.value}>{flightFrequencyLabel(freq.value, freq.label)}</option>
                       ))}
                     </select>
                   </div>
