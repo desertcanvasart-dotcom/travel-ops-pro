@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileSpreadsheet, TrendingUp, AlertCircle, UserPlus, Save, X, CheckCircle2, Building2, User, Mail, Phone, FileText, ChevronDown, ChevronUp, Pencil, Plane, Ship, MapPin, Plus, RotateCcw, Tag, Star } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { currencySymbol } from '@/lib/currency-totals'
@@ -183,6 +184,7 @@ export default function TourPriceCalculator() {
   const { rateSymbol } = useCurrency()
   const t = useTranslations('b2bCalculator')
   const tierLabel = useTierLabel()
+  const guideGradeLabel = useVocabLabel('guide_grade')
   const tLeg = useTranslations('travelLeg')
   const params = useParams()
   const variationId = params?.id as string
@@ -809,8 +811,8 @@ export default function TourPriceCalculator() {
                   onChange={(e) => setGuideGrade(e.target.value === 'senior' ? 'senior' : 'egyptologist')}
                   className="w-full px-3 py-2 mb-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#647C47] outline-none bg-white"
                 >
-                  <option value="egyptologist">{t('guideGradeEgyptologist')}</option>
-                  <option value="senior">{t('guideGradeSenior')}</option>
+                  <option value="egyptologist">{guideGradeLabel('egyptologist', t('guideGradeEgyptologist'))}</option>
+                  <option value="senior">{guideGradeLabel('senior', t('guideGradeSenior'))}</option>
                 </select>
                 <div className="flex gap-2">
                   <button
