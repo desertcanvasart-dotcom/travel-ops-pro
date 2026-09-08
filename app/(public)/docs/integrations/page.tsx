@@ -14,7 +14,7 @@ export default function IntegrationsPage() {
 
       <h1 className="text-3xl font-bold text-gray-900 mb-4">Integrations</h1>
       <p className="text-gray-600 mb-8">
-        Autoura connects to the tools your team already uses, so conversations, communications, and finances all flow into one system. Three integrations are live today: <strong>WhatsApp Business</strong>, <strong>Gmail</strong>, and accounting sync to <strong>Xero</strong> and <strong>QuickBooks</strong>.
+        Autoura connects to the tools your team already uses, so conversations, communications, and finances all flow into one system. Two integrations are live today: <strong>WhatsApp Business</strong> and <strong>Gmail</strong>. Push-only accounting sync to <strong>Xero</strong> and <strong>QuickBooks</strong> is in <strong>beta</strong>.
       </p>
 
       {/* WhatsApp */}
@@ -50,9 +50,9 @@ export default function IntegrationsPage() {
 
       {/* Accounting */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Accounting: Xero &amp; QuickBooks</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Accounting: Xero &amp; QuickBooks <span className="text-sm font-medium text-amber-700 align-middle">(beta)</span></h2>
         <p className="text-gray-600 mb-3">
-          Autoura pushes your financial records into <strong>Xero</strong> or <strong>QuickBooks Online</strong> so your accountant works from their own books without re-keying anything. The sync is <strong>push-only</strong> &mdash; Autoura stays the source of truth and writes out to the accounting platform.
+          Accounting sync is currently in <strong>beta</strong>. Autoura pushes your financial records into <strong>Xero</strong> or <strong>QuickBooks Online</strong> so your accountant works from their own books without re-keying anything. The sync is <strong>push-only</strong> &mdash; Autoura stays the source of truth and writes out to the accounting platform.
         </p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li><strong>Client invoices</strong> &mdash; Pushed as accounts-receivable invoices</li>
