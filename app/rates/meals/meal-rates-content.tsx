@@ -134,6 +134,8 @@ export default function MealRatesContent() {
   const tCommon = useTranslations('rates.common')
   const tierLabel = useTierLabel()
   const mealTypeLabel = useVocabLabel('meal_type')
+  const cuisineTypeLabel = useVocabLabel('cuisine_type')
+  const restaurantTypeLabel = useVocabLabel('restaurant_type')
   const searchParams = useSearchParams()
   const initialSupplierId = searchParams.get('supplier_id') || ''
 
@@ -940,7 +942,7 @@ export default function MealRatesContent() {
 
                 <div className="space-y-1 text-sm text-gray-600 mb-3">
                   <p><span className="text-gray-400">{tCommon('city')}:</span> {rate.city || '—'}</p>
-                  <p><span className="text-gray-400">{t('cuisineType')}:</span> {rate.cuisine_type || '—'}</p>
+                  <p><span className="text-gray-400">{t('cuisineType')}:</span> {rate.cuisine_type ? cuisineTypeLabel(rate.cuisine_type, rate.cuisine_type) : '—'}</p>
                 </div>
 
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
@@ -1175,7 +1177,7 @@ export default function MealRatesContent() {
                     >
                       <option value="">{t('selectCuisine')}</option>
                       {CUISINE_TYPES.map(cuisine => (
-                        <option key={cuisine} value={cuisine}>{cuisine}</option>
+                        <option key={cuisine} value={cuisine}>{cuisineTypeLabel(cuisine, cuisine)}</option>
                       ))}
                     </select>
                   </div>
@@ -1189,7 +1191,7 @@ export default function MealRatesContent() {
                     >
                       <option value="">{t('selectType')}</option>
                       {RESTAURANT_TYPES.map(type => (
-                        <option key={type} value={type}>{type}</option>
+                        <option key={type} value={type}>{restaurantTypeLabel(type, type)}</option>
                       ))}
                     </select>
                   </div>
