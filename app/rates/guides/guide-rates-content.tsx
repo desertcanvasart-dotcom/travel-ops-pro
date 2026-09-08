@@ -7,6 +7,7 @@ import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
@@ -97,6 +98,7 @@ const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function GuideRatesContent() {
   const t = useTranslations('rates.guides')
+  const guideGradeLabel = useVocabLabel('guide_grade')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const initialSupplierId = searchParams.get('supplier_id') || ''
@@ -681,7 +683,7 @@ export default function GuideRatesContent() {
           >
             <option value="">{t('allTypes')}</option>
             {GUIDE_TYPES.map(type => (
-              <option key={type.value} value={type.value}>{t(`guideTypes.${type.value}`)}</option>
+              <option key={type.value} value={type.value}>{guideGradeLabel(type.value, t(`guideTypes.${type.value}`))}</option>
             ))}
           </select>
 
@@ -806,7 +808,7 @@ export default function GuideRatesContent() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                        {t(`guideTypes.${rate.guide_type}`)}
+                        {guideGradeLabel(rate.guide_type, t(`guideTypes.${rate.guide_type}`))}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -875,7 +877,7 @@ export default function GuideRatesContent() {
                 )}
 
                 <div className="space-y-1 text-sm text-gray-600 mb-3">
-                  <p><span className="text-gray-400">{t('table.type')}:</span> {t(`guideTypes.${rate.guide_type}`)}</p>
+                  <p><span className="text-gray-400">{t('table.type')}:</span> {guideGradeLabel(rate.guide_type, t(`guideTypes.${rate.guide_type}`))}</p>
                   <p><span className="text-gray-400">{t('table.city')}:</span> {rate.city || '—'}</p>
                   <p><span className="text-gray-400">{t('table.duration')}:</span> {t(`tourDurations.${rate.tour_duration}`)}</p>
                 </div>
@@ -1073,7 +1075,7 @@ export default function GuideRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       {GUIDE_TYPES.map(type => (
-                        <option key={type.value} value={type.value}>{t(`guideTypes.${type.value}`)}</option>
+                        <option key={type.value} value={type.value}>{guideGradeLabel(type.value, t(`guideTypes.${type.value}`))}</option>
                       ))}
                     </select>
                   </div>

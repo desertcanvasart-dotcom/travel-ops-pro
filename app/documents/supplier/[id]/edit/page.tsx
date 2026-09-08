@@ -126,6 +126,7 @@ interface Supplier {
 
 export default function EditSupplierDocumentPage() {
   const serviceTypeLabel = useVocabLabel('transport_service_type')
+  const guideGradeLabel = useVocabLabel('guide_grade')
   const { rateCurrency } = useCurrency()
   const t = useTranslations('supplierDocumentEdit')
   const params = useParams()
@@ -1570,7 +1571,7 @@ export default function EditSupplierDocumentPage() {
                           </td>
                           <td className="px-4 py-3">
                             <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
-                              {GUIDE_TYPE_LABELS[guide.guide_type] || guide.guide_type.replace(/_/g, ' ')}
+                              {guideGradeLabel(guide.guide_type, GUIDE_TYPE_LABELS[guide.guide_type] || guide.guide_type.replace(/_/g, ' '))}
                             </span>
                           </td>
                           <td className="px-4 py-3">
