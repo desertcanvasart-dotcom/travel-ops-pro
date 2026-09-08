@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { PartnerIntegrationsPanel } from '@/components/settings/PartnerIntegrationsPanel'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { useTierLabel } from '@/hooks/useTierLabel'
 import { createClient } from '@/app/supabase'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { usePreferences } from '@/app/contexts/PreferencesContext'
@@ -121,6 +122,7 @@ function SettingsContent() {
   const tabParam = searchParams.get('tab')
   const { user } = useAuth()
   const t = useTranslations('settings')
+  const tierLabel = useTierLabel()
   const confirmDialog = useConfirm()
 
   const [activeTab, setActiveTab] = useState(tabParam || 'profile')
@@ -977,7 +979,7 @@ function SettingsContent() {
                   <span className={`text-sm font-semibold ${
                     isSelected ? 'text-gray-900' : 'text-gray-700'
                   }`}>
-                    {t(tier.labelKey)}
+                    {tierLabel(tier.value, t(tier.labelKey))}
                   </span>
                 </div>
                 <p className="text-xs text-gray-500">{t(tier.descKey)}</p>

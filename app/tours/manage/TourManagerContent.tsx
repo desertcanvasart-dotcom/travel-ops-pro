@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic'
 import React, { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { useTierLabel } from '@/hooks/useTierLabel'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import {
@@ -622,6 +623,7 @@ interface AddVariationModalProps {
 }
 
 function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVariationModalProps) {
+  const tierLabel = useTierLabel()
   // Determine which tiers already exist for this template
   const existingTiers = new Set<string>(
     (template.variations || []).map(v => v.tier)
@@ -746,7 +748,7 @@ function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVaria
                     <div className="flex items-center gap-2">
                       <span className="text-lg">{config.icon}</span>
                       <span className={`font-medium ${alreadyExists ? 'text-gray-400' : selectedTiers.has(tier) ? config.textColor : 'text-gray-900'}`}>
-                        {config.label}
+                        {tierLabel(tier, config.label)}
                       </span>
                       {alreadyExists && (
                         <span className="text-xs bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full">Already exists</span>
@@ -836,6 +838,7 @@ function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVaria
 
 export default function TourManagerContent() {
   const t = useTranslations('tours')
+  const tierLabel = useTierLabel()
   const { confirmDelete } = useConfirmDialog()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [templates, setTemplates] = useState<TourTemplate[]>([])
@@ -2273,7 +2276,7 @@ export default function TourManagerContent() {
                             <div className="flex items-center gap-2">
                               <span className="text-lg">{config.icon}</span>
                               <span className={`font-medium ${newTemplateVariations.has(tier) ? config.textColor : 'text-gray-900'}`}>
-                                {config.label}
+                                {tierLabel(tier, config.label)}
                               </span>
                             </div>
                             <p className="text-xs text-gray-500 mt-1">{config.description}</p>

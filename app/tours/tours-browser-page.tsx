@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { useTierLabel } from '@/hooks/useTierLabel'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { LanguageIndicator } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
@@ -40,6 +41,7 @@ type ViewMode = 'grid' | 'table' | 'list'
 
 export default function ToursBrowsePage() {
   const t = useTranslations('tours')
+  const tierLabel = useTierLabel()
   // Program prices come out of the EUR-denominated B2B engine; display them in
   // the user's preferred currency like the rates pages do.
   const { formatWithConversion, rateCurrency } = useCurrency()
@@ -264,10 +266,10 @@ export default function ToursBrowsePage() {
           className="px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] outline-none bg-white min-w-[150px]"
         >
           <option value="all">{t('filters.allTiers')}</option>
-          <option value="budget">💰 {t('tiers.budget')}</option>
-          <option value="standard">💎 {t('tiers.standard')}</option>
-          <option value="deluxe">✨ {t('tiers.deluxe')}</option>
-          <option value="luxury">👑 {t('tiers.luxury')}</option>
+          <option value="budget">💰 {tierLabel('budget', t('tiers.budget'))}</option>
+          <option value="standard">💎 {tierLabel('standard', t('tiers.standard'))}</option>
+          <option value="deluxe">✨ {tierLabel('deluxe', t('tiers.deluxe'))}</option>
+          <option value="luxury">👑 {tierLabel('luxury', t('tiers.luxury'))}</option>
         </select>
         <select
           value={filterCategory}
@@ -376,7 +378,7 @@ export default function ToursBrowsePage() {
                         key={tier}
                         className={`px-2 py-1 rounded text-xs font-medium ${getTierBadge(tier)}`}
                       >
-                        {getTierIcon(tier)} {t(`tiers.${tier}`)}
+                        {getTierIcon(tier)} {tierLabel(tier, t(`tiers.${tier}`))}
                       </span>
                     ))
                   ) : (
@@ -493,7 +495,7 @@ export default function ToursBrowsePage() {
                         key={tier}
                         className={`px-2 py-0.5 rounded text-[10px] font-medium ${getTierBadge(tier)}`}
                       >
-                        {getTierIcon(tier)} {t(`tiers.${tier}`)}
+                        {getTierIcon(tier)} {tierLabel(tier, t(`tiers.${tier}`))}
                       </span>
                     ))
                   ) : (
