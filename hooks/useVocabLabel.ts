@@ -2,7 +2,7 @@
 
 import { useLocale } from 'next-intl'
 import { useVocabulary } from '@/hooks/useVocabulary'
-import type { VocabularyKind } from '@/lib/vocabulary'
+import { slugifyKey, type VocabularyKind } from '@/lib/vocabulary'
 
 /**
  * Generic white-label label resolver for any vocabulary KIND.
@@ -24,9 +24,10 @@ export function useVocabLabel(kind: VocabularyKind): (key: string | null | undef
   const { all } = useVocabulary(kind)
   return (key, fallback) => {
     if (!key) return fallback
-    // Vocabulary keys are lowercase by constraint; some stored codes are not
-    // (e.g. board_basis 'BB'), so normalise before matching.
-    const item = all.find(i => i.key === key.toLowerCase())
+    // Vocabulary keys are lowercase slugs by constraint; some stored codes are
+    // not (board_basis 'BB', sleeper_cabin 'Half Twin'), so slugify the stored
+    // value before matching. slugifyKey is idempotent on existing slug keys.
+    const item = all.find(i => i.key === slugifyKey(key))
     if (!item) return fallback
     const override = locale === 'ja' ? item.label_ja : item.label
     return override && override.trim() ? override : fallback

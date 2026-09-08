@@ -7,6 +7,7 @@ import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurre
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import { useTranslations } from 'next-intl'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { SLEEPING_TRAIN_CABINS } from '@/lib/rates/sleeping-train-cabins'
 import { useSearchParams } from 'next/navigation'
 import RateAuditLog from '@/app/components/RateAuditLog'
@@ -84,6 +85,7 @@ const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function SleepingTrainRatesContent() {
   const t = useTranslations('rates.sleepingTrains')
+  const sleeperCabinLabel = useVocabLabel('sleeper_cabin')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
 
@@ -614,7 +616,7 @@ export default function SleepingTrainRatesContent() {
           >
             <option value="">{t('allCabins')}</option>
             {CABIN_TYPES.map(cabin => (
-              <option key={cabin.value} value={cabin.value}>{t(`cabins.${cabin.labelKey}`)}</option>
+              <option key={cabin.value} value={cabin.value}>{sleeperCabinLabel(cabin.value, t(`cabins.${cabin.labelKey}`))}</option>
             ))}
           </select>
 
@@ -737,7 +739,7 @@ export default function SleepingTrainRatesContent() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs font-medium">
-                        {rate.cabin_type || '—'}
+                        {rate.cabin_type ? sleeperCabinLabel(rate.cabin_type, rate.cabin_type) : '—'}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -811,7 +813,7 @@ export default function SleepingTrainRatesContent() {
 
                 <div className="flex items-center gap-2 mb-3">
                   <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs">
-                    {rate.cabin_type}
+                    {sleeperCabinLabel(rate.cabin_type, rate.cabin_type)}
                   </span>
                   {rate.season && (
                     <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs">
@@ -868,7 +870,7 @@ export default function SleepingTrainRatesContent() {
                     {rate.origin_city} → {rate.destination_city}
                   </span>
                   <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs">
-                    {rate.cabin_type}
+                    {sleeperCabinLabel(rate.cabin_type, rate.cabin_type)}
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
@@ -1085,7 +1087,7 @@ export default function SleepingTrainRatesContent() {
                     >
                       <option value="">{t('form.selectCabin')}</option>
                       {CABIN_TYPES.map(cabin => (
-                        <option key={cabin.value} value={cabin.value}>{t(`cabins.${cabin.labelKey}`)}</option>
+                        <option key={cabin.value} value={cabin.value}>{sleeperCabinLabel(cabin.value, t(`cabins.${cabin.labelKey}`))}</option>
                       ))}
                     </select>
                   </div>
