@@ -5,6 +5,7 @@ import React, { useState, useEffect, Fragment } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { useTierLabel } from '@/hooks/useTierLabel'
 import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileSpreadsheet, TrendingUp, AlertCircle, UserPlus, Save, X, CheckCircle2, Building2, User, Mail, Phone, FileText, ChevronDown, ChevronUp, Pencil, Plane, Ship, MapPin, Plus, RotateCcw, Tag, Star } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { currencySymbol } from '@/lib/currency-totals'
@@ -181,6 +182,7 @@ function AttractionInput({ onAdd, placeholder }: { onAdd: (name: string) => void
 export default function TourPriceCalculator() {
   const { rateSymbol } = useCurrency()
   const t = useTranslations('b2bCalculator')
+  const tierLabel = useTierLabel()
   const tLeg = useTranslations('travelLeg')
   const params = useParams()
   const variationId = params?.id as string
@@ -875,11 +877,11 @@ export default function TourPriceCalculator() {
                   data-testid="pricing-tier"
                 >
                   {(['budget', 'standard', 'deluxe', 'luxury'] as const).map(tier => (
-                    <option key={tier} value={tier}>{t(`tiers.${tier}`)}</option>
+                    <option key={tier} value={tier}>{tierLabel(tier, t(`tiers.${tier}`))}</option>
                   ))}
                 </select>
                 {importedTier && importedTier !== variationTier && (
-                  <p className="text-xs text-gray-500 mt-1">{t('tierHint', { tier: t(`tiers.${importedTier}`) })}</p>
+                  <p className="text-xs text-gray-500 mt-1">{t('tierHint', { tier: tierLabel(importedTier, t(`tiers.${importedTier}`)) })}</p>
                 )}
               </div>
 

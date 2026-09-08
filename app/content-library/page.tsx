@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
+import { useTierLabel } from '@/hooks/useTierLabel'
 import { createClient } from '@/app/supabase'
 import Link from 'next/link'
 import {
@@ -82,6 +83,7 @@ interface ContentItem {
 
 export default function ContentLibraryPage() {
   const t = useTranslations('contentLibrary')
+  const tierLabel = useTierLabel()
   const [categories, setCategories] = useState<Category[]>([])
   const [content, setContent] = useState<ContentItem[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -406,7 +408,7 @@ export default function ContentLibraryPage() {
                               className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-semibold ${
                                 hasTier ? `${config.activeBg} ${config.activeText}` : `${config.bg} ${config.text}`
                               }`}
-                              title={`${t(`tiers.${tier}`)}: ${hasTier ? t('tierAvailable') : t('tierNotAvailable')}`}
+                              title={`${tierLabel(tier, t(`tiers.${tier}`))}: ${hasTier ? t('tierAvailable') : t('tierNotAvailable')}`}
                             >
                               {config.letter}
                             </div>
