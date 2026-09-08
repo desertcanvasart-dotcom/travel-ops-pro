@@ -7,6 +7,7 @@ import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import RateAuditLog from '@/app/components/RateAuditLog'
@@ -155,6 +156,7 @@ const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function ActivityRatesContent() {
   const t = useTranslations('rates.activities')
+  const activityCategoryLabel = useVocabLabel('activity_category')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const initialSupplierId = searchParams.get('supplier_id') || ''
@@ -786,7 +788,7 @@ export default function ActivityRatesContent() {
           >
             <option value="">{t('allCategories')}</option>
             {ACTIVITY_CATEGORIES.map(cat => (
-              <option key={cat} value={cat}>{cat}</option>
+              <option key={cat} value={cat}>{activityCategoryLabel(cat, cat)}</option>
             ))}
           </select>
 
@@ -905,7 +907,7 @@ export default function ActivityRatesContent() {
                     <td className="px-4 py-3">
                       {rate.activity_category ? (
                         <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">
-                          {rate.activity_category}
+                          {activityCategoryLabel(rate.activity_category, rate.activity_category)}
                         </span>
                       ) : (
                         <span className="text-xs text-gray-400">—</span>
@@ -985,7 +987,7 @@ export default function ActivityRatesContent() {
                   {getPricingTypeBadge(rate.pricing_type)}
                   {rate.activity_category && (
                     <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">
-                      {rate.activity_category}
+                      {activityCategoryLabel(rate.activity_category, rate.activity_category)}
                     </span>
                   )}
                 </div>
@@ -1040,7 +1042,7 @@ export default function ActivityRatesContent() {
                   {getPricingTypeBadge(rate.pricing_type)}
                   {rate.activity_category && (
                     <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">
-                      {rate.activity_category}
+                      {activityCategoryLabel(rate.activity_category, rate.activity_category)}
                     </span>
                   )}
                 </div>
@@ -1189,7 +1191,7 @@ export default function ActivityRatesContent() {
                     >
                       <option value="">{t('form.selectCategory')}</option>
                       {ACTIVITY_CATEGORIES.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
+                        <option key={cat} value={cat}>{activityCategoryLabel(cat, cat)}</option>
                       ))}
                     </select>
                   </div>
