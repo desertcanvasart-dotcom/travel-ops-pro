@@ -8,6 +8,7 @@ import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurre
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import RateAuditLog from '@/app/components/RateAuditLog'
@@ -132,6 +133,7 @@ export default function MealRatesContent() {
   const t = useTranslations('rates.meals')
   const tCommon = useTranslations('rates.common')
   const tierLabel = useTierLabel()
+  const mealTypeLabel = useVocabLabel('meal_type')
   const searchParams = useSearchParams()
   const initialSupplierId = searchParams.get('supplier_id') || ''
 
@@ -729,7 +731,7 @@ export default function MealRatesContent() {
           >
             <option value="">{t('allMealTypes')}</option>
             {MEAL_TYPES.map(type => (
-              <option key={type} value={type}>{type}</option>
+              <option key={type} value={type}>{mealTypeLabel(type, type)}</option>
             ))}
           </select>
 
@@ -862,7 +864,7 @@ export default function MealRatesContent() {
                     <td className="px-4 py-3">
                       {rate.meal_type ? (
                         <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium">
-                          {rate.meal_type}
+                          {mealTypeLabel(rate.meal_type, rate.meal_type)}
                         </span>
                       ) : (
                         <span className="text-xs text-gray-400">—</span>
@@ -930,7 +932,7 @@ export default function MealRatesContent() {
                 <div className="flex items-center gap-2 mb-2">
                   {rate.meal_type && (
                     <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">
-                      {rate.meal_type}
+                      {mealTypeLabel(rate.meal_type, rate.meal_type)}
                     </span>
                   )}
                   {getTierBadge(rate.tier)}
@@ -978,7 +980,7 @@ export default function MealRatesContent() {
                   <span className="text-sm text-gray-500">{rate.city || '—'}</span>
                   {rate.meal_type && (
                     <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">
-                      {rate.meal_type}
+                      {mealTypeLabel(rate.meal_type, rate.meal_type)}
                     </span>
                   )}
                   {getTierBadge(rate.tier)}
@@ -1159,7 +1161,7 @@ export default function MealRatesContent() {
                     >
                       <option value="">{t('selectMealType')}</option>
                       {MEAL_TYPES.map(type => (
-                        <option key={type} value={type}>{type}</option>
+                        <option key={type} value={type}>{mealTypeLabel(type, type)}</option>
                       ))}
                     </select>
                   </div>

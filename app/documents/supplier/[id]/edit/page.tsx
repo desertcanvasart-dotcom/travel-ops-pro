@@ -127,6 +127,7 @@ interface Supplier {
 export default function EditSupplierDocumentPage() {
   const serviceTypeLabel = useVocabLabel('transport_service_type')
   const guideGradeLabel = useVocabLabel('guide_grade')
+  const mealTypeLabel = useVocabLabel('meal_type')
   const { rateCurrency } = useCurrency()
   const t = useTranslations('supplierDocumentEdit')
   const params = useParams()
@@ -1391,7 +1392,7 @@ export default function EditSupplierDocumentPage() {
                           </td>
                           <td className="px-4 py-3">
                             <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full">
-                              {MEAL_TYPE_LABELS[meal.meal_type] || meal.meal_type || '—'}
+                              {mealTypeLabel(meal.meal_type, MEAL_TYPE_LABELS[meal.meal_type] || meal.meal_type || '—')}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
@@ -1500,7 +1501,7 @@ export default function EditSupplierDocumentPage() {
                           <div key={type}>
                             <div className="bg-gray-50 px-4 py-1.5 border-b border-gray-100">
                               <span className="text-xs font-semibold text-gray-600 uppercase">
-                                {MEAL_TYPE_LABELS[type] || type}
+                                {mealTypeLabel(type, MEAL_TYPE_LABELS[type] || type)}
                               </span>
                             </div>
                             {rates.map(rate => (
