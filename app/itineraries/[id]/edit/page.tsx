@@ -5,6 +5,7 @@ import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useTranslations, useLocale } from 'next-intl'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase'
@@ -258,6 +259,7 @@ export default function ItineraryEditorPage() {
   const { rateSymbol } = useCurrency()
   const t = useTranslations('itineraries.edit')
   const tCommon = useTranslations('common')
+  const serviceTypeLabel = useVocabLabel('transport_service_type')
   const dialog = useConfirmDialog()
   const [repricing, setRepricing] = useState(false)
 
@@ -1757,7 +1759,7 @@ export default function ItineraryEditorPage() {
                                     }}
                                     className="w-3.5 h-3.5 accent-[#647C47]"
                                   />
-                                  <span className="text-xs">{extraType.replace(/_/g, ' ')}</span>
+                                  <span className="text-xs">{serviceTypeLabel(extraType, extraType.replace(/_/g, ' '))}</span>
                                 </label>
                               )
                             })}
