@@ -7,6 +7,7 @@ import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
+import { useTierLabel } from '@/hooks/useTierLabel'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import RateAuditLog from '@/app/components/RateAuditLog'
@@ -130,6 +131,7 @@ const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 export default function MealRatesContent() {
   const t = useTranslations('rates.meals')
   const tCommon = useTranslations('rates.common')
+  const tierLabel = useTierLabel()
   const searchParams = useSearchParams()
   const initialSupplierId = searchParams.get('supplier_id') || ''
 
@@ -500,7 +502,7 @@ export default function MealRatesContent() {
     const tierConfig = TIERS.find(t => t.value.toLowerCase() === (tier || '').toLowerCase()) || TIERS[1]
     return (
       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig.color}`}>
-        {tierConfig.label}
+        {tierLabel(tierConfig.value, tierConfig.label)}
       </span>
     )
   }
@@ -749,7 +751,7 @@ export default function MealRatesContent() {
           >
             <option value="">{t('allTiers')}</option>
             {TIERS.map(tier => (
-              <option key={tier.value} value={tier.value}>{tier.label}</option>
+              <option key={tier.value} value={tier.value}>{tierLabel(tier.value, tier.label)}</option>
             ))}
           </select>
 
@@ -1210,7 +1212,7 @@ export default function MealRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       {TIERS.map(tier => (
-                        <option key={tier.value} value={tier.value}>{tier.label}</option>
+                        <option key={tier.value} value={tier.value}>{tierLabel(tier.value, tier.label)}</option>
                       ))}
                     </select>
                   </div>
