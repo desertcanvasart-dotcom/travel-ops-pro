@@ -239,6 +239,7 @@ const navigationConfig: NavConfig[] = [
     items: [
       { labelKey: 'activityLog', href: '/activity', icon: ScrollText },
       { labelKey: 'destinations', href: '/settings/destinations', icon: Globe },
+      { labelKey: 'vocabulary', href: '/settings/vocabulary', icon: BookOpen },
       { labelKey: 'settings', href: '/settings', icon: Settings },
       { labelKey: 'userManagement', href: '/users', icon: Shield },
     ]
