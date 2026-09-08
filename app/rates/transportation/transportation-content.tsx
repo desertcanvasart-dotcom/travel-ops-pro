@@ -4,6 +4,7 @@ import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { useTranslations } from 'next-intl'
+import { useVehicleLabel } from '@/hooks/useVehicleLabel'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
@@ -245,6 +246,7 @@ function getMinRate(rate: TransportationRate): number {
 
 export default function TransportationContent() {
   const t = useTranslations('rates.transportation')
+  const vehicleLabel = useVehicleLabel()
   // The banner lives at the top of a long modal; the save button is at the
   // bottom. Without this, a refusal is written where nobody is looking.
   const errorRef = useRef<HTMLDivElement | null>(null)
@@ -503,11 +505,11 @@ export default function TransportationContent() {
       const min = parseInt(formData[`${tier.key}_capacity_min` as keyof FormData] as string)
       const max = parseInt(formData[`${tier.key}_capacity_max` as keyof FormData] as string)
       if (!Number.isFinite(min) || !Number.isFinite(max) || min < 1) {
-        refuse(`${t(tier.labelKey)}: capacity must be a number of passengers`)
+        refuse(`${vehicleLabel(tier.key, t(tier.labelKey))}: capacity must be a number of passengers`)
         return
       }
       if (max < min) {
-        refuse(`${t(tier.labelKey)}: maximum capacity cannot be below the minimum`)
+        refuse(`${vehicleLabel(tier.key, t(tier.labelKey))}: maximum capacity cannot be below the minimum`)
         return
       }
     }
@@ -948,7 +950,7 @@ export default function TransportationContent() {
                               const capMax = rate[`${tier.key}_capacity_max` as keyof TransportationRate] as number
                               return (
                                 <tr key={tier.key} className="border-t border-gray-50">
-                                  <td className="py-1.5 text-xs font-medium text-gray-700">{t(tier.labelKey)}</td>
+                                  <td className="py-1.5 text-xs font-medium text-gray-700">{vehicleLabel(tier.key, t(tier.labelKey))}</td>
                                   <td className="py-1.5 text-xs text-center text-gray-500">{capMin}-{capMax}</td>
                                   <td className="py-1.5 text-xs text-right font-medium text-gray-900">{formatRateInRowCurrency(eurRate, rate, formatRate)}</td>
                                 </tr>
@@ -999,11 +1001,11 @@ export default function TransportationContent() {
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">{t('serviceCode')}</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">{t('serviceType')}</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">{t('city')}</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{t('sedan')}</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{t('minivan')}</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{t('van')}</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{t('minibus')}</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{t('bus')}</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{vehicleLabel('sedan', t('sedan'))}</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{vehicleLabel('minivan', t('minivan'))}</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{vehicleLabel('van', t('van'))}</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{vehicleLabel('minibus', t('minibus'))}</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{vehicleLabel('bus', t('bus'))}</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">{t('supplier')}</th>
                   <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600">{t('status')}</th>
                   <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600">{t('actions')}</th>
@@ -1159,7 +1161,7 @@ export default function TransportationContent() {
                           return (
                             <span key={tier.key}>
                               {idx > 0 && <span className="mx-0.5 text-gray-300">|</span>}
-                              <span className="text-gray-400">{t(tier.labelKey)}:</span>{' '}
+                              <span className="text-gray-400">{vehicleLabel(tier.key, t(tier.labelKey))}:</span>{' '}
                               <span className="font-medium text-gray-700">{formatRateInRowCurrency(eurRate, rate, formatRate)}</span>
                             </span>
                           )
@@ -1592,7 +1594,7 @@ export default function TransportationContent() {
                       {VEHICLE_TIERS.map(tier => (
                         <tr key={tier.key} className="border-t border-gray-200">
                           <td className="px-3 py-2">
-                            <span className="text-sm font-medium text-gray-700">{t(tier.labelKey)}</span>
+                            <span className="text-sm font-medium text-gray-700">{vehicleLabel(tier.key, t(tier.labelKey))}</span>
                           </td>
                           <td className="px-3 py-2">
                             {/* Editable, because the bands are the agency's own.
@@ -1607,7 +1609,7 @@ export default function TransportationContent() {
                                 onChange={(e) => setFormData(prev => ({ ...prev, [`${tier.key}_capacity_min`]: e.target.value }))}
                                 min="1"
                                 step="1"
-                                aria-label={`${t(tier.labelKey)} minimum pax`}
+                                aria-label={`${vehicleLabel(tier.key, t(tier.labelKey))} minimum pax`}
                                 className="w-12 px-1 py-1 text-xs text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                               />
                               <span className="text-xs text-gray-400">–</span>
@@ -1617,7 +1619,7 @@ export default function TransportationContent() {
                                 onChange={(e) => setFormData(prev => ({ ...prev, [`${tier.key}_capacity_max`]: e.target.value }))}
                                 min="1"
                                 step="1"
-                                aria-label={`${t(tier.labelKey)} maximum pax`}
+                                aria-label={`${vehicleLabel(tier.key, t(tier.labelKey))} maximum pax`}
                                 className="w-12 px-1 py-1 text-xs text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                               />
                             </div>
