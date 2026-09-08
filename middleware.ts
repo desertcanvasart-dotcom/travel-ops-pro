@@ -291,7 +291,7 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
   // '/order' is the hosted order form — the tour-up.jp inquiry form served by
   // us. The visitor is a customer with no account; the page only renders a
   // form, and its submit endpoint (/api/public/order-form) defends itself.
-  const publicRoutes = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/invite/accept', '/terms', '/privacy', '/contact', '/docs', '/about', '/integrations', '/share', '/portal', '/order']
+  const publicRoutes = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/invite/accept', '/terms', '/privacy', '/contact', '/docs', '/about', '/integrations', '/share', '/portal', '/order', '/guide']
   const isPublicRoute = publicRoutes.some(route => 
     request.nextUrl.pathname === route || 
     (route !== '/' && request.nextUrl.pathname.startsWith(route))

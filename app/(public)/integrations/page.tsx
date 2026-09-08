@@ -409,6 +409,8 @@ export default function IntegrationsPage() {
             <div className="flex items-center gap-6 sm:gap-8 text-sm text-stone-500">
               <Link href="/about" className="hover:text-stone-700 transition-colors">About</Link>
               <Link href="/integrations" className="hover:text-stone-700 transition-colors">Integrations</Link>
+              <a href="/guide/en.html" className="hover:text-stone-700 transition-colors">Guide</a>
+              <a href="/guide/ja.html" className="hover:text-stone-700 transition-colors" lang="ja">日本語ガイド</a>
               <Link href="/privacy" className="hover:text-stone-700 transition-colors">Privacy</Link>
               <Link href="/terms" className="hover:text-stone-700 transition-colors">Terms</Link>
               <Link href="/contact" className="hover:text-stone-700 transition-colors">Contact</Link>

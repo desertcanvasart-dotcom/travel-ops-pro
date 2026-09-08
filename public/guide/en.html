@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autoura Operator Guide</title>
+<meta name="description" content="A detailed walkthrough of the Autoura travel operations platform, with on-screen steps.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+  :root {
+    --ground: #F6F3EC; --surface: #FFFDF7; --surface-2: #F1ECE0;
+    --ink: #23281C; --ink-soft: #565d48; --ink-faint: #8a8f7c;
+    --brand: #647C47; --brand-deep: #46592f; --brand-soft: #e7ecdc;
+    --sand: #B08420; --sand-soft: #f3e9cf;
+    --border: #E2DCCC; --border-strong: #d0c8b2;
+    --shadow: 0 1px 2px rgba(35,40,28,.05), 0 8px 28px rgba(35,40,28,.06);
+    --maxw: 1040px;
+  }
+  :root:not([data-theme="light"]) { @media (prefers-color-scheme: dark) {
+    --ground: #16180F; --surface: #1F2318; --surface-2: #262b1d;
+    --ink: #ECEADD; --ink-soft: #b6bba4; --ink-faint: #868b73;
+    --brand: #A2B77E; --brand-deep: #b8cd94; --brand-soft: #2c331f;
+    --sand: #D8B255; --sand-soft: #33301f;
+    --border: #333829; --border-strong: #454b37;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  }}
+  :root[data-theme="dark"] {
+    --ground: #16180F; --surface: #1F2318; --surface-2: #262b1d;
+    --ink: #ECEADD; --ink-soft: #b6bba4; --ink-faint: #868b73;
+    --brand: #A2B77E; --brand-deep: #b8cd94; --brand-soft: #2c331f;
+    --sand: #D8B255; --sand-soft: #33301f;
+    --border: #333829; --border-strong: #454b37;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    line-height: 1.72; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+  .mono { font-family: "IBM Plex Mono", monospace; font-size: .9em; }
+  code { font-family:"IBM Plex Mono",monospace; background: var(--surface-2); padding: 1px 6px;
+    border-radius: 5px; font-size: .85em; color: var(--brand-deep); }
+
+  /* Header */
+  header { border-bottom: 1px solid var(--border);
+    background: radial-gradient(120% 140% at 88% -30%, var(--brand-soft) 0%, transparent 55%), var(--surface); }
+  .head-inner { padding: 52px 24px 40px; max-width: var(--maxw); margin: 0 auto; }
+  .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .2em; color: var(--brand-deep);
+    text-transform: uppercase; margin: 0 0 18px; display: flex; align-items: center; gap: 12px; }
+  .eyebrow::before { content: ""; width: 30px; height: 2px; background: var(--sand); }
+  h1 { font-family: "Spectral", Georgia, serif; font-weight: 700; font-size: clamp(30px, 4.8vw, 46px);
+    line-height: 1.14; margin: 0 0 16px; text-wrap: balance; letter-spacing: -.01em; }
+  h1 .en { display:block; font-family:"IBM Plex Sans",sans-serif; font-weight: 500;
+    font-size: clamp(12px,1.5vw,15px); letter-spacing: .16em; color: var(--ink-faint); margin-top: 14px; }
+  .lede { font-size: 16.5px; color: var(--ink-soft); max-width: 62ch; margin: 0; }
+  .client-tag { display: inline-flex; align-items: baseline; gap: 10px; margin-top: 26px;
+    padding: 10px 18px; border: 1px solid var(--border-strong); border-radius: 999px;
+    background: var(--surface); font-size: 13px; color: var(--ink-soft); flex-wrap: wrap; }
+  .client-tag strong { color: var(--ink); font-weight: 700; }
+
+  .howread { display:grid; grid-template-columns: repeat(auto-fit, minmax(210px,1fr)); gap: 12px; margin: 26px 0 4px; }
+  .howread div { background: var(--surface); border: 1px solid var(--border); border-radius: 11px;
+    padding: 13px 16px; font-size: 13px; color: var(--ink-soft); }
+  .howread b { color: var(--ink); font-weight: 700; display:block; margin-bottom: 2px; font-size: 13.5px; }
+  .k-howto { color: var(--brand-deep); } .k-tip { color: var(--sand); }
+
+  /* TOC */
+  nav.toc { padding: 30px 0 6px; }
+  nav.toc ol { list-style: none; margin: 0; padding: 0;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(238px, 1fr)); gap: 10px; }
+  nav.toc a { display: flex; align-items: baseline; gap: 12px; text-decoration: none; padding: 12px 15px;
+    border: 1px solid var(--border); border-radius: 11px; background: var(--surface); color: var(--ink);
+    transition: border-color .15s, transform .15s; }
+  nav.toc a:hover { border-color: var(--brand); transform: translateY(-1px); }
+  nav.toc .n { font-family: "Spectral", serif; font-weight: 700; color: var(--sand); font-size: 14px;
+    font-variant-numeric: tabular-nums; min-width: 1.4em; }
+  nav.toc .t { font-size: 13.5px; font-weight: 500; line-height: 1.4; }
+
+  /* Worked-example band */
+  .example { margin: 28px 0 6px; border: 1px solid var(--border-strong); border-radius: 16px;
+    background: linear-gradient(180deg, var(--sand-soft), var(--surface) 70%); padding: 26px 26px 22px;
+    box-shadow: var(--shadow); }
+  .example h2 { font-family:"Spectral",serif; font-size: 21px; margin: 0 0 4px; }
+  .example .sub { color: var(--ink-faint); font-size: 13px; margin: 0 0 18px; }
+  .flow { display:grid; gap: 0; }
+  .flow .f { display:grid; grid-template-columns: 26px 1fr; gap: 14px; padding: 9px 0; align-items: baseline;
+    border-top: 1px dashed var(--border-strong); }
+  .flow .f:first-child { border-top: none; }
+  .flow .fn { font-family:"IBM Plex Mono",monospace; font-weight: 500; color: var(--brand); font-size: 13px; }
+  .flow .ft { font-size: 14px; color: var(--ink-soft); }
+  .flow .ft b { color: var(--ink); }
+
+  main { padding: 22px 0 30px; }
+  section.step { padding: 40px 0; border-top: 1px solid var(--border); scroll-margin-top: 16px; }
+  .step-head { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 18px; }
+  .step-num { font-family:"Spectral",serif; font-weight: 700; font-variant-numeric: tabular-nums;
+    font-size: clamp(32px, 5.5vw, 48px); line-height: .95; color: var(--brand); flex: none;
+    width: 1.7em; text-align: right; }
+  .step-titles { flex: 1; min-width: 0; padding-top: 6px; }
+  .step-titles h2 { font-family:"Spectral",serif; font-weight: 600; font-size: clamp(21px, 3vw, 28px);
+    margin: 0 0 3px; line-height: 1.2; text-wrap: balance; letter-spacing: -.01em; }
+  .step-titles .en { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint); font-weight: 500; }
+  .step-body { margin-left: calc(1.7em + 20px); }
+  @media (max-width: 640px){ .step-body { margin-left: 0; } .step-num { font-size: 30px; width: auto; } }
+  .step-body > p { margin: 0 0 18px; color: var(--ink-soft); font-size: 15px; max-width: 68ch; }
+  .step-body > p strong { color: var(--ink); font-weight: 700; }
+  .subhead { font-weight: 700; font-size: 13.5px; color: var(--brand-deep); margin: 22px 0 10px;
+    display:flex; align-items:center; gap:8px; letter-spacing: .01em; }
+  .subhead::before { content:""; width: 6px; height: 6px; border-radius: 2px; background: var(--sand); }
+
+  /* How-to steps — number is absolute, li is a block (not grid). */
+  ol.howto { counter-reset: h; list-style: none; margin: 0 0 4px; padding: 0;
+    display: flex; flex-direction: column; gap: 9px; }
+  ol.howto li { counter-increment: h; position: relative; padding-left: 37px; min-height: 24px;
+    font-size: 14.5px; color: var(--ink-soft); }
+  ol.howto li::before { content: counter(h); position: absolute; left: 0; top: .05em;
+    font-family:"IBM Plex Mono",monospace; font-size: 12px; font-weight:500;
+    color: #fff; background: var(--brand); width: 24px; height: 24px; border-radius: 7px;
+    display: flex; align-items: center; justify-content: center; }
+  ol.howto li b { color: var(--ink); font-weight: 700; }
+
+  .points { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border);
+    border-radius: 13px; overflow: hidden; box-shadow: var(--shadow); margin-top: 6px; }
+  .point { background: var(--surface); padding: 14px 18px; display: grid;
+    grid-template-columns: 190px 1fr; gap: 14px; align-items: start; }
+  @media (max-width: 620px){ .point { grid-template-columns: 1fr; gap: 3px; } }
+  .point .k { font-weight: 700; font-size: 13px; color: var(--brand-deep); }
+  .point .v { font-size: 14px; color: var(--ink-soft); line-height: 1.65; }
+  .point .v b { color: var(--ink); font-weight: 700; }
+
+  .tip { margin-top: 16px; padding: 13px 16px 13px 18px; border-radius: 11px; background: var(--sand-soft);
+    border: 1px solid var(--border-strong); border-left: 4px solid var(--sand); font-size: 13.5px; color: var(--ink-soft); }
+  .tip b { color: var(--ink); }
+  .tip.info { background: var(--brand-soft); border-left-color: var(--brand); }
+
+  .pills { display:flex; flex-wrap:wrap; gap: 7px; margin: 6px 0 4px; }
+  .pill { font-size: 12.5px; padding: 4px 11px; border-radius: 999px; background: var(--surface-2);
+    border: 1px solid var(--border); color: var(--ink-soft); }
+
+  .ref { padding: 46px 0 10px; border-top: 2px solid var(--border-strong); }
+  .ref h2 { font-family:"Spectral",serif; font-size: 25px; font-weight: 600; margin: 0 0 6px; }
+  .ref .sub { color: var(--ink-faint); font-size: 14px; margin: 0 0 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(256px, 1fr)); gap: 14px; }
+  .rcard { background: var(--surface); border: 1px solid var(--border); border-radius: 13px; padding: 19px; }
+  .rcard h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; }
+  .rcard .en { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); }
+  .rcard p { margin: 9px 0 0; font-size: 13px; color: var(--ink-soft); line-height: 1.65; }
+
+  .tbl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); margin-top: 6px; }
+  table { border-collapse: collapse; width: 100%; min-width: 520px; background: var(--surface); font-size: 13.5px; }
+  th, td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--surface-2); font-weight: 700; font-size: 12px; color: var(--ink-faint); letter-spacing: .03em; }
+  tr:last-child td { border-bottom: none; }
+  td b { color: var(--ink); }
+
+  .integ { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 15px; border-radius: 999px;
+    border: 1px solid var(--border-strong); background: var(--surface); font-size: 13px; color: var(--ink-soft); }
+  .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brand); }
+  .chip.beta .dot { background: var(--sand); }
+  .chip small { color: var(--ink-faint); }
+
+  footer { border-top: 1px solid var(--border); margin-top: 28px; }
+  .foot-inner { padding: 30px 24px 48px; max-width: var(--maxw); margin: 0 auto; color: var(--ink-faint);
+    font-size: 12.5px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  a.top { color: var(--brand-deep); text-decoration: none; font-weight: 500; }
+  a.top:hover { text-decoration: underline; }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 4px; }
+  @media (prefers-reduced-motion: reduce){ * { transition: none !important; } }
+
+  /* Print / PDF: keep each row whole across page breaks. */
+  @media print {
+    body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    ol.howto li, .point, .flow .f, .agenda .ai, tr, .rcard,
+    .howread > div, nav.toc li, .integ .chip, .tip, .example,
+    .step-head, .subhead { break-inside: avoid; page-break-inside: avoid; }
+    .subhead, .step-head { break-after: avoid; page-break-after: avoid; }
+    section.step { border-top-color: #d9d4c4; }
+  }
+</style>
+</head>
+<body>
+
+<header id="top">
+  <div class="head-inner">
+    <p class="eyebrow">Operations Walkthrough / Detailed</p>
+    <h1>Autoura Operator Guide — from enquiry to invoice
+      <span class="en">TRAVEL OPERATIONS PLATFORM &mdash; A GUIDED WALKTHROUGH</span>
+    </h1>
+    <p class="lede">Run your Egypt travel operations in one system. This guide follows the real workflow — showing the <strong>on-screen steps</strong> and <strong>what each feature does</strong>. New here? Read top to bottom. Familiar? Jump from the contents.</p>
+    <div class="client-tag"><strong>Autoura</strong>&nbsp;<span style="color:var(--ink-faint)">|&nbsp; Travel operations platform &nbsp;/&nbsp; enquiry to quote, booking and invoice</span></div>
+
+    <div class="howread">
+      <div><b class="k-howto">▸ Steps</b>Numbered, the exact actions you take on screen.</div>
+      <div><b>Highlights</b>What the feature can do, at a glance.</div>
+      <div><b class="k-tip">Tip</b>Practical notes and things to watch for.</div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="toc" aria-label="Contents">
+    <ol>
+      <li><a href="#s1"><span class="n">01</span><span class="t">Unified intake</span></a></li>
+      <li><a href="#s2"><span class="n">02</span><span class="t">AI-drafted replies</span></a></li>
+      <li><a href="#s3"><span class="n">03</span><span class="t">Itineraries &amp; quotes</span></a></li>
+      <li><a href="#s4"><span class="n">04</span><span class="t">How auto-pricing works</span></a></li>
+      <li><a href="#s5"><span class="n">05</span><span class="t">B2B quotes &amp; revisions</span></a></li>
+      <li><a href="#s6"><span class="n">06</span><span class="t">Bookings, departures, capacity</span></a></li>
+      <li><a href="#s7"><span class="n">07</span><span class="t">Traveller portal</span></a></li>
+      <li><a href="#s8"><span class="n">08</span><span class="t">Invoicing &amp; finance</span></a></li>
+      <li><a href="#ref"><span class="n">＋</span><span class="t">Foundations, roles &amp; integrations</span></a></li>
+    </ol>
+  </nav>
+
+  <div class="example">
+    <h2>The whole flow, in one booking</h2>
+    <p class="sub">The Tanaka party (3 pax, Japanese = non-EU) / March departure, Cairo → Luxor, 5 days — how one enquiry moves through the system.</p>
+    <div class="flow">
+      <div class="f"><div class="fn">01</div><div class="ft">Tanaka-san messages on <b>WhatsApp</b>. It lands in the inbox automatically and AI extracts the name, dates, 3 pax, nationality and requests.</div></div>
+      <div class="f"><div class="fn">02</div><div class="ft">AI checks availability and drafts a <b>reply</b>. The agent reviews the wording and sends.</div></div>
+      <div class="f"><div class="fn">03</div><div class="ft">The conversation builds a 5-day itinerary in the <b>Quote Builder</b>; every service is linked to your rates and prices instantly.</div></div>
+      <div class="f"><div class="fn">04</div><div class="ft">For 3 pax it <b>auto-selects the vehicle class</b>, applies non-EU entrance fees and the March cruise rate; any unpriced service is flagged.</div></div>
+      <div class="f"><div class="fn">05</div><div class="ft">The itinerary becomes a <b>quote</b> in one click. Every change is versioned — compare or revert any time.</div></div>
+      <div class="f"><div class="fn">06</div><div class="ft">On confirmation it converts to a <b>booking</b>. Assign guide, vehicle and hotel; record supplier confirmation numbers.</div></div>
+      <div class="f"><div class="fn">07</div><div class="ft">Tanaka-san gets a <b>private link</b> to attach their passport and ask questions — replacing the posted application form.</div></div>
+      <div class="f"><div class="fn">08</div><div class="ft">Raise the <b>invoice</b>, record payment, auto-generate the receipt, and see per-trip profit before departure.</div></div>
+    </div>
+  </div>
+
+  <main>
+    <!-- 01 -->
+    <section class="step" id="s1">
+      <div class="step-head"><div class="step-num">01</div>
+        <div class="step-titles"><h2>Every enquiry in one inbox</h2><div class="en">Unified Inbox &amp; WhatsApp Parser</div></div></div>
+      <div class="step-body">
+        <p>Messages from WhatsApp, email (Gmail) and the traveller portal collect in <strong>one inbox</strong>. WhatsApp is two-way, so client replies arrive automatically. An <strong>AI parser</strong> reads the conversation, pulls out the details a quote needs, and hands them straight to itinerary building.</p>
+
+        <div class="subhead">Working the inbox</div>
+        <ol class="howto">
+          <li>Open <b>WhatsApp Inbox</b> in the sidebar — conversations on the left, the open chat on the right.</li>
+          <li>Pick a conversation, type your reply at the bottom, and <b>Send</b>.</li>
+          <li>As needed: <b>assign to an agent</b>, use <b>quick replies</b>, set the <b>reply language</b>, and <b>link or create a client</b> record.</li>
+          <li>Send <b>quotes, invoices, contracts and receipts</b> straight from the conversation.</li>
+        </ol>
+
+        <div class="subhead">Turn a conversation into a quote</div>
+        <ol class="howto">
+          <li>From the dashboard, click <b>Parse WhatsApp</b> (or WhatsApp Parser in the sidebar).</li>
+          <li>Paste the conversation text and click <b>Parse</b>.</li>
+          <li>Review the extracted details and click <b>Create Itinerary</b> — a priced itinerary is generated.</li>
+        </ol>
+        <div class="subhead">What the AI extracts</div>
+        <div class="pills">
+          <span class="pill">Name · email · phone</span><span class="pill">Nationality · passport type</span><span class="pill">Travel dates</span>
+          <span class="pill">Pax (adults · children · infants)</span><span class="pill">Destinations · interests</span><span class="pill">Budget range</span><span class="pill">Special requests</span>
+        </div>
+        <div class="tip info">Every extracted field carries a <b>confidence score</b>, so you can see how sure the AI is. Pasting a conversation is the fastest way to turn an enquiry into a quote.</div>
+      </div>
+    </section>
+
+    <!-- 02 -->
+    <section class="step" id="s2">
+      <div class="step-head"><div class="step-num">02</div>
+        <div class="step-titles"><h2>AI drafts the reply, a human approves it</h2><div class="en">WhatsApp AI Agent &amp; Copilot</div></div></div>
+      <div class="step-body">
+        <p>Before writing, the WhatsApp AI agent <strong>looks up your real data</strong> (tool-calling). What it produces is always a <strong>draft suggestion</strong>, saved against the conversation and waiting for approval. <strong>The agent never sends on its own.</strong> The feature is off by default and enabled per organisation.</p>
+
+        <div class="subhead">What the agent can look up (read-only)</div>
+        <div class="points">
+          <div class="point"><div class="k">Search customer trips</div><div class="v">The linked client's itineraries and bookings, with dates and status.</div></div>
+          <div class="point"><div class="k">Look up an itinerary</div><div class="v">The day-by-day detail and pricing of one specific trip.</div></div>
+          <div class="point"><div class="k">Check availability</div><div class="v">Capacity for the dates and any group departures in range. <b>It won't promise dates you can't serve.</b></div></div>
+          <div class="point"><div class="k">Escalate to a human</div><div class="v">Complaints, cancellations, refunds, money or anything urgent go to a person instead of a guess.</div></div>
+        </div>
+        <div class="tip">Each suggestion shows a <b>confidence signal and its reasoning</b> (which tools it used). Sensitive messages — a complaint, a refund, a same-day request — are escalated rather than answered.</div>
+
+        <div class="subhead">AI Copilot — grounded in your own knowledge (RAG)</div>
+        <p style="margin-top:2px">Incoming messages gather in a shared Copilot inbox; the assistant <strong>retrieves the most relevant facts you've taught it</strong> and proposes a draft. Everything is approval-gated — a human always sends. Manage what it knows in <b>Copilot Knowledge</b>.</p>
+        <div class="pills">
+          <span class="pill">FAQ</span><span class="pill">Policy (cancellation · refunds)</span><span class="pill">Tour descriptions</span><span class="pill">Other</span>
+        </div>
+        <div class="tip info"><b>Agent memory:</b> the system learns from your approved replies and work patterns (client preferences, pricing patterns, supplier notes) and feeds them into itinerary generation — so suggestions sound more like you over time. Nothing to configure.</div>
+      </div>
+    </section>
+
+    <!-- 03 -->
+    <section class="step" id="s3">
+      <div class="step-head"><div class="step-num">03</div>
+        <div class="step-titles"><h2>Build the itinerary and quote</h2><div class="en">Quote Builder &amp; Itineraries</div></div></div>
+      <div class="step-body">
+        <p>The Quote Builder is Autoura's <strong>single pricing engine</strong>. Drop services into fixed day slots and the whole trip prices in real time. The same engine powers both B2C quotes and B2B rate sheets, so <strong>the numbers always agree</strong>.</p>
+
+        <div class="subhead">Three ways to start</div>
+        <ol class="howto">
+          <li><b>Paste text</b> — from WhatsApp, email or operator shorthand; AI reads the cities, activities and services into a day-by-day grid.</li>
+          <li><b>Upload a file</b> — PDF, image (PNG/JPG/WebP) or DOCX, read by vision into the same grid.</li>
+          <li><b>Load / build</b> — enter an itinerary ID to reprice an existing trip, or click “+” to add days and build from scratch.</li>
+        </ol>
+
+        <div class="subhead">The Trip Settings bar drives every calculation</div>
+        <div class="points">
+          <div class="point"><div class="k">Pax</div><div class="v">Affects vehicle selection, per-person cost and accommodation splits.</div></div>
+          <div class="point"><div class="k">Start date</div><div class="v">Sets the seasonal (dated-period) rates for hotels and cruises.</div></div>
+          <div class="point"><div class="k">Passport type</div><div class="v">EU or non-EU — entrance fees and some services differ.</div></div>
+          <div class="point"><div class="k">Tier</div><div class="v">Budget / Standard / Deluxe / Luxury — which hotels and service levels are used.</div></div>
+          <div class="point"><div class="k">Pricing mode</div><div class="v">B2C (direct) or B2B (partner). B2B enables partner selection and rate sheets.</div></div>
+          <div class="point"><div class="k">Currency</div><div class="v">EUR / USD / GBP / EGP / JPY — all rates converted and displayed.</div></div>
+          <div class="point"><div class="k">Margin %</div><div class="v">Applied to total cost to produce the selling price.</div></div>
+        </div>
+        <div class="tip">Change any setting and it recalculates instantly — <b>cost per person, total cost, margin, sell per person and sell total.</b></div>
+
+        <div class="subhead">Up to 14 service slots per day</div>
+        <div class="pills">
+          <span class="pill">Transport / route</span><span class="pill">Guide</span><span class="pill">Accommodation</span><span class="pill">Meals</span><span class="pill">Entrance fees</span>
+          <span class="pill">Activities</span><span class="pill">Domestic flights</span><span class="pill">Nile cruise</span><span class="pill">Airport services</span><span class="pill">Tipping</span><span class="pill">Water / supplies</span>
+        </div>
+        <p style="margin-top:12px">AI maps each service to the best rate in your database — you only edit the slots it guessed wrong or where you want a different option. A <b>day-type preset</b> (arrival, tour, transfer, cruise, free, departure) fills sensible defaults.</p>
+
+        <div class="subhead">Actions on the itinerary detail page</div>
+        <div class="pills">
+          <span class="pill">Download PDF</span><span class="pill">Send via WhatsApp</span><span class="pill">Send email</span>
+          <span class="pill">Generate invoice</span><span class="pill">Create booking</span><span class="pill">Generate commissions</span><span class="pill">Generate tasks (AI)</span>
+        </div>
+        <div class="tip info">Children (4–12) are 50% off, infants (0–3) free except flights — the pax mix is reflected in pricing. Keep your rates current and <b>Auto mode</b> prices every trip instantly and accurately.</div>
+      </div>
+    </section>
+
+    <!-- 04 -->
+    <section class="step" id="s4">
+      <div class="step-head"><div class="step-num">04</div>
+        <div class="step-titles"><h2>How auto-pricing works</h2><div class="en">Rate Management &amp; Auto-Pricing</div></div></div>
+      <div class="step-body">
+        <p>The engine sorts costs into <strong>three kinds</strong>, so pricing stays correct as the group size changes.</p>
+        <div class="points">
+          <div class="point"><div class="k">Fixed costs</div><div class="v">Same regardless of pax — guide, tipping, airport services. Split across the group.</div></div>
+          <div class="point"><div class="k">Per-person costs</div><div class="v">Scale with pax — accommodation (per-night), entrance fees, meals, water, Nile cruise.</div></div>
+          <div class="point"><div class="k">Transport costs</div><div class="v">Step up with group size: <b>sedan → minivan → van → minibus → bus</b>, chosen automatically.</div></div>
+        </div>
+
+        <div class="subhead">Built for Egypt handling</div>
+        <div class="points">
+          <div class="point"><div class="k">16 rate categories</div><div class="v">Hotels, Nile cruises, sleeper trains, flights, entrance fees, guides, transport, tipping and more.</div></div>
+          <div class="point"><div class="k">Dated rate periods</div><div class="v">Hotels and cruises take <b>as many dated price periods</b> as the contract has.</div></div>
+          <div class="point"><div class="k">Dual passport rates</div><div class="v">EU / non-EU fees applied automatically per service.</div></div>
+          <div class="point"><div class="k">Cruise cabins</div><div class="v">Priced per person per night by cabin (single/double/triple/suite); the <b>cheapest valid combination</b> is chosen.</div></div>
+          <div class="point"><div class="k">Coverage checks</div><div class="v">Any unpriced service is <b>flagged before the quote goes out</b> — a blank rate is never read as “free”.</div></div>
+        </div>
+        <div class="tip">Transport is the one cost that isn't linear in group size. The grid switches vehicle class per pax count for you — no manual maths.</div>
+      </div>
+    </section>
+
+    <!-- 05 -->
+    <section class="step" id="s5">
+      <div class="step-head"><div class="step-num">05</div>
+        <div class="step-titles"><h2>B2B quotes &amp; revision history</h2><div class="en">B2B Quotes &amp; Revisions</div></div></div>
+      <div class="step-body">
+        <p>B2B pricing calculates per-person rates across <strong>1–40 pax</strong> at once, with or without a <strong>tour leader (+0 / +1)</strong> and single-supplement included — the <strong>rate sheet</strong> partners expect.</p>
+
+        <div class="subhead">Generate a rate sheet</div>
+        <ol class="howto">
+          <li>Choose a tour variation, then set pax, travel date, passport type and margin.</li>
+          <li>Click <b>Calculate Price</b> — summary, single supplement, and a day-by-day cost breakdown.</li>
+          <li>Set the pax range <b>From–To (1–40)</b> and <b>Generate Rate Sheet</b>: cost / margin / selling / per-person / supplement for each size.</li>
+          <li><b>Export CSV</b> to share, or <b>Save as Quote</b>.</li>
+        </ol>
+
+        <div class="subhead">The quote (PDF) and its history</div>
+        <div class="points">
+          <div class="point"><div class="k">Reference code</div><div class="v">A unique code on save; status Draft / Sent / Confirmed / Expired.</div></div>
+          <div class="point"><div class="k">PDF export</div><div class="v">Company branding, rate table, supplement and terms. <b>Japanese-safe fonts</b> for Japanese partners.</div></div>
+          <div class="point"><div class="k">Automatic revisions</div><div class="v">Every edit or status change <b>snapshots the whole quote</b>, with who changed what and when.</div></div>
+          <div class="point"><div class="k">Compare two versions</div><div class="v">A <b>field-level diff</b> showing only what changed, and how many fields.</div></div>
+          <div class="point"><div class="k">Revert</div><div class="v">Restore an earlier version in one step (the revert is itself recorded, so nothing is lost). <b>Manager+</b>.</div></div>
+        </div>
+        <div class="tip">Manage many quotes at once with <b>bulk status updates and bulk delete</b> (Manager role or above).</div>
+      </div>
+    </section>
+
+    <!-- 06 -->
+    <section class="step" id="s6">
+      <div class="step-head"><div class="step-num">06</div>
+        <div class="step-titles"><h2>Bookings, departures &amp; capacity</h2><div class="en">Operations</div></div></div>
+      <div class="step-body">
+        <p>When a client confirms, <strong>convert the itinerary to a booking</strong>. Bookings track the operational side — supplier confirmations, payments and status.</p>
+
+        <div class="subhead">Booking status &amp; supplier confirmations</div>
+        <ol class="howto">
+          <li>Open the booking and click <b>Sync from Itinerary</b> to pull in every linked service.</li>
+          <li>On the <b>Suppliers</b> tab, move each service Pending → Requested → <b>Confirmed (enter the confirmation number)</b>; problems go to Issues.</li>
+          <li>The booking advances Pending → Supplier Confirmed → Payment Received → <b>Ready</b> → In Progress → Completed.</li>
+        </ol>
+
+        <div class="subhead">Group departures &amp; capacity</div>
+        <div class="points">
+          <div class="point"><div class="k">Create a departure</div><div class="v">From a template or a custom tour — dates, min/max pax, price per person, booking cutoff.</div></div>
+          <div class="point"><div class="k">Status</div><div class="v">Draft → Open → Limited → Full → <b>Guaranteed</b> (min pax met) / Cancelled.</div></div>
+          <div class="point"><div class="k">Capacity</div><div class="v">Set “how many groups you can run” per date; availability is computed live.</div></div>
+          <div class="point"><div class="k">Live availability</div><div class="v">For requested dates + pax it returns <b>Available / Limited / Busy / Blackout</b> in customer-ready wording.</div></div>
+        </div>
+        <div class="tip info">This availability also feeds the <b>WhatsApp AI agent</b> and resource assignment. Because the agent reads the same live numbers your team does, it <b>never confirms a date you can't serve, and won't double-book</b> guides or vehicles.</div>
+        <div class="tip">The calendar shows every tour in month, week and timeline views, with <b>drag-to-reschedule and conflict detection</b>.</div>
+      </div>
+    </section>
+
+    <!-- 07 -->
+    <section class="step" id="s7">
+      <div class="step-head"><div class="step-num">07</div>
+        <div class="step-titles"><h2>The traveller portal</h2><div class="en">Traveller Portal</div></div></div>
+      <div class="step-body">
+        <p>The portal is <strong>the page your customers see</strong>. Send a link and they fill in their own details, attach their passport, and ask questions — <strong>replacing the posted application form</strong>. <strong>No account, no password</strong>: the link itself is the credential.</p>
+
+        <div class="subhead">Sending the link</div>
+        <ol class="howto">
+          <li>Open the booking and find the <b>Customer portal</b> panel.</li>
+          <li>Choose how they fill it in: <b>Family</b> (one link for the whole booking) or <b>Private</b> (a per-traveller link others on the booking can't read).</li>
+        </ol>
+
+        <div class="subhead">Passport &amp; documents</div>
+        <div class="points">
+          <div class="point"><div class="k">Passport</div><div class="v">One file (a new upload replaces the old). PDF/JPEG/PNG/WEBP/<b>HEIC</b> (iPhone photos), 10&nbsp;MB each.</div></div>
+          <div class="point"><div class="k">Other documents</div><div class="v">Up to six, each with a label the traveller writes (visa, insurance…).</div></div>
+          <div class="point"><div class="k">Stored securely</div><div class="v"><b>Private storage</b>; opening one issues a link that <b>expires in five minutes</b>. Only <b>managers/administrators</b> can view a scan (agents work the booking without seeing it).</div></div>
+          <div class="point"><div class="k">Auto-deleted</div><div class="v">Scans are destroyed automatically <b>after the trip</b>; the deletion date shows on each row and is fixed at upload (moving dates won't extend it).</div></div>
+        </div>
+
+        <div class="subhead">Portal messages</div>
+        <p style="margin-top:2px">Travellers ask questions from their own booking page. Before sending, they see your <strong>office hours</strong>; out of hours, they're told when the next office opens <strong>in their own time zone</strong>. The first message gets an auto-acknowledgement. Your team answers from the <strong>unified inbox's Portal tab</strong> (or the booking page). Replying emails the traveller a <strong>link back to their page</strong> — not the message text, since it may concern a passport or a payment.</p>
+        <div class="tip">Office hours are set <b>per office</b> (each with its own working week and time zone), so a team spread across countries is described accurately rather than averaged.</div>
+      </div>
+    </section>
+
+    <!-- 08 -->
+    <section class="step" id="s8">
+      <div class="step-head"><div class="step-num">08</div>
+        <div class="step-titles"><h2>Invoicing, payments &amp; finance</h2><div class="en">Finance</div></div></div>
+      <div class="step-body">
+        <p>Raise an <strong>invoice</strong> straight from an itinerary, then track payments, balances and receivables. Multi-currency throughout, with <strong>per-trip profit &amp; loss</strong> visible before departure.</p>
+
+        <div class="subhead">Creating &amp; working an invoice</div>
+        <ol class="howto">
+          <li>Open the itinerary and click <b>Generate Invoice</b> (all line items carry over), or create one manually.</li>
+          <li>Pick a type: <b>Standard (full) / Deposit (typically 30%) / Final (balance)</b>.</li>
+          <li>The detail page shows a <b>payment progress bar</b> and history, with <b>Download PDF · Send via WhatsApp/email · Add payment · Send reminder · Create final invoice.</b></li>
+        </ol>
+
+        <div class="subhead">Receipts, receivables &amp; reports</div>
+        <div class="points">
+          <div class="point"><div class="k">Receipts</div><div class="v"><b>Generated automatically</b> from payments (invoice or itinerary), with a receipt #, branded PDF, and WhatsApp delivery.</div></div>
+          <div class="point"><div class="k">Receivables (AR)</div><div class="v">Client-level <b>aging (30/60/90 days)</b>, outstanding balances, and reminder triggers.</div></div>
+          <div class="point"><div class="k">Profit &amp; Loss</div><div class="v">Supplier cost vs. client revenue — per-trip margin, visible before departure.</div></div>
+          <div class="point"><div class="k">Financial reports</div><div class="v">Five tabs (Overview / Revenue / Cash Flow / Tax / Commissions), with YoY, quarterly and monthly charts and CSV/PDF export.</div></div>
+          <div class="point"><div class="k">Accounting sync (beta)</div><div class="v"><b>Push-only</b> sync to QuickBooks / Xero, currently in beta.</div></div>
+        </div>
+        <div class="tip">Tax-tab VAT figures are estimates for planning — always confirm with your accountant before filing.</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Reference -->
+  <div class="ref" id="ref">
+    <h2>Foundations, roles &amp; integrations</h2>
+    <p class="sub">Beyond the workflow, the pieces that keep day-to-day operations running.</p>
+
+    <div class="subhead" style="font-size:14.5px">Roles &amp; permissions (login accounts)</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Role</th><th>What they can do</th></tr></thead>
+        <tbody>
+          <tr><td><b>Owner</b></td><td>Everything, always. Transferred, never invited. The <b>first account to sign up</b> on a fresh install becomes owner.</td></tr>
+          <tr><td><b>Administrator</b></td><td>Everything, including Settings, User Management, the Activity Log and financial configuration.</td></tr>
+          <tr><td><b>Manager</b></td><td>Operations plus finance: rates, financial reports, receipts, commissions, P&amp;L — but not user management or company settings.</td></tr>
+          <tr><td><b>Agent</b></td><td>Day-to-day sales: clients, itineraries, invoices, payments, tasks, inboxes, tours, follow-ups.</td></tr>
+          <tr><td><b>Viewer</b></td><td>Dashboard only. The default for an account with no explicit role — access fails closed.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tip info" style="margin-top:14px"><b>“User Management” and “Team Members” are different.</b> User Management = who can log in and what they may do. Team Members = who does the work (task assignment, trip ownership, department). A driver who never opens Autoura is a team member with no login; give someone a login with <b>Invite to system</b> on their Team Members row.</div>
+
+    <div class="grid" style="margin-top:26px">
+      <div class="rcard"><div class="en">Dashboard</div><h3>Dashboard</h3><p>Clients, follow-ups needing attention, quotes created and trips in the next 30 days — with quick actions like Parse WhatsApp.</p></div>
+      <div class="rcard"><div class="en">Tasks</div><h3>Tasks</h3><p>Kanban / table / list views with priority, due date and assignee. Assigning <b>notifies</b> automatically; finished work archives.</p></div>
+      <div class="rcard"><div class="en">Departments</div><h3>Department routing</h3><p>Each department owns service types; tasks generated from an itinerary land with the right team — hotels to Reservation, ticketing to Aviation.</p></div>
+      <div class="rcard"><div class="en">Message Templates</div><h3>Message templates</h3><p>WhatsApp / email templates with <span class="mono">{{Name}}</span>-style <b>placeholders</b> that auto-fill from real data.</p></div>
+      <div class="rcard"><div class="en">Multi-Language</div><h3>Languages (EN / JP)</h3><p>Switch the UI in one click; itineraries hold parallel EN/JP content, and PDFs and emails render Japanese correctly.</p></div>
+      <div class="rcard"><div class="en">Content Library</div><h3>Content library</h3><p>Reusable attraction and activity descriptions with per-tier variations and writing rules.</p></div>
+      <div class="rcard"><div class="en">Suppliers &amp; Documents</div><h3>Suppliers &amp; documents</h3><p>Manage guides, vehicles, hotels, restaurants and airport staff; generate invoices, contracts, vouchers and receipts.</p></div>
+      <div class="rcard"><div class="en">Activity Log</div><h3>Audit log</h3><p>Who, when, what, endpoint and IP — filterable, and never editable.</p></div>
+    </div>
+
+    <div class="subhead" style="font-size:14.5px; margin-top:34px">How the AI behaves (for peace of mind)</div>
+    <div class="points">
+      <div class="point"><div class="k">Draft-gated</div><div class="v">AI drafts only. <b>It never sends or changes anything by itself</b> — a human always decides.</div></div>
+      <div class="point"><div class="k">Grounded</div><div class="v">It uses only your knowledge and real data (organisation-scoped) and cites its sources.</div></div>
+      <div class="point"><div class="k">Confidence &amp; escalation</div><div class="v">It shows how sure it is and hands sensitive cases to a person.</div></div>
+      <div class="point"><div class="k">Learning</div><div class="v">It learns from your approved replies and patterns, so suggestions sound more like you.</div></div>
+    </div>
+
+    <h2 style="margin-top:40px">Integrations</h2>
+    <p class="sub">Connect the tools you already use, so conversations, communications and finances flow into one system.</p>
+    <div class="integ">
+      <span class="chip"><span class="dot"></span>WhatsApp Business (via Twilio)</span>
+      <span class="chip"><span class="dot"></span>Gmail (Google Workspace)</span>
+      <span class="chip"><span class="dot"></span>Claude AI (Anthropic)</span>
+      <span class="chip beta"><span class="dot"></span>QuickBooks / Xero <small>&nbsp;beta · push-only</small></span>
+    </div>
+    <div class="tip" style="margin-top:22px"><b>Note:</b> accounting sync (QuickBooks / Xero) is currently in <b>beta</b>. Autoura stays the source of truth and <b>writes out (push-only)</b>; it does not process card payments itself.</div>
+  </div>
+</div>
+
+<footer>
+  <div class="foot-inner">
+    <span>Autoura — Travel Operations Platform ／ Operator Guide (detailed)</span>
+    <a class="top" href="#top">▲ Back to top</a>
+  </div>
+</footer>
+
+</body>
+</html>
