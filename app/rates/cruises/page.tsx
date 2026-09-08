@@ -5,6 +5,7 @@ import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import Link from 'next/link'
 import { Copy, Ship, Plus, Search, Edit, Trash2, X, Check, ChevronDown, AlertCircle, CheckCircle2, Crown, Star,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Calendar
@@ -338,6 +339,7 @@ export default function CruisesPage() {
   const t = useTranslations('rates.cruises')
   const tCommon = useTranslations('rates.common')
   const tierLabel = useTierLabel()
+  const cruiseCabinLabel = useVocabLabel('cruise_cabin')
   const tPeriods = useTranslations('rates.ratePeriods')
   const dialog = useConfirmDialog()
   const { formatWithConversion, rateCurrency } = useCurrency()
@@ -844,7 +846,7 @@ export default function CruisesPage() {
             >
               <option value="all">{t('filters.allCabins')}</option>
               {CABIN_TYPES.map(type => (
-                <option key={type} value={type}>{t(`cabinTypes.${type}`)}</option>
+                <option key={type} value={type}>{cruiseCabinLabel(type, t(`cabinTypes.${type}`))}</option>
               ))}
             </select>
             <select
@@ -929,7 +931,7 @@ export default function CruisesPage() {
                         cruise.cabin_type === 'deluxe' ? 'bg-indigo-100 text-indigo-800' :
                         'bg-gray-100 text-gray-700'
                       }`}>
-                        {t(`cabinTypes.${cruise.cabin_type}`)}
+                        {cruiseCabinLabel(cruise.cabin_type, t(`cabinTypes.${cruise.cabin_type}`))}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -1143,7 +1145,7 @@ export default function CruisesPage() {
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
                 >
                   {CABIN_TYPES.map(type => (
-                    <option key={type} value={type}>{t(`cabinTypes.${type}`)}</option>
+                    <option key={type} value={type}>{cruiseCabinLabel(type, t(`cabinTypes.${type}`))}</option>
                   ))}
                 </select>
               </div>
