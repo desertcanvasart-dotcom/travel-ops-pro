@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { createClient } from '@supabase/supabase-js'
-import { sendEmailInternal } from '@/lib/email-send'
+import { createNotification } from '@/lib/notifications'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -51,7 +51,7 @@ async function getHandler(request: NextRequest) {
       .from('tasks')
       .select(`
         *,
-        assigned_member:team_members(id, name, email)
+        assigned_member:team_members(id, name, email, user_id)
       `)
       .eq('due_date', tomorrowStr)
       .neq('status', 'done')
@@ -76,14 +76,16 @@ async function getHandler(request: NextRequest) {
 
         // Create notification
         await createNotification({
+          // user_id makes the recipient's email opt-out apply (lib gates on it);
+          // team_member_id keeps the in-app row on the roster address too. A
+          // member with no login (user_id null) still gets the courtesy email.
+          user_id: task.assigned_member.user_id ?? null,
           team_member_id: task.assigned_member.id,
           type: 'task_due_soon',
           title: `Task due tomorrow: ${task.title}`,
           message: `Your task "${task.title}" is due tomorrow (${formatDate(task.due_date)}). Please complete it soon.`,
           link: `/tasks`,
           related_task_id: task.id,
-          email: task.assigned_member.email,
-          name: task.assigned_member.name
         })
         
         results.dueSoon++
@@ -97,7 +99,7 @@ async function getHandler(request: NextRequest) {
       .from('tasks')
       .select(`
         *,
-        assigned_member:team_members(id, name, email)
+        assigned_member:team_members(id, name, email, user_id)
       `)
       .lt('due_date', todayStr)
       .neq('status', 'done')
@@ -127,14 +129,13 @@ async function getHandler(request: NextRequest) {
 
         // Create notification
         await createNotification({
+          user_id: task.assigned_member.user_id ?? null,
           team_member_id: task.assigned_member.id,
           type: 'task_overdue',
           title: `Overdue task: ${task.title}`,
           message: `Your task "${task.title}" is ${daysOverdue} day${daysOverdue > 1 ? 's' : ''} overdue (was due ${formatDate(task.due_date)}). Please complete it as soon as possible.`,
           link: `/tasks`,
           related_task_id: task.id,
-          email: task.assigned_member.email,
-          name: task.assigned_member.name
         })
         
         results.overdue++
@@ -159,137 +160,6 @@ async function getHandler(request: NextRequest) {
 // Also support POST for some cron services
 async function postHandler(request: NextRequest) {
   return GET(request)
-}
-
-// Helper to create notification and send email
-async function createNotification({
-  team_member_id,
-  type,
-  title,
-  message,
-  link,
-  related_task_id,
-  email,
-  name
-}: {
-  team_member_id: string
-  type: string
-  title: string
-  message: string
-  link: string
-  related_task_id: string
-  email?: string
-  name?: string
-}) {
-  // Insert notification
-  const { data: notification, error } = await supabase
-    .from('notifications')
-    .insert({
-      team_member_id,
-      type,
-      title,
-      message,
-      link,
-      related_task_id,
-      is_read: false,
-      email_sent: false
-    })
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error creating notification:', error)
-    return null
-  }
-
-  // Send email if team member has email
-  if (email && name) {
-    try {
-      await sendReminderEmail(email, name, title, message, link, type)
-      
-      // Mark email as sent
-      await supabase
-        .from('notifications')
-        .update({ email_sent: true })
-        .eq('id', notification.id)
-    } catch (emailError) {
-      console.error('Failed to send reminder email:', emailError)
-    }
-  }
-
-  return notification
-}
-
-// Helper to send email
-async function sendReminderEmail(
-  toEmail: string,
-  toName: string,
-  subject: string,
-  message: string,
-  link: string,
-  type: string
-) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://autoura.net'
-  
-  const typeConfig = {
-    task_due_soon: { color: '#F59E0B', icon: '⏰', bgColor: '#FEF3C7' },
-    task_overdue: { color: '#EF4444', icon: '🚨', bgColor: '#FEE2E2' }
-  }
-  
-  const config = typeConfig[type as keyof typeof typeConfig] || typeConfig.task_due_soon
-
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    </head>
-    <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background-color: #f3f4f6;">
-      <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background-color: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-          <!-- Header -->
-          <div style="background-color: ${config.bgColor}; padding: 24px; text-align: center; border-bottom: 3px solid ${config.color};">
-            <span style="font-size: 40px;">${config.icon}</span>
-            <h1 style="color: ${config.color}; margin: 12px 0 0 0; font-size: 18px; font-weight: 600;">Task Reminder</h1>
-          </div>
-          
-          <!-- Content -->
-          <div style="padding: 24px;">
-            <p style="color: #374151; font-size: 16px; margin: 0 0 16px 0;">Hi ${toName},</p>
-            <p style="color: #4b5563; font-size: 14px; line-height: 1.6; margin: 0 0 24px 0;">${message}</p>
-            
-            <div style="text-align: center;">
-              <a href="${baseUrl}${link}" style="display: inline-block; background-color: ${config.color}; color: white; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">
-                View Tasks
-              </a>
-            </div>
-          </div>
-          
-          <!-- Footer -->
-          <div style="background-color: #f9fafb; padding: 16px 24px; border-top: 1px solid #e5e7eb;">
-            <p style="color: #9ca3af; font-size: 11px; margin: 0; text-align: center;">
-              Autoura Task Management • This is an automated reminder
-            </p>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
-  `
-
-  // In-process send (a fetch to /api/send-email would hit the /api/* auth gate).
-  const result = await sendEmailInternal({
-    to: toEmail,
-    subject: `[Autoura] ${subject}`,
-    html: htmlContent,
-  })
-
-  if (!result.success) {
-    throw new Error(result.error || 'Failed to send email')
-  }
-
-  return result
 }
 
 // Format date helper
