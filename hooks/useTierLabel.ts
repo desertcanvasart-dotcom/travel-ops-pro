@@ -2,6 +2,7 @@
 
 import { useLocale } from 'next-intl'
 import { useVocabulary } from '@/hooks/useVocabulary'
+import { slugifyKey } from '@/lib/vocabulary'
 
 /**
  * The operator's own label for a service TIER, in the active locale.
@@ -22,7 +23,7 @@ export function useTierLabel(): (key: string | null | undefined, fallback: strin
   const { all } = useVocabulary('tier')
   return (key, fallback) => {
     if (!key) return fallback
-    const item = all.find(i => i.key === key.toLowerCase())
+    const item = all.find(i => i.key === slugifyKey(key))
     if (!item) return fallback
     const override = locale === 'ja' ? item.label_ja : item.label
     return override && override.trim() ? override : fallback
