@@ -8,6 +8,7 @@ import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { useTierLabel } from '@/hooks/useTierLabel'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useSearchParams } from 'next/navigation'
 import Papa from 'papaparse'
 import {
@@ -153,6 +154,7 @@ export default function RestaurantsContent() {
   const { rateSymbol, rateCurrency } = useCurrency()
   const confirmDialog = useConfirm()
   const tierLabel = useTierLabel()
+  const dietaryLabel = useVocabLabel('dietary_option')
   const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
@@ -1386,7 +1388,7 @@ export default function RestaurantsContent() {
                     <label key={option} className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={formData.dietary_options.includes(option)} onChange={() => toggleDietaryOption(option)}
                         className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500" />
-                      <span className="text-sm text-gray-700">{option}</span>
+                      <span className="text-sm text-gray-700">{dietaryLabel(option, option)}</span>
                     </label>
                   ))}
                 </div>

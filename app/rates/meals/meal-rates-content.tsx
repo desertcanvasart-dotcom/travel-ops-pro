@@ -136,6 +136,7 @@ export default function MealRatesContent() {
   const mealTypeLabel = useVocabLabel('meal_type')
   const cuisineTypeLabel = useVocabLabel('cuisine_type')
   const restaurantTypeLabel = useVocabLabel('restaurant_type')
+  const dietaryLabel = useVocabLabel('dietary_option')
   const searchParams = useSearchParams()
   const initialSupplierId = searchParams.get('supplier_id') || ''
 
@@ -1241,7 +1242,7 @@ export default function MealRatesContent() {
                           : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
                       }`}
                     >
-                      {option}
+                      {dietaryLabel(option, option)}
                     </button>
                   ))}
                 </div>
