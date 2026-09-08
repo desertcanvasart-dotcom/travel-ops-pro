@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getAuthenticatedUser } from '@/lib/supabase-secure'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,13 +12,19 @@ export async function GET(request: NextRequest) {
   try {
     const userId = request.nextUrl.searchParams.get('userId')
 
-    // Fetch saved email settings
-    const { data: settingsData } = await supabase
-      .from('user_settings')
-      .select('email_settings')
-      .single()
-
-    const emailSettings = settingsData?.email_settings || {}
+    // Email settings live on the current user's user_settings row, keyed on
+    // user_id. The old code did an unfiltered .single(), which returns the
+    // wrong user's row (or errors) once more than one user has settings.
+    const { user } = await getAuthenticatedUser()
+    let emailSettings: Record<string, any> = {}
+    if (user) {
+      const { data: settingsData } = await supabase
+        .from('user_settings')
+        .select('email_settings')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      emailSettings = settingsData?.email_settings || {}
+    }
 
     // Check actual Gmail connection from gmail_tokens table
     // Try user-specific token first, then fall back to any token
@@ -69,6 +76,14 @@ export async function GET(request: NextRequest) {
 // PUT - Update email settings
 export async function PUT(request: NextRequest) {
   try {
+    const { user, error: authError } = await getAuthenticatedUser()
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, error: 'Not authenticated' },
+        { status: 401 }
+      )
+    }
+
     const settings = await request.json()
 
     const validSettings = {
@@ -81,14 +96,21 @@ export async function PUT(request: NextRequest) {
 
     const { error } = await supabase
       .from('user_settings')
-      .upsert({
-        id: 'default',
-        email_settings: validSettings,
-        updated_at: new Date().toISOString()
-      })
+      .upsert(
+        {
+          user_id: user.id,
+          email_settings: validSettings,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: 'user_id' }
+      )
 
     if (error) {
       console.error('Error saving email settings:', error)
+      return NextResponse.json(
+        { success: false, error: 'Failed to save email settings' },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({

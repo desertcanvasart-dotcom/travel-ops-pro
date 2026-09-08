@@ -14,6 +14,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { sendEmailInternal } from '@/lib/email-send'
+import { getNotificationPreferences, shouldEmailForType } from '@/lib/notification-preferences'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -99,9 +100,19 @@ export async function createNotification(
     return { success: false, emailed: false, error: error?.message || 'Insert failed' }
   }
 
+  // The recipient's own choice is the master switch. A login (user_id) can turn
+  // email off in Settings; if they have, the in-app row still stands but no
+  // email goes out. Roster-only recipients (team_member_id, no login) have no
+  // preference row and fall through to the courtesy email as before.
+  let emailWanted = send_email
+  if (emailWanted && user_id) {
+    const prefs = await getNotificationPreferences(supabaseAdmin, user_id)
+    emailWanted = shouldEmailForType(prefs, String(type))
+  }
+
   let recipient: { name?: string | null; email?: string | null } | undefined =
     (notification as { team_member?: { name?: string; email?: string } }).team_member ?? undefined
-  if (send_email && !recipient?.email && user_id) {
+  if (emailWanted && !recipient?.email && user_id) {
     const { data: profile } = await supabaseAdmin
       .from('user_profiles')
       .select('email, full_name')
@@ -109,7 +120,7 @@ export async function createNotification(
       .maybeSingle()
     if (profile?.email) recipient = { email: profile.email, name: profile.full_name }
   }
-  if (!send_email || !recipient?.email) {
+  if (!emailWanted || !recipient?.email) {
     return { success: true, notification, emailed: false }
   }
 
