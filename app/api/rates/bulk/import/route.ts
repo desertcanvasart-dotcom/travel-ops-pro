@@ -98,6 +98,21 @@ export async function POST(request: NextRequest) {
       const rowNum = idx + 2
       const idValue = typeof row.supplier_id === 'string' ? row.supplier_id.trim() : ''
       const nameValue = typeof row.supplier_name === 'string' ? row.supplier_name : ''
+      const codeValue = typeof row.supplier_code === 'string' ? row.supplier_code.trim() : ''
+
+      // supplier_code wins — it is the portable cross-install key. A code that
+      // matches no supplier here errors and demotes the row (suppliers must be
+      // migrated before their rates), rather than silently importing unlinked.
+      if (codeValue) {
+        const rid = resolution.resolvedIdByCode.get(norm(codeValue))
+        if (rid) {
+          row.supplier_id = rid
+        } else {
+          supplierErrors.push({ row: rowNum, column: 'supplier_code', message: lookupServerMessage(locale, 'rates.common.errors.supplierCodeNotFound', { code: codeValue }) })
+          indicesToDemote.add(idx)
+        }
+        return
+      }
 
       if (idValue) {
         if (resolution.unknownIds.has(idValue)) {
@@ -136,6 +151,12 @@ export async function POST(request: NextRequest) {
       preview.parsedValidRows = parsedRows.filter((_, idx) => !indicesToDemote.has(idx))
       preview.sampleData = preview.parsedValidRows.slice(0, 5)
     }
+
+    // supplier_code is virtual — no rate table has the column. It has done its
+    // job (resolving supplier_id above); strip it from every row so the upsert
+    // never sends an unknown column. Done on parsedRows, which the kept rows
+    // share by reference.
+    for (const row of parsedRows) delete (row as Record<string, unknown>).supplier_code
 
     // L7: don't serialize the FULL parsed rows back to the caller in the
     // dry-run response — only the sampleData (first 5) is part of the

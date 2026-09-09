@@ -70,6 +70,29 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // supplier_code is a portable key that lives on suppliers, not on the rate
+    // row, so fill it in by joining: one query for the codes of every supplier
+    // referenced here, keyed back onto each row. This is what lets the export
+    // link to a supplier across installs (the sibling has different UUIDs). A
+    // separate lookup, not a PostgREST embed, so a table without a supplier FK
+    // relationship can't fail the whole export (PGRST200).
+    if (headers.includes('supplier_code')) {
+      const supplierIds = Array.from(
+        new Set((data || []).map((r: Record<string, unknown>) => r.supplier_id).filter(Boolean))
+      ) as string[]
+      const codeById = new Map<string, string>()
+      if (supplierIds.length > 0) {
+        const { data: sup } = await supabase
+          .from('suppliers')
+          .select('id, supplier_code')
+          .in('id', supplierIds)
+        for (const s of sup || []) if (s.supplier_code) codeById.set(s.id, s.supplier_code)
+      }
+      for (const r of data || []) {
+        ;(r as Record<string, unknown>).supplier_code = r.supplier_id ? codeById.get(r.supplier_id as string) ?? '' : ''
+      }
+    }
+
     // The { fields, data } form, NOT unparse(rows, { columns }): the latter
     // returns an empty string for zero rows — no headers either — so exporting
     // an empty rate table handed back a completely blank file, at exactly the

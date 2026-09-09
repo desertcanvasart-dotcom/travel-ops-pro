@@ -16,6 +16,7 @@ import { buildSupplierInsert } from '@/lib/suppliers/create-payload'
 
 export const SUPPLIER_CSV_COLUMNS = [
   { name: 'name', label: 'Name', required: true },
+  { name: 'supplier_code', label: 'Supplier Code', required: false, hint: 'portable key (SUP-0001); leave blank to auto-assign' },
   { name: 'roles', label: 'Roles', required: true, hint: `one or more of ${SUPPLIER_TYPE_VALUES.join(' | ')}, separated by ;` },
   { name: 'status', label: 'Status', required: false, hint: SUPPLIER_STATUSES.join(' | ') },
   { name: 'contact_name', label: 'Contact Person', required: false },
@@ -82,6 +83,9 @@ export function prepareSupplierRows(rows: SupplierCsvRow[]): SupplierImportPrevi
 
     const built = buildSupplierInsert({
       name, types: roles, status,
+      // A code from the file is honoured; blank leaves the DB trigger to
+      // auto-assign the next SUP-####.
+      supplier_code: norm(raw.supplier_code) || undefined,
       contact_name: norm(raw.contact_name) || null,
       contact_email: norm(raw.contact_email) || null,
       contact_phone: norm(raw.contact_phone) || null,

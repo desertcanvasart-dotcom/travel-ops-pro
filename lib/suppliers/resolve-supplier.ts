@@ -26,6 +26,11 @@ export type BatchResolution = {
   ambiguousNames: Map<string, Array<{ id: string; name: string }>>
   unknownIds: Set<string>
   noMatchNames: Set<string>
+  /** supplier_code (normalised) → supplier_id, for cross-install linking.
+   *  Codes are UNIQUE, so this is 1:1 and never ambiguous. */
+  resolvedIdByCode: Map<string, string>
+  /** Codes on rows that match no supplier here — the import errors on these. */
+  unknownCodes: Set<string>
 }
 
 export async function batchResolveSuppliers(
@@ -37,12 +42,19 @@ export async function batchResolveSuppliers(
     ambiguousNames: new Map(),
     unknownIds: new Set(),
     noMatchNames: new Set(),
+    resolvedIdByCode: new Map(),
+    unknownCodes: new Set(),
   }
 
-  const { data: suppliers, error } = await supabase.from('suppliers').select('id, name')
+  const { data: suppliers, error } = await supabase.from('suppliers').select('id, name, supplier_code')
   if (error || !suppliers) return result
 
   const canonicalById = new Map(suppliers.map((s) => [s.id, s]))
+  const idByCode = new Map<string, string>()
+  for (const s of suppliers) {
+    const c = norm(s.supplier_code)
+    if (c) idByCode.set(c, s.id)
+  }
   const byNormName = new Map<string, Array<{ id: string; name: string }>>()
   for (const s of suppliers) {
     const k = norm(s.name)
@@ -54,7 +66,17 @@ export async function batchResolveSuppliers(
   for (const row of rows) {
     const idValue = typeof row.supplier_id === 'string' ? row.supplier_id.trim() : ''
     const nameValue = typeof row.supplier_name === 'string' ? row.supplier_name : ''
+    const codeValue = typeof row.supplier_code === 'string' ? row.supplier_code : ''
     const normName = norm(nameValue)
+    const normCode = norm(codeValue)
+
+    // Code takes precedence — it is the portable cross-install key.
+    if (normCode) {
+      const id = idByCode.get(normCode)
+      if (id) result.resolvedIdByCode.set(normCode, id)
+      else result.unknownCodes.add(normCode)
+      continue
+    }
 
     if (idValue) {
       if (!canonicalById.has(idValue)) result.unknownIds.add(idValue)

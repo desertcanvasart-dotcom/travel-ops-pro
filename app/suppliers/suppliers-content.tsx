@@ -444,15 +444,16 @@ export default function SuppliersContent() {
 
   const handleExport = () => {
     const csv = [
-      ['Name', 'Roles', 'Contact', 'Email', 'Phone', 'WhatsApp', 'City', 'Status'].join(','),
+      ['Code', 'Name', 'Roles', 'Contact', 'Email', 'Phone', 'WhatsApp', 'City', 'Status'].join(','),
       ...filteredSuppliers.map(s => [
-        s.name, 
-        (s.types?.length ? s.types : [s.type]).join('; '), 
-        s.contact_name, 
-        s.contact_email, 
-        s.contact_phone, 
-        s.whatsapp, 
-        s.city, 
+        s.supplier_code,
+        s.name,
+        (s.types?.length ? s.types : [s.type]).join('; '),
+        s.contact_name,
+        s.contact_email,
+        s.contact_phone,
+        s.whatsapp,
+        s.city,
         s.status
       ].map(v => `"${v || ''}"`).join(','))
     ].join('\n')

@@ -2182,6 +2182,7 @@
     "noCity": "No city",
     "noEmail": "No email",
     "errors": {
+      "supplierCodeNotFound": "supplier_code \"{code}\" matches no supplier here. Migrate suppliers before their rates, or fix the code.",
       "supplierIdNotFound": "supplier_id \"{id}\" not found in suppliers table",
       "supplierNameAmbiguous": "supplier_name \"{name}\" matches {count} suppliers — set supplier_id explicitly: {candidates}",
       "supplierNameNoMatchForm": "supplier_name \"{name}\" has no canonical supplier. Create the supplier first, fix the spelling, or omit supplier_name to save without a supplier.",
