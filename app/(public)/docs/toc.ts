@@ -115,7 +115,6 @@ export const CATEGORIES: DocCategory[] = [
       { href: '/docs/bookings', icon: CalendarCheck, title: 'Bookings', description: 'Track supplier confirmations, payments, and operational status.' },
       { href: '/docs/calendar', icon: Calendar, title: 'Calendar', description: 'Month, week, and timeline views of all tours. Drag-to-reschedule, resource conflict detection, and team-wide visibility.' },
       { href: '/docs/extras', icon: Sparkles, title: 'Extras & Upgrades', description: 'Add-ons, upgrades and options offered on top of a trip — priced off-margin, per-row currency, and attached from the itinerary.' },
-      { href: '/docs/seasonal-premiums', icon: CalendarRange, title: 'Seasonal Premiums', description: 'Your high-demand dates as a premium on the whole price after margin — set the dated windows once and every quote in them lifts automatically.' },
     ],
   },
   {
@@ -195,6 +194,7 @@ export const CATEGORIES: DocCategory[] = [
       { href: '/docs/team-settings', icon: Settings, title: 'Settings', description: 'Company profile and letterhead, invitations, email signatures, and the preferences that reach across the app — Vocabulary, Destinations, Seasonal Premiums and Extras.' },
       { href: '/docs/vocabulary', icon: BookOpen, title: 'Vocabulary', description: 'Relabel the product in your own words — 35 kinds of built-in term, English and Japanese — without renaming anything under the hood.' },
       { href: '/docs/destinations', icon: Globe, title: 'Destinations', description: 'Manage the destinations your itineraries are built for; Egypt ships complete, others are configurable.' },
+      { href: '/docs/seasonal-premiums', icon: CalendarRange, title: 'Seasonal Premiums', description: 'Your high-demand dates as a premium on the whole price after margin — set the dated windows once and every quote in them lifts automatically.' },
       { href: '/docs/activity-log', icon: FileText, title: 'Activity Log', description: 'The audit trail: every change with who, when, what, endpoint and IP — filterable, and never editable.' },
       { href: '/docs/integrations', icon: Link2, title: 'Integrations', description: 'Connect Xero or QuickBooks for push-only accounting sync. WhatsApp Business and Gmail OAuth setup.' },
       { href: '/docs/user-management', icon: Users, title: 'User Management', description: 'Login accounts and access: the Administrator / Manager / Agent / Viewer roles, invitations, activation, and deletion.' },
