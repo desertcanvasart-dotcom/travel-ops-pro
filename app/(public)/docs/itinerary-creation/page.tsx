@@ -180,7 +180,7 @@ export default function ItineraryCreationPage() {
 
         <h3 className="font-semibold text-gray-900 mt-4 mb-2">B2B Output</h3>
         <p className="text-gray-600">
-          When pricing mode is set to B2B with a partner selected, saving also creates a <strong>B2B quote</strong> and <strong>tour template</strong>, then redirects to the B2B Calculator for rate sheet generation (1&ndash;40 pax).
+          When pricing mode is set to B2B with a partner selected, saving also creates a <strong>B2B quote</strong> and <strong>tour template</strong>, then redirects to B2B Pricing for rate sheet generation (1&ndash;40 pax).
         </p>
       </section>
 

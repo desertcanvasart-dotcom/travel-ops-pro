@@ -34,6 +34,40 @@ export default function SuppliersPage() {
         <ScreenshotPlaceholder caption="Supplier directory grouped by type with colored badges" />
       </section>
 
+      {/* Portable supplier code */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">The supplier code (SUP-####)</h2>
+        <p className="text-gray-600 mb-3">
+          Every supplier is given a short, stable code &mdash; <strong>SUP-0001</strong>,
+          <strong> SUP-0002</strong>, and so on &mdash; assigned automatically in order. It is
+          yours to edit if you keep your own numbering, as long as it stays unique.
+        </p>
+        <p className="text-gray-600">
+          This code is what makes rates <em>portable</em>. A supplier&rsquo;s internal id is unique
+          to this install, so it means nothing anywhere else; the SUP-#### code travels with the
+          supplier. When you export rates to another install, each rate carries its supplier code,
+          and on import the rate re-attaches to the supplier with the matching code &mdash; instead
+          of every rate becoming an orphan you re-link by hand.
+        </p>
+      </section>
+
+      {/* CSV import / export */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Importing &amp; exporting suppliers</h2>
+        <p className="text-gray-600 mb-3">
+          The directory has <strong>Sample CSV</strong>, <strong>Export</strong> and{' '}
+          <strong>Import</strong> buttons. Export downloads your suppliers &mdash; codes included
+          &mdash; as a spreadsheet; import reads a filled-in sheet back, matching each row on its
+          supplier code so an existing supplier updates rather than duplicates.
+        </p>
+        <Tip>
+          Import suppliers <em>before</em> their rates. A rate whose supplier code is not yet in
+          this install is reported and skipped, not guessed &mdash; so the order is suppliers first,
+          then rates. The shared CSV rules live in{' '}
+          <Link href="/docs/bulk-csv" className="text-primary-600 hover:underline">Bulk Import (CSV)</Link>.
+        </Tip>
+      </section>
+
       {/* Adding a supplier */}
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Adding a Supplier</h2>
