@@ -25,6 +25,9 @@ import SupplierImportExport from '@/components/suppliers/SupplierImportExport'
 // Types
 interface Supplier {
   id: string
+  /** Stable, human-readable, portable business key (SUP-0001). Auto-assigned
+   *  by a DB trigger; the shared identifier for cross-install CSV migration. */
+  supplier_code?: string | null
   name: string
   /** The primary role, shown on the badge. */
   type: string
@@ -271,7 +274,8 @@ export default function SuppliersContent() {
       const roles = supplier.types?.length ? supplier.types : [supplier.type]
       const matchesType = selectedType === 'all' || roles.includes(selectedType)
       const matchesStatus = selectedStatus === 'all' || supplier.status === selectedStatus
-      const matchesSearch = !searchQuery || 
+      const matchesSearch = !searchQuery ||
+        supplier.supplier_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         supplier.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         supplier.contact_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         supplier.contact_email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -665,6 +669,7 @@ export default function SuppliersContent() {
                           <div>
                             <h3 className="text-sm font-semibold text-gray-900">{supplier.name}</h3>
                             <p className="text-xs text-gray-500">
+                              {supplier.supplier_code && <span className="font-mono text-gray-400 mr-1.5">{supplier.supplier_code}</span>}
                               {supplierTypeLabel(supplier.type, config.singular)}{supplier.city && ` • ${supplier.city}`}
                             </p>
                           </div>
@@ -898,7 +903,10 @@ export default function SuppliersContent() {
                 })()}
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">{selectedSupplier.name}</h2>
-                  <p className="text-sm text-gray-500">{(selectedSupplier.types?.length ? selectedSupplier.types : [selectedSupplier.type]).map(r => supplierTypeLabel(r, getTypeConfig(r).singular)).join(' · ')}</p>
+                  <p className="text-sm text-gray-500">
+                    {selectedSupplier.supplier_code && <span className="font-mono text-gray-400 mr-2">{selectedSupplier.supplier_code}</span>}
+                    {(selectedSupplier.types?.length ? selectedSupplier.types : [selectedSupplier.type]).map(r => supplierTypeLabel(r, getTypeConfig(r).singular)).join(' · ')}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">

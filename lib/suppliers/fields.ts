@@ -37,6 +37,7 @@ export const SUPPLIER_STATUSES = ['active', 'inactive', 'pending'] as const
 /** The whole supplier form. The same for every role — there are no per-role extras. */
 export const SUPPLIER_FORM_FIELDS: readonly SupplierFormField[] = [
   { key: 'name',          labelKey: 'supplierName',  kind: 'text',   required: true, sectionKey: 'sectionIdentity' },
+  { key: 'supplier_code', labelKey: 'supplierCode',  kind: 'text',   sectionKey: 'sectionIdentity' },
   { key: 'types',         labelKey: 'roles',         kind: 'roles',  required: true, sectionKey: 'sectionIdentity' },
   { key: 'status',        labelKey: 'status',        kind: 'select', sectionKey: 'sectionIdentity', options: SUPPLIER_STATUSES },
   { key: 'contact_name',  labelKey: 'contactPerson', kind: 'text',   sectionKey: 'sectionContact' },
@@ -63,7 +64,7 @@ export const SUPPLIER_RATES_FIELDS = [
  *  `types` (primary role = first role) but may also be sent; `country` is
  *  defaulted server-side. */
 export const SUPPLIER_WRITABLE_FIELDS = [
-  'name', 'type', 'types', 'status',
+  'name', 'supplier_code', 'type', 'types', 'status',
   'contact_name', 'contact_email', 'contact_phone', 'whatsapp', 'website',
   'city', 'address', 'country',
   'notes',

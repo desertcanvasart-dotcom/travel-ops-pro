@@ -17,7 +17,7 @@ describe('supplier form fields', () => {
   it('is contact + location only — no role-specific extras', () => {
     const keys = SUPPLIER_FORM_FIELDS.map(f => f.key)
     expect(keys).toEqual([
-      'name', 'types', 'status',
+      'name', 'supplier_code', 'types', 'status',
       'contact_name', 'contact_email', 'contact_phone', 'whatsapp', 'website',
       'city', 'address',
       'notes',
