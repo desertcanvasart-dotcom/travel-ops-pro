@@ -215,6 +215,7 @@ export default function AttractionsContent() {
   const t = useTranslations('rates.attractions')
   const attractionCategoryLabel = useVocabLabel('attraction_category')
   const attractionFeeLabel = useVocabLabel('attraction_fee_type')
+  const seasonLabel = useVocabLabel('rate_season')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const dialog = useConfirmDialog()
@@ -1093,7 +1094,7 @@ export default function AttractionsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
                       {seasonOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>{t(`seasons.${opt.value}`)}</option>
+                        <option key={opt.value} value={opt.value}>{seasonLabel(opt.value, t(`seasons.${opt.value}`))}</option>
                       ))}
                     </select>
                   </div>
