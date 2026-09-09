@@ -84,8 +84,8 @@ export default function WorkflowsPage() {
           Manage business-to-business relationships with other travel companies:
         </p>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
-          <li><strong>Partners</strong> &mdash; Go to <strong>B2B &gt; Partners</strong> to add partner companies, set pricing rules, and track performance</li>
-          <li><strong>B2B Quotes</strong> &mdash; Create quotes with net pricing, apply partner-specific rules, and generate B2B PDFs</li>
+          <li><strong>Partners</strong> &mdash; Go to <strong>People &gt; Partners</strong> to add partner companies, set default margins, and track performance</li>
+          <li><strong>B2B Quotes</strong> &mdash; Under <strong>Sell</strong>, create quotes with net pricing, apply partner-specific rules, and generate B2B PDFs</li>
           <li><strong>Pricing Rules</strong> &mdash; Set up partner-specific discounts, commission structures, and markup rules</li>
         </ul>
       </section>

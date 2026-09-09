@@ -21,11 +21,11 @@ export default function B2BPricingPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Accessing the Calculator</h2>
         <p className="text-gray-600 mb-3">
-          There are two ways to reach the B2B Price Calculator:
+          There are two ways to reach the B2B Price Calculator, both under <strong>Sell</strong>:
         </p>
         <ol className="list-decimal list-inside space-y-2 text-gray-700">
-          <li>From the sidebar: <strong>B2B Calculator</strong></li>
-          <li>From the <strong>Tour Programs Manager</strong>: Click the calculator icon on any variation</li>
+          <li>From the <strong>Quote Builder</strong> or <strong>B2B Quotes</strong>, once a partner is selected</li>
+          <li>From the <strong>Tour Templates</strong> manager: click the calculator icon on any variation</li>
         </ol>
         <p className="text-gray-600 mt-3">
           The calculator requires a <strong>tour variation</strong> to price. Each variation defines a specific itinerary with day-by-day services.

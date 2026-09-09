@@ -23,7 +23,7 @@ export default function CommunicationPage() {
 
         <h3 className="text-lg font-medium text-gray-900 mb-3">Using the Inbox</h3>
         <ol className="list-decimal list-inside space-y-2 text-gray-700">
-          <li>Go to <strong>WhatsApp Inbox</strong> in the sidebar</li>
+          <li>Go to <strong>Unified Inbox</strong> under <strong>Communicate</strong> in the sidebar</li>
           <li>The left panel shows all conversations with the latest message preview</li>
           <li>Click a conversation to open the full chat on the right</li>
           <li>Type your reply at the bottom and press <strong>Send</strong></li>
@@ -53,7 +53,7 @@ export default function CommunicationPage() {
 
         <h3 className="text-lg font-medium text-gray-900 mb-3">How to Use It</h3>
         <ol className="list-decimal list-inside space-y-2 text-gray-700">
-          <li>From the Dashboard, click <strong>Parse WhatsApp</strong> (or go to <strong>WhatsApp Parser</strong> in the sidebar)</li>
+          <li>From the Dashboard, click <strong>Parse WhatsApp</strong> (or open the AI parser from the <strong>Unified Inbox</strong>)</li>
           <li>Paste the WhatsApp conversation text</li>
           <li>Click <strong>Parse</strong></li>
           <li>The AI extracts:

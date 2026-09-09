@@ -31,6 +31,12 @@ export default function MultiLanguagePage() {
           Dates, times, and currency follow the locale too &mdash; English shows USD, Japanese shows JPY &mdash; so figures read naturally for each audience.
         </p>
         <ScreenshotPlaceholder caption="Language switcher toggling the interface between English and Japanese" />
+        <Tip>
+          Interface language decides <em>which language</em> the labels appear in.{' '}
+          <Link href="/docs/vocabulary" className="text-primary-600 hover:underline">Vocabulary</Link>{' '}
+          decides <em>what those labels say</em> &mdash; relabel &ldquo;tour&rdquo; as
+          &ldquo;programme&rdquo;, in English or Japanese, without renaming anything underneath.
+        </Tip>
       </section>
 
       {/* Itinerary Language Versions */}

@@ -13,7 +13,7 @@ export default function PartnersPage() {
 
       <h1 className="text-3xl font-bold text-gray-900 mb-4">Partners</h1>
       <p className="text-gray-600 mb-8">
-        <strong>Sales &amp; Pricing &rarr; Partners</strong> holds your B2B partner accounts &mdash; the agencies and resellers you quote wholesale. A partner carries its own default margin, so quoting for them starts from the commercial terms you agreed rather than your walk-in pricing.
+        <strong>People &rarr; Partners</strong> holds your B2B partner accounts &mdash; the agencies and resellers you quote wholesale. A partner carries its own default margin, so quoting for them starts from the commercial terms you agreed rather than your walk-in pricing.
       </p>
 
       <section className="mb-10">

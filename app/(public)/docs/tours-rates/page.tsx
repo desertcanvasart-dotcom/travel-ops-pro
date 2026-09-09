@@ -80,7 +80,7 @@ export default function ToursRatesPage() {
             <tbody className="text-gray-700">
               <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">Hotels</td><td className="px-4 py-2.5">Room rates by city, tier, and per person</td></tr>
               <tr className="border-b border-gray-100 bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Transportation</td><td className="px-4 py-2.5">Vehicle rates by type, service type, and group size</td></tr>
-              <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">Guides</td><td className="px-4 py-2.5">Daily and hourly rates, by language and specialty</td></tr>
+              <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">Guides</td><td className="px-4 py-2.5">Daily and hourly rates by language and grade (e.g. Egyptologist, senior), plus a &ldquo;throughout&rdquo; guide who accompanies the whole trip</td></tr>
               <tr className="border-b border-gray-100 bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Entrance Fees</td><td className="px-4 py-2.5">Attraction tickets with EU and non-EU prices</td></tr>
               <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">Meals</td><td className="px-4 py-2.5">Lunch and dinner rates by quality tier</td></tr>
               <tr className="border-b border-gray-100 bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Activities</td><td className="px-4 py-2.5">Optional activities and excursions</td></tr>
@@ -106,8 +106,27 @@ export default function ToursRatesPage() {
         </Tip>
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">EU vs Non-EU Pricing</h3>
-        <p className="text-gray-600">
+        <p className="text-gray-600 mb-6">
           Many rates (especially entrance fees and transportation) have different prices for European passport holders and non-European passport holders. Make sure to set both when adding rates.
+        </p>
+
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Importing rates from a spreadsheet</h3>
+        <p className="text-gray-600 mb-3">
+          Each rate category has its own CSV import, so you can load a whole contract at once
+          instead of typing rows. Every rate sheet carries a <strong>supplier code</strong> column,
+          so each rate attaches to the right supplier &mdash; and a rate whose code is not yet in
+          this install is reported and skipped rather than guessed. See{' '}
+          <Link href="/docs/bulk-csv" className="text-primary-600 hover:underline">Bulk Import (CSV)</Link>{' '}
+          for the shared rules and <Link href="/docs/suppliers" className="text-primary-600 hover:underline">Suppliers</Link>{' '}
+          for why the code matters.
+        </p>
+
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Labels in your own words</h3>
+        <p className="text-gray-600">
+          The category names you rate against &mdash; and the wording throughout the hub &mdash;
+          follow your <Link href="/docs/vocabulary" className="text-primary-600 hover:underline">Vocabulary</Link>.
+          If your team calls a guide a &ldquo;lecturer&rdquo; or a tour a &ldquo;programme&rdquo;,
+          relabel it once and the Rates Hub reads in your words.
         </p>
       </section>
 
