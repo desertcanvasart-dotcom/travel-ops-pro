@@ -279,7 +279,21 @@
     "destinations": "デスティネーション",
     "vocabulary": "用語設定",
     "extras": "オプション",
-    "orderIntake": "申込み取り込み"
+    "orderIntake": "申込み取り込み",
+    "home": "ホーム",
+    "clientsComms": "顧客・連絡",
+    "sell": "販売",
+    "toursPackages": "ツアー・パッケージ",
+    "suppliersRates": "サプライヤー・料金",
+    "aiContent": "AI・コンテンツ",
+    "admin": "管理",
+    "operate": "運行",
+    "people": "取引先",
+    "communicate": "コミュニケーション",
+    "accommodation": "宿泊",
+    "transportTickets": "交通・チケット",
+    "guidesServices": "ガイド・サービス",
+    "ratesCosts": "コスト"
   },
   "roles": {
     "admin": "管理者",

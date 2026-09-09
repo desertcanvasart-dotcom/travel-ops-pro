@@ -107,26 +107,128 @@ interface NavConfig {
 }
 
 const navigationConfig: NavConfig[] = [
+  // Grouping mirrors autoura-saas: the operator's pipeline, front to back.
+  // Section roles are the UNION of their items' roles and each item keeps its
+  // own roles, so regrouping never widens or narrows who sees a page.
   {
-    titleKey: 'main',
-    key: 'main',
+    titleKey: 'home',
+    key: 'home',
     items: [
       { labelKey: 'dashboard', href: '/dashboard', icon: LayoutDashboard },
       { labelKey: 'analytics', href: '/analytics', icon: TrendingUp, roles: ['admin', 'manager'] },
+      { labelKey: 'financialReports', href: '/financial-reports', icon: BarChart3, roles: ['admin', 'manager'] },
+      // How the Copilot is doing is analytics, not a Copilot setting.
+      { labelKey: 'copilotAnalytics', href: '/copilot-analytics', icon: BarChart3, roles: ['admin', 'manager', 'agent'] },
     ]
   },
+  // The sale's lifecycle in one place: price it, save it as a quote, it lands
+  // in an itinerary, gets booked, shows on the calendar. Extras & Seasonal
+  // Premiums are selling-side (what you CHARGE), so they live here, not with the
+  // buying rates.
   {
-    titleKey: 'crm',
+    titleKey: 'sell',
+    key: 'sell',
+    roles: ['admin', 'manager', 'agent'],
+    items: [
+      { labelKey: 'pricingGrid', href: '/pricing-grid', icon: Calculator, roles: ['admin', 'manager'] },
+      { labelKey: 'b2cQuotes', href: '/b2c/quotes', icon: FileText, roles: ['admin', 'manager'] },
+      { labelKey: 'b2bQuotes', href: '/b2b/quotes', icon: FileText, roles: ['admin', 'manager'] },
+      { labelKey: 'orderIntake', href: '/intake/order', icon: ClipboardPaste, roles: ['admin', 'manager'] },
+      { labelKey: 'itineraries', href: '/itineraries', icon: Route, roles: ['admin', 'manager'] },
+      { labelKey: 'bookings', href: '/bookings', icon: Briefcase, roles: ['admin', 'manager'] },
+      { labelKey: 'calendar', href: '/calendar', icon: Calendar, roles: ['admin', 'manager', 'agent'] },
+      { labelKey: 'extras', href: '/rates/extras', icon: Sparkles, roles: ['admin', 'manager'] },
+      { labelKey: 'seasonalPremiums', href: '/rates/seasons', icon: CalendarRange, roles: ['admin', 'manager'] },
+    ]
+  },
+  // Running what was sold: the to-dos, the departures and capacity per date,
+  // the client touchpoints, the paperwork.
+  {
+    titleKey: 'operate',
+    key: 'operate',
+    roles: ['admin', 'manager', 'agent'],
+    items: [
+      { labelKey: 'tasks', href: '/tasks', icon: CheckSquare, roles: ['admin', 'manager'] },
+      { labelKey: 'departures', href: '/departures', icon: Calendar, roles: ['admin', 'manager'] },
+      { labelKey: 'capacity', href: '/capacity', icon: CalendarDays, roles: ['admin', 'manager'] },
+      { labelKey: 'followups', href: '/followups', icon: CheckSquare, roles: ['admin', 'manager', 'agent'] },
+      { labelKey: 'documents', href: '/documents', icon: FileText, roles: ['admin', 'manager'] },
+    ]
+  },
+  // The catalogue: tour templates, the ready-made packages, the transport
+  // packages that price them.
+  {
+    titleKey: 'tours',
+    key: 'tours',
+    roles: ['admin', 'manager'],
+    items: [
+      { labelKey: 'tourTemplates', href: '/tours/manage', icon: LayoutTemplate },
+      { labelKey: 'readyMadePackages', href: '/tours', icon: Package },
+      { labelKey: 'pricingRules', href: '/b2b/pricing-rules', icon: Tags },
+    ]
+  },
+  // What you buy and what it costs: the supplier roster, then the buying rates
+  // in four subgroups (collapsed until needed).
+  {
+    titleKey: 'suppliersRates',
+    key: 'rates',
+    roles: ['admin', 'manager'],
+    items: [
+      { labelKey: 'suppliers', href: '/suppliers', icon: Building },
+      { labelKey: 'ratesHub', href: '/rates', icon: Coins },
+      {
+        labelKey: 'accommodation', href: '/rates#accommodation', icon: Hotel,
+        children: [
+          { labelKey: 'hotels', href: '/rates/hotels', icon: Hotel },
+          { labelKey: 'nileCruises', href: '/rates/cruises', icon: Ship },
+          { labelKey: 'sleepingTrains', href: '/rates/sleeping-train', icon: BedDouble },
+          { labelKey: 'hotelServices', href: '/rates/hotel-services', icon: ConciergeBell },
+        ],
+      },
+      {
+        labelKey: 'transportTickets', href: '/rates#transport', icon: Truck,
+        children: [
+          { labelKey: 'transportation', href: '/rates/transportation', icon: Truck },
+          { labelKey: 'flights', href: '/rates/flights', icon: Plane },
+          { labelKey: 'trains', href: '/rates/trains', icon: Train },
+          { labelKey: 'airportServices', href: '/rates/airport-services', icon: Plane },
+        ],
+      },
+      {
+        labelKey: 'guidesServices', href: '/rates#services', icon: Users,
+        children: [
+          { labelKey: 'tourGuides', href: '/rates/guides', icon: Users },
+          { labelKey: 'meals', href: '/rates/meals', icon: UtensilsCrossed },
+          { labelKey: 'attractions', href: '/rates/attractions', icon: Building },
+          { labelKey: 'activities', href: '/rates/activities', icon: Ticket },
+        ],
+      },
+      {
+        labelKey: 'ratesCosts', href: '/rates#costs', icon: DollarSign,
+        children: [
+          { labelKey: 'tipping', href: '/rates/tipping', icon: DollarSign },
+          { labelKey: 'fixedCosts', href: '/rates/fixed-costs', icon: Droplets },
+          { labelKey: 'commissionRates', href: '/rates/commissions', icon: Percent },
+        ],
+      },
+    ]
+  },
+  // The people and organisations the agency deals with.
+  {
+    titleKey: 'people',
     key: 'crm',
     roles: ['admin', 'manager', 'agent'],
     items: [
-      { labelKey: 'clients', href: '/clients', icon: Users },
-      { labelKey: 'followups', href: '/followups', icon: CheckSquare },
-      { labelKey: 'calendar', href: '/calendar', icon: Calendar },
+      { labelKey: 'clients', href: '/clients', icon: Users, roles: ['admin', 'manager', 'agent'] },
+      { labelKey: 'partners', href: '/b2b/partners', icon: Handshake, roles: ['admin', 'manager'] },
+      { labelKey: 'teamMembers', href: '/team-members', icon: Users, roles: ['admin', 'manager'] },
+      { labelKey: 'departments', href: '/departments', icon: Building2, roles: ['admin', 'manager'] },
     ]
   },
+  // The channels, and the library that feeds the words the Copilot and the
+  // itinerary writer use.
   {
-    titleKey: 'communications',
+    titleKey: 'communicate',
     key: 'communication',
     roles: ['admin', 'manager', 'agent'],
     items: [
@@ -135,75 +237,10 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'messageTemplates', href: '/templates', icon: FileText },
       { labelKey: 'aiCopilot', href: '/copilot', icon: Sparkles },
       { labelKey: 'copilotKnowledge', href: '/copilot-knowledge', icon: BookOpen },
-      // Concierge leads is hidden from the nav while the operator is not using
-      // it (2026-08-26). Hidden, NOT removed: /concierge-briefs, its API and
-      // the inbound partner webhook all still work, so anything already
-      // pointing at it keeps working and turning it back on is one line.
+      { labelKey: 'contentLibrary', href: '/content-library', icon: Library, roles: ['admin', 'manager'] },
+      { labelKey: 'writingRules', href: '/content-library/rules', icon: BookOpen, roles: ['admin', 'manager'] },
+      // Concierge leads hidden while unused (2026-08-26); page + webhook live.
       // { labelKey: 'conciergeLeads', href: '/concierge-briefs', icon: ConciergeBell },
-      { labelKey: 'copilotAnalytics', href: '/copilot-analytics', icon: BarChart3 },
-    ]
-  },
-  {
-    titleKey: 'operations',
-    key: 'operations',
-    roles: ['admin', 'manager'],
-    items: [
-      { labelKey: 'suppliers', href: '/suppliers', icon: Building },
-      { labelKey: 'itineraries', href: '/itineraries', icon: Route },
-      { labelKey: 'bookings', href: '/bookings', icon: Briefcase },
-      { labelKey: 'departures', href: '/departures', icon: Calendar },
-      { labelKey: 'capacity', href: '/capacity', icon: CalendarDays },
-      { labelKey: 'documents', href: '/documents', icon: FileText },
-      { labelKey: 'teamMembers', href: '/team-members', icon: Users },
-      { labelKey: 'departments', href: '/departments', icon: Building2, roles: ['admin', 'manager'] },
-      { labelKey: 'tasks', href: '/tasks', icon: CheckSquare },
-    ]
-  },
-  {
-    titleKey: 'tours',
-    key: 'tours',
-    roles: ['admin', 'manager'],
-    items: [
-      { labelKey: 'tourTemplates', href: '/tours/manage', icon: LayoutTemplate },
-      { labelKey: 'readyMadePackages', href: '/tours', icon: Package },
-    ]
-  },
-  {
-    titleKey: 'salesPricing',
-    key: 'salesPricing',
-    roles: ['admin', 'manager'],
-    items: [
-      { labelKey: 'pricingGrid', href: '/pricing-grid', icon: Calculator },
-      { labelKey: 'b2bQuotes', href: '/b2b/quotes', icon: FileText },
-      { labelKey: 'orderIntake', href: '/intake/order', icon: ClipboardPaste },
-      { labelKey: 'b2cQuotes', href: '/b2c/quotes', icon: FileText },
-      { labelKey: 'partners', href: '/b2b/partners', icon: Handshake },
-    ]
-  },
-  {
-    titleKey: 'rates',
-    key: 'rates',
-    roles: ['admin', 'manager'],
-    items: [
-      { labelKey: 'ratesHub', href: '/rates', icon: Coins },
-      { labelKey: 'hotels', href: '/rates/hotels', icon: Hotel },
-      { labelKey: 'nileCruises', href: '/rates/cruises', icon: Ship },
-      { labelKey: 'sleepingTrains', href: '/rates/sleeping-train', icon: BedDouble },
-      { labelKey: 'flights', href: '/rates/flights', icon: Plane },
-      { labelKey: 'trains', href: '/rates/trains', icon: Train },
-      { labelKey: 'meals', href: '/rates/meals', icon: UtensilsCrossed },
-      { labelKey: 'attractions', href: '/rates/attractions', icon: Building },
-      { labelKey: 'tourGuides', href: '/rates/guides', icon: Users },
-      { labelKey: 'activities', href: '/rates/activities', icon: Ticket },
-      { labelKey: 'transportation', href: '/rates/transportation', icon: Truck },
-      { labelKey: 'pricingRules', href: '/b2b/pricing-rules', icon: Tags },
-      { labelKey: 'airportServices', href: '/rates/airport-services', icon: Plane },
-      { labelKey: 'hotelServices', href: '/rates/hotel-services', icon: ConciergeBell },
-      { labelKey: 'tipping', href: '/rates/tipping', icon: DollarSign },
-      { labelKey: 'seasonalPremiums', href: '/rates/seasons', icon: CalendarRange },
-      { labelKey: 'fixedCosts', href: '/rates/fixed-costs', icon: Droplets },
-      { labelKey: 'commissionRates', href: '/rates/commissions', icon: Percent },
-      { labelKey: 'extras', href: '/rates/extras', icon: Sparkles },
     ]
   },
   {
@@ -220,27 +257,18 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'expenses', href: '/expenses', icon: HandCoins },
       { labelKey: 'commissions', href: '/commissions', icon: Handshake },
       { labelKey: 'profitLoss', href: '/profit-loss', icon: TrendingUp },
-      { labelKey: 'financialReports', href: '/financial-reports', icon: BarChart3 },
     ]
   },
-  {
-    titleKey: 'content',
-    key: 'content',
-    roles: ['admin', 'manager'],
-    items: [
-      { labelKey: 'contentLibrary', href: '/content-library', icon: Library },
-      { labelKey: 'writingRules', href: '/content-library/rules', icon: BookOpen },
-    ]
-  },
+  // Configured once.
   {
     titleKey: 'settings',
     key: 'settings',
     roles: ['admin'],
     items: [
-      { labelKey: 'activityLog', href: '/activity', icon: ScrollText },
-      { labelKey: 'destinations', href: '/settings/destinations', icon: Globe },
-      { labelKey: 'vocabulary', href: '/settings/vocabulary', icon: BookOpen },
       { labelKey: 'settings', href: '/settings', icon: Settings },
+      { labelKey: 'vocabulary', href: '/settings/vocabulary', icon: BookOpen },
+      { labelKey: 'destinations', href: '/settings/destinations', icon: Globe },
+      { labelKey: 'activityLog', href: '/activity', icon: ScrollText },
       { labelKey: 'userManagement', href: '/users', icon: Shield },
     ]
   }
@@ -285,7 +313,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   })), [t])
   
   const [isMobileOpen, setIsMobileOpen] = useState(false)
-  const [expandedSections, setExpandedSections] = useState<string[]>(['main', 'crm', 'trips'])
+  const [expandedSections, setExpandedSections] = useState<string[]>(['home', 'clientsComms', 'sell'])
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['Contacts'])
   const [currentUrl, setCurrentUrl] = useState('')
 
@@ -307,7 +335,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     if (saved) {
       try {
         const parsed = JSON.parse(saved)
-        setExpandedSections(parsed.sections || ['main', 'crm', 'trips'])
+        setExpandedSections(parsed.sections || ['home', 'clientsComms', 'sell'])
         setExpandedMenus(parsed.menus || ['Contacts'])
       } catch {
         // Use defaults if parsing fails
