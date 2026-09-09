@@ -3,7 +3,7 @@
 // never enter this format by design.
 import { describe, it, expect } from 'vitest'
 import Papa from 'papaparse'
-import { serializeTemplatesCsv, parseTemplatesCsv, TEMPLATE_CSV_COLUMNS } from '@/lib/tours/template-csv'
+import { serializeTemplatesCsv, parseTemplatesCsv, sampleTemplateCsv, TEMPLATE_CSV_COLUMNS } from '@/lib/tours/template-csv'
 
 const papa = (csv: string) => {
   const p = Papa.parse<Record<string, string>>(csv, { header: true, skipEmptyLines: true, transformHeader: h => h.trim() })
@@ -55,6 +55,18 @@ describe('parseTemplatesCsv', () => {
       '"X-3": missing Type',
       '"X-4": Duration Days must be a whole number ≥ 1',
     ])
+  })
+
+  it('skips the sample sheet’s EXAMPLE- guide row so uploading it unedited is a no-op', () => {
+    const { records, refused } = parseTemplatesCsv(sampleTemplateCsv(), papa)
+    expect(records).toEqual([])
+    expect(refused).toEqual([])
+  })
+
+  it('imports real rows alongside the example row (example skipped)', () => {
+    const csv = sampleTemplateCsv() + '"EGY-DAY-9","Real Tour","","day_tour","1","0","Cairo","","","false","true"\n'
+    const { records } = parseTemplatesCsv(csv, papa)
+    expect(records.map(r => r.template_code)).toEqual(['EGY-DAY-9'])
   })
 
   it('refuses a duplicate code within the file', () => {
