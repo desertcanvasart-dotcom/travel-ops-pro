@@ -12,6 +12,8 @@ import { useCurrency } from '@/app/contexts/PreferencesContext'
 import {
   Map,
   Plus,
+  Download,
+  Upload,
   Search,
   Edit,
   Trash2,
@@ -1121,6 +1123,37 @@ export default function TourManagerContent() {
     return `${city.substring(0, 3).toUpperCase()}-${type.substring(0, 3)}-${random}`
   }
 
+  // Flat CSV of the portable template metadata — a summary sheet and the shape
+  // that can move to the other install. Server builds it; this just downloads.
+  const handleExportTemplates = () => {
+    window.location.href = '/api/tours/bulk/export'
+  }
+
+  // Import that CSV: upserts by template_code (portable fields only, never the
+  // itinerary), so it round-trips the export and creates metadata shells for
+  // codes not seen here yet.
+  const handleImportFile = async (file: File) => {
+    try {
+      const text = await file.text()
+      const res = await fetch('/api/tours/bulk/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csvData: text, dryRun: false }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        showToast('success', `Imported: ${json.created} created, ${json.updated} updated${json.refusedRows ? `, ${json.refusedRows} skipped` : ''}`)
+        fetchTemplates()
+      } else {
+        showToast('error', json.error || 'Import failed')
+      }
+    } catch (e: any) {
+      showToast('error', e?.message || 'Import failed')
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
   const handleAddNew = () => {
     setEditingTemplate(null)
     setFormData({
@@ -1372,7 +1405,13 @@ export default function TourManagerContent() {
         ))}
       </div>
 
-      <input ref={fileInputRef} type="file" accept=".csv,.json" className="hidden" />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleImportFile(f) }}
+      />
 
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
@@ -1387,6 +1426,14 @@ export default function TourManagerContent() {
               <button onClick={handleAddNew} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium">
                 <Plus className="w-4 h-4" />
                 {t('addTemplate')}
+              </button>
+              <button onClick={handleExportTemplates} title="Download all templates as a CSV (portable metadata: code, name, type, duration, cities, status)" className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">
+                <Download className="w-4 h-4" />
+                Export
+              </button>
+              <button onClick={() => fileInputRef.current?.click()} title="Import templates from a CSV (upserts by code; itinerary and variations are untouched)" className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">
+                <Upload className="w-4 h-4" />
+                Import
               </button>
               <Link href="/tours" className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">
                 <Eye className="w-4 h-4" />
