@@ -193,6 +193,7 @@ function Pagination({
 export default function AirportServicesPage() {
   const t = useTranslations('rates.airportServices')
   const airportServiceLabel = useVocabLabel('airport_service_type')
+  const directionLabel = useVocabLabel('airport_direction')
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
   const { formatWithConversion, rateCurrency } = useCurrency()
@@ -361,7 +362,7 @@ export default function AirportServicesPage() {
     const airportName = getAirportName(rate.airport_code)
 
     const confirmed = await dialog.confirmDelete(t('deleteModal.title'),
-      t('deleteModal.confirmText', { service: serviceName, airport: airportName, direction: t(`directions.${rate.direction}`) })
+      t('deleteModal.confirmText', { service: serviceName, airport: airportName, direction: directionLabel(rate.direction, t(`directions.${rate.direction}`)) })
     )
 
     if (!confirmed) return
@@ -586,7 +587,7 @@ export default function AirportServicesPage() {
                         rate.direction === 'arrival' ? 'bg-blue-100 text-blue-800' :
                         'bg-orange-100 text-orange-800'
                       }`}>
-                        {t(`directions.${rate.direction}`)}
+                        {directionLabel(rate.direction, t(`directions.${rate.direction}`))}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
@@ -727,7 +728,7 @@ export default function AirportServicesPage() {
                     title={t('form.direction')}
                   >
                     {DIRECTIONS.map(d => (
-                      <option key={d} value={d}>{t(`directions.${d}`)}</option>
+                      <option key={d} value={d}>{directionLabel(d, t(`directions.${d}`))}</option>
                     ))}
                   </select>
                 </div>
