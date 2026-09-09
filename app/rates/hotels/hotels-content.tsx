@@ -329,6 +329,7 @@ export default function HotelsContent() {
   const t = useTranslations('rates.hotels')
   const tierLabel = useTierLabel()
   const boardBasisLabel = useVocabLabel('board_basis')
+  const propertyTypeLabel = useVocabLabel('hotel_property_type')
   const tPeriods = useTranslations('rates.ratePeriods')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
@@ -1458,12 +1459,12 @@ export default function HotelsContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
-                      <option value="hotel">🏨 {t('propertyTypes.hotel')}</option>
-                      <option value="resort">🏖️ {t('propertyTypes.resort')}</option>
-                      <option value="apartment">🏢 {t('propertyTypes.apartment')}</option>
-                      <option value="guesthouse">🏠 {t('propertyTypes.guesthouse')}</option>
-                      <option value="cruise">🚢 {t('propertyTypes.cruise')}</option>
-                      <option value="camp">⛺ {t('propertyTypes.camp')}</option>
+                      <option value="hotel">🏨 {propertyTypeLabel('hotel', t('propertyTypes.hotel'))}</option>
+                      <option value="resort">🏖️ {propertyTypeLabel('resort', t('propertyTypes.resort'))}</option>
+                      <option value="apartment">🏢 {propertyTypeLabel('apartment', t('propertyTypes.apartment'))}</option>
+                      <option value="guesthouse">🏠 {propertyTypeLabel('guesthouse', t('propertyTypes.guesthouse'))}</option>
+                      <option value="cruise">🚢 {propertyTypeLabel('cruise', t('propertyTypes.cruise'))}</option>
+                      <option value="camp">⛺ {propertyTypeLabel('camp', t('propertyTypes.camp'))}</option>
                     </select>
                   </div>
                   <div>
