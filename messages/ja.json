@@ -3048,6 +3048,7 @@
     "noCity": "都市なし",
     "noEmail": "メールなし",
     "errors": {
+      "supplierCodeNotFound": "supplier_code「{code}」に該当するサプライヤーがここにありません。料金より先にサプライヤーを移行するか、コードを修正してください。",
       "supplierIdNotFound": "supplier_id「{id}」がサプライヤーテーブルに見つかりません",
       "supplierNameAmbiguous": "supplier_name「{name}」が{count}件のサプライヤーに一致します — supplier_idを明示的に指定してください: {candidates}",
       "supplierNameNoMatchForm": "supplier_name「{name}」に該当するサプライヤーが見つかりません。先にサプライヤーを作成するか、表記を修正するか、supplier_nameを空にしてサプライヤーなしで保存してください。",
