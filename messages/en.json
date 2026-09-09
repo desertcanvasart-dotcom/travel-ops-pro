@@ -279,7 +279,21 @@
     "destinations": "Destinations",
     "vocabulary": "Vocabulary",
     "extras": "Extras",
-    "orderIntake": "Order Intake"
+    "orderIntake": "Order Intake",
+    "home": "Home",
+    "clientsComms": "Clients & Comms",
+    "sell": "Sell",
+    "toursPackages": "Tours & Packages",
+    "suppliersRates": "Suppliers & Rates",
+    "aiContent": "AI & Content",
+    "admin": "Admin",
+    "operate": "Operate",
+    "people": "People",
+    "communicate": "Communicate",
+    "accommodation": "Accommodation",
+    "transportTickets": "Transport & Tickets",
+    "guidesServices": "Guides & Services",
+    "ratesCosts": "Costs"
   },
   "roles": {
     "admin": "Admin",
