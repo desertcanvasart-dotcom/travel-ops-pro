@@ -37,7 +37,9 @@ const HIDDEN_COST_TYPES = ['Daily Tips']
 export default function FixedCostsPage() {
   const { rateSymbol, rateCurrency } = useCurrency()
   const tCommon = useTranslations('common')
+  const tRates = useTranslations('rates.common')
   const [costs, setCosts] = useState<FixedCost[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -188,6 +190,14 @@ export default function FixedCostsPage() {
     )
   }
 
+  const q = searchTerm.trim().toLowerCase()
+  const visible = costs.filter(c => !HIDDEN_COST_TYPES.includes(c.cost_type))
+  const filtered = q
+    ? visible.filter(c =>
+        c.cost_type.toLowerCase().includes(q) ||
+        (c.description || '').toLowerCase().includes(q))
+    : visible
+
   return (
     <div className="p-4 lg:p-6 space-y-6 bg-gray-50 min-h-screen max-w-4xl mx-auto">
       {/* Notification */}
@@ -236,6 +246,19 @@ export default function FixedCostsPage() {
         </div>
       </div>
 
+      {/* Search */}
+      {visible.length > 0 && (
+        <div>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            placeholder={tRates('searchPlaceholder')}
+            className="w-full md:w-80 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#647C47] focus:border-transparent"
+          />
+        </div>
+      )}
+
       {/* Cost Cards */}
       <div className="space-y-4">
         {costs.length === 0 ? (
@@ -251,8 +274,12 @@ export default function FixedCostsPage() {
               Add First Cost
             </button>
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-sm text-gray-400">
+            {tRates('noRatesFound')}
+          </div>
         ) : (
-          costs.filter(c => !HIDDEN_COST_TYPES.includes(c.cost_type)).map((cost) => {
+          filtered.map((cost) => {
             const config = COST_TYPE_CONFIG[cost.cost_type] || {
               icon: Coins,
               color: 'text-gray-600',

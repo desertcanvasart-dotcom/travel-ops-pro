@@ -46,6 +46,7 @@ export default function PricingSeasonsPage() {
   const tCommon = useTranslations('rates.common')
 
   const [seasons, setSeasons] = useState<Season[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -229,6 +230,9 @@ export default function PricingSeasonsPage() {
 
   const today = todayIso()
 
+  const q = searchTerm.trim().toLowerCase()
+  const filtered = q ? seasons.filter(s => s.name.toLowerCase().includes(q)) : seasons
+
   return (
     <div className="p-6 space-y-6 max-w-5xl">
       {notice && (
@@ -338,6 +342,19 @@ export default function PricingSeasonsPage() {
         </div>
       )}
 
+      {/* Search */}
+      {seasons.length > 0 && (
+        <div>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            placeholder={tCommon('searchPlaceholder')}
+            className="w-full md:w-80 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#647C47] focus:border-transparent"
+          />
+        </div>
+      )}
+
       {/* Seasons */}
       {seasons.length === 0 && !showAddSeason ? (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
@@ -354,7 +371,12 @@ export default function PricingSeasonsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {seasons.map((season) => {
+          {filtered.length === 0 && (
+            <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-sm text-gray-400">
+              {tCommon('noRatesFound')}
+            </div>
+          )}
+          {filtered.map((season) => {
             const windows = season.pricing_season_dates || []
             return (
               <div
