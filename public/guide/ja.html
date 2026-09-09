@@ -358,6 +358,7 @@
           <div class="point"><div class="k">16 の料金区分</div><div class="v">ホテル・ナイルクルーズ・寝台列車・航空・入場料・ガイド・送迎・チップほか。</div></div>
           <div class="point"><div class="k">期間別レート</div><div class="v">ホテルとクルーズは、契約どおり<b>何期間でも</b>日付別に料金設定が可能。</div></div>
           <div class="point"><div class="k">旅券別料金</div><div class="v">EU / 非EU の区分で、入場料などを自動的に出し分け。</div></div>
+          <div class="point"><div class="k">ガイドの等級</div><div class="v">等級別に計算——<b>エジプト学者／シニア</b>、販売する言語で。行程に同行する「スルー」ガイドは、送迎・チケットに1名分の座席を追加。</div></div>
           <div class="point"><div class="k">クルーズ客室</div><div class="v">シングル/ダブル/トリプル/スイート別に1名1泊で計算し、<b>最も安価で有効な組み合わせ</b>を自動選定。</div></div>
           <div class="point"><div class="k">カバレッジ確認</div><div class="v">料金が未設定のサービスは、見積提示前に<b>警告</b>として表示。空欄を「0円」と誤認しません。</div></div>
         </div>
@@ -477,6 +478,9 @@
     <h2>基盤機能・権限・連携</h2>
     <p class="sub">ワークフロー以外にも、日々の運営を支えるしくみがそろっています。</p>
 
+    <div class="subhead" style="font-size:14.5px">画面の見つけ方——サイドバー</div>
+    <p style="margin-top:2px">メニューは運用の流れに沿って並んでいます：<b>ホーム</b>（ダッシュボード・分析）・<b>販売</b>（見積ビルダー、B2C/B2B 見積、行程、予約、カレンダー、追加オプション・季節料金）・<b>運行</b>（タスク、出発、キャパシティ、フォローアップ、書類）・<b>ツアー</b>（カタログ）・<b>サプライヤー／料金</b>（サプライヤー名簿と全仕入レート。宿泊／交通・チケット／ガイド・サービス／コストに分類）・<b>取引先</b>（顧客、パートナー、チームメンバー）・<b>コミュニケーション</b>（受信箱、Copilot、テンプレート、コンテンツライブラリ）・<b>会計</b>・<b>設定</b>。</p>
+
     <div class="subhead" style="font-size:15px">役割と権限（ログインアカウント）</div>
     <div class="tbl-wrap">
       <table>
@@ -499,7 +503,10 @@
       <div class="rcard"><div class="en">Message Templates</div><h3>メッセージテンプレート</h3><p>WhatsApp／メールの定型文。<span class="mono">{{Name}}</span> などの<b>差し込み</b>が実データで自動補完。日本語テンプレート多数。</p></div>
       <div class="rcard"><div class="en">Multi-Language</div><h3>多言語（EN / JP）</h3><p>UI をワンクリック切替。行程は日英を別々に保持し、生成時に自動振り分け。PDF・メールも日本語対応。</p></div>
       <div class="rcard"><div class="en">Content Library</div><h3>コンテンツライブラリ</h3><p>観光地・アクティビティの説明文をティア別に再利用。執筆ルールも一元管理。</p></div>
-      <div class="rcard"><div class="en">Suppliers &amp; Documents</div><h3>サプライヤー／書類</h3><p>ガイド・車両・ホテル・レストラン・空港係員を管理し、請求書・契約書・バウチャー・領収書を生成。</p></div>
+      <div class="rcard"><div class="en">Suppliers &amp; Documents</div><h3>サプライヤー／書類</h3><p>ガイド・車両・ホテル・レストラン・空港係員を管理。各サプライヤーには検索可能で取込／書出に引き継がれる<b>固有コード（SUP-0001）</b>が付与されます。請求書・契約書・バウチャー・領収書を生成。</p></div>
+      <div class="rcard"><div class="en">Tours &amp; Packages</div><h3>ツアー／パッケージ</h3><p><b>ツアープログラム管理</b>に、プログラムのテンプレート、ティア／人数の<b>バリエーション</b>、お客様が閲覧するパッケージを集約——見積ビルダーと B2B レートシートが参照するカタログです。</p></div>
+      <div class="rcard"><div class="en">Bulk Import / CSV</div><h3>一括取込（CSV）</h3><p>データを素早く投入：サプライヤー・各料金ページ・ツアープログラム管理で<b>サンプル CSV</b> を取得し、1行1件で入力して<b>取込</b>——一括で作成・更新できます。<b>書出</b>でバックアップや別環境への移行も可能。</p></div>
+      <div class="rcard"><div class="en">Your Vocabulary</div><h3>用語のカスタマイズ</h3><p><b>設定 → 用語（Vocabulary）</b>で、ティア・食事条件・客室・食事タイプ・ガイド等級などの用語を、貴社独自の表現に<b>日英</b>で変更可能。表示ラベルのみを変更し、背後の料金計算は変わりません。</p></div>
       <div class="rcard"><div class="en">Activity Log</div><h3>監査ログ</h3><p>誰が・いつ・何を・どのエンドポイント・IP まで記録。絞り込み可能・編集不可の証跡。</p></div>
     </div>
 
