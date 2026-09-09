@@ -514,6 +514,19 @@ WHERE v.kind = 'tipping_role' AND v.key = 'hotel_staff'
     WHERE u.org_id = v.org_id AND u.kind = 'tipping_role' AND u.key = 'hotel_assistant'
   );
 
+-- Where an org ALREADY has a 'hotel_assistant' row (a prior manual add, or a
+-- re-seed), the rename above is skipped so it can't collide on the unique key —
+-- which used to leave the stale 'hotel_staff' row behind and trip the verify
+-- probe below. The correct row is already present, so drop the duplicate.
+-- Safe: no tipping_rates reference the 'hotel_staff' key (the app writes
+-- 'hotel_assistant'); this only removes an orphaned vocabulary label.
+DELETE FROM org_vocabularies v
+WHERE v.kind = 'tipping_role' AND v.key = 'hotel_staff'
+  AND EXISTS (
+    SELECT 1 FROM org_vocabularies u
+    WHERE u.org_id = v.org_id AND u.kind = 'tipping_role' AND u.key = 'hotel_assistant'
+  );
+
 -- Backfill Japanese labels where blank.
   UPDATE org_vocabularies SET label_ja = 'ガイド'
     WHERE kind = 'tipping_role' AND key = 'guide' AND coalesce(btrim(label_ja), '') = '';
