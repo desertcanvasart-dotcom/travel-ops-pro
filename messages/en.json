@@ -2114,6 +2114,7 @@
     "status": "Status",
     "notes": "Notes",
     "supplierName": "Supplier Name",
+    "supplierCode": "Supplier Code",
     "statusActive": "Active",
     "statusInactive": "Inactive",
     "statusPending": "Pending",

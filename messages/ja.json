@@ -2980,6 +2980,7 @@
     "status": "ステータス",
     "notes": "備考",
     "supplierName": "サプライヤー名",
+    "supplierCode": "サプライヤーコード",
     "statusActive": "アクティブ",
     "statusInactive": "非アクティブ",
     "statusPending": "保留中",
