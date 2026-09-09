@@ -98,7 +98,7 @@ export default function RatePeriodsPage() {
         <p className="text-gray-600">
           Rate periods are what a <em>supplier</em> charges you, and they sit before your margin.
           Your own high dates &mdash; Golden Week, Obon, New Year &mdash; are a separate premium
-          added to the selling price, under <strong>Rates &rarr; Seasonal Premiums</strong>.
+          added to the selling price, under <strong>Settings &rarr; Seasonal Premiums</strong>.
         </p>
       </section>
     </div>

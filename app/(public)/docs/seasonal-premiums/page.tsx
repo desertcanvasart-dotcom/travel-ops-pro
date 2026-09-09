@@ -23,7 +23,7 @@ export default function SeasonalPremiumsPage() {
         <p className="text-gray-600 mb-3">
           A seasonal premium is applied to the <strong>whole trip price, after your margin</strong>
           &mdash; not to the underlying costs. Set a window and a percentage in{' '}
-          <strong>Sell &rarr; Seasonal Premiums</strong>, and any quote whose travel dates fall in
+          <strong>Settings &rarr; Seasonal Premiums</strong>, and any quote whose travel dates fall in
           that window is lifted by that percentage automatically.
         </p>
         <p className="text-gray-600">

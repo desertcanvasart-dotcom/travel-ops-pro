@@ -138,7 +138,6 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'bookings', href: '/bookings', icon: Briefcase, roles: ['admin', 'manager'] },
       { labelKey: 'calendar', href: '/calendar', icon: Calendar, roles: ['admin', 'manager', 'agent'] },
       { labelKey: 'extras', href: '/rates/extras', icon: Sparkles, roles: ['admin', 'manager'] },
-      { labelKey: 'seasonalPremiums', href: '/rates/seasons', icon: CalendarRange, roles: ['admin', 'manager'] },
     ]
   },
   // Running what was sold: the to-dos, the departures and capacity per date,
@@ -263,13 +262,17 @@ const navigationConfig: NavConfig[] = [
   {
     titleKey: 'settings',
     key: 'settings',
-    roles: ['admin'],
+    // admin + manager: the section renders for managers so they can still reach
+    // Seasonal Premiums (a pricing tool). Every other item is pinned admin-only
+    // so widening the section does not expose admin config to managers.
+    roles: ['admin', 'manager'],
     items: [
-      { labelKey: 'settings', href: '/settings', icon: Settings },
-      { labelKey: 'vocabulary', href: '/settings/vocabulary', icon: BookOpen },
-      { labelKey: 'destinations', href: '/settings/destinations', icon: Globe },
-      { labelKey: 'activityLog', href: '/activity', icon: ScrollText },
-      { labelKey: 'userManagement', href: '/users', icon: Shield },
+      { labelKey: 'settings', href: '/settings', icon: Settings, roles: ['admin'] },
+      { labelKey: 'vocabulary', href: '/settings/vocabulary', icon: BookOpen, roles: ['admin'] },
+      { labelKey: 'destinations', href: '/settings/destinations', icon: Globe, roles: ['admin'] },
+      { labelKey: 'seasonalPremiums', href: '/rates/seasons', icon: CalendarRange, roles: ['admin', 'manager'] },
+      { labelKey: 'activityLog', href: '/activity', icon: ScrollText, roles: ['admin'] },
+      { labelKey: 'userManagement', href: '/users', icon: Shield, roles: ['admin'] },
     ]
   }
 ]
