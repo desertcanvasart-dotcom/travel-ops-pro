@@ -86,6 +86,7 @@ const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 export default function SleepingTrainRatesContent() {
   const t = useTranslations('rates.sleepingTrains')
   const sleeperCabinLabel = useVocabLabel('sleeper_cabin')
+  const seasonLabel = useVocabLabel('rate_season')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
 
@@ -817,7 +818,7 @@ export default function SleepingTrainRatesContent() {
                   </span>
                   {rate.season && (
                     <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs">
-                      {rate.season}
+                      {seasonLabel(rate.season, rate.season)}
                     </span>
                   )}
                 </div>
@@ -1101,7 +1102,7 @@ export default function SleepingTrainRatesContent() {
                     >
                       <option value="">{t('form.selectSeason')}</option>
                       {SEASONS.map(s => (
-                        <option key={s} value={s}>{s}</option>
+                        <option key={s} value={s}>{seasonLabel(s, s)}</option>
                       ))}
                     </select>
                   </div>
