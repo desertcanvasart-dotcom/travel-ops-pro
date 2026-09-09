@@ -157,6 +157,10 @@ const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 export default function ActivityRatesContent() {
   const t = useTranslations('rates.activities')
   const activityCategoryLabel = useVocabLabel('activity_category')
+  const activityTypeLabel = useVocabLabel('activity_type')
+  const activityDurationLabel = useVocabLabel('activity_duration')
+  const activityUnitLabel = useVocabLabel('activity_unit')
+  const pricingTypeLabel = useVocabLabel('activity_pricing_type')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const initialSupplierId = searchParams.get('supplier_id') || ''
@@ -535,13 +539,13 @@ export default function ActivityRatesContent() {
   const getPricingTypeBadge = (pricingType: string | undefined) => {
     switch (pricingType) {
       case 'per_unit':
-        return <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">{t('perUnit')}</span>
+        return <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">{pricingTypeLabel('per_unit', t('perUnit'))}</span>
       case 'flat':
-        return <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium">{t('flatRate')}</span>
+        return <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium">{pricingTypeLabel('flat', t('flatRate'))}</span>
       case 'tiered':
-        return <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">Tiered</span>
+        return <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">{pricingTypeLabel('tiered', 'Tiered')}</span>
       default:
-        return <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">{t('perPerson')}</span>
+        return <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs font-medium">{pricingTypeLabel('per_person', t('perPerson'))}</span>
     }
   }
 
@@ -774,10 +778,10 @@ export default function ActivityRatesContent() {
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
             <option value="">{t('allPricingTypes')}</option>
-            <option value="per_person">{t('pricingTypes.per_person')}</option>
-            <option value="per_unit">{t('pricingTypes.per_unit')}</option>
-            <option value="flat">{t('pricingTypes.flat')}</option>
-            <option value="tiered">Tiered</option>
+            <option value="per_person">{pricingTypeLabel('per_person', t('pricingTypes.per_person'))}</option>
+            <option value="per_unit">{pricingTypeLabel('per_unit', t('pricingTypes.per_unit'))}</option>
+            <option value="flat">{pricingTypeLabel('flat', t('pricingTypes.flat'))}</option>
+            <option value="tiered">{pricingTypeLabel('tiered', 'Tiered')}</option>
           </select>
 
           {/* Category Filter */}
@@ -920,7 +924,7 @@ export default function ActivityRatesContent() {
                       <div className="flex flex-col items-center gap-1">
                         {getPricingTypeBadge(rate.pricing_type)}
                         {rate.pricing_type === 'per_unit' && rate.unit_label && (
-                          <span className="text-xs text-gray-500">/{rate.unit_label}</span>
+                          <span className="text-xs text-gray-500">/{activityUnitLabel(rate.unit_label, rate.unit_label)}</span>
                         )}
                       </div>
                     </td>
@@ -996,12 +1000,12 @@ export default function ActivityRatesContent() {
                   <p><span className="text-gray-400">City:</span> {rate.city || '—'}</p>
                   {rate.pricing_type === 'per_unit' && (
                     <>
-                      <p><span className="text-gray-400">Unit:</span> {rate.unit_label || 'unit'}</p>
+                      <p><span className="text-gray-400">Unit:</span> {rate.unit_label ? activityUnitLabel(rate.unit_label, rate.unit_label) : 'unit'}</p>
                       <p><span className="text-gray-400">Capacity:</span> {rate.min_capacity}-{rate.max_capacity} pax</p>
                     </>
                   )}
                   {rate.duration && (
-                    <p><span className="text-gray-400">Duration:</span> {rate.duration}</p>
+                    <p><span className="text-gray-400">Duration:</span> {activityDurationLabel(rate.duration, rate.duration)}</p>
                   )}
                 </div>
 
@@ -1205,7 +1209,7 @@ export default function ActivityRatesContent() {
                     >
                       <option value="">{t('form.selectType')}</option>
                       {ACTIVITY_TYPES.map(type => (
-                        <option key={type} value={type}>{type}</option>
+                        <option key={type} value={type}>{activityTypeLabel(type, type)}</option>
                       ))}
                     </select>
                   </div>
@@ -1219,7 +1223,7 @@ export default function ActivityRatesContent() {
                     >
                       <option value="">{t('form.selectDuration')}</option>
                       {DURATIONS.map(dur => (
-                        <option key={dur} value={dur}>{dur}</option>
+                        <option key={dur} value={dur}>{activityDurationLabel(dur, dur)}</option>
                       ))}
                     </select>
                   </div>
@@ -1263,7 +1267,7 @@ export default function ActivityRatesContent() {
                         <div className="flex items-center gap-2 mb-1">
                           <Icon className={`w-4 h-4 ${formData.pricing_type === type.value ? 'text-primary-600' : 'text-gray-400'}`} />
                           <span className={`text-sm font-semibold ${formData.pricing_type === type.value ? 'text-primary-600' : 'text-gray-900'}`}>
-                            {type.label}
+                            {pricingTypeLabel(type.value, type.label)}
                           </span>
                         </div>
                         <p className="text-xs text-gray-500">{type.description}</p>
@@ -1290,7 +1294,7 @@ export default function ActivityRatesContent() {
                         >
                           <option value="">{t('form.selectUnit')}</option>
                           {UNIT_LABELS.map(label => (
-                            <option key={label} value={label}>{label}</option>
+                            <option key={label} value={label}>{activityUnitLabel(label, label)}</option>
                           ))}
                         </select>
                       </div>
