@@ -99,6 +99,8 @@ const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 export default function GuideRatesContent() {
   const t = useTranslations('rates.guides')
   const guideGradeLabel = useVocabLabel('guide_grade')
+  const guideDurationLabel = useVocabLabel('guide_duration')
+  const guideLanguageLabel = useVocabLabel('guide_language')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const initialSupplierId = searchParams.get('supplier_id') || ''
@@ -661,7 +663,7 @@ export default function GuideRatesContent() {
           >
             <option value="">{t('allLanguages')}</option>
             {LANGUAGES.map(lang => (
-              <option key={lang} value={lang}>{lang}</option>
+              <option key={lang} value={lang}>{guideLanguageLabel(lang, lang)}</option>
             ))}
           </select>
 
@@ -793,7 +795,7 @@ export default function GuideRatesContent() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <Globe className="w-4 h-4 text-purple-500" />
-                        <span className="text-sm font-semibold text-gray-900">{rate.guide_language}</span>
+                        <span className="text-sm font-semibold text-gray-900">{guideLanguageLabel(rate.guide_language, rate.guide_language)}</span>
                       </div>
                       <span className="text-xs text-gray-500">{rate.service_code}</span>
                     </td>
@@ -816,7 +818,7 @@ export default function GuideRatesContent() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-sm text-gray-600">
-                        {t(`tourDurations.${rate.tour_duration}`)}
+                        {guideDurationLabel(rate.tour_duration, t(`tourDurations.${rate.tour_duration}`))}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -860,7 +862,7 @@ export default function GuideRatesContent() {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <Globe className="w-5 h-5 text-purple-500" />
-                    <span className="font-semibold text-gray-900">{rate.guide_language}</span>
+                    <span className="font-semibold text-gray-900">{guideLanguageLabel(rate.guide_language, rate.guide_language)}</span>
                   </div>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
@@ -879,7 +881,7 @@ export default function GuideRatesContent() {
                 <div className="space-y-1 text-sm text-gray-600 mb-3">
                   <p><span className="text-gray-400">{t('table.type')}:</span> {guideGradeLabel(rate.guide_type, t(`guideTypes.${rate.guide_type}`))}</p>
                   <p><span className="text-gray-400">{t('table.city')}:</span> {rate.city || '—'}</p>
-                  <p><span className="text-gray-400">{t('table.duration')}:</span> {t(`tourDurations.${rate.tour_duration}`)}</p>
+                  <p><span className="text-gray-400">{t('table.duration')}:</span> {guideDurationLabel(rate.tour_duration, t(`tourDurations.${rate.tour_duration}`))}</p>
                 </div>
 
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
@@ -914,7 +916,7 @@ export default function GuideRatesContent() {
               <div key={rate.id} className="px-4 py-2 flex items-center justify-between hover:bg-gray-50">
                 <div className="flex items-center gap-4">
                   <Globe className="w-4 h-4 text-purple-500" />
-                  <span className="font-medium text-gray-900">{rate.guide_language}</span>
+                  <span className="font-medium text-gray-900">{guideLanguageLabel(rate.guide_language, rate.guide_language)}</span>
                   <span className="text-sm text-gray-500">{rate.city || '—'}</span>
                   {rate.supplier_id && (
                     <span className="text-sm text-purple-600">{getGuideName(rate.supplier_id)}</span>
@@ -1061,7 +1063,7 @@ export default function GuideRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       {LANGUAGES.map(lang => (
-                        <option key={lang} value={lang}>{lang}</option>
+                        <option key={lang} value={lang}>{guideLanguageLabel(lang, lang)}</option>
                       ))}
                     </select>
                   </div>
@@ -1138,7 +1140,7 @@ export default function GuideRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       {TOUR_DURATIONS.map(dur => (
-                        <option key={dur.value} value={dur.value}>{t(`tourDurations.${dur.value}`)}</option>
+                        <option key={dur.value} value={dur.value}>{guideDurationLabel(dur.value, t(`tourDurations.${dur.value}`))}</option>
                       ))}
                     </select>
                   </div>

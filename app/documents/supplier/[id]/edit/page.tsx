@@ -127,6 +127,8 @@ interface Supplier {
 export default function EditSupplierDocumentPage() {
   const serviceTypeLabel = useVocabLabel('transport_service_type')
   const guideGradeLabel = useVocabLabel('guide_grade')
+  const guideDurationLabel = useVocabLabel('guide_duration')
+  const guideLanguageLabel = useVocabLabel('guide_language')
   const mealTypeLabel = useVocabLabel('meal_type')
   const { rateCurrency } = useCurrency()
   const t = useTranslations('supplierDocumentEdit')
@@ -1567,7 +1569,7 @@ export default function EditSupplierDocumentPage() {
                       {selectedGuides.map((guide) => (
                         <tr key={guide.rate_id} className="hover:bg-gray-50">
                           <td className="px-4 py-3">
-                            <p className="text-sm font-medium text-gray-900">{guide.guide_language}</p>
+                            <p className="text-sm font-medium text-gray-900">{guideLanguageLabel(guide.guide_language, guide.guide_language)}</p>
                             {guide.city && <p className="text-xs text-gray-500">{guide.city}</p>}
                           </td>
                           <td className="px-4 py-3">
@@ -1577,7 +1579,7 @@ export default function EditSupplierDocumentPage() {
                           </td>
                           <td className="px-4 py-3">
                             <span className="text-xs text-gray-600">
-                              {DURATION_LABELS[guide.tour_duration] || guide.tour_duration.replace(/_/g, ' ')}
+                              {guideDurationLabel(guide.tour_duration, DURATION_LABELS[guide.tour_duration] || guide.tour_duration.replace(/_/g, ' '))}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
@@ -1697,7 +1699,7 @@ export default function EditSupplierDocumentPage() {
                               >
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-medium text-gray-900">
-                                    {rate.guide_language} — {DURATION_LABELS[rate.tour_duration] || rate.tour_duration.replace(/_/g, ' ')}
+                                    {guideLanguageLabel(rate.guide_language, rate.guide_language)} — {guideDurationLabel(rate.tour_duration, DURATION_LABELS[rate.tour_duration] || rate.tour_duration.replace(/_/g, ' '))}
                                   </p>
                                   <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
                                     <MapPin className="w-3 h-3" />

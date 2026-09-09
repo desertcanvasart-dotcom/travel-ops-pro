@@ -185,6 +185,7 @@ export default function TourPriceCalculator() {
   const t = useTranslations('b2bCalculator')
   const tierLabel = useTierLabel()
   const guideGradeLabel = useVocabLabel('guide_grade')
+  const guideLanguageLabel = useVocabLabel('guide_language')
   const tLeg = useTranslations('travelLeg')
   const params = useParams()
   const variationId = params?.id as string
@@ -899,7 +900,7 @@ export default function TourPriceCalculator() {
                   data-testid="guide-language"
                 >
                   {(guideLanguages.length ? guideLanguages : ['English']).map(l => (
-                    <option key={l} value={l}>{l}</option>
+                    <option key={l} value={l}>{guideLanguageLabel(l, l)}</option>
                   ))}
                 </select>
               </div>
