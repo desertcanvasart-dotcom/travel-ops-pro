@@ -6,6 +6,8 @@ import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
 import { useTierOptions } from '@/hooks/useTierOptions'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
+import { defaultTierKey } from '@/lib/vocabulary'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import Link from 'next/link'
 import { Copy, Ship, Plus, Search, Edit, Trash2, X, Check, ChevronDown, AlertCircle, CheckCircle2, Crown, Star,
@@ -347,7 +349,11 @@ export default function CruisesPage() {
   const t = useTranslations('rates.cruises')
   const tCommon = useTranslations('rates.common')
   const tierOptions = useTierOptions(key => t(`tiers.${key}`))
+  // A new rate starts on the ladder's own "standard" rung — 'standard' itself
+  // may not exist once the agency has reshaped its tiers.
+  const defaultTier = defaultTierKey(tierOptions.map(o => o.value))
   const cruiseCabinLabel = useVocabLabel('cruise_cabin')
+  const cabinOptions = useVocabOptions('cruise_cabin', CABIN_TYPES.map(c => ({ value: c, label: t(`cabinTypes.${c}`) })))
   const tPeriods = useTranslations('rates.ratePeriods')
   const dialog = useConfirmDialog()
   const { formatWithConversion, rateCurrency } = useCurrency()
@@ -431,7 +437,7 @@ export default function CruisesPage() {
     description: '',
     notes: '',
     is_active: true,
-    tier: 'standard',
+    tier: defaultTier,
     is_preferred: false,
     supplier_id: '',
     property_id: '',
@@ -853,8 +859,8 @@ export default function CruisesPage() {
               className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
             >
               <option value="all">{t('filters.allCabins')}</option>
-              {CABIN_TYPES.map(type => (
-                <option key={type} value={type}>{cruiseCabinLabel(type, t(`cabinTypes.${type}`))}</option>
+              {cabinOptions.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
             <select
@@ -1152,8 +1158,8 @@ export default function CruisesPage() {
                   onChange={handleChange}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
                 >
-                  {CABIN_TYPES.map(type => (
-                    <option key={type} value={type}>{cruiseCabinLabel(type, t(`cabinTypes.${type}`))}</option>
+                  {cabinOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
               </div>

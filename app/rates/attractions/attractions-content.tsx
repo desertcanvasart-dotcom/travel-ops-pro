@@ -9,6 +9,7 @@ import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurre
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Copy, Search, Plus, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
@@ -215,6 +216,16 @@ export default function AttractionsContent() {
   const t = useTranslations('rates.attractions')
   const attractionCategoryLabel = useVocabLabel('attraction_category')
   const attractionFeeLabel = useVocabLabel('attraction_fee_type')
+  // The form's pickers list the agency's vocabulary; these built-in lists
+  // stand in until it loads. (The list FILTER offers the categories actually
+  // in use, derived from the data — see `categories` below.)
+  const categoryOptions = useVocabOptions('attraction_category', [
+    'temple', 'pyramid', 'museum', 'tomb', 'church', 'mosque',
+    'fortress', 'palace', 'nature', 'entertainment', 'other',
+  ].map(c => ({ value: c, label: t(`categories.${c}`) })))
+  const feeTypeOptions = useVocabOptions('attraction_fee_type', [
+    'standard', 'free', 'donation', 'included',
+  ].map(f => ({ value: f, label: t(`feeTypes.${f}`) })))
   const seasonLabel = useVocabLabel('rate_season')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
@@ -600,17 +611,6 @@ export default function AttractionsContent() {
     )
   }
 
-  const categoryOptions = [
-    'temple', 'pyramid', 'museum', 'tomb', 'church', 'mosque', 
-    'fortress', 'palace', 'nature', 'entertainment', 'other'
-  ]
-
-  const feeTypeOptions = [
-    { value: 'standard', label: 'Standard' },
-    { value: 'free', label: 'Free Entry' },
-    { value: 'donation', label: 'Donation Based' },
-    { value: 'included', label: 'Included in Package' }
-  ]
 
   const seasonOptions = [
     { value: 'all_year', label: 'All Year' },
@@ -1061,8 +1061,8 @@ export default function AttractionsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
                       <option value="">{t('form.selectCategory')}</option>
-                      {categoryOptions.map(cat => (
-                        <option key={cat} value={cat}>{attractionCategoryLabel(cat, t(`categories.${cat}`))}</option>
+                      {categoryOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>
@@ -1077,8 +1077,8 @@ export default function AttractionsContent() {
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
-                      {feeTypeOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>{attractionFeeLabel(opt.value, t(`feeTypes.${opt.value}`))}</option>
+                      {feeTypeOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>

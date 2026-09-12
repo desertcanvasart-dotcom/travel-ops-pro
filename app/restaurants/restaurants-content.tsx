@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { useTierLabel } from '@/hooks/useTierLabel'
 import { useTierOptions } from '@/hooks/useTierOptions'
+import { defaultTierKey } from '@/lib/vocabulary'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useSearchParams } from 'next/navigation'
 import Papa from 'papaparse'
@@ -172,6 +173,9 @@ export default function RestaurantsContent() {
   const [selectedCity, setSelectedCity] = useState('all')
   const [filterTier, setFilterTier] = useState<string | null>(null)
   const tierOptions = useTierOptions(presetTierLabel)
+  // A new restaurant starts on the ladder's own "standard" rung — 'standard'
+  // itself may not exist once the agency has reshaped its tiers.
+  const defaultTier = defaultTierKey(tierOptions.map(o => o.value))
   const [showInactive, setShowInactive] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editingRestaurant, setEditingRestaurant] = useState<Restaurant | null>(null)
@@ -196,7 +200,7 @@ export default function RestaurantsContent() {
     dietary_options: [] as string[],
     notes: '',
     is_active: true,
-    tier: 'standard',
+    tier: defaultTier,
     is_preferred: false,
     rate_per_person_eur: 0,
     rate_per_person_non_eur: 0,
@@ -301,7 +305,7 @@ export default function RestaurantsContent() {
       dietary_options: [],
       notes: '',
       is_active: true,
-      tier: 'standard',
+      tier: defaultTier,
       is_preferred: false,
       rate_per_person_eur: 0,
       rate_per_person_non_eur: 0,

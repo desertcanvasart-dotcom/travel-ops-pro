@@ -82,6 +82,45 @@ describe('tier pickers read the vocabulary', () => {
   }
 })
 
+// The other vocabulary kinds: every picker that listed a built-in copy of a
+// kind now reads the agency's list through useVocabOptions(kind, builtIn).
+// (Class B — forms that stored the LABEL as the value: meals, restaurants,
+// trains, sleeper, seasons, guide languages, activities — and Class C — the
+// per-vehicle columns on transportation rates — are separate changes.)
+const VOCAB_PICKERS: Record<string, string[]> = {
+  'app/rates/tipping/page.tsx': ['tipping_role', 'tipping_context', 'tipping_unit'],
+  'app/rates/airport-services/page.tsx': ['airport_service_type', 'airport_direction'],
+  'app/rates/hotel-services/page.tsx': ['hotel_service_type'],
+  'app/rates/cruises/page.tsx': ['cruise_cabin'],
+  'app/rates/guides/guide-rates-content.tsx': ['guide_grade', 'guide_duration'],
+  'app/rates/attractions/attractions-content.tsx': ['attraction_category', 'attraction_fee_type'],
+  'app/rates/hotels/hotels-content.tsx': ['board_basis', 'hotel_property_type'],
+  'app/rates/transportation/transportation-content.tsx': ['transport_service_type'],
+}
+
+describe('vocabulary pickers read the agency list', () => {
+  for (const [rel, kinds] of Object.entries(VOCAB_PICKERS)) {
+    it(`${rel} lists ${kinds.join(', ')} from useVocabOptions`, () => {
+      const src = read(rel)
+      for (const kind of kinds) {
+        expect(src.includes(`useVocabOptions('${kind}'`), `${rel} must list ${kind} from the vocabulary`).toBe(true)
+      }
+    })
+  }
+  it('the transportation route learns which service types need a destination from the vocabulary', () => {
+    const src = read('app/api/rates/transportation/route.ts')
+    expect(src.includes("vocabularyItemsForCurrentOrg('transport_service_type')")).toBe(true)
+    expect(src.includes('needsDestination(')).toBe(true)
+  })
+  it('the frozen service_type CHECK on transportation_rates is dropped by a later migration', () => {
+    const migrations = readdirSync(join(ROOT, 'migrations')).filter(f => f.endsWith('.sql')).sort()
+    const baseline = migrations.find(f => f.includes('baseline'))!
+    expect(read(join('migrations', baseline))).toMatch(/CONSTRAINT transportation_rates_service_type_check CHECK/)
+    const later = migrations.filter(f => f > baseline).map(f => read(join('migrations', f))).join('\n')
+    expect(later).toMatch(/DROP CONSTRAINT IF EXISTS transportation_rates_service_type_check\b/)
+  })
+})
+
 describe('the WhatsApp parser offers and resolves the agency tiers', () => {
   it('the extraction prompt lists tierPromptChoices, not a frozen budget|standard|deluxe|luxury', () => {
     const src = read('app/api/ai/parse-whatsapp/route.ts')

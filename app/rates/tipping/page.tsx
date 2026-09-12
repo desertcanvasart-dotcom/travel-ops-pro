@@ -6,6 +6,7 @@ import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
 import { Copy, DollarSign, Plus, Search, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
@@ -180,6 +181,11 @@ export default function TippingPage() {
   const tippingRoleLabel = useVocabLabel('tipping_role')
   const tippingContextLabel = useVocabLabel('tipping_context')
   const tippingUnitLabel = useVocabLabel('tipping_unit')
+  // The pickers list the agency's vocabulary (Settings → Vocabulary), the
+  // built-in lists above standing in until it loads.
+  const roleOptions = useVocabOptions('tipping_role', ROLE_TYPES.map(r => ({ value: r, label: t(`roleTypes.${r}`) })))
+  const contextOptions = useVocabOptions('tipping_context', CONTEXTS.map(c => ({ value: c, label: t(`contexts.${c}`) })))
+  const unitOptions = useVocabOptions('tipping_unit', RATE_UNITS.map(u => ({ value: u, label: t(`rateUnits.${u}`) })))
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
   const { formatWithConversion, rateCurrency } = useCurrency()
@@ -486,8 +492,8 @@ export default function TippingPage() {
               className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
             >
               <option value="all">{t('allRoles')}</option>
-              {ROLE_TYPES.map(r => (
-                <option key={r} value={r}>{tippingRoleLabel(r, t(`roleTypes.${r}`))}</option>
+              {roleOptions.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
             <button
@@ -638,8 +644,8 @@ export default function TippingPage() {
                     onChange={handleChange}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
                   >
-                    {ROLE_TYPES.map(r => (
-                      <option key={r} value={r}>{tippingRoleLabel(r, t(`roleTypes.${r}`))}</option>
+                    {roleOptions.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </select>
                 </div>
@@ -652,8 +658,8 @@ export default function TippingPage() {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
                   >
                     <option value="">{t('form.noContext')}</option>
-                    {CONTEXTS.map(c => (
-                      <option key={c} value={c}>{tippingContextLabel(c, t(`contexts.${c}`))}</option>
+                    {contextOptions.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </select>
                 </div>
@@ -683,8 +689,8 @@ export default function TippingPage() {
                     onChange={handleChange}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
                   >
-                    {RATE_UNITS.map(u => (
-                      <option key={u} value={u}>{tippingUnitLabel(u, t(`rateUnits.${u}`))}</option>
+                    {unitOptions.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </select>
                 </div>

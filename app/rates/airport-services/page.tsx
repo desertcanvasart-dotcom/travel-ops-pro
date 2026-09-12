@@ -7,6 +7,7 @@ import SupplierPicker from '@/components/rates/SupplierPicker'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
 import { Copy, Plane, Plus, Search, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
@@ -194,6 +195,9 @@ export default function AirportServicesPage() {
   const t = useTranslations('rates.airportServices')
   const airportServiceLabel = useVocabLabel('airport_service_type')
   const directionLabel = useVocabLabel('airport_direction')
+  // The pickers list the agency's vocabulary; the built-in lists stand in until it loads.
+  const serviceOptions = useVocabOptions('airport_service_type', SERVICE_TYPES.map(s => ({ value: s, label: t(`serviceTypes.${s}`) })))
+  const directionOptions = useVocabOptions('airport_direction', DIRECTIONS.map(d => ({ value: d, label: t(`directions.${d}`) })))
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
   const { formatWithConversion, rateCurrency } = useCurrency()
@@ -527,8 +531,8 @@ export default function AirportServicesPage() {
               title={t('filters.allServices')}
             >
               <option value="all">{t('filters.allServices')}</option>
-              {SERVICE_TYPES.map(s => (
-                <option key={s} value={s}>{airportServiceLabel(s, t(`serviceTypes.${s}`))}</option>
+              {serviceOptions.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
             <button
@@ -711,8 +715,8 @@ export default function AirportServicesPage() {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
                     title={t('form.serviceType')}
                   >
-                    {SERVICE_TYPES.map(s => (
-                      <option key={s} value={s}>{airportServiceLabel(s, t(`serviceTypes.${s}`))}</option>
+                    {serviceOptions.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </select>
                 </div>
@@ -727,8 +731,8 @@ export default function AirportServicesPage() {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
                     title={t('form.direction')}
                   >
-                    {DIRECTIONS.map(d => (
-                      <option key={d} value={d}>{directionLabel(d, t(`directions.${d}`))}</option>
+                    {directionOptions.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </select>
                 </div>

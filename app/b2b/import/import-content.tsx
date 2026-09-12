@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
 import { useTierOptions } from '@/hooks/useTierOptions'
-import { presetTierFor } from '@/lib/vocabulary'
+import { presetTierFor, defaultTierKey } from '@/lib/vocabulary'
 import { useRouter } from 'next/navigation'
 import {
   Upload, FileText, Image as ImageIcon, X, Loader2,
@@ -370,6 +370,8 @@ export default function ImportContent() {
   const { rateSymbol } = useCurrency()
   const t = useTranslations('b2bImport')
   const tierOptions = useTierOptions(presetTierLabel)
+  // A new import starts on the ladder's own "standard" rung.
+  const defaultTier = defaultTierKey(tierOptions.map(o => o.value))
   const router = useRouter()
 
   // Wizard state
@@ -390,7 +392,7 @@ export default function ImportContent() {
     start_date: '',
     num_adults: 2,
     num_children: 0,
-    tier: 'standard',
+    tier: defaultTier,
     package_type: 'land-package',
     guide_language: 'en',
     partner_id: '',
@@ -727,7 +729,7 @@ export default function ImportContent() {
       start_date: '',
       num_adults: 2,
       num_children: 0,
-      tier: 'standard',
+      tier: defaultTier,
       package_type: 'land-package',
       guide_language: 'en',
       partner_id: '',

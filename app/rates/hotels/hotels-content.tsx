@@ -7,6 +7,8 @@ import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
 import { useTierOptions } from '@/hooks/useTierOptions'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
+import { defaultTierKey } from '@/lib/vocabulary'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -66,13 +68,20 @@ const TIER_OPTIONS_CONFIG = [
 // added in Settings → Vocabulary has neither: brand green, its own label.
 const CUSTOM_TIER_COLOR = 'bg-green-100 text-green-800'
 
+// Board basis is stored as the VOCABULARY key (lowercase — 'bb'), which is
+// what Settings → Vocabulary → Board basis holds and what the bulk importer
+// resolves to. The form used to write 'BB'; readers slugify, so both read.
 const BOARD_BASIS_OPTIONS_CONFIG = [
-  { value: 'RO', labelKey: 'roomOnly' },
-  { value: 'BB', labelKey: 'bedBreakfast' },
-  { value: 'HB', labelKey: 'halfBoard' },
-  { value: 'FB', labelKey: 'fullBoard' },
-  { value: 'AI', labelKey: 'allInclusive' }
+  { value: 'ro', labelKey: 'roomOnly' },
+  { value: 'bb', labelKey: 'bedBreakfast' },
+  { value: 'hb', labelKey: 'halfBoard' },
+  { value: 'fb', labelKey: 'fullBoard' },
+  { value: 'ai', labelKey: 'allInclusive' }
 ]
+// A preset property type's emoji; an agency-added type gets the generic one.
+const PROPERTY_TYPE_ICONS: Record<string, string> = {
+  hotel: '🏨', resort: '🏖️', apartment: '🏢', guesthouse: '🏠', cruise: '🚢', camp: '⛺',
+}
 
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
@@ -336,8 +345,14 @@ function Pagination({
 export default function HotelsContent() {
   const t = useTranslations('rates.hotels')
   const tierOptions = useTierOptions(key => t(`tiers.${key}`))
+  // A new rate starts on the ladder's own "standard" rung — 'standard' itself
+  // may not exist once the agency has reshaped its tiers.
+  const defaultTier = defaultTierKey(tierOptions.map(o => o.value))
   const boardBasisLabel = useVocabLabel('board_basis')
   const propertyTypeLabel = useVocabLabel('hotel_property_type')
+  // The pickers list the agency's vocabulary; the built-in lists stand in until it loads.
+  const boardBasisOptions = useVocabOptions('board_basis', BOARD_BASIS_OPTIONS_CONFIG.map(o => ({ value: o.value, label: t(`boardTypes.${o.labelKey}`) })))
+  const propertyTypeOptions = useVocabOptions('hotel_property_type', Object.keys(PROPERTY_TYPE_ICONS).map(k => ({ value: k, label: t(`propertyTypes.${k}`) })))
   const tPeriods = useTranslations('rates.ratePeriods')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
@@ -376,7 +391,7 @@ export default function HotelsContent() {
     property_id: '',
     property_type: 'hotel',
     city: '',
-    board_basis: 'BB',
+    board_basis: 'bb',
     rate_currency: '',
     // Hotel contacts (NEW)
     contact_name: '',
@@ -420,7 +435,7 @@ export default function HotelsContent() {
     // Validity
     rate_valid_from: today,
     rate_valid_to: nextYear,
-    tier: 'standard',
+    tier: defaultTier,
     supplier_id: '',
     supplier_name: '',
     notes: '',
@@ -557,7 +572,7 @@ export default function HotelsContent() {
       property_id: '',
       property_type: 'hotel',
       city: '',
-      board_basis: 'BB',
+      board_basis: 'bb',
       rate_currency: '',
       // Hotel contacts
       contact_name: '',
@@ -598,7 +613,7 @@ export default function HotelsContent() {
       // Validity
       rate_valid_from: today,
       rate_valid_to: nextYear,
-      tier: 'standard',
+      tier: defaultTier,
       supplier_id: '',
       supplier_name: '',
       notes: '',
@@ -638,7 +653,7 @@ export default function HotelsContent() {
       property_id: (rate as { property_id?: string | null }).property_id || '',
       property_type: rate.property_type || 'hotel',
       city: rate.city || '',
-      board_basis: rate.board_basis || 'BB',
+      board_basis: (rate.board_basis || 'bb').toLowerCase(),
       rate_currency: rate.rate_currency || '',
       // Hotel contacts
       contact_name: rate.contact_name || '',
@@ -1467,12 +1482,9 @@ export default function HotelsContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
-                      <option value="hotel">🏨 {propertyTypeLabel('hotel', t('propertyTypes.hotel'))}</option>
-                      <option value="resort">🏖️ {propertyTypeLabel('resort', t('propertyTypes.resort'))}</option>
-                      <option value="apartment">🏢 {propertyTypeLabel('apartment', t('propertyTypes.apartment'))}</option>
-                      <option value="guesthouse">🏠 {propertyTypeLabel('guesthouse', t('propertyTypes.guesthouse'))}</option>
-                      <option value="cruise">🚢 {propertyTypeLabel('cruise', t('propertyTypes.cruise'))}</option>
-                      <option value="camp">⛺ {propertyTypeLabel('camp', t('propertyTypes.camp'))}</option>
+                      {propertyTypeOptions.map(o => (
+                        <option key={o.value} value={o.value}>{PROPERTY_TYPE_ICONS[o.value] ?? '🏨'} {o.label}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -1483,8 +1495,8 @@ export default function HotelsContent() {
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
                     >
-                      {BOARD_BASIS_OPTIONS_CONFIG.map(opt => (
-                        <option key={opt.value} value={opt.value}>{boardBasisLabel(opt.value, t(`boardTypes.${opt.labelKey}`))}</option>
+                      {boardBasisOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>
