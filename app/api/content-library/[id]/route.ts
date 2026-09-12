@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
 
 // Helper to create Supabase client
 async function createClient() {
@@ -59,8 +60,8 @@ export async function GET(
       return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
-    // Calculate missing tiers
-    const TIERS = ['budget', 'standard', 'deluxe', 'luxury']
+    // Calculate missing tiers against the agency's own ladder
+    const TIERS = await tierLadderForCurrentOrg()
     const existingTiers = data.variations?.map((v: { tier: string }) => v.tier) || []
     const enrichedData = {
       ...data,

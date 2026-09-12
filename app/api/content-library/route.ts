@@ -9,6 +9,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
 
 // Helper to create Supabase client
 async function createClient() {
@@ -107,8 +108,9 @@ export async function GET(request: NextRequest) {
       variationMap.get(v.content_id)!.push(v)
     })
 
-    // Build enriched response
-    const TIERS = ['budget', 'standard', 'deluxe', 'luxury']
+    // Build enriched response — "missing" is measured against the agency's
+    // own ladder (Settings → Vocabulary), not the four presets.
+    const TIERS = await tierLadderForCurrentOrg()
     const enrichedData = contentItems.map(item => {
       const itemVariations = variationMap.get(item.id) || []
       const existingTiers = itemVariations.map(v => v.tier)

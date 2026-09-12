@@ -8,6 +8,7 @@ import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { useTierLabel } from '@/hooks/useTierLabel'
+import { useTierOptions } from '@/hooks/useTierOptions'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useSearchParams } from 'next/navigation'
 import Papa from 'papaparse'
@@ -38,12 +39,17 @@ import { useCurrency } from '@/app/contexts/PreferencesContext'
 // CONSTANTS
 // ============================================
 
+// The PRESETS' badge colours and fallback words. The tiers a form offers come
+// from Settings → Vocabulary (useTierOptions); an agency-added tier has no
+// preset colour and takes CUSTOM_TIER_COLOR.
 const TIER_OPTIONS = [
   { value: 'budget', label: 'Budget', color: 'bg-gray-100 text-gray-700' },
   { value: 'standard', label: 'Standard', color: 'bg-blue-100 text-blue-700' },
   { value: 'deluxe', label: 'Deluxe', color: 'bg-purple-100 text-purple-700' },
   { value: 'luxury', label: 'Luxury', color: 'bg-amber-100 text-amber-700' }
 ]
+const CUSTOM_TIER_COLOR = 'bg-green-100 text-green-800'
+const presetTierLabel = (key: string) => TIER_OPTIONS.find(x => x.value === key)?.label ?? key
 
 // ============================================
 // EGYPTIAN CITIES
@@ -104,11 +110,14 @@ type ViewMode = 'table' | 'cards' | 'compact'
 // ============================================
 
 function TierBadge({ tier }: { tier: string | null }) {
-  const tierConfig = TIER_OPTIONS.find(t => t.value === tier) || TIER_OPTIONS[1]
   const tierLabel = useTierLabel()
+  const key = tier || 'standard'
+  const tierConfig = TIER_OPTIONS.find(t => t.value === key)
+  // Labelled by the ROW's tier, not the fallback config's: an agency-added
+  // tier used to read as "Standard".
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig.color}`}>
-      {tierLabel(tierConfig.value, tierConfig.label)}
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig?.color ?? CUSTOM_TIER_COLOR}`}>
+      {tierLabel(key, tierConfig?.label ?? key)}
     </span>
   )
 }
@@ -162,6 +171,7 @@ export default function RestaurantsContent() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCity, setSelectedCity] = useState('all')
   const [filterTier, setFilterTier] = useState<string | null>(null)
+  const tierOptions = useTierOptions(presetTierLabel)
   const [showInactive, setShowInactive] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editingRestaurant, setEditingRestaurant] = useState<Restaurant | null>(null)
@@ -756,10 +766,9 @@ export default function RestaurantsContent() {
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
               >
                 <option value="all">All Tiers</option>
-                <option value="budget">Budget</option>
-                <option value="standard">Standard</option>
-                <option value="deluxe">Deluxe</option>
-                <option value="luxury">Luxury</option>
+                {tierOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
               </select>
             </div>
             <button
@@ -1197,20 +1206,22 @@ export default function RestaurantsContent() {
                     Service Tier
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    {TIER_OPTIONS.map((tier) => (
+                    {tierOptions.map((tier) => (
                       <button
                         key={tier.value}
                         type="button"
                         onClick={() => setFormData({ ...formData, tier: tier.value })}
                         className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
                           formData.tier === tier.value
-                            ? tier.value === 'luxury' 
+                            ? tier.value === 'luxury'
                               ? 'bg-amber-600 text-white'
                               : tier.value === 'deluxe'
                               ? 'bg-purple-600 text-white'
                               : tier.value === 'standard'
                               ? 'bg-blue-600 text-white'
-                              : 'bg-gray-600 text-white'
+                              : tier.value === 'budget'
+                              ? 'bg-gray-600 text-white'
+                              : 'bg-[#647C47] text-white'
                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}
                       >

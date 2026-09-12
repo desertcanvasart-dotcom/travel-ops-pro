@@ -4,6 +4,10 @@ import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
+import { useTierOptions } from '@/hooks/useTierOptions'
+
+// A preset's emoji in the tier filter; an agency-added tier gets a star.
+const TIER_EMOJI: Record<string, string> = { budget: '💰', standard: '💎', deluxe: '✨', luxury: '👑' }
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { LanguageIndicator } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
@@ -42,6 +46,7 @@ type ViewMode = 'grid' | 'table' | 'list'
 export default function ToursBrowsePage() {
   const t = useTranslations('tours')
   const tierLabel = useTierLabel()
+  const tierOptions = useTierOptions(key => t(`tiers.${key}`))
   // Program prices come out of the EUR-denominated B2B engine; display them in
   // the user's preferred currency like the rates pages do.
   const { formatWithConversion, rateCurrency } = useCurrency()
@@ -266,10 +271,9 @@ export default function ToursBrowsePage() {
           className="px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] outline-none bg-white min-w-[150px]"
         >
           <option value="all">{t('filters.allTiers')}</option>
-          <option value="budget">💰 {tierLabel('budget', t('tiers.budget'))}</option>
-          <option value="standard">💎 {tierLabel('standard', t('tiers.standard'))}</option>
-          <option value="deluxe">✨ {tierLabel('deluxe', t('tiers.deluxe'))}</option>
-          <option value="luxury">👑 {tierLabel('luxury', t('tiers.luxury'))}</option>
+          {tierOptions.map(opt => (
+            <option key={opt.value} value={opt.value}>{TIER_EMOJI[opt.value] ?? '⭐'} {opt.label}</option>
+          ))}
         </select>
         <select
           value={filterCategory}

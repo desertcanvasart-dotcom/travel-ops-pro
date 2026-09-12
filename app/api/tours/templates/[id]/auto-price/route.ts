@@ -19,6 +19,7 @@ import {
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { createServerClient } from '@/lib/supabase-server'
+import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
 
 export async function POST(
   request: NextRequest,
@@ -41,12 +42,14 @@ export async function POST(
       include_accommodation = false,
       // Multi-tier mode
       all_tiers = false,
-      tiers = ['budget', 'standard', 'deluxe', 'luxury']
+      tiers: requestedTiers = null,
     } = body
     const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(createServerClient(), await getCurrentOrgId()) })
 
-    // Validate tier
-    const validTiers: ServiceTier[] = ['budget', 'standard', 'deluxe', 'luxury']
+    // Validate tier against the agency's own ladder (Settings → Vocabulary);
+    // "all tiers" means all of THOSE, not the four presets.
+    const validTiers: ServiceTier[] = await tierLadderForCurrentOrg()
+    const tiers: string[] = Array.isArray(requestedTiers) ? requestedTiers : validTiers
     if (!all_tiers && !validTiers.includes(tier)) {
       return NextResponse.json(
         { success: false, error: `Invalid tier. Must be one of: ${validTiers.join(', ')}` },

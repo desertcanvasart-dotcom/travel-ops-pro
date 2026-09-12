@@ -15,6 +15,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { calculateDayBasedPricing, type ServiceTier } from '@/lib/auto-pricing-service'
 import { computeCoverage } from '@/lib/pricing-coverage'
+import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
 
 // Service-role client, matching ours' other tour-template routes; the /api/*
 // middleware gate handles authentication. Pricing/templates are single-org here.
@@ -23,7 +24,6 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const ALL_TIERS: ServiceTier[] = ['budget', 'standard', 'deluxe', 'luxury']
 const MAX_TEMPLATES = 25 // bound the work for a single diagnostic request
 
 export async function GET(request: NextRequest) {
@@ -33,6 +33,8 @@ export async function GET(request: NextRequest) {
     const tierParam = searchParams.get('tier')
     const isEurPassport = searchParams.get('isEurPassport') !== 'false'
 
+    // 'all' = every tier on the agency's ladder (Settings → Vocabulary)
+    const ALL_TIERS: ServiceTier[] = await tierLadderForCurrentOrg()
     const tiers: ServiceTier[] =
       tierParam === 'all'
         ? ALL_TIERS

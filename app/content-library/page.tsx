@@ -9,6 +9,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
+import { useTierOptions } from '@/hooks/useTierOptions'
 import { createClient } from '@/app/supabase'
 import Link from 'next/link'
 import {
@@ -53,6 +54,11 @@ const TIER_CONFIG: Record<string, { bg: string; activeBg: string; text: string; 
   deluxe: { bg: 'bg-gray-100', activeBg: 'bg-purple-100', text: 'text-gray-400', activeText: 'text-purple-700', letter: 'D', label: 'Deluxe' },
   luxury: { bg: 'bg-gray-100', activeBg: 'bg-amber-100', text: 'text-gray-400', activeText: 'text-amber-700', letter: 'L', label: 'Luxury' },
 }
+// An agency-added tier (Settings → Vocabulary): brand green, lettered from its own label.
+const customTierConfig = (label: string) => ({
+  bg: 'bg-gray-100', activeBg: 'bg-green-100', text: 'text-gray-400', activeText: 'text-green-800',
+  letter: (label.trim().charAt(0) || '?').toUpperCase(), label,
+})
 
 interface Category {
   id: string
@@ -84,6 +90,7 @@ interface ContentItem {
 export default function ContentLibraryPage() {
   const t = useTranslations('contentLibrary')
   const tierLabel = useTierLabel()
+  const tierOptions = useTierOptions(key => t(`tiers.${key}`))
   const [categories, setCategories] = useState<Category[]>([])
   const [content, setContent] = useState<ContentItem[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -399,8 +406,9 @@ export default function ContentLibraryPage() {
                       
                       {/* Tier Badges - Letters */}
                       <div className="flex gap-0.5">
-                        {['budget', 'standard', 'deluxe', 'luxury'].map(tier => {
-                          const config = TIER_CONFIG[tier]
+                        {tierOptions.map(opt => {
+                          const tier = opt.value
+                          const config = TIER_CONFIG[tier] ?? customTierConfig(opt.label)
                           const hasTier = !item.missing_tiers.includes(tier)
                           return (
                             <div
@@ -408,7 +416,7 @@ export default function ContentLibraryPage() {
                               className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-semibold ${
                                 hasTier ? `${config.activeBg} ${config.activeText}` : `${config.bg} ${config.text}`
                               }`}
-                              title={`${tierLabel(tier, t(`tiers.${tier}`))}: ${hasTier ? t('tierAvailable') : t('tierNotAvailable')}`}
+                              title={`${opt.label}: ${hasTier ? t('tierAvailable') : t('tierNotAvailable')}`}
                             >
                               {config.letter}
                             </div>

@@ -3977,13 +3977,13 @@ export async function calculateMultiTierPricing(
  */
 export async function getTemplatePriceRange(
   templateId: string,
-  isEurPassport: boolean = true
+  isEurPassport: boolean = true,
+  /** The agency's tier ladder (tierLadderForCurrentOrg); the presets by default. */
+  tiers: readonly string[] = PRESET_TIERS
 ): Promise<{ minPrice: number; maxPrice: number; tier: ServiceTier } | null> {
-  const tiers: ServiceTier[] = ['budget', 'standard', 'deluxe', 'luxury']
-  
   const results = await calculateMultiTierPricing(
     templateId,
-    tiers,
+    [...tiers],
     2,
     isEurPassport
   )

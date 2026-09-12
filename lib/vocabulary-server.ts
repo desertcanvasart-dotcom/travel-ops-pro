@@ -9,6 +9,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { activeInOrder, PRESET_TIERS, type VehicleBand, type VocabularyItem, type VocabularyKind } from '@/lib/vocabulary'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { createServerClient } from '@/lib/supabase-server'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Client = SupabaseClient<any>
@@ -60,6 +62,23 @@ export async function vocabularyLabelsForOrg(supabase: Client, orgId: string, ki
 export async function tierLadderForOrg(supabase: Client, orgId: string): Promise<string[]> {
   const keys = activeInOrder(await loadVocabularyForOrg(supabase, orgId, 'tier')).map(i => i.key)
   return keys.length ? keys : [...PRESET_TIERS]
+}
+
+/** The tier ladder for the request's org — what a route validates a tier
+ *  against or iterates "all tiers" over. Reads with the service-role client
+ *  scoped by org_id (the vocabulary table is not RLS-readable through the
+ *  cookie client). The presets when there is no org (a diagnostic hit
+ *  outside a session) or no vocabulary. */
+export async function tierLadderForCurrentOrg(): Promise<string[]> {
+  try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return [...PRESET_TIERS]
+    return await tierLadderForOrg(createServerClient(), orgId)
+  } catch {
+    // No request scope (a unit test, a script) or no service client: the
+    // presets stand, exactly as the frozen lists this replaced did.
+    return [...PRESET_TIERS]
+  }
 }
 
 /** The org's vehicles with their passenger bands, smallest first. Empty when

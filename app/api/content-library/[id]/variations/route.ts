@@ -8,8 +8,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
 
-const VALID_TIERS = ['budget', 'standard', 'deluxe', 'luxury']
+// A valid tier is one on the agency's ladder (Settings → Vocabulary) — read
+// per request by tierLadderForCurrentOrg(); this used to be a frozen copy of
+// the four presets, which refused every tier the agency added.
 
 // Helper to create Supabase client
 async function createClient() {
@@ -49,7 +52,7 @@ export async function GET(
       .eq('content_id', id)
       .order('tier', { ascending: true })
 
-    if (tier && VALID_TIERS.includes(tier)) {
+    if (tier && (await tierLadderForCurrentOrg()).includes(tier)) {
       query = query.eq('tier', tier)
     }
 
@@ -96,9 +99,10 @@ export async function POST(
     const { tier, title, description, highlights, inclusions, internal_notes } = body
 
     // Validation
-    if (!tier || !VALID_TIERS.includes(tier)) {
+    const validTiers = await tierLadderForCurrentOrg()
+    if (!tier || !validTiers.includes(tier)) {
       return NextResponse.json(
-        { error: `Invalid tier. Must be one of: ${VALID_TIERS.join(', ')}` },
+        { error: `Invalid tier. Must be one of: ${validTiers.join(', ')}` },
         { status: 400 }
       )
     }
@@ -188,8 +192,9 @@ export async function PUT(
     }
 
     // Validate all variations
+    const validTiers = await tierLadderForCurrentOrg()
     for (const v of variations) {
-      if (!v.tier || !VALID_TIERS.includes(v.tier)) {
+      if (!v.tier || !validTiers.includes(v.tier)) {
         return NextResponse.json(
           { error: `Invalid tier: ${v.tier}` },
           { status: 400 }

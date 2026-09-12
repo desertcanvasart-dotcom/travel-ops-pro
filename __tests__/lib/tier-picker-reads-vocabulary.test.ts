@@ -22,12 +22,43 @@ const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
 const TIER_PICKERS = [
   'app/rates/hotels/hotels-content.tsx',
   'app/rates/cruises/page.tsx',
+  'app/rates/meals/meal-rates-content.tsx',
+  'app/restaurants/restaurants-content.tsx',
   'app/itineraries/[id]/edit/page.tsx',
   'app/b2b/calculator/[id]/page.tsx',
+  'app/b2b/import/import-content.tsx',
   'app/pricing-grid/components/GridHeader.tsx',
   'app/whatsapp-parser/whatsapp-parser-content.tsx',
   'app/settings/page.tsx',
+  'app/tours/tours-browser-page.tsx',
+  'app/content-library/page.tsx',
+  'app/content-library/[id]/page.tsx',
 ]
+
+// Routes that validate a tier or iterate "all tiers" — each carried a frozen
+// copy of the presets, so an agency-added tier was refused or skipped.
+const TIER_ROUTES = [
+  'app/api/content-library/route.ts',
+  'app/api/content-library/[id]/route.ts',
+  'app/api/content-library/[id]/variations/route.ts',
+  'app/api/tours/templates/[id]/auto-price/route.ts',
+  'app/api/tours/variations/route.ts',
+  'app/api/tours/recalculate-prices/route.ts',
+  'app/api/pricing/coverage/route.ts',
+]
+
+describe('tier routes read the org ladder', () => {
+  for (const rel of TIER_ROUTES) {
+    it(`${rel} validates or iterates tiers from tierLadderForCurrentOrg, not a frozen list`, () => {
+      const src = read(rel)
+      expect(src.includes('tierLadderForCurrentOrg('), `${rel} must read the org ladder`).toBe(true)
+      expect(
+        /\[\s*'budget',\s*'standard',\s*'deluxe',\s*'luxury'\s*\]/.test(src),
+        `${rel} carries a four-entry tier list — an agency-added tier is refused or skipped`
+      ).toBe(false)
+    })
+  }
+})
 
 describe('tier pickers read the vocabulary', () => {
   for (const rel of TIER_PICKERS) {

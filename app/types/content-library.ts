@@ -6,8 +6,13 @@
 // ENUMS & CONSTANTS
 // =====================================================
 
+/** The preset tiers — the DEFAULT ladder. The agency's own ladder (Settings →
+ *  Vocabulary, which may add a tier) is read by useTierOptions on the client
+ *  and tierLadderForCurrentOrg on the server; pass it where a helper here
+ *  takes a `ladder`. */
 export const TIERS = ['budget', 'standard', 'deluxe', 'luxury'] as const
-export type Tier = typeof TIERS[number]
+/** A tier KEY — a preset or one the agency added ("5_star"). */
+export type Tier = string
 
 export const RULE_CATEGORIES = ['tone', 'vocabulary', 'structure', 'formatting', 'brand'] as const
 export type RuleCategory = typeof RULE_CATEGORIES[number]
@@ -425,9 +430,9 @@ export function generateSlug(name: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
-export function getMissingTiers(variations: ContentVariation[]): Tier[] {
+export function getMissingTiers(variations: ContentVariation[], ladder: readonly string[] = TIERS): Tier[] {
   const existingTiers = variations.map(v => v.tier)
-  return TIERS.filter(tier => !existingTiers.includes(tier))
+  return ladder.filter(tier => !existingTiers.includes(tier))
 }
 
 export function hasAllTiers(variations: ContentVariation[]): boolean {
