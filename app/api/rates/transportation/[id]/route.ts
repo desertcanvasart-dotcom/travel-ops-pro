@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { LEGACY_VEHICLE_KEYS, bodyTouchesVehicles } from '@/lib/rates/vehicle-bands'
+import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
 import { clientMessage } from '@/lib/api-errors'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createActorAdminClient } from '@/lib/supabase-actor'
@@ -11,27 +13,9 @@ import { createActorAdminClient } from '@/lib/supabase-actor'
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
 
-const VEHICLE_TIERS = ['sedan', 'minivan', 'van', 'minibus', 'bus'] as const
 
 // Helper to parse tiered rate fields from request body
-function parseTieredRates(body: any) {
-  const rates: Record<string, any> = {}
-  for (const tier of VEHICLE_TIERS) {
-    if (body[`${tier}_rate_eur`] !== undefined) {
-      rates[`${tier}_rate_eur`] = body[`${tier}_rate_eur`] !== null ? parseFloat(body[`${tier}_rate_eur`]) || null : null
-    }
-    if (body[`${tier}_rate_non_eur`] !== undefined) {
-      rates[`${tier}_rate_non_eur`] = body[`${tier}_rate_non_eur`] !== null ? parseFloat(body[`${tier}_rate_non_eur`]) || null : null
-    }
-    if (body[`${tier}_capacity_min`] !== undefined) {
-      rates[`${tier}_capacity_min`] = body[`${tier}_capacity_min`] !== null ? parseInt(body[`${tier}_capacity_min`]) : null
-    }
-    if (body[`${tier}_capacity_max`] !== undefined) {
-      rates[`${tier}_capacity_max`] = body[`${tier}_capacity_max`] !== null ? parseInt(body[`${tier}_capacity_max`]) : null
-    }
-  }
-  return rates
-}
+// Vehicles are resolved by lib/rates/vehicle-bands-server — see the POST route.
 
 // GET - Single transportation rate by ID
 export async function GET(
@@ -89,13 +73,31 @@ export async function PUT(
     // Remove id from body to avoid conflicts
     const { id: _, ...rawUpdates } = body
 
-    // Parse tiered rates
-    const tieredRates = parseTieredRates(rawUpdates)
+    // Vehicles: a list replaces the row's; legacy fields patch it, merged over
+    // what the row carries. Nothing vehicle-related in the body → unchanged.
+    let vehiclePatch: Record<string, unknown> = {}
+    if (bodyTouchesVehicles(rawUpdates)) {
+      const { data: currentRow } = await supabaseAdmin
+        .from('transportation_rates')
+        .select('*')
+        .eq('id', id)
+        .single()
+      const vehicleWrite = await resolveVehicleWrite(rawUpdates, currentRow ?? null)
+      if (!vehicleWrite.ok) {
+        return NextResponse.json({ success: false, error: vehicleWrite.error }, { status: 400 })
+      }
+      if (vehicleWrite.patch) {
+        if (vehicleWrite.patch.vehicles.length === 0) {
+          return NextResponse.json({ success: false, error: 'At least one vehicle rate is required' }, { status: 400 })
+        }
+        vehiclePatch = vehicleWrite.patch
+      }
+    }
 
-    // Build non-tier updates
+    // Build non-vehicle updates — the patch above owns the vehicle fields.
     const updates: Record<string, any> = {}
     for (const [key, val] of Object.entries(rawUpdates)) {
-      if (!VEHICLE_TIERS.some(t => key.startsWith(`${t}_`))) {
+      if (key !== 'vehicles' && !LEGACY_VEHICLE_KEYS.some(t => key.startsWith(`${t}_`))) {
         updates[key] = val
       }
     }
@@ -111,7 +113,7 @@ export async function PUT(
 
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
-      .update({ ...updates, ...tieredRates })
+      .update({ ...updates, ...vehiclePatch })
       .eq('id', id)
       .select('*')
       .single()

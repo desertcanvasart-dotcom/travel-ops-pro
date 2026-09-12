@@ -5,6 +5,8 @@ import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-suppl
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { needsDestination } from '@/lib/vocabulary'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
+import { LEGACY_VEHICLE_KEYS, bodyTouchesVehicles } from '@/lib/rates/vehicle-bands'
+import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
 
 // ============================================
 // TRANSPORTATION RATES API - Full CRUD
@@ -54,7 +56,6 @@ function isIntercityType(serviceType: string | null | undefined): boolean {
 
 const DURATIONS = ['full_day', 'half_day', 'one_way'] as const
 
-const VEHICLE_TIERS = ['sedan', 'minivan', 'van', 'minibus', 'bus'] as const
 
 const AREAS = [
   'east_bank',
@@ -67,24 +68,9 @@ const AREAS = [
 ] as const
 
 // Helper to parse tiered rate fields from request body
-function parseTieredRates(body: any) {
-  const rates: Record<string, any> = {}
-  for (const tier of VEHICLE_TIERS) {
-    if (body[`${tier}_rate_eur`] !== undefined) {
-      rates[`${tier}_rate_eur`] = body[`${tier}_rate_eur`] !== null ? parseFloat(body[`${tier}_rate_eur`]) || null : null
-    }
-    if (body[`${tier}_rate_non_eur`] !== undefined) {
-      rates[`${tier}_rate_non_eur`] = body[`${tier}_rate_non_eur`] !== null ? parseFloat(body[`${tier}_rate_non_eur`]) || null : null
-    }
-    if (body[`${tier}_capacity_min`] !== undefined) {
-      rates[`${tier}_capacity_min`] = body[`${tier}_capacity_min`] !== null ? parseInt(body[`${tier}_capacity_min`]) : null
-    }
-    if (body[`${tier}_capacity_max`] !== undefined) {
-      rates[`${tier}_capacity_max`] = body[`${tier}_capacity_max`] !== null ? parseInt(body[`${tier}_capacity_max`]) : null
-    }
-  }
-  return rates
-}
+// Vehicles are resolved by lib/rates/vehicle-bands-server (a list, or the
+// legacy per-vehicle fields), validated against the agency's vehicle types,
+// and stored as the list plus its mirror into the five legacy columns.
 
 // GET - List transportation rates with filters
 export async function GET(request: NextRequest) {
@@ -134,7 +120,7 @@ export async function GET(request: NextRequest) {
       options: {
         serviceTypes: SERVICE_TYPES,
         durations: DURATIONS,
-        vehicleTiers: VEHICLE_TIERS,
+        vehicleTiers: await vocabularyItemsForCurrentOrg('vehicle_type').then(items => items.length ? items.map(i => i.key) : [...LEGACY_VEHICLE_KEYS]),
         areas: AREAS
       }
     })
@@ -166,8 +152,12 @@ export async function POST(request: NextRequest) {
     // Generate route name if not provided
     const routeName = body.route_name || generateRouteName(body)
 
-    // Parse tiered vehicle rates from body
-    const tieredRates = parseTieredRates(body)
+    // The vehicles this rate offers — a list, or the legacy per-vehicle fields.
+    const vehicleWrite = await resolveVehicleWrite(body, null)
+    if (!vehicleWrite.ok) {
+      return NextResponse.json({ success: false, error: vehicleWrite.error }, { status: 400 })
+    }
+    const vehiclePatch = vehicleWrite.patch ?? { vehicles: [] }
 
     const newRate: Record<string, any> = {
       service_code: serviceCode,
@@ -187,7 +177,7 @@ export async function POST(request: NextRequest) {
       notes: body.notes || null,
       ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
       is_active: body.is_active !== false,
-      ...tieredRates
+      ...vehiclePatch
     }
 
     // Validate required fields
@@ -205,10 +195,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'city is required' }, { status: 400 })
     }
 
-    // Must have at least one vehicle tier rate
-    const firstTierRate = VEHICLE_TIERS.map(t => tieredRates[`${t}_rate_eur`]).find(r => r != null && r > 0)
-    if (!firstTierRate) {
-      return NextResponse.json({ success: false, error: 'At least one vehicle tier rate is required' }, { status: 400 })
+    // Must offer at least one vehicle
+    if (vehiclePatch.vehicles.length === 0) {
+      return NextResponse.json({ success: false, error: 'At least one vehicle rate is required' }, { status: 400 })
     }
 
 
@@ -291,13 +280,32 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     }
 
-    // Parse tiered rates from the update payload
-    const tieredRates = parseTieredRates(rawUpdates)
+    // Vehicles: a list replaces the row's; legacy fields patch it (merged over
+    // what the row carries, so an older client cannot drop a vehicle it does
+    // not know). Nothing vehicle-related in the body → nothing changes.
+    let vehiclePatch: Record<string, unknown> = {}
+    if (bodyTouchesVehicles(rawUpdates)) {
+      const { data: currentRow } = await supabaseAdmin
+        .from('transportation_rates')
+        .select('*')
+        .eq('id', id)
+        .single()
+      const vehicleWrite = await resolveVehicleWrite(rawUpdates, currentRow ?? null)
+      if (!vehicleWrite.ok) {
+        return NextResponse.json({ success: false, error: vehicleWrite.error }, { status: 400 })
+      }
+      if (vehicleWrite.patch) {
+        if (vehicleWrite.patch.vehicles.length === 0) {
+          return NextResponse.json({ success: false, error: 'At least one vehicle rate is required' }, { status: 400 })
+        }
+        vehiclePatch = vehicleWrite.patch
+      }
+    }
 
-    // Remove tiered fields from rawUpdates to avoid double-setting
+    // Keep the vehicle fields out of the raw spread — the patch above owns them.
     const updates: Record<string, any> = {}
     for (const [key, val] of Object.entries(rawUpdates)) {
-      if (!VEHICLE_TIERS.some(t => key.startsWith(`${t}_`))) {
+      if (key !== 'vehicles' && !LEGACY_VEHICLE_KEYS.some(t => key.startsWith(`${t}_`))) {
         updates[key] = val
       }
     }
@@ -320,7 +328,7 @@ export async function PUT(request: NextRequest) {
 
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
-      .update({ ...updates, ...tieredRates })
+      .update({ ...updates, ...vehiclePatch })
       .eq('id', id)
       .select('*')
       .single()

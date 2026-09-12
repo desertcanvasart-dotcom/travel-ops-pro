@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { useTranslations } from 'next-intl'
 import { useVehicleLabel } from '@/hooks/useVehicleLabel'
+import { vehicleBands, LEGACY_VEHICLE_BANDS, type VehicleBandRate } from '@/lib/rates/vehicle-bands'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
 import RateAuditLog from '@/app/components/RateAuditLog'
@@ -105,6 +106,23 @@ const VEHICLE_TIERS = [
   { key: 'bus', labelKey: 'bus', defaultMin: 21, defaultMax: 45 },
 ] as const
 
+/** One vehicle row in the form: a single price (the API mirrors it into both
+ *  passport columns) and this route's own band. Blank rate = not offered. */
+interface VehicleFormRow {
+  rate_eur: string
+  capacity_min: string
+  capacity_max: string
+}
+
+/** A vehicle the agency lists in Settings → Vocabulary → Vehicle types, with
+ *  the band Settings gives it — the default for a new rate. */
+interface VehicleOption {
+  value: string
+  label: string
+  defaultMin: number
+  defaultMax: number
+}
+
 interface FormData {
   service_code: string
   route_name: string
@@ -120,53 +138,37 @@ interface FormData {
   supplier_name: string
   notes: string
   is_active: boolean
-  // Tiered rates. ONE price per vehicle: a vehicle costs what it costs
-  // regardless of the traveller's passport (unlike entrance fees, which keep
-  // their split). The save mirrors this value into both legacy DB columns
-  // (<tier>_rate_eur and _rate_non_eur) so every consumer reads the same
-  // number; the currency it is in comes from the Rate currency field.
-  sedan_rate_eur: string
-  minivan_rate_eur: string
-  van_rate_eur: string
-  minibus_rate_eur: string
-  bus_rate_eur: string
-  // Capacity per vehicle, per route. An agency that never uses a sedan leaves
-  // its rate blank and starts the minivan at 1 — the engine then picks the
-  // minivan for a couple, because it is the smallest vehicle they actually run.
-  sedan_capacity_min: string
-  sedan_capacity_max: string
-  minivan_capacity_min: string
-  minivan_capacity_max: string
-  van_capacity_min: string
-  van_capacity_max: string
-  minibus_capacity_min: string
-  minibus_capacity_max: string
-  bus_capacity_min: string
-  bus_capacity_max: string
+  // The vehicles this rate offers, keyed by the vocabulary vehicle key — one
+  // row per vehicle in Settings → Vocabulary → Vehicle types, plus any the
+  // rate already carries. ONE price per vehicle: a vehicle costs what it
+  // costs regardless of the traveller's passport (unlike entrance fees, which
+  // keep their split); the API mirrors it into both passport columns. The
+  // currency it is in comes from the Rate currency field. Capacity is per
+  // route: an agency that never uses a sedan leaves its rate blank and starts
+  // the minivan at 1 — the engine then picks the minivan for a couple.
+  vehicles: Record<string, VehicleFormRow>
 }
 
-type CapacityFields = Pick<
-  FormData,
-  | 'sedan_capacity_min' | 'sedan_capacity_max'
-  | 'minivan_capacity_min' | 'minivan_capacity_max'
-  | 'van_capacity_min' | 'van_capacity_max'
-  | 'minibus_capacity_min' | 'minibus_capacity_max'
-  | 'bus_capacity_min' | 'bus_capacity_max'
->
-
 /**
- * The capacity bands to show for a rate: what the row stores, or the
- * conventional band for a row saved before these were editable.
+ * The form rows for a rate: one per vehicle the agency lists (the band the
+ * row stores, else the band Settings gives that vehicle), plus any vehicle
+ * the row prices that the list no longer names — shown, never dropped.
  */
-function capacityFieldsFor(rate: TransportationRate | null): CapacityFields {
-  const fields: Record<string, string> = {}
-  for (const tier of VEHICLE_TIERS) {
-    const min = rate ? (rate[`${tier.key}_capacity_min` as keyof TransportationRate] as number | null) : null
-    const max = rate ? (rate[`${tier.key}_capacity_max` as keyof TransportationRate] as number | null) : null
-    fields[`${tier.key}_capacity_min`] = String(min ?? tier.defaultMin)
-    fields[`${tier.key}_capacity_max`] = String(max ?? tier.defaultMax)
+function vehicleRowsFor(rate: TransportationRate | null, options: readonly VehicleOption[]): Record<string, VehicleFormRow> {
+  const bands = rate ? vehicleBands(rate as unknown as Record<string, unknown>) : []
+  const rows: Record<string, VehicleFormRow> = {}
+  for (const o of options) {
+    const b = bands.find(x => x.key === o.value)
+    rows[o.value] = {
+      rate_eur: b ? String(b.rate_eur) : '',
+      capacity_min: String(b?.capacity_min ?? o.defaultMin),
+      capacity_max: String(b?.capacity_max ?? o.defaultMax),
+    }
   }
-  return fields as CapacityFields
+  for (const b of bands) {
+    if (!rows[b.key]) rows[b.key] = { rate_eur: String(b.rate_eur), capacity_min: String(b.capacity_min), capacity_max: String(b.capacity_max) }
+  }
+  return rows
 }
 
 const initialFormData: FormData = {
@@ -184,21 +186,7 @@ const initialFormData: FormData = {
   supplier_name: '',
   notes: '',
   is_active: true,
-  sedan_rate_eur: '',
-  minivan_rate_eur: '',
-  van_rate_eur: '',
-  minibus_rate_eur: '',
-  bus_rate_eur: '',
-  sedan_capacity_min: '1',
-  sedan_capacity_max: '2',
-  minivan_capacity_min: '3',
-  minivan_capacity_max: '7',
-  van_capacity_min: '8',
-  van_capacity_max: '12',
-  minibus_capacity_min: '13',
-  minibus_capacity_max: '20',
-  bus_capacity_min: '21',
-  bus_capacity_max: '45',
+  vehicles: {},
 }
 
 // Canonical service_type taxonomy (B3, locked-in 2026-06-23).
@@ -228,17 +216,14 @@ const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 // HELPERS
 // ============================================
 
-function getActiveTiers(rate: TransportationRate) {
-  return VEHICLE_TIERS.filter(t => {
-    const eurRate = rate[`${t.key}_rate_eur` as keyof TransportationRate] as number | null
-    return eurRate != null && eurRate > 0
-  })
+/** The vehicles a rate offers, smallest band first — the `vehicles` list,
+ *  else the legacy columns (lib/rates/vehicle-bands). */
+function getActiveTiers(rate: TransportationRate): VehicleBandRate[] {
+  return vehicleBands(rate as unknown as Record<string, unknown>)
 }
 
 function getMinRate(rate: TransportationRate): number {
-  const rates = VEHICLE_TIERS
-    .map(t => rate[`${t.key}_rate_eur` as keyof TransportationRate] as number | null)
-    .filter((r): r is number => r != null && r > 0)
+  const rates = getActiveTiers(rate).map(b => b.rate_eur)
   return rates.length > 0 ? Math.min(...rates) : 0
 }
 
@@ -249,6 +234,23 @@ function getMinRate(rate: TransportationRate): number {
 export default function TransportationContent() {
   const t = useTranslations('rates.transportation')
   const vehicleLabel = useVehicleLabel()
+  // The vehicles the agency lists (Settings → Vocabulary → Vehicle types) with
+  // the band Settings gives each — the rows of the rate grid and the columns
+  // of the table. The five built-ins stand in until the vocabulary loads.
+  const vehicleVocab = useVocabOptions('vehicle_type', VEHICLE_TIERS.map(v => ({
+    value: v.key, label: t(v.labelKey), meta: { min_pax: v.defaultMin, max_pax: v.defaultMax },
+  })))
+  const vehicleOptions: VehicleOption[] = vehicleVocab.map(o => {
+    const legacy = LEGACY_VEHICLE_BANDS[o.value as keyof typeof LEGACY_VEHICLE_BANDS]
+    return {
+      value: o.value,
+      label: o.label,
+      defaultMin: Number(o.meta.min_pax) || legacy?.min || 1,
+      defaultMax: Number(o.meta.max_pax) || legacy?.max || 45,
+    }
+  })
+  /** The agency's word for a vehicle key — a vocabulary entry, or a rate's own key when it is no longer listed. */
+  const vehicleName = (key: string) => vehicleOptions.find(o => o.value === key)?.label ?? vehicleLabel(key, key)
   const serviceTypeLabel = useVocabLabel('transport_service_type')
   // The service-type pickers list the agency's vocabulary; which types need
   // a destination is its `needs_destination` meta (the built-in flags stand
@@ -428,7 +430,7 @@ export default function TransportationContent() {
 
   const openAddModal = () => {
     setEditingRate(null)
-    setFormData(initialFormData)
+    setFormData({ ...initialFormData, vehicles: vehicleRowsFor(null, vehicleOptions) })
     setError(null)
     setIsModalOpen(true)
   }
@@ -461,15 +463,7 @@ export default function TransportationContent() {
       supplier_name: rate.supplier_name || rate.supplier?.name || '',
       notes: rate.notes || '',
       is_active: rate.is_active,
-      // Old rows may carry two passport prices; the form is single-price now,
-      // so show the EU-column value (falling back to the other) — saving
-      // collapses the row to that one number, visibly.
-      sedan_rate_eur: (rate.sedan_rate_eur ?? rate.sedan_rate_non_eur)?.toString() || '',
-      minivan_rate_eur: (rate.minivan_rate_eur ?? rate.minivan_rate_non_eur)?.toString() || '',
-      van_rate_eur: (rate.van_rate_eur ?? rate.van_rate_non_eur)?.toString() || '',
-      minibus_rate_eur: (rate.minibus_rate_eur ?? rate.minibus_rate_non_eur)?.toString() || '',
-      bus_rate_eur: (rate.bus_rate_eur ?? rate.bus_rate_non_eur)?.toString() || '',
-      ...capacityFieldsFor(rate),
+      vehicles: vehicleRowsFor(rate, vehicleOptions),
     })
     setIsModalOpen(true)
   }
@@ -509,26 +503,22 @@ export default function TransportationContent() {
 
     // A band that runs backwards would silently match nothing: the selector
     // looks for pax >= min && pax <= max, so 7–3 is a vehicle nobody can book.
-    for (const tier of VEHICLE_TIERS) {
-      const rateVal = formData[`${tier.key}_rate_eur` as keyof FormData] as string
-      if (!rateVal || parseFloat(rateVal) <= 0) continue
-      const min = parseInt(formData[`${tier.key}_capacity_min` as keyof FormData] as string)
-      const max = parseInt(formData[`${tier.key}_capacity_max` as keyof FormData] as string)
+    for (const [key, row] of Object.entries(formData.vehicles)) {
+      if (!row.rate_eur || parseFloat(row.rate_eur) <= 0) continue
+      const min = parseInt(row.capacity_min)
+      const max = parseInt(row.capacity_max)
       if (!Number.isFinite(min) || !Number.isFinite(max) || min < 1) {
-        refuse(`${vehicleLabel(tier.key, t(tier.labelKey))}: capacity must be a number of passengers`)
+        refuse(`${vehicleName(key)}: capacity must be a number of passengers`)
         return
       }
       if (max < min) {
-        refuse(`${vehicleLabel(tier.key, t(tier.labelKey))}: maximum capacity cannot be below the minimum`)
+        refuse(`${vehicleName(key)}: maximum capacity cannot be below the minimum`)
         return
       }
     }
 
-    // Check at least one tier has a rate
-    const hasAnyRate = VEHICLE_TIERS.some(t => {
-      const val = formData[`${t.key}_rate_eur` as keyof FormData] as string
-      return val && parseFloat(val) > 0
-    })
+    // Check at least one vehicle has a rate
+    const hasAnyRate = Object.values(formData.vehicles).some(row => row.rate_eur && parseFloat(row.rate_eur) > 0)
     if (!hasAnyRate) {
       refuse('Please enter a rate for at least one vehicle')
       return
@@ -557,20 +547,18 @@ export default function TransportationContent() {
         is_active: formData.is_active,
       }
 
-      // Add tiered rates
-      for (const tier of VEHICLE_TIERS) {
-        // One price per vehicle, mirrored into both legacy passport columns
-        // so nothing downstream depends on which one it reads.
-        const priceVal = formData[`${tier.key}_rate_eur` as keyof FormData] as string
-        const price = priceVal ? parseFloat(priceVal) : null
-        submitData[`${tier.key}_rate_eur`] = price
-        submitData[`${tier.key}_rate_non_eur`] = price
-
-        const minVal = formData[`${tier.key}_capacity_min` as keyof FormData] as string
-        const maxVal = formData[`${tier.key}_capacity_max` as keyof FormData] as string
-        submitData[`${tier.key}_capacity_min`] = minVal ? parseInt(minVal) : null
-        submitData[`${tier.key}_capacity_max`] = maxVal ? parseInt(maxVal) : null
-      }
+      // The vehicles this rate offers — one price per vehicle (the API mirrors
+      // it into both passport columns and the legacy per-vehicle columns), the
+      // route's own bands. A blank rate is simply not in the list.
+      submitData.vehicles = Object.entries(formData.vehicles)
+        .filter(([, row]) => row.rate_eur && parseFloat(row.rate_eur) > 0)
+        .map(([key, row]) => ({
+          key,
+          rate_eur: parseFloat(row.rate_eur),
+          rate_non_eur: null,
+          capacity_min: parseInt(row.capacity_min),
+          capacity_max: parseInt(row.capacity_max),
+        }))
 
       const response = await fetch(url, {
         method: editingRate ? 'PUT' : 'POST',
@@ -953,18 +941,13 @@ export default function TransportationContent() {
                         </thead>
                         <tbody>
                           {activeTiers.length > 0 ? (
-                            activeTiers.map(tier => {
-                              const eurRate = rate[`${tier.key}_rate_eur` as keyof TransportationRate] as number
-                              const capMin = rate[`${tier.key}_capacity_min` as keyof TransportationRate] as number
-                              const capMax = rate[`${tier.key}_capacity_max` as keyof TransportationRate] as number
-                              return (
-                                <tr key={tier.key} className="border-t border-gray-50">
-                                  <td className="py-1.5 text-xs font-medium text-gray-700">{vehicleLabel(tier.key, t(tier.labelKey))}</td>
-                                  <td className="py-1.5 text-xs text-center text-gray-500">{capMin}-{capMax}</td>
-                                  <td className="py-1.5 text-xs text-right font-medium text-gray-900">{formatRateInRowCurrency(eurRate, rate, formatRate)}</td>
-                                </tr>
-                              )
-                            })
+                            activeTiers.map(band => (
+                              <tr key={band.key} className="border-t border-gray-50">
+                                <td className="py-1.5 text-xs font-medium text-gray-700">{vehicleName(band.key)}</td>
+                                <td className="py-1.5 text-xs text-center text-gray-500">{band.capacity_min}-{band.capacity_max}</td>
+                                <td className="py-1.5 text-xs text-right font-medium text-gray-900">{formatRateInRowCurrency(band.rate_eur, rate, formatRate)}</td>
+                              </tr>
+                            ))
                           ) : (
                             <tr>
                               <td colSpan={3} className="py-2 text-xs text-center text-gray-400">{t('noRatesConfigured')}</td>
@@ -1010,11 +993,9 @@ export default function TransportationContent() {
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">{t('serviceCode')}</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">{t('serviceType')}</th>
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">{t('city')}</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{vehicleLabel('sedan', t('sedan'))}</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{vehicleLabel('minivan', t('minivan'))}</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{vehicleLabel('van', t('van'))}</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{vehicleLabel('minibus', t('minibus'))}</th>
-                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{vehicleLabel('bus', t('bus'))}</th>
+                  {vehicleOptions.map(o => (
+                    <th key={o.value} className="px-3 py-2 text-right text-xs font-semibold text-gray-600">{o.label}</th>
+                  ))}
                   <th className="px-3 py-2 text-left text-xs font-semibold text-gray-600">{t('supplier')}</th>
                   <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600">{t('status')}</th>
                   <th className="px-3 py-2 text-center text-xs font-semibold text-gray-600">{t('actions')}</th>
@@ -1051,12 +1032,12 @@ export default function TransportationContent() {
                           ? `${translateCity(rate.city)} → ${translateCity(rate.destination_city)}`
                           : translateCity(rate.city)}
                       </td>
-                      {VEHICLE_TIERS.map(tier => {
-                        const eurRate = rate[`${tier.key}_rate_eur` as keyof TransportationRate] as number | null
+                      {vehicleOptions.map(o => {
+                        const band = getActiveTiers(rate).find(b => b.key === o.value)
                         return (
-                          <td key={tier.key} className="px-3 py-2 text-right text-sm">
-                            {eurRate != null && eurRate > 0 ? (
-                              <span className="font-medium text-gray-900">{formatRateInRowCurrency(eurRate, rate, formatRate)}</span>
+                          <td key={o.value} className="px-3 py-2 text-right text-sm">
+                            {band ? (
+                              <span className="font-medium text-gray-900">{formatRateInRowCurrency(band.rate_eur, rate, formatRate)}</span>
                             ) : (
                               <span className="text-gray-300">—</span>
                             )}
@@ -1098,7 +1079,7 @@ export default function TransportationContent() {
                 })}
                 {paginatedRates.length === 0 && (
                   <tr>
-                    <td colSpan={12} className="px-4 py-12 text-center text-gray-500">
+                    <td colSpan={7 + vehicleOptions.length} className="px-4 py-12 text-center text-gray-500">
                       <Car className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                       <p className="text-sm">{t('noRatesFound')}</p>
                     </td>
@@ -1164,16 +1145,13 @@ export default function TransportationContent() {
                   <div className="flex items-center gap-4 flex-shrink-0 ml-4">
                     <div className="hidden md:flex items-center gap-1 text-xs text-gray-500">
                       {activeTiers.length > 0 ? (
-                        activeTiers.map((tier, idx) => {
-                          const eurRate = rate[`${tier.key}_rate_eur` as keyof TransportationRate] as number
-                          return (
-                            <span key={tier.key}>
-                              {idx > 0 && <span className="mx-0.5 text-gray-300">|</span>}
-                              <span className="text-gray-400">{vehicleLabel(tier.key, t(tier.labelKey))}:</span>{' '}
-                              <span className="font-medium text-gray-700">{formatRateInRowCurrency(eurRate, rate, formatRate)}</span>
-                            </span>
-                          )
-                        })
+                        activeTiers.map((band, idx) => (
+                          <span key={band.key}>
+                            {idx > 0 && <span className="mx-0.5 text-gray-300">|</span>}
+                            <span className="text-gray-400">{vehicleName(band.key)}:</span>{' '}
+                            <span className="font-medium text-gray-700">{formatRateInRowCurrency(band.rate_eur, rate, formatRate)}</span>
+                          </span>
+                        ))
                       ) : (
                         <span className="text-gray-300">{t('noRatesConfigured')}</span>
                       )}
@@ -1599,59 +1577,79 @@ export default function TransportationContent() {
                       </tr>
                     </thead>
                     <tbody>
-                      {VEHICLE_TIERS.map(tier => (
-                        <tr key={tier.key} className="border-t border-gray-200">
-                          <td className="px-3 py-2">
-                            <span className="text-sm font-medium text-gray-700">{vehicleLabel(tier.key, t(tier.labelKey))}</span>
-                          </td>
-                          <td className="px-3 py-2">
-                            {/* Editable, because the bands are the agency's own.
-                                An agency that never runs a sedan leaves its rate
-                                blank and starts the minivan at 1 — and a couple
-                                is then priced in the smallest vehicle they
-                                actually own. */}
-                            <div className="flex items-center justify-center gap-1">
+                      {Object.entries(formData.vehicles).map(([key, row]) => {
+                        // A row per vehicle in the agency's vocabulary (its
+                        // Settings band as the default), plus any vehicle this
+                        // rate prices that the vocabulary no longer lists —
+                        // shown greyed, still priced, never dropped silently.
+                        const option = vehicleOptions.find(o => o.value === key)
+                        const bandDiffers = !!option && (String(option.defaultMin) !== row.capacity_min || String(option.defaultMax) !== row.capacity_max)
+                        const setRow = (patch: Partial<VehicleFormRow>) =>
+                          setFormData(prev => ({ ...prev, vehicles: { ...prev.vehicles, [key]: { ...prev.vehicles[key], ...patch } } }))
+                        return (
+                          <tr key={key} className={`border-t border-gray-200 ${option ? '' : 'opacity-70'}`}>
+                            <td className="px-3 py-2">
+                              <span className="text-sm font-medium text-gray-700">{vehicleName(key)}</span>
+                              {!option && (
+                                <span className="ml-2 text-[10px] uppercase tracking-wider text-amber-700">{t('notInVocabulary')}</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {/* Editable, because the bands are the agency's own.
+                                  An agency that never runs a sedan leaves its rate
+                                  blank and starts the minivan at 1 — and a couple
+                                  is then priced in the smallest vehicle they
+                                  actually own. */}
+                              <div className="flex items-center justify-center gap-1">
+                                <input
+                                  type="number"
+                                  value={row.capacity_min}
+                                  onChange={(e) => setRow({ capacity_min: e.target.value })}
+                                  min="1"
+                                  step="1"
+                                  aria-label={`${vehicleName(key)} minimum pax`}
+                                  className="w-12 px-1 py-1 text-xs text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                                />
+                                <span className="text-xs text-gray-400">–</span>
+                                <input
+                                  type="number"
+                                  value={row.capacity_max}
+                                  onChange={(e) => setRow({ capacity_max: e.target.value })}
+                                  min="1"
+                                  step="1"
+                                  aria-label={`${vehicleName(key)} maximum pax`}
+                                  className="w-12 px-1 py-1 text-xs text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                                />
+                              </div>
+                              {option && bandDiffers && (
+                                <button
+                                  type="button"
+                                  onClick={() => setRow({ capacity_min: String(option.defaultMin), capacity_max: String(option.defaultMax) })}
+                                  className="mt-1 block mx-auto text-[10px] text-amber-700 hover:underline"
+                                  title={t('settingsBandDiffers', { min: option.defaultMin, max: option.defaultMax })}
+                                >
+                                  {t('useSettingsBand', { min: option.defaultMin, max: option.defaultMax })}
+                                </button>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
                               <input
                                 type="number"
-                                value={formData[`${tier.key}_capacity_min` as keyof FormData] as string}
-                                onChange={(e) => setFormData(prev => ({ ...prev, [`${tier.key}_capacity_min`]: e.target.value }))}
-                                min="1"
-                                step="1"
-                                aria-label={`${vehicleLabel(tier.key, t(tier.labelKey))} minimum pax`}
-                                className="w-12 px-1 py-1 text-xs text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                                value={row.rate_eur}
+                                onChange={(e) => setRow({ rate_eur: e.target.value })}
+                                step="0.01"
+                                min="0"
+                                placeholder="—"
+                                className="w-full px-2 py-1 text-sm text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                               />
-                              <span className="text-xs text-gray-400">–</span>
-                              <input
-                                type="number"
-                                value={formData[`${tier.key}_capacity_max` as keyof FormData] as string}
-                                onChange={(e) => setFormData(prev => ({ ...prev, [`${tier.key}_capacity_max`]: e.target.value }))}
-                                min="1"
-                                step="1"
-                                aria-label={`${vehicleLabel(tier.key, t(tier.labelKey))} maximum pax`}
-                                className="w-12 px-1 py-1 text-xs text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                              />
-                            </div>
-                          </td>
-                          <td className="px-3 py-2">
-                            <input
-                              type="number"
-                              value={formData[`${tier.key}_rate_eur` as keyof FormData] as string}
-                              onChange={(e) => setFormData(prev => ({ ...prev, [`${tier.key}_rate_eur`]: e.target.value }))}
-                              step="0.01"
-                              min="0"
-                              placeholder="—"
-                              className="w-full px-2 py-1 text-sm text-center border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                            />
-                          </td>
-
-                        </tr>
-                      ))}
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
-                <p className="text-xs text-gray-400">
-                  Leave the rate empty for a vehicle you do not run — it is then never used to price a trip, and the next vehicle up takes the group. Capacity is yours to set: if you carry couples in a minivan rather than a sedan, start the minivan at 1.
-                </p>
+                <p className="text-xs text-gray-400">{t('vehicleRatesHint')}</p>
               </div>
 
               {/* Validity & Notes */}

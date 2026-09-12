@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   sanitizeVehicles, parseVehicles, vehicleBands, vehicleRateForPax, LEGACY_VEHICLE_BANDS,
+  vehiclesFromBody, legacyColumnsFor, allowedVehicleKeys, unknownVehicleKeys, bodyTouchesVehicles,
 } from '@/lib/rates/vehicle-bands'
 
 const v = (key: string, rate: number, min: number, max: number, nonEur: number | null = null) =>
@@ -95,5 +96,66 @@ describe('vehicleRateForPax — the rule the columns always had', () => {
   })
   it('nothing offered → null', () => {
     expect(vehicleRateForPax({}, 2)).toBeNull()
+  })
+})
+
+describe('vehiclesFromBody — what a write carries', () => {
+  const existing = [v('sedan', 45, 1, 2), v('4x4', 85, 1, 6), v('bus', 140, 21, 45)]
+
+  it('a list replaces the row\'s vehicles', () => {
+    const r = vehiclesFromBody({ vehicles: [v('minivan', 60, 3, 7)] }, existing)
+    expect(r.vehicles?.map(b => b.key)).toEqual(['minivan'])
+  })
+  it('a malformed list is refused, not repaired', () => {
+    expect(vehiclesFromBody({ vehicles: [v('sedan', 45, 3, 2)] }).invalid).toMatch(/min ≤ max/)
+    expect(vehiclesFromBody({ vehicles: 'sedan' }).invalid).toBeTruthy()
+  })
+  it('legacy fields PATCH the row: a vehicle the client does not know survives', () => {
+    // An importer that speaks only sedan…bus re-prices the sedan; the 4x4 priced from the form stays.
+    const r = vehiclesFromBody({ sedan_rate_eur: '50' }, existing)
+    expect(r.vehicles?.map(b => [b.key, b.rate_eur])).toEqual([['sedan', 50], ['4x4', 85], ['bus', 140]])
+    expect(r.vehicles?.[0]).toMatchObject({ capacity_min: 1, capacity_max: 2 }) // band kept from the row
+  })
+  it('a legacy field blanked or zero removes that vehicle, as a blank column always did', () => {
+    expect(vehiclesFromBody({ bus_rate_eur: null }, existing).vehicles?.map(b => b.key)).toEqual(['sedan', '4x4'])
+    expect(vehiclesFromBody({ bus_rate_eur: 0 }, existing).vehicles?.map(b => b.key)).toEqual(['sedan', '4x4'])
+  })
+  it('a legacy vehicle new to the row takes the conventional band unless given one', () => {
+    const r = vehiclesFromBody({ minivan_rate_eur: 60 }, [])
+    expect(r.vehicles?.[0]).toEqual(v('minivan', 60, LEGACY_VEHICLE_BANDS.minivan.min, LEGACY_VEHICLE_BANDS.minivan.max))
+    const withBand = vehiclesFromBody({ minivan_rate_eur: 60, minivan_capacity_min: '1', minivan_capacity_max: '8' }, [])
+    expect(withBand.vehicles?.[0]).toMatchObject({ capacity_min: 1, capacity_max: 8 })
+  })
+  it('no vehicle field at all → nothing to change', () => {
+    expect(vehiclesFromBody({ notes: 'x' }, existing)).toEqual({})
+    expect(bodyTouchesVehicles({ notes: 'x' })).toBe(false)
+    expect(bodyTouchesVehicles({ van_capacity_max: 14 })).toBe(true)
+    expect(bodyTouchesVehicles({ vehicles: [] })).toBe(true)
+  })
+})
+
+describe('legacyColumnsFor — the mirror for readers not yet converted', () => {
+  it('writes the five presets, clears an absent one, leaves a custom vehicle to the list', () => {
+    const cols = legacyColumnsFor([v('sedan', 45, 1, 2, 50), v('4x4', 85, 1, 6)])
+    expect(cols).toMatchObject({
+      sedan_rate_eur: 45, sedan_rate_non_eur: 50, sedan_capacity_min: 1, sedan_capacity_max: 2,
+      bus_rate_eur: null, bus_rate_non_eur: null, bus_capacity_min: LEGACY_VEHICLE_BANDS.bus.min, bus_capacity_max: LEGACY_VEHICLE_BANDS.bus.max,
+    })
+    expect(Object.keys(cols).some(k => k.startsWith('4x4'))).toBe(false)
+  })
+  it('rate_non_eur null mirrors as "same as EUR"', () => {
+    expect(legacyColumnsFor([v('minivan', 60, 3, 7)]).minivan_rate_non_eur).toBe(60)
+  })
+})
+
+describe('allowedVehicleKeys — the agency\'s list, plus what the row already carries', () => {
+  it('the vocabulary when there is one, else the presets', () => {
+    expect([...allowedVehicleKeys(['sedan', 'suv', '4x4'])]).toEqual(['sedan', 'suv', '4x4'])
+    expect([...allowedVehicleKeys([])]).toEqual(['sedan', 'minivan', 'van', 'minibus', 'bus'])
+  })
+  it('a vehicle hidden in Settings stays allowed on a row that prices it', () => {
+    const allowed = allowedVehicleKeys(['sedan'], [v('horse_carriage', 30, 1, 4)])
+    expect(unknownVehicleKeys([v('horse_carriage', 30, 1, 4)], allowed)).toEqual([])
+    expect(unknownVehicleKeys([v('tuk_tuk', 10, 1, 2)], allowed)).toEqual(['tuk_tuk'])
   })
 })

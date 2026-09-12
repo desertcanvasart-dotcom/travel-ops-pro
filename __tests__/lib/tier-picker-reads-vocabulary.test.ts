@@ -95,7 +95,7 @@ const VOCAB_PICKERS: Record<string, string[]> = {
   'app/rates/guides/guide-rates-content.tsx': ['guide_grade', 'guide_duration'],
   'app/rates/attractions/attractions-content.tsx': ['attraction_category', 'attraction_fee_type', 'rate_season'],
   'app/rates/hotels/hotels-content.tsx': ['board_basis', 'hotel_property_type'],
-  'app/rates/transportation/transportation-content.tsx': ['transport_service_type'],
+  'app/rates/transportation/transportation-content.tsx': ['transport_service_type', 'vehicle_type'],
   // Class B — these stored the WORD; the pickers now store the vocabulary key.
   'app/rates/meals/meal-rates-content.tsx': ['meal_type', 'cuisine_type', 'restaurant_type', 'dietary_option'],
   'app/rates/trains/train-rates-content.tsx': ['train_class'],
@@ -125,6 +125,32 @@ describe('vocabulary pickers read the agency list', () => {
     expect(read(join('migrations', baseline))).toMatch(/CONSTRAINT transportation_rates_service_type_check CHECK/)
     const later = migrations.filter(f => f > baseline).map(f => read(join('migrations', f))).join('\n')
     expect(later).toMatch(/DROP CONSTRAINT IF EXISTS transportation_rates_service_type_check\b/)
+  })
+})
+
+// Class C: the routes that write a transportation rate's vehicles resolve
+// them through one helper (a list, or the legacy fields, validated against
+// the agency's vehicle types) — none keeps its own five-name list.
+const VEHICLE_ROUTES = [
+  'app/api/rates/transportation/route.ts',
+  'app/api/rates/transportation/[id]/route.ts',
+  'app/api/resources/transportation/route.ts',
+  'app/api/resources/transportation/[id]/route.ts',
+]
+
+describe('transportation routes write vehicles through the one helper', () => {
+  for (const rel of VEHICLE_ROUTES) {
+    it(`${rel} resolves vehicles with resolveVehicleWrite and carries no five-vehicle list`, () => {
+      const src = read(rel)
+      expect(src.includes('resolveVehicleWrite(')).toBe(true)
+      expect(
+        /\[\s*'sedan',\s*'minivan',\s*'van',\s*'minibus',\s*'bus'\s*\]/.test(src),
+        `${rel} carries a five-vehicle list — an agency-added vehicle can never be priced`
+      ).toBe(false)
+    })
+  }
+  it('the pricing engine has no city-to-vehicle table (Edfu → horse carriage was Egypt in a white-label engine)', () => {
+    expect(/SPECIAL_VEHICLE_CITIES\s*[:=]/.test(read('lib/auto-pricing-service.ts'))).toBe(false)
   })
 })
 

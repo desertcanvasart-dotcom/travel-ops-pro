@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
 import { createServerClient } from '@/lib/supabase-server'
 
 // Actor-attributed service-role client (lib/supabase-actor): rate-table
@@ -8,27 +9,7 @@ import { createServerClient } from '@/lib/supabase-server'
 // 不明なユーザー" to the whole team (audit AUT-H04).
 const supabaseAdmin = createServerClient()
 
-const VEHICLE_TIERS = ['sedan', 'minivan', 'van', 'minibus', 'bus'] as const
-
-// Helper to parse tiered rate fields from request body
-function parseTieredRates(body: any) {
-  const rates: Record<string, any> = {}
-  for (const tier of VEHICLE_TIERS) {
-    if (body[`${tier}_rate_eur`] !== undefined) {
-      rates[`${tier}_rate_eur`] = body[`${tier}_rate_eur`] !== null ? parseFloat(body[`${tier}_rate_eur`]) || null : null
-    }
-    if (body[`${tier}_rate_non_eur`] !== undefined) {
-      rates[`${tier}_rate_non_eur`] = body[`${tier}_rate_non_eur`] !== null ? parseFloat(body[`${tier}_rate_non_eur`]) || null : null
-    }
-    if (body[`${tier}_capacity_min`] !== undefined) {
-      rates[`${tier}_capacity_min`] = body[`${tier}_capacity_min`] !== null ? parseInt(body[`${tier}_capacity_min`]) : null
-    }
-    if (body[`${tier}_capacity_max`] !== undefined) {
-      rates[`${tier}_capacity_max`] = body[`${tier}_capacity_max`] !== null ? parseInt(body[`${tier}_capacity_max`]) : null
-    }
-  }
-  return rates
-}
+// Vehicles are resolved by lib/rates/vehicle-bands-server — see the POST route.
 
 export async function GET(
   request: NextRequest,
@@ -71,10 +52,23 @@ export async function PUT(
       )
     }
 
-    // Parse tiered rates
-    const tieredRates = parseTieredRates(body)
+    // The vehicles this rate offers — merged over the row's own when the
+    // client sends legacy fields, so nothing it does not know is dropped.
+    const { data: currentRow } = await supabaseAdmin
+      .from('transportation_rates')
+      .select('*')
+      .eq('id', id)
+      .single()
+    const vehicleWrite = await resolveVehicleWrite(body, currentRow ?? null)
+    if (!vehicleWrite.ok) {
+      return NextResponse.json({ error: vehicleWrite.error }, { status: 400 })
+    }
+    if (vehicleWrite.patch && vehicleWrite.patch.vehicles.length === 0) {
+      return NextResponse.json({ error: 'At least one vehicle rate is required' }, { status: 400 })
+    }
+    const vehiclePatch = vehicleWrite.patch ?? {}
 
-    // Build non-tier update fields
+    // Build non-vehicle update fields
     const updateData: Record<string, any> = {
       service_code: body.service_code,
       service_type: body.service_type,
@@ -101,7 +95,7 @@ export async function PUT(
       // clients and unmigrated databases are untouched.
       ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
       updated_at: new Date().toISOString(),
-      ...tieredRates
+      ...vehiclePatch
     }
 
     const { data, error } = await supabaseAdmin

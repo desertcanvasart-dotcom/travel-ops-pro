@@ -139,6 +139,88 @@ export function vehicleBands(row: Record<string, unknown>): VehicleBandRate[] {
   return []
 }
 
+const LEGACY_FIELDS = ['rate_eur', 'rate_non_eur', 'capacity_min', 'capacity_max'] as const
+
+export interface VehicleWriteResult {
+  /** The list to store; undefined when the body carried no vehicle field at all. */
+  vehicles?: VehicleBandRate[]
+  /** Why the body cannot be stored, when it cannot. */
+  invalid?: string
+}
+
+/** True when a write carries any vehicle field — the list, or a legacy
+ *  per-vehicle column — so a PUT knows to load the row it is patching. */
+export function bodyTouchesVehicles(body: Record<string, unknown>): boolean {
+  if (body.vehicles !== undefined) return true
+  return LEGACY_VEHICLE_KEYS.some(k => LEGACY_FIELDS.some(f => body[`${k}_${f}`] !== undefined))
+}
+
+/** What a write may carry for vehicles: a `vehicles` list (the form since
+ *  P2), or the legacy per-vehicle fields (older clients, the CSV importer).
+ *  A list REPLACES the row's vehicles. Legacy fields PATCH them — merged
+ *  over `existing`, so a legacy write cannot drop a vehicle it does not know
+ *  (a 4x4 priced from the form survives an importer run that only speaks
+ *  sedan…bus). A legacy field blanked or zero removes that vehicle, as a
+ *  blank column always did. No vehicle field → nothing to change. */
+export function vehiclesFromBody(body: Record<string, unknown>, existing: readonly VehicleBandRate[] = []): VehicleWriteResult {
+  if (body.vehicles !== undefined) {
+    const list = sanitizeVehicles(body.vehicles)
+    if (!list) {
+      return { invalid: 'vehicles must be a list of { key, rate_eur, rate_non_eur, capacity_min, capacity_max } — key a slug, min ≤ max, no duplicate key' }
+    }
+    return { vehicles: list }
+  }
+  const touched = LEGACY_VEHICLE_KEYS.filter(k => LEGACY_FIELDS.some(f => body[`${k}_${f}`] !== undefined))
+  if (touched.length === 0) return {}
+  const byKey = new Map(existing.map(v => [v.key, { ...v }]))
+  for (const k of touched) {
+    const cur = byKey.get(k)
+    const rate = body[`${k}_rate_eur`] !== undefined ? num(body[`${k}_rate_eur`]) : (cur?.rate_eur ?? null)
+    if (rate === null || rate <= 0) { byKey.delete(k); continue }
+    const nonEur = body[`${k}_rate_non_eur`] !== undefined ? num(body[`${k}_rate_non_eur`]) : (cur?.rate_non_eur ?? null)
+    const min = body[`${k}_capacity_min`] !== undefined ? num(body[`${k}_capacity_min`]) : (cur?.capacity_min ?? null)
+    const max = body[`${k}_capacity_max`] !== undefined ? num(body[`${k}_capacity_max`]) : (cur?.capacity_max ?? null)
+    byKey.set(k, {
+      key: k,
+      rate_eur: rate,
+      rate_non_eur: nonEur !== null && nonEur >= 0 ? nonEur : null,
+      capacity_min: min ?? LEGACY_VEHICLE_BANDS[k].min,
+      capacity_max: max ?? LEGACY_VEHICLE_BANDS[k].max,
+    })
+  }
+  const list = sanitizeVehicles([...byKey.values()])
+  if (!list) return { invalid: 'a vehicle band must run from a minimum to a maximum of at least the same size' }
+  return { vehicles: list }
+}
+
+/** The legacy columns a list mirrors into, for readers not yet converted
+ *  (and the CSV exporter). A preset the list does not carry is CLEARED —
+ *  its rate null, its band back to the conventional default — so removing
+ *  a vehicle in the form removes it everywhere. A vehicle beyond the five
+ *  presets lives only in the list. rate_non_eur mirrors "same as EUR". */
+export function legacyColumnsFor(vehicles: readonly VehicleBandRate[]): Record<string, number | null> {
+  const out: Record<string, number | null> = {}
+  for (const k of LEGACY_VEHICLE_KEYS) {
+    const v = vehicles.find(b => b.key === k)
+    out[`${k}_rate_eur`] = v ? v.rate_eur : null
+    out[`${k}_rate_non_eur`] = v ? (v.rate_non_eur ?? v.rate_eur) : null
+    out[`${k}_capacity_min`] = v ? v.capacity_min : LEGACY_VEHICLE_BANDS[k].min
+    out[`${k}_capacity_max`] = v ? v.capacity_max : LEGACY_VEHICLE_BANDS[k].max
+  }
+  return out
+}
+
+/** The keys a write may use: the agency's vehicle vocabulary (the five
+ *  presets when it has none), plus whatever the row already carries — hiding
+ *  a vehicle in Settings never breaks the rows that price it. */
+export function allowedVehicleKeys(vocabularyKeys: readonly string[], existing: readonly VehicleBandRate[] = []): Set<string> {
+  return new Set([...(vocabularyKeys.length ? vocabularyKeys : LEGACY_VEHICLE_KEYS), ...existing.map(v => v.key)])
+}
+
+export function unknownVehicleKeys(vehicles: readonly VehicleBandRate[], allowed: ReadonlySet<string>): string[] {
+  return vehicles.map(v => v.key).filter(k => !allowed.has(k))
+}
+
 /** The vehicle this row prices a group of `pax` in: the band it falls in,
  *  else the smallest vehicle whose maximum still covers it, else the largest
  *  the row offers. Null when the row offers nothing. */
