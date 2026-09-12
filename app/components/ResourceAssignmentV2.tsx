@@ -10,6 +10,8 @@ import {
 import { useTranslations } from 'next-intl'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { getTransportRateForPax, getAllVehicleTiers } from '@/lib/transport-rate-utils'
+import { vehicleKeyLabel } from '@/lib/rates/vehicle-bands'
+import { useVehicleLabel } from '@/hooks/useVehicleLabel'
 import type { VehicleRateResult } from '@/lib/transport-rate-utils'
 
 // Types
@@ -249,6 +251,7 @@ export default function ResourceAssignmentV2({
 }: ResourceAssignmentV2Props) {
   const t = useTranslations('resourceAssignment')
   const dialog = useConfirmDialog()
+  const vehicleLabel = useVehicleLabel()
   const [activeTab, setActiveTab] = useState('guide')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -539,7 +542,7 @@ export default function ResourceAssignmentV2({
         const city = selectedResource.city || ''
         const dest = selectedResource.destination_city ? ` → ${selectedResource.destination_city}` : ''
         const tierLabel = addFormData.vehicle_tier
-          ? addFormData.vehicle_tier.charAt(0).toUpperCase() + addFormData.vehicle_tier.slice(1)
+          ? vehicleLabel(addFormData.vehicle_tier, vehicleKeyLabel(addFormData.vehicle_tier))
           : ''
         const supplier = selectedResource.supplier?.name || selectedResource.supplier_name || ''
 
@@ -1143,7 +1146,7 @@ export default function ResourceAssignmentV2({
                   >
                     {selectedRateTiers.map((tier) => (
                       <option key={tier.tier} value={tier.tier}>
-                        {tier.vehicleType} — EUR {tier.rateEur.toFixed(2)} ({tier.capacityMin}-{tier.capacityMax} pax)
+                        {vehicleLabel(tier.tier, tier.vehicleType)} — EUR {tier.rateEur.toFixed(2)} ({tier.capacityMin}-{tier.capacityMax} pax)
                         {tier.tier === autoSelectedTier?.tier ? ' \u2713 Recommended' : ''}
                       </option>
                     ))}

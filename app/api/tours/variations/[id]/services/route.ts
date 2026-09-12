@@ -1,5 +1,6 @@
 import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
+import { vehicleBands } from '@/lib/rates/vehicle-bands'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
@@ -26,11 +27,13 @@ async function getRateDetails(rateType: string, rateId: string) {
     case 'transportation':
       const { data: transport } = await supabaseAdmin
         .from('transportation_rates')
-        .select('id, service_code, service_type, route_name, city, origin_city, destination_city, sedan_rate_eur, minivan_rate_eur, van_rate_eur, minibus_rate_eur, bus_rate_eur')
+        .select('id, service_code, service_type, route_name, city, origin_city, destination_city, vehicles, sedan_rate_eur, minivan_rate_eur, van_rate_eur, minibus_rate_eur, bus_rate_eur')
         .eq('id', rateId)
         .single()
       if (transport) {
-        const tRates = [transport.sedan_rate_eur, transport.minivan_rate_eur, transport.van_rate_eur, transport.minibus_rate_eur, transport.bus_rate_eur].filter(Boolean) as number[]
+        // The cheapest vehicle the row offers — from the vehicles list, so an
+        // agency-added vehicle counts; the legacy columns are the fallback.
+        const tRates = vehicleBands(transport as unknown as Record<string, unknown>).map(b => b.rate_eur)
         const minTRate = tRates.length > 0 ? Math.min(...tRates) : 0
         result = {
           id: transport.id,

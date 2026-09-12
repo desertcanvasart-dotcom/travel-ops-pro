@@ -8,6 +8,8 @@ import Link from 'next/link'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { hotelPpDouble } from '@/lib/rates/hotel-display-rate'
+import { vehicleBands, vehicleKeyLabel, LEGACY_VEHICLE_KEYS } from '@/lib/rates/vehicle-bands'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
 
 // ============================================
 // INTERFACES
@@ -42,6 +44,8 @@ interface TransportationRate extends BaseRate {
   minibus_rate_non_eur?: number
   bus_rate_eur?: number
   bus_rate_non_eur?: number
+  /** The vehicles list (lib/rates/vehicle-bands) — read first; the columns above are its legacy mirror. */
+  vehicles?: unknown
 }
 
 interface GuideRate extends BaseRate {
@@ -216,6 +220,9 @@ export default function RatesPage() {
   const t = useTranslations('rates.overview')
   const { formatWithConversion, rateCurrency } = useCurrency()
   const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
+  // The transport table's vehicle columns: the agency's vehicle types
+  // (Settings → Vocabulary), the five presets until the vocabulary loads.
+  const vehicleOptions = useVocabOptions('vehicle_type', LEGACY_VEHICLE_KEYS.map(k => ({ value: k, label: vehicleKeyLabel(k) })))
 
   const [rates, setRates] = useState<RatesData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -869,11 +876,9 @@ export default function RatesPage() {
                     <tr>
                       <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.service')}</th>
                       <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.city')}</th>
-                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Sedan</th>
-                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Minivan</th>
-                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Van</th>
-                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Minibus</th>
-                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Bus</th>
+                      {vehicleOptions.map(o => (
+                        <th key={o.value} className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{o.label}</th>
+                      ))}
                       <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{t('table.supplier')}</th>
                     </tr>
                   </thead>
@@ -886,27 +891,20 @@ export default function RatesPage() {
                             {rate.city}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                          {rate.sedan_rate_eur ? formatRateInRowCurrency(Number(rate.sedan_rate_eur), rate, formatRate) : <span className="text-gray-300 font-normal">—</span>}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                          {rate.minivan_rate_eur ? formatRateInRowCurrency(Number(rate.minivan_rate_eur), rate, formatRate) : <span className="text-gray-300 font-normal">—</span>}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                          {rate.van_rate_eur ? formatRateInRowCurrency(Number(rate.van_rate_eur), rate, formatRate) : <span className="text-gray-300 font-normal">—</span>}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                          {rate.minibus_rate_eur ? formatRateInRowCurrency(Number(rate.minibus_rate_eur), rate, formatRate) : <span className="text-gray-300 font-normal">—</span>}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                          {rate.bus_rate_eur ? formatRateInRowCurrency(Number(rate.bus_rate_eur), rate, formatRate) : <span className="text-gray-300 font-normal">—</span>}
-                        </td>
+                        {vehicleOptions.map(o => {
+                          const band = vehicleBands(rate as unknown as Record<string, unknown>).find(b => b.key === o.value)
+                          return (
+                            <td key={o.value} className="px-4 py-3 text-right text-sm font-bold text-green-600">
+                              {band ? formatRateInRowCurrency(band.rate_eur, rate, formatRate) : <span className="text-gray-300 font-normal">—</span>}
+                            </td>
+                          )
+                        })}
                         <td className="px-4 py-3 text-xs text-gray-600">{rate.supplier_name || '-'}</td>
                       </tr>
                     ))}
                     {paginatedRates.transportation.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
+                        <td colSpan={3 + vehicleOptions.length} className="px-4 py-12 text-center text-gray-500">
                           <span className="text-3xl">🚗</span>
                           <p className="text-sm font-medium mt-2">{t('empty.transportation')}</p>
                         </td>

@@ -4,7 +4,7 @@
 // from restructured transportation_rates table
 // ============================================
 
-import { LEGACY_VEHICLE_KEYS, parseVehicles, vehicleBands, vehicleRateForPax, type VehicleBandRate } from '@/lib/rates/vehicle-bands'
+import { LEGACY_VEHICLE_KEYS, parseVehicles, vehicleBands, vehicleKeyLabel, vehicleRateForPax, type VehicleBandRate } from '@/lib/rates/vehicle-bands'
 
 /** A vehicle KEY from Settings → Vocabulary → Vehicle types — one of the
  *  five the legacy columns know, or one the agency added ('4x4'). Open since
@@ -72,7 +72,7 @@ export interface VehicleRateResult {
 
 function toResult(band: VehicleBandRate): VehicleRateResult {
   return {
-    vehicleType: capitalize(band.key),
+    vehicleType: vehicleKeyLabel(band.key),
     rateEur: band.rate_eur,
     rateNonEur: band.rate_non_eur ?? band.rate_eur,
     capacityMin: band.capacity_min,
@@ -134,6 +134,3 @@ export function getAllVehicleTiers(rate: TransportRateRecord | any): VehicleRate
   return vehicleBands(rate).map(toResult)
 }
 
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1)
-}

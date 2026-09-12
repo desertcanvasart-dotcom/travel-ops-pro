@@ -149,6 +149,21 @@ describe('transportation routes write vehicles through the one helper', () => {
       ).toBe(false)
     })
   }
+  // P3: the readers that used to fan a row out over the five columns read the
+  // list through the one reader, so an agency-added vehicle shows where it
+  // is priced.
+  for (const rel of [
+    'app/api/pricing-grid/rates/route.ts',
+    'app/api/rates/available/route.ts',
+    'app/api/tours/variations/[id]/services/route.ts',
+    'app/rates/page.tsx',
+  ]) {
+    it(`${rel} reads a rate's vehicles through vehicleBands`, () => {
+      const src = read(rel)
+      expect(src.includes('vehicleBands(')).toBe(true)
+      expect(/key:\s*'sedan',\s*label:\s*'Sedan'/.test(src), `${rel} still carries its own five-vehicle table`).toBe(false)
+    })
+  }
   it('the pricing engine has no city-to-vehicle table (Edfu → horse carriage was Egypt in a white-label engine)', () => {
     expect(/SPECIAL_VEHICLE_CITIES\s*[:=]/.test(read('lib/auto-pricing-service.ts'))).toBe(false)
   })

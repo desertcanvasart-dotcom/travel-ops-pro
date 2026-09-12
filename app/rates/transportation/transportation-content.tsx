@@ -428,6 +428,45 @@ export default function TransportationContent() {
   // MODAL HANDLERS
   // ============================================
 
+  // Rows whose bands differ from the ones Settings → Vocabulary gives their
+  // vehicles. Aligning them is a deliberate, confirmed sweep — never a
+  // migration's silent rewrite — because a group can fall into a different
+  // vehicle afterwards and the price with it.
+  const rowsOffSettings = rates.filter(r => getActiveTiers(r).some(b => {
+    const o = vehicleOptions.find(x => x.value === b.key)
+    return !!o && (o.defaultMin !== b.capacity_min || o.defaultMax !== b.capacity_max)
+  }))
+
+  const alignBandsWithSettings = async () => {
+    if (rowsOffSettings.length === 0) {
+      await dialog.alert(t('alignBands'), t('alignBandsNone'), 'info')
+      return
+    }
+    const ok = await dialog.confirm({
+      title: t('alignBands'),
+      message: t('alignBandsConfirm', { count: rowsOffSettings.length }),
+      confirmText: t('alignBands'),
+      variant: 'warning',
+    })
+    if (!ok) return
+    let done = 0
+    for (const r of rowsOffSettings) {
+      const vehicles = getActiveTiers(r).map(b => {
+        const o = vehicleOptions.find(x => x.value === b.key)
+        return o ? { ...b, capacity_min: o.defaultMin, capacity_max: o.defaultMax } : b
+      })
+      // The partial-update route: only the vehicles change, nothing else on the row.
+      const res = await fetch('/api/rates/transportation', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: r.id, vehicles }),
+      })
+      if (res.ok) done++
+    }
+    await fetchRates()
+    await dialog.alert(t('alignBands'), t('alignBandsDone', { count: done }), 'success')
+  }
+
   const openAddModal = () => {
     setEditingRate(null)
     setFormData({ ...initialFormData, vehicles: vehicleRowsFor(null, vehicleOptions) })
@@ -718,6 +757,18 @@ export default function TransportationContent() {
         </div>
         <div className="flex items-center gap-2">
           <BulkRateImportExport tableName="transportation_rates" onImportComplete={fetchRates} />
+          <button
+            type="button"
+            onClick={alignBandsWithSettings}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border transition-colors ${
+              rowsOffSettings.length > 0
+                ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+            }`}
+            title={rowsOffSettings.length > 0 ? t('alignBandsConfirm', { count: rowsOffSettings.length }) : t('alignBandsNone')}
+          >
+            {t('alignBands')}{rowsOffSettings.length > 0 ? ` (${rowsOffSettings.length})` : ''}
+          </button>
           <button
             type="button"
             onClick={openAddModal}

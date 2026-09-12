@@ -9,6 +9,8 @@ import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
+import { vehicleBands, vehicleKeyLabel } from '@/lib/rates/vehicle-bands'
+import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
 
 export async function GET(request: NextRequest) {
   try {
@@ -77,49 +79,27 @@ export async function GET(request: NextRequest) {
     }
 
     // Map to RateOption format per slot
-    // Vehicle tiers: each transport row expands into up to 5 options (one per vehicle type)
-    const VEHICLE_TIERS = [
-      { key: 'sedan',   label: 'Sedan',   capMin: 1,  capMax: 2  },
-      { key: 'minivan', label: 'Minivan', capMin: 3,  capMax: 7  },
-      { key: 'van',     label: 'Van',     capMin: 8,  capMax: 12 },
-      { key: 'minibus', label: 'Minibus', capMin: 13, capMax: 20 },
-      { key: 'bus',     label: 'Bus',     capMin: 21, capMax: 45 },
-    ]
+    // Vehicles: each transport row expands into one option per vehicle it
+    // offers — the row's `vehicles` list (an agency-added vehicle included),
+    // else its legacy columns (lib/rates/vehicle-bands). Named in the
+    // agency's own words where Settings → Vocabulary has them.
+    const vehicleWords = new Map((await vocabularyItemsForCurrentOrg('vehicle_type')).map(i => [i.key, i.label]))
+    const vehicleLabel = (key: string) => vehicleWords.get(key) ?? vehicleKeyLabel(key)
 
-    const expandTiers = (r: any, namePrefix: string) => {
-      const tiered = VEHICLE_TIERS
-        .filter(t => toNum(r[`${t.key}_rate_eur`]) > 0)
-        .map(t => ({
-          id: `${r.id}__${t.key}`,
-          name: `${t.label} (${r[`${t.key}_capacity_min`] || t.capMin}-${r[`${t.key}_capacity_max`] || t.capMax} pax) — ${namePrefix}`,
-          rateEur: toNum(r[`${t.key}_rate_eur`]),
-          rateNonEur: toNum(r[`${t.key}_rate_non_eur`] || r[`${t.key}_rate_eur`]),
-          city: r.origin_city || r.city,
-          details: `${t.label} | ${r.service_type}`,
-          capacity_min: r[`${t.key}_capacity_min`] || t.capMin,
-          capacity_max: r[`${t.key}_capacity_max`] || t.capMax,
-          service_type: r.service_type,
-          origin_city: r.origin_city || r.city,
-          destination_city: r.destination_city,
-        }))
-      // Fallback: if no tiered columns, use legacy base_rate_eur for all tiers
-      if (tiered.length === 0 && toNum(r.base_rate_eur) > 0) {
-        return VEHICLE_TIERS.map(t => ({
-          id: `${r.id}__${t.key}`,
-          name: `${t.label} (${t.capMin}-${t.capMax} pax) — ${namePrefix}`,
-          rateEur: toNum(r.base_rate_eur),
-          rateNonEur: toNum(r.base_rate_non_eur || r.base_rate_eur),
-          city: r.origin_city || r.city,
-          details: `${t.label} | ${r.service_type} (legacy rate)`,
-          capacity_min: t.capMin,
-          capacity_max: t.capMax,
-          service_type: r.service_type,
-          origin_city: r.origin_city || r.city,
-          destination_city: r.destination_city,
-        }))
-      }
-      return tiered
-    }
+    const expandTiers = (r: any, namePrefix: string) =>
+      vehicleBands(r).map(b => ({
+        id: `${r.id}__${b.key}`,
+        name: `${vehicleLabel(b.key)} (${b.capacity_min}-${b.capacity_max} pax) — ${namePrefix}`,
+        rateEur: b.rate_eur,
+        rateNonEur: b.rate_non_eur ?? b.rate_eur,
+        city: r.origin_city || r.city,
+        details: `${vehicleLabel(b.key)} | ${r.service_type}`,
+        capacity_min: b.capacity_min,
+        capacity_max: b.capacity_max,
+        service_type: r.service_type,
+        origin_city: r.origin_city || r.city,
+        destination_city: r.destination_city,
+      }))
 
     const rates = {
       route: [
