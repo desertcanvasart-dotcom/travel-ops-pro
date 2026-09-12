@@ -1,5 +1,6 @@
 import { SLEEPING_TRAIN_CABIN_VALUES } from '@/lib/rates/sleeping-train-cabins'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
+import { slugifyKey } from '@/lib/vocabulary'
 /**
  * Bulk Rate Import/Export Service
  * Provides CSV import/export for all rate tables with validation and upsert.
@@ -528,10 +529,14 @@ function parseCell(value: string | undefined | null, colDef: ColumnDef): { parse
     case 'text':
     default: {
       if (colDef.allowedValues && colDef.allowedValues.length > 0) {
-        // Case-insensitive match; on hit, normalize to the canonical spelling
-        // so downstream code never has to .toLowerCase() to look it up.
+        // Case-insensitive match, then slug match ("Half Twin" → half_twin),
+        // so a sheet written in words still lands on the vocabulary KEY the
+        // column stores; on hit, normalize to the canonical spelling so
+        // downstream code never has to .toLowerCase() to look it up.
         const lower = raw.toLowerCase()
+        const slug = slugifyKey(raw)
         const match = colDef.allowedValues.find(v => v.toLowerCase() === lower)
+          ?? colDef.allowedValues.find(v => slugifyKey(v) === slug)
         if (!match) {
           return {
             parsed: null,

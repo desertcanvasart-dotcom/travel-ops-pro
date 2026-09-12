@@ -9,7 +9,8 @@ import Link from 'next/link'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { useTierLabel } from '@/hooks/useTierLabel'
 import { useTierOptions } from '@/hooks/useTierOptions'
-import { defaultTierKey } from '@/lib/vocabulary'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
+import { defaultTierKey, optionsFromLabels } from '@/lib/vocabulary'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useSearchParams } from 'next/navigation'
 import Papa from 'papaparse'
@@ -607,7 +608,9 @@ export default function RestaurantsContent() {
     : '0'
 
   const mealTypesList = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Buffet', 'À la carte']
-  const dietaryOptionsList = ['Vegetarian', 'Vegan', 'Halal', 'Kosher', 'Gluten-Free', 'Dairy-Free']
+  // Stores the vocabulary KEY ('gluten_free'); the words are the built-in
+  // fallback until the agency's list loads.
+  const dietaryOptionsList = useVocabOptions('dietary_option', optionsFromLabels(['Vegetarian', 'Vegan', 'Halal', 'Kosher', 'Gluten-Free', 'Dairy-Free']))
 
   if (loading) {
     return (
@@ -1399,11 +1402,11 @@ export default function RestaurantsContent() {
                   Dietary Options
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                  {dietaryOptionsList.map(option => (
+                  {dietaryOptionsList.map(({ value: option, label: optionLabel }) => (
                     <label key={option} className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={formData.dietary_options.includes(option)} onChange={() => toggleDietaryOption(option)}
                         className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500" />
-                      <span className="text-sm text-gray-700">{dietaryLabel(option, option)}</span>
+                      <span className="text-sm text-gray-700">{optionLabel}</span>
                     </label>
                   ))}
                 </div>

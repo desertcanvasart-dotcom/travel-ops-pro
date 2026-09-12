@@ -9,6 +9,8 @@ import SupplierPicker from '@/components/rates/SupplierPicker'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { SLEEPING_TRAIN_CABINS } from '@/lib/rates/sleeping-train-cabins'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
+import { optionsFromLabels, slugifyKey } from '@/lib/vocabulary'
 import { useSearchParams } from 'next/navigation'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
@@ -48,6 +50,9 @@ const SLEEPER_CITIES = [
 // The two cabins this operator sells — see lib/rates/sleeping-train-cabins.ts.
 const CABIN_TYPES = SLEEPING_TRAIN_CABINS
 
+// WORDS, kept as the built-in fallback. The picker stores the vocabulary KEY
+// ('peak_season' — Settings → Vocabulary → Rate seasons) and lists the
+// agency's entries; older rows hold the word and are read through slugify.
 const SEASONS = [
   'Peak Season',
   'High Season',
@@ -87,6 +92,8 @@ export default function SleepingTrainRatesContent() {
   const t = useTranslations('rates.sleepingTrains')
   const sleeperCabinLabel = useVocabLabel('sleeper_cabin')
   const seasonLabel = useVocabLabel('rate_season')
+  const cabinOptions = useVocabOptions('sleeper_cabin', CABIN_TYPES.map(c => ({ value: c.value, label: t(`cabins.${c.labelKey}`) })))
+  const seasonOptions = useVocabOptions('rate_season', optionsFromLabels(SEASONS))
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
 
@@ -244,7 +251,7 @@ export default function SleepingTrainRatesContent() {
       service_code: rate.service_code || '',
       origin_city: rate.origin_city || '',
       destination_city: rate.destination_city || '',
-      cabin_type: rate.cabin_type || '',
+      cabin_type: slugifyKey(rate.cabin_type || ''),
       rate_oneway_eur: rate.rate_oneway_eur || 0,
       guide_rate: rate.guide_rate ?? '',
       rate_roundtrip_eur: rate.rate_roundtrip_eur || 0,
@@ -253,7 +260,7 @@ export default function SleepingTrainRatesContent() {
       arrival_time: rate.arrival_time || '',
       rate_valid_from: rate.rate_valid_from || today,
       rate_valid_to: rate.rate_valid_to || nextYear,
-      season: rate.season || '',
+      season: slugifyKey(rate.season || ''),
       operator_name: rate.operator_name || '',
       description: rate.description || '',
       supplier_id: rate.supplier_id || '',
@@ -370,7 +377,7 @@ export default function SleepingTrainRatesContent() {
 
     const matchesOrigin = selectedOrigin === '' || rate.origin_city === selectedOrigin
     const matchesDestination = selectedDestination === '' || rate.destination_city === selectedDestination
-    const matchesCabin = selectedCabin === '' || rate.cabin_type === selectedCabin
+    const matchesCabin = selectedCabin === '' || slugifyKey(rate.cabin_type || '') === selectedCabin
     const matchesActive = showInactive || rate.is_active
 
     return matchesSearch && matchesOrigin && matchesDestination && matchesCabin && matchesActive
@@ -616,8 +623,8 @@ export default function SleepingTrainRatesContent() {
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
             <option value="">{t('allCabins')}</option>
-            {CABIN_TYPES.map(cabin => (
-              <option key={cabin.value} value={cabin.value}>{sleeperCabinLabel(cabin.value, t(`cabins.${cabin.labelKey}`))}</option>
+            {cabinOptions.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
 
@@ -1087,8 +1094,8 @@ export default function SleepingTrainRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       <option value="">{t('form.selectCabin')}</option>
-                      {CABIN_TYPES.map(cabin => (
-                        <option key={cabin.value} value={cabin.value}>{sleeperCabinLabel(cabin.value, t(`cabins.${cabin.labelKey}`))}</option>
+                      {cabinOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>
@@ -1101,8 +1108,8 @@ export default function SleepingTrainRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       <option value="">{t('form.selectSeason')}</option>
-                      {SEASONS.map(s => (
-                        <option key={s} value={s}>{seasonLabel(s, s)}</option>
+                      {seasonOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>

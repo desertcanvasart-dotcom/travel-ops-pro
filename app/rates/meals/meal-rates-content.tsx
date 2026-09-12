@@ -9,7 +9,8 @@ import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
 import { useTierOptions } from '@/hooks/useTierOptions'
-import { defaultTierKey } from '@/lib/vocabulary'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
+import { defaultTierKey, optionsFromLabels, slugifyKey } from '@/lib/vocabulary'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -43,6 +44,12 @@ import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-total
 
 // Egyptian cities
 
+// These four lists are WORDS, and the form used to store the word itself
+// ('Lunch', 'Fine Dining'). Since 2026-09 the pickers store the vocabulary
+// KEY ('lunch', 'fine_dining' — Settings → Vocabulary) and list the agency's
+// entries; the words below are the built-in fallback until the vocabulary
+// loads. Rows written before then still hold the word: readers slugify, and
+// migration 20261004 rewrote the stored ones.
 const MEAL_TYPES = [
   'Breakfast',
   'Lunch',
@@ -148,6 +155,10 @@ export default function MealRatesContent() {
   const cuisineTypeLabel = useVocabLabel('cuisine_type')
   const restaurantTypeLabel = useVocabLabel('restaurant_type')
   const dietaryLabel = useVocabLabel('dietary_option')
+  const mealTypeOptions = useVocabOptions('meal_type', optionsFromLabels(MEAL_TYPES))
+  const cuisineOptions = useVocabOptions('cuisine_type', optionsFromLabels(CUISINE_TYPES))
+  const restaurantTypeOptions = useVocabOptions('restaurant_type', optionsFromLabels(RESTAURANT_TYPES))
+  const dietaryOptions = useVocabOptions('dietary_option', optionsFromLabels(DIETARY_OPTIONS))
   const searchParams = useSearchParams()
   const initialSupplierId = searchParams.get('supplier_id') || ''
 
@@ -350,9 +361,11 @@ export default function MealRatesContent() {
     setFormData({
       service_code: rate.service_code || '',
       restaurant_name: rate.restaurant_name || '',
-      meal_type: rate.meal_type || '',
-      cuisine_type: rate.cuisine_type || '',
-      restaurant_type: rate.restaurant_type || '',
+      // Stored as keys since 2026-09; a row that still holds the word opens
+      // under the matching key.
+      meal_type: slugifyKey(rate.meal_type || ''),
+      cuisine_type: slugifyKey(rate.cuisine_type || ''),
+      restaurant_type: slugifyKey(rate.restaurant_type || ''),
       city: rate.city || '',
       base_rate_eur: rate.base_rate_eur || 0,
       base_rate_non_eur: rate.base_rate_non_eur || 0,
@@ -366,7 +379,7 @@ export default function MealRatesContent() {
       // agency-added tier must open under that tier, not as 'standard'.
       tier: (rate.tier || '').trim().toLowerCase() || 'standard',
       meal_category: rate.meal_category || '',
-      dietary_options: rate.dietary_options || [],
+      dietary_options: (rate.dietary_options || []).map((d: string) => slugifyKey(d)),
       per_person_rate: rate.per_person_rate !== false,
       minimum_pax: rate.minimum_pax || 1,
       notes: rate.notes || '',
@@ -495,8 +508,8 @@ export default function MealRatesContent() {
       rate.city?.toLowerCase().includes(searchTerm.toLowerCase())
 
     const matchesCity = selectedCity === '' || rate.city === selectedCity
-    const matchesMealType = selectedMealType === '' || rate.meal_type === selectedMealType
-    const matchesCuisine = selectedCuisine === '' || rate.cuisine_type === selectedCuisine
+    const matchesMealType = selectedMealType === '' || slugifyKey(rate.meal_type || '') === selectedMealType
+    const matchesCuisine = selectedCuisine === '' || slugifyKey(rate.cuisine_type || '') === selectedCuisine
     const matchesTier = selectedTier === '' || (rate.tier || '').toLowerCase() === selectedTier.toLowerCase()
     const matchesSupplier = selectedSupplier === '' || rate.supplier_id === selectedSupplier
     const matchesActive = showInactive || rate.is_active
@@ -747,8 +760,8 @@ export default function MealRatesContent() {
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
             <option value="">{t('allMealTypes')}</option>
-            {MEAL_TYPES.map(type => (
-              <option key={type} value={type}>{mealTypeLabel(type, type)}</option>
+            {mealTypeOptions.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
 
@@ -1177,8 +1190,8 @@ export default function MealRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       <option value="">{t('selectMealType')}</option>
-                      {MEAL_TYPES.map(type => (
-                        <option key={type} value={type}>{mealTypeLabel(type, type)}</option>
+                      {mealTypeOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>
@@ -1191,8 +1204,8 @@ export default function MealRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       <option value="">{t('selectCuisine')}</option>
-                      {CUISINE_TYPES.map(cuisine => (
-                        <option key={cuisine} value={cuisine}>{cuisineTypeLabel(cuisine, cuisine)}</option>
+                      {cuisineOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>
@@ -1205,8 +1218,8 @@ export default function MealRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       <option value="">{t('selectType')}</option>
-                      {RESTAURANT_TYPES.map(type => (
-                        <option key={type} value={type}>{restaurantTypeLabel(type, type)}</option>
+                      {restaurantTypeOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>
@@ -1245,18 +1258,18 @@ export default function MealRatesContent() {
                   {t('dietaryOptions')}
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {DIETARY_OPTIONS.map(option => (
+                  {dietaryOptions.map(o => (
                     <button
-                      key={option}
+                      key={o.value}
                       type="button"
-                      onClick={() => toggleDietaryOption(option)}
+                      onClick={() => toggleDietaryOption(o.value)}
                       className={`px-3 py-1.5 text-sm rounded-lg border-2 font-medium transition-colors ${
-                        formData.dietary_options.includes(option)
+                        formData.dietary_options.includes(o.value)
                           ? 'border-green-600 bg-green-50 text-green-700'
                           : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
                       }`}
                     >
-                      {dietaryLabel(option, option)}
+                      {o.label}
                     </button>
                   ))}
                 </div>

@@ -93,10 +93,17 @@ const VOCAB_PICKERS: Record<string, string[]> = {
   'app/rates/hotel-services/page.tsx': ['hotel_service_type'],
   'app/rates/cruises/page.tsx': ['cruise_cabin'],
   'app/rates/guides/guide-rates-content.tsx': ['guide_grade', 'guide_duration'],
-  'app/rates/attractions/attractions-content.tsx': ['attraction_category', 'attraction_fee_type'],
+  'app/rates/attractions/attractions-content.tsx': ['attraction_category', 'attraction_fee_type', 'rate_season'],
   'app/rates/hotels/hotels-content.tsx': ['board_basis', 'hotel_property_type'],
   'app/rates/transportation/transportation-content.tsx': ['transport_service_type'],
+  // Class B — these stored the WORD; the pickers now store the vocabulary key.
+  'app/rates/meals/meal-rates-content.tsx': ['meal_type', 'cuisine_type', 'restaurant_type', 'dietary_option'],
+  'app/rates/trains/train-rates-content.tsx': ['train_class'],
+  'app/rates/sleeping-train/sleeping-train-rates-content.tsx': ['sleeper_cabin', 'rate_season'],
+  'app/rates/activities/activity-rates-content.tsx': ['activity_category', 'activity_type', 'activity_duration', 'activity_unit'],
+  'app/restaurants/restaurants-content.tsx': ['dietary_option'],
 }
+// attractions' season picker is in TIER_PICKERS' sibling list above (rate_season).
 
 describe('vocabulary pickers read the agency list', () => {
   for (const [rel, kinds] of Object.entries(VOCAB_PICKERS)) {

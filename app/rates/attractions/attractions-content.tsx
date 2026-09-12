@@ -227,6 +227,13 @@ export default function AttractionsContent() {
     'standard', 'free', 'donation', 'included',
   ].map(f => ({ value: f, label: t(`feeTypes.${f}`) })))
   const seasonLabel = useVocabLabel('rate_season')
+  const seasonOptions = useVocabOptions('rate_season', [
+    { value: 'all_year', label: 'All Year' },
+    { value: 'high_season', label: 'High Season' },
+    { value: 'low_season', label: 'Low Season' },
+    { value: 'summer', label: 'Summer' },
+    { value: 'winter', label: 'Winter' },
+  ])
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const dialog = useConfirmDialog()
@@ -611,14 +618,6 @@ export default function AttractionsContent() {
     )
   }
 
-
-  const seasonOptions = [
-    { value: 'all_year', label: 'All Year' },
-    { value: 'high_season', label: 'High Season' },
-    { value: 'low_season', label: 'Low Season' },
-    { value: 'summer', label: 'Summer' },
-    { value: 'winter', label: 'Winter' }
-  ]
 
   return (
     <div className="min-h-screen bg-gray-50">

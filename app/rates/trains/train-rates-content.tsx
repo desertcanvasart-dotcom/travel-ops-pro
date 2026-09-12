@@ -8,6 +8,8 @@ import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
+import { optionsFromLabels, slugifyKey } from '@/lib/vocabulary'
 import { useSearchParams } from 'next/navigation'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
@@ -42,6 +44,9 @@ const TRAIN_CITIES = [
   'Mansoura', 'Port Said', 'Qena', 'Sohag', 'Suez', 'Tanta', 'Zagazig'
 ]
 
+// WORDS, kept as the built-in fallback. The picker stores the vocabulary KEY
+// ('first_class' — Settings → Vocabulary → Train classes) and lists the
+// agency's entries; older rows hold the word and are read through slugify.
 const CLASS_TYPES = [
   'First Class',
   'Second Class AC',
@@ -79,6 +84,7 @@ const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 export default function TrainRatesContent() {
   const t = useTranslations('rates.trains')
   const trainClassLabel = useVocabLabel('train_class')
+  const classOptions = useVocabOptions('train_class', optionsFromLabels(CLASS_TYPES))
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
 
@@ -232,7 +238,7 @@ export default function TrainRatesContent() {
       service_code: rate.service_code || '',
       origin_city: rate.origin_city || '',
       destination_city: rate.destination_city || '',
-      class_type: rate.class_type || '',
+      class_type: slugifyKey(rate.class_type || ''),
       rate_eur: rate.rate_eur || 0,
       guide_rate: rate.guide_rate ?? '',
       rate_currency: rate.rate_currency || '',
@@ -360,7 +366,7 @@ export default function TrainRatesContent() {
 
     const matchesOrigin = selectedOrigin === '' || rate.origin_city === selectedOrigin
     const matchesDestination = selectedDestination === '' || rate.destination_city === selectedDestination
-    const matchesClass = selectedClass === '' || rate.class_type === selectedClass
+    const matchesClass = selectedClass === '' || slugifyKey(rate.class_type || '') === selectedClass
     const matchesActive = showInactive || rate.is_active
 
     return matchesSearch && matchesOrigin && matchesDestination && matchesClass && matchesActive
@@ -606,8 +612,8 @@ export default function TrainRatesContent() {
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
             <option value="">{t('allClasses')}</option>
-            {CLASS_TYPES.map(cls => (
-              <option key={cls} value={cls}>{trainClassLabel(cls, cls)}</option>
+            {classOptions.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
 
@@ -1073,8 +1079,8 @@ export default function TrainRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       <option value="">{t('form.selectClass')}</option>
-                      {CLASS_TYPES.map(cls => (
-                        <option key={cls} value={cls}>{trainClassLabel(cls, cls)}</option>
+                      {classOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>

@@ -605,6 +605,14 @@ export interface VocabOption {
   description: string | null
 }
 
+/** A form's built-in list that was a list of WORDS ("Fine Dining") turned
+ *  into options that store the KEY ("fine_dining") — the vocabulary's key
+ *  for the same word, since the seed was derived by the same slug. Used by
+ *  the forms that stored the label itself until 2026-09. */
+export function optionsFromLabels(labels: readonly string[]): BuiltInOption[] {
+  return labels.map(label => ({ value: slugifyKey(label), label }))
+}
+
 /** The choices a picker offers for one KIND: the agency's active entries in
  *  their order when the vocabulary holds any — so a hide, a reorder or an
  *  added entry in Settings reaches the form — else the form's built-in list.
