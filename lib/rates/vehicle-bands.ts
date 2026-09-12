@@ -229,6 +229,58 @@ export function unknownVehicleKeys(vehicles: readonly VehicleBandRate[], allowed
   return vehicles.map(v => v.key).filter(k => !allowed.has(k))
 }
 
+// ---- Flat sheets (the CSV importer / exporter) ----------------------------
+
+const FLAT_FIELDS = ['rate_eur', 'rate_non_eur', 'capacity_min', 'capacity_max'] as const
+
+/** The vehicles a FLAT sheet row carries: one <key>_rate_eur / _capacity_min /
+ *  _capacity_max column-set per vehicle in `specs` (the agency's sheet). A
+ *  sheet row is the whole list — every vehicle it prices — so this REPLACES,
+ *  where a form's legacy fields patch. A vehicle without a rate is not
+ *  offered; a band the sheet leaves blank is the spec's (Settings). Null
+ *  when a band is malformed. */
+export function vehiclesFromFlatRow(
+  row: Record<string, unknown>,
+  specs: readonly { key: string; min: number; max: number }[],
+): VehicleBandRate[] | null {
+  const raw = specs.map(s => ({
+    key: s.key,
+    rate_eur: row[`${s.key}_rate_eur`],
+    rate_non_eur: row[`${s.key}_rate_non_eur`],
+    capacity_min: num(row[`${s.key}_capacity_min`]) ?? s.min,
+    capacity_max: num(row[`${s.key}_capacity_max`]) ?? s.max,
+  }))
+  return sanitizeVehicles(raw)
+}
+
+/** The FLAT cells for a row's vehicles, for the columns in `specs`: the
+ *  list (else the legacy columns) written out as <key>_rate_eur / _rate_non_eur
+ *  / _capacity_min / _capacity_max. A vehicle the row does not offer exports
+ *  blank; a vehicle the row offers that the sheet has no column for is not
+ *  exported (the sheet is the agency's list — a hidden vehicle stays behind). */
+export function flattenVehicles(
+  row: Record<string, unknown>,
+  specs: readonly { key: string }[],
+): Record<string, number | null> {
+  const bands = vehicleBands(row)
+  const out: Record<string, number | null> = {}
+  for (const s of specs) {
+    const b = bands.find(x => x.key === s.key)
+    out[`${s.key}_rate_eur`] = b ? b.rate_eur : null
+    // Unset stays blank (not mirrored), so a re-import lands the same list.
+    out[`${s.key}_rate_non_eur`] = b ? b.rate_non_eur : null
+    out[`${s.key}_capacity_min`] = b ? b.capacity_min : null
+    out[`${s.key}_capacity_max`] = b ? b.capacity_max : null
+  }
+  return out
+}
+
+/** Remove every <key>_* vehicle cell for these keys — before an upsert, so a
+ *  column the table does not have (a 4x4's) never reaches Postgres. */
+export function stripVehicleFields(row: Record<string, unknown>, keys: readonly string[]): void {
+  for (const k of keys) for (const f of FLAT_FIELDS) delete row[`${k}_${f}`]
+}
+
 /** The vehicle this row prices a group of `pax` in: the band it falls in,
  *  else the smallest vehicle whose maximum still covers it, else the largest
  *  the row offers. Null when the row offers nothing. */

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
-import { RATE_TABLE_CONFIGS, validateImportData, isExampleRow } from '@/lib/bulk-rate-service'
+import { RATE_TABLE_CONFIGS, validateImportData, isExampleRow, transportationConfigFor, vehicleColumnSpecsFor } from '@/lib/bulk-rate-service'
+import { legacyColumnsFor, stripVehicleFields, vehiclesFromFlatRow } from '@/lib/rates/vehicle-bands'
+import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
 import type { ImportResult, ValidationError } from '@/lib/bulk-rate-service'
 import Papa from 'papaparse'
 import { validateRatePayload } from '@/lib/rate-validation'
@@ -39,7 +41,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const config = RATE_TABLE_CONFIGS[table]
+    // The transportation sheet carries a column-set per vehicle in the
+    // agency's vocabulary (a 4x4 defined in Settings has its own columns);
+    // every other table's sheet is fixed.
+    const vehicleSpecs = table === 'transportation_rates'
+      ? vehicleColumnSpecsFor(await vocabularyItemsForCurrentOrg('vehicle_type'))
+      : null
+    const config = vehicleSpecs ? transportationConfigFor(vehicleSpecs) : RATE_TABLE_CONFIGS[table]
 
     // Parse CSV
     const parsed = Papa.parse<Record<string, string>>(csvData, {
@@ -190,6 +198,24 @@ export async function POST(request: NextRequest) {
     // parsedValidRows has already been filtered for unresolved suppliers above
     // and any resolved-by-name rows now carry the canonical supplier_id.
     const rowsToUpsert: Record<string, any>[] = preview.parsedValidRows || []
+
+    // Transportation: fold each row's vehicle cells into its `vehicles` list
+    // (the row's whole list — a sheet row replaces), mirror the presets into
+    // the legacy columns, and drop the cells so a column the table does not
+    // have (a 4x4's) never reaches the upsert.
+    if (vehicleSpecs) {
+      for (const row of rowsToUpsert) {
+        const list = vehiclesFromFlatRow(row, vehicleSpecs)
+        if (!list) {
+          return NextResponse.json(
+            { success: false, error: `Row ${String(row[config.uniqueKey[0]] ?? '')}: a vehicle capacity band must run from a minimum to a maximum of at least the same size` },
+            { status: 400 }
+          )
+        }
+        stripVehicleFields(row, vehicleSpecs.map(s => s.key))
+        Object.assign(row, { vehicles: list, ...legacyColumnsFor(list) })
+      }
+    }
 
     // Rate-entry validation (harness Layer 4): reject the import if any row has
     // a negative / absurd money value, so the engine never reads a bad rate.

@@ -7,6 +7,9 @@ import {
   buildTemplateRow,
 } from '@/lib/bulk-rate-service'
 import Papa from 'papaparse'
+import { transportationConfigFor, vehicleColumnSpecsFor } from '@/lib/bulk-rate-service'
+import { flattenVehicles } from '@/lib/rates/vehicle-bands'
+import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
 
 const supabase = createServerClient()
 
@@ -31,7 +34,12 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const config = RATE_TABLE_CONFIGS[table]
+    // The transportation sheet carries a column-set per vehicle in the
+    // agency's vocabulary; every other table's sheet is fixed.
+    const vehicleSpecs = table === 'transportation_rates'
+      ? vehicleColumnSpecsFor(await vocabularyItemsForCurrentOrg('vehicle_type'))
+      : null
+    const config = vehicleSpecs ? transportationConfigFor(vehicleSpecs) : RATE_TABLE_CONFIGS[table]
     const wantsTemplate = request.nextUrl.searchParams.get('template') === '1'
 
     if (wantsTemplate) {
@@ -97,6 +105,12 @@ export async function GET(request: NextRequest) {
     // returns an empty string for zero rows — no headers either — so exporting
     // an empty rate table handed back a completely blank file, at exactly the
     // moment somebody most needs to see the column names.
+    // Transportation: the row's vehicles list flattens into the sheet's
+    // per-vehicle cells (a 4x4 lives only in the list — without this its
+    // column would export blank).
+    if (vehicleSpecs) {
+      for (const r of data || []) Object.assign(r as Record<string, unknown>, flattenVehicles(r as Record<string, unknown>, vehicleSpecs))
+    }
     const rows = (data || []).map((row: Record<string, unknown>) =>
       headers.map(h => row[h] ?? '')
     )
