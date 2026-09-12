@@ -10,7 +10,7 @@ import { MODEL_GENERATOR } from '@/lib/ai/models'
 import {
   type ServiceTier,
   type ExtractedDay,
-  TIER_DESCRIPTIONS,
+  tierDescription,
   calculateExpectedDays,
   preParseRawItinerary,
 } from '@/lib/ai/parsing-utils'
@@ -218,6 +218,9 @@ export async function generateCreativeItinerary(
     tourName: string
     durationDays: number
     tier: ServiceTier
+    /** The agency's tier keys, lowest to highest — places a custom tier
+     *  against the preset descriptions. Omitted = the four presets. */
+    tierLadder?: readonly string[]
     totalPax: number
     numAdults: number
     numChildren: number
@@ -242,14 +245,14 @@ export async function generateCreativeItinerary(
   }
 ): Promise<any> {
   const {
-    clientName, tourName, durationDays, tier, totalPax, numAdults, numChildren,
+    clientName, tourName, durationDays, tier, tierLadder, totalPax, numAdults, numChildren,
     language, cities, interests, specialRequests, startDate, effectiveCity,
     attractionNames, attractionMenu, contentContext, writingContext, includeLunch, includeDinner, includeAccommodation,
     memoryContext,
   } = params
 
   const prompt = buildCreativePrompt({
-    clientName, tourName, durationDays, tier, totalPax, numAdults, numChildren,
+    clientName, tourName, durationDays, tier, tierLadder, totalPax, numAdults, numChildren,
     language, cities, interests, specialRequests, startDate, effectiveCity,
     attractionNames, attractionMenu, contentContext, writingContext, includeLunch, includeDinner,
     includeAccommodation, memoryContext,
@@ -606,6 +609,7 @@ export function buildCreativePrompt(input: {
   tourName: string
   durationDays: number
   tier: ServiceTier
+  tierLadder?: readonly string[]
   totalPax: number
   numAdults: number
   numChildren: number
@@ -626,7 +630,8 @@ export function buildCreativePrompt(input: {
   /** The destination's framing; omitted = Egypt, byte-identical to before. */
   destination?: DestinationPromptContext
 }): string {
-  const { clientName, tourName, durationDays, tier, totalPax, numAdults, numChildren, language, cities, interests, specialRequests, startDate, effectiveCity, attractionNames, attractionMenu, contentContext, writingContext, includeLunch, includeDinner, includeAccommodation, memoryContext } = input
+  const { clientName, tourName, durationDays, tier, tierLadder, totalPax, numAdults, numChildren, language, cities, interests, specialRequests, startDate, effectiveCity, attractionNames, attractionMenu, contentContext, writingContext, includeLunch, includeDinner, includeAccommodation, memoryContext } = input
+  const tierDesc = tierDescription(tier, tierLadder)
   const d = input.destination ?? egyptPromptContext()
   return `Create a ${durationDays}-day ${d.name} itinerary.
 ${memoryContext ? `\n${memoryContext}\n` : ''}
@@ -639,7 +644,7 @@ CLIENT: ${clientName}
 TOUR: ${tourName}
 DATE: ${startDate}
 TRAVELERS: ${numAdults} adults${numChildren > 0 ? `, ${numChildren} children` : ''}
-TIER: ${tier.toUpperCase()} (${TIER_DESCRIPTIONS[tier]})
+TIER: ${tier.toUpperCase()} (${tierDesc})
 CITIES: ${cities.length > 0 ? cities.join(', ') : effectiveCity}
 ${interests.length > 0 ? `INTERESTS: ${interests.join(', ')}` : ''}
 ${specialRequests.length > 0 ? `SPECIAL REQUESTS: ${specialRequests.join(', ')}` : ''}
@@ -693,7 +698,7 @@ PLANNING GUIDELINES:
 3. Last day typically departure transfer
 4. Group nearby attractions on the same day
 5. Include realistic driving times
-6. For ${tier} tier: ${TIER_DESCRIPTIONS[tier]}
+6. For ${tier} tier: ${tierDesc}
 
 CRUISE TRANSPORT BUNDLE (if cruise days exist):
 On cruise days, the following are INCLUDED in the bundled cruise transport package.

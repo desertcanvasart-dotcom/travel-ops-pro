@@ -46,6 +46,7 @@ import { ratesForTravelDate } from '@/lib/rates/rate-seasons'
 import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
 import { tripAccommodationCost, type NightRates } from '@/lib/pricing/rooming'
 import { resolveAttractions, buildAliasMap } from '@/lib/pricing/attractions'
+import { PRESET_TIERS, presetTierFor } from '@/lib/vocabulary'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -56,7 +57,11 @@ const supabaseAdmin = createClient(
 // TYPES
 // ============================================
 
-export type ServiceTier = 'budget' | 'standard' | 'deluxe' | 'luxury'
+/** A tier KEY from Settings → Vocabulary → Service tiers — one of the four
+ *  presets or one the agency added ("5_star"). The same open type as
+ *  lib/ai/parsing-utils. Rate lookups match the key exactly; position logic
+ *  (getTierCategory) maps it onto the preset ladder with presetTierFor. */
+export type ServiceTier = string
 export type AccommodationType = 'hotel' | 'cruise' | 'none'
 export type MealStatus = 'included' | 'external' | 'none'
 
@@ -443,9 +448,12 @@ export function getAirportCode(city: string): string {
 /**
  * Map tier to hotel category for hotel_staff_rates
  */
-export function getTierCategory(tier: ServiceTier): string {
-  if (tier === 'budget') return 'budget'
-  if (tier === 'luxury') return 'luxury'
+export function getTierCategory(tier: ServiceTier, ladder: readonly string[] = PRESET_TIERS): string {
+  // By rung, not by name: an agency-added top tier ("5_star") is a luxury
+  // category, not the 'standard' it would fall to on a string comparison.
+  const preset = presetTierFor(ladder, tier)
+  if (preset === 'budget') return 'budget'
+  if (preset === 'luxury') return 'luxury'
   return 'standard'  // standard and deluxe both map to standard
 }
 

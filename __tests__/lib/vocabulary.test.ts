@@ -94,7 +94,7 @@ describe('tierOptionsFor — the picker offers the agency ladder, presets only a
   it('an agency-added tier is offered, in ladder order, under its own label', () => {
     const opts = tierOptionsFor(seeded, 'en', i18n)
     expect(opts.map(o => o.value)).toEqual(['budget', 'standard', 'deluxe', 'luxury', '5_star'])
-    expect(opts[4]).toEqual({ value: '5_star', label: '5 star', preset: null })
+    expect(opts[4]).toEqual({ value: '5_star', label: '5 star', preset: null, description: null })
   })
 
   it('a preset key is still recognised as one, so it keeps its colour', () => {

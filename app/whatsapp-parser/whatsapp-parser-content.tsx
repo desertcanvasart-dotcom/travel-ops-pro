@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useTranslations } from 'next-intl'
+import { useTierOptions } from '@/hooks/useTierOptions'
 import { createClient } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
@@ -111,12 +112,17 @@ type InputMode = 'creative' | 'structured'
 // CONSTANTS
 // ============================================
 
-const TIER_OPTIONS = [
-  { value: 'budget', label: 'Budget', icon: null, color: 'gray', description: 'Cost-effective, good value' },
-  { value: 'standard', label: 'Standard', icon: null, color: 'blue', description: 'Comfortable mid-range' },
-  { value: 'deluxe', label: 'Deluxe', icon: Star, color: 'purple', description: 'Superior quality' },
-  { value: 'luxury', label: 'Luxury', icon: Crown, color: 'amber', description: 'Top-tier VIP experience' }
-]
+// The tiers themselves come from Settings → Vocabulary (useTierOptions) — this
+// was a four-entry copy that could never show a tier the agency added. What
+// stays local is the decoration a PRESET carries: its icon, and its i18n
+// label/description keys used when the vocabulary has no word of its own.
+const TIER_ICONS: Record<string, typeof Star> = { deluxe: Star, luxury: Crown }
+const TIER_LABEL_KEYS: Record<string, string> = {
+  budget: 'tierBudget', standard: 'tierStandard', deluxe: 'tierDeluxe', luxury: 'tierLuxury',
+}
+const TIER_DESC_KEYS: Record<string, string> = {
+  budget: 'tierBudgetDesc', standard: 'tierStandardDesc', deluxe: 'tierDeluxeDesc', luxury: 'tierLuxuryDesc',
+}
 
 // UPDATED: New package types
 const PACKAGE_TYPES = [
@@ -175,9 +181,11 @@ const getTierColor = (tier: string) => {
     luxury: { bg: 'bg-amber-50', border: 'border-amber-300', text: 'text-amber-700', ring: 'ring-amber-500' },
     deluxe: { bg: 'bg-purple-50', border: 'border-purple-300', text: 'text-purple-700', ring: 'ring-purple-500' },
     standard: { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-700', ring: 'ring-blue-500' },
-    budget: { bg: 'bg-gray-50', border: 'border-gray-300', text: 'text-gray-700', ring: 'ring-gray-500' }
+    budget: { bg: 'bg-gray-50', border: 'border-gray-300', text: 'text-gray-700', ring: 'ring-gray-500' },
+    // An agency-added tier (Settings → Vocabulary): brand green, not standard's blue.
+    custom: { bg: 'bg-green-50', border: 'border-[#647C47]', text: 'text-green-800', ring: 'ring-[#647C47]' },
   }
-  return colors[tier] || colors.standard
+  return colors[tier] || colors.custom
 }
 
 const parseConversation = (text: string): { sender: 'client' | 'agent'; message: string; highlight?: string[] }[] => {
@@ -850,6 +858,8 @@ function WhatsAppParserContent() {
   const [error, setError] = useState<string | null>(null)
 
   const [selectedTier, setSelectedTier] = useState<string>('standard')
+  // The agency's tiers (Settings → Vocabulary); presets fall back to the i18n words.
+  const tierOptions = useTierOptions(key => t(TIER_LABEL_KEYS[key]))
   // UPDATED: Default to land-package
   const [packageType, setPackageType] = useState<PackageType>('land-package')
   // Guide toggle: true = include guide, false = exclude guide
@@ -1713,20 +1723,17 @@ function WhatsAppParserContent() {
                   </h3>
 
                   <div className="grid grid-cols-4 gap-2">
-                    {TIER_OPTIONS.map((tier) => {
-                      const isSelected = selectedTier === tier.value
-                      const color = getTierColor(tier.value)
-                      const tierLabels: Record<string, { label: string; desc: string }> = {
-                        budget: { label: t('tierBudget'), desc: t('tierBudgetDesc') },
-                        standard: { label: t('tierStandard'), desc: t('tierStandardDesc') },
-                        deluxe: { label: t('tierDeluxe'), desc: t('tierDeluxeDesc') },
-                        luxury: { label: t('tierLuxury'), desc: t('tierLuxuryDesc') },
-                      }
+                    {tierOptions.map((opt) => {
+                      const isSelected = selectedTier === opt.value
+                      const color = getTierColor(opt.value)
+                      const Icon = TIER_ICONS[opt.value]
+                      const descKey = TIER_DESC_KEYS[opt.value]
+                      const desc = opt.description || (descKey ? t(descKey) : '')
                       return (
                         <button
                           type="button"
-                          key={tier.value}
-                          onClick={() => setSelectedTier(tier.value)}
+                          key={opt.value}
+                          onClick={() => setSelectedTier(opt.value)}
                           className={`p-3 rounded-xl border-2 text-left transition-all ${
                             isSelected
                               ? `${color.border} ${color.bg} ring-2 ${color.ring} ring-offset-1`
@@ -1734,10 +1741,10 @@ function WhatsAppParserContent() {
                           }`}
                         >
                           <div className="flex items-center gap-1.5 mb-1">
-                            {tier.icon && <tier.icon className={`w-4 h-4 ${color.text}`} />}
-                            <span className={`text-sm font-semibold ${isSelected ? color.text : 'text-gray-600'}`}>{tierLabels[tier.value]?.label || tier.label}</span>
+                            {Icon && <Icon className={`w-4 h-4 ${color.text}`} />}
+                            <span className={`text-sm font-semibold ${isSelected ? color.text : 'text-gray-600'}`}>{opt.label}</span>
                           </div>
-                          <p className="text-xs text-gray-500">{tierLabels[tier.value]?.desc || tier.description}</p>
+                          {desc && <p className="text-xs text-gray-500">{desc}</p>}
                         </button>
                       )
                     })}

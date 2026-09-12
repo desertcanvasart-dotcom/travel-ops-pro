@@ -16,7 +16,7 @@ import { type PackageType } from '@/lib/package-types'
 import {
   type ServiceTier,
   isValidDate,
-  normalizeTier,
+  resolveRequestedTier,
   calculateExpectedDays,
   determineInputMode,
 } from '@/lib/ai/parsing-utils'
@@ -47,6 +47,8 @@ import { buildInclusionsExclusions, extractItineraryDetails } from '@/lib/inclus
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { createLanguageVersions } from '@/lib/ai/language-versions'
 import { getUserPreferences } from '@/lib/ai/user-preferences'
+import { loadVocabularyForOrg } from '@/lib/vocabulary-server'
+import { activeInOrder } from '@/lib/vocabulary'
 import { applyDayRules } from '@/lib/ai/day-rules-engine'
 import { reconcileWithParserData } from '@/lib/ai/reconciliation'
 import { getMemoriesForPrompt, logAgentRun } from '@/lib/agent-memory'
@@ -283,13 +285,18 @@ export async function POST(request: NextRequest) {
     // ============================================
     const guideLanguage = language || 'English'
     const contentLanguage = 'English'
-    // Tier priority: explicit raw_tier > budget_level > user default
+    // Tier priority: explicit raw_tier > budget_level > user default — each
+    // resolved against the agency's own tier list (Settings → Vocabulary), so
+    // a tier the agency added ("5_star") survives intake instead of
+    // collapsing to 'standard'. The ladder also tells the prompt which preset
+    // description a custom tier is nearest to.
     // Note: budget_level 'standard' IS a valid explicit choice, not a fallback signal
-    const tier: ServiceTier = raw_tier
-      ? normalizeTier(raw_tier)
-      : budget_level
-        ? normalizeTier(budget_level)
-        : userPrefs.default_tier
+    const tierItems = activeInOrder(await loadVocabularyForOrg(supabaseAdmin, orgId, 'tier'))
+    const tierLadder = tierItems.map(i => i.key)
+    const tier: ServiceTier = resolveRequestedTier(
+      { raw_tier, budget_level, default_tier: userPrefs.default_tier },
+      tierItems,
+    )
 
     if (!isValidDate(start_date)) {
       return NextResponse.json(
@@ -474,6 +481,7 @@ export async function POST(request: NextRequest) {
         const cruiseIncExc = buildInclusionsExclusions({
           packageType: effectivePackageType as PackageType,
           tier,
+          tierLadder,
           includeLunch: true,
           includeDinner: true,
           includeAccommodation: true,
@@ -742,6 +750,7 @@ export async function POST(request: NextRequest) {
         tourName: finalTourName,
         durationDays: duration_days,
         tier,
+        tierLadder,
         totalPax,
         numAdults: num_adults,
         numChildren: num_children,
@@ -859,6 +868,7 @@ export async function POST(request: NextRequest) {
     const landIncExc = buildInclusionsExclusions({
       packageType: effectivePackageType as PackageType,
       tier,
+      tierLadder,
       includeLunch: include_lunch,
       includeDinner: include_dinner,
       includeAccommodation: includeAccommodationFinal,
@@ -972,6 +982,7 @@ export async function POST(request: NextRequest) {
     const updatedIncExc = buildInclusionsExclusions({
       packageType: effectivePackageType as PackageType,
       tier,
+      tierLadder,
       includeLunch: include_lunch,
       includeDinner: include_dinner,
       includeAccommodation: includeAccommodationFinal,

@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
+import { useTierOptions } from '@/hooks/useTierOptions'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileSpreadsheet, TrendingUp, AlertCircle, UserPlus, Save, X, CheckCircle2, Building2, User, Mail, Phone, FileText, ChevronDown, ChevronUp, Pencil, Plane, Ship, MapPin, Plus, RotateCcw, Tag, Star } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
@@ -184,6 +185,7 @@ export default function TourPriceCalculator() {
   const { rateSymbol } = useCurrency()
   const t = useTranslations('b2bCalculator')
   const tierLabel = useTierLabel()
+  const tierOptions = useTierOptions(key => t(`tiers.${key}`))
   const guideGradeLabel = useVocabLabel('guide_grade')
   const guideLanguageLabel = useVocabLabel('guide_language')
   const tLeg = useTranslations('travelLeg')
@@ -879,8 +881,8 @@ export default function TourPriceCalculator() {
                   className="w-full px-3 py-2 border rounded-lg bg-white"
                   data-testid="pricing-tier"
                 >
-                  {(['budget', 'standard', 'deluxe', 'luxury'] as const).map(tier => (
-                    <option key={tier} value={tier}>{tierLabel(tier, t(`tiers.${tier}`))}</option>
+                  {tierOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
                 {importedTier && importedTier !== variationTier && (

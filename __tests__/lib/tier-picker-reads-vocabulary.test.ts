@@ -15,22 +15,58 @@ import { join } from 'path'
 const ROOT = join(__dirname, '..', '..')
 const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
 
-const TIER_FORMS = [
+// Where a tier is FILED (rate forms) and where one is ASKED FOR (the quote
+// side: the itinerary editor, the B2B calculator, the pricing grid, the
+// WhatsApp brief, and the user's default in Settings). Each of these carried
+// its own four-entry copy.
+const TIER_PICKERS = [
   'app/rates/hotels/hotels-content.tsx',
   'app/rates/cruises/page.tsx',
+  'app/itineraries/[id]/edit/page.tsx',
+  'app/b2b/calculator/[id]/page.tsx',
+  'app/pricing-grid/components/GridHeader.tsx',
+  'app/whatsapp-parser/whatsapp-parser-content.tsx',
+  'app/settings/page.tsx',
 ]
 
 describe('tier pickers read the vocabulary', () => {
-  for (const rel of TIER_FORMS) {
-    it(`${rel} builds its tier buttons from useTierOptions, not a form-local list`, () => {
+  for (const rel of TIER_PICKERS) {
+    it(`${rel} builds its tier choices from useTierOptions, not a form-local list`, () => {
       const src = read(rel)
-      expect(src.includes('useTierOptions('), `${rel} must build its tier buttons from useTierOptions`).toBe(true)
+      expect(src.includes('useTierOptions('), `${rel} must build its tier choices from useTierOptions`).toBe(true)
       expect(
         /TIER_OPTIONS_CONFIG\.map\(/.test(src),
         `${rel} maps over TIER_OPTIONS_CONFIG — an agency-added tier can never appear`
       ).toBe(false)
+      // SHIP_CATEGORIES on the cruises page is the VESSEL's class
+      // (ship_category, its own column, its own i18n words), not the service
+      // tier — a separate list, tracked here rather than hidden. Every other
+      // four-entry literal in these files is a tier picker in disguise.
+      const withoutShipCategory = src.split('\n').filter(l => !l.includes('SHIP_CATEGORIES')).join('\n')
+      expect(
+        /\[\s*'budget',\s*'standard',\s*'deluxe',\s*'luxury'\s*\]/.test(withoutShipCategory),
+        `${rel} carries a four-entry tier list — an agency-added tier can never appear`
+      ).toBe(false)
     })
   }
+})
+
+describe('a requested tier survives the quote path', () => {
+  it('generate-itinerary resolves the tier against the org vocabulary, not normalizeTier alone', () => {
+    const src = read('app/api/ai/generate-itinerary/route.ts')
+    expect(src.includes('resolveRequestedTier(')).toBe(true)
+    expect(src.includes("loadVocabularyForOrg(supabaseAdmin, orgId, 'tier')")).toBe(true)
+    expect(/const tier: ServiceTier = raw_tier\s*\?\s*normalizeTier/.test(src), 'the collapsing ternary is back').toBe(false)
+  })
+  it('the engine tier types are open keys, not the four-preset union', () => {
+    for (const rel of ['lib/auto-pricing-service.ts', 'lib/ai/parsing-utils.ts', 'app/pricing-grid/types.ts']) {
+      const src = read(rel)
+      expect(
+        /export type (ServiceTier|Tier) = 'budget' \| 'standard' \| 'deluxe' \| 'luxury'/.test(src),
+        `${rel} closes the tier type to the presets — a vocabulary tier cannot be priced`
+      ).toBe(false)
+    }
+  })
 })
 
 describe('the schema does not freeze the tier list', () => {
