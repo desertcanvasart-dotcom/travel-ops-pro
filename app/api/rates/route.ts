@@ -121,6 +121,10 @@ export async function GET(request: NextRequest) {
           supplier_name: rate.supplier_name,
           notes: rate.notes,
           includes: rate.includes,
+          // The vehicles list (lib/rates/vehicle-bands) — an agency-added
+          // vehicle is here and nowhere else; the five columns below are the
+          // mirror of the presets for readers not yet converted.
+          vehicles: rate.vehicles ?? null,
           sedan_rate_eur: rate.sedan_rate_eur,
           minivan_rate_eur: rate.minivan_rate_eur,
           van_rate_eur: rate.van_rate_eur,

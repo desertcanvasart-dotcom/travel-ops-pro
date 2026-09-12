@@ -10,7 +10,17 @@ import { describe, it, expect } from 'vitest'
 import {
   sanitizeVehicles, parseVehicles, vehicleBands, vehicleRateForPax, LEGACY_VEHICLE_BANDS,
   vehiclesFromBody, legacyColumnsFor, allowedVehicleKeys, unknownVehicleKeys, bodyTouchesVehicles,
+  vehicleKeyLabel,
 } from '@/lib/rates/vehicle-bands'
+
+describe('vehicleKeyLabel — a readable word where no vocabulary label is at hand', () => {
+  it('reads presets as before and an agency key as words', () => {
+    expect(['sedan', 'minivan', 'bus'].map(vehicleKeyLabel)).toEqual(['Sedan', 'Minivan', 'Bus'])
+    expect(vehicleKeyLabel('horse_carriage')).toBe('Horse Carriage')
+    expect(vehicleKeyLabel('4x4')).toBe('4x4')
+    expect(vehicleKeyLabel('suv')).toBe('Suv') // the vocabulary label ("SUV") wins wherever it is available
+  })
+})
 
 const v = (key: string, rate: number, min: number, max: number, nonEur: number | null = null) =>
   ({ key, rate_eur: rate, rate_non_eur: nonEur, capacity_min: min, capacity_max: max })

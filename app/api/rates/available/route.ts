@@ -1,5 +1,6 @@
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { clientMessage } from '@/lib/api-errors'
+import { vehicleBands } from '@/lib/rates/vehicle-bands'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
@@ -52,7 +53,7 @@ export async function GET(request: NextRequest) {
       !rate_type || rate_type === 'transportation'
         ? supabaseAdmin
         .from('transportation_rates')
-        .select('id, service_code, service_type, route_name, city, origin_city, destination_city, sedan_rate_eur, minivan_rate_eur, van_rate_eur, minibus_rate_eur, bus_rate_eur, supplier_id, suppliers (name)')
+        .select('id, service_code, service_type, route_name, city, origin_city, destination_city, rate_currency, vehicles, sedan_rate_eur, minivan_rate_eur, van_rate_eur, minibus_rate_eur, bus_rate_eur, supplier_id, suppliers (name)')
         .eq('is_active', true)
         .order('city')
         .order('service_type')
@@ -108,10 +109,12 @@ export async function GET(request: NextRequest) {
     if (r_trans?.data) {
       const data = r_trans.data
         for (const r of data) {
-          // Find the cheapest available tier rate for display
-          const tierRates = [r.sedan_rate_eur, r.minivan_rate_eur, r.van_rate_eur, r.minibus_rate_eur, r.bus_rate_eur].filter(Boolean) as number[]
-          const minRate = tierRates.length > 0 ? Math.min(...tierRates) : 0
-          const tierCount = tierRates.length
+          // The cheapest vehicle the row offers, for display — from the
+          // vehicles list (lib/rates/vehicle-bands), so an agency-added
+          // vehicle counts; the legacy columns are the fallback.
+          const bands = vehicleBands(r as unknown as Record<string, unknown>)
+          const minRate = bands.length > 0 ? Math.min(...bands.map(b => b.rate_eur)) : 0
+          const tierCount = bands.length
 
           rates.push({
             rate_type: 'transportation',

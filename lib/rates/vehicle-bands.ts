@@ -54,6 +54,14 @@ export const LEGACY_VEHICLE_BANDS: Record<LegacyVehicleKey, { min: number; max: 
   bus: { min: 21, max: 45 },
 }
 
+/** A readable word for a vehicle key where no vocabulary label is at hand
+ *  (server code, documents): 'sedan' → 'Sedan', 'horse_carriage' → 'Horse
+ *  Carriage', '4x4' → '4x4'. The agency's own label (useVehicleLabel on the
+ *  client, the vocabulary on the server) is preferred wherever available. */
+export function vehicleKeyLabel(key: string): string {
+  return key.split('_').filter(Boolean).map(w => (/^\d/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ')
+}
+
 const num = (v: unknown): number | null => {
   if (v === null || v === undefined || v === '') return null
   const n = typeof v === 'number' ? v : Number(v)

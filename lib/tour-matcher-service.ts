@@ -401,7 +401,7 @@ export async function getTemplateWithPricing(
         activities:tour_day_activities(
           *,
           entrance:attractions(id, name, entrance_fee_eur, entrance_fee_non_eur),
-          transportation:transportation_rates(id, service_code, service_type, sedan_rate_eur, minivan_rate_eur, van_rate_eur)
+          transportation:transportation_rates(id, service_code, service_type, vehicles, sedan_rate_eur, minivan_rate_eur, van_rate_eur)
         ),
         accommodation:hotel_contacts(id, name, rate_double_eur),
         lunch_meal:restaurant_contacts!lunch_meal_id(id, name, lunch_rate_eur),
