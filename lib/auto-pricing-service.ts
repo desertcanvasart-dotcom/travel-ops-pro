@@ -396,10 +396,11 @@ const AREA_ATTRACTIONS: Record<string, string[]> = {
   ]
 }
 
-// Cities that use special vehicles
-const SPECIAL_VEHICLE_CITIES: Record<string, VehicleType> = {
-  'edfu': 'Horse Carriage'
-}
+// There used to be a city → vehicle table here ('edfu' → 'Horse Carriage').
+// It was a LABEL override only — the rate chosen never depended on it — and
+// it was Egypt written into a white-label engine. A vehicle a city needs is
+// now simply priced on that city's rate rows (transportation_rates.vehicles,
+// keyed by the agency's own vehicle types); the label is the chosen band's.
 
 // NOTE: DEFAULT_RATES (hardcoded per-tier fallback prices) was REMOVED by the
 // pricing correctness harness (Phase 1). A missing DB rate is now recorded as a
@@ -419,10 +420,7 @@ const SPECIAL_VEHICLE_CITIES: Record<string, VehicleType> = {
  * It survives as the fallback text when a rate row has no vehicle_type.
  */
 export function getVehicleTypeByPax(totalPax: number, city?: string): VehicleType {
-  // Check for special vehicle cities first
-  if (city && SPECIAL_VEHICLE_CITIES[city.toLowerCase()]) {
-    return SPECIAL_VEHICLE_CITIES[city.toLowerCase()]
-  }
+  void city // no city has a built-in vehicle any more; the rate rows decide
   
   if (totalPax <= 2) return 'Sedan'
   if (totalPax <= 7) return 'Minivan'
@@ -547,9 +545,10 @@ export function determineTransportNeeds(
     return lines
   }
 
+  // A special vehicle comes only from the day's own transport override above
+  // (day.transport.vehicle_type — the agency's template data), never from the
+  // city: the rate rows carry whatever a city needs.
   const cityLower = day.city.toLowerCase()
-  const useSpecialVehicle = !!SPECIAL_VEHICLE_CITIES[cityLower]
-  const specialVehicleType = SPECIAL_VEHICLE_CITIES[cityLower]
   const hasAttractions = !!(day.attractions && day.attractions.length > 0)
   const attractionCount = day.attractions?.length || 0
   // City change = cities differ AND it's not pure in-cruise movement (the ship
@@ -594,8 +593,7 @@ export function determineTransportNeeds(
           serviceType: sightseeingServiceType(attractionCount),
           duration: sightseeingDuration(attractionCount),
           area: transportArea,
-          useSpecialVehicle,
-          specialVehicleType,
+          useSpecialVehicle: false,
         })
       }
     }
@@ -658,8 +656,7 @@ export function determineTransportNeeds(
       serviceType: sightseeingServiceType(attractionCount),
       duration: sightseeingDuration(attractionCount),
       area: transportArea,
-      useSpecialVehicle,
-      specialVehicleType,
+      useSpecialVehicle: false,
     })
   }
 
