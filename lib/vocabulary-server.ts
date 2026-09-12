@@ -104,6 +104,22 @@ export async function vocabularyItemsForCurrentOrg(kind: VocabularyKind): Promis
   }
 }
 
+/** The request org's supplier types — hidden entries included, each with
+ *  its behaviour — for the routes that widen a "type=hotel" filter to every
+ *  type that behaves as a hotel, or validate the roles a supplier is filed
+ *  under (lib/supplier-types). Empty when there is no org, no vocabulary, or
+ *  no request scope; callers fall back to the built-ins. */
+export async function supplierTypesForCurrentOrg(): Promise<Pick<VocabularyItem, 'key' | 'label' | 'label_ja' | 'behavior' | 'is_active'>[]> {
+  try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return []
+    return (await loadVocabularyForOrg(createServerClient(), orgId, 'supplier_type'))
+      .map(i => ({ key: i.key, label: i.label, label_ja: i.label_ja, behavior: i.behavior, is_active: i.is_active }))
+  } catch {
+    return []
+  }
+}
+
 /** The org's vehicles with their passenger bands, smallest first. Empty when
  *  none exist (callers keep their built-in bands). */
 export async function vehicleBandsForOrg(supabase: Client, orgId: string): Promise<VehicleBand[]> {

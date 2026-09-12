@@ -2,7 +2,7 @@
 
 import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback } from 'react'
-import { SUPPLIER_TYPES as CANONICAL_SUPPLIER_TYPES } from '@/lib/supplier-types'
+import { useSupplierTypes } from '@/hooks/useSupplierTypes'
 import { formatMoney, formatTotals, sumByCurrency } from '@/lib/currency-totals'
 import { useTranslations } from 'next-intl'
 import {
@@ -123,11 +123,10 @@ const CATEGORIES = [
   { value: 'other', label: 'Other', icon: '📦' }
 ]
 
-// Every supplier the operator can buy from, from the one canonical list, plus
-// the one payee that is not a supplier: an authority whose fee is still an
-// expense (visas, permits, the antiquities ticket office).
-const SUPPLIER_TYPES = [
-  ...CANONICAL_SUPPLIER_TYPES.filter(t => t.value !== 'other'),
+// The one payee that is not a supplier: an authority whose fee is still an
+// expense (visas, permits, the antiquities ticket office). Appended to the
+// agency's supplier types inside the page.
+const EXTRA_PAYEE_TYPES = [
   { value: 'government', label: 'Government/Authority' },
   { value: 'other', label: 'Other' },
 ]
@@ -151,6 +150,10 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
 const ITEMS_PER_PAGE = 15
 
 export default function ExpensesPage() {
+  // Every supplier the operator can buy from — the agency's own types
+  // (Settings → Vocabulary) — plus the non-supplier payees above.
+  const agencySupplierTypes = useSupplierTypes()
+  const SUPPLIER_TYPES = [...agencySupplierTypes.options.filter(t => t.value !== 'other'), ...EXTRA_PAYEE_TYPES]
   const t = useTranslations('expenses')
   const dialog = useConfirmDialog()
   const [expenses, setExpenses] = useState<Expense[]>([])

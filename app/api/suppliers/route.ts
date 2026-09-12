@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { buildSupplierInsert } from '@/lib/suppliers/create-payload'
+import { allowedSupplierTypeKeys, supplierTypeKeysMatching, unknownSupplierTypeError, unknownSupplierTypes } from '@/lib/supplier-types'
+import { supplierTypesForCurrentOrg } from '@/lib/vocabulary-server'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,12 +23,13 @@ export async function GET(request: NextRequest) {
     // Support comma-separated types (e.g., type=transport,local_operator,driver).
     // Matched against `types`, the full set of roles a supplier fills — asking
     // `type` alone would hide the driver who also meets clients at the airport.
+    // Each requested type is widened to the agency's own types that BEHAVE
+    // like it (Settings → Vocabulary): the hotel-rate form asks for hotels
+    // and gets the lodges too.
     if (type) {
       const types = type.split(',').map(t => t.trim()).filter(Boolean)
-      if (types.length === 1) {
-        query = query.contains('types', [types[0]])
-      } else if (types.length > 1) {
-        query = query.overlaps('types', types)
+      if (types.length > 0) {
+        query = query.overlaps('types', supplierTypeKeysMatching(types, await supplierTypesForCurrentOrg()))
       }
     }
     
@@ -60,6 +63,14 @@ export async function POST(request: NextRequest) {
     const built = buildSupplierInsert(body)
     if (!built.ok) {
       return NextResponse.json({ error: built.error }, { status: 400 })
+    }
+
+    // The roles must be the agency's (or built-in) supplier types. The
+    // database keeps only the key SHAPE since 20261007; the list is here.
+    const roles: string[] = Array.isArray(built.row.types) ? built.row.types : []
+    const unknown = unknownSupplierTypes(roles, allowedSupplierTypeKeys(await supplierTypesForCurrentOrg()))
+    if (unknown.length > 0) {
+      return NextResponse.json({ error: unknownSupplierTypeError(unknown) }, { status: 400 })
     }
 
     const { data, error } = await supabaseAdmin

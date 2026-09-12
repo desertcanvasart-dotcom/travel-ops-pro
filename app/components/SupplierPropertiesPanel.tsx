@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { useSupplierTypes } from '@/hooks/useSupplierTypes'
 import CityOptions from '@/app/components/CityOptions'
 import { Loader2, Pencil, Plus, Ship, Building2, TrainFront, Trash2, X } from 'lucide-react'
 import {
@@ -50,7 +51,10 @@ const EMPTY = (type: PropertyType): Draft => ({
 
 export default function SupplierPropertiesPanel({ supplierId, supplierRoles }: Props) {
   const t = useTranslations('suppliers')
-  const allowedTypes = propertyTypesForRoles(supplierRoles)
+  // Roles resolve through their BEHAVIOUR: a "Lodge" defined in Settings as
+  // behaving like a hotel gets the hotel Properties tab too.
+  const { behaviourOf } = useSupplierTypes()
+  const allowedTypes = propertyTypesForRoles((supplierRoles ?? []).map(behaviourOf))
   const [properties, setProperties] = useState<SupplierProperty[]>([])
   const [loading, setLoading] = useState(true)
   const [draft, setDraft] = useState<Draft | null>(null)

@@ -17,7 +17,8 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { ArrowLeft, Percent, Search, Edit, Save, X, Check, AlertTriangle, Loader2, Info, TrendingUp, TrendingDown } from 'lucide-react'
-import { supplierTypeLabel, SUPPLIER_TYPES } from '@/lib/supplier-types'
+import { supplierTypeLabel } from '@/lib/supplier-types'
+import { useSupplierTypes } from '@/hooks/useSupplierTypes'
 import { COMMISSION_DIRECTIONS, type CommissionDirection } from '@/lib/suppliers/fields'
 
 interface Supplier {
@@ -43,6 +44,8 @@ function directionOf(s: Supplier): CommissionDirection | null {
 
 export default function CommissionRatesPage() {
   const t = useTranslations('rates.commissions')
+  // The role filter offers the agency's supplier types (Settings → Vocabulary).
+  const supplierTypes = useSupplierTypes()
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -204,7 +207,7 @@ export default function CommissionRatesPage() {
         </select>
         <select value={role} onChange={e => setRole(e.target.value)} className="h-10 px-3 text-sm border border-gray-200 rounded-lg bg-white outline-none">
           <option value="">{t('allRoles')}</option>
-          {SUPPLIER_TYPES.map(st => <option key={st.value} value={st.value}>{st.label}</option>)}
+          {supplierTypes.options.map(st => <option key={st.value} value={st.value}>{st.label}</option>)}
         </select>
         <label className="inline-flex items-center gap-2 text-sm text-gray-700 h-10 px-3 border border-gray-200 rounded-lg bg-white cursor-pointer">
           <input type="checkbox" checked={withRateOnly} onChange={e => setWithRateOnly(e.target.checked)} className="w-4 h-4" />

@@ -58,8 +58,10 @@ export interface SupplierImportPreview {
 
 const norm = (v: unknown) => String(v ?? '').trim()
 
-/** Turn parsed CSV rows into insert payloads, or say per row why not. */
-export function prepareSupplierRows(rows: SupplierCsvRow[]): SupplierImportPreview {
+/** Turn parsed CSV rows into insert payloads, or say per row why not.
+ *  `allowedRoles` is the agency's supplier types (lib/supplier-types
+ *  allowedSupplierTypeKeys); the built-ins when the caller has no org. */
+export function prepareSupplierRows(rows: SupplierCsvRow[], allowedRoles: ReadonlySet<string> = new Set(SUPPLIER_TYPE_VALUES)): SupplierImportPreview {
   const out: SupplierImportPreview = { ready: [], errors: [], exampleRowsSkipped: 0 }
   const seen = new Set<string>()
   rows.forEach((raw, i) => {
@@ -71,7 +73,7 @@ export function prepareSupplierRows(rows: SupplierCsvRow[]): SupplierImportPrevi
 
     const roles = norm(raw.roles ?? raw.types ?? raw.type).split(/[;|,/]/).map(r => r.trim().toLowerCase().replace(/\s+/g, '_')).filter(Boolean)
     if (roles.length === 0) { out.errors.push({ line, name, message: 'Roles is required' }); return }
-    const unknown = roles.filter(r => !(SUPPLIER_TYPE_VALUES as readonly string[]).includes(r))
+    const unknown = roles.filter(r => !allowedRoles.has(r))
     if (unknown.length) { out.errors.push({ line, name, message: `Unknown role: ${unknown.join(', ')}` }); return }
 
     const status = norm(raw.status).toLowerCase() || 'active'
