@@ -8,6 +8,8 @@ import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurre
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
+import { optionsFromLabels, slugifyKey } from '@/lib/vocabulary'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import RateAuditLog from '@/app/components/RateAuditLog'
@@ -43,6 +45,9 @@ import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 // Egyptian cities
 
+// WORDS, kept as the built-in fallback. The pickers store the vocabulary KEY
+// ('water_activities' — Settings → Vocabulary) and list the agency's
+// entries; older rows hold the word and are read through slugify.
 const ACTIVITY_CATEGORIES = [
   'Ancient Sites',
   'Museums',
@@ -160,6 +165,10 @@ export default function ActivityRatesContent() {
   const activityTypeLabel = useVocabLabel('activity_type')
   const activityDurationLabel = useVocabLabel('activity_duration')
   const activityUnitLabel = useVocabLabel('activity_unit')
+  const categoryOptions = useVocabOptions('activity_category', optionsFromLabels(ACTIVITY_CATEGORIES))
+  const typeOptions = useVocabOptions('activity_type', optionsFromLabels(ACTIVITY_TYPES))
+  const durationOptions = useVocabOptions('activity_duration', optionsFromLabels(DURATIONS))
+  const unitOptions = useVocabOptions('activity_unit', optionsFromLabels(UNIT_LABELS))
   const pricingTypeLabel = useVocabLabel('activity_pricing_type')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
@@ -395,15 +404,17 @@ export default function ActivityRatesContent() {
     setFormData({
       service_code: rate.service_code || '',
       activity_name: rate.activity_name || '',
-      activity_category: rate.activity_category || '',
-      activity_type: rate.activity_type || '',
-      duration: rate.duration || '',
+      // Stored as keys since 2026-09; a row that still holds the word opens
+      // under the matching key.
+      activity_category: slugifyKey(rate.activity_category || ''),
+      activity_type: slugifyKey(rate.activity_type || ''),
+      duration: slugifyKey(rate.duration || ''),
       city: rate.city || '',
       base_rate_eur: rate.base_rate_eur || 0,
       base_rate_non_eur: rate.base_rate_non_eur || 0,
       rate_currency: rate.rate_currency || '',
       pricing_type: rate.pricing_type || 'per_person',
-      unit_label: rate.unit_label || '',
+      unit_label: slugifyKey(rate.unit_label || ''),
       tiers: rate.tiers || [],
       min_capacity: rate.min_capacity || 1,
       max_capacity: rate.max_capacity || 99,
@@ -515,7 +526,7 @@ export default function ActivityRatesContent() {
       rate.city?.toLowerCase().includes(searchTerm.toLowerCase())
 
     const matchesCity = selectedCity === '' || rate.city === selectedCity
-    const matchesCategory = selectedCategory === '' || rate.activity_category === selectedCategory
+    const matchesCategory = selectedCategory === '' || slugifyKey(rate.activity_category || '') === selectedCategory
     const matchesSupplier = selectedSupplier === '' || rate.supplier_id === selectedSupplier
     const matchesPricingType = selectedPricingType === '' || rate.pricing_type === selectedPricingType
     const matchesActive = showInactive || rate.is_active
@@ -791,8 +802,8 @@ export default function ActivityRatesContent() {
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
             <option value="">{t('allCategories')}</option>
-            {ACTIVITY_CATEGORIES.map(cat => (
-              <option key={cat} value={cat}>{activityCategoryLabel(cat, cat)}</option>
+            {categoryOptions.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
 
@@ -1194,8 +1205,8 @@ export default function ActivityRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       <option value="">{t('form.selectCategory')}</option>
-                      {ACTIVITY_CATEGORIES.map(cat => (
-                        <option key={cat} value={cat}>{activityCategoryLabel(cat, cat)}</option>
+                      {categoryOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>
@@ -1208,8 +1219,8 @@ export default function ActivityRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       <option value="">{t('form.selectType')}</option>
-                      {ACTIVITY_TYPES.map(type => (
-                        <option key={type} value={type}>{activityTypeLabel(type, type)}</option>
+                      {typeOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>
@@ -1222,8 +1233,8 @@ export default function ActivityRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       <option value="">{t('form.selectDuration')}</option>
-                      {DURATIONS.map(dur => (
-                        <option key={dur} value={dur}>{activityDurationLabel(dur, dur)}</option>
+                      {durationOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>
@@ -1293,8 +1304,8 @@ export default function ActivityRatesContent() {
                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                         >
                           <option value="">{t('form.selectUnit')}</option>
-                          {UNIT_LABELS.map(label => (
-                            <option key={label} value={label}>{activityUnitLabel(label, label)}</option>
+                          {unitOptions.map(o => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
                           ))}
                         </select>
                       </div>

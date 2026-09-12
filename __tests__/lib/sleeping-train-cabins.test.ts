@@ -7,15 +7,19 @@ import { SLEEPING_TRAIN_CABINS, SLEEPING_TRAIN_CABIN_VALUES, normaliseSleepingTr
 
 describe('sleeping-train cabins', () => {
   it('is exactly Single and Half Twin — the two the operator sells', () => {
-    expect(SLEEPING_TRAIN_CABIN_VALUES).toEqual(['Single', 'Half Twin'])
+    expect(SLEEPING_TRAIN_CABIN_VALUES).toEqual(['single', 'half_twin'])
     expect(SLEEPING_TRAIN_CABINS.map(c => c.labelKey)).toEqual(['single', 'halfTwin'])
   })
 
   it('normalises case, spacing and separators', () => {
-    expect(normaliseSleepingTrainCabin('half twin')).toBe('Half Twin')
-    expect(normaliseSleepingTrainCabin('  HALF-TWIN ')).toBe('Half Twin')
-    expect(normaliseSleepingTrainCabin('half_twin')).toBe('Half Twin')
-    expect(normaliseSleepingTrainCabin('single')).toBe('Single')
+    // The stored value is the vocabulary KEY; the words rows used to hold
+    // ('Half Twin', 'Single') still resolve, so old rows read and re-save.
+    expect(normaliseSleepingTrainCabin('half twin')).toBe('half_twin')
+    expect(normaliseSleepingTrainCabin('  HALF-TWIN ')).toBe('half_twin')
+    expect(normaliseSleepingTrainCabin('half_twin')).toBe('half_twin')
+    expect(normaliseSleepingTrainCabin('Half Twin')).toBe('half_twin')
+    expect(normaliseSleepingTrainCabin('single')).toBe('single')
+    expect(normaliseSleepingTrainCabin('Single')).toBe('single')
   })
 
   it('rejects the retired cabins and anything else', () => {

@@ -8,7 +8,7 @@
 // 2026). vocabOptionsFor is the "remap" half: the agency's list when it holds
 // any, the form's built-in list until then.
 import { describe, it, expect } from 'vitest'
-import { vocabOptionsFor } from '@/lib/vocabulary'
+import { vocabOptionsFor, optionsFromLabels } from '@/lib/vocabulary'
 
 const builtIn = [
   { value: 'guide', label: 'i18n:Guide' },
@@ -59,6 +59,14 @@ describe('vocabOptionsFor', () => {
     const opts = vocabOptionsFor(items, 'en', flagged)
     expect(opts.map(o => o.meta.needs_destination)).toEqual([true, true, true])
     expect(vocabOptionsFor([], 'en', flagged).map(o => o.meta.needs_destination)).toEqual([true, false])
+  })
+
+  it('optionsFromLabels turns a list of words into key-storing options that match the seeded keys', () => {
+    // The forms that stored the word: their words slug to exactly the
+    // vocabulary's seeded keys, so old rows and new rows meet on the key.
+    expect(optionsFromLabels(['Lunch', 'Fine Dining', 'Café', 'Gluten-Free', 'Half Twin', 'Half Day (4-5h)', '1.5 hours', 'Shows & Events'])
+      .map(o => o.value)).toEqual(['lunch', 'fine_dining', 'cafe', 'gluten_free', 'half_twin', 'half_day_4_5h', '1_5_hours', 'shows_events'])
+    expect(optionsFromLabels(['Lunch'])[0].label).toBe('Lunch')
   })
 
   it('the description rides along when the agency wrote one', () => {

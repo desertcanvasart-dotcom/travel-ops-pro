@@ -69,7 +69,7 @@ const TALGO_QENA = {
 const WATANIA = 'sup-watania'
 const WATANIA_SINGLE = {
   id: 'row-watania-single', service_code: 'SLP-A',
-  origin_city: 'Giza', destination_city: 'Luxor', cabin_type: 'Single',
+  origin_city: 'Giza', destination_city: 'Luxor', cabin_type: 'single',
   rate_oneway_eur: 120, supplier_id: WATANIA, property_id: 'prop-nile-express',
   operator_name: 'Watania Sleeping Trains',
   rate_valid_from: '2026-09-01', rate_valid_to: '2027-08-31', is_active: true,
@@ -148,7 +148,7 @@ describe('POST /api/rates/trains — the natural key is the full identity of a r
 describe('POST /api/rates/sleeping-trains — same rules, same key shape', () => {
   it('a second train on the same route and cabin inserts; the first keeps its price', async () => {
     const { status, json } = await call(postSleeper, {
-      origin_city: 'Giza', destination_city: 'Luxor', cabin_type: 'Single',
+      origin_city: 'Giza', destination_city: 'Luxor', cabin_type: 'single',
       rate_oneway_eur: 140, supplier_id: WATANIA, property_id: 'prop-other-train',
       rate_valid_from: '2026-09-01', rate_valid_to: '2027-08-31',
     })
@@ -162,7 +162,7 @@ describe('POST /api/rates/sleeping-trains — same rules, same key shape', () =>
 
   it('a different validity period inserts', async () => {
     const { status } = await call(postSleeper, {
-      origin_city: 'Giza', destination_city: 'Luxor', cabin_type: 'Single',
+      origin_city: 'Giza', destination_city: 'Luxor', cabin_type: 'single',
       rate_oneway_eur: 150, supplier_id: WATANIA, property_id: 'prop-nile-express',
       rate_valid_from: '2027-09-01', rate_valid_to: '2028-08-31',
     })
@@ -172,7 +172,7 @@ describe('POST /api/rates/sleeping-trains — same rules, same key shape', () =>
 
   it('an exact duplicate is a 409 and updates nothing', async () => {
     const { status, json } = await call(postSleeper, {
-      origin_city: 'Giza', destination_city: 'Luxor', cabin_type: 'Single',
+      origin_city: 'Giza', destination_city: 'Luxor', cabin_type: 'single',
       rate_oneway_eur: 999, supplier_id: WATANIA, property_id: 'prop-nile-express',
       rate_valid_from: '2026-09-01', rate_valid_to: '2027-08-31',
     })
