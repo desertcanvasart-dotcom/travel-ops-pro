@@ -135,6 +135,7 @@ export function createRateNormalizer(runCurrency: string, deps?: {
     for (const col of RATE_MONETARY_COLUMNS[table]) copy[col] = null
     if (table === 'activity_rates') copy.tiers = null
     if (table === 'accommodation_rates' || table === 'nile_cruises') copy.seasons = null
+    if (table === 'transportation_rates') copy.vehicles = null
     misses.push({ table, id: (row.id as string | number | undefined) ?? null, currency: String(row.rate_currency) })
     return copy as T
   }
@@ -164,6 +165,17 @@ export function createRateNormalizer(runCurrency: string, deps?: {
         t && typeof t === 'object'
           ? { ...t, rate_eur: convertValue((t as Record<string, unknown>).rate_eur, factor), rate_non_eur: convertValue((t as Record<string, unknown>).rate_non_eur, factor) }
           : t
+      )
+    }
+    if (table === 'transportation_rates' && Array.isArray(copy.vehicles)) {
+      // The vehicles list (20261005) is read BEFORE the per-vehicle columns
+      // by lib/rates/vehicle-bands.ts, so it must be converted with them —
+      // an unconverted list handed the engine raw EGP as if it were the run
+      // currency for the 22 minutes this branch was missing (2026-09-12).
+      copy.vehicles = copy.vehicles.map(v =>
+        v && typeof v === 'object'
+          ? { ...v, rate_eur: convertValue((v as Record<string, unknown>).rate_eur, factor), rate_non_eur: convertValue((v as Record<string, unknown>).rate_non_eur, factor) }
+          : v
       )
     }
     return copy as T
