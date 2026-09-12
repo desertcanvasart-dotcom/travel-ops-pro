@@ -7,6 +7,8 @@ import Papa from 'papaparse'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { clientMessage } from '@/lib/api-errors'
 import { prepareSupplierRows, supplierCsvTemplate, type SupplierCsvRow } from '@/lib/suppliers/import-csv'
+import { allowedSupplierTypeKeys } from '@/lib/supplier-types'
+import { supplierTypesForCurrentOrg } from '@/lib/vocabulary-server'
 
 export async function GET(request: NextRequest) {
   if (request.nextUrl.searchParams.get('template') !== '1') {
@@ -30,7 +32,9 @@ export async function POST(request: NextRequest) {
       header: true, skipEmptyLines: true,
       transformHeader: (h: string) => h.trim().toLowerCase().replace(/\s+/g, '_'),
     })
-    const preview = prepareSupplierRows(parsed.data)
+    // Roles are the agency's supplier types (Settings → Vocabulary), the
+    // built-ins included — a "Lodge" row imports once the agency defined it.
+    const preview = prepareSupplierRows(parsed.data, allowedSupplierTypeKeys(await supplierTypesForCurrentOrg()))
 
     const supabase = createActorAdminClient()
     // Which of the ready names are already on file (case-insensitive).

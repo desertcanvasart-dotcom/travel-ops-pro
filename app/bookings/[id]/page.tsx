@@ -42,7 +42,8 @@ import {
   statusChip
 } from '@/types/bookings'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
-import { SUPPLIER_TYPE_GROUPS, supplierTypeLabel } from '@/lib/supplier-types'
+import { supplierTypeGroupsFor, supplierTypeLabel } from '@/lib/supplier-types'
+import { useSupplierTypes } from '@/hooks/useSupplierTypes'
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import AddExpenseFromItinerary from '@/components/AddExpenseFromItinerary'
 import PassengerManifest from '@/components/PassengerManifest'
@@ -59,6 +60,8 @@ type TabType = 'overview' | 'suppliers' | 'payments' | 'passengers' | 'notes'
 export default function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const t = useTranslations('bookings')
+  // The Add Supplier modal offers the agency's supplier types (Settings → Vocabulary), grouped.
+  const supplierTypeGroups = supplierTypeGroupsFor(useSupplierTypes().options)
   const tCommon = useTranslations('common')
 
   const [booking, setBooking] = useState<BookingWithDetails | null>(null)
@@ -911,7 +914,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                   title={t('fields.supplierType')}
                   className="w-full border rounded-lg px-3 py-2"
                 >
-                  {SUPPLIER_TYPE_GROUPS.map(({ group, options }) => (
+                  {supplierTypeGroups.map(({ group, options }) => (
                     <optgroup key={group} label={group}>
                       {options.map(opt => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>

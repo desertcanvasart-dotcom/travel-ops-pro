@@ -8,6 +8,7 @@ import { propertyTypesForRoles } from '@/lib/supplier-properties'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
+import { useSupplierTypes } from '@/hooks/useSupplierTypes'
 import Link from 'next/link'
 import { SUPPLIER_FORM_FIELDS, type SupplierFormField } from '@/lib/suppliers/fields'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -72,7 +73,10 @@ type SortDirection = 'asc' | 'desc'
 // own copy was missing Abu Simbel, among others.
 const EGYPTIAN_CITIES: readonly string[] = EGYPT_CITIES
 
-// Supplier type configuration
+// Supplier type configuration — the icon and colours of the BUILT-IN types.
+// The list a picker offers is the agency's (Settings → Vocabulary → Supplier
+// types, via useSupplierTypes); an agency-added type takes the look of the
+// built-in it behaves like ("Lodge" behaves as a hotel → Building2, blue).
   const TYPE_CONFIG: Record<string, { icon: any; label: string; singular: string; color: string; borderColor: string }> = {
   hotel: { icon: Building2, label: 'Hotels', singular: 'Hotel', color: 'bg-blue-100 text-blue-700', borderColor: 'border-blue-200' },
   transport: { icon: Car, label: 'Transport', singular: 'Transport', color: 'bg-cyan-100 text-cyan-700', borderColor: 'border-cyan-200' },
@@ -91,6 +95,11 @@ const EGYPTIAN_CITIES: readonly string[] = EGYPT_CITIES
   restaurant: { icon: Utensils, label: 'Restaurants', singular: 'Restaurant', color: 'bg-orange-100 text-orange-700', borderColor: 'border-orange-200' },
   shop: { icon: ShoppingBag, label: 'Shops', singular: 'Shop', color: 'bg-rose-100 text-rose-700', borderColor: 'border-rose-200' },
   other: { icon: Briefcase, label: 'Other', singular: 'Supplier', color: 'bg-gray-100 text-gray-700', borderColor: 'border-gray-200' }
+}
+
+/** The built-in type whose look a behaviour borrows. */
+const CONFIG_KEY_FOR_BEHAVIOUR: Record<string, string> = {
+  transport_company: 'transport', airline: 'air_carrier',
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -182,6 +191,9 @@ export default function SuppliersContent() {
   const { rateSymbol } = useCurrency()
   const t = useTranslations('suppliers')
   const supplierTypeLabel = useVocabLabel('supplier_type')
+  // The agency's supplier types — what the role picker offers, what the
+  // filter chips list, and how an added type resolves to a built-in look.
+  const supplierTypes = useSupplierTypes()
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -222,10 +234,10 @@ export default function SuppliersContent() {
 
   useEffect(() => {
     const typeParam = searchParams.get('type')
-    if (typeParam && (typeParam === 'all' || TYPE_CONFIG[typeParam])) {
+    if (typeParam && (typeParam === 'all' || TYPE_CONFIG[typeParam] || supplierTypes.keys.includes(typeParam))) {
       setSelectedType(typeParam)
     }
-  }, [searchParams])
+  }, [searchParams, supplierTypes.keys])
 
   const handleTypeChange = (type: string) => {
     setSelectedType(type)
@@ -323,7 +335,17 @@ export default function SuppliersContent() {
     return sortDirection === 'asc' ? <ChevronUp className="w-3.5 h-3.5 text-primary-600" /> : <ChevronDown className="w-3.5 h-3.5 text-primary-600" />
   }
 
-  const getTypeConfig = (type: string) => TYPE_CONFIG[type] || TYPE_CONFIG.other
+  // A built-in type's own look; an agency-added type borrows the look of the
+  // built-in it behaves like; anything else reads as "other".
+  const getTypeConfig = (type: string) => {
+    if (TYPE_CONFIG[type]) return TYPE_CONFIG[type]
+    const behaviour = supplierTypes.behaviourOf(type)
+    return TYPE_CONFIG[CONFIG_KEY_FOR_BEHAVIOUR[behaviour] ?? behaviour] || TYPE_CONFIG.other
+  }
+  // The plural word on a filter chip: the built-in's, else the agency's label.
+  const typeChipLabel = (type: string) => TYPE_CONFIG[type]?.label ?? supplierTypeLabel(type, getTypeConfig(type).label)
+  // Every type a chip can stand for: the built-ins, then the agency's own.
+  const chipTypes = [...Object.keys(TYPE_CONFIG), ...supplierTypes.keys.filter(k => !TYPE_CONFIG[k])]
 
   const handleAdd = () => {
     const defaultType = selectedType !== 'all' ? selectedType : 'hotel'
@@ -475,7 +497,9 @@ export default function SuppliersContent() {
     const inputClass = 'w-full h-10 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none'
 
     if (field.kind === 'roles') {
-      const roleOptions = Object.keys(TYPE_CONFIG).filter(k => k !== 'other')
+      // The agency's supplier types (Settings → Vocabulary), the built-ins
+      // until they load. "other" is never a role.
+      const roleOptions = (supplierTypes.keys.length ? supplierTypes.keys : Object.keys(TYPE_CONFIG)).filter(k => k !== 'other')
       return (
         <MultiSelect
           options={roleOptions}
@@ -551,7 +575,7 @@ export default function SuppliersContent() {
           <div className="flex items-center justify-between flex-wrap gap-y-2">
             <div>
               <h1 className="text-lg font-semibold text-gray-900">
-                {selectedType === 'all' ? t('allSuppliers') : getTypeConfig(selectedType).label}
+                {selectedType === 'all' ? t('allSuppliers') : typeChipLabel(selectedType)}
               </h1>
               <p className="text-sm text-gray-500">{t('subtitle')}</p>
             </div>
@@ -588,17 +612,17 @@ export default function SuppliersContent() {
             >
               {t('all')} <span className="px-1.5 py-0.5 bg-white/20 rounded-full">{stats.all || 0}</span>
             </button>
-            {Object.entries(TYPE_CONFIG).filter(([key]) => key !== 'other' && stats[key]).map(([key, config]) => (
+            {chipTypes.filter(key => key !== 'other' && stats[key]).map(key => { const config = getTypeConfig(key); return (
               <button
                 key={key}
                 onClick={() => handleTypeChange(key)}
                 className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${selectedType === key ? config.color : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
               >
                 <config.icon className="w-3.5 h-3.5" />
-                {config.label}
+                {typeChipLabel(key)}
                 <span className={`px-1.5 py-0.5 rounded-full ${selectedType === key ? 'bg-white/30' : 'bg-gray-200'}`}>{stats[key] || 0}</span>
               </button>
-            ))}
+            ) })}
           </div>
         </div>
       </div>

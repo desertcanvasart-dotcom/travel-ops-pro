@@ -100,6 +100,12 @@ function makeQuery(rows: Row[], table?: string) {
       )
       return builder
     },
+    overlaps(col: string, arr: unknown[]) {
+      filtered = filtered.filter(
+        (r) => Array.isArray(r[col]) && arr.some((a) => r[col].includes(a))
+      )
+      return builder
+    },
     in(col: string, arr: any[]) {
       filtered = filtered.filter((r) => arr.includes(r[col]))
       return builder

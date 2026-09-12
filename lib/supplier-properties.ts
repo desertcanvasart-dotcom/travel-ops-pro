@@ -24,7 +24,10 @@ export interface SupplierProperty {
   updated_at: string
 }
 
-/** Which property types a supplier's roles imply it can own. */
+/** Which property types a supplier's roles imply it can own. Pass the
+ *  roles' BEHAVIOURS (lib/supplier-types supplierBehaviourOf) so an
+ *  agency-added type that behaves as a hotel owns hotels; the built-in keys
+ *  are their own behaviour, so raw roles still work for those. */
 export function propertyTypesForRoles(types: string[] | null | undefined): PropertyType[] {
   const out = new Set<PropertyType>()
   for (const t of types ?? []) {

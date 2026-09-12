@@ -8,6 +8,8 @@ const supabaseAdmin = createClient(
 )
 
 import { SUPPLIER_WRITABLE_FIELDS } from '@/lib/suppliers/fields'
+import { allowedSupplierTypeKeys, unknownSupplierTypeError, unknownSupplierTypes } from '@/lib/supplier-types'
+import { supplierTypesForCurrentOrg } from '@/lib/vocabulary-server'
 
 // One whitelist with create and the form (lib/suppliers/fields.ts), so a
 // field cannot be shown but silently dropped on save — which is exactly what
@@ -75,6 +77,14 @@ export async function PUT(
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+    }
+
+    // Same rule as create: roles are the agency's supplier types.
+    if (Array.isArray(updateData.types)) {
+      const unknown = unknownSupplierTypes(updateData.types, allowedSupplierTypeKeys(await supplierTypesForCurrentOrg()))
+      if (unknown.length > 0) {
+        return NextResponse.json({ error: unknownSupplierTypeError(unknown) }, { status: 400 })
+      }
     }
 
     const { data, error } = await supabaseAdmin

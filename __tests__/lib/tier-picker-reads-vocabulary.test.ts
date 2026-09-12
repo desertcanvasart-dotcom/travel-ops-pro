@@ -172,6 +172,34 @@ describe('transportation routes write vehicles through the one helper', () => {
       expect(src.includes('transportationConfigFor(')).toBe(true)
     })
   }
+  // Supplier types (20261007): the role picker and every supplier-type
+  // picker read the agency's list; the API widens a type filter by
+  // behaviour; the two word-list CHECKs on suppliers are dropped.
+  for (const rel of [
+    'app/suppliers/suppliers-content.tsx',
+    'app/components/SupplierPropertiesPanel.tsx',
+    'app/itineraries/[id]/edit/page.tsx',
+    'app/expenses/page.tsx',
+    'app/rates/commissions/page.tsx',
+    'app/bookings/[id]/page.tsx',
+  ]) {
+    it(`${rel} reads the agency's supplier types`, () => {
+      expect(read(rel).includes('useSupplierTypes()')).toBe(true)
+    })
+  }
+  it('the suppliers API widens a type filter by behaviour and validates roles against the vocabulary', () => {
+    const list = read('app/api/suppliers/route.ts')
+    expect(list.includes('supplierTypeKeysMatching(')).toBe(true)
+    expect(list.includes('allowedSupplierTypeKeys(')).toBe(true)
+    expect(read('app/api/suppliers/[id]/route.ts').includes('allowedSupplierTypeKeys(')).toBe(true)
+    expect(read('app/api/suppliers/import/route.ts').includes('allowedSupplierTypeKeys(')).toBe(true)
+  })
+  it('the suppliers word-list CHECKs are dropped for key-shape CHECKs', () => {
+    const sql = read('migrations/20261007_supplier_type_vocabulary_check.sql')
+    expect(sql.includes('DROP CONSTRAINT IF EXISTS suppliers_type_check')).toBe(true)
+    expect(sql.includes('DROP CONSTRAINT IF EXISTS suppliers_types_vocab_check')).toBe(true)
+    expect(sql.includes('ADD CONSTRAINT suppliers_type_key_check')).toBe(true)
+  })
   // P4b: the twenty per-vehicle columns are gone (20261006). No app or lib
   // source may name one — a select naming a dropped column fails outright,
   // a write into one fails the upsert. The sheet's <key>_* cells are built

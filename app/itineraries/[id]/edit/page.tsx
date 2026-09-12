@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useTranslations, useLocale } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
+import { useSupplierTypes } from '@/hooks/useSupplierTypes'
 import { useTierOptions } from '@/hooks/useTierOptions'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -261,6 +262,9 @@ export default function ItineraryEditorPage() {
   // The agency's tiers (Settings → Vocabulary); the presets read in caps as before.
   const tierOptions = useTierOptions(key => key.toUpperCase())
   const serviceTypeLabel = useVocabLabel('transport_service_type')
+  // "Sold by" lists every supplier that BEHAVES as a guide — an agency-added
+  // guide type (Settings → Vocabulary) included.
+  const supplierTypes = useSupplierTypes()
   const dialog = useConfirmDialog()
   const [repricing, setRepricing] = useState(false)
 
@@ -1959,7 +1963,7 @@ export default function ItineraryEditorPage() {
                                       >
                                         <option value="">{t('soldByNone')}</option>
                                         {suppliers
-                                          .filter(sp => sp.type === 'guide' || (sp.types || []).includes('guide'))
+                                          .filter(sp => supplierTypes.hasBehaviour(sp, 'guide'))
                                           .map(sp => (
                                             <option key={sp.id} value={sp.id}>{sp.name}{sp.city ? ` (${sp.city})` : ''}</option>
                                           ))}
