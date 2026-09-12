@@ -32,14 +32,9 @@ import { normaliseRateCurrency } from '@/lib/org-rate-currency'
 
 /** Tables that carry a rate_currency column, → their monetary columns. */
 export const RATE_MONETARY_COLUMNS = {
-  transportation_rates: [
-    'base_rate_eur', 'base_rate_non_eur',
-    'sedan_rate_eur', 'sedan_rate_non_eur',
-    'minivan_rate_eur', 'minivan_rate_non_eur',
-    'van_rate_eur', 'van_rate_non_eur',
-    'minibus_rate_eur', 'minibus_rate_non_eur',
-    'bus_rate_eur', 'bus_rate_non_eur',
-  ],
+  // Per-vehicle rates are the `vehicles` JSONB list (converted below); the
+  // twenty per-vehicle columns were dropped by 20261006.
+  transportation_rates: ['base_rate_eur', 'base_rate_non_eur'],
   guide_rates: ['base_rate_eur', 'base_rate_non_eur'],
   meal_rates: ['base_rate_eur', 'base_rate_non_eur'],
   // Discount percentages on entrance_fees are ratios, not money.
@@ -168,10 +163,10 @@ export function createRateNormalizer(runCurrency: string, deps?: {
       )
     }
     if (table === 'transportation_rates' && Array.isArray(copy.vehicles)) {
-      // The vehicles list (20261005) is read BEFORE the per-vehicle columns
-      // by lib/rates/vehicle-bands.ts, so it must be converted with them —
-      // an unconverted list handed the engine raw EGP as if it were the run
-      // currency for the 22 minutes this branch was missing (2026-09-12).
+      // The vehicles list (20261005) is where every per-vehicle rate lives
+      // (lib/rates/vehicle-bands.ts) — an unconverted list handed the engine
+      // raw EGP as if it were the run currency for the 22 minutes this branch
+      // was missing (2026-09-12).
       copy.vehicles = copy.vehicles.map(v =>
         v && typeof v === 'object'
           ? { ...v, rate_eur: convertValue((v as Record<string, unknown>).rate_eur, factor), rate_non_eur: convertValue((v as Record<string, unknown>).rate_non_eur, factor) }

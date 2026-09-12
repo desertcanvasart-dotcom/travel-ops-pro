@@ -44,16 +44,23 @@ async function rowsViaQuery(): Promise<any[]> {
   return data ?? []
 }
 
+// A stored row prices its vehicles in the `vehicles` list (20261005; the
+// per-vehicle columns are gone since 20261006). The POST bodies below still
+// send `sedan_rate_eur` — the older-client body shape the route keeps
+// honouring — which is exactly why these rows must be read through the list.
+const sedan = (rate: number) => [{ key: 'sedan', rate_eur: rate, rate_non_eur: null, capacity_min: 1, capacity_max: 2 }]
+const sedanRate = (row: { vehicles: { rate_eur: number }[] }) => row.vehicles[0].rate_eur
+
 const ASWAN_TOURS: MockTables['transportation_rates'] = [
   {
     id: 't-docks', supplier_id: null, service_type: 'city_tour', service_code: 'ASWAN-NORTH-DOCKS',
     city: 'Aswan', origin_city: null, destination_city: null, duration: 'full_day', area: null,
-    route_name: 'Aswan North Docks', sedan_rate_eur: 40,
+    route_name: 'Aswan North Docks', vehicles: sedan(40),
   },
   {
     id: 't-highdam', supplier_id: null, service_type: 'city_tour', service_code: 'ASWAN-HIGH-DAM-HOTEL',
     city: 'Aswan', origin_city: null, destination_city: null, duration: 'full_day', area: null,
-    route_name: 'Aswan High Dam Hotel', sedan_rate_eur: 55,
+    route_name: 'Aswan High Dam Hotel', vehicles: sedan(55),
   },
 ]
 
@@ -61,12 +68,12 @@ const INTERCITY_VARIANTS: MockTables['transportation_rates'] = [
   {
     id: 't-cai-alex-1', supplier_id: null, service_type: 'intercity', service_code: 'CAI-ALEX-DIRECT',
     city: null, origin_city: 'Cairo', destination_city: 'Alexandria', duration: null, area: null,
-    sedan_rate_eur: 120,
+    vehicles: sedan(120),
   },
   {
     id: 't-cai-alex-2', supplier_id: null, service_type: 'intercity', service_code: 'CAI-ALEX-VIA-WADI',
     city: null, origin_city: 'Cairo', destination_city: 'Alexandria', duration: null, area: null,
-    sedan_rate_eur: 150,
+    vehicles: sedan(150),
   },
 ]
 
@@ -89,8 +96,8 @@ describe('POST /api/rates/transportation — service_code is part of the natural
     const rows = await rowsViaQuery()
     expect(rows).toHaveLength(3)
     // The pre-existing named routes keep their own rates.
-    expect(rows.find((r) => r.id === 't-docks').sedan_rate_eur).toBe(40)
-    expect(rows.find((r) => r.id === 't-highdam').sedan_rate_eur).toBe(55)
+    expect(sedanRate(rows.find((r) => r.id === 't-docks'))).toBe(40)
+    expect(sedanRate(rows.find((r) => r.id === 't-highdam'))).toBe(55)
   })
 
   it('refuses an exact duplicate (case-insensitive service_code) with the existing row — never updates', async () => {
@@ -106,9 +113,9 @@ describe('POST /api/rates/transportation — service_code is part of the natural
     const rows = await rowsViaQuery()
     expect(rows).toHaveLength(2)
     // The original keeps its rate: a create never rewrites a row.
-    expect(rows.find((r) => r.id === 't-highdam').sedan_rate_eur).toBe(55)
+    expect(sedanRate(rows.find((r) => r.id === 't-highdam'))).toBe(55)
     // The sibling named route is untouched.
-    expect(rows.find((r) => r.id === 't-docks').sedan_rate_eur).toBe(40)
+    expect(sedanRate(rows.find((r) => r.id === 't-docks'))).toBe(40)
   })
 
   it('inserts a new intercity variant alongside existing same-city-pair variants', async () => {
@@ -123,8 +130,8 @@ describe('POST /api/rates/transportation — service_code is part of the natural
     expect(json.updated).toBe(false)
     const rows = await rowsViaQuery()
     expect(rows).toHaveLength(3)
-    expect(rows.find((r) => r.id === 't-cai-alex-1').sedan_rate_eur).toBe(120)
-    expect(rows.find((r) => r.id === 't-cai-alex-2').sedan_rate_eur).toBe(150)
+    expect(sedanRate(rows.find((r) => r.id === 't-cai-alex-1'))).toBe(120)
+    expect(sedanRate(rows.find((r) => r.id === 't-cai-alex-2'))).toBe(150)
   })
 
   it('refuses to overwrite the intercity variant whose service_code matches', async () => {
@@ -139,8 +146,8 @@ describe('POST /api/rates/transportation — service_code is part of the natural
     expect(json.existing.id).toBe('t-cai-alex-2')
     const rows = await rowsViaQuery()
     expect(rows).toHaveLength(2)
-    expect(rows.find((r) => r.id === 't-cai-alex-2').sedan_rate_eur).toBe(150)
-    expect(rows.find((r) => r.id === 't-cai-alex-1').sedan_rate_eur).toBe(120)
+    expect(sedanRate(rows.find((r) => r.id === 't-cai-alex-2'))).toBe(150)
+    expect(sedanRate(rows.find((r) => r.id === 't-cai-alex-1'))).toBe(120)
   })
 
   it('still detects the duplicate when no service_code is sent and the generated code matches — and refuses it', async () => {
@@ -150,7 +157,7 @@ describe('POST /api/rates/transportation — service_code is part of the natural
         {
           id: 't-generated', supplier_id: null, service_type: 'city_tour', service_code: 'ASWAN-FULL-CTOUR',
           city: 'Aswan', origin_city: null, destination_city: null, duration: 'full_day', area: null,
-          sedan_rate_eur: 45,
+          vehicles: sedan(45),
         },
       ],
       suppliers: [],
@@ -164,6 +171,6 @@ describe('POST /api/rates/transportation — service_code is part of the natural
     expect(json.existing.id).toBe('t-generated')
     const rows = await rowsViaQuery()
     expect(rows).toHaveLength(1)
-    expect(rows[0].sedan_rate_eur).toBe(45)
+    expect(sedanRate(rows[0])).toBe(45)
   })
 })

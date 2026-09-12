@@ -12,7 +12,7 @@ import {
   RATE_TABLE_CONFIGS, PRESET_VEHICLE_COLUMNS, transportationConfigFor, vehicleColumnSpecsFor,
   getTemplateHeaders, getExportHeaders, buildTemplateRow,
 } from '@/lib/bulk-rate-service'
-import { vehiclesFromFlatRow, flattenVehicles, stripVehicleFields, legacyColumnsFor } from '@/lib/rates/vehicle-bands'
+import { vehiclesFromFlatRow, flattenVehicles, stripVehicleFields } from '@/lib/rates/vehicle-bands'
 
 const agency = vehicleColumnSpecsFor([
   { key: 'sedan', label: 'Sedan', meta: { min_pax: 1, max_pax: 2 } },
@@ -60,14 +60,12 @@ describe('a sheet row ↔ the vehicles list', () => {
       { key: '4x4', rate_eur: 85, rate_non_eur: null, capacity_min: 1, capacity_max: 5 },
     ])
   })
-  it('strips the cells so an unknown column never reaches the upsert, and mirrors the presets', () => {
+  it('strips every vehicle cell so none reaches the upsert — the table has no per-vehicle column (20261006)', () => {
     const row: Record<string, unknown> = { service_code: 'LXR-1', sedan_rate_eur: 45, '4x4_rate_eur': 85, '4x4_capacity_min': 1, '4x4_capacity_max': 6 }
     const list = vehiclesFromFlatRow(row, agency)!
     stripVehicleFields(row, agency.map(s => s.key))
-    Object.assign(row, { vehicles: list, ...legacyColumnsFor(list) })
-    expect(Object.keys(row).some(k => k.startsWith('4x4_'))).toBe(false)
-    expect(row.sedan_rate_eur).toBe(45)
-    expect(row.sedan_rate_non_eur).toBe(45)
+    row.vehicles = list
+    expect(Object.keys(row).sort()).toEqual(['service_code', 'vehicles'])
     expect((row.vehicles as { key: string }[]).map(v => v.key)).toEqual(['sedan', '4x4'])
   })
   it('flattens a list back into the sheet\'s cells and round-trips', () => {

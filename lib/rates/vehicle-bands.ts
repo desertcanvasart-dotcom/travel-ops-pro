@@ -10,12 +10,12 @@
 // Since 20261005 the row carries `vehicles` — a JSONB LIST of
 //   { key, rate_eur, rate_non_eur, capacity_min, capacity_max }
 // keyed by the vocabulary vehicle key, the shape `seasons` took when rate
-// periods stopped being fixed columns. The legacy columns stay for the CSV
-// importer and for readers not yet converted; writers mirror the five preset
-// keys into them during the transition.
+// periods stopped being fixed columns. The twenty columns were dropped by
+// 20261006; the five preset keys and their conventional bands survive only
+// as the defaults an install without a vehicle vocabulary starts from.
 //
-// This module is the ONE reader: vehicleBands(row) understands the list, the
-// legacy columns, and the oldest single-rate rows, in that order. The
+// This module is the ONE reader: vehicleBands(row) understands the list and
+// the oldest single-rate rows, in that order. The
 // chooser is lib/vocabulary's vehicleForPax — the same rule
 // getTransportRateForPax always applied (exact band, else the smallest
 // vehicle whose maximum covers the group, else the largest).
@@ -42,11 +42,12 @@ export interface VehicleBandRate {
   capacity_max: number
 }
 
-/** The five vehicles the legacy columns know, and the bands the columns
- *  default to (the values every production row carried on 2026-09-12). */
-export const LEGACY_VEHICLE_KEYS = ['sedan', 'minivan', 'van', 'minibus', 'bus'] as const
-export type LegacyVehicleKey = (typeof LEGACY_VEHICLE_KEYS)[number]
-export const LEGACY_VEHICLE_BANDS: Record<LegacyVehicleKey, { min: number; max: number }> = {
+/** The five preset vehicles and their conventional bands — what the dropped
+ *  columns defaulted to (every production row carried these on 2026-09-12),
+ *  and what an install without a vehicle vocabulary starts from. */
+export const PRESET_VEHICLE_KEYS = ['sedan', 'minivan', 'van', 'minibus', 'bus'] as const
+export type PresetVehicleKey = (typeof PRESET_VEHICLE_KEYS)[number]
+export const PRESET_VEHICLE_BANDS: Record<PresetVehicleKey, { min: number; max: number }> = {
   sedan: { min: 1, max: 2 },
   minivan: { min: 3, max: 7 },
   van: { min: 8, max: 12 },
@@ -112,27 +113,11 @@ export function parseVehicles(value: unknown): VehicleBandRate[] | null {
 }
 
 /** The vehicles this row offers, sorted smallest band first — from the
- *  `vehicles` list when the row has one, else the five legacy column-sets,
- *  else the oldest shape (one base_rate for one vehicle_type). Empty when
- *  the row prices nothing. */
+ *  `vehicles` list when the row has one, else the oldest shape (one
+ *  base_rate for one vehicle_type). Empty when the row prices nothing. */
 export function vehicleBands(row: Record<string, unknown>): VehicleBandRate[] {
   const listed = parseVehicles(row.vehicles)
   if (listed) return listed
-
-  const fromColumns: VehicleBandRate[] = []
-  for (const key of LEGACY_VEHICLE_KEYS) {
-    const rate = num(row[`${key}_rate_eur`])
-    if (rate === null || rate <= 0) continue
-    const nonEur = num(row[`${key}_rate_non_eur`])
-    fromColumns.push({
-      key,
-      rate_eur: rate,
-      rate_non_eur: nonEur,
-      capacity_min: num(row[`${key}_capacity_min`]) ?? LEGACY_VEHICLE_BANDS[key].min,
-      capacity_max: num(row[`${key}_capacity_max`]) ?? LEGACY_VEHICLE_BANDS[key].max,
-    })
-  }
-  if (fromColumns.length > 0) return fromColumns.sort(byBand)
 
   const base = num(row.base_rate_eur)
   if (base !== null && base > 0) {
@@ -147,7 +132,9 @@ export function vehicleBands(row: Record<string, unknown>): VehicleBandRate[] {
   return []
 }
 
-const LEGACY_FIELDS = ['rate_eur', 'rate_non_eur', 'capacity_min', 'capacity_max'] as const
+// The four cells a vehicle has in a FLAT shape — a write body's
+// <preset>_rate_eur fields, a CSV sheet's <key>_* columns.
+const FLAT_FIELDS = ['rate_eur', 'rate_non_eur', 'capacity_min', 'capacity_max'] as const
 
 export interface VehicleWriteResult {
   /** The list to store; undefined when the body carried no vehicle field at all. */
@@ -156,19 +143,20 @@ export interface VehicleWriteResult {
   invalid?: string
 }
 
-/** True when a write carries any vehicle field — the list, or a legacy
- *  per-vehicle column — so a PUT knows to load the row it is patching. */
+/** True when a write carries any vehicle field — the list, or a preset's
+ *  per-vehicle field — so a PUT knows to load the row it is patching. */
 export function bodyTouchesVehicles(body: Record<string, unknown>): boolean {
   if (body.vehicles !== undefined) return true
-  return LEGACY_VEHICLE_KEYS.some(k => LEGACY_FIELDS.some(f => body[`${k}_${f}`] !== undefined))
+  return PRESET_VEHICLE_KEYS.some(k => FLAT_FIELDS.some(f => body[`${k}_${f}`] !== undefined))
 }
 
 /** What a write may carry for vehicles: a `vehicles` list (the form since
- *  P2), or the legacy per-vehicle fields (older clients, the CSV importer).
- *  A list REPLACES the row's vehicles. Legacy fields PATCH them — merged
- *  over `existing`, so a legacy write cannot drop a vehicle it does not know
- *  (a 4x4 priced from the form survives an importer run that only speaks
- *  sedan…bus). A legacy field blanked or zero removes that vehicle, as a
+ *  P2), or the per-vehicle fields of the five presets (the body shape older
+ *  clients send — the columns they were named for are gone, the shape is
+ *  still honoured). A list REPLACES the row's vehicles. Preset fields PATCH
+ *  them — merged over `existing`, so such a write cannot drop a vehicle it
+ *  does not know (a 4x4 priced from the form survives a client that only
+ *  speaks sedan…bus). A field blanked or zero removes that vehicle, as a
  *  blank column always did. No vehicle field → nothing to change. */
 export function vehiclesFromBody(body: Record<string, unknown>, existing: readonly VehicleBandRate[] = []): VehicleWriteResult {
   if (body.vehicles !== undefined) {
@@ -178,7 +166,7 @@ export function vehiclesFromBody(body: Record<string, unknown>, existing: readon
     }
     return { vehicles: list }
   }
-  const touched = LEGACY_VEHICLE_KEYS.filter(k => LEGACY_FIELDS.some(f => body[`${k}_${f}`] !== undefined))
+  const touched = PRESET_VEHICLE_KEYS.filter(k => FLAT_FIELDS.some(f => body[`${k}_${f}`] !== undefined))
   if (touched.length === 0) return {}
   const byKey = new Map(existing.map(v => [v.key, { ...v }]))
   for (const k of touched) {
@@ -192,8 +180,8 @@ export function vehiclesFromBody(body: Record<string, unknown>, existing: readon
       key: k,
       rate_eur: rate,
       rate_non_eur: nonEur !== null && nonEur >= 0 ? nonEur : null,
-      capacity_min: min ?? LEGACY_VEHICLE_BANDS[k].min,
-      capacity_max: max ?? LEGACY_VEHICLE_BANDS[k].max,
+      capacity_min: min ?? PRESET_VEHICLE_BANDS[k].min,
+      capacity_max: max ?? PRESET_VEHICLE_BANDS[k].max,
     })
   }
   const list = sanitizeVehicles([...byKey.values()])
@@ -201,28 +189,11 @@ export function vehiclesFromBody(body: Record<string, unknown>, existing: readon
   return { vehicles: list }
 }
 
-/** The legacy columns a list mirrors into, for readers not yet converted
- *  (and the CSV exporter). A preset the list does not carry is CLEARED —
- *  its rate null, its band back to the conventional default — so removing
- *  a vehicle in the form removes it everywhere. A vehicle beyond the five
- *  presets lives only in the list. rate_non_eur mirrors "same as EUR". */
-export function legacyColumnsFor(vehicles: readonly VehicleBandRate[]): Record<string, number | null> {
-  const out: Record<string, number | null> = {}
-  for (const k of LEGACY_VEHICLE_KEYS) {
-    const v = vehicles.find(b => b.key === k)
-    out[`${k}_rate_eur`] = v ? v.rate_eur : null
-    out[`${k}_rate_non_eur`] = v ? (v.rate_non_eur ?? v.rate_eur) : null
-    out[`${k}_capacity_min`] = v ? v.capacity_min : LEGACY_VEHICLE_BANDS[k].min
-    out[`${k}_capacity_max`] = v ? v.capacity_max : LEGACY_VEHICLE_BANDS[k].max
-  }
-  return out
-}
-
 /** The keys a write may use: the agency's vehicle vocabulary (the five
  *  presets when it has none), plus whatever the row already carries — hiding
  *  a vehicle in Settings never breaks the rows that price it. */
 export function allowedVehicleKeys(vocabularyKeys: readonly string[], existing: readonly VehicleBandRate[] = []): Set<string> {
-  return new Set([...(vocabularyKeys.length ? vocabularyKeys : LEGACY_VEHICLE_KEYS), ...existing.map(v => v.key)])
+  return new Set([...(vocabularyKeys.length ? vocabularyKeys : PRESET_VEHICLE_KEYS), ...existing.map(v => v.key)])
 }
 
 export function unknownVehicleKeys(vehicles: readonly VehicleBandRate[], allowed: ReadonlySet<string>): string[] {
@@ -230,8 +201,6 @@ export function unknownVehicleKeys(vehicles: readonly VehicleBandRate[], allowed
 }
 
 // ---- Flat sheets (the CSV importer / exporter) ----------------------------
-
-const FLAT_FIELDS = ['rate_eur', 'rate_non_eur', 'capacity_min', 'capacity_max'] as const
 
 /** The vehicles a FLAT sheet row carries: one <key>_rate_eur / _capacity_min /
  *  _capacity_max column-set per vehicle in `specs` (the agency's sheet). A
@@ -254,8 +223,8 @@ export function vehiclesFromFlatRow(
 }
 
 /** The FLAT cells for a row's vehicles, for the columns in `specs`: the
- *  list (else the legacy columns) written out as <key>_rate_eur / _rate_non_eur
- *  / _capacity_min / _capacity_max. A vehicle the row does not offer exports
+ *  list written out as <key>_rate_eur / _rate_non_eur / _capacity_min /
+ *  _capacity_max. A vehicle the row does not offer exports
  *  blank; a vehicle the row offers that the sheet has no column for is not
  *  exported (the sheet is the agency's list — a hidden vehicle stays behind). */
 export function flattenVehicles(
@@ -275,8 +244,8 @@ export function flattenVehicles(
   return out
 }
 
-/** Remove every <key>_* vehicle cell for these keys — before an upsert, so a
- *  column the table does not have (a 4x4's) never reaches Postgres. */
+/** Remove every <key>_* vehicle cell for these keys — before an upsert; the
+ *  table has no per-vehicle columns, so none may reach Postgres. */
 export function stripVehicleFields(row: Record<string, unknown>, keys: readonly string[]): void {
   for (const k of keys) for (const f of FLAT_FIELDS) delete row[`${k}_${f}`]
 }

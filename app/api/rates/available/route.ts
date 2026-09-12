@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
       !rate_type || rate_type === 'transportation'
         ? supabaseAdmin
         .from('transportation_rates')
-        .select('id, service_code, service_type, route_name, city, origin_city, destination_city, rate_currency, vehicles, sedan_rate_eur, minivan_rate_eur, van_rate_eur, minibus_rate_eur, bus_rate_eur, supplier_id, suppliers (name)')
+        .select('id, service_code, service_type, route_name, city, origin_city, destination_city, rate_currency, vehicles, supplier_id, suppliers (name)')
         .eq('is_active', true)
         .order('city')
         .order('service_type')

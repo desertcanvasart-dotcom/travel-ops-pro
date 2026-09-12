@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { RATE_TABLE_CONFIGS, validateImportData, isExampleRow, transportationConfigFor, vehicleColumnSpecsFor } from '@/lib/bulk-rate-service'
-import { legacyColumnsFor, stripVehicleFields, vehiclesFromFlatRow } from '@/lib/rates/vehicle-bands'
+import { stripVehicleFields, vehiclesFromFlatRow } from '@/lib/rates/vehicle-bands'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
 import type { ImportResult, ValidationError } from '@/lib/bulk-rate-service'
 import Papa from 'papaparse'
@@ -200,9 +200,8 @@ export async function POST(request: NextRequest) {
     const rowsToUpsert: Record<string, any>[] = preview.parsedValidRows || []
 
     // Transportation: fold each row's vehicle cells into its `vehicles` list
-    // (the row's whole list — a sheet row replaces), mirror the presets into
-    // the legacy columns, and drop the cells so a column the table does not
-    // have (a 4x4's) never reaches the upsert.
+    // (the row's whole list — a sheet row replaces) and drop the cells — the
+    // table has no per-vehicle columns, so none may reach the upsert.
     if (vehicleSpecs) {
       for (const row of rowsToUpsert) {
         const list = vehiclesFromFlatRow(row, vehicleSpecs)
@@ -213,7 +212,7 @@ export async function POST(request: NextRequest) {
           )
         }
         stripVehicleFields(row, vehicleSpecs.map(s => s.key))
-        Object.assign(row, { vehicles: list, ...legacyColumnsFor(list) })
+        row.vehicles = list
       }
     }
 

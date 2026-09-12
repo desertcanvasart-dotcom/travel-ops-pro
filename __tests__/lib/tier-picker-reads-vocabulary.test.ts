@@ -172,6 +172,20 @@ describe('transportation routes write vehicles through the one helper', () => {
       expect(src.includes('transportationConfigFor(')).toBe(true)
     })
   }
+  // P4b: the twenty per-vehicle columns are gone (20261006). No app or lib
+  // source may name one — a select naming a dropped column fails outright,
+  // a write into one fails the upsert. The sheet's <key>_* cells are built
+  // from template strings and fold into the list before any upsert.
+  it('no app/lib source names a dropped per-vehicle column', () => {
+    const walk = (dir: string): string[] => readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap(d => {
+      const rel = join(dir, d.name)
+      if (d.isDirectory()) return d.name === 'node_modules' || d.name === '.next' ? [] : walk(rel)
+      return /\.(ts|tsx)$/.test(d.name) ? [rel] : []
+    })
+    const legacy = /\b(sedan|minivan|van|minibus|bus)_(rate_eur|rate_non_eur|capacity_min|capacity_max)\b/
+    const offenders = [...walk('app'), ...walk('lib')].filter(rel => legacy.test(read(rel)))
+    expect(offenders).toEqual([])
+  })
   it('the pricing engine has no city-to-vehicle table (Edfu → horse carriage was Egypt in a white-label engine)', () => {
     expect(/SPECIAL_VEHICLE_CITIES\s*[:=]/.test(read('lib/auto-pricing-service.ts'))).toBe(false)
   })

@@ -9,21 +9,17 @@
 import { describe, it, expect } from 'vitest'
 import { getTransportRateForPax } from '@/lib/transport-rate-utils'
 
-// A route priced the conventional way.
+const v = (key: string, rate: number, min: number, max: number) => ({ key, rate_eur: rate, rate_non_eur: rate, capacity_min: min, capacity_max: max })
+
+// A route priced the conventional way (no van).
 const CONVENTIONAL = {
-  sedan_rate_eur: 24, sedan_rate_non_eur: 24,
-  minivan_rate_eur: 28, minivan_rate_non_eur: 28,
-  minibus_rate_eur: 49, minibus_rate_non_eur: 49,
-  bus_rate_eur: 79, bus_rate_non_eur: 79,
-  van_rate_eur: null, van_rate_non_eur: null,
+  vehicles: [v('sedan', 24, 1, 2), v('minivan', 28, 3, 7), v('minibus', 49, 13, 20), v('bus', 79, 21, 45)],
 }
 
 // The same route at an agency that stopped running sedans and carries 1–5 pax
 // in a minivan.
 const NO_SEDAN = {
-  ...CONVENTIONAL,
-  sedan_rate_eur: null, sedan_rate_non_eur: null,
-  minivan_capacity_min: 1, minivan_capacity_max: 5,
+  vehicles: [v('minivan', 28, 1, 5), v('minibus', 49, 13, 20), v('bus', 79, 21, 45)],
 }
 
 describe('getTransportRateForPax — vehicles the agency actually runs', () => {
@@ -53,14 +49,14 @@ describe('getTransportRateForPax — vehicles the agency actually runs', () => {
   })
 
   it('never books a vehicle with no rate, whatever its capacity says', () => {
-    // The van covers 8-12 by default and is exactly the right size for 10 —
-    // but it has no price, so it cannot be sold.
+    // A van would be exactly the right size for 10 — but the row prices
+    // none, so it cannot be sold.
     const r = getTransportRateForPax(CONVENTIONAL, 10)
     expect(r?.vehicleType).not.toBe('Van')
     expect(r?.vehicleType).toBe('Minibus')
   })
 
-  it('falls back to the conventional band when the row does not say', () => {
+  it('keeps the conventional band when the row carries it', () => {
     const r = getTransportRateForPax(CONVENTIONAL, 4)
     expect(r?.vehicleType).toBe('Minivan')
     expect(r?.capacityMin).toBe(3)
@@ -68,7 +64,8 @@ describe('getTransportRateForPax — vehicles the agency actually runs', () => {
   })
 
   it('returns nothing when the route has no priced vehicle at all', () => {
-    expect(getTransportRateForPax({ sedan_rate_eur: null, minivan_rate_eur: null }, 2)).toBeNull()
+    expect(getTransportRateForPax({ vehicles: [] }, 2)).toBeNull()
+    expect(getTransportRateForPax({}, 2)).toBeNull()
   })
 
   it('takes the largest vehicle they run when the group exceeds every band', () => {

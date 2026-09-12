@@ -121,20 +121,9 @@ export async function GET(request: NextRequest) {
           supplier_name: rate.supplier_name,
           notes: rate.notes,
           includes: rate.includes,
-          // The vehicles list (lib/rates/vehicle-bands) — an agency-added
-          // vehicle is here and nowhere else; the five columns below are the
-          // mirror of the presets for readers not yet converted.
+          // The vehicles list (lib/rates/vehicle-bands) — every vehicle the
+          // row prices, the agency's own included, is here and nowhere else.
           vehicles: rate.vehicles ?? null,
-          sedan_rate_eur: rate.sedan_rate_eur,
-          minivan_rate_eur: rate.minivan_rate_eur,
-          van_rate_eur: rate.van_rate_eur,
-          minibus_rate_eur: rate.minibus_rate_eur,
-          bus_rate_eur: rate.bus_rate_eur,
-          sedan_rate_non_eur: rate.sedan_rate_non_eur,
-          minivan_rate_non_eur: rate.minivan_rate_non_eur,
-          van_rate_non_eur: rate.van_rate_non_eur,
-          minibus_rate_non_eur: rate.minibus_rate_non_eur,
-          bus_rate_non_eur: rate.bus_rate_non_eur
         }))
         error = transportResult.error
         break

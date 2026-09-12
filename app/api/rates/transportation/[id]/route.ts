@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { LEGACY_VEHICLE_KEYS, bodyTouchesVehicles } from '@/lib/rates/vehicle-bands'
+import { PRESET_VEHICLE_KEYS, bodyTouchesVehicles } from '@/lib/rates/vehicle-bands'
 import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
 import { clientMessage } from '@/lib/api-errors'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
@@ -97,7 +97,7 @@ export async function PUT(
     // Build non-vehicle updates — the patch above owns the vehicle fields.
     const updates: Record<string, any> = {}
     for (const [key, val] of Object.entries(rawUpdates)) {
-      if (key !== 'vehicles' && !LEGACY_VEHICLE_KEYS.some(t => key.startsWith(`${t}_`))) {
+      if (key !== 'vehicles' && !PRESET_VEHICLE_KEYS.some(t => key.startsWith(`${t}_`))) {
         updates[key] = val
       }
     }
