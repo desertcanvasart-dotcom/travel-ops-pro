@@ -81,6 +81,21 @@ export async function tierLadderForCurrentOrg(): Promise<string[]> {
   }
 }
 
+/** The request org's active tiers as key + label, ladder order — what an
+ *  AI extraction prompt lists as choices and resolves an answer against
+ *  (normalizeTierKey). Empty when there is no org, no vocabulary, or no
+ *  request scope; callers treat empty as "the presets". */
+export async function tierItemsForCurrentOrg(): Promise<Pick<VocabularyItem, 'key' | 'label'>[]> {
+  try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return []
+    return activeInOrder(await loadVocabularyForOrg(createServerClient(), orgId, 'tier'))
+      .map(i => ({ key: i.key, label: i.label }))
+  } catch {
+    return []
+  }
+}
+
 /** The org's vehicles with their passenger bands, smallest first. Empty when
  *  none exist (callers keep their built-in bands). */
 export async function vehicleBandsForOrg(supabase: Client, orgId: string): Promise<VehicleBand[]> {

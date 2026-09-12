@@ -4,6 +4,11 @@ import { PACKAGE_TYPE_SLUGS } from '@/lib/package-types'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { MODEL_PARSER } from '@/lib/ai/models'
 import { isEuroPassport as isEuroPassportFromNationality } from '@/lib/passport'
+import { tierPromptChoices, type VocabularyItem } from '@/lib/vocabulary'
+import { tierItemsForCurrentOrg } from '@/lib/vocabulary-server'
+import { resolveRequestedTier } from '@/lib/ai/parsing-utils'
+
+type TierItem = Pick<VocabularyItem, 'key' | 'label'>
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 // Read-only vocabulary lookups (destination city codes for detection).
@@ -432,6 +437,10 @@ function extractPhoneFromText(text: string): string {
 }
 
 export async function POST(request: Request) {
+  // The agency's tier list (Settings → Vocabulary): offered to the model as
+  // the budget_level choices, and what its answer is resolved against — so
+  // "4 star hotels" lands on the agency's 4-star tier, not on 'standard'.
+  const tierItems = await tierItemsForCurrentOrg()
   try {
     const { conversation } = await request.json()
 
@@ -486,8 +495,8 @@ export async function POST(request: Request) {
 
     // Build the appropriate prompt based on detection
     const systemPrompt = structureDetection.isStructured
-      ? buildStructuredExtractionPrompt(structureDetection.rawDaySegments)
-      : buildGeneralExtractionPrompt()
+      ? buildStructuredExtractionPrompt(structureDetection.rawDaySegments, tierItems)
+      : buildGeneralExtractionPrompt(tierItems)
 
     // L4: prompt-injection mitigation. The instructions move to the
     // top-level `system` parameter (separated from untrusted user content),
@@ -662,7 +671,9 @@ export async function POST(request: Request) {
       interests: Array.isArray(extracted.interests) ? extracted.interests : [],
       cities: Array.isArray(extracted.cities) ? extracted.cities : [],
       special_requests: Array.isArray(extracted.special_requests) ? extracted.special_requests : [],
-      budget_level: extracted.budget_level || 'standard',
+      // A KEY on the agency's ladder (label, key or synonym-by-rung accepted;
+      // the ladder's standard rung when the model gave nothing).
+      budget_level: resolveRequestedTier({ raw_tier: extracted.budget_level }, tierItems),
       meal_plan: extracted.meal_plan || '',
 
       // Accommodation
@@ -724,7 +735,7 @@ export async function POST(request: Request) {
 // PROMPT FOR STRUCTURED ITINERARY EXTRACTION
 // ============================================
 
-function buildStructuredExtractionPrompt(rawDaySegments: string[]): string {
+function buildStructuredExtractionPrompt(rawDaySegments: string[], tierItems: readonly TierItem[] = []): string {
   return `You are an expert travel operations assistant specializing in EGYPTIAN TOURISM.
 
 The user has provided a STRUCTURED ITINERARY using Egyptian travel industry abbreviations.
@@ -918,7 +929,7 @@ Return ONLY valid JSON:
   "interests": ["decoded interests/attractions"],
   "cities": ["Cairo", "Alexandria", "Aswan", "Luxor", "Hurghada"],
   "special_requests": ["any special requests"],
-  "budget_level": "budget|standard|deluxe|luxury",
+  "budget_level": "${tierPromptChoices(tierItems)} - the closest to what the client asked for (e.g. '4 star hotels'); answer with the key",
   "meal_plan": "RO|BB|HB|FB|AI if mentioned",
 
   "hotel_name": "hotel if mentioned (NOT for cruise nights!)",
@@ -970,7 +981,7 @@ IMPORTANT VALIDATIONS:
 // PROMPT FOR GENERAL REQUEST EXTRACTION
 // ============================================
 
-function buildGeneralExtractionPrompt(): string {
+function buildGeneralExtractionPrompt(tierItems: readonly TierItem[] = []): string {
   return `You are an expert travel agent assistant that analyzes WhatsApp conversations and emails to extract booking information.
 
 This appears to be a GENERAL REQUEST (not a structured day-by-day itinerary). Extract the key information to help create a custom itinerary.
@@ -1085,7 +1096,7 @@ Extract the following and return as JSON:
   "interests": ["places they want to visit", "activities"],
   "cities": ["cities mentioned"],
   "special_requests": ["any special requests"],
-  "budget_level": "budget|standard|deluxe|luxury",
+  "budget_level": "${tierPromptChoices(tierItems)} - the closest to what the client asked for (e.g. '4 star hotels'); answer with the key",
   "meal_plan": "RO|BB|HB|FB|AI - if mentioned",
 
   "hotel_name": "Hotel if mentioned (NOT for cruise itineraries)",
