@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { presetTierFor } from '@/lib/vocabulary'
+import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
 
 // ============================================
 // TOUR VARIATIONS API - FIXED
@@ -88,8 +90,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Smart defaults are keyed by PRESET rung: an agency-added tier
+    // ("5_star") is placed on the ladder first, so the top tier gets the
+    // luxury defaults rather than budget's.
+    const tierLadder = await tierLadderForCurrentOrg()
+
     // Prepare variation data with smart defaults
     const variationsToInsert = variations.map(v => {
+      const rung = presetTierFor(tierLadder, v.tier)
       // Generate unique variation code (append random suffix to avoid duplicates)
       const baseCode = v.variation_code ||
         `${v.variation_name.toUpperCase().replace(/\s+/g, '-').substring(0, 20)}-${v.tier.toUpperCase()}`
@@ -101,22 +109,22 @@ export async function POST(request: NextRequest) {
         variation_code: variationCode,
         variation_name: v.variation_name,
         tier: v.tier,
-        group_type: v.group_type || getDefaultGroupType(v.tier),
-        min_pax: v.min_pax || getDefaultMinPax(v.tier),
-        max_pax: v.max_pax || getDefaultMaxPax(v.tier),
+        group_type: v.group_type || getDefaultGroupType(rung),
+        min_pax: v.min_pax || getDefaultMinPax(rung),
+        max_pax: v.max_pax || getDefaultMaxPax(rung),
         optimal_pax: v.optimal_pax || null,
-        inclusions: v.inclusions || getDefaultInclusions(v.tier),
+        inclusions: v.inclusions || getDefaultInclusions(rung),
         exclusions: v.exclusions || getDefaultExclusions(),
         optional_extras: v.optional_extras || [],
         guide_type: v.guide_type || 'egyptologist',
         guide_languages: v.guide_languages || ['English'],
-        vehicle_type: v.vehicle_type || getDefaultVehicle(v.tier),
-        accommodation_standard: v.accommodation_standard || getDefaultAccommodation(v.tier),
-        meal_quality: v.meal_quality || getDefaultMealQuality(v.tier),
-        private_experience: v.private_experience ?? (v.group_type === 'private' || v.tier !== 'budget'),
-        skip_line_access: v.skip_line_access ?? (v.tier === 'luxury'),
-        vip_treatment: v.vip_treatment ?? (v.tier === 'luxury'),
-        flexible_itinerary: v.flexible_itinerary ?? (v.tier !== 'budget'),
+        vehicle_type: v.vehicle_type || getDefaultVehicle(rung),
+        accommodation_standard: v.accommodation_standard || getDefaultAccommodation(rung),
+        meal_quality: v.meal_quality || getDefaultMealQuality(rung),
+        private_experience: v.private_experience ?? (v.group_type === 'private' || rung !== 'budget'),
+        skip_line_access: v.skip_line_access ?? (rung === 'luxury'),
+        vip_treatment: v.vip_treatment ?? (rung === 'luxury'),
+        flexible_itinerary: v.flexible_itinerary ?? (rung !== 'budget'),
         typical_start_time: v.typical_start_time || null,
         typical_end_time: v.typical_end_time || null,
         pickup_time_range: v.pickup_time_range || null,

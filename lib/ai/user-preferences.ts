@@ -5,7 +5,7 @@
 // Fetches default preferences for the authenticated user.
 // Used in itinerary generation to fill in missing parameters.
 
-import { type ServiceTier, normalizeTier } from '@/lib/ai/parsing-utils'
+import { type ServiceTier, tierKeyOrPreset } from '@/lib/ai/parsing-utils'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 
@@ -51,7 +51,9 @@ export async function getUserPreferences(supabase: any): Promise<UserGenerationP
 
     return {
       default_cost_mode: prefs.default_cost_mode || defaults.default_cost_mode,
-      default_tier: normalizeTier(prefs.default_tier) || defaults.default_tier,
+      // A default the agency added in Settings → Vocabulary ("5_star") used to
+      // collapse to 'standard' here, before any route could see it.
+      default_tier: tierKeyOrPreset(prefs.default_tier) || defaults.default_tier,
       default_margin_percent: resolveMarginPercent({ userPreference: prefs.default_margin_percent, orgDefault: orgMargin }),
       default_currency: prefs.default_currency || defaults.default_currency
     }

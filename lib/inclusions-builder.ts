@@ -5,6 +5,7 @@
 // ============================================
 
 import { type PackageType, PACKAGE_TYPE_CONFIGS } from '@/lib/package-types'
+import { PRESET_TIERS, presetTierFor } from '@/lib/vocabulary'
 
 // ============================================
 // TYPES
@@ -12,7 +13,11 @@ import { type PackageType, PACKAGE_TYPE_CONFIGS } from '@/lib/package-types'
 
 export interface InclusionsBuilderInput {
   packageType: PackageType
-  tier: 'budget' | 'standard' | 'deluxe' | 'luxury'
+  /** A tier KEY from Settings → Vocabulary — a preset or one the agency added. */
+  tier: string
+  /** The agency's tier keys, lowest to highest; places a custom tier on the
+   *  preset ladder for the tier-specific extras. Omitted = the four presets. */
+  tierLadder?: readonly string[]
   includeLunch: boolean
   includeDinner: boolean
   includeAccommodation: boolean
@@ -159,6 +164,7 @@ export function buildInclusionsExclusions(input: InclusionsBuilderInput): Inclus
     domesticFlights,
     intercityTransfers,
     mealSelections,
+    tierLadder,
   } = input
 
   const inclusions: string[] = []
@@ -308,12 +314,14 @@ export function buildInclusionsExclusions(input: InclusionsBuilderInput): Inclus
   // 12. Taxes
   inclusions.push('All applicable taxes and service charges')
 
-  // 13. Tier-specific premium extras
-  if (tier === 'luxury') {
+  // 13. Tier-specific premium extras — by rung, so an agency-added top tier
+  //     ("5_star") gets the luxury extras rather than none.
+  const tierRung = presetTierFor(tierLadder ?? PRESET_TIERS, tier)
+  if (tierRung === 'luxury') {
     inclusions.push('Priority skip-the-line access at major sites')
     inclusions.push('Premium dining experiences')
     inclusions.push('Cold towels and refreshments during tours')
-  } else if (tier === 'deluxe') {
+  } else if (tierRung === 'deluxe') {
     inclusions.push('Upgraded restaurant selections')
   }
 

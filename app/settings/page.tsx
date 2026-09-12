@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { PartnerIntegrationsPanel } from '@/components/settings/PartnerIntegrationsPanel'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { useTierLabel } from '@/hooks/useTierLabel'
+import { useTierOptions } from '@/hooks/useTierOptions'
 import { createClient } from '@/app/supabase'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { usePreferences } from '@/app/contexts/PreferencesContext'
@@ -89,6 +89,16 @@ interface UserPreferences {
 // TAB CONFIGURATION
 // ============================================
 
+// The default-tier cards list whatever Settings → Vocabulary holds
+// (useTierOptions). What stays local is a PRESET's i18n label/description
+// keys, used when the vocabulary has no word of its own.
+const TIER_LABEL_KEYS: Record<string, string> = {
+  budget: 'tierBudget', standard: 'tierStandard', deluxe: 'tierDeluxe', luxury: 'tierLuxury',
+}
+const TIER_DESC_KEYS: Record<string, string> = {
+  budget: 'tierBudgetDesc', standard: 'tierStandardDesc', deluxe: 'tierDeluxeDesc', luxury: 'tierLuxuryDesc',
+}
+
 const TAB_IDS = ['profile', 'email', 'notifications', 'preferences', 'integrations', 'partners', 'organization'] as const
 const TAB_ICONS = {
   profile: User,
@@ -122,7 +132,8 @@ function SettingsContent() {
   const tabParam = searchParams.get('tab')
   const { user } = useAuth()
   const t = useTranslations('settings')
-  const tierLabel = useTierLabel()
+  // The agency's tiers (Settings → Vocabulary), presets falling back to the i18n words.
+  const tierOptions = useTierOptions(key => t(TIER_LABEL_KEYS[key]))
   const confirmDialog = useConfirm()
 
   const [activeTab, setActiveTab] = useState(tabParam || 'profile')
@@ -950,13 +961,10 @@ function SettingsContent() {
         </p>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {[
-            { value: 'budget', labelKey: 'tierBudget', descKey: 'tierBudgetDesc' },
-            { value: 'standard', labelKey: 'tierStandard', descKey: 'tierStandardDesc' },
-            { value: 'deluxe', labelKey: 'tierDeluxe', descKey: 'tierDeluxeDesc' },
-            { value: 'luxury', labelKey: 'tierLuxury', descKey: 'tierLuxuryDesc' }
-          ].map((tier) => {
+          {tierOptions.map((tier) => {
             const isSelected = userPreferences.default_tier === tier.value
+            const descKey = TIER_DESC_KEYS[tier.value]
+            const desc = tier.description || (descKey ? t(descKey) : '')
 
             return (
               <button
@@ -970,7 +978,9 @@ function SettingsContent() {
                       ? 'border-purple-500 bg-purple-50'
                       : tier.value === 'standard'
                       ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-500 bg-gray-50'
+                      : tier.value === 'budget'
+                      ? 'border-gray-500 bg-gray-50'
+                      : 'border-[#647C47] bg-green-50'
                     : 'border-gray-200 hover:border-gray-300'
                 }`}
               >
@@ -979,10 +989,10 @@ function SettingsContent() {
                   <span className={`text-sm font-semibold ${
                     isSelected ? 'text-gray-900' : 'text-gray-700'
                   }`}>
-                    {tierLabel(tier.value, t(tier.labelKey))}
+                    {tier.label}
                   </span>
                 </div>
-                <p className="text-xs text-gray-500">{t(tier.descKey)}</p>
+                {desc && <p className="text-xs text-gray-500">{desc}</p>}
               </button>
             )
           })}

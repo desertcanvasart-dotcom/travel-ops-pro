@@ -60,7 +60,7 @@ interface TourVariation {
   template_id: string
   variation_code: string
   variation_name: string
-  tier: 'budget' | 'standard' | 'deluxe' | 'luxury'
+  tier: string // a vocabulary tier key — a preset or one the agency added
   group_type: 'private' | 'shared'
   min_pax: number
   max_pax: number

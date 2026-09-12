@@ -12,6 +12,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getTemplatePriceRange } from '@/lib/auto-pricing-service'
 import { requireRole } from '@/lib/auth/current-org'
+import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -112,6 +113,9 @@ export async function POST(request: NextRequest) {
 
     const results: { id: string; name: string; price: number | null; tier: string | null; error?: string }[] = []
 
+    // The "from" price ranges over the agency's own tiers, not the four presets.
+    const tierLadder = await tierLadderForCurrentOrg()
+
     // Process templates sequentially to avoid overwhelming the database
     for (const template of templates) {
       try {
@@ -120,7 +124,7 @@ export async function POST(request: NextRequest) {
 
         // Only calculate auto-pricing for templates that use it
         if (template.uses_day_builder || template.pricing_mode === 'auto') {
-          const priceRange = await getTemplatePriceRange(template.id)
+          const priceRange = await getTemplatePriceRange(template.id, true, tierLadder)
           if (priceRange) {
             startingPrice = Math.round(priceRange.minPrice)
             startingTier = priceRange.tier

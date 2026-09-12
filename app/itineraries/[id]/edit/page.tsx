@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useTranslations, useLocale } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
+import { useTierOptions } from '@/hooks/useTierOptions'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase'
@@ -205,8 +206,6 @@ const PACKAGE_TYPES = [
   { id: 'shore-excursions', name: 'Shore Excursions', icon: '⚓', desc: 'Port pickup, time-limited', advanced: true }
 ]
 
-const TIERS = ['budget', 'standard', 'deluxe', 'luxury']
-
 const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft', color: 'bg-gray-100 text-gray-700' },
   { value: 'sent', label: 'Sent', color: 'bg-blue-100 text-blue-700' },
@@ -259,6 +258,8 @@ export default function ItineraryEditorPage() {
   const { rateSymbol } = useCurrency()
   const t = useTranslations('itineraries.edit')
   const tCommon = useTranslations('common')
+  // The agency's tiers (Settings → Vocabulary); the presets read in caps as before.
+  const tierOptions = useTierOptions(key => key.toUpperCase())
   const serviceTypeLabel = useVocabLabel('transport_service_type')
   const dialog = useConfirmDialog()
   const [repricing, setRepricing] = useState(false)
@@ -2114,8 +2115,8 @@ export default function ItineraryEditorPage() {
                   onChange={(e) => setItinerary({ ...itinerary, tier: e.target.value })}
                   className="font-semibold text-gray-900 bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs border-none focus:outline-none"
                 >
-                  {TIERS.map(tier => (
-                    <option key={tier} value={tier}>{tier.toUpperCase()}</option>
+                  {tierOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
               </div>

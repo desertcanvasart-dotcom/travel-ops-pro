@@ -6,6 +6,7 @@ import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
+import { useTierOptions } from '@/hooks/useTierOptions'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -61,6 +62,9 @@ const TIER_OPTIONS_CONFIG = [
   { value: 'deluxe', labelKey: 'deluxe', color: 'bg-purple-100 text-purple-700' },
   { value: 'luxury', labelKey: 'luxury', color: 'bg-amber-100 text-amber-700' }
 ]
+// The four presets above carry a colour and an i18n word. A tier the agency
+// added in Settings → Vocabulary has neither: brand green, its own label.
+const CUSTOM_TIER_COLOR = 'bg-green-100 text-green-800'
 
 const BOARD_BASIS_OPTIONS_CONFIG = [
   { value: 'RO', labelKey: 'roomOnly' },
@@ -196,10 +200,14 @@ function ToastNotification({ toast, onClose }: { toast: Toast; onClose: () => vo
 
 function TierBadge({ tier, t }: { tier: string | undefined; t: (key: string) => string }) {
   const tierLabel = useTierLabel()
-  const tierConfig = TIER_OPTIONS_CONFIG.find(tc => tc.value === tier) || TIER_OPTIONS_CONFIG[1]
+  const key = tier || 'standard'
+  const tierConfig = TIER_OPTIONS_CONFIG.find(tc => tc.value === key)
+  // A preset keeps its i18n word; an agency-added tier is labelled by the
+  // vocabulary, and reads as its key once the agency has removed it.
+  const fallback = tierConfig ? t(`tiers.${tierConfig.labelKey}`) : key
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig.color}`}>
-      {tierLabel(tier ?? tierConfig.value, t(`tiers.${tierConfig.labelKey}`))}
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig?.color ?? CUSTOM_TIER_COLOR}`}>
+      {tierLabel(key, fallback)}
     </span>
   )
 }
@@ -327,7 +335,7 @@ function Pagination({
 
 export default function HotelsContent() {
   const t = useTranslations('rates.hotels')
-  const tierLabel = useTierLabel()
+  const tierOptions = useTierOptions(key => t(`tiers.${key}`))
   const boardBasisLabel = useVocabLabel('board_basis')
   const propertyTypeLabel = useVocabLabel('hotel_property_type')
   const tPeriods = useTranslations('rates.ratePeriods')
@@ -978,8 +986,8 @@ export default function HotelsContent() {
                 className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm appearance-none pr-8"
               >
                 <option value="all">{t('allTiers')}</option>
-                {TIER_OPTIONS_CONFIG.map(tier => (
-                  <option key={tier.value} value={tier.value}>{tierLabel(tier.value, t(`tiers.${tier.labelKey}`))}</option>
+                {tierOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
               <Crown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -1577,25 +1585,27 @@ export default function HotelsContent() {
                   {tCommon('tier')}
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {TIER_OPTIONS_CONFIG.map((tier) => (
+                  {tierOptions.map((opt) => (
                     <button
-                      key={tier.value}
+                      key={opt.value}
                       type="button"
-                      onClick={() => setFormData({ ...formData, tier: tier.value })}
+                      onClick={() => setFormData({ ...formData, tier: opt.value })}
                       className={`px-4 py-2 text-sm rounded-lg border-2 font-medium transition-all ${
-                        formData.tier === tier.value
-                          ? tier.value === 'budget'
+                        formData.tier === opt.value
+                          ? opt.value === 'budget'
                             ? 'border-gray-600 bg-gray-100 text-gray-800'
-                            : tier.value === 'standard'
+                            : opt.value === 'standard'
                             ? 'border-blue-600 bg-blue-50 text-blue-800'
-                            : tier.value === 'deluxe'
+                            : opt.value === 'deluxe'
                             ? 'border-purple-600 bg-purple-50 text-purple-800'
-                            : 'border-amber-600 bg-amber-50 text-amber-800'
+                            : opt.value === 'luxury'
+                            ? 'border-amber-600 bg-amber-50 text-amber-800'
+                            : 'border-[#647C47] bg-green-50 text-green-800'
                           : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
                       }`}
                     >
-                      {tier.value === 'luxury' && <Crown className="w-3.5 h-3.5 inline mr-1" />}
-                      {tierLabel(tier.value, t(`tiers.${tier.labelKey}`))}
+                      {opt.value === 'luxury' && <Crown className="w-3.5 h-3.5 inline mr-1" />}
+                      {opt.label}
                     </button>
                   ))}
                 </div>

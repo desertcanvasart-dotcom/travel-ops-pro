@@ -6,11 +6,13 @@
 
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, useMemo, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { useTierOptions } from '@/hooks/useTierOptions'
+import { PRESET_TIERS, presetTierFor } from '@/lib/vocabulary'
 import {
   ArrowLeft,
   Save,
@@ -54,7 +56,7 @@ interface ContentCategory {
 
 interface ContentVariation {
   id?: string
-  tier: 'budget' | 'standard' | 'deluxe' | 'luxury'
+  tier: string // a vocabulary tier key — a preset or one the agency added
   title: string
   description: string
   highlights: string[]
@@ -77,15 +79,22 @@ interface ContentItem {
   variations: ContentVariation[]
 }
 
-const TIERS = ['budget', 'standard', 'deluxe', 'luxury'] as const
-type Tier = typeof TIERS[number]
+// A tier KEY — a preset or one the agency added in Settings → Vocabulary. The
+// tabs list whatever the vocabulary holds (useTierOptions); what stays local
+// is a PRESET's icon and colour. An agency-added tier gets brand green.
+type Tier = string
 
-const TIER_CONFIG: Record<Tier, { label: string; icon: typeof Wallet; color: string; bgColor: string }> = {
+const TIER_CONFIG: Record<string, { label: string; icon: typeof Wallet; color: string; bgColor: string }> = {
   budget: { label: 'Budget', icon: Wallet, color: 'text-emerald-600', bgColor: 'bg-emerald-50' },
   standard: { label: 'Standard', icon: Star, color: 'text-blue-600', bgColor: 'bg-blue-50' },
   deluxe: { label: 'Deluxe', icon: Gem, color: 'text-purple-600', bgColor: 'bg-purple-50' },
   luxury: { label: 'Luxury', icon: Crown, color: 'text-amber-600', bgColor: 'bg-amber-50' }
 }
+const customTierConfig = (label: string) => ({ label, icon: Sparkles, color: 'text-green-700', bgColor: 'bg-green-50' })
+
+const emptyVariation = (tier: Tier): ContentVariation => ({
+  tier, title: '', description: '', highlights: [], inclusions: [], internal_notes: '', is_active: true,
+})
 
 const CATEGORY_ICONS: Record<string, typeof Landmark> = {
   'Landmark': Landmark,
@@ -520,6 +529,9 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [categories, setCategories] = useState<ContentCategory[]>([])
+  const tierOptions = useTierOptions(key => t(`tiers.${key}`))
+  const tierKeyList = tierOptions.map(o => o.value).join('|')
+  const tierKeys = useMemo(() => tierKeyList.split('|'), [tierKeyList])
   const [activeTier, setActiveTier] = useState<Tier>('budget')
   const [categorySchema, setCategorySchema] = useState<CategorySchema | null>(null)
 
@@ -534,15 +546,9 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
     tags: [],
     metadata: {},
     is_active: true,
-    variations: TIERS.map(tier => ({
-      tier,
-      title: '',
-      description: '',
-      highlights: [],
-      inclusions: [],
-      internal_notes: '',
-      is_active: true
-    }))
+    // The presets to start; the effect below adds a slot for every tier on
+    // the agency's ladder once the vocabulary is in.
+    variations: PRESET_TIERS.map(emptyVariation)
   })
 
   const [tagInput, setTagInput] = useState('')
@@ -580,19 +586,11 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
         if (res.ok) {
           const data = await res.json()
           
-          // Ensure all tiers exist
-          const variations = TIERS.map(tier => {
-            const existing = data.variations?.find((v: ContentVariation) => v.tier === tier)
-            return existing || {
-              tier,
-              title: '',
-              description: '',
-              highlights: [],
-              inclusions: [],
-              internal_notes: '',
-              is_active: true
-            }
-          })
+          // Ensure every tier on the agency's ladder has a slot — and keep any
+          // saved variation whose tier is no longer on it, rather than drop it.
+          const saved: ContentVariation[] = data.variations ?? []
+          const keys = Array.from(new Set([...tierKeys, ...saved.map(v => v.tier)]))
+          const variations = keys.map(tier => saved.find(v => v.tier === tier) || emptyVariation(tier))
 
           setFormData({
             ...data,
@@ -646,7 +644,19 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
   }, [formData.name, isNew])
 
   // Get current variation
+  // The vocabulary may arrive after the form: give every ladder tier a slot.
+  useEffect(() => {
+    setFormData(prev => {
+      const missing = tierKeys.filter(k => !prev.variations.some(v => v.tier === k))
+      return missing.length === 0 ? prev : { ...prev, variations: [...prev.variations, ...missing.map(emptyVariation)] }
+    })
+  }, [tierKeys])
+
   const currentVariation = formData.variations.find(v => v.tier === activeTier)
+  const activeTierLabel = tierOptions.find(o => o.value === activeTier)?.label ?? activeTier
+  // Writing tips are written per PRESET; an agency-added tier reads the tip
+  // for the preset nearest its rung.
+  const tipTier = presetTierFor(tierKeys, activeTier)
 
   // Update variation
   const updateVariation = (field: keyof ContentVariation, value: unknown) => {
@@ -932,8 +942,9 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
             <div className="bg-white rounded-xl border border-gray-200">
               {/* Tier Tabs */}
               <div className="flex border-b border-gray-200">
-                {TIERS.map((tier) => {
-                  const config = TIER_CONFIG[tier]
+                {tierOptions.map((opt) => {
+                  const tier = opt.value
+                  const config = TIER_CONFIG[tier] ?? customTierConfig(opt.label)
                   const Icon = config.icon
                   const status = getVariationStatus(tier)
 
@@ -948,7 +959,7 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
                       }`}
                     >
                       <Icon className="w-4 h-4" />
-                      {config.label}
+                      {opt.label}
                       {status === 'complete' && (
                         <Check className="w-3.5 h-3.5 text-green-500" />
                       )}
@@ -970,7 +981,7 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
                         type="text"
                         value={currentVariation.title}
                         onChange={(e) => updateVariation('title', e.target.value)}
-                        placeholder={t('titlePlaceholder', { tier: t(`tiers.${activeTier}`) })}
+                        placeholder={t('titlePlaceholder', { tier: activeTierLabel })}
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
                       />
                     </div>
@@ -983,7 +994,7 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
                       <textarea
                         value={currentVariation.description}
                         onChange={(e) => updateVariation('description', e.target.value)}
-                        placeholder={t('descriptionPlaceholder', { tier: t(`tiers.${activeTier}`) })}
+                        placeholder={t('descriptionPlaceholder', { tier: activeTierLabel })}
                         rows={6}
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47] resize-none"
                       />
@@ -1036,16 +1047,16 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
                 {t('tierWritingTips')}
               </h3>
               <div className="text-sm text-gray-600 space-y-2">
-                {activeTier === 'budget' && (
+                {tipTier === 'budget' && (
                   <p dangerouslySetInnerHTML={{ __html: t('budgetTip') }} />
                 )}
-                {activeTier === 'standard' && (
+                {tipTier === 'standard' && (
                   <p dangerouslySetInnerHTML={{ __html: t('standardTip') }} />
                 )}
-                {activeTier === 'deluxe' && (
+                {tipTier === 'deluxe' && (
                   <p dangerouslySetInnerHTML={{ __html: t('deluxeTip') }} />
                 )}
-                {activeTier === 'luxury' && (
+                {tipTier === 'luxury' && (
                   <p dangerouslySetInnerHTML={{ __html: t('luxuryTip') }} />
                 )}
               </div>

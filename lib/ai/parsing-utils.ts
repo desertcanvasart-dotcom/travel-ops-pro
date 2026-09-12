@@ -7,12 +7,19 @@
 // TIER SYSTEM CONSTANTS
 // ============================================
 
-export type ServiceTier = 'budget' | 'standard' | 'deluxe' | 'luxury'
+import { KEY_PATTERN, PRESET_TIERS, normalizeTierKey, presetTierFor, type PresetTier } from '@/lib/vocabulary'
+
+/** A service tier as a quote carries it: a KEY from Settings → Vocabulary →
+ *  Service tiers. The four presets are `PresetTier`; an agency may add more
+ *  ("5_star"), so this is deliberately open. Rate lookups match the key
+ *  exactly; position logic (descriptions, staff categories) maps a key onto
+ *  the preset ladder with `presetTierFor`. */
+export type ServiceTier = string
 export type InputMode = 'creative' | 'structured'
 
-export const VALID_TIERS: ServiceTier[] = ['budget', 'standard', 'deluxe', 'luxury']
+export const VALID_TIERS: PresetTier[] = [...PRESET_TIERS]
 
-export const TIER_MAP: Record<string, ServiceTier> = {
+export const TIER_MAP: Record<string, PresetTier> = {
   'budget': 'budget',
   'economy': 'budget',
   'standard': 'standard',
@@ -24,11 +31,44 @@ export const TIER_MAP: Record<string, ServiceTier> = {
   'vip': 'luxury'
 }
 
-export const TIER_DESCRIPTIONS: Record<ServiceTier, string> = {
+export const TIER_DESCRIPTIONS: Record<PresetTier, string> = {
   'budget': 'cost-effective, good value',
   'standard': 'comfortable mid-range',
   'deluxe': 'superior quality, premium',
   'luxury': 'top-tier, VIP treatment'
+}
+
+/** The preset description for ANY tier key, by its rung on the agency's
+ *  ladder — a fifth tier reads as the preset nearest its position. With the
+ *  preset ladder (the default) a preset key describes itself. */
+export function tierDescription(tier: ServiceTier, ladder: readonly string[] = PRESET_TIERS): string {
+  return TIER_DESCRIPTIONS[presetTierFor(ladder, tier)]
+}
+
+/** A stored default tier, kept intact: a synonym collapses to its preset as
+ *  before, but a well-formed key the agency added in Settings → Vocabulary
+ *  ("5_star") is NOT a synonym and must survive — the generation route
+ *  resolves it against the org's tier list. Anything else is 'standard'. */
+export function tierKeyOrPreset(value: string | null | undefined): ServiceTier {
+  const raw = String(value ?? '').trim()
+  if (!raw) return 'standard'
+  return TIER_MAP[raw.toLowerCase()] ?? (KEY_PATTERN.test(raw) ? raw : 'standard')
+}
+
+/** Vocabulary item shape a tier resolver needs. */
+export type TierVocabItem = { key: string; label: string }
+
+/** The tier a generation request is priced at: the explicit tier, else the
+ *  brief's budget level, else the user's default — resolved against the
+ *  agency's own tier list (a key, a label, or a synonym mapped by ladder
+ *  position). Without a vocabulary the four presets stand, as before. */
+export function resolveRequestedTier(
+  candidates: { raw_tier?: string | null; budget_level?: string | null; default_tier?: string | null },
+  items: readonly TierVocabItem[] = [],
+): ServiceTier {
+  const first = candidates.raw_tier || candidates.budget_level || candidates.default_tier || null
+  if (items.length === 0) return normalizeTier(first)
+  return normalizeTierKey(first, items)
 }
 
 // ============================================
@@ -77,7 +117,7 @@ export function toNumber(value: any, fallback: number = 0): number {
   return Number(value)
 }
 
-export function normalizeTier(value: string | null | undefined): ServiceTier {
+export function normalizeTier(value: string | null | undefined): PresetTier {
   if (!value) return 'standard'
   const normalized = value.toLowerCase().trim()
   return TIER_MAP[normalized] || 'standard'

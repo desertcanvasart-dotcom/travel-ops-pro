@@ -596,6 +596,47 @@ export function tierMultiplier(ladder: readonly string[], tier: string, table: r
   return table[ladderStep(pos, ladder.length, table.length)]
 }
 
+export function isPresetTier(v: unknown): v is PresetTier {
+  return (PRESET_TIERS as readonly string[]).includes(String(v))
+}
+
+export interface TierOption {
+  /** The stored key. */
+  value: string
+  /** The word to show, in the active locale. */
+  label: string
+  /** The preset this key IS (not maps onto) — null for an agency-added tier. */
+  preset: PresetTier | null
+  /** The agency's one-line description, when it wrote one (Settings → Vocabulary). */
+  description: string | null
+}
+
+/** The tiers a form offers, in the agency's order: the Vocabulary ladder
+ *  when one exists — so a tier added in Settings reaches every picker — else
+ *  the four presets. A preset key keeps its built-in i18n word unless the
+ *  agency relabelled it (the useTierLabel rule); an agency-added tier is
+ *  whatever the agency typed, Japanese label first for ja. */
+export function tierOptionsFor(
+  items: readonly (Pick<VocabularyItem, 'key' | 'label' | 'label_ja'> & { description?: string | null })[],
+  locale: string,
+  presetLabel: (key: PresetTier) => string,
+): TierOption[] {
+  if (items.length === 0) {
+    return PRESET_TIERS.map(key => ({ value: key, label: presetLabel(key), preset: key, description: null }))
+  }
+  return items.map(item => {
+    const preset = isPresetTier(item.key) ? item.key : null
+    const override = locale === 'ja' ? item.label_ja : item.label
+    const fallback = preset ? presetLabel(preset) : item.label
+    return {
+      value: item.key,
+      label: override && override.trim() ? override : fallback,
+      preset,
+      description: item.description?.trim() ? item.description : null,
+    }
+  })
+}
+
 export interface VehicleBand { key: string; min_pax: number; max_pax: number }
 
 /** The smallest vehicle that seats the group; failing that, the smallest

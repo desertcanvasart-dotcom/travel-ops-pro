@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest'
 import {
   PRESET_TIERS, VOCABULARY_KINDS, presetTierFor, tierFromPreset,
   localizedLabelFor, slugifyKey, KEY_PATTERN, vehicleForPax, tierMultiplier,
+  tierOptionsFor, isPresetTier,
 } from '@/lib/vocabulary'
 
 describe('frozen keys (the skeleton under the custom words)', () => {
@@ -75,5 +76,49 @@ describe('helpers', () => {
   it('tierMultiplier climbs with position', () => {
     const four = [...PRESET_TIERS]
     expect(tierMultiplier(four, 'budget')).toBeLessThan(tierMultiplier(four, 'luxury'))
+  })
+})
+
+describe('tierOptionsFor — the picker offers the agency ladder, presets only as fallback', () => {
+  // The operator added a fifth tier in Settings → Vocabulary and it appeared
+  // in no rate form: the pickers mapped over their own four-entry list.
+  const i18n = (k: string) => `i18n:${k}`
+  const seeded = [
+    { key: 'budget', label: 'Budget', label_ja: null },
+    { key: 'standard', label: 'Standard', label_ja: 'スタンダード' },
+    { key: 'deluxe', label: 'Deluxe', label_ja: null },
+    { key: 'luxury', label: 'Luxury', label_ja: null },
+    { key: '5_star', label: '5 star', label_ja: null },
+  ]
+
+  it('an agency-added tier is offered, in ladder order, under its own label', () => {
+    const opts = tierOptionsFor(seeded, 'en', i18n)
+    expect(opts.map(o => o.value)).toEqual(['budget', 'standard', 'deluxe', 'luxury', '5_star'])
+    expect(opts[4]).toEqual({ value: '5_star', label: '5 star', preset: null, description: null })
+  })
+
+  it('a preset key is still recognised as one, so it keeps its colour', () => {
+    const opts = tierOptionsFor(seeded, 'en', i18n)
+    expect(opts.slice(0, 4).map(o => o.preset)).toEqual(['budget', 'standard', 'deluxe', 'luxury'])
+    expect(isPresetTier('luxury')).toBe(true)
+    expect(isPresetTier('5_star')).toBe(false)
+  })
+
+  it('ja uses the Japanese label where set, else the built-in word for a preset, else the default label', () => {
+    const opts = tierOptionsFor(seeded, 'ja', i18n)
+    expect(opts.find(o => o.value === 'standard')!.label).toBe('スタンダード')
+    expect(opts.find(o => o.value === 'deluxe')!.label).toBe('i18n:deluxe')
+    expect(opts.find(o => o.value === '5_star')!.label).toBe('5 star')
+  })
+
+  it('an agency relabel of a preset wins over the built-in word', () => {
+    const relabelled = [{ key: 'budget', label: '3★', label_ja: null }]
+    expect(tierOptionsFor(relabelled, 'en', i18n)[0].label).toBe('3★')
+  })
+
+  it('with no vocabulary (migration unapplied, fetch failed) the four presets stand', () => {
+    const opts = tierOptionsFor([], 'en', i18n)
+    expect(opts.map(o => o.value)).toEqual([...PRESET_TIERS])
+    expect(opts.map(o => o.label)).toEqual(['i18n:budget', 'i18n:standard', 'i18n:deluxe', 'i18n:luxury'])
   })
 })

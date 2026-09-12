@@ -5,6 +5,7 @@ import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
+import { useTierOptions } from '@/hooks/useTierOptions'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import Link from 'next/link'
 import { Copy, Ship, Plus, Search, Edit, Trash2, X, Check, ChevronDown, AlertCircle, CheckCircle2, Crown, Star,
@@ -34,6 +35,9 @@ const TIER_OPTIONS_CONFIG = [
   { value: 'deluxe', labelKey: 'deluxe', color: 'bg-purple-100 text-purple-700' },
   { value: 'luxury', labelKey: 'luxury', color: 'bg-amber-100 text-amber-700' }
 ]
+// The four presets above carry a colour and an i18n word. A tier the agency
+// added in Settings → Vocabulary has neither: brand green, its own label.
+const CUSTOM_TIER_COLOR = 'bg-green-100 text-green-800'
 
 // Embark/disembark ports: the Nile between Luxor and Aswan, Cairo for the
 // long cruise, and Abu Simbel for the Lake Nasser boats.
@@ -203,12 +207,16 @@ interface CruiseFormData {
 // ============================================
 
 function TierBadge({ tier, t }: { tier: string | null; t: (key: string) => string }) {
-  const tierConfig = TIER_OPTIONS_CONFIG.find(tc => tc.value === tier) || TIER_OPTIONS_CONFIG[1]
   const tierLabel = useTierLabel()
+  const key = tier || 'standard'
+  const tierConfig = TIER_OPTIONS_CONFIG.find(tc => tc.value === key)
+  // Labelled by the ROW's tier, not the config's: an agency-added tier used
+  // to fall through to the 'standard' config and read as "Standard".
+  const fallback = tierConfig ? t(`tiers.${tierConfig.labelKey}`) : key
 
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig.color}`}>
-      {tierLabel(tierConfig.value, t(`tiers.${tierConfig.labelKey}`))}
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig?.color ?? CUSTOM_TIER_COLOR}`}>
+      {tierLabel(key, fallback)}
     </span>
   )
 }
@@ -338,7 +346,7 @@ function Pagination({
 export default function CruisesPage() {
   const t = useTranslations('rates.cruises')
   const tCommon = useTranslations('rates.common')
-  const tierLabel = useTierLabel()
+  const tierOptions = useTierOptions(key => t(`tiers.${key}`))
   const cruiseCabinLabel = useVocabLabel('cruise_cabin')
   const tPeriods = useTranslations('rates.ratePeriods')
   const dialog = useConfirmDialog()
@@ -1157,25 +1165,27 @@ export default function CruisesPage() {
                   {t('form.serviceTier')}
                 </h3>
                 <div className="flex flex-wrap gap-2 mb-3">
-                  {TIER_OPTIONS_CONFIG.map((tier) => (
+                  {tierOptions.map((opt) => (
                     <button
-                      key={tier.value}
+                      key={opt.value}
                       type="button"
-                      onClick={() => setFormData({ ...formData, tier: tier.value })}
+                      onClick={() => setFormData({ ...formData, tier: opt.value })}
                       className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
-                        formData.tier === tier.value
-                          ? tier.value === 'luxury'
+                        formData.tier === opt.value
+                          ? opt.value === 'luxury'
                             ? 'bg-amber-600 text-white'
-                            : tier.value === 'deluxe'
+                            : opt.value === 'deluxe'
                             ? 'bg-purple-600 text-white'
-                            : tier.value === 'standard'
+                            : opt.value === 'standard'
                             ? 'bg-blue-600 text-white'
-                            : 'bg-gray-600 text-white'
+                            : opt.value === 'budget'
+                            ? 'bg-gray-600 text-white'
+                            : 'bg-[#647C47] text-white'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
                     >
-                      {tier.value === 'luxury' && <Crown className="w-3.5 h-3.5" />}
-                      {tierLabel(tier.value, t(`tiers.${tier.labelKey}`))}
+                      {opt.value === 'luxury' && <Crown className="w-3.5 h-3.5" />}
+                      {opt.label}
                     </button>
                   ))}
                 </div>

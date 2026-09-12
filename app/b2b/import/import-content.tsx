@@ -2,6 +2,8 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
+import { useTierOptions } from '@/hooks/useTierOptions'
+import { presetTierFor } from '@/lib/vocabulary'
 import { useRouter } from 'next/navigation'
 import {
   Upload, FileText, Image as ImageIcon, X, Loader2,
@@ -92,12 +94,9 @@ const ACCEPTED_MIME_TYPES = [
 ]
 const MAX_FILE_SIZE = 32 * 1024 * 1024 // 32MB per file
 
-const TIER_OPTIONS = [
-  { value: 'budget', label: 'Budget', icon: null, color: 'gray' },
-  { value: 'standard', label: 'Standard', icon: null, color: 'blue' },
-  { value: 'deluxe', label: 'Deluxe', icon: Star, color: 'purple' },
-  { value: 'luxury', label: 'Luxury', icon: Crown, color: 'amber' },
-]
+// Tiers come from Settings → Vocabulary (useTierOptions) — this was a
+// four-entry copy that could never show a tier the agency added.
+const presetTierLabel = (key: string) => key.charAt(0).toUpperCase() + key.slice(1)
 
 const PACKAGE_TYPES = [
   { slug: 'day-trips', name: 'Day Trips', icon: Sun, color: 'amber' },
@@ -370,6 +369,7 @@ function ImportAttractionInput({
 export default function ImportContent() {
   const { rateSymbol } = useCurrency()
   const t = useTranslations('b2bImport')
+  const tierOptions = useTierOptions(presetTierLabel)
   const router = useRouter()
 
   // Wizard state
@@ -650,7 +650,9 @@ export default function ImportContent() {
       // Create variation using the selected tier so user can proceed directly to pricing
       if (templateId) {
         try {
-          const tierLabel = formData.tier.charAt(0).toUpperCase() + formData.tier.slice(1)
+          const tierLabel = tierOptions.find(o => o.value === formData.tier)?.label ?? presetTierLabel(formData.tier)
+          // group_type by RUNG: an agency-added bottom tier is shared like budget.
+          const tierRung = presetTierFor(tierOptions.map(o => o.value), formData.tier)
           const varResponse = await fetch('/api/tours/variations', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -658,7 +660,7 @@ export default function ImportContent() {
               template_id: templateId,
               variation_name: `${formData.trip_name} - ${tierLabel}`,
               tier: formData.tier,
-              group_type: formData.tier === 'budget' ? 'shared' : 'private',
+              group_type: tierRung === 'budget' ? 'shared' : 'private',
               min_pax: formData.num_adults + formData.num_children,
               max_pax: 40,
               is_active: true,
@@ -980,8 +982,8 @@ export default function ImportContent() {
                   onChange={(e) => setFormData(prev => ({ ...prev, tier: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#647C47]"
                 >
-                  {TIER_OPTIONS.map(tier => (
-                    <option key={tier.value} value={tier.value}>{tier.label}</option>
+                  {tierOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
               </div>

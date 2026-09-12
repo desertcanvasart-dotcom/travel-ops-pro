@@ -5,7 +5,7 @@ import type { GridConfig, GridTotals, Tier, ClientType, PassportType } from '../
 import { convertAmount } from '../lib/calculator'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
-import { useTierLabel } from '@/hooks/useTierLabel'
+import { useTierOptions } from '@/hooks/useTierOptions'
 
 interface GridHeaderProps {
   config: GridConfig
@@ -20,12 +20,9 @@ interface B2BPartner {
   default_margin_percent: number
 }
 
-const TIERS: { value: Tier; label: string }[] = [
-  { value: 'budget', label: 'Budget' },
-  { value: 'standard', label: 'Standard' },
-  { value: 'deluxe', label: 'Deluxe' },
-  { value: 'luxury', label: 'Luxury' },
-]
+// Tiers come from Settings → Vocabulary (useTierOptions) — this used to be a
+// four-entry copy that could never show a tier the agency added.
+const presetTierLabel = (key: string) => key.charAt(0).toUpperCase() + key.slice(1)
 
 // The ONE currency vocabulary (lib/org-rate-currency) — this list used to
 // be a four-entry copy that silently lacked JPY (operator, 2026-09-04).
@@ -37,7 +34,7 @@ const DEFAULT_MARGINS: Record<ClientType, number> = {
 }
 
 export default function GridHeader({ config, onChange, totals }: GridHeaderProps) {
-  const tierLabel = useTierLabel()
+  const tierOptions = useTierOptions(presetTierLabel)
   const [partners, setPartners] = useState<B2BPartner[]>([])
   const update = (partial: Partial<GridConfig>) => onChange({ ...config, ...partial })
   const sym = currencySymbol(config.currency)
@@ -145,8 +142,8 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
             onChange={(e) => update({ tier: e.target.value as Tier })}
             className="px-2 py-1 text-sm border border-gray-200 rounded-lg font-medium bg-white focus:ring-2 focus:ring-blue-200 transition-all"
           >
-            {TIERS.map(t => (
-              <option key={t.value} value={t.value}>{tierLabel(t.value, t.label)}</option>
+            {tierOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
 

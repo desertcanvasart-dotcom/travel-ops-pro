@@ -8,6 +8,7 @@ import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurre
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
+import { useTierOptions } from '@/hooks/useTierOptions'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -85,12 +86,17 @@ const DIETARY_OPTIONS = [
   'Kosher'
 ]
 
+// The PRESETS' badge colours and fallback words. The tiers a form offers come
+// from Settings → Vocabulary (useTierOptions); an agency-added tier has no
+// preset colour and takes CUSTOM_TIER_COLOR.
 const TIERS = [
   { value: 'budget', label: 'Budget', color: 'bg-gray-100 text-gray-700' },
   { value: 'standard', label: 'Standard', color: 'bg-blue-100 text-blue-700' },
   { value: 'deluxe', label: 'Deluxe', color: 'bg-purple-100 text-purple-700' },
   { value: 'luxury', label: 'Luxury', color: 'bg-amber-100 text-amber-700' }
 ]
+const CUSTOM_TIER_COLOR = 'bg-green-100 text-green-800'
+const presetTierLabel = (key: string) => TIERS.find(x => x.value === key)?.label ?? key
 
 interface Supplier {
   id: string
@@ -132,6 +138,7 @@ const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 export default function MealRatesContent() {
   const t = useTranslations('rates.meals')
   const tCommon = useTranslations('rates.common')
+  const tierOptions = useTierOptions(presetTierLabel)
   const tierLabel = useTierLabel()
   const mealTypeLabel = useVocabLabel('meal_type')
   const cuisineTypeLabel = useVocabLabel('cuisine_type')
@@ -351,7 +358,9 @@ export default function MealRatesContent() {
       rate_valid_to: rate.rate_valid_to || nextYear,
       supplier_id: rate.supplier_id || '',
       supplier_name: rate.supplier_name || '',
-      tier: (TIERS.find(t => t.value === (rate.tier || '').toLowerCase())?.value) || 'standard',
+      // Case-normalised, but NOT filtered to the presets: a rate filed under an
+      // agency-added tier must open under that tier, not as 'standard'.
+      tier: (rate.tier || '').trim().toLowerCase() || 'standard',
       meal_category: rate.meal_category || '',
       dietary_options: rate.dietary_options || [],
       per_person_rate: rate.per_person_rate !== false,
@@ -504,10 +513,11 @@ export default function MealRatesContent() {
 
   // Get tier badge
   const getTierBadge = (tier: string | undefined) => {
-    const tierConfig = TIERS.find(t => t.value.toLowerCase() === (tier || '').toLowerCase()) || TIERS[1]
+    const key = (tier || '').trim().toLowerCase() || 'standard'
+    const tierConfig = TIERS.find(t => t.value === key)
     return (
-      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig.color}`}>
-        {tierLabel(tierConfig.value, tierConfig.label)}
+      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${tierConfig?.color ?? CUSTOM_TIER_COLOR}`}>
+        {tierLabel(key, tierConfig?.label ?? key)}
       </span>
     )
   }
@@ -755,8 +765,8 @@ export default function MealRatesContent() {
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
             <option value="">{t('allTiers')}</option>
-            {TIERS.map(tier => (
-              <option key={tier.value} value={tier.value}>{tierLabel(tier.value, tier.label)}</option>
+            {tierOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
 
@@ -1216,8 +1226,8 @@ export default function MealRatesContent() {
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      {TIERS.map(tier => (
-                        <option key={tier.value} value={tier.value}>{tierLabel(tier.value, tier.label)}</option>
+                      {tierOptions.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
                       ))}
                     </select>
                   </div>
