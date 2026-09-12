@@ -296,6 +296,9 @@ interface TransportRate {
   minibus_capacity_max?: number
   bus_capacity_min?: number
   bus_capacity_max?: number
+  /** The vehicles list (20261005) — read through lib/rates/vehicle-bands.ts,
+   *  which falls back to the columns above on rows not yet backfilled. */
+  vehicles?: unknown
 }
 
 // Cruise transport pricing rule from b2b_pricing_rules
