@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useTranslations } from 'next-intl'
 import { useTierOptions } from '@/hooks/useTierOptions'
+import { normalizeTierKey } from '@/lib/vocabulary'
 import { createClient } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
@@ -165,16 +166,6 @@ Cliente: Queremos algo de lujo, es nuestro aniversario`
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
-
-const mapBudgetToTier = (budgetLevel: string): string => {
-  const mapping: Record<string, string> = {
-    'budget': 'budget', 'economy': 'budget',
-    'standard': 'standard', 'mid-range': 'standard', 'moderate': 'standard',
-    'deluxe': 'deluxe', 'superior': 'deluxe',
-    'luxury': 'luxury', 'premium': 'luxury', 'vip': 'luxury', 'high-end': 'luxury'
-  }
-  return mapping[budgetLevel?.toLowerCase()] || 'standard'
-}
 
 const getTierColor = (tier: string) => {
   const colors: Record<string, { bg: string; border: string; text: string; ring: string }> = {
@@ -1125,7 +1116,10 @@ function WhatsAppParserContent() {
         result.data.client_phone = phoneNumber
       }
 
-      const aiDetectedTier = mapBudgetToTier(result.data.budget_level || '')
+      // The model's answer, resolved against the agency's own tiers (key, label
+      // or synonym by rung) — this used to pass through a four-preset map that
+      // turned an agency-added tier back into 'standard'.
+      const aiDetectedTier = normalizeTierKey(result.data.budget_level || '', tierOptions.map(o => ({ key: o.value, label: o.label })))
       const finalTier = result.data.budget_level ? aiDetectedTier : userPreferences.default_tier
 
       result.data.tier = finalTier

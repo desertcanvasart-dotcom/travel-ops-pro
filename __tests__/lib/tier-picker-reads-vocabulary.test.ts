@@ -82,6 +82,21 @@ describe('tier pickers read the vocabulary', () => {
   }
 })
 
+describe('the WhatsApp parser offers and resolves the agency tiers', () => {
+  it('the extraction prompt lists tierPromptChoices, not a frozen budget|standard|deluxe|luxury', () => {
+    const src = read('app/api/ai/parse-whatsapp/route.ts')
+    expect(src.includes('tierItemsForCurrentOrg(')).toBe(true)
+    expect(src.includes('tierPromptChoices(tierItems)')).toBe(true)
+    expect(src.includes('"budget|standard|deluxe|luxury"'), 'a frozen choice list is back in the prompt').toBe(false)
+    expect(src.includes('resolveRequestedTier('), 'the model answer must be resolved to a ladder key').toBe(true)
+  })
+  it('the parser UI resolves the answer against the vocabulary, not a four-preset map', () => {
+    const src = read('app/whatsapp-parser/whatsapp-parser-content.tsx')
+    expect(src.includes('normalizeTierKey(')).toBe(true)
+    expect(/mapBudgetToTier/.test(src), 'the four-preset map is back').toBe(false)
+  })
+})
+
 describe('a requested tier survives the quote path', () => {
   it('generate-itinerary resolves the tier against the org vocabulary, not normalizeTier alone', () => {
     const src = read('app/api/ai/generate-itinerary/route.ts')

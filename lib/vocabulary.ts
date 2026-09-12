@@ -589,6 +589,17 @@ export function normalizeTierKey(value: string | null | undefined, items: readon
   return defaultTierKey(ladder)
 }
 
+/** The tier choices an extraction prompt offers the model — the agency's
+ *  KEYS in ladder order, each with its label where that differs from the key
+ *  ("budget (3★)"), so the model can match the client's words and still
+ *  answer with a key. The presets when there is no vocabulary. */
+export function tierPromptChoices(items: readonly Pick<VocabularyItem, 'key' | 'label'>[]): string {
+  const list = items.length ? items : PRESET_TIERS.map(k => ({ key: k, label: k }))
+  return list
+    .map(i => (i.label && slugifyKey(i.label) !== i.key ? `${i.key} (${i.label})` : i.key))
+    .join('|')
+}
+
 /** Tipping and similar per-tier multipliers, by ladder position. */
 export function tierMultiplier(ladder: readonly string[], tier: string, table: readonly number[] = [0.8, 1.0, 1.2, 1.5]): number {
   const pos = ladder.indexOf(tier)
