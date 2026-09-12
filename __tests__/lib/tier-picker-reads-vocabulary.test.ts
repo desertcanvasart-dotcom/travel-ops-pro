@@ -164,6 +164,14 @@ describe('transportation routes write vehicles through the one helper', () => {
       expect(/key:\s*'sedan',\s*label:\s*'Sedan'/.test(src), `${rel} still carries its own five-vehicle table`).toBe(false)
     })
   }
+  // P4a: the transportation sheet is built from the agency's vehicle types.
+  for (const rel of ['app/api/rates/bulk/import/route.ts', 'app/api/rates/bulk/export/route.ts']) {
+    it(`${rel} builds the transportation sheet from the vocabulary`, () => {
+      const src = read(rel)
+      expect(src.includes("vehicleColumnSpecsFor(await vocabularyItemsForCurrentOrg('vehicle_type'))")).toBe(true)
+      expect(src.includes('transportationConfigFor(')).toBe(true)
+    })
+  }
   it('the pricing engine has no city-to-vehicle table (Edfu → horse carriage was Egypt in a white-label engine)', () => {
     expect(/SPECIAL_VEHICLE_CITIES\s*[:=]/.test(read('lib/auto-pricing-service.ts'))).toBe(false)
   })

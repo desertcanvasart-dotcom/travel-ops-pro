@@ -1,6 +1,7 @@
 import { SLEEPING_TRAIN_CABIN_VALUES } from '@/lib/rates/sleeping-train-cabins'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { slugifyKey } from '@/lib/vocabulary'
+import { LEGACY_VEHICLE_KEYS, LEGACY_VEHICLE_BANDS, vehicleKeyLabel } from '@/lib/rates/vehicle-bands'
 /**
  * Bulk Rate Import/Export Service
  * Provides CSV import/export for all rate tables with validation and upsert.
@@ -33,6 +34,9 @@ export interface ColumnDef {
   // the slimmed template has to do the same, or it writes a row that is
   // priced for one passport and blank for the other.
   mirrorFrom?: string
+  // The template's example value for this column, when the generic sampler
+  // cannot know it — a vehicle's capacity band comes from Settings.
+  sample?: string
 }
 
 export interface ValidationError {
@@ -89,6 +93,62 @@ function col(name: string, label: string, type: ColumnDef['type'], required: boo
  */
 function legacyRate(name: string, label: string, mirrorFrom: string): ColumnDef {
   return { name, label, type: 'number', required: false, legacy: true, mirrorFrom }
+}
+
+// ============================================
+// Vehicle columns — generated from the agency's vehicle types
+// ============================================
+// A transportation sheet carries one column-set per vehicle: <key>_rate_eur,
+// <key>_capacity_min, <key>_capacity_max (and the legacy non-EU column, kept
+// readable, never offered). The five presets are the default; a route builds
+// the sheet for the agency's own list with transportationConfigFor(), so a
+// 4x4 defined in Settings → Vocabulary gets its own columns. On import the
+// cells fold into the row's `vehicles` list (lib/rates/vehicle-bands); on
+// export the list flattens back into cells. Flat stays flat — these sheets
+// are edited in spreadsheets and migrate rates between installs.
+
+export interface VehicleColumnSpec { key: string; label: string; min: number; max: number }
+
+export const PRESET_VEHICLE_COLUMNS: readonly VehicleColumnSpec[] = LEGACY_VEHICLE_KEYS.map(key => ({
+  key, label: vehicleKeyLabel(key), min: LEGACY_VEHICLE_BANDS[key].min, max: LEGACY_VEHICLE_BANDS[key].max,
+}))
+
+/** The sheet's vehicle specs for an org: its vehicle vocabulary (label and
+ *  Settings band each), else the presets. */
+export function vehicleColumnSpecsFor(
+  items: readonly { key: string; label: string; meta?: Record<string, unknown> | null }[],
+): VehicleColumnSpec[] {
+  if (items.length === 0) return [...PRESET_VEHICLE_COLUMNS]
+  return items.map(i => {
+    const legacy = LEGACY_VEHICLE_BANDS[i.key as keyof typeof LEGACY_VEHICLE_BANDS]
+    return {
+      key: i.key,
+      label: i.label || vehicleKeyLabel(i.key),
+      min: Number(i.meta?.min_pax) || legacy?.min || 1,
+      max: Number(i.meta?.max_pax) || legacy?.max || 45,
+    }
+  })
+}
+
+function vehicleColumns(vehicles: readonly VehicleColumnSpec[]): ColumnDef[] {
+  return vehicles.flatMap(v => [
+    col(`${v.key}_rate_eur`, `${v.label} Rate`, 'number', false),
+    legacyRate(`${v.key}_rate_non_eur`, `${v.label} Rate (non-EU passport, legacy)`, `${v.key}_rate_eur`),
+    { ...col(`${v.key}_capacity_min`, `${v.label} Cap Min`, 'number', false), sample: String(v.min) },
+    { ...col(`${v.key}_capacity_max`, `${v.label} Cap Max`, 'number', false), sample: String(v.max) },
+  ])
+}
+
+const isVehicleField = (name: string, key: string) =>
+  name === `${key}_rate_eur` || name === `${key}_rate_non_eur` || name === `${key}_capacity_min` || name === `${key}_capacity_max`
+
+/** The transportation config with the vehicle column-sets for these vehicles
+ *  in place of the presets — the sheet an org downloads and imports. */
+export function transportationConfigFor(vehicles: readonly VehicleColumnSpec[]): RateTableConfig {
+  const base = RATE_TABLE_CONFIGS.transportation_rates
+  const at = base.columns.findIndex(c => c.name === `${PRESET_VEHICLE_COLUMNS[0].key}_rate_eur`)
+  const rest = base.columns.filter(c => !PRESET_VEHICLE_COLUMNS.some(p => isVehicleField(c.name, p.key)))
+  return { ...base, columns: [...rest.slice(0, at), ...vehicleColumns(vehicles), ...rest.slice(at)] }
 }
 
 // Helper for an enum-constrained text column. Values are normalized to the
@@ -177,27 +237,9 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('duration', 'Duration', 'text', false),
       col('area', 'Area', 'text', false),
       col('includes', 'Includes', 'text', false),
-      // Vehicle rates
-      col('sedan_rate_eur', 'Sedan Rate', 'number', false),
-      legacyRate('sedan_rate_non_eur', 'Sedan Rate (non-EU passport, legacy)', 'sedan_rate_eur'),
-      col('sedan_capacity_min', 'Sedan Cap Min', 'number', false),
-      col('sedan_capacity_max', 'Sedan Cap Max', 'number', false),
-      col('minivan_rate_eur', 'Minivan Rate', 'number', false),
-      legacyRate('minivan_rate_non_eur', 'Minivan Rate (non-EU passport, legacy)', 'minivan_rate_eur'),
-      col('minivan_capacity_min', 'Minivan Cap Min', 'number', false),
-      col('minivan_capacity_max', 'Minivan Cap Max', 'number', false),
-      col('van_rate_eur', 'Van Rate', 'number', false),
-      legacyRate('van_rate_non_eur', 'Van Rate (non-EU passport, legacy)', 'van_rate_eur'),
-      col('van_capacity_min', 'Van Cap Min', 'number', false),
-      col('van_capacity_max', 'Van Cap Max', 'number', false),
-      col('minibus_rate_eur', 'Minibus Rate', 'number', false),
-      legacyRate('minibus_rate_non_eur', 'Minibus Rate (non-EU passport, legacy)', 'minibus_rate_eur'),
-      col('minibus_capacity_min', 'Minibus Cap Min', 'number', false),
-      col('minibus_capacity_max', 'Minibus Cap Max', 'number', false),
-      col('bus_rate_eur', 'Bus Rate', 'number', false),
-      legacyRate('bus_rate_non_eur', 'Bus Rate (non-EU passport, legacy)', 'bus_rate_eur'),
-      col('bus_capacity_min', 'Bus Cap Min', 'number', false),
-      col('bus_capacity_max', 'Bus Cap Max', 'number', false),
+      // Vehicle rates — the presets here; transportationConfigFor() swaps in
+      // the agency's own vehicle list for the sheet it downloads and imports.
+      ...vehicleColumns(PRESET_VEHICLE_COLUMNS),
       season(), rateValidFrom(), rateValidTo(),
       rateCurrency(),
       supplierId(), notes(), isActive(), createdAt(), updatedAt(),
@@ -719,6 +761,8 @@ function sampleNumber(name: string): string {
 /** Plausible sample values, so the row reads as a real rate rather than as
  *  filler. Matched on the column name first, then the declared type. */
 function exampleValue(colDef: ColumnDef, config: RateTableConfig): string {
+  // A column that carries its own sample (a vehicle's Settings band) wins.
+  if (colDef.sample !== undefined) return colDef.sample
   // An enum tells us its own vocabulary; the first value is always valid.
   if (colDef.allowedValues?.length) return colDef.allowedValues[0]
 
