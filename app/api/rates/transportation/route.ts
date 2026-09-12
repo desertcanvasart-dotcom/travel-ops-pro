@@ -3,6 +3,8 @@ import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { needsDestination } from '@/lib/vocabulary'
+import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
 
 // ============================================
 // TRANSPORTATION RATES API - Full CRUD
@@ -32,8 +34,22 @@ const SERVICE_TYPES = [
 // Both intercity variants require an origin_city + destination_city rather
 // than a single city. Use this helper everywhere instead of an exact-match
 // check against the now-retired 'intercity_transfer' literal.
+// Which service types need a destination is the vocabulary's
+// `needs_destination` meta (Settings → Vocabulary → Transport service types),
+// so a type the agency adds validates like the intercity presets do. The two
+// presets stay as the floor for when there is no vocabulary. Refreshed at the
+// top of every write (single-org install; a module-level set is one org's).
+const INTERCITY_PRESETS = ['intercity', 'intercity_with_sightseeing']
+let intercityTypes = new Set<string>(INTERCITY_PRESETS)
+
+async function refreshIntercityTypes(): Promise<void> {
+  const items = await vocabularyItemsForCurrentOrg('transport_service_type')
+  if (items.length === 0) return
+  intercityTypes = new Set([...INTERCITY_PRESETS, ...items.filter(i => needsDestination(items, i.key)).map(i => i.key)])
+}
+
 function isIntercityType(serviceType: string | null | undefined): boolean {
-  return serviceType === 'intercity' || serviceType === 'intercity_with_sightseeing'
+  return !!serviceType && intercityTypes.has(serviceType)
 }
 
 const DURATIONS = ['full_day', 'half_day', 'one_way'] as const
@@ -131,6 +147,7 @@ export async function GET(request: NextRequest) {
 // POST - Create new transportation rate (one row per service with tiered vehicle rates)
 export async function POST(request: NextRequest) {
   try {
+    await refreshIntercityTypes()
     const body = await request.json()
 
     const _rateCheck = validateRatePayload(body)
@@ -266,6 +283,7 @@ export async function POST(request: NextRequest) {
 // PUT - Update transportation rate
 export async function PUT(request: NextRequest) {
   try {
+    await refreshIntercityTypes()
     const body = await request.json()
     const { id, ...rawUpdates } = body
 

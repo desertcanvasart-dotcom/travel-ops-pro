@@ -9,6 +9,7 @@ import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
 import { useTierOptions } from '@/hooks/useTierOptions'
+import { defaultTierKey } from '@/lib/vocabulary'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -139,6 +140,9 @@ export default function MealRatesContent() {
   const t = useTranslations('rates.meals')
   const tCommon = useTranslations('rates.common')
   const tierOptions = useTierOptions(presetTierLabel)
+  // A new rate starts on the ladder's own "standard" rung — 'standard' itself
+  // may not exist once the agency has reshaped its tiers.
+  const defaultTier = defaultTierKey(tierOptions.map(o => o.value))
   const tierLabel = useTierLabel()
   const mealTypeLabel = useVocabLabel('meal_type')
   const cuisineTypeLabel = useVocabLabel('cuisine_type')
@@ -219,7 +223,7 @@ export default function MealRatesContent() {
     rate_valid_to: nextYear,
     supplier_id: '',
     supplier_name: '',
-    tier: 'standard',
+    tier: defaultTier,
     meal_category: '',
     dietary_options: [] as string[],
     per_person_rate: true,
@@ -318,7 +322,7 @@ export default function MealRatesContent() {
       rate_valid_to: nextYear,
       supplier_id: selectedSupplier || '',
       supplier_name: '',
-      tier: 'standard',
+      tier: defaultTier,
       meal_category: '',
       dietary_options: [],
       per_person_rate: true,

@@ -6,6 +6,7 @@ import CityOptions from '@/app/components/CityOptions'
 import { useTranslations } from 'next-intl'
 import { useVehicleLabel } from '@/hooks/useVehicleLabel'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
@@ -249,6 +250,13 @@ export default function TransportationContent() {
   const t = useTranslations('rates.transportation')
   const vehicleLabel = useVehicleLabel()
   const serviceTypeLabel = useVocabLabel('transport_service_type')
+  // The service-type pickers list the agency's vocabulary; which types need
+  // a destination is its `needs_destination` meta (the built-in flags stand
+  // in until it loads).
+  const serviceTypeOptions = useVocabOptions('transport_service_type',
+    SERVICE_TYPES.map(s => ({ value: s.value, label: t(s.labelKey), meta: { needs_destination: s.needsDestination } })))
+  const serviceTypeLabelFor = (key: string | null | undefined) =>
+    serviceTypeOptions.find(o => o.value === key)?.label ?? serviceTypeLabel(key, key ?? '')
   // The banner lives at the top of a long modal; the save button is at the
   // bottom. Without this, a refusal is written where nobody is looking.
   const errorRef = useRef<HTMLDivElement | null>(null)
@@ -362,8 +370,8 @@ export default function TransportationContent() {
   // ============================================
 
   const needsDestinationCity = (serviceType: string) => {
-    const type = SERVICE_TYPES.find(t => t.value === serviceType)
-    return type?.needsDestination || false
+    const type = serviceTypeOptions.find(o => o.value === serviceType)
+    return type?.meta.needs_destination === true
   }
 
   const generateServiceCode = (city: string, serviceType: string, destinationCity?: string) => {
@@ -805,8 +813,8 @@ export default function TransportationContent() {
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
             <option value="">{t('allServiceTypes')}</option>
-            {SERVICE_TYPES.map(type => (
-              <option key={type.value} value={type.value}>{serviceTypeLabel(type.value, t(type.labelKey))}</option>
+            {serviceTypeOptions.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -880,8 +888,7 @@ export default function TransportationContent() {
                 const activeTiers = getActiveTiers(rate)
                 const isIntercity = needsDestinationCity(rate.service_type)
                 const supplierName = rate.supplier?.name || rate.supplier_name
-                const serviceType = SERVICE_TYPES.find(st => st.value === rate.service_type)
-                const serviceLabel = serviceType ? serviceTypeLabel(serviceType.value, t(serviceType.labelKey)) : rate.service_type
+                const serviceLabel = serviceTypeLabelFor(rate.service_type)
 
                 return (
                   <div
@@ -1015,8 +1022,7 @@ export default function TransportationContent() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {paginatedRates.map((rate, index) => {
-                  const serviceType = SERVICE_TYPES.find(st => st.value === rate.service_type)
-                  const serviceLabel = serviceType ? serviceTypeLabel(serviceType.value, t(serviceType.labelKey)) : rate.service_type
+                  const serviceLabel = serviceTypeLabelFor(rate.service_type)
                   const supplierName = rate.supplier?.name || rate.supplier_name
                   const isIntercity = needsDestinationCity(rate.service_type)
 

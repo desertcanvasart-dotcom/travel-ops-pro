@@ -8,6 +8,7 @@ import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurre
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
@@ -101,6 +102,10 @@ export default function GuideRatesContent() {
   const guideGradeLabel = useVocabLabel('guide_grade')
   const guideDurationLabel = useVocabLabel('guide_duration')
   const guideLanguageLabel = useVocabLabel('guide_language')
+  // Grades and durations list the agency's vocabulary (hidden grades stay
+  // hidden — the pricing engine selects by the two the operator sells).
+  const gradeOptions = useVocabOptions('guide_grade', GUIDE_TYPES.map(g => ({ value: g.value, label: t(`guideTypes.${g.value}`) })))
+  const durationOptions = useVocabOptions('guide_duration', TOUR_DURATIONS.map(d => ({ value: d.value, label: t(`tourDurations.${d.value}`) })))
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const initialSupplierId = searchParams.get('supplier_id') || ''
@@ -684,8 +689,8 @@ export default function GuideRatesContent() {
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
             <option value="">{t('allTypes')}</option>
-            {GUIDE_TYPES.map(type => (
-              <option key={type.value} value={type.value}>{guideGradeLabel(type.value, t(`guideTypes.${type.value}`))}</option>
+            {gradeOptions.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
 
@@ -1076,8 +1081,8 @@ export default function GuideRatesContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      {GUIDE_TYPES.map(type => (
-                        <option key={type.value} value={type.value}>{guideGradeLabel(type.value, t(`guideTypes.${type.value}`))}</option>
+                      {gradeOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>
@@ -1139,8 +1144,8 @@ export default function GuideRatesContent() {
                       onChange={handleChange}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      {TOUR_DURATIONS.map(dur => (
-                        <option key={dur.value} value={dur.value}>{guideDurationLabel(dur.value, t(`tourDurations.${dur.value}`))}</option>
+                      {durationOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>

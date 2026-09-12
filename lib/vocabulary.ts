@@ -589,6 +589,50 @@ export function normalizeTierKey(value: string | null | undefined, items: readon
   return defaultTierKey(ladder)
 }
 
+/** A form's built-in choice for one kind — what a picker offered before the
+ *  vocabulary existed: the stored key, the i18n word, and any behaviour the
+ *  form attached to it (transport: needs_destination). */
+export interface BuiltInOption { value: string; label: string; meta?: Record<string, unknown> }
+
+export interface VocabOption {
+  /** The stored key. */
+  value: string
+  /** The word to show, in the active locale. */
+  label: string
+  /** The entry's behaviour flags: the vocabulary's meta over the built-in's. */
+  meta: Record<string, unknown>
+  /** The agency's one-line description, when it wrote one. */
+  description: string | null
+}
+
+/** The choices a picker offers for one KIND: the agency's active entries in
+ *  their order when the vocabulary holds any — so a hide, a reorder or an
+ *  added entry in Settings reaches the form — else the form's built-in list.
+ *  Labels follow the useVocabLabel rule: the agency's word for the active
+ *  locale when set, else the built-in i18n word for that key, else the key.
+ *  Meta merges vocabulary over built-in, so a seeded entry keeps the
+ *  behaviour the form knew and an agency-added one carries its own. */
+export function vocabOptionsFor(
+  items: readonly (Pick<VocabularyItem, 'key' | 'label' | 'label_ja'> & { meta?: Record<string, unknown> | null; description?: string | null })[],
+  locale: string,
+  builtIn: readonly BuiltInOption[],
+): VocabOption[] {
+  if (items.length === 0) {
+    return builtIn.map(b => ({ value: b.value, label: b.label, meta: b.meta ?? {}, description: null }))
+  }
+  const known = new Map(builtIn.map(b => [b.value, b]))
+  return items.map(item => {
+    const b = known.get(item.key)
+    const override = locale === 'ja' ? item.label_ja : item.label
+    return {
+      value: item.key,
+      label: override && override.trim() ? override : (b?.label ?? item.label ?? item.key),
+      meta: { ...(b?.meta ?? {}), ...(item.meta ?? {}) },
+      description: item.description?.trim() ? item.description : null,
+    }
+  })
+}
+
 /** The tier choices an extraction prompt offers the model — the agency's
  *  KEYS in ladder order, each with its label where that differs from the key
  *  ("budget (3★)"), so the model can match the client's words and still

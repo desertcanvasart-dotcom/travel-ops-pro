@@ -86,11 +86,19 @@ export async function tierLadderForCurrentOrg(): Promise<string[]> {
  *  (normalizeTierKey). Empty when there is no org, no vocabulary, or no
  *  request scope; callers treat empty as "the presets". */
 export async function tierItemsForCurrentOrg(): Promise<Pick<VocabularyItem, 'key' | 'label'>[]> {
+  return vocabularyItemsForCurrentOrg('tier')
+}
+
+/** The request org's ACTIVE entries of one kind, in ladder order — what a
+ *  route validates a stored key against or reads behaviour from
+ *  (needsDestination). Empty when there is no org, no vocabulary, or no
+ *  request scope; callers keep their built-in behaviour on empty. */
+export async function vocabularyItemsForCurrentOrg(kind: VocabularyKind): Promise<Pick<VocabularyItem, 'key' | 'label' | 'meta'>[]> {
   try {
     const orgId = await getCurrentOrgId()
     if (!orgId) return []
-    return activeInOrder(await loadVocabularyForOrg(createServerClient(), orgId, 'tier'))
-      .map(i => ({ key: i.key, label: i.label }))
+    return activeInOrder(await loadVocabularyForOrg(createServerClient(), orgId, kind))
+      .map(i => ({ key: i.key, label: i.label, meta: i.meta ?? {} }))
   } catch {
     return []
   }

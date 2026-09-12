@@ -8,6 +8,7 @@ import SupplierPicker from '@/components/rates/SupplierPicker'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
 import { Copy, ConciergeBell, Plus, Search, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
@@ -179,6 +180,8 @@ function Pagination({
 export default function HotelServicesPage() {
   const t = useTranslations('rates.hotelServices')
   const hotelServiceLabel = useVocabLabel('hotel_service_type')
+  // The picker lists the agency's vocabulary; the built-in list stands in until it loads.
+  const serviceOptions = useVocabOptions('hotel_service_type', SERVICE_TYPES.map(s => ({ value: s, label: t(`serviceTypes.${s}`) })))
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
   const { formatWithConversion, rateCurrency } = useCurrency()
@@ -503,8 +506,8 @@ export default function HotelServicesPage() {
               title={t('filters.allServices')}
             >
               <option value="all">{t('filters.allServices')}</option>
-              {SERVICE_TYPES.map(s => (
-                <option key={s} value={s}>{hotelServiceLabel(s, t(`serviceTypes.${s}`))}</option>
+              {serviceOptions.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
             <select
@@ -695,8 +698,8 @@ export default function HotelServicesPage() {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-600"
                     title={t('form.serviceType')}
                   >
-                    {SERVICE_TYPES.map(s => (
-                      <option key={s} value={s}>{hotelServiceLabel(s, t(`serviceTypes.${s}`))}</option>
+                    {serviceOptions.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
                     ))}
                   </select>
                 </div>
