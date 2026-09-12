@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { useTranslations } from 'next-intl'
 import { useVehicleLabel } from '@/hooks/useVehicleLabel'
-import { vehicleBands, LEGACY_VEHICLE_BANDS, type VehicleBandRate } from '@/lib/rates/vehicle-bands'
+import { vehicleBands, PRESET_VEHICLE_BANDS, type VehicleBandRate } from '@/lib/rates/vehicle-bands'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
 import RateAuditLog from '@/app/components/RateAuditLog'
@@ -50,27 +50,8 @@ interface TransportationRate {
   route_name?: string | null
   includes?: string | null
   rate_currency?: string | null
-  // Tiered vehicle rates
-  sedan_rate_eur: number | null
-  sedan_rate_non_eur: number | null
-  sedan_capacity_min: number
-  sedan_capacity_max: number
-  minivan_rate_eur: number | null
-  minivan_rate_non_eur: number | null
-  minivan_capacity_min: number
-  minivan_capacity_max: number
-  van_rate_eur: number | null
-  van_rate_non_eur: number | null
-  van_capacity_min: number
-  van_capacity_max: number
-  minibus_rate_eur: number | null
-  minibus_rate_non_eur: number | null
-  minibus_capacity_min: number
-  minibus_capacity_max: number
-  bus_rate_eur: number | null
-  bus_rate_non_eur: number | null
-  bus_capacity_min: number
-  bus_capacity_max: number
+  /** The vehicles list (lib/rates/vehicle-bands) — every vehicle the row prices. */
+  vehicles?: unknown
   // Legacy fields (kept for backward compat)
   vehicle_type?: string | null
   base_rate_eur?: number | null
@@ -241,7 +222,7 @@ export default function TransportationContent() {
     value: v.key, label: t(v.labelKey), meta: { min_pax: v.defaultMin, max_pax: v.defaultMax },
   })))
   const vehicleOptions: VehicleOption[] = vehicleVocab.map(o => {
-    const legacy = LEGACY_VEHICLE_BANDS[o.value as keyof typeof LEGACY_VEHICLE_BANDS]
+    const legacy = PRESET_VEHICLE_BANDS[o.value as keyof typeof PRESET_VEHICLE_BANDS]
     return {
       value: o.value,
       label: o.label,

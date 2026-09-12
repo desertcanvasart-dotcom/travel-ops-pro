@@ -8,7 +8,7 @@ import Link from 'next/link'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { hotelPpDouble } from '@/lib/rates/hotel-display-rate'
-import { vehicleBands, vehicleKeyLabel, LEGACY_VEHICLE_KEYS } from '@/lib/rates/vehicle-bands'
+import { vehicleBands, vehicleKeyLabel, PRESET_VEHICLE_KEYS } from '@/lib/rates/vehicle-bands'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
 
 // ============================================
@@ -34,17 +34,7 @@ interface BaseRate {
 
 interface TransportationRate extends BaseRate {
   service_type?: string
-  sedan_rate_eur?: number
-  sedan_rate_non_eur?: number
-  minivan_rate_eur?: number
-  minivan_rate_non_eur?: number
-  van_rate_eur?: number
-  van_rate_non_eur?: number
-  minibus_rate_eur?: number
-  minibus_rate_non_eur?: number
-  bus_rate_eur?: number
-  bus_rate_non_eur?: number
-  /** The vehicles list (lib/rates/vehicle-bands) — read first; the columns above are its legacy mirror. */
+  /** The vehicles list (lib/rates/vehicle-bands) — every vehicle the row prices. */
   vehicles?: unknown
 }
 
@@ -222,7 +212,7 @@ export default function RatesPage() {
   const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
   // The transport table's vehicle columns: the agency's vehicle types
   // (Settings → Vocabulary), the five presets until the vocabulary loads.
-  const vehicleOptions = useVocabOptions('vehicle_type', LEGACY_VEHICLE_KEYS.map(k => ({ value: k, label: vehicleKeyLabel(k) })))
+  const vehicleOptions = useVocabOptions('vehicle_type', PRESET_VEHICLE_KEYS.map(k => ({ value: k, label: vehicleKeyLabel(k) })))
 
   const [rates, setRates] = useState<RatesData | null>(null)
   const [loading, setLoading] = useState(true)

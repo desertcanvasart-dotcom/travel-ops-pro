@@ -5,7 +5,7 @@ import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-suppl
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { needsDestination } from '@/lib/vocabulary'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
-import { LEGACY_VEHICLE_KEYS, bodyTouchesVehicles } from '@/lib/rates/vehicle-bands'
+import { PRESET_VEHICLE_KEYS, bodyTouchesVehicles } from '@/lib/rates/vehicle-bands'
 import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
 
 // ============================================
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
       options: {
         serviceTypes: SERVICE_TYPES,
         durations: DURATIONS,
-        vehicleTiers: await vocabularyItemsForCurrentOrg('vehicle_type').then(items => items.length ? items.map(i => i.key) : [...LEGACY_VEHICLE_KEYS]),
+        vehicleTiers: await vocabularyItemsForCurrentOrg('vehicle_type').then(items => items.length ? items.map(i => i.key) : [...PRESET_VEHICLE_KEYS]),
         areas: AREAS
       }
     })
@@ -305,7 +305,7 @@ export async function PUT(request: NextRequest) {
     // Keep the vehicle fields out of the raw spread — the patch above owns them.
     const updates: Record<string, any> = {}
     for (const [key, val] of Object.entries(rawUpdates)) {
-      if (key !== 'vehicles' && !LEGACY_VEHICLE_KEYS.some(t => key.startsWith(`${t}_`))) {
+      if (key !== 'vehicles' && !PRESET_VEHICLE_KEYS.some(t => key.startsWith(`${t}_`))) {
         updates[key] = val
       }
     }

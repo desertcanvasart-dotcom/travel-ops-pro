@@ -4,14 +4,13 @@
 // The four routes that write transportation_rates (rates/transportation,
 // rates/transportation/[id], resources/transportation, resources/…/[id])
 // all resolve a request's vehicles the same way: what the body carries
-// (a list, or the legacy per-vehicle fields), checked against the vehicle
-// types the agency defines in Settings → Vocabulary, stored as the list
-// PLUS its mirror into the five legacy columns for readers not yet
-// converted. One function, so the four cannot drift.
+// (a list, or the per-vehicle fields older clients send), checked against
+// the vehicle types the agency defines in Settings → Vocabulary, stored as
+// the row's `vehicles` list. One function, so the four cannot drift.
 
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
 import {
-  allowedVehicleKeys, legacyColumnsFor, unknownVehicleKeys, vehicleBands, vehiclesFromBody,
+  allowedVehicleKeys, unknownVehicleKeys, vehicleBands, vehiclesFromBody,
   type VehicleBandRate,
 } from '@/lib/rates/vehicle-bands'
 
@@ -19,9 +18,9 @@ export type VehicleWrite =
   | { ok: true; patch: (Record<string, unknown> & { vehicles: VehicleBandRate[] }) | null }
   | { ok: false; error: string }
 
-/** The row patch for a write's vehicles — the list and its legacy mirror —
- *  or null when the body carries no vehicle field (a PUT changing something
- *  else). `existingRow` is the row being patched (null on create): legacy
+/** The row patch for a write's vehicles — `{ vehicles }` — or null when the
+ *  body carries no vehicle field (a PUT changing something else).
+ *  `existingRow` is the row being patched (null on create): per-vehicle
  *  fields merge over its vehicles, and a vehicle it already carries stays
  *  allowed even if the agency has since hidden it in Settings. */
 export async function resolveVehicleWrite(
@@ -42,5 +41,5 @@ export async function resolveVehicleWrite(
       error: `Unknown vehicle type${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}. Add it in Settings → Vocabulary → Vehicle types, or use one of: ${[...allowed].join(', ')}`,
     }
   }
-  return { ok: true, patch: { vehicles, ...legacyColumnsFor(vehicles) } }
+  return { ok: true, patch: { vehicles } }
 }

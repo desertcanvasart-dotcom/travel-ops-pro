@@ -275,29 +275,8 @@ interface TransportRate {
   capacity_min: number | null
   capacity_max: number | null
   is_active: boolean
-  // Tiered vehicle rates (from restructured table)
-  sedan_rate_eur?: number | null
-  sedan_rate_non_eur?: number | null
-  minivan_rate_eur?: number | null
-  minivan_rate_non_eur?: number | null
-  van_rate_eur?: number | null
-  van_rate_non_eur?: number | null
-  minibus_rate_eur?: number | null
-  minibus_rate_non_eur?: number | null
-  bus_rate_eur?: number | null
-  bus_rate_non_eur?: number | null
-  sedan_capacity_min?: number
-  sedan_capacity_max?: number
-  minivan_capacity_min?: number
-  minivan_capacity_max?: number
-  van_capacity_min?: number
-  van_capacity_max?: number
-  minibus_capacity_min?: number
-  minibus_capacity_max?: number
-  bus_capacity_min?: number
-  bus_capacity_max?: number
-  /** The vehicles list (20261005) — read through lib/rates/vehicle-bands.ts,
-   *  which falls back to the columns above on rows not yet backfilled. */
+  /** The vehicles list (20261005) — every vehicle the row prices, read
+   *  through lib/rates/vehicle-bands.ts. */
   vehicles?: unknown
 }
 

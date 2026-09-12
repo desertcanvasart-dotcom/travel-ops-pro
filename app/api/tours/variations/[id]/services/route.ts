@@ -27,7 +27,7 @@ async function getRateDetails(rateType: string, rateId: string) {
     case 'transportation':
       const { data: transport } = await supabaseAdmin
         .from('transportation_rates')
-        .select('id, service_code, service_type, route_name, city, origin_city, destination_city, vehicles, sedan_rate_eur, minivan_rate_eur, van_rate_eur, minibus_rate_eur, bus_rate_eur')
+        .select('id, service_code, service_type, route_name, city, origin_city, destination_city, vehicles')
         .eq('id', rateId)
         .single()
       if (transport) {

@@ -132,13 +132,17 @@ function hotelStaffRates() {
 }
 
 function transportationRates() {
+  // The vehicles list (20261005) with the conventional bands — the same
+  // five prices the per-vehicle columns carried before 20261006 dropped them.
   const tiers = {
     base_rate_eur: 70, base_rate_non_eur: 80,
-    sedan_rate_eur: 70, sedan_rate_non_eur: 80,
-    minivan_rate_eur: 85, minivan_rate_non_eur: 95,
-    van_rate_eur: 100, van_rate_non_eur: 110,
-    minibus_rate_eur: 120, minibus_rate_non_eur: 130,
-    bus_rate_eur: 150, bus_rate_non_eur: 160,
+    vehicles: [
+      { key: 'sedan', rate_eur: 70, rate_non_eur: 80, capacity_min: 1, capacity_max: 2 },
+      { key: 'minivan', rate_eur: 85, rate_non_eur: 95, capacity_min: 3, capacity_max: 7 },
+      { key: 'van', rate_eur: 100, rate_non_eur: 110, capacity_min: 8, capacity_max: 12 },
+      { key: 'minibus', rate_eur: 120, rate_non_eur: 130, capacity_min: 13, capacity_max: 20 },
+      { key: 'bus', rate_eur: 150, rate_non_eur: 160, capacity_min: 21, capacity_max: 45 },
+    ],
     capacity_min: 1, capacity_max: 45,
   }
   return [

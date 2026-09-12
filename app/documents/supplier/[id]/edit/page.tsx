@@ -10,6 +10,8 @@ import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { formatMoney } from '@/lib/currency-totals'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
+import { vehicleBands } from '@/lib/rates/vehicle-bands'
+import { slugifyKey } from '@/lib/vocabulary'
 
 interface TransportRate {
   id: string
@@ -21,11 +23,8 @@ interface TransportRate {
   destination_city: string | null
   area: string | null
   duration: string | null
-  sedan_rate_eur: number | null
-  minivan_rate_eur: number | null
-  van_rate_eur: number | null
-  minibus_rate_eur: number | null
-  bus_rate_eur: number | null
+  /** The vehicles list (lib/rates/vehicle-bands) — every vehicle the row prices. */
+  vehicles: unknown
   includes: string | null
   supplier_name: string | null
 }
@@ -238,11 +237,7 @@ export default function EditSupplierDocumentPage() {
           destination_city: r.destination_city,
           area: r.area,
           duration: r.duration,
-          sedan_rate_eur: r.sedan_rate_eur,
-          minivan_rate_eur: r.minivan_rate_eur,
-          van_rate_eur: r.van_rate_eur,
-          minibus_rate_eur: r.minibus_rate_eur,
-          bus_rate_eur: r.bus_rate_eur,
+          vehicles: r.vehicles ?? null,
           includes: r.includes,
           supplier_name: r.supplier_name || r.supplier?.name || null
         })))
@@ -526,17 +521,15 @@ export default function EditSupplierDocumentPage() {
     }
   }, [selectedAttractions])
 
-  // Get the rate for the current vehicle type from a transport rate record
+  // Get the rate for the current vehicle type from a transport rate record:
+  // the row's vehicles list by key ('luxury_sedan' reads as 'sedan'), else
+  // the minivan, else the sedan, else the smallest vehicle it prices.
   const getRateForVehicle = (rate: TransportRate, vehicleType?: string): number => {
     const vt = vehicleType || document?.vehicle_type || 'minivan'
-    switch (vt) {
-      case 'sedan': case 'luxury_sedan': return rate.sedan_rate_eur || 0
-      case 'minivan': return rate.minivan_rate_eur || 0
-      case 'van': case 'luxury_van': return rate.van_rate_eur || 0
-      case 'minibus': return rate.minibus_rate_eur || 0
-      case 'bus': return rate.bus_rate_eur || 0
-      default: return rate.minivan_rate_eur || rate.sedan_rate_eur || 0
-    }
+    const key = slugifyKey(vt).replace(/^luxury_/, '')
+    const bands = vehicleBands(rate as unknown as Record<string, unknown>)
+    const pick = bands.find(b => b.key === key) ?? bands.find(b => b.key === 'minivan') ?? bands.find(b => b.key === 'sedan') ?? bands[0]
+    return pick?.rate_eur || 0
   }
 
   // Add a transport route

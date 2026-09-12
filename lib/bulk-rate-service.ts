@@ -1,7 +1,7 @@
 import { SLEEPING_TRAIN_CABIN_VALUES } from '@/lib/rates/sleeping-train-cabins'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { slugifyKey } from '@/lib/vocabulary'
-import { LEGACY_VEHICLE_KEYS, LEGACY_VEHICLE_BANDS, vehicleKeyLabel } from '@/lib/rates/vehicle-bands'
+import { PRESET_VEHICLE_KEYS, PRESET_VEHICLE_BANDS, vehicleKeyLabel } from '@/lib/rates/vehicle-bands'
 /**
  * Bulk Rate Import/Export Service
  * Provides CSV import/export for all rate tables with validation and upsert.
@@ -109,8 +109,8 @@ function legacyRate(name: string, label: string, mirrorFrom: string): ColumnDef 
 
 export interface VehicleColumnSpec { key: string; label: string; min: number; max: number }
 
-export const PRESET_VEHICLE_COLUMNS: readonly VehicleColumnSpec[] = LEGACY_VEHICLE_KEYS.map(key => ({
-  key, label: vehicleKeyLabel(key), min: LEGACY_VEHICLE_BANDS[key].min, max: LEGACY_VEHICLE_BANDS[key].max,
+export const PRESET_VEHICLE_COLUMNS: readonly VehicleColumnSpec[] = PRESET_VEHICLE_KEYS.map(key => ({
+  key, label: vehicleKeyLabel(key), min: PRESET_VEHICLE_BANDS[key].min, max: PRESET_VEHICLE_BANDS[key].max,
 }))
 
 /** The sheet's vehicle specs for an org: its vehicle vocabulary (label and
@@ -120,7 +120,7 @@ export function vehicleColumnSpecsFor(
 ): VehicleColumnSpec[] {
   if (items.length === 0) return [...PRESET_VEHICLE_COLUMNS]
   return items.map(i => {
-    const legacy = LEGACY_VEHICLE_BANDS[i.key as keyof typeof LEGACY_VEHICLE_BANDS]
+    const legacy = PRESET_VEHICLE_BANDS[i.key as keyof typeof PRESET_VEHICLE_BANDS]
     return {
       key: i.key,
       label: i.label || vehicleKeyLabel(i.key),

@@ -40,7 +40,7 @@ const base = { supplier_id: null, service_type: 'city_tour', city: 'Luxor', dura
 beforeEach(() => { setMockTables({ transportation_rates: [] }) })
 
 describe('POST /api/rates/transportation — the vehicles list', () => {
-  it('stores a list with an agency-added vehicle and mirrors the presets into the legacy columns', async () => {
+  it('stores a list with an agency-added vehicle — the list only, no per-vehicle column (20261006)', async () => {
     const { status } = await post({ ...base, service_code: 'LXR-4X4', vehicles: [
       { key: 'sedan', rate_eur: 45, rate_non_eur: null, capacity_min: 1, capacity_max: 2 },
       { key: '4x4', rate_eur: 85, rate_non_eur: null, capacity_min: 1, capacity_max: 6 },
@@ -48,10 +48,8 @@ describe('POST /api/rates/transportation — the vehicles list', () => {
     expect(status).toBe(201)
     const [row] = await rows()
     expect((row.vehicles as { key: string }[]).map(v => v.key)).toEqual(['sedan', '4x4'])
-    expect(row.sedan_rate_eur).toBe(45)
-    expect(row.sedan_rate_non_eur).toBe(45) // "same as EUR" mirrored
-    expect(row.minivan_rate_eur).toBeNull()  // an absent preset is cleared
-    expect('4x4_rate_eur' in row).toBe(false) // a custom vehicle lives only in the list
+    // The columns are gone; a write that still named one would fail the insert.
+    expect(Object.keys(row).filter(k => /^(sedan|minivan|van|minibus|bus|4x4)_/.test(k))).toEqual([])
   })
 
   it('refuses a vehicle the agency has not defined, naming the allowed keys', async () => {
@@ -64,7 +62,7 @@ describe('POST /api/rates/transportation — the vehicles list', () => {
     expect(await rows()).toEqual([])
   })
 
-  it('still accepts the legacy shape (older clients, the importer) and builds the list from it', async () => {
+  it('still accepts the per-vehicle body shape (older clients) and builds the list from it — storing the list only', async () => {
     const { status } = await post({ ...base, service_code: 'LXR-LEGACY', sedan_rate_eur: 40, bus_rate_eur: 140, bus_capacity_min: 25, bus_capacity_max: 45 })
     expect(status).toBe(201)
     const [row] = await rows()
@@ -72,7 +70,7 @@ describe('POST /api/rates/transportation — the vehicles list', () => {
       { key: 'sedan', rate_eur: 40, rate_non_eur: null, capacity_min: 1, capacity_max: 2 },
       { key: 'bus', rate_eur: 140, rate_non_eur: null, capacity_min: 25, capacity_max: 45 },
     ])
-    expect(row.sedan_rate_eur).toBe(40)
+    expect('sedan_rate_eur' in row).toBe(false)
   })
 
   it('a list that prices nothing is refused', async () => {

@@ -32,7 +32,10 @@ const NOTE = opt('--note') || ''
 
 /** Every rate table and the amount columns it carries (passport-tier pairs included — both are amounts). */
 const TABLES = {
-  transportation_rates: ['base_rate_eur', 'base_rate_non_eur', 'sedan_rate_eur', 'sedan_rate_non_eur', 'minivan_rate_eur', 'minivan_rate_non_eur', 'van_rate_eur', 'van_rate_non_eur', 'minibus_rate_eur', 'minibus_rate_non_eur', 'bus_rate_eur', 'bus_rate_non_eur'],
+  // Per-vehicle rates live in the `vehicles` JSONB list since 20261005 (the
+  // twenty columns went in 20261006); this one-off cut-over script predates
+  // the list and converts the base pair only.
+  transportation_rates: ['base_rate_eur', 'base_rate_non_eur'],
   flight_rates: ['base_rate_eur', 'base_rate_non_eur', 'tax_eur', 'tax_non_eur'],
   train_rates: ['rate_eur'],
   sleeping_train_rates: ['rate_oneway_eur', 'rate_roundtrip_eur'],

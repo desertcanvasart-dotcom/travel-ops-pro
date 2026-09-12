@@ -11856,26 +11856,7 @@ export interface Database {
           supplier_id: string | null
           duration: string | null
           area: string | null
-          sedan_rate_eur: number | null
-          sedan_rate_non_eur: number | null
-          minivan_rate_eur: number | null
-          minivan_rate_non_eur: number | null
-          van_rate_eur: number | null
-          van_rate_non_eur: number | null
-          minibus_rate_eur: number | null
-          minibus_rate_non_eur: number | null
-          bus_rate_eur: number | null
-          bus_rate_non_eur: number | null
-          sedan_capacity_min: number | null
-          sedan_capacity_max: number | null
-          minivan_capacity_min: number | null
-          minivan_capacity_max: number | null
-          van_capacity_min: number | null
-          van_capacity_max: number | null
-          minibus_capacity_min: number | null
-          minibus_capacity_max: number | null
-          bus_capacity_min: number | null
-          bus_capacity_max: number | null
+          vehicles: Json | null
           route_name: string | null
           includes: string | null
           rate_currency: string | null
@@ -11903,26 +11884,7 @@ export interface Database {
           supplier_id?: string | null
           duration?: string | null
           area?: string | null
-          sedan_rate_eur?: number | null
-          sedan_rate_non_eur?: number | null
-          minivan_rate_eur?: number | null
-          minivan_rate_non_eur?: number | null
-          van_rate_eur?: number | null
-          van_rate_non_eur?: number | null
-          minibus_rate_eur?: number | null
-          minibus_rate_non_eur?: number | null
-          bus_rate_eur?: number | null
-          bus_rate_non_eur?: number | null
-          sedan_capacity_min?: number | null
-          sedan_capacity_max?: number | null
-          minivan_capacity_min?: number | null
-          minivan_capacity_max?: number | null
-          van_capacity_min?: number | null
-          van_capacity_max?: number | null
-          minibus_capacity_min?: number | null
-          minibus_capacity_max?: number | null
-          bus_capacity_min?: number | null
-          bus_capacity_max?: number | null
+          vehicles?: Json | null
           route_name?: string | null
           includes?: string | null
           rate_currency?: string | null
@@ -11950,26 +11912,7 @@ export interface Database {
           supplier_id?: string | null
           duration?: string | null
           area?: string | null
-          sedan_rate_eur?: number | null
-          sedan_rate_non_eur?: number | null
-          minivan_rate_eur?: number | null
-          minivan_rate_non_eur?: number | null
-          van_rate_eur?: number | null
-          van_rate_non_eur?: number | null
-          minibus_rate_eur?: number | null
-          minibus_rate_non_eur?: number | null
-          bus_rate_eur?: number | null
-          bus_rate_non_eur?: number | null
-          sedan_capacity_min?: number | null
-          sedan_capacity_max?: number | null
-          minivan_capacity_min?: number | null
-          minivan_capacity_max?: number | null
-          van_capacity_min?: number | null
-          van_capacity_max?: number | null
-          minibus_capacity_min?: number | null
-          minibus_capacity_max?: number | null
-          bus_capacity_min?: number | null
-          bus_capacity_max?: number | null
+          vehicles?: Json | null
           route_name?: string | null
           includes?: string | null
           rate_currency?: string | null

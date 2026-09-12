@@ -1,13 +1,15 @@
-// P1 of the vehicle-bands change must change no price.
+// The vehicle-bands change changed no price — and still hasn't.
 //
-// getTransportRateForPax used to read the five legacy column-sets directly;
-// it now reads through vehicleBands(row), which prefers the `vehicles` list
-// that migration 20261005 backfills from those same columns. For every row
-// shape production holds — and a few it could — the vehicle and rate chosen
+// getTransportRateForPax used to read the five per-vehicle column-sets
+// directly; since 20261005 it reads the `vehicles` list through
+// vehicleBands(row), and since 20261006 the columns are gone. For every row
+// shape production held — and a few it could — the vehicle and rate chosen
 // for every group size 1…45 must be identical between:
-//   (a) the legacy algorithm, reimplemented here verbatim as the reference,
-//   (b) the new wrapper reading the legacy columns (rows not yet backfilled),
-//   (c) the new wrapper reading the list the backfill would produce.
+//   (a) the column-era algorithm, reimplemented here verbatim as the oracle,
+//   (b) the wrapper reading the list 20261005's backfill produced from those
+//       same columns.
+// The fixtures are still written as columns so the oracle and the backfill
+// read the same thing; the wrapper only ever sees the list.
 import { describe, it, expect } from 'vitest'
 import { getTransportRateForPax, getAllVehicleTiers } from '@/lib/transport-rate-utils'
 
@@ -42,7 +44,7 @@ function backfill(row: Row) {
 const bands = { sedan_capacity_min: 1, sedan_capacity_max: 2, minivan_capacity_min: 3, minivan_capacity_max: 7, van_capacity_min: 8, van_capacity_max: 12, minibus_capacity_min: 13, minibus_capacity_max: 20, bus_capacity_min: 21, bus_capacity_max: 45 }
 
 const FIXTURES: Record<string, Row> = {
-  // What all 101 production rows look like on 2026-09-12: four vehicles, no van, default bands.
+  // What all 101 production rows looked like on 2026-09-12: four vehicles, no van, default bands.
   'production shape': { ...bands, sedan_rate_eur: 45, minivan_rate_eur: 60, van_rate_eur: null, minibus_rate_eur: 95, bus_rate_eur: 140 },
   'with non-EU rates': { ...bands, sedan_rate_eur: 45, sedan_rate_non_eur: 50, minivan_rate_eur: 60, minivan_rate_non_eur: 66, minibus_rate_eur: 95, minibus_rate_non_eur: 100, bus_rate_eur: 140, bus_rate_non_eur: 155 },
   'all five': { ...bands, sedan_rate_eur: 45, minivan_rate_eur: 60, van_rate_eur: 75, minibus_rate_eur: 95, bus_rate_eur: 140 },
@@ -57,22 +59,15 @@ const strip = (r: ReturnType<typeof getTransportRateForPax>) =>
 
 describe('vehicle-bands parity — the same vehicle and rate for every pax count', () => {
   for (const [name, row] of Object.entries(FIXTURES)) {
-    it(`${name}: legacy columns → wrapper`, () => {
-      for (let pax = 1; pax <= 45; pax++) {
-        expect(strip(getTransportRateForPax(row, pax)), `pax ${pax}`).toEqual(legacyReference(row, pax))
-      }
-    })
     it(`${name}: backfilled list → wrapper`, () => {
-      const listed = { ...row, vehicles: backfill(row) }
+      const listed = { vehicles: backfill(row) }
       for (let pax = 1; pax <= 45; pax++) {
         expect(strip(getTransportRateForPax(listed, pax)), `pax ${pax}`).toEqual(legacyReference(row, pax))
       }
     })
     it(`${name}: getAllVehicleTiers lists the same vehicles in the same order`, () => {
-      const fromColumns = getAllVehicleTiers(row).map(r => r.tier)
-      const fromList = getAllVehicleTiers({ ...row, vehicles: backfill(row) }).map(r => r.tier)
-      expect(fromList).toEqual(fromColumns)
-      expect(fromColumns).toEqual(KEYS.filter(k => (row[`${k}_rate_eur`] ?? 0) > 0))
+      const fromList = getAllVehicleTiers({ vehicles: backfill(row) }).map(r => r.tier)
+      expect(fromList).toEqual(KEYS.filter(k => (row[`${k}_rate_eur`] ?? 0) > 0))
     })
   }
 

@@ -8,8 +8,8 @@
 // covers the group, else the largest.
 import { describe, it, expect } from 'vitest'
 import {
-  sanitizeVehicles, parseVehicles, vehicleBands, vehicleRateForPax, LEGACY_VEHICLE_BANDS,
-  vehiclesFromBody, legacyColumnsFor, allowedVehicleKeys, unknownVehicleKeys, bodyTouchesVehicles,
+  sanitizeVehicles, parseVehicles, vehicleBands, vehicleRateForPax, PRESET_VEHICLE_BANDS,
+  vehiclesFromBody, allowedVehicleKeys, unknownVehicleKeys, bodyTouchesVehicles,
   vehicleKeyLabel,
 } from '@/lib/rates/vehicle-bands'
 
@@ -56,34 +56,25 @@ describe('sanitizeVehicles — a list fit to store', () => {
   })
 })
 
-describe('vehicleBands — three fallbacks, in order', () => {
-  const columns = {
-    sedan_rate_eur: 45, sedan_capacity_min: 1, sedan_capacity_max: 2,
-    minivan_rate_eur: 60, minivan_capacity_min: 3, minivan_capacity_max: 7,
-    van_rate_eur: null, van_capacity_min: 8, van_capacity_max: 12,
-    minibus_rate_eur: 95, minibus_capacity_min: 13, minibus_capacity_max: 20,
-    bus_rate_eur: 140, bus_rate_non_eur: 150, bus_capacity_min: 21, bus_capacity_max: 45,
-  }
-  it('1. the list wins when the row has one, even over populated columns', () => {
-    const row = { ...columns, vehicles: [v('4x4', 85, 1, 6)] }
+describe('vehicleBands — the list, else the oldest shape', () => {
+  it('1. the list wins when the row has one — even over a base rate, even a stray column', () => {
+    const row = { base_rate_eur: 80, sedan_rate_eur: 45, vehicles: [v('4x4', 85, 1, 6)] }
     expect(vehicleBands(row).map(b => b.key)).toEqual(['4x4'])
   })
-  it('2. else the legacy columns — only priced vehicles, the row\'s own bands, non-EU carried', () => {
-    const bands = vehicleBands(columns)
-    expect(bands.map(b => b.key)).toEqual(['sedan', 'minivan', 'minibus', 'bus'])
-    expect(bands[3]).toEqual(v('bus', 140, 21, 45, 150))
+  it('1b. an empty list is a real "offers nothing", not a fallthrough', () => {
+    expect(vehicleBands({ base_rate_eur: 80, vehicles: [] })).toEqual([])
   })
-  it('2b. a column with no band falls back to the legacy default band', () => {
-    expect(vehicleBands({ sedan_rate_eur: 45 })[0]).toMatchObject({ capacity_min: LEGACY_VEHICLE_BANDS.sedan.min, capacity_max: LEGACY_VEHICLE_BANDS.sedan.max })
-  })
-  it('3. else the oldest shape: one base rate for one vehicle_type', () => {
+  it('2. else the oldest shape: one base rate for one vehicle_type', () => {
     expect(vehicleBands({ base_rate_eur: 80, vehicle_type: 'Minibus', capacity_min: 10, capacity_max: 20 }))
       .toEqual([v('minibus', 80, 10, 20)])
     expect(vehicleBands({ base_rate_eur: 80 })).toEqual([v('vehicle', 80, 1, 45)])
   })
+  it('the dropped per-vehicle columns are NOT read (20261006): a row with only those prices nothing', () => {
+    expect(vehicleBands({ sedan_rate_eur: 45, sedan_capacity_min: 1, sedan_capacity_max: 2 })).toEqual([])
+  })
   it('nothing priced → empty', () => {
     expect(vehicleBands({})).toEqual([])
-    expect(vehicleBands({ sedan_rate_eur: 0, base_rate_eur: 0 })).toEqual([])
+    expect(vehicleBands({ base_rate_eur: 0 })).toEqual([])
   })
 })
 
@@ -120,19 +111,19 @@ describe('vehiclesFromBody — what a write carries', () => {
     expect(vehiclesFromBody({ vehicles: [v('sedan', 45, 3, 2)] }).invalid).toMatch(/min ≤ max/)
     expect(vehiclesFromBody({ vehicles: 'sedan' }).invalid).toBeTruthy()
   })
-  it('legacy fields PATCH the row: a vehicle the client does not know survives', () => {
-    // An importer that speaks only sedan…bus re-prices the sedan; the 4x4 priced from the form stays.
+  it('preset fields PATCH the row: a vehicle the client does not know survives', () => {
+    // An older client that speaks only sedan…bus re-prices the sedan; the 4x4 priced from the form stays.
     const r = vehiclesFromBody({ sedan_rate_eur: '50' }, existing)
     expect(r.vehicles?.map(b => [b.key, b.rate_eur])).toEqual([['sedan', 50], ['4x4', 85], ['bus', 140]])
     expect(r.vehicles?.[0]).toMatchObject({ capacity_min: 1, capacity_max: 2 }) // band kept from the row
   })
-  it('a legacy field blanked or zero removes that vehicle, as a blank column always did', () => {
+  it('a preset field blanked or zero removes that vehicle, as a blank column always did', () => {
     expect(vehiclesFromBody({ bus_rate_eur: null }, existing).vehicles?.map(b => b.key)).toEqual(['sedan', '4x4'])
     expect(vehiclesFromBody({ bus_rate_eur: 0 }, existing).vehicles?.map(b => b.key)).toEqual(['sedan', '4x4'])
   })
-  it('a legacy vehicle new to the row takes the conventional band unless given one', () => {
+  it('a preset vehicle new to the row takes the conventional band unless given one', () => {
     const r = vehiclesFromBody({ minivan_rate_eur: 60 }, [])
-    expect(r.vehicles?.[0]).toEqual(v('minivan', 60, LEGACY_VEHICLE_BANDS.minivan.min, LEGACY_VEHICLE_BANDS.minivan.max))
+    expect(r.vehicles?.[0]).toEqual(v('minivan', 60, PRESET_VEHICLE_BANDS.minivan.min, PRESET_VEHICLE_BANDS.minivan.max))
     const withBand = vehiclesFromBody({ minivan_rate_eur: 60, minivan_capacity_min: '1', minivan_capacity_max: '8' }, [])
     expect(withBand.vehicles?.[0]).toMatchObject({ capacity_min: 1, capacity_max: 8 })
   })
@@ -141,20 +132,6 @@ describe('vehiclesFromBody — what a write carries', () => {
     expect(bodyTouchesVehicles({ notes: 'x' })).toBe(false)
     expect(bodyTouchesVehicles({ van_capacity_max: 14 })).toBe(true)
     expect(bodyTouchesVehicles({ vehicles: [] })).toBe(true)
-  })
-})
-
-describe('legacyColumnsFor — the mirror for readers not yet converted', () => {
-  it('writes the five presets, clears an absent one, leaves a custom vehicle to the list', () => {
-    const cols = legacyColumnsFor([v('sedan', 45, 1, 2, 50), v('4x4', 85, 1, 6)])
-    expect(cols).toMatchObject({
-      sedan_rate_eur: 45, sedan_rate_non_eur: 50, sedan_capacity_min: 1, sedan_capacity_max: 2,
-      bus_rate_eur: null, bus_rate_non_eur: null, bus_capacity_min: LEGACY_VEHICLE_BANDS.bus.min, bus_capacity_max: LEGACY_VEHICLE_BANDS.bus.max,
-    })
-    expect(Object.keys(cols).some(k => k.startsWith('4x4'))).toBe(false)
-  })
-  it('rate_non_eur null mirrors as "same as EUR"', () => {
-    expect(legacyColumnsFor([v('minivan', 60, 3, 7)]).minivan_rate_non_eur).toBe(60)
   })
 })
 

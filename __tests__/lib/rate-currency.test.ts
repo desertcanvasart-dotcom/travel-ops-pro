@@ -92,7 +92,6 @@ describe('createRateNormalizer', () => {
     const { getTransportRateForPax } = await import('@/lib/transport-rate-utils')
     const rows = [{
       id: 1, rate_currency: 'EGP',
-      sedan_rate_eur: 2000, sedan_rate_non_eur: 2000, sedan_capacity_min: 1, sedan_capacity_max: 2,
       vehicles: [
         { key: 'sedan', rate_eur: 2000, rate_non_eur: 2000, capacity_min: 1, capacity_max: 2 },
         { key: 'bus', rate_eur: 8000, rate_non_eur: null, capacity_min: 21, capacity_max: 45 },
@@ -105,19 +104,18 @@ describe('createRateNormalizer', () => {
     expect(vehicles[1].rate_eur).toBe(160)
     expect(vehicles[1].rate_non_eur).toBeNull() // blank stays blank
     expect(vehicles[1].capacity_max).toBe(45)  // bands are not money
-    // The row the engine sees prices in USD, list and columns agreeing.
+    // The row the engine sees prices in USD.
     expect(getTransportRateForPax(r, 2)?.rateEur).toBe(40)
     expect(getTransportRateForPax(r, 30)?.rateEur).toBe(160)
-    expect(r.sedan_rate_eur).toBe(40)
     // The fetched row itself was not rewritten.
     expect((rows[0].vehicles as Array<Record<string, unknown>>)[0].rate_eur).toBe(2000)
   })
 
   it('a neutralised transportation row loses its vehicles list too — no raw list survives a missing FX rate', async () => {
-    const rows = [{ id: 1, rate_currency: 'XXX', sedan_rate_eur: 2000, vehicles: [{ key: 'sedan', rate_eur: 2000, rate_non_eur: null, capacity_min: 1, capacity_max: 2 }] }]
+    const rows = [{ id: 1, rate_currency: 'XXX', base_rate_eur: 2000, vehicles: [{ key: 'sedan', rate_eur: 2000, rate_non_eur: null, capacity_min: 1, capacity_max: 2 }] }]
     const [r] = (await usd().normalize('transportation_rates', rows))!
     expect(r.vehicles).toBeNull()
-    expect(r.sedan_rate_eur).toBeNull()
+    expect(r.base_rate_eur).toBeNull()
   })
 
   it('NEVER guesses: an unbackable pair neutralises the row into a missing rate', async () => {

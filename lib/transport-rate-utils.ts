@@ -4,11 +4,11 @@
 // from restructured transportation_rates table
 // ============================================
 
-import { LEGACY_VEHICLE_KEYS, parseVehicles, vehicleBands, vehicleKeyLabel, vehicleRateForPax, type VehicleBandRate } from '@/lib/rates/vehicle-bands'
+import { parseVehicles, vehicleBands, vehicleKeyLabel, vehicleRateForPax, type VehicleBandRate } from '@/lib/rates/vehicle-bands'
 
 /** A vehicle KEY from Settings → Vocabulary → Vehicle types — one of the
- *  five the legacy columns know, or one the agency added ('4x4'). Open since
- *  20261005; see lib/rates/vehicle-bands.ts. */
+ *  five presets, or one the agency added ('4x4'). Open since 20261005; see
+ *  lib/rates/vehicle-bands.ts. */
 export type VehicleTier = string
 
 export interface TransportRateRecord {
@@ -25,27 +25,8 @@ export interface TransportRateRecord {
   includes?: string | null
   notes?: string | null
   is_active: boolean
-  // Tiered vehicle rates
-  sedan_rate_eur: number | null
-  sedan_rate_non_eur: number | null
-  sedan_capacity_min: number
-  sedan_capacity_max: number
-  minivan_rate_eur: number | null
-  minivan_rate_non_eur: number | null
-  minivan_capacity_min: number
-  minivan_capacity_max: number
-  van_rate_eur: number | null
-  van_rate_non_eur: number | null
-  van_capacity_min: number
-  van_capacity_max: number
-  minibus_rate_eur: number | null
-  minibus_rate_non_eur: number | null
-  minibus_capacity_min: number
-  minibus_capacity_max: number
-  bus_rate_eur: number | null
-  bus_rate_non_eur: number | null
-  bus_capacity_min: number
-  bus_capacity_max: number
+  /** The vehicles list (20261005) — every vehicle the row prices. */
+  vehicles?: unknown
   // Deprecated (kept for backward compat during migration)
   vehicle_type?: string | null
   base_rate_eur?: number | null
@@ -64,8 +45,8 @@ export interface VehicleRateResult {
 }
 
 // The vehicles a row offers come from lib/rates/vehicle-bands.ts — the
-// `vehicles` list (20261005), else the five legacy column-sets. The two
-// functions below are the shape their five call sites expect; the selection
+// `vehicles` list (20261005). The two functions below are the shape their
+// five call sites expect; the selection
 // rule is lib/vocabulary's vehicleForPax, which is the rule this file always
 // applied: exact band, else the smallest vehicle whose maximum covers the
 // group, else the largest offered.
@@ -101,14 +82,10 @@ function legacyBaseRate(rate: Record<string, unknown>): VehicleRateResult | null
   return null
 }
 
-/** Whether the row prices a vehicle through the list or the legacy columns
- *  (as opposed to the single base_rate shape). */
+/** Whether the row carries a vehicles list (as opposed to the single
+ *  base_rate shape). An empty list is a list — "offers nothing". */
 function hasVehicleBands(rate: Record<string, unknown>): boolean {
-  if (parseVehicles(rate.vehicles)) return true
-  return LEGACY_VEHICLE_KEYS.some(k => {
-    const r = rate[`${k}_rate_eur`]
-    return typeof r === 'number' && r > 0
-  })
+  return parseVehicles(rate.vehicles) !== null
 }
 
 /**
