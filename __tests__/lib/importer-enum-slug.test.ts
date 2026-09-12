@@ -32,6 +32,6 @@ describe('importer enum columns accept the word and store the key', () => {
   it('a cabin the operator does not sell is still refused, naming the allowed keys', () => {
     const preview = validateImportData([row('Double')], config)
     expect(preview.validRows).toBe(0)
-    expect(preview.errors.map(e => e.message ?? e.error ?? JSON.stringify(e)).join(' ')).toMatch(/single, half_twin/)
+    expect(preview.errors.map(e => e.message).join(' ')).toMatch(/single, half_twin/)
   })
 })
