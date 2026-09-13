@@ -29,7 +29,11 @@ interface TeamMember {
   id: string
   full_name: string
   email: string
+  /** The organisation MEMBERSHIP role — what every gate reads. /api/profiles
+   *  stitches it over the user_profiles mirror (lib/auth/profile-roles.ts). */
   role: string
+  /** null = no membership in this organisation yet (invitation not accepted). */
+  membership_role?: string | null
   phone?: string
   is_active: boolean
   last_login_at?: string
@@ -57,6 +61,7 @@ const ROLE_OPTIONS = [
 ]
 
 const ROLE_COLORS: Record<string, string> = {
+  owner: 'bg-amber-100 text-amber-800',
   admin: 'bg-purple-100 text-purple-700',
   manager: 'bg-blue-100 text-blue-700',
   agent: 'bg-green-100 text-green-700',
@@ -65,7 +70,7 @@ const ROLE_COLORS: Record<string, string> = {
 
 export default function UserManagementPage() {
   const router = useRouter()
-  const { isAdmin, canManageTeam } = useRole()
+  const { isAdmin } = useRole()
   const { profile } = useAuth()
   const confirmDialog = useConfirm()
 
@@ -272,7 +277,10 @@ export default function UserManagementPage() {
           </div>
         </div>
 
-        {canManageTeam && (
+        {/* Inviting is organisation administration (/api/invitations is
+            admin-only); a manager sees the roster and the invitations,
+            read-only. */}
+        {isAdmin && (
           <button
             onClick={() => setShowInviteModal(true)}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors"
@@ -380,8 +388,10 @@ export default function UserManagementPage() {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    {/* Role Badge/Selector */}
-                    {isAdmin ? (
+                    {/* Role Badge/Selector — the MEMBERSHIP role. An owner is
+                        shown, never edited here: ownership is transferred, not
+                        picked from a dropdown (the API refuses it too). */}
+                    {isAdmin && member.role !== 'owner' ? (
                       <select
                         value={member.role}
                         onChange={(e) => updateMemberRole(member.id, e.target.value)}
@@ -392,8 +402,8 @@ export default function UserManagementPage() {
                         ))}
                       </select>
                     ) : (
-                      <span className={`px-2 py-1 text-xs font-medium rounded ${ROLE_COLORS[member.role]}`}>
-                        {ROLE_OPTIONS.find(r => r.value === member.role)?.label || member.role}
+                      <span className={`px-2 py-1 text-xs font-medium rounded ${ROLE_COLORS[member.role] ?? ROLE_COLORS.viewer}`}>
+                        {member.role === 'owner' ? 'Owner' : ROLE_OPTIONS.find(r => r.value === member.role)?.label || member.role}
                       </span>
                     )}
 
@@ -473,7 +483,8 @@ export default function UserManagementPage() {
                         <span className={`px-2 py-1 text-xs font-medium rounded ${ROLE_COLORS[invitation.role]}`}>
                           {ROLE_OPTIONS.find(r => r.value === invitation.role)?.label}
                         </span>
-                        
+
+                        {isAdmin && (<>
                         <button
                           onClick={() => resendInvitation(invitation)}
                           className="p-1.5 text-gray-400 hover:text-[#647C47] hover:bg-gray-100 rounded transition-colors"
@@ -488,6 +499,7 @@ export default function UserManagementPage() {
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
+                        </>)}
                       </div>
                     </div>
                   </div>
@@ -516,6 +528,7 @@ export default function UserManagementPage() {
                         </div>
                       </div>
 
+                      {isAdmin && (
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => resendInvitation(invitation)}
@@ -530,6 +543,7 @@ export default function UserManagementPage() {
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
+                      )}
                     </div>
                   </div>
                 ))}

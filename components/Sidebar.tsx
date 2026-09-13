@@ -262,17 +262,19 @@ const navigationConfig: NavConfig[] = [
   {
     titleKey: 'settings',
     key: 'settings',
-    // admin + manager: the section renders for managers so they can still reach
-    // Seasonal Premiums (a pricing tool). Every other item is pinned admin-only
-    // so widening the section does not expose admin config to managers.
+    // admin + manager: a manager sees every page, Settings included (the
+    // middleware page gates agree — middleware.ts ROUTE_PERMISSIONS). What a
+    // manager cannot do is administer the organisation: invite, change a
+    // role, edit the vocabulary or the company identity. Those are gated on
+    // the API and inside the pages, which render read-only for non-admins.
     roles: ['admin', 'manager'],
     items: [
-      { labelKey: 'settings', href: '/settings', icon: Settings, roles: ['admin'] },
-      { labelKey: 'vocabulary', href: '/settings/vocabulary', icon: BookOpen, roles: ['admin'] },
-      { labelKey: 'destinations', href: '/settings/destinations', icon: Globe, roles: ['admin'] },
+      { labelKey: 'settings', href: '/settings', icon: Settings, roles: ['admin', 'manager'] },
+      { labelKey: 'vocabulary', href: '/settings/vocabulary', icon: BookOpen, roles: ['admin', 'manager'] },
+      { labelKey: 'destinations', href: '/settings/destinations', icon: Globe, roles: ['admin', 'manager'] },
       { labelKey: 'seasonalPremiums', href: '/rates/seasons', icon: CalendarRange, roles: ['admin', 'manager'] },
-      { labelKey: 'activityLog', href: '/activity', icon: ScrollText, roles: ['admin'] },
-      { labelKey: 'userManagement', href: '/users', icon: Shield, roles: ['admin'] },
+      { labelKey: 'activityLog', href: '/activity', icon: ScrollText, roles: ['admin', 'manager'] },
+      { labelKey: 'userManagement', href: '/users', icon: Shield, roles: ['admin', 'manager'] },
     ]
   }
 ]

@@ -8,11 +8,15 @@ import { recordActivity } from '@/lib/activity-log'
 
 // Define route permissions - which roles can access which routes
 const ROUTE_PERMISSIONS: Record<string, string[]> = {
-  // Admin only
-  '/settings': ['admin'],
-  '/activity': ['admin'],
-  '/users': ['admin'],
-  
+  // Admin and Manager — a manager sees everything, Settings included. What
+  // stays admin-only is ADMINISTERING the organisation, and that is gated on
+  // the mutations (below) and in-route, not on the pages: a manager opens
+  // Settings and User Management, reads the Activity Log, and cannot invite,
+  // change a role, edit the vocabulary or the company identity.
+  '/settings': ['admin', 'manager'],
+  '/activity': ['admin', 'manager'],
+  '/users': ['admin', 'manager'],
+
   // Admin and Manager
   '/team-members': ['admin', 'manager'],
   '/departments': ['admin', 'manager'],
@@ -91,7 +95,10 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   { prefix: '/api/departments', roles: ['admin', 'manager'] },
   { prefix: '/api/organization', roles: ['admin'] },
   { prefix: '/api/invitations', roles: ['admin'] },
-  { prefix: '/api/settings', roles: ['admin'] },
+  // Email, notification and WhatsApp-AI settings are operating configuration,
+  // not organisation administration: manager and above, like the rate
+  // tables. Payment terms keep their own owner-only check in-route.
+  { prefix: '/api/settings', roles: ['admin', 'manager'] },
   { prefix: '/api/integrations', roles: ['admin'] },
   { prefix: '/api/partners', roles: ['admin', 'manager'] },
 
