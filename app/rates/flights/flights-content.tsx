@@ -1,8 +1,10 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import CityOptions from '@/app/components/CityOptions'
+import { useDestinationCities } from '@/app/components/useDestinationCities'
+import { flightTypeForRoute } from '@/lib/rates/flight-type'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
@@ -41,7 +43,8 @@ interface FlightRate {
   airline: string
   airline_code?: string | null
   flight_number: string | null
-  flight_type: 'domestic' | 'international'
+  /** A flight_type vocabulary key — the presets are 'domestic' / 'international'. */
+  flight_type: string
   cabin_class: 'economy' | 'business' | 'first'
   base_rate_eur: number
   guide_rate?: number | null
@@ -78,7 +81,8 @@ interface FormData {
   route_to: string
   airline: string
   flight_number: string
-  flight_type: 'domestic' | 'international'
+  /** A flight_type vocabulary key — the presets are 'domestic' / 'international'. */
+  flight_type: string
   cabin_class: 'economy' | 'business' | 'first'
   base_rate_eur: number
   guide_rate?: number | null
@@ -176,6 +180,14 @@ export default function FlightsContent() {
   // added there appears, a removed one disappears. The built-in lists only
   // stand in until the vocabulary loads.
   const flightTypeOptions = useVocabOptions('flight_type', FLIGHT_TYPES.map(x => ({ value: x.value, label: x.label })))
+  const flightTypeLabelFor = (key: string | null | undefined) =>
+    flightTypeOptions.find(o => o.value === key)?.label ?? flightTypeLabel(key, key ?? '')
+  // The flight type follows the agency's DESTINATIONS (Settings → Destinations):
+  // both cities in one destination = domestic, otherwise international. A
+  // pre-fill only — once the operator picks a type by hand on this form, a
+  // route change stops overwriting it.
+  const { destinations } = useDestinationCities()
+  const typeChosenByHand = useRef(false)
   const cabinClassOptions = useVocabOptions('flight_cabin', CABIN_CLASSES.map(x => ({ value: x.value, label: x.label })))
   const frequencyOptions = useVocabOptions('flight_frequency', FREQUENCIES.map(x => ({ value: x.value, label: x.label })))
   const tCommon = useTranslations('rates.common')
@@ -277,11 +289,12 @@ export default function FlightsContent() {
         prev.airline_code,
         prev.cabin_class
       )
-      // Auto-detect flight type
-      const domesticCities = ['Cairo', 'Luxor', 'Aswan', 'Hurghada', 'Sharm El Sheikh', 'Alexandria', 'Abu Simbel', 'Marsa Alam']
-      const fromDomestic = domesticCities.includes(field === 'route_from' ? value : prev.route_from)
-      const toDomestic = domesticCities.includes(field === 'route_to' ? value : prev.route_to)
-      updated.flight_type = (fromDomestic && toDomestic) ? 'domestic' : 'international'
+      // Pre-fill the flight type from the agency's destinations; never a
+      // guess when neither city is known, never over a hand-picked type.
+      if (!typeChosenByHand.current) {
+        const detected = flightTypeForRoute(updated.route_from, updated.route_to, destinations)
+        if (detected) updated.flight_type = detected as FlightRate['flight_type']
+      }
       return updated
     })
   }
@@ -326,11 +339,12 @@ export default function FlightsContent() {
       route_from: from,
       route_to: to,
       service_code: generateServiceCode(from, to, prev.airline, prev.cabin_class),
-      flight_type: 'domestic'
+      flight_type: (typeChosenByHand.current ? null : flightTypeForRoute(from, to, destinations)) as FlightRate['flight_type'] | null ?? prev.flight_type,
     }))
   }
 
   const openAddModal = () => {
+    typeChosenByHand.current = false
     setEditingRate(null)
     setFormData(initialFormData)
     setError(null)
@@ -348,6 +362,8 @@ export default function FlightsContent() {
   }
 
   const openEditModal = (rate: FlightRate) => {
+    // An existing rate's type is what it is until the operator changes it here.
+    typeChosenByHand.current = true
     setEditingRate(rate)
     setError(null)
     setFormData({
@@ -520,8 +536,12 @@ export default function FlightsContent() {
   // Stats
   const totalRates = rates.length
   const activeRates = rates.filter(r => r.is_active).length
-  const domesticRoutes = rates.filter(r => r.flight_type === 'domestic').length
-  const internationalRoutes = rates.filter(r => r.flight_type === 'international').length
+  // One count per type in the agency's vocabulary (plus any stored type the
+  // vocabulary no longer lists, so no rate is uncounted).
+  const typeCounts = [
+    ...flightTypeOptions.map(o => ({ key: o.value, label: o.label })),
+    ...[...new Set(rates.map(r => r.flight_type))].filter(k => k && !flightTypeOptions.some(o => o.value === k)).map(k => ({ key: k, label: flightTypeLabelFor(k) })),
+  ].map(t => ({ ...t, count: rates.filter(r => r.flight_type === t.key).length }))
   const uniqueAirlines = [...new Set(rates.map(r => r.airline))].length
   const linkedToSuppliers = rates.filter(r => r.supplier_id).length
 
@@ -580,7 +600,7 @@ export default function FlightsContent() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-6 gap-3">
+      <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-sky-500"></div>
@@ -595,20 +615,15 @@ export default function FlightsContent() {
           </div>
           <p className="text-xl font-semibold text-gray-900 mt-1">{activeRates}</p>
         </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-            <span className="text-xs text-gray-500">{t('domestic')}</span>
+        {typeCounts.map((tc, i) => (
+          <div key={tc.key} className="bg-white rounded-lg border border-gray-200 p-3">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${i % 2 === 0 ? 'bg-blue-500' : 'bg-purple-500'}`}></div>
+              <span className="text-xs text-gray-500 truncate" title={tc.label}>{tc.label}</span>
+            </div>
+            <p className="text-xl font-semibold text-gray-900 mt-1">{tc.count}</p>
           </div>
-          <p className="text-xl font-semibold text-gray-900 mt-1">{domesticRoutes}</p>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-3">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-            <span className="text-xs text-gray-500">{t('international')}</span>
-          </div>
-          <p className="text-xl font-semibold text-gray-900 mt-1">{internationalRoutes}</p>
-        </div>
+        ))}
         <div className="bg-white rounded-lg border border-gray-200 p-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-orange-500"></div>
@@ -794,7 +809,7 @@ export default function FlightsContent() {
                         ? 'bg-blue-100 text-blue-800' 
                         : 'bg-purple-100 text-purple-800'
                     }`}>
-                      {rate.flight_type === 'domestic' ? 'DOM' : 'INT'}
+                      {flightTypeLabelFor(rate.flight_type)}
                     </span>
                   </td>
                   <td className="px-4 py-2 text-center">
@@ -1059,10 +1074,29 @@ export default function FlightsContent() {
                         ? 'bg-blue-100 text-blue-700'
                         : 'bg-purple-100 text-purple-700'
                     }`}>
-                      {formData.flight_type === 'domestic' ? t('domestic') : t('international')}
+                      {flightTypeLabelFor(formData.flight_type)}
                     </span>
                   </div>
                 )}
+
+                {/* The agency's Flight types (Settings → Vocabulary). Pre-filled
+                    from the destinations when the route is picked; choosing one
+                    here makes it stick for the rest of this form. */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1.5">{t('flightType')}</label>
+                  <select
+                    value={formData.flight_type}
+                    onChange={(e) => { typeChosenByHand.current = true; setFormData(prev => ({ ...prev, flight_type: e.target.value as FlightRate['flight_type'] })) }}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                  >
+                    {!flightTypeOptions.some(o => o.value === formData.flight_type) && formData.flight_type && (
+                      <option value={formData.flight_type}>{flightTypeLabelFor(formData.flight_type)}</option>
+                    )}
+                    {flightTypeOptions.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
 
                 <div className="grid grid-cols-3 gap-4">
                   <div>

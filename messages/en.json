@@ -3558,6 +3558,7 @@
       "totalRates": "Total Rates",
       "active": "Active",
       "domestic": "Domestic",
+      "flightType": "Flight type",
       "international": "International",
       "airlines": "Airlines",
       "linked": "Linked",

@@ -4157,6 +4157,7 @@
       "totalRates": "料金総数",
       "active": "有効",
       "domestic": "国内線",
+      "flightType": "フライト種別",
       "international": "国際線",
       "airlines": "航空会社",
       "linked": "リンク済み",
