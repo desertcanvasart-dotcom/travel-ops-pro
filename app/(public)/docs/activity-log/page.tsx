@@ -13,7 +13,7 @@ export default function ActivityLogPage() {
 
       <h1 className="text-3xl font-bold text-gray-900 mb-4">Activity Log</h1>
       <p className="text-gray-600 mb-8">
-        <strong>Settings &rarr; Activity Log</strong> is the audit trail: a record of every change made through the application &mdash; who made it, when, what it touched, and from where. It is admin-only, and its records cannot be edited or deleted from the app.
+        <strong>Settings &rarr; Activity Log</strong> is the audit trail: a record of every change made through the application &mdash; who made it, when, what it touched, and from where. It is open to managers and administrators, and its records cannot be edited or deleted from the app.
       </p>
 
       <section className="mb-10">

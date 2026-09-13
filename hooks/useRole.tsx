@@ -86,7 +86,9 @@ export function useRole(): UseRoleReturn {
       canAccess: (requiredRoles: UserRole[]) => roleAllows(role, requiredRoles),
 
       canManageTeam: roleAllows(role, ['admin', 'manager']),
-      canManageSettings: roleAllows(role, ['admin']),
+      // Settings is a page a manager may open; administering the
+      // organisation (invites, roles, identity) stays admin — see middleware.
+      canManageSettings: roleAllows(role, ['admin', 'manager']),
       canViewFinancials: roleAllows(role, ['admin', 'manager']),
       canEditClients: roleAllows(role, ['admin', 'manager', 'agent']),
       canDeleteRecords: roleAllows(role, ['admin', 'manager']),

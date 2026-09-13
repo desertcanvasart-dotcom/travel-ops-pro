@@ -9,7 +9,9 @@ interface UserProfile {
   id: string
   email: string
   full_name: string | null
-  role: 'admin' | 'agent' | 'viewer'
+  // The DISPLAY MIRROR of organization_members.role (lib/auth/roles.ts):
+  // kept in step by a database trigger, never gated on. Owner shows as admin.
+  role: 'admin' | 'manager' | 'agent' | 'viewer'
   company_name: string | null
   phone: string | null
   is_active: boolean

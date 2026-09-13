@@ -59,7 +59,7 @@ Your admin assigns you one of these roles. Each role determines what you can see
 | Role | What You Can Do |
 |------|-----------------|
 | **Admin** | Everything: settings, users, rates, finances, and all operations |
-| **Manager** | Rates, team members, financial reports, clients, itineraries, invoices, tours |
+| **Manager** | Sees every page (Settings, Users and the Activity Log included); rates, team members, financial reports, clients, itineraries, invoices, tours. Cannot invite, change roles, or edit company settings |
 | **Agent** | Clients, itineraries, invoices, payments, tasks, inbox, WhatsApp, tours |
 | **Viewer** | View-only: dashboard, analytics, calendar, notifications |
 

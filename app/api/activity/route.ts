@@ -1,4 +1,6 @@
-// GET /api/activity — the audit trail, admin/owner only.
+// GET /api/activity — the audit trail, manager and above (a read; the
+// /activity page is open to managers and a blocked API under an open page
+// is theatre in the other direction).
 // Filters: user_email (substring), entity (substring), action, from/to dates.
 // Page-walked by the UI; capped page size.
 
@@ -14,7 +16,7 @@ const admin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    const forbidden = await requireRole(['admin'])
+    const forbidden = await requireRole(['admin', 'manager'])
     if (forbidden) return forbidden
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()

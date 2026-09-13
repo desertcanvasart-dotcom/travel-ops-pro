@@ -28,7 +28,7 @@ export default function UserManagementPage() {
             <tbody className="divide-y divide-gray-100 text-gray-600">
               <tr><td className="px-3 py-2 font-medium">Owner</td><td className="px-3 py-2">Everything, always &mdash; the owner passes every gate without being named in it. Ownership is transferred, never invited.</td></tr>
               <tr><td className="px-3 py-2 font-medium">Administrator</td><td className="px-3 py-2">Everything, including Settings, User Management, the Activity Log, and financial configuration.</td></tr>
-              <tr><td className="px-3 py-2 font-medium">Manager</td><td className="px-3 py-2">Operations plus finance: rates, financial reports, receipts, bills, commissions, P&amp;L &mdash; but not user management or company settings.</td></tr>
+              <tr><td className="px-3 py-2 font-medium">Manager</td><td className="px-3 py-2">Sees everything an administrator sees &mdash; Settings, User Management and the Activity Log included &mdash; and runs operations and finance: rates, financial reports, receipts, bills, commissions, P&amp;L. What a manager cannot do is administer the organisation: invite people, change roles, edit the vocabulary or the company identity.</td></tr>
               <tr><td className="px-3 py-2 font-medium">Agent</td><td className="px-3 py-2">Day-to-day sales work: clients, itineraries, invoices, payments, tasks, the inboxes, tours and follow-ups.</td></tr>
               <tr><td className="px-3 py-2 font-medium">Viewer</td><td className="px-3 py-2">The dashboard only. The default for an account with no explicit role &mdash; access fails closed.</td></tr>
             </tbody>

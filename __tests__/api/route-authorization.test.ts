@@ -105,6 +105,53 @@ describe('API mutation gate — coverage', () => {
   })
 })
 
+// ============================================
+// A manager sees everything — the PAGE gates
+// ============================================
+// 2026-09-13: a manager could not open Settings, User Management or the
+// Activity Log at all — the pages were admin-only. The line is now: a manager
+// may SEE every page; ADMINISTERING the organisation (invites, role changes,
+// company identity, integrations) stays admin on the mutations.
+function pagePermissions(): Record<string, string[]> {
+  const block = source.match(/const ROUTE_PERMISSIONS[^=]*=\s*\{([\s\S]*?)\n\}/)
+  expect(block, 'ROUTE_PERMISSIONS not found in middleware.ts').toBeTruthy()
+  const perms: Record<string, string[]> = {}
+  const re = /'([^']+)':\s*\[([^\]]+)\]/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(block![1]))) {
+    perms[m[1]] = m[2].split(',').map(r => r.trim().replace(/'/g, '')).filter(Boolean)
+  }
+  return perms
+}
+
+describe('page gate — a manager sees everything', () => {
+  it.each(['/settings', '/activity', '/users'])('%s opens for a manager', page => {
+    const roles = pagePermissions()[page]
+    expect(roles, `${page} has no page gate`).toBeTruthy()
+    expect(roleAllows('manager', roles)).toBe(true)
+    expect(roleAllows('agent', roles)).toBe(false)
+    expect(roleAllows('viewer', roles)).toBe(false)
+  })
+
+  it('no page gate excludes a manager', () => {
+    for (const [page, roles] of Object.entries(pagePermissions())) {
+      expect(roleAllows('manager', roles), `manager must open ${page}`).toBe(true)
+    }
+  })
+
+  it('administering the organisation stays admin: invitations, org identity, integrations', () => {
+    for (const path of ['/api/invitations', '/api/organization', '/api/integrations']) {
+      const roles = rolesFor(path)
+      expect(roles, `${path} has no entry`).not.toBeNull()
+      expect(roleAllows('manager', roles!), `manager must not administer ${path}`).toBe(false)
+    }
+  })
+
+  it('operating settings (email, notifications, WhatsApp-AI) are manager-and-above', () => {
+    expect(roleAllows('manager', rolesFor('/api/settings/email')!)).toBe(true)
+  })
+})
+
 describe('P3 — audit authorship comes from the session, not the body', () => {
   it.each([
     ['app/api/b2b/quotes/[id]/route.ts', 'create_quote_revision'],
