@@ -30,6 +30,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { buildBundle, bundleFindings, reportEnv } from '../lib/support/bundle-core.mjs'
 import { JOB_NAMES, SCHEDULED_IN_PROCESS } from '../lib/support/job-names.mjs'
+import { verifyLicence } from '../lib/licence/verify-core.mjs'
 import { computePending, loadApplied } from './migrate-core.mjs'
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -223,6 +224,17 @@ async function main() {
   line(env.missingRequired.length === 0, 'required environment variables',
     env.missingRequired.length ? `missing: ${env.missingRequired.join(', ')}` : `${env.set.length} set`)
 
+  // The licence is verified here exactly as the app verifies it at boot
+  // (lib/licence) — same key, same code — so what this line says is what
+  // Settings → Organization → Licence shows. Missing is not a fault: an
+  // evaluation install is a supported state.
+  const licence = verifyLicence(process.env.LICENSE_KEY)
+  if (licence.status === 'missing') {
+    console.log(`  ok    licence  — ${licence.reason}`)
+  } else {
+    line(licence.status === 'valid' || licence.status === 'grace', 'licence', licence.reason)
+  }
+
   const database = await probeDatabase()
   if (database.notChecked) {
     console.log(`  skip  database and migrations  — ${database.notChecked}`)
@@ -279,6 +291,13 @@ async function main() {
   })
 
   const findings = [...bundleFindings(bundle)]
+  if (licence.status === 'invalid') {
+    findings.push(`${licence.reason} LICENSE_KEY must be the whole key Autoura issued, on one line: AUT1.<payload>.<signature>. Until it verifies, the install runs as an unlicensed evaluation — nothing is disabled.`)
+  } else if (licence.status === 'expired') {
+    findings.push(`${licence.reason} Operations keep working; updates from Autoura are refused until the licence is renewed. Contact Autoura for a new key.`)
+  } else if (licence.status === 'grace') {
+    findings.push(`${licence.reason} Renew before the grace runs out; nothing changes until then.`)
+  }
   if (ownership && !ownership.error && ownership.users > 0) {
     const pending = database.migrationsPending?.length ?? 0
     if (ownership.orgs === 0) {

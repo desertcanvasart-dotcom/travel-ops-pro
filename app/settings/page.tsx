@@ -42,6 +42,7 @@ import { LanguageSelector } from '@/components/LanguageSelector'
 import { SignatureEditor } from '@/components/email/RichTextEditor'
 import PaymentTermsCard from '@/app/components/PaymentTermsCard'
 import CompanyProfileCard from '@/app/components/CompanyProfileCard'
+import LicenceCard from '@/app/components/LicenceCard'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 
 // ============================================
@@ -1426,6 +1427,8 @@ function SettingsContent() {
                   money is asked for and when is not a per-agent preference. */}
               {activeTab === 'organization' && <CompanyProfileCard />}
               {activeTab === 'organization' && <PaymentTermsCard />}
+              {/* What this install is licensed as — read-only, from LICENSE_KEY. */}
+              {activeTab === 'organization' && <LicenceCard />}
             </>
           )}
         </div>

@@ -3362,6 +3362,27 @@
     }
   },
   "settings": {
+    "licence": {
+      "title": "ライセンス",
+      "description": "このインストールがライセンスされている会社と、ライセンスの有効期間。サーバー環境の LICENSE_KEY で設定します。",
+      "status": {
+        "valid": "ライセンス済み",
+        "grace": "更新期限間近",
+        "expired": "期限切れ",
+        "invalid": "無効なキー",
+        "missing": "未ライセンス（評価版）"
+      },
+      "licensee": "ライセンシー",
+      "licenceId": "ライセンスID",
+      "validUntil": "有効期限",
+      "daysLeft": "残り{count}日",
+      "domains": "ドメイン",
+      "seats": "アカウント数",
+      "features": "含まれる機能",
+      "howToSet": "Autoura から発行された LICENSE_KEY を .env に追加してサーバーを再起動してください。その間もすべて動作します。キーはこのコピーの所有者を記録します。",
+      "invalidHint": "LICENSE_KEY が一行で丸ごとコピーされているか確認してください。詳細は npm run doctor に表示されます。",
+      "failedToLoad": "ライセンス状態を読み込めませんでした。"
+    },
     "title": "設定",
     "subtitle": "アカウントと環境設定を管理",
     "profile": "プロフィール",
