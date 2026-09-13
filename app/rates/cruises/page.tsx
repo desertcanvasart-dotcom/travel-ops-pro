@@ -24,7 +24,9 @@ const NEW_SHIP = '__new__'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import RatePeriodsImportExport from '@/app/components/RatePeriodsImportExport'
 import RateSeasonsEditor from '@/components/rates/RateSeasonsEditor'
+import RateSupplementsPicker from '@/components/rates/RateSupplementsPicker'
 import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
+import { supplementsForRow, type RateSupplement } from '@/lib/rates/supplements'
 import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
 
 // ============================================
@@ -77,6 +79,7 @@ interface Cruise {
   // season blocks below, which are kept for the bulk importer and for readers
   // that price without a travel date.
   seasons: RateSeason[] | null
+  supplements?: RateSupplement[] | null
   // Seasonal rates - Low Season
   low_season_start: string | null
   low_season_end: string | null
@@ -153,6 +156,7 @@ interface CruiseFormData {
   rate_double_eur: number
   rate_triple_eur: number
   seasons: RateSeason[]
+  supplements: RateSupplement[]
   // Low Season
   low_season_start: string
   low_season_end: string
@@ -355,6 +359,7 @@ export default function CruisesPage() {
   const cruiseCabinLabel = useVocabLabel('cruise_cabin')
   const cabinOptions = useVocabOptions('cruise_cabin', CABIN_TYPES.map(c => ({ value: c, label: t(`cabinTypes.${c}`) })))
   const tPeriods = useTranslations('rates.ratePeriods')
+  const tSupp = useTranslations('rates.supplements')
   const dialog = useConfirmDialog()
   const { formatWithConversion, rateCurrency } = useCurrency()
   const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
@@ -393,6 +398,7 @@ export default function CruisesPage() {
     rate_double_eur: 0,
     rate_triple_eur: 0,
     seasons: [],
+    supplements: [],
     // Low Season (May 1 - Sep 30)
     low_season_start: `${currentYear}-05-01`,
     low_season_end: `${currentYear}-09-30`,
@@ -576,6 +582,7 @@ export default function CruisesPage() {
       // Opens with the ship's periods, or its old low/high/peak windows
       // converted, so editing a pre-migration cruise loses nothing.
       seasons: seasonsForRow(cruise, 'cruise'),
+      supplements: supplementsForRow(cruise),
       // Low Season
       low_season_start: cruise.low_season_start || `${currentYear}-05-01`,
       low_season_end: cruise.low_season_end || `${currentYear}-09-30`,
@@ -1235,9 +1242,20 @@ export default function CruisesPage() {
                   <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs">3</span>
                   {tPeriods('titleWithCurrency', { currency: formData.rate_currency || rateCurrency })}
                 </h4>
+                {/* Which of the agency's cruise supplements this ship prices —
+                    a deck, a balcony — each with a per-night price per period. */}
+                <div className="mb-3">
+                  <p className="text-xs font-medium text-gray-600 mb-1">{tSupp('title')}</p>
+                  <RateSupplementsPicker
+                    kind="cruise_supplement"
+                    value={formData.supplements}
+                    onChange={(supplements) => setFormData({ ...formData, supplements })}
+                  />
+                </div>
                 <RateSeasonsEditor
                   entity="cruise"
                   seasons={formData.seasons}
+                  supplements={formData.supplements}
                   currency={rateCurrency}
                   onChange={(seasons) => setFormData({ ...formData, seasons })}
                 />

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSeasons, legacyColumnMirror } from '@/lib/rates/rate-seasons'
+import { sanitizeSupplements } from '@/lib/rates/supplements'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createActorAdminClient } from '@/lib/supabase-actor'
@@ -76,6 +77,8 @@ export async function POST(request: NextRequest) {
       ...body,
       seasons: cruiseSeasons,
       ...legacyColumnMirror(cruiseSeasons, 'cruise'),
+      // The supplements the ship carries; their prices ride in the periods above.
+      supplements: sanitizeSupplements(body.supplements),
       supplier_id: supplierCheck.supplier_id,
       // Omitted when null so a database that has not run the phase-1 migration
       // yet still saves the rate.

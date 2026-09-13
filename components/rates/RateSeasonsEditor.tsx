@@ -23,6 +23,7 @@ import {
   type RateSeason,
   type RateSeasonEntity,
 } from '@/lib/rates/rate-seasons'
+import { supplementField, type RateSupplement } from '@/lib/rates/supplements'
 
 /** Rate rows as the form shows them: EUR block, then non-EUR block. */
 const FIELD_GROUPS: Record<RateSeasonEntity, Array<{ suffix: 'eur' | 'non_eur'; fields: string[] }>> = {
@@ -93,12 +94,17 @@ type Props = {
   /** Symbol for the currency the rate tables are kept in (organizations.rate_currency). */
   currency?: string
   disabled?: boolean
+  /** The supplements the rate carries (RateSupplementsPicker): each gets a
+   *  per-person-per-night price row in every period, under
+   *  `supp:<key>:eur` / `supp:<key>:non_eur` in the period's rates. */
+  supplements?: RateSupplement[]
 }
 
 export default function RateSeasonsEditor({
-  entity, seasons, onChange, currency = '', disabled = false,
+  entity, seasons, onChange, currency = '', disabled = false, supplements = [],
 }: Props) {
   const t = useTranslations('rates.ratePeriods')
+  const tSupp = useTranslations('rates.supplements')
 
   // A cruise period is entered the hotel way, so its base rate reads
   // "PP Dbl" like a hotel's, not the cabin word the column is stored under.
@@ -244,6 +250,40 @@ export default function RateSeasonsEditor({
                 </div>
               </div>
             ))}
+
+            {/* The agency's supplements this rate carries — a view, a deck, a
+                meal plan — priced per person per night, per passport group,
+                in THIS period. Blank prices as a hole, never as free. */}
+            {supplements.length > 0 && (
+              <div className="mb-2 last:mb-0" data-testid="period-supplements">
+                <p className="text-xs font-medium text-gray-600 mb-1">{tSupp('periodTitle')}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                  {supplements.map(supp => (
+                    <div key={supp.key} className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
+                      <span className="text-[11px] text-gray-600 truncate" title={supp.name}>{supp.name}</span>
+                      {(['eur', 'non_eur'] as const).map(suffix => {
+                        const field = supplementField(supp.key, suffix)
+                        return (
+                          <label key={suffix} className="flex items-center gap-1 text-[10px] text-gray-500">
+                            {suffix === 'eur' ? t('eurShort') : t('nonEurShort')}
+                            <input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              disabled={disabled}
+                              aria-label={`${supp.name} ${suffix === 'eur' ? t('eurShort') : t('nonEurShort')}`}
+                              value={season.rates[field] ?? 0}
+                              onChange={e => updateRate(index, field, e.target.value)}
+                              className="w-24 px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#647C47]"
+                            />
+                          </label>
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* The property's special rate for a throughout guide travelling
                 with the group ("+1"). One number — no passport split, the

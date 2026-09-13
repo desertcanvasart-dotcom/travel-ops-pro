@@ -52,6 +52,29 @@ export default function RatePeriodsPage() {
       </section>
 
       <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Supplements</h2>
+        <p className="text-gray-600 mb-3">
+          A property often charges extras on top of the room, per person per night: a view, an
+          upper floor, a meal plan; on a ship, a deck or a balcony. The list of extras is
+          yours &mdash; <strong>Settings &rarr; Vocabulary &rarr; Hotel supplements</strong> and
+          <strong> Cruise supplements</strong> &mdash; and the note on each entry (View, Room,
+          Meal Plan) groups the dropdown on the rate form.
+        </p>
+        <p className="text-gray-600 mb-3">
+          On a hotel or cruise rate, pick the supplements that property prices. Each one you pick
+          gets a price box in <em>every</em> rate period, for each passport group, so a Nile view
+          can cost more at Christmas than in July.
+        </p>
+        <p className="text-gray-600">
+          To sell one, mark it on the programme day: the day editor in the tour manager and the
+          B2B calculator offers the supplements for that night. The engine prices each at the
+          property&apos;s rate for that night and includes it in the price. A property that does
+          not price a supplement the day asks for is reported as an unpriced hole &mdash; the
+          customer asked for it, so it is never quietly dropped or quietly free.
+        </p>
+      </section>
+
+      <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Loading a contract from a spreadsheet</h2>
         <p className="text-gray-600 mb-3">
           A contract usually arrives as a table of periods, so there is a sheet shaped the same

@@ -4949,7 +4949,19 @@
         "suite": "Suite",
         "guide_rate": "Guide bed / night"
       },
-      "throughoutGuide": "Throughout guide"
+      "throughoutGuide": "Throughout guide",
+      "eurShort": "EU",
+      "nonEurShort": "Non-EU"
+    },
+    "supplements": {
+      "title": "Supplements",
+      "help": "The extras this property charges per person per night on top of the room — a view, a floor, a meal plan. The list is yours: Settings → Vocabulary. Each one you add here gets a price in every rate period below.",
+      "add": "Add a supplement…",
+      "remove": "Remove",
+      "allAdded": "Every supplement in your vocabulary is on this rate.",
+      "noneDefined": "No supplements are defined yet. Add them in Settings → Vocabulary.",
+      "periodTitle": "Supplements (per person per night)",
+      "dayLabel": "Supplements for this night"
     },
     "extras": {
       "title": "Extras",

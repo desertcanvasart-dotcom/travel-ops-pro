@@ -43,6 +43,7 @@ import type { PricingHole } from '@/lib/pricing-types'
 import { priceAcrossPax } from '@/lib/pricing/pax-range'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { ratesForTravelDate } from '@/lib/rates/rate-seasons'
+import { resolveSupplementsForDate, sanitizeSupplementKeys } from '@/lib/rates/supplements'
 import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
 import { tripAccommodationCost, type NightRates } from '@/lib/pricing/rooming'
 import { resolveAttractions, buildAliasMap } from '@/lib/pricing/attractions'
@@ -161,6 +162,12 @@ export interface ItineraryDay {
   // even on a cruise day. Each entry emits one line item looked up at
   // `day.city`.
   extras?: TransportServiceType[]
+  /** The supplements this night is sold with — vocabulary KEYS from the
+   *  agency's Hotel supplements (a hotel night) or Cruise supplements (a
+   *  cruise day) list, priced per person per night at the resolved
+   *  property's rate for that night (lib/rates/supplements). A property
+   *  with no price for one is a HOLE, never free. Included in the price. */
+  supplements?: string[]
 }
 
 // Pricing parameters
@@ -826,6 +833,8 @@ export function parseItinerary(itineraryData: any, opts?: {
       transport: day.transport || undefined,
       transport_type: sleepingAboard ? 'sleeping_train' : (day.transport_type || undefined),
       transport_rate_id: day.transport_rate_id ? String(day.transport_rate_id) : undefined,
+      // The supplements the night is sold with (vocabulary keys).
+      supplements: sanitizeSupplementKeys(day.supplements),
       // Nile Cruise package flag - uses bundled transport instead of individual vehicle costs
       is_cruise_day: day.is_cruise_day || false
     }
@@ -2745,6 +2754,9 @@ export async function calculateDayBasedPricing(
   // ============================================
 
   let accommodationPPD = 0
+  // Supplements the days ask for — per person per night, on top of the
+  // room, outside the rooming rule (a view costs the same in a single).
+  let supplementsPerPax = 0
   // Every night's three contract figures, for the rooming rule below
   // (lib/pricing/rooming.ts): a solo traveller pays the supplement, a triple
   // takes the reduction. The per-person lines stay per-person-in-double.
@@ -2792,6 +2804,43 @@ export async function calculateDayBasedPricing(
           ? `PPD (Per Person Double) — ${nightly.seasonName}`
           : 'PPD (Per Person Double)'
       })
+
+      // The supplements this night is sold with — a view, a floor, a meal
+      // plan from the agency's own list — each at the hotel's per-person
+      // price for this night's period. Included in the price. One the hotel
+      // does not price is a hole: the customer asked for it, so it is never
+      // quietly dropped or quietly free.
+      for (const supp of resolveSupplementsForDate(hotelRate.row, 'accommodation', isEurPassport, dateForDay(day.day), day.supplements ?? [])) {
+        if (supp.night > 0) {
+          accommodationPPD += supp.night
+          supplementsPerPax += supp.night
+          services.push({
+            id: `day${day.day}-hotel-supp-${supp.key}`,
+            dayNumber: day.day,
+            serviceType: 'accommodation',
+            serviceName: `Hotel supplement - ${supp.name} (${hotelRate.hotelName})`,
+            quantity: 1,
+            quantityMode: 'per_pax',
+            unitCost: supp.night,
+            lineTotal: supp.night,
+            rateSource: 'accommodation_rates',
+            isPerPax: true,
+            isOptional: false,
+            notes: nightly.seasonName ? `Per person per night — ${nightly.seasonName}` : 'Per person per night'
+          })
+        } else {
+          addHole({
+            kind: 'hotel',
+            reason: supp.carried ? 'unpriced' : 'missing',
+            dayNumber: day.day,
+            city: hotelCity,
+            lookupAttempted: `accommodation_rates ${hotelRate.hotelName} supplement=${supp.key}`,
+            message: supp.carried
+              ? `${hotelRate.hotelName} has no price for the "${supp.name}" supplement on the period covering ${dateForDay(day.day) ?? 'this night'}. Fill it on the hotel's rate periods in Rates → Hotels.`
+              : `${hotelRate.hotelName} does not carry the "${supp.name}" supplement this day asks for. Add it to the hotel in Rates → Hotels, or take it off the day.`,
+          })
+        }
+      }
 
       // The "+1" guide sleeps where the group sleeps, at the hotel's special
       // guide rate for this night's period. Blank = hole, never a free bed.
@@ -2873,6 +2922,50 @@ export async function calculateDayBasedPricing(
         ? `PPD ${perNight.toFixed(2)}/night avg × ${cruiseNights} nights (${periodsUsed.join(', ')})`
         : `PPD ${perNight.toFixed(2)}/night × ${cruiseNights} nights`
     })
+
+    // The supplements the sailing is sold with — a deck, a balcony from the
+    // agency's own list — each night at that night's period price, one line
+    // per supplement for the sailing. Included in the price. A night the
+    // ship does not price is a hole for the whole sailing, never free.
+    const cruiseSuppKeys = [...new Set(cruiseDays.flatMap(day => day.supplements ?? []))]
+    for (const key of cruiseSuppKeys) {
+      const perNightSupp = cruiseDays
+        .filter(day => (day.supplements ?? []).includes(key))
+        .map(day => resolveSupplementsForDate(cruiseRates.row, 'cruise', isEurPassport, dateForDay(day.day), [key])[0])
+      const nightsAsked = perNightSupp.length
+      const carried = perNightSupp.some(n => n.carried)
+      const name = perNightSupp.find(n => n.carried)?.name ?? key
+      if (carried && perNightSupp.every(n => n.night > 0)) {
+        const total = perNightSupp.reduce((sum, n) => sum + n.night, 0)
+        accommodationPPD += total
+        supplementsPerPax += total
+        services.push({
+          id: `cruise-supp-${key}`,
+          dayNumber: cruiseDays[0]?.day || 1,
+          serviceType: 'cruise',
+          serviceName: `Cruise supplement - ${name}, ${cruiseRates.shipName} (${nightsAsked} nights)`,
+          quantity: nightsAsked,
+          quantityMode: 'per_pax',
+          unitCost: total / nightsAsked,
+          lineTotal: total,
+          rateSource: 'nile_cruises',
+          isPerPax: true,
+          isOptional: false,
+          notes: `Per person per night × ${nightsAsked} nights`
+        })
+      } else {
+        addHole({
+          kind: 'cruise',
+          reason: carried ? 'unpriced' : 'missing',
+          dayNumber: cruiseDays[0]?.day || 1,
+          city: cruiseDays[0]?.city || '',
+          lookupAttempted: `nile_cruises ${cruiseRates.shipName} supplement=${key}`,
+          message: carried
+            ? `${cruiseRates.shipName} has no price for the "${name}" supplement on a period this sailing covers. Fill it on the ship's rate periods in Rates → Cruises.`
+            : `${cruiseRates.shipName} does not carry the "${name}" supplement the sailing asks for. Add it to the ship in Rates → Cruises, or take it off the days.`,
+        })
+      }
+    }
 
     // The "+1" guide's cabin, each night at that night's period guide_rate.
     // Any night without one is a hole for the whole sailing — never free.
@@ -3199,7 +3292,7 @@ export async function calculateDayBasedPricing(
   // Accommodation is NOT in the per-person line any more: it goes through
   // the rooming rule per party size (accommodationAt below). Everything
   // else still scales linearly with pax.
-  const perPaxCosts = entranceFeesPerPax + externalMealsPerPax + waterPerPax + ticketsPerPax
+  const perPaxCosts = entranceFeesPerPax + externalMealsPerPax + waterPerPax + ticketsPerPax + supplementsPerPax
   const accommodationAt = (pax: number) => tripAccommodationCost(pax, accommodationNights)
 
   debugLog(`📊 Fixed costs: €${fixedCosts.toFixed(2)} | Per-pax costs: €${perPaxCosts.toFixed(2)}`)

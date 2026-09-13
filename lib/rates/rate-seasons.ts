@@ -46,6 +46,14 @@ export const RATE_FIELDS = {
 
 export type RateSeasonEntity = keyof typeof RATE_FIELDS
 
+/** A supplement's per-night price inside a period's rates: `supp:<key>:eur`
+ *  or `supp:<key>:non_eur`, `<key>` a vocabulary key (lib/rates/supplements).
+ *  Colons, because a key may itself end in `_non` — an underscore-joined
+ *  field could not be split back apart.
+ *  Kept by sanitizeSeasons alongside the fixed RATE_FIELDS, so the agency's
+ *  own supplements ride every path a period's rates already take. */
+export const SUPPLEMENT_FIELD = /^supp:([a-z0-9][a-z0-9_]{0,59}):(eur|non_eur)$/
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
 /** Parse/validate a seasons payload from a form or API body. Returns null when
@@ -66,13 +74,18 @@ export function sanitizeSeasons(input: unknown, entity: RateSeasonEntity): RateS
 
     const rates: Record<string, number> = {}
     const src = (s.rates && typeof s.rates === 'object' ? s.rates : {}) as Record<string, unknown>
-    for (const field of RATE_FIELDS[entity]) {
-      const value = src[field]
+    const readRate = (value: unknown): number => {
       // A blank rate is an unpriced hole, not a zero — it is stored as 0 and
       // read back through usableRate() at pricing time, same as every other
       // rate table.
       const n = value === null || value === undefined || value === '' ? 0 : Number(value)
-      rates[field] = Number.isFinite(n) && n >= 0 ? n : 0
+      return Number.isFinite(n) && n >= 0 ? n : 0
+    }
+    for (const field of RATE_FIELDS[entity]) rates[field] = readRate(src[field])
+    // The agency's supplements, keyed by vocabulary key. Only well-formed
+    // fields survive: the shape is the contract, the list is the agency's.
+    for (const field of Object.keys(src)) {
+      if (SUPPLEMENT_FIELD.test(field)) rates[field] = readRate(src[field])
     }
 
     const name = typeof s.name === 'string' && s.name.trim()

@@ -18,7 +18,7 @@ export const VOCABULARY_KINDS = [
   'cuisine_type', 'restaurant_type', 'dietary_option', 'activity_category',
   'activity_type', 'activity_duration', 'activity_unit', 'guide_grade',
   'guide_duration', 'guide_language', 'rate_season', 'airline', 'hotel_supplement',
-  'airport_direction', 'activity_pricing_type',
+  'airport_direction', 'activity_pricing_type', 'cruise_supplement',
 ] as const
 export type VocabularyKind = (typeof VOCABULARY_KINDS)[number]
 
@@ -339,10 +339,19 @@ export const VOCABULARY_KIND_INFO: Record<VocabularyKind, VocabularyKindInfo> = 
     kind: 'hotel_supplement',
     group: 'Hotels & cruises',
     title: 'Hotel supplements',
-    description: 'The extras a hotel rate can carry a per-night price for — a view, a floor, a meal plan. The note on each entry (View, Room, Meal Plan) groups the dropdown on the hotel rate form.',
-    usedIn: 'Hotel rates',
+    description: 'The extras a hotel rate can carry a per-person-per-night price for — a view, a floor, a meal plan. The note on each entry (View, Room, Meal Plan) groups the dropdown on the hotel rate form. A programme day that asks for one is priced at the hotel\'s rate for that night; a hotel with no price for it is an unpriced hole, never free.',
+    usedIn: 'Hotel rates, programme days, pricing engine',
     minItems: 1,
     example: 'Nile View / Upper Floor / Half Board (HB)',
+  },
+  cruise_supplement: {
+    kind: 'cruise_supplement',
+    group: 'Hotels & cruises',
+    title: 'Cruise supplements',
+    description: 'The extras a cruise rate can carry a per-person-per-night price for — a deck, a cabin position, a balcony. The note on each entry (Deck, Cabin) groups the dropdown on the cruise rate form. A cruise day that asks for one is priced at the ship\'s rate for that night; a ship with no price for it is an unpriced hole, never free.',
+    usedIn: 'Cruise rates, programme days, pricing engine',
+    minItems: 1,
+    example: 'Upper Deck / Panoramic Window / Private Balcony',
   },
   airport_direction: {
     kind: 'airport_direction',
