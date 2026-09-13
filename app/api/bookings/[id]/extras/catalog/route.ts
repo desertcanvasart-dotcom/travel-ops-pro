@@ -29,9 +29,12 @@ import { convertOnDate } from '@/lib/fx-conversion'
 import {
   priceCatalogItem,
   entranceFeeBasis,
+  supplementUpgrades,
   type CatalogItem,
   type Converter,
+  type PropertyStay,
 } from '@/lib/extras-catalog'
+import { getHotelRates, getCruiseRates } from '@/lib/auto-pricing-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -189,16 +192,90 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     })
   }
 
+  // ---------- the trip's own hotels and ship: their supplements as upgrades ----------
+  // The properties are resolved the way the engine priced the trip — by the
+  // night's city and the itinerary's tier — and each supplement is priced for
+  // the stay, night by night at its own period. Offered as UPGRADES: the
+  // customer already has the room; this is the view, the deck, the meal plan
+  // on top of it.
+  const supplementItems: CatalogItem[] = []
+  for (const u of supplementUpgrades(await staysForItinerary(booking.itinerary_id, orgId))) {
+    const priced = price(u.costPerPerson, null, { rate_currency: u.rateCurrency })
+    supplementItems.push({
+      source_kind: 'accommodation_supplement',
+      source_id: u.rowId,
+      item_id: `accommodation_supplement:${u.rowId}:${u.key}`,
+      kind: 'upgrade',
+      title: `${u.name} — ${u.propertyName}`,
+      subtitle: `${u.entity === 'cruise' ? 'cruise' : 'hotel'} supplement [${u.key}] · ${u.nights} night${u.nights === 1 ? '' : 's'} · per person for the stay`,
+      supplier_id: u.supplierId,
+      ...priced,
+      price_note: u.costPerPerson == null ? u.basis : `${u.basis}, ${priced.price_note}`,
+      currency: bookingCurrency,
+    })
+  }
+
   return NextResponse.json({
     currency: bookingCurrency,
     rate_currency: rateCurrency,
     margin_percent: marginPercent,
     groups: [
       { source: 'package', label: 'Options in this programme', items: packageItems },
+      { source: 'supplement', label: "Upgrades at this trip's hotels and ship", items: supplementItems },
       { source: 'addon', label: 'Attraction extras', items: addonItems },
       { source: 'catalogue', label: 'Extras', items: catalogueItems },
     ].filter(g => g.items.length > 0),
   })
+}
+
+/** The trip's stays — one per property, with the dates of its nights — found
+ *  the way the engine finds them: each hotel night's city and the itinerary's
+ *  tier; the cruise by tier over the days flagged as cruise days. A city with
+ *  no rate at the tier is simply absent here (the trip's own pricing already
+ *  reported that hole). */
+async function staysForItinerary(itineraryId: string | null | undefined, orgId: string): Promise<PropertyStay[]> {
+  if (!itineraryId) return []
+  const { data: itinerary } = await admin
+    .from('itineraries')
+    .select('id, tier')
+    .eq('id', itineraryId)
+    .eq('org_id', orgId)
+    .maybeSingle()
+  if (!itinerary) return []
+  const tier = String(itinerary.tier || 'standard')
+
+  const { data: days } = await admin
+    .from('itinerary_days')
+    .select('day_number, date, city, overnight_city, hotel_included, is_cruise_day, day_type, overnight')
+    .eq('itinerary_id', itineraryId)
+    .order('day_number', { ascending: true })
+
+  const hotelNights = new Map<string, string[]>()
+  const cruiseNights: string[] = []
+  for (const d of days ?? []) {
+    const date = typeof d.date === 'string' ? d.date.slice(0, 10) : null
+    if (!date) continue
+    if (d.is_cruise_day) { cruiseNights.push(date); continue }
+    // A bed is booked unless the day says otherwise: the last day and a day
+    // marked no-overnight have none.
+    if (d.hotel_included === false || d.overnight === false || d.day_type === 'departure') continue
+    const city = String(d.overnight_city || d.city || '').trim()
+    if (!city) continue
+    const list = hotelNights.get(city) ?? []
+    list.push(date)
+    hotelNights.set(city, list)
+  }
+
+  const stays: PropertyStay[] = []
+  for (const [city, dates] of hotelNights) {
+    const hotel = await getHotelRates(city, tier, false, dates[0])
+    if (hotel?.row) stays.push({ entity: 'accommodation', row: hotel.row, name: hotel.hotelName, dates })
+  }
+  if (cruiseNights.length > 0) {
+    const cruise = await getCruiseRates(tier, undefined, false, cruiseNights[0])
+    if (cruise?.row) stays.push({ entity: 'cruise', row: cruise.row, name: cruise.shipName, dates: cruiseNights })
+  }
+  return stays
 }
 
 /** The tour template this trip was built from, if it was built from one. */

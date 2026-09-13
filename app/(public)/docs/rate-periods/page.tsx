@@ -72,6 +72,13 @@ export default function RatePeriodsPage() {
           not price a supplement the day asks for is reported as an unpriced hole &mdash; the
           customer asked for it, so it is never quietly dropped or quietly free.
         </p>
+        <p className="text-gray-600 mt-3">
+          After the sale, the same supplements appear in the booking&apos;s extras catalogue under
+          <strong> Upgrades at this trip&apos;s hotels and ship</strong>: each one the trip&apos;s
+          own properties carry, priced per person for the stay at each night&apos;s period, offered
+          as an upgrade the customer can accept. A night the property has no price for leaves the
+          item unpriced with the reason.
+        </p>
       </section>
 
       <section className="mb-10">

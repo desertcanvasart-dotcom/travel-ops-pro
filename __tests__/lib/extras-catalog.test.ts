@@ -99,3 +99,50 @@ describe('entranceFeeBasis', () => {
     expect(entranceFeeBasis({ non_eur_rate: null, eur_rate: 0 })).toEqual({ cost: null, basis: null })
   })
 })
+
+// ── Accommodation supplements as upgrades (2026-09-13) ────────────────────
+import { supplementUpgrades, type PropertyStay } from '@/lib/extras-catalog'
+
+describe('supplementUpgrades — the trip\'s own hotels and ship, priced for the stay', () => {
+  const hotel: PropertyStay = {
+    entity: 'accommodation',
+    name: 'Hotel A',
+    dates: ['2026-09-29', '2026-09-30', '2026-10-01'],   // two low nights, one high
+    row: {
+      id: 'h-1', supplier_id: 'sup-1', rate_currency: 'EGP',
+      supplements: [{ key: 'view_nile', name: 'Nile View' }, { key: 'half_board', name: 'Half Board' }, { key: 'upper_floor', name: 'Upper Floor' }],
+      seasons: [
+        { name: 'Low', from: '2026-05-01', to: '2026-09-30', rates: { pp_double_eur: 80, 'supp:view_nile:eur': 10, 'supp:view_nile:non_eur': 15, 'supp:half_board:eur': 20, 'supp:upper_floor:non_eur': 5 } },
+        { name: 'High', from: '2026-10-01', to: '2026-12-19', rates: { pp_double_eur: 120, 'supp:view_nile:eur': 20, 'supp:view_nile:non_eur': 25, 'supp:half_board:eur': 30 } },
+      ],
+    },
+  }
+
+  it('prices each supplement per person for the stay, night by night, non-EUR rate first', () => {
+    const [view] = supplementUpgrades([hotel])
+    expect(view).toMatchObject({ entity: 'accommodation', rowId: 'h-1', key: 'view_nile', name: 'Nile View', propertyName: 'Hotel A', supplierId: 'sup-1', rateCurrency: 'EGP', nights: 3 })
+    expect(view.costPerPerson).toBe(15 + 15 + 25)
+    expect(view.basis).toContain('non-EUR passport rate')
+  })
+
+  it('falls back to the EUR rate when that is the only one entered, and says so', () => {
+    const hb = supplementUpgrades([hotel]).find(u => u.key === 'half_board')!
+    expect(hb.costPerPerson).toBe(20 + 20 + 30)
+    expect(hb.basis).toContain('EUR passport rate')
+  })
+
+  it('a night with no price under either rate leaves the item unpriced with the reason — never a free night', () => {
+    const uf = supplementUpgrades([hotel]).find(u => u.key === 'upper_floor')!
+    expect(uf.costPerPerson).toBeNull()
+    expect(uf.basis).toContain('no price for 1 of 3 nights')
+  })
+
+  it('a cruise stay prices the same way, and a stay with no nights offers nothing', () => {
+    const ship: PropertyStay = {
+      entity: 'cruise', name: 'Ship', dates: ['2026-06-01', '2026-06-02'],
+      row: { id: 'c-1', supplements: [{ key: 'upper_deck', name: 'Upper Deck' }], seasons: [{ name: 'All', from: '2026-01-01', to: '2026-12-31', rates: { double_eur: 200, 'supp:upper_deck:non_eur': 30 } }] },
+    }
+    expect(supplementUpgrades([ship])[0]).toMatchObject({ entity: 'cruise', key: 'upper_deck', nights: 2, costPerPerson: 60, supplierId: null, rateCurrency: null })
+    expect(supplementUpgrades([{ ...ship, dates: [] }])).toEqual([])
+  })
+})

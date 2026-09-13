@@ -29,12 +29,29 @@
 
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { roundToCurrency } from '@/lib/currency-totals'
+import { resolveSupplementsForDate, supplementsForRow } from '@/lib/rates/supplements'
+import type { RateSeasonEntity } from '@/lib/rates/rate-seasons'
 
-export type CatalogSourceKind = 'package_option' | 'entrance_fee' | 'catalogue_extra'
+//   ACCOMMODATION     the supplements the trip's OWN hotels and ship carry
+//   SUPPLEMENTS       (Settings → Vocabulary; priced on the rate row per
+//                     person per night): a Nile view, an upper deck — offered
+//                     after the sale as an UPGRADE, priced for the stay's
+//                     nights at each night's own period. Operator decision
+//                     2026-09-13: included in the price by default when the
+//                     programme asks for one; here is where the customer who
+//                     comes back and asks for the view is served.
+
+export type CatalogSourceKind = 'package_option' | 'entrance_fee' | 'catalogue_extra' | 'accommodation_supplement'
 
 export interface CatalogItem {
   source_kind: CatalogSourceKind
   source_id: string
+  /** Unique within the catalogue. Several supplements share one rate row
+   *  (their source_id, a uuid the extras table can store), so the picker
+   *  keys on this, never on source_id. Equal to source_id elsewhere. */
+  item_id?: string
+  /** What the picker offers it as. A supplement is an upgrade by nature. */
+  kind?: 'addon' | 'upgrade'
   title: string
   /** Where it comes from and how it was priced, in the office's words. */
   subtitle: string | null
@@ -172,4 +189,72 @@ function conversionSuffix(from: string, to: string): string {
 function normalise(currency: unknown): string {
   const s = typeof currency === 'string' ? currency.trim().toUpperCase() : ''
   return /^[A-Z]{3}$/.test(s) ? s : 'EUR'
+}
+
+// ── Accommodation supplements as upgrades ──────────────────────────────────
+
+export interface PropertyStay {
+  entity: RateSeasonEntity
+  /** The accommodation_rates / nile_cruises row the trip priced against. */
+  row: Record<string, unknown>
+  name: string
+  /** The nights of the stay, 'YYYY-MM-DD' each, for per-night period pricing. */
+  dates: string[]
+}
+
+export interface SupplementUpgrade {
+  entity: RateSeasonEntity
+  rowId: string
+  key: string
+  name: string
+  propertyName: string
+  supplierId: string | null
+  rateCurrency: string | null
+  nights: number
+  /** Per person for the whole stay, in the rate's currency. Null = a night
+   *  the property has no price for — a hole, never a free night. */
+  costPerPerson: number | null
+  /** Which passport rate the cost came from, or why it could not be priced. */
+  basis: string
+}
+
+/**
+ * Every supplement the trip's properties carry, priced per person for the
+ * stay: each night at its own period, non-EUR passport rate first (the one
+ * most of this operator's travellers pay — the same choice entranceFeeBasis
+ * makes, and said out loud), EUR when that is the only one entered. A night
+ * with no price under either leaves the item unpriced with the reason.
+ */
+export function supplementUpgrades(stays: readonly PropertyStay[]): SupplementUpgrade[] {
+  const out: SupplementUpgrade[] = []
+  for (const stay of stays) {
+    if (stay.dates.length === 0) continue
+    const rowId = String(stay.row.id ?? '')
+    for (const supp of supplementsForRow(stay.row)) {
+      const perNight = (isEur: boolean) =>
+        stay.dates.map(d => resolveSupplementsForDate(stay.row, stay.entity, isEur, d, [supp.key])[0].night)
+      let nights = perNight(false)
+      let basis = 'non-EUR passport rate'
+      if (nights.some(n => n <= 0)) {
+        const eur = perNight(true)
+        if (eur.every(n => n > 0)) { nights = eur; basis = 'EUR passport rate' }
+      }
+      const unpriced = nights.filter(n => n <= 0).length
+      out.push({
+        entity: stay.entity,
+        rowId,
+        key: supp.key,
+        name: supp.name,
+        propertyName: stay.name,
+        supplierId: typeof stay.row.supplier_id === 'string' ? stay.row.supplier_id : null,
+        rateCurrency: typeof stay.row.rate_currency === 'string' && stay.row.rate_currency ? stay.row.rate_currency : null,
+        nights: stay.dates.length,
+        costPerPerson: unpriced === 0 ? Math.round(nights.reduce((a, b) => a + b, 0) * 100) / 100 : null,
+        basis: unpriced === 0
+          ? `${basis}, ${stay.dates.length} night${stay.dates.length === 1 ? '' : 's'} at each night's period`
+          : `no price for ${unpriced} of ${stay.dates.length} nights — fill it on the property's rate periods`,
+      })
+    }
+  }
+  return out
 }

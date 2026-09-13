@@ -271,6 +271,10 @@ function PriceButton({
 type CatalogItem = {
   source_kind: string
   source_id: string
+  /** Unique in the list (several supplements share a rate row's source_id). */
+  item_id?: string
+  /** Offered as an upgrade by nature (a supplement on a room the customer has). */
+  kind?: 'addon' | 'upgrade'
   title: string
   subtitle: string | null
   supplier_id: string | null
@@ -339,11 +343,12 @@ function CatalogPicker({
   const add = async (item: CatalogItem, kind: 'addon' | 'upgrade') => {
     // An unpriced row cannot be added blind — the office types the price into
     // the row first, and that typed figure is what gets used.
-    const typed = prices[item.source_id]
+    const itemKey = item.item_id ?? item.source_id
+    const typed = prices[itemKey]
     const unitPrice = item.unit_price ?? (typed === '' || typed === undefined ? null : Number(typed))
     if (unitPrice == null) { onError('Set a price for this option first.'); return }
 
-    setBusy(item.source_id); onError(null)
+    setBusy(itemKey); onError(null)
     try {
       const res = await fetch(`/api/bookings/${bookingId}/extras`, {
         method: 'POST',
@@ -387,8 +392,8 @@ function CatalogPicker({
         <div key={g.source}>
           <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">{g.label}</p>
           <div className="divide-y bg-white rounded-lg border">
-            {g.items.map(item => (
-              <div key={item.source_id} className="p-2.5 flex items-start justify-between gap-3">
+            {g.items.map(item => { const itemKey = item.item_id ?? item.source_id; return (
+              <div key={itemKey} className="p-2.5 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-900">{item.title}</p>
                   {item.subtitle && <p className="text-xs text-gray-600">{item.subtitle}</p>}
@@ -403,23 +408,33 @@ function CatalogPicker({
                 <div className="flex items-center gap-1 flex-shrink-0">
                   {item.unit_price == null && (
                     <input type="number" min="0" step="0.01" placeholder="price"
-                      value={prices[item.source_id] ?? ''}
-                      onChange={e => setPrices(p => ({ ...p, [item.source_id]: e.target.value }))}
+                      value={prices[itemKey] ?? ''}
+                      onChange={e => setPrices(p => ({ ...p, [itemKey]: e.target.value }))}
                       className="w-24 px-2 py-1 text-xs border border-gray-300 rounded-lg" />
                   )}
-                  {busy === item.source_id && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
-                  <button type="button" onClick={() => add(item, 'addon')} disabled={busy === item.source_id}
+                  {busy === itemKey && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
+                  {item.kind === 'upgrade' ? (
+                    // A supplement on a room the customer already has: an
+                    // upgrade by nature, so one button, and it says so.
+                    <button type="button" onClick={() => add(item, 'upgrade')} disabled={busy === itemKey}
+                      title="Add as an upgrade — the price is what the supplement adds, not a new room price"
+                      className="px-2.5 py-1 text-xs font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] disabled:opacity-40">
+                      Add as upgrade
+                    </button>
+                  ) : (<>
+                  <button type="button" onClick={() => add(item, 'addon')} disabled={busy === itemKey}
                     className="px-2.5 py-1 text-xs font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] disabled:opacity-40">
                     Add
                   </button>
-                  <button type="button" onClick={() => add(item, 'upgrade')} disabled={busy === item.source_id}
+                  <button type="button" onClick={() => add(item, 'upgrade')} disabled={busy === itemKey}
                     title="Add as an upgrade — the price is the difference, not the new price"
                     className="px-2.5 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40">
                     As upgrade
                   </button>
+                  </>)}
                 </div>
               </div>
-            ))}
+            ) })}
           </div>
         </div>
       ))}
