@@ -116,7 +116,8 @@ const VOCAB_PICKERS: Record<string, string[]> = {
 // constants may still be passed to useVocabOptions as the built-in fallback.
 const RETIRED_FORM_LISTS: Record<string, string[]> = {
   'app/rates/transportation/transportation-content.tsx': ['{SERVICE_TYPES.map('],
-  'app/rates/flights/flights-content.tsx': ['{FLIGHT_TYPES.map(', '{CABIN_CLASSES.map(', '{FREQUENCIES.map('],
+  // POPULAR_ROUTES was an Egypt city-pair list; the quick-select chips come from the agency's own rates now.
+  'app/rates/flights/flights-content.tsx': ['{FLIGHT_TYPES.map(', '{CABIN_CLASSES.map(', '{FREQUENCIES.map(', 'POPULAR_ROUTES'],
 }
 // attractions' season picker is in TIER_PICKERS' sibling list above (rate_season).
 

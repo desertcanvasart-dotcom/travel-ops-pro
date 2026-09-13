@@ -155,20 +155,6 @@ const FREQUENCIES = [
 ]
 
 // Popular flight routes in Egypt
-const POPULAR_ROUTES = [
-  { from: 'Cairo', to: 'Aswan' },
-  { from: 'Cairo', to: 'Luxor' },
-  { from: 'Cairo', to: 'Hurghada' },
-  { from: 'Cairo', to: 'Sharm El Sheikh' },
-  { from: 'Cairo', to: 'Abu Simbel' },
-  { from: 'Cairo', to: 'Alexandria' },
-  { from: 'Luxor', to: 'Cairo' },
-  { from: 'Aswan', to: 'Cairo' },
-  { from: 'Aswan', to: 'Abu Simbel' },
-  { from: 'Hurghada', to: 'Cairo' },
-  { from: 'Sharm El Sheikh', to: 'Cairo' }
-]
-
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
 
 export default function FlightsContent() {
@@ -542,6 +528,19 @@ export default function FlightsContent() {
     ...flightTypeOptions.map(o => ({ key: o.value, label: o.label })),
     ...[...new Set(rates.map(r => r.flight_type))].filter(k => k && !flightTypeOptions.some(o => o.value === k)).map(k => ({ key: k, label: flightTypeLabelFor(k) })),
   ].map(t => ({ ...t, count: rates.filter(r => r.flight_type === t.key).length }))
+  // Quick-select routes are the agency's OWN: the routes its flight rates
+  // already fly, most-priced first. Nothing to suggest until it has some.
+  const quickRoutes = (() => {
+    const counts = new Map<string, { from: string; to: string; n: number }>()
+    for (const r of rates) {
+      if (!r.route_from || !r.route_to) continue
+      const key = `${r.route_from}\u0000${r.route_to}`
+      const e = counts.get(key) ?? { from: r.route_from, to: r.route_to, n: 0 }
+      e.n++
+      counts.set(key, e)
+    }
+    return [...counts.values()].sort((a, b) => b.n - a.n || a.from.localeCompare(b.from) || a.to.localeCompare(b.to)).slice(0, 6)
+  })()
   const uniqueAirlines = [...new Set(rates.map(r => r.airline))].length
   const linkedToSuppliers = rates.filter(r => r.supplier_id).length
 
@@ -961,14 +960,14 @@ export default function FlightsContent() {
                 </div>
               )}
 
-              {/* Popular Routes Quick Select */}
-              {!editingRate && (
+              {/* Quick-select: the routes this agency's own rates already fly. */}
+              {!editingRate && quickRoutes.length > 0 && (
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-gray-600">{t('quickSelectRoute')}</label>
                   <div className="flex flex-wrap gap-2">
-                    {POPULAR_ROUTES.slice(0, 6).map((route, idx) => (
+                    {quickRoutes.map(route => (
                       <button
-                        key={idx}
+                        key={`${route.from}→${route.to}`}
                         type="button"
                         onClick={() => applyPopularRoute(route.from, route.to)}
                         className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
