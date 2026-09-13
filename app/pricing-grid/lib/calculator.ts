@@ -7,6 +7,7 @@ import type {
   GridDay, GridConfig, SlotValue, SelectedItem, RateOption,
   DayCalc, GridTotals, PaxRangeResult, SLOT_DEFINITIONS,
 } from '../types'
+import { isSupplementItem, isSingleSupplementItem } from '../types'
 import { priceAcrossPax } from '@/lib/pricing/pax-range'
 import { computeUplift, seasonForDate, type SeasonWindow } from '@/lib/pricing/season-uplift'
 
@@ -80,14 +81,18 @@ export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
 
     } else if (PP_SLOT_IDS.has(slot.slotId)) {
       if (slot.slotId === 'accommodation') {
-        // Accommodation: pp_double_eur is already a per-person rate
-        // For single pax, add single supplement on top
+        // Accommodation: pp_double_eur is already a per-person rate.
+        // Under the hotel pick ride two kinds of add-on: the single
+        // supplement (`${id}_supp`, charged for a party of one only) and the
+        // agency's supplements (`#supp:<key>` — a view, a meal plan), which
+        // every traveller pays per night.
         if (slot.selectedItems.length > 0) {
           const ppDouble = getRate(slot.selectedItems[0], passport)
-          const singleSupp = pax === 1 && slot.selectedItems.length > 1
-            ? getRate(slot.selectedItems[1], passport)
+          const singleSupp = pax === 1
+            ? slot.selectedItems.slice(1).filter(isSingleSupplementItem).reduce((sum, i) => sum + getRate(i, passport), 0)
             : 0
-          perPersonTotal += ppDouble + (pax === 1 ? singleSupp : 0)
+          const supplements = slot.selectedItems.slice(1).filter(isSupplementItem).reduce((sum, i) => sum + getRate(i, passport), 0)
+          perPersonTotal += ppDouble + singleSupp + supplements
         }
       } else {
         perPersonTotal += cost
@@ -276,11 +281,15 @@ function aggregateNonTransport(days: GridDay[], config: GridConfig) {
       } else if (PP_SLOT_IDS.has(slot.slotId)) {
         if (slot.slotId === 'accommodation') {
           if (slot.selectedItems.length > 0) {
-            // First item = double-occupancy per-person rate; any further items
-            // are single-supplement add-ons (see SlotRow's `${id}_supp`).
+            // First item = double-occupancy per-person rate. Under it: the
+            // single-supplement add-on (SlotRow's `${id}_supp`, the solo
+            // traveller's extra) and the agency's supplements (`#supp:<key>`),
+            // which every traveller pays per night — per person, like the room.
             perPerson += getRate(slot.selectedItems[0], passport)
-            for (let k = 1; k < slot.selectedItems.length; k++) {
-              singleSupplement += getRate(slot.selectedItems[k], passport)
+            for (const extra of slot.selectedItems.slice(1)) {
+              if (isSupplementItem(extra)) perPerson += getRate(extra, passport)
+              else if (isSingleSupplementItem(extra)) singleSupplement += getRate(extra, passport)
+              else singleSupplement += getRate(extra, passport) // legacy: anything else under the hotel was the single supp
             }
           } else if (slot.customAmount > 0) {
             perPerson += slot.customAmount

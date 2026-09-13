@@ -7,6 +7,11 @@ import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { DEFAULT_DAY_TYPE } from '@/app/pricing-grid/types'
 
+/** Add-ons under a hotel / cruise pick (see app/pricing-grid/types). */
+const isAddOnItem = (item: { rateId?: string }) =>
+  Boolean(item.rateId && (item.rateId.endsWith('_supp') || item.rateId.includes('#supp:')))
+const baseRateId = (rateId: string) => rateId.replace(/_supp$/, '').replace(/#supp:.*$/, '')
+
 // ============================================
 // POST /api/pricing-grid/save
 // Save pricing grid state → itineraries + itinerary_days + itinerary_services
@@ -276,7 +281,12 @@ export async function POST(request: NextRequest) {
         const tbl = slotToRateTable[slot.slotId]
         if (!tbl) continue
         for (const item of (slot.selectedItems || [])) {
-          if (item.rateId) rateIdsByTable[tbl].add(item.rateId)
+          // Only real rate-row ids: the add-ons under a hotel pick — the
+          // single supplement (`<id>_supp`) and the agency's supplements
+          // (`<id>#supp:<key>`) — are not rows, and one non-uuid in the IN
+          // list fails the whole lookup, dropping supplier_id for every
+          // item in that table on this save.
+          if (item.rateId && !isAddOnItem(item)) rateIdsByTable[tbl].add(item.rateId)
         }
       }
     }
@@ -352,7 +362,8 @@ export async function POST(request: NextRequest) {
             rate_non_eur: item.rateNonEur,
             total_cost: supplierCost,
             client_price: grossUp(supplierCost),
-            supplier_id: item.rateId ? (supplierIdByRateId.get(item.rateId) ?? null) : null,
+            // An add-on carries its property's supplier: the id before the marker.
+            supplier_id: item.rateId ? (supplierIdByRateId.get(baseRateId(item.rateId)) ?? null) : null,
             notes: `__grid:slot:${slot.slotId}|rate_id:${item.rateId}`,
           })
         }
