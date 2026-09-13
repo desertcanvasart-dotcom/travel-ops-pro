@@ -3,7 +3,8 @@
 // structured by grid slot for dropdown population.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { seasonsForRow } from '@/lib/rates/rate-seasons'
+import { seasonsForRow, type RateSeasonEntity } from '@/lib/rates/rate-seasons'
+import { supplementsForRow, supplementField } from '@/lib/rates/supplements'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
@@ -201,6 +202,7 @@ export async function GET(request: NextRequest) {
         // The throughout guide's bed, from the first rate period — the same
         // period the headline pp_double columns mirror. 0 = not entered.
         guide_rate: toNum(seasonsForRow(r, 'accommodation')[0]?.rates?.guide_rate),
+        supplements: gridSupplements(r, 'accommodation'),
       })),
 
       entrance_fees: (nEntrance || []).map((r: any) => ({
@@ -262,6 +264,7 @@ export async function GET(request: NextRequest) {
         ship_category: r.ship_category,
         // The throughout guide's cabin per night, first rate period.
         guide_rate: toNum(seasonsForRow(r, 'cruise')[0]?.rates?.guide_rate),
+        supplements: gridSupplements(r, 'cruise'),
       })),
     }
 
@@ -275,4 +278,18 @@ export async function GET(request: NextRequest) {
 function toNum(v: any): number {
   const n = parseFloat(v)
   return isNaN(n) ? 0 : n
+}
+
+/** The property's supplements with their FIRST-period per-person-per-night
+ *  prices — the period the headline rate mirrors, since the grid resolves no
+ *  travel date per night. Rows already went through the currency normaliser,
+ *  so these are in the run currency like everything else on the option. */
+function gridSupplements(row: object, entity: RateSeasonEntity) {
+  const rates = seasonsForRow(row, entity)[0]?.rates ?? {}
+  return supplementsForRow(row).map(s => ({
+    key: s.key,
+    name: s.name,
+    rateEur: toNum(rates[supplementField(s.key, 'eur')]),
+    rateNonEur: toNum(rates[supplementField(s.key, 'non_eur')]),
+  }))
 }

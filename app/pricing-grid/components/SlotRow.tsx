@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import type { SlotDefinition, SlotValue, RateOption, SelectedItem, PassportType } from '../types'
+import { supplementItemId, isSupplementItem } from '../types'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 
 interface SlotRowProps {
@@ -84,6 +85,27 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
     onChange({ ...value, selectedItems: items })
   }
 
+  // The agency's supplements on a hotel / cruise pick (Settings → Vocabulary,
+  // priced on the rate row): each toggled one is an extra per-person item
+  // under the property, so both calculators and the save mapping carry it.
+  const isPropertySlot = definition.slotId === 'accommodation' || definition.slotId === 'cruise'
+  const pickedProperty = isPropertySlot ? value.selectedItems[0] : undefined
+  const propertyOption = pickedProperty
+    ? options.find(o => o.id === pickedProperty.rateId) ?? (allOptions || []).find(o => o.id === pickedProperty.rateId)
+    : undefined
+  const availableSupplements = propertyOption?.supplements ?? []
+  const toggleSupplement = (supp: { key: string; name: string; rateEur: number; rateNonEur: number }) => {
+    if (!pickedProperty) return
+    const id = supplementItemId(pickedProperty.rateId, supp.key)
+    const on = value.selectedItems.some(i => i.rateId === id)
+    onChange({
+      ...value,
+      selectedItems: on
+        ? value.selectedItems.filter(i => i.rateId !== id)
+        : [...value.selectedItems, { rateId: id, name: `${supp.name} (supplement)`, rateEur: supp.rateEur, rateNonEur: supp.rateNonEur, supplementKey: supp.key }],
+    })
+  }
+
   const unselectedCount = options.filter(o => !value.selectedItems.some(i => i.rateId === o.id)).length
   const hasValue = slotCost > 0
 
@@ -119,6 +141,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
               ? [{ id: selected.rateId, name: selected.name, rateEur: selected.rateEur, rateNonEur: selected.rateNonEur } as RateOption, ...options]
               : options
             return (
+              <>
               <select
                 value={selected?.rateId || ''}
                 onChange={(e) => {
@@ -139,6 +162,38 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
                   </option>
                 ))}
               </select>
+              {/* The property's supplements — the agency's own list, each a
+                  per-person-per-night extra on top of the room. */}
+              {availableSupplements.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1 mt-1" data-testid="slot-supplements">
+                  {availableSupplements.map(supp => {
+                    const on = value.selectedItems.some(i => i.rateId === supplementItemId(selected!.rateId, supp.key))
+                    return (
+                      <button
+                        key={supp.key}
+                        type="button"
+                        onClick={() => toggleSupplement(supp)}
+                        aria-pressed={on}
+                        title={`${supp.name}: ${rateSymbol}${supp[rateKey].toFixed(2)} per person per night`}
+                        className={`px-1.5 py-0.5 text-[10px] rounded-full border transition-colors ${
+                          on ? 'bg-[#647C47] border-[#647C47] text-white' : 'bg-white border-gray-200 text-gray-500 hover:border-[#647C47]'
+                        }`}
+                      >
+                        {supp.name} +{rateSymbol}{supp[rateKey].toFixed(0)}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              {/* Supplements from a saved quote whose property no longer lists them
+                  still count; show them so they can be removed. */}
+              {value.selectedItems.filter(i => isSupplementItem(i) && !availableSupplements.some(s => supplementItemId(selected?.rateId ?? '', s.key) === i.rateId)).map(i => (
+                <span key={i.rateId} onClick={() => onChange({ ...value, selectedItems: value.selectedItems.filter(x => x.rateId !== i.rateId) })}
+                  className="inline-flex items-center gap-1 mt-1 mr-1 px-1.5 py-0.5 text-[10px] bg-amber-50 text-amber-700 rounded cursor-pointer" title="Click to remove">
+                  {i.name} {rateSymbol}{i[rateKey].toFixed(2)} ×
+                </span>
+              ))}
+              </>
             )
           })()
         ) : (

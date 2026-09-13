@@ -157,6 +157,11 @@ export interface SelectedItem {
   serviceType?: string         // e.g. 'airport_transfer' / 'day_tour' / 'intercity_transfer' on route slot
   pricingClass?: PricingClass  // 'mandatory' / 'optional' / 'free' on entrance_fees
   guideRate?: number | null    // throughout-guide money on this pick (bed / guide fare) — see RateOption.guide_rate
+  /** An agency supplement (Settings → Vocabulary) riding on the hotel or
+   *  cruise pick above it in the same slot — a view, a deck, a meal plan —
+   *  priced PER PERSON PER NIGHT on top of the room. Its rateId is
+   *  `<propertyId>#supp:<key>`, so a reloaded save is recognised too. */
+  supplementKey?: string
 }
 
 export interface SlotValue {
@@ -218,7 +223,25 @@ export interface RateOption {
    *  night (first rate period's guide_rate — the same period the headline
    *  pp_double mirrors), or the flight's guide fare (null = customer fare). */
   guide_rate?: number | null
+  /** Hotel / cruise options only: the supplements the property prices, each
+   *  with its first-period per-person-per-night rate — the same period the
+   *  headline rate mirrors (lib/rates/supplements). */
+  supplements?: GridSupplement[]
 }
+
+export interface GridSupplement {
+  key: string
+  name: string
+  rateEur: number
+  rateNonEur: number
+}
+
+/** The selected-item id of a supplement riding on a property pick. */
+export const supplementItemId = (propertyId: string, key: string) => `${propertyId}#supp:${key}`
+export const isSupplementItem = (item: { rateId: string; supplementKey?: string }) =>
+  Boolean(item.supplementKey) || item.rateId.includes('#supp:')
+/** The grid's single-supplement add-on under a hotel pick (SlotRow `${id}_supp`). */
+export const isSingleSupplementItem = (item: { rateId: string }) => item.rateId.endsWith('_supp')
 
 export interface AllRates {
   route: RateOption[]
