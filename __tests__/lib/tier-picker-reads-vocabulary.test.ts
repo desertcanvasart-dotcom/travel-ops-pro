@@ -102,6 +102,21 @@ const VOCAB_PICKERS: Record<string, string[]> = {
   'app/rates/sleeping-train/sleeping-train-rates-content.tsx': ['sleeper_cabin', 'rate_season'],
   'app/rates/activities/activity-rates-content.tsx': ['activity_category', 'activity_type', 'activity_duration', 'activity_unit'],
   'app/restaurants/restaurants-content.tsx': ['dietary_option'],
+  // 2026-09-13: the flights pickers were never converted — a type removed in
+  // Settings stayed on the form.
+  'app/rates/flights/flights-content.tsx': ['flight_type', 'flight_cabin', 'flight_frequency'],
+}
+
+// Calling useVocabOptions somewhere in a file is not enough: the transportation
+// FORM's service-type <select> kept iterating the built-in SERVICE_TYPES (only
+// relabelling them) while the page's filter read the vocabulary, so a type the
+// operator deleted in Settings was still offered on every new rate
+// (2026-09-13). These built-in lists must never reach an <option> again.
+// The leading brace is the JSX expression that renders options; the same
+// constants may still be passed to useVocabOptions as the built-in fallback.
+const RETIRED_FORM_LISTS: Record<string, string[]> = {
+  'app/rates/transportation/transportation-content.tsx': ['{SERVICE_TYPES.map('],
+  'app/rates/flights/flights-content.tsx': ['{FLIGHT_TYPES.map(', '{CABIN_CLASSES.map(', '{FREQUENCIES.map('],
 }
 // attractions' season picker is in TIER_PICKERS' sibling list above (rate_season).
 
@@ -111,6 +126,14 @@ describe('vocabulary pickers read the agency list', () => {
       const src = read(rel)
       for (const kind of kinds) {
         expect(src.includes(`useVocabOptions('${kind}'`), `${rel} must list ${kind} from the vocabulary`).toBe(true)
+      }
+    })
+  }
+  for (const [rel, lists] of Object.entries(RETIRED_FORM_LISTS)) {
+    it(`${rel} renders no <option> from its built-in lists`, () => {
+      const src = read(rel)
+      for (const list of lists) {
+        expect(src.includes(list), `${rel} still iterates ${list} — the vocabulary is the list`).toBe(false)
       }
     })
   }

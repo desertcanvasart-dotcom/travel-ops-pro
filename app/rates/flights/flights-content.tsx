@@ -8,6 +8,7 @@ import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurre
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
@@ -171,6 +172,12 @@ export default function FlightsContent() {
   const flightTypeLabel = useVocabLabel('flight_type')
   const flightCabinLabel = useVocabLabel('flight_cabin')
   const flightFrequencyLabel = useVocabLabel('flight_frequency')
+  // The pickers list the agency's vocabulary (Settings → Vocabulary): an entry
+  // added there appears, a removed one disappears. The built-in lists only
+  // stand in until the vocabulary loads.
+  const flightTypeOptions = useVocabOptions('flight_type', FLIGHT_TYPES.map(x => ({ value: x.value, label: x.label })))
+  const cabinClassOptions = useVocabOptions('flight_cabin', CABIN_CLASSES.map(x => ({ value: x.value, label: x.label })))
+  const frequencyOptions = useVocabOptions('flight_frequency', FREQUENCIES.map(x => ({ value: x.value, label: x.label })))
   const tCommon = useTranslations('rates.common')
   const dialog = useConfirmDialog()
 
@@ -675,8 +682,8 @@ export default function FlightsContent() {
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
             <option value="">{t('allTypes')}</option>
-            {FLIGHT_TYPES.map(type => (
-              <option key={type.value} value={type.value}>{flightTypeLabel(type.value, type.label)}</option>
+            {flightTypeOptions.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -689,8 +696,8 @@ export default function FlightsContent() {
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
             <option value="">{t('allClasses')}</option>
-            {CABIN_CLASSES.map(cls => (
-              <option key={cls.value} value={cls.value}>{flightCabinLabel(cls.value, cls.label)}</option>
+            {cabinClassOptions.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -1081,8 +1088,11 @@ export default function FlightsContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
-                      {CABIN_CLASSES.map(cls => (
-                        <option key={cls.value} value={cls.value}>{flightCabinLabel(cls.value, cls.label)}</option>
+                      {!cabinClassOptions.some(o => o.value === formData.cabin_class) && formData.cabin_class && (
+                        <option value={formData.cabin_class}>{flightCabinLabel(formData.cabin_class, formData.cabin_class)}</option>
+                      )}
+                      {cabinClassOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>
@@ -1157,8 +1167,11 @@ export default function FlightsContent() {
                       onChange={(e) => setFormData(prev => ({ ...prev, frequency: e.target.value }))}
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
-                      {FREQUENCIES.map(freq => (
-                        <option key={freq.value} value={freq.value}>{flightFrequencyLabel(freq.value, freq.label)}</option>
+                      {!frequencyOptions.some(o => o.value === formData.frequency) && formData.frequency && (
+                        <option value={formData.frequency}>{flightFrequencyLabel(formData.frequency, formData.frequency)}</option>
+                      )}
+                      {frequencyOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>

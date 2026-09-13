@@ -1144,8 +1144,8 @@ export default function TransportationContent() {
           <div className="divide-y divide-gray-100">
             {paginatedRates.map((rate) => {
               const activeTiers = getActiveTiers(rate)
-              const serviceType = SERVICE_TYPES.find(st => st.value === rate.service_type)
-              const serviceLabel = serviceType ? serviceTypeLabel(serviceType.value, t(serviceType.labelKey)) : rate.service_type
+              // The agency's word for the stored key — a removed entry shows its key.
+              const serviceLabel = serviceTypeLabelFor(rate.service_type)
               const isIntercity = needsDestinationCity(rate.service_type)
               const cityDisplay = isIntercity && rate.destination_city
                 ? `${translateCity(rate.city)} → ${translateCity(rate.destination_city)}`
@@ -1381,8 +1381,15 @@ export default function TransportationContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
-                      {SERVICE_TYPES.map(type => (
-                        <option key={type.value} value={type.value}>{serviceTypeLabel(type.value, t(type.labelKey))}</option>
+                      {/* The agency's list (Settings → Vocabulary) — an entry removed
+                          there is gone from here too. A rate whose stored type is no
+                          longer listed still shows it, so editing does not silently
+                          retype it. */}
+                      {!serviceTypeOptions.some(o => o.value === formData.service_type) && formData.service_type && (
+                        <option value={formData.service_type}>{serviceTypeLabelFor(formData.service_type)}</option>
+                      )}
+                      {serviceTypeOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </div>
