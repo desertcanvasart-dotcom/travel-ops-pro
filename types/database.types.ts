@@ -104,6 +104,7 @@ export interface Database {
           peak_single_supp_non_eur: number | null
           peak_triple_red_non_eur: number | null
           seasons: Json | null
+          supplements: Json
           rate_currency: string | null
           property_id: string | null
         }
@@ -190,6 +191,7 @@ export interface Database {
           peak_single_supp_non_eur?: number | null
           peak_triple_red_non_eur?: number | null
           seasons?: Json | null
+          supplements?: Json
           rate_currency?: string | null
           property_id?: string | null
         }
@@ -276,6 +278,7 @@ export interface Database {
           peak_single_supp_non_eur?: number | null
           peak_triple_red_non_eur?: number | null
           seasons?: Json | null
+          supplements?: Json
           rate_currency?: string | null
           property_id?: string | null
         }
@@ -7751,6 +7754,7 @@ export interface Database {
           rate_peak_triple_non_eur: number | null
           rate_peak_suite_non_eur: number | null
           seasons: Json | null
+          supplements: Json
           rate_currency: string | null
           property_id: string | null
         }
@@ -7819,6 +7823,7 @@ export interface Database {
           rate_peak_triple_non_eur?: number | null
           rate_peak_suite_non_eur?: number | null
           seasons?: Json | null
+          supplements?: Json
           rate_currency?: string | null
           property_id?: string | null
         }
@@ -7887,6 +7892,7 @@ export interface Database {
           rate_peak_triple_non_eur?: number | null
           rate_peak_suite_non_eur?: number | null
           seasons?: Json | null
+          supplements?: Json
           rate_currency?: string | null
           property_id?: string | null
         }

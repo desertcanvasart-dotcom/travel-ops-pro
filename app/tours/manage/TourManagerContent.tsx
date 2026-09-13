@@ -44,6 +44,7 @@ import { LanguageIndicator } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
 import AttractionPicker from '@/components/AttractionPicker'
 import TravelLegPicker from '@/components/TravelLegPicker'
+import DaySupplementsPicker from '@/components/DaySupplementsPicker'
 
 // ============================================
 // INTERFACES
@@ -117,6 +118,9 @@ interface ItineraryDay {
   attractions?: string[]
   /** entrance_fees ids — the tickets the pricing engine charges for the day. */
   attraction_ids?: string[]
+  /** Supplements the night is sold with (vocabulary keys) — priced per
+   *  person per night at the property's rate; included in the price. */
+  supplements?: string[]
 }
 
 interface Toast {
@@ -581,6 +585,15 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
                     selectedIds={day.attraction_ids ?? []}
                     onChange={(ids) => onChange(itinerary.map((d, i) => (i === index ? { ...d, attraction_ids: ids } : d)))}
                     compact
+                  />
+                </div>
+                {/* What the night is sold with — a view, a deck, a meal plan
+                    from the agency's own list; priced at the property's rate. */}
+                <div className="mt-2">
+                  <DaySupplementsPicker
+                    accommodationType={day.is_cruise_day ? 'cruise' : 'hotel'}
+                    value={day.supplements}
+                    onChange={(keys) => onChange(itinerary.map((d, i) => (i === index ? { ...d, supplements: keys } : d)))}
                   />
                 </div>
                 {/* How the day travels — a marked leg prices a per-person

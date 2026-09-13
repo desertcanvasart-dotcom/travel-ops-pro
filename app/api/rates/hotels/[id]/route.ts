@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSeasons, legacyColumnMirror } from '@/lib/rates/rate-seasons'
+import { sanitizeSupplements } from '@/lib/rates/supplements'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { createActorAdminClient } from '@/lib/supabase-actor'
@@ -130,6 +131,10 @@ export async function PUT(
       // readers that have no travel date.
       seasons: hotelSeasons,
       ...legacyColumnMirror(hotelSeasons, 'accommodation'),
+      // The supplements the rate carries (their prices ride in the periods
+      // above). Only when the body speaks of them: a caller that does not
+      // (the bulk importer) leaves the list as it is.
+      ...('supplements' in body ? { supplements: sanitizeSupplements(body.supplements) } : {}),
 
       // Rate validity
       rate_valid_from: body.rate_valid_from || null,

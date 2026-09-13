@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSeasons, legacyColumnMirror } from '@/lib/rates/rate-seasons'
+import { sanitizeSupplements } from '@/lib/rates/supplements'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
@@ -143,6 +144,8 @@ export async function POST(request: NextRequest) {
       // readers that have no travel date.
       seasons: hotelSeasons,
       ...legacyColumnMirror(hotelSeasons, 'accommodation'),
+      // The supplements the rate carries; their prices ride in the periods above.
+      supplements: sanitizeSupplements(body.supplements),
 
       // Rate validity
       rate_valid_from: body.rate_valid_from || null,

@@ -13,6 +13,7 @@ import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { currencySymbol } from '@/lib/currency-totals'
 import AttractionPicker from '@/components/AttractionPicker'
 import TravelLegPicker from '@/components/TravelLegPicker'
+import DaySupplementsPicker from '@/components/DaySupplementsPicker'
 
 // ============================================
 // B2B TOUR PRICE CALCULATOR PAGE
@@ -141,6 +142,8 @@ interface TemplateItineraryDay {
   transport_type?: string
   /** The exact ticket row when several serve the route (operator picks THE train). */
   transport_rate_id?: string
+  /** Supplements the night is sold with (vocabulary keys); included in the price. */
+  supplements?: string[]
   accommodation_type: string // 'hotel' | 'cruise' | 'none'
   services: {
     airport_arrival: boolean
@@ -335,6 +338,7 @@ export default function TourPriceCalculator() {
           is_cruise_day: d.is_cruise_day || false,
           attractions: Array.isArray(d.attractions) ? d.attractions : [],
           attraction_ids: Array.isArray(d.attraction_ids) ? d.attraction_ids.filter(Boolean) : [],
+          supplements: Array.isArray(d.supplements) && d.supplements.length ? d.supplements.filter(Boolean) : undefined,
           accommodation_type: d.accommodation_type || 'hotel',
           services: {
             airport_arrival: d.services?.airport_arrival || false,
@@ -405,6 +409,15 @@ export default function TourPriceCalculator() {
       const updated = [...prev]
       const attractions = [...(updated[dayIndex].attractions || []), attraction.trim()]
       updated[dayIndex] = { ...updated[dayIndex], attractions }
+      return updated
+    })
+    setHasUnsavedChanges(true)
+  }
+
+  const setDaySupplements = (dayIndex: number, keys: string[] | undefined) => {
+    setEditableDays(prev => {
+      const updated = [...prev]
+      updated[dayIndex] = { ...updated[dayIndex], supplements: keys }
       return updated
     })
     setHasUnsavedChanges(true)
@@ -1228,6 +1241,15 @@ export default function TourPriceCalculator() {
                                 ))}
                               </div>
                             </div>
+
+                            {/* Row 5a: What the night is sold with — priced at the property's rate */}
+                            {day.accommodation_type !== 'none' && (
+                              <DaySupplementsPicker
+                                accommodationType={day.accommodation_type}
+                                value={day.supplements}
+                                onChange={(keys) => setDaySupplements(index, keys)}
+                              />
+                            )}
 
                             {/* Row 5b: How the day travels (leg pricing) */}
                             <div>

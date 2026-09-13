@@ -46,7 +46,9 @@ import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import RatePeriodsImportExport from '@/app/components/RatePeriodsImportExport'
 import RateSeasonsEditor from '@/components/rates/RateSeasonsEditor'
+import RateSupplementsPicker from '@/components/rates/RateSupplementsPicker'
 import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
+import { supplementsForRow, type RateSupplement } from '@/lib/rates/supplements'
 import { hotelPpDoubleRange } from '@/lib/rates/hotel-display-rate'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
@@ -354,6 +356,7 @@ export default function HotelsContent() {
   const boardBasisOptions = useVocabOptions('board_basis', BOARD_BASIS_OPTIONS_CONFIG.map(o => ({ value: o.value, label: t(`boardTypes.${o.labelKey}`) })))
   const propertyTypeOptions = useVocabOptions('hotel_property_type', Object.keys(PROPERTY_TYPE_ICONS).map(k => ({ value: k, label: t(`propertyTypes.${k}`) })))
   const tPeriods = useTranslations('rates.ratePeriods')
+  const tSupp = useTranslations('rates.supplements')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -403,6 +406,8 @@ export default function HotelsContent() {
     // fields below stay in the payload so the API can keep mirroring the first
     // period onto them for readers that have no travel date.
     seasons: [] as RateSeason[],
+    // The agency's supplements this rate carries; priced inside each period.
+    supplements: [] as RateSupplement[],
     // Low Season - Per Person
     pp_double_eur: 0,
     single_supp_eur: 0,
@@ -581,6 +586,7 @@ export default function HotelsContent() {
       reservations_email: '',
       reservations_phone: '',
       seasons: [] as RateSeason[],
+      supplements: [] as RateSupplement[],
       // Low Season - Per Person
       pp_double_eur: 0,
       single_supp_eur: 0,
@@ -664,6 +670,7 @@ export default function HotelsContent() {
       // Opens with the row's periods, or its old low/high/peak windows
       // converted, so editing a pre-migration rate loses nothing.
       seasons: seasonsForRow(rate, 'accommodation'),
+      supplements: supplementsForRow(rate),
       // Low Season - Per Person
       pp_double_eur: rate.pp_double_eur || 0,
       single_supp_eur: rate.single_supp_eur || 0,
@@ -1634,9 +1641,20 @@ export default function HotelsContent() {
                   <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">4</span>
                   {tPeriods('titleWithCurrency', { currency: formData.rate_currency || rateCurrency })}
                 </h3>
+                {/* Which of the agency's supplements this hotel prices — each
+                    one picked here gets a per-night price in every period. */}
+                <div className="mb-3">
+                  <p className="text-xs font-medium text-gray-600 mb-1">{tSupp('title')}</p>
+                  <RateSupplementsPicker
+                    kind="hotel_supplement"
+                    value={formData.supplements}
+                    onChange={(supplements) => setFormData({ ...formData, supplements })}
+                  />
+                </div>
                 <RateSeasonsEditor
                   entity="accommodation"
                   seasons={formData.seasons}
+                  supplements={formData.supplements}
                   currency={rateCurrency}
                   onChange={(seasons) => setFormData({ ...formData, seasons })}
                 />

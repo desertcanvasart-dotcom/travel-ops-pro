@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSeasons, legacyColumnMirror } from '@/lib/rates/rate-seasons'
+import { sanitizeSupplements } from '@/lib/rates/supplements'
 import { createServerClient } from '@/lib/supabase-server'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
@@ -36,6 +37,11 @@ export async function PUT(
         seasons: cruiseSeasons,
         ...legacyColumnMirror(cruiseSeasons, 'cruise'),
       }
+    }
+    // The supplements the ship carries (their prices ride in the periods).
+    // Only when the body speaks of them, like `seasons` above.
+    if ('supplements' in body) {
+      updateBody = { ...updateBody, supplements: sanitizeSupplements(body.supplements) }
     }
 
     // Re-link the ship when anything identifying it moved (PUT can patch, so

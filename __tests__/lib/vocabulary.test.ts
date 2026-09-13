@@ -14,8 +14,9 @@ describe('frozen keys (the skeleton under the custom words)', () => {
   it('the 4 preset tier positions never change', () => {
     expect([...PRESET_TIERS]).toEqual(['budget', 'standard', 'deluxe', 'luxury'])
   })
-  it('exactly 35 vocabulary kinds, incl. tier + supplier_type', () => {
-    expect(VOCABULARY_KINDS.length).toBe(35)
+  it('exactly 36 vocabulary kinds, incl. tier + supplier_type', () => {
+    expect(VOCABULARY_KINDS.length).toBe(36)
+    expect(VOCABULARY_KINDS).toContain('cruise_supplement')
     expect(VOCABULARY_KINDS).toContain('tier')
     expect(VOCABULARY_KINDS).toContain('supplier_type')
   })

@@ -44,7 +44,7 @@ const TABLES = `
 
 describe('20261008 — user_profiles.role mirrors the membership', () => {
   const db = new PGlite()
-  beforeAll(async () => { await db.exec(TABLES); await db.exec(sql) })
+  beforeAll(async () => { await db.exec(TABLES); await db.exec(sql) }, 60_000) // PGlite boots slowly under a full parallel run; 10s flaked twice on 2026-09-13
   afterAll(async () => { await db.close() })
 
   const mirror = async (id: string) =>
