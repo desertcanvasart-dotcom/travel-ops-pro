@@ -91,6 +91,13 @@ export default function RatePeriodsPage() {
           The preview says exactly which properties change and from how many periods to how many.
           Nothing is written until you confirm.
         </p>
+        <p className="text-gray-600 mt-3">
+          The sheet also carries your supplements: two columns per entry in your vocabulary, one
+          per passport group, with the per-person-per-night price for the period. The column
+          header shows the entry&apos;s key in brackets, so a renamed word still loads. A
+          supplement priced in any period of a property is put on that property; one left blank
+          everywhere is taken off it. A sheet with no supplement columns leaves the lists alone.
+        </p>
         <Tip>
           Importing <strong>replaces</strong> the periods of every property named in the file. A
           new contract supersedes the old one. Properties not named in the file are untouched.

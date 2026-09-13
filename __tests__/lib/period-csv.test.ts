@@ -5,6 +5,7 @@ import {
   periodsToRows,
   parsePeriodRows,
   parseSheetDate,
+  periodTemplateRows,
 } from '@/lib/rates/period-csv'
 
 // The wide rate CSV has fixed columns for three seasons, so a six-period
@@ -171,5 +172,70 @@ describe('parsePeriodRows', () => {
       rates: { single_eur: 160, double_eur: 130, triple_eur: 115, suite_eur: 240,
                single_non_eur: 155, double_non_eur: 125, triple_non_eur: 110, suite_non_eur: 235, guide_rate: 0 },
     })
+  })
+})
+
+// ── Supplements (2026-09-13) ────────────────────────────────────────────
+// The agency's supplements are two more columns per supplement, keyed in
+// the header so a renamed word or another installation's sheet still lands.
+import { withSupplementColumns, supplementHeader, parseSupplementHeader } from '@/lib/rates/period-csv'
+
+describe('supplement columns', () => {
+  const VOCAB = [{ key: 'view_nile', label: 'Nile View' }, { key: 'half_board', label: 'Half Board (HB)' }]
+  const SHEET = withSupplementColumns(HOTEL, VOCAB)
+
+  it('adds a pair of columns per supplement, after the fixed rates, and never duplicates a key', () => {
+    const headers = periodHeaders(SHEET)
+    expect(headers).toHaveLength(periodHeaders(HOTEL).length + 4)
+    expect(headers.slice(-4)).toEqual([
+      'Supplement: Nile View [view_nile] (EU passport)',
+      'Supplement: Nile View [view_nile] (non-EU passport)',
+      'Supplement: Half Board (HB) [half_board] (EU passport)',
+      'Supplement: Half Board (HB) [half_board] (non-EU passport)',
+    ])
+    expect(periodHeaders(withSupplementColumns(HOTEL, [...VOCAB, VOCAB[0]]))).toHaveLength(headers.length)
+  })
+
+  it('reads a header by its key, whatever the word beside it', () => {
+    expect(parseSupplementHeader('Supplement: Vista del Nilo [view_nile] (non-EU passport)'))
+      .toEqual({ key: 'view_nile', label: 'Vista del Nilo', suffix: 'non_eur' })
+    expect(parseSupplementHeader(supplementHeader('upper_deck', 'Upper Deck', 'eur')))
+      .toEqual({ key: 'upper_deck', label: 'Upper Deck', suffix: 'eur' })
+    expect(parseSupplementHeader('PP Double (EU passport)')).toBeNull()
+    expect(parseSupplementHeader('Supplement: Bad [Not A Key] (EU passport)')).toBeNull()
+  })
+
+  it('round-trips supplement prices and derives which supplements each rate carries', () => {
+    const seasons = [
+      { name: 'Summer', from: '2026-05-01', to: '2026-09-30',
+        rates: { pp_double_eur: 55, single_supp_eur: 0, triple_red_eur: 0, pp_double_non_eur: 50, single_supp_non_eur: 0, triple_red_non_eur: 0, guide_rate: 0,
+                 'supp:view_nile:eur': 15, 'supp:view_nile:non_eur': 18, 'supp:half_board:eur': 0, 'supp:half_board:non_eur': 0 } },
+      { name: 'Christmas', from: '2026-12-20', to: '2027-01-05',
+        rates: { pp_double_eur: 140, single_supp_eur: 0, triple_red_eur: 0, pp_double_non_eur: 135, single_supp_non_eur: 0, triple_red_non_eur: 0, guide_rate: 0,
+                 'supp:view_nile:eur': 25, 'supp:view_nile:non_eur': 30, 'supp:half_board:eur': 0, 'supp:half_board:non_eur': 0 } },
+    ]
+    const rows = periodsToRows(SHEET, { key: 'ACC-1', displayName: 'Steigenberger', seasons })
+    expect(rows[0]['Supplement: Nile View [view_nile] (EU passport)']).toBe(15)
+
+    const parsed = parsePeriodRows(HOTEL, rows as Record<string, unknown>[])   // base config: columns come from the FILE
+    expect(parsed.errors).toEqual([])
+    expect(parsed.hasSupplementColumns).toBe(true)
+    expect(parsed.byKey.get('ACC-1')).toEqual(seasons)
+    // Priced somewhere → carried; blank everywhere → not.
+    expect(parsed.supplementsByKey.get('ACC-1')).toEqual([{ key: 'view_nile', name: 'Nile View' }])
+  })
+
+  it('an older sheet with no supplement columns says so, and touches nothing', () => {
+    const rows = periodsToRows(HOTEL, { key: 'ACC-1', displayName: 'X', seasons: [
+      { name: 'All', from: '2026-01-01', to: '2026-12-31', rates: { pp_double_eur: 50 } },
+    ] })
+    const parsed = parsePeriodRows(HOTEL, rows as Record<string, unknown>[])
+    expect(parsed.hasSupplementColumns).toBe(false)
+    expect(parsed.supplementsByKey.size).toBe(0)
+  })
+
+  it('the sample rows carry supplement figures too, smaller than the headline', () => {
+    const [summer] = periodTemplateRows(SHEET)
+    expect(summer['Supplement: Nile View [view_nile] (EU passport)']).toBe(50)
   })
 })

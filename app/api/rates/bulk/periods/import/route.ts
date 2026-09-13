@@ -18,6 +18,8 @@ import { createServerClient } from '@/lib/supabase-server'
 import Papa from 'papaparse'
 import { PERIOD_SHEETS, parsePeriodRows, type PeriodRowError } from '@/lib/rates/period-csv'
 import { sanitizeSeasons, legacyColumnMirror, seasonsForRow } from '@/lib/rates/rate-seasons'
+import { sanitizeSupplements, supplementsForRow, type RateSupplement } from '@/lib/rates/supplements'
+import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
 import { requireRole } from '@/lib/auth/current-org'
 
 export const dynamic = 'force-dynamic'
@@ -27,6 +29,10 @@ interface RateChange {
   name: string
   before: number
   after: number
+  /** Supplements the rate carries before / after — after is null when the
+   *  file has no supplement columns and the list is left alone. */
+  supplementsBefore: number
+  supplementsAfter: number | null
 }
 
 export async function POST(request: NextRequest) {
@@ -54,8 +60,19 @@ export async function POST(request: NextRequest) {
       transformHeader: h => h.trim(),
     })
 
-    const { byKey, errors, exampleRows } = parsePeriodRows(config, parsed.data ?? [])
+    const { byKey, errors, exampleRows, hasSupplementColumns, supplementsByKey } = parsePeriodRows(config, parsed.data ?? [])
     const rowErrors: PeriodRowError[] = [...errors]
+
+    // The list a rate carries follows the file: a key priced anywhere in the
+    // rate's periods is on it, named by the agency's CURRENT word where the
+    // vocabulary has one (the header's word otherwise). No supplement
+    // columns at all = an older sheet; the list is not touched.
+    const vocabulary = hasSupplementColumns
+      ? await vocabularyItemsForCurrentOrg(entity === 'accommodation' ? 'hotel_supplement' : 'cruise_supplement')
+      : []
+    const vocabLabel = new Map(vocabulary.map(v => [v.key, v.label]))
+    const supplementsFor = (key: string): RateSupplement[] =>
+      sanitizeSupplements((supplementsByKey.get(key) ?? []).map(s => ({ key: s.key, name: vocabLabel.get(s.key) ?? s.name })))
 
     if (byKey.size === 0) {
       return NextResponse.json({
@@ -104,6 +121,8 @@ export async function POST(request: NextRequest) {
         name: String(row[config.displayColumn] ?? key),
         before: seasonsForRow(row, config.entity).length,
         after: byKey.get(key)!.length,
+        supplementsBefore: supplementsForRow(row).length,
+        supplementsAfter: hasSupplementColumns ? supplementsFor(key).length : null,
       })
     }
 
@@ -128,7 +147,11 @@ export async function POST(request: NextRequest) {
       // The first period is mirrored onto the base columns, same as a save
       // from the rates screen, so readers that price without a travel date
       // keep seeing a real rate.
-      const patch = { seasons, ...legacyColumnMirror(seasons, config.entity) }
+      const patch = {
+        seasons,
+        ...legacyColumnMirror(seasons, config.entity),
+        ...(hasSupplementColumns ? { supplements: supplementsFor(change.key) } : {}),
+      }
       const { error: updateError } = config.table === 'accommodation_rates'
         ? await supabase.from('accommodation_rates').update(patch).eq('service_code', change.key)
         : await supabase.from('nile_cruises').update(patch).eq('cruise_code', change.key)

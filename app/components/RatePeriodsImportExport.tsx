@@ -17,7 +17,7 @@ import { useRef, useState } from 'react'
 import { Download, Upload, X, Loader2, AlertCircle, CheckCircle, CalendarRange, FileText } from 'lucide-react'
 
 type Entity = 'accommodation' | 'cruise'
-type Change = { key: string; name: string; before: number; after: number }
+type Change = { key: string; name: string; before: number; after: number; supplementsBefore?: number; supplementsAfter?: number | null }
 type RowError = { row: number; key: string; message: string }
 
 type Step = 'idle' | 'previewing' | 'preview' | 'importing' | 'done' | 'error'
@@ -178,6 +178,12 @@ export default function RatePeriodsImportExport({ entity }: { entity: Entity }) 
                           <span className="font-medium">{c.name}</span>
                           <span className="text-gray-600">
                             {c.before} → <strong>{c.after}</strong> period{c.after === 1 ? '' : 's'}
+                            {/* The file carries supplement columns: the list follows the file. */}
+                            {c.supplementsAfter != null && (
+                              <span className="ml-2 text-gray-500">
+                                · {c.supplementsBefore ?? 0} → <strong>{c.supplementsAfter}</strong> supplement{c.supplementsAfter === 1 ? '' : 's'}
+                              </span>
+                            )}
                           </span>
                         </div>
                       ))}

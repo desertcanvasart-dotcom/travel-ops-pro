@@ -38,8 +38,10 @@ test('a six-period contract imports from one spreadsheet', async ({ request }) =
     expect(dry.ok(), await dry.text()).toBeTruthy()
     const dryJson = await dry.json()
     expect(dryJson.errors).toEqual([])
+    // This sheet carries no supplement columns, so the preview reports the
+    // rate's supplement list untouched (after: null) — see period-csv.ts.
     expect(dryJson.changes).toEqual([
-      { key: 'ZZTEST-PERIODS', name: 'ZZ TEST — periods CSV (delete me)', before: 0, after: 6 },
+      { key: 'ZZTEST-PERIODS', name: 'ZZ TEST — periods CSV (delete me)', before: 0, after: 6, supplementsBefore: 0, supplementsAfter: null },
     ])
 
     // Nothing written yet.

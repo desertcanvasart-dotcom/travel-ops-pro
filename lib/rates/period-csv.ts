@@ -16,13 +16,65 @@
 // broke a real production import once ("23/06/2026" rejected by the database).
 // Both forms are accepted here, exactly as the wide importer accepts them.
 
-import { RATE_FIELDS, type RateSeason, type RateSeasonEntity } from '@/lib/rates/rate-seasons'
+import { RATE_FIELDS, SUPPLEMENT_FIELD, type RateSeason, type RateSeasonEntity } from '@/lib/rates/rate-seasons'
+import { supplementField, type RateSupplement, type SupplementSuffix } from '@/lib/rates/supplements'
 
 export interface PeriodColumn {
   /** Header text in the file. */
   label: string
   /** Where it lands: the rate key, a period property, or a rate field. */
   field: string
+}
+
+// ── Supplements ──────────────────────────────────────────────────────────
+// The agency's supplements (Settings → Vocabulary) are two more columns per
+// supplement — one per passport group — carrying the per-person-per-night
+// price for the period. The header carries the vocabulary KEY in brackets
+// next to the agency's word, so an import still finds the column after the
+// word was changed in Settings, and a sheet from another installation loads
+// under its own keys. The word is for the operator's eye.
+//
+// Which supplements a rate CARRIES is derived on import: a key with a price
+// in any of the rate's periods is on the rate; one that is blank everywhere
+// is not. A sheet with no supplement columns at all (an older export) leaves
+// every rate's list alone.
+
+export interface SupplementColumnMeta {
+  key: string
+  label: string
+  suffix: SupplementSuffix
+}
+
+const SUPPLEMENT_HEADER = /^Supplement:\s*(.*?)\s*\[([a-z0-9][a-z0-9_]{0,59})\]\s*\((EU|non-EU) passport\)$/i
+
+export function supplementHeader(key: string, label: string, suffix: SupplementSuffix): string {
+  return `Supplement: ${label} [${key}] (${suffix === 'eur' ? 'EU' : 'non-EU'} passport)`
+}
+
+/** The supplement a column header names, or null for any other header. */
+export function parseSupplementHeader(header: string): SupplementColumnMeta | null {
+  const m = SUPPLEMENT_HEADER.exec(String(header ?? '').trim())
+  if (!m) return null
+  return { key: m[2], label: m[1] || m[2], suffix: /^non/i.test(m[3]) ? 'non_eur' : 'eur' }
+}
+
+/** A sheet config with a pair of columns for each of the given supplements —
+ *  the agency's vocabulary for the kind, plus any key a rate already
+ *  carries (so an export never drops a price it holds). */
+export function withSupplementColumns(
+  config: PeriodSheetConfig,
+  supplements: readonly { key: string; label: string }[]
+): PeriodSheetConfig {
+  const seen = new Set<string>()
+  const extra: PeriodColumn[] = []
+  for (const s of supplements) {
+    if (!s.key || seen.has(s.key)) continue
+    seen.add(s.key)
+    for (const suffix of ['eur', 'non_eur'] as const) {
+      extra.push({ label: supplementHeader(s.key, s.label || s.key, suffix), field: supplementField(s.key, suffix) })
+    }
+  }
+  return { ...config, columns: [...config.columns, ...extra] }
 }
 
 /** Columns before the rate numbers: which rate this is, and which window. */
@@ -165,6 +217,12 @@ export interface ParsedPeriodSheet {
   errors: PeriodRowError[]
   /** Unedited sample rows left out rather than treated as a missing rate. */
   exampleRows: number
+  /** Whether the file carried any supplement column at all. False = an
+   *  older sheet; the importer leaves every rate's supplement list alone. */
+  hasSupplementColumns: boolean
+  /** rate key → the supplements it carries per this file: every key priced
+   *  in at least one of its periods, named by the header's word. */
+  supplementsByKey: Map<string, RateSupplement[]>
 }
 
 const num = (raw: unknown): number => {
@@ -187,6 +245,17 @@ export function parsePeriodRows(
   const byKey = new Map<string, RateSeason[]>()
   const errors: PeriodRowError[] = []
   let exampleRows = 0
+  // Supplement columns are read off the FILE's headers, not the config: the
+  // key in the header is what identifies them, whatever the word beside it.
+  const supplementColumns = new Map<string, SupplementColumnMeta>()
+  for (const raw of rows) {
+    for (const header of Object.keys(raw)) {
+      if (supplementColumns.has(header)) continue
+      const meta = parseSupplementHeader(header)
+      if (meta) supplementColumns.set(header, meta)
+    }
+  }
+  const supplementsByKey = new Map<string, RateSupplement[]>()
   const keyLabel = config.columns[0].label
   const nameLabel = config.columns[2].label
   const fromLabel = config.columns[3].label
@@ -223,6 +292,17 @@ export function parsePeriodRows(
       const col = config.columns.find(c => c.field === field)
       rates[field] = num(col ? raw[col.label] : 0)
     }
+    for (const [header, meta] of supplementColumns) {
+      const field = supplementField(meta.key, meta.suffix)
+      if (!SUPPLEMENT_FIELD.test(field)) continue
+      const value = num(raw[header])
+      rates[field] = value
+      if (value > 0) {
+        const carried = supplementsByKey.get(key) ?? []
+        if (!carried.some(c => c.key === meta.key)) carried.push({ key: meta.key, name: meta.label.slice(0, 80) })
+        supplementsByKey.set(key, carried)
+      }
+    }
 
     const name = String(raw[nameLabel] ?? '').trim().slice(0, 80) || `${from} – ${to}`
     const list = byKey.get(key) ?? []
@@ -236,5 +316,5 @@ export function parsePeriodRows(
     list.sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0))
   }
 
-  return { byKey, errors, exampleRows }
+  return { byKey, errors, exampleRows, hasSupplementColumns: supplementColumns.size > 0, supplementsByKey }
 }
