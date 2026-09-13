@@ -2621,6 +2621,27 @@
     }
   },
   "settings": {
+    "licence": {
+      "title": "Licence",
+      "description": "The company this installation is licensed to, and the term of the licence. Set by LICENSE_KEY in the server environment.",
+      "status": {
+        "valid": "Licensed",
+        "grace": "Renewal due",
+        "expired": "Expired",
+        "invalid": "Invalid key",
+        "missing": "Unlicensed evaluation"
+      },
+      "licensee": "Licensed to",
+      "licenceId": "Licence ID",
+      "validUntil": "Valid until",
+      "daysLeft": "{count} days left",
+      "domains": "Domains",
+      "seats": "Seats",
+      "features": "Includes",
+      "howToSet": "Add the LICENSE_KEY Autoura issued to your .env and restart the server. Everything works meanwhile; the key records who this copy belongs to.",
+      "invalidHint": "Check that LICENSE_KEY was copied whole, on one line. The details are in npm run doctor.",
+      "failedToLoad": "Could not read the licence status."
+    },
     "title": "Settings",
     "subtitle": "Manage your account and preferences",
     "profile": "Profile",

@@ -103,6 +103,33 @@ them, which is what public signup should do.
 membership. Run `npm run doctor` with `DATABASE_URL` set: "the install has an
 owner" is a check, and it names the fix.
 
+## Licence
+
+Every installation is licensed to one company. Autoura issues a `LICENSE_KEY`
+— one line, `AUT1.<payload>.<signature>` — naming the licensee, its domains
+and the term. Put it in `.env.local` and restart:
+
+```
+LICENSE_KEY=AUT1.eyJsaWQiOi…
+```
+
+The app verifies it at startup with no network (the payload is readable; only
+Autoura can produce a valid signature) and shows the result in **Settings →
+Organization → Licence** and on the `licence` line of `npm run doctor`.
+
+| State | Means | What changes |
+|---|---|---|
+| Licensed | Signature good, in date | Nothing |
+| Renewal due | Past the term, inside the grace period | Nothing yet |
+| Expired | Beyond grace | Operations keep working; updates from Autoura are refused |
+| Invalid key | Altered, truncated, or signed with a key this build does not know | As unlicensed; `doctor` says which |
+| Unlicensed evaluation | No `LICENSE_KEY` | Nothing is disabled |
+
+**Nothing about the licence can lock you out of your own data.** A bad or
+missing key is shown, never enforced by stopping bookings, documents or the
+portal. The licence records who a copy belongs to; the contract is what binds
+it, and the key is what makes a copy visible.
+
 ## Scheduled jobs
 
 **You do not configure cron.** The app schedules its own work in-process
