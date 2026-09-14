@@ -423,7 +423,7 @@ GUIDELINES:
 
       const toolExecutor = new ToolExecutor(supabase, context.clientId)
       const toolsUsed: string[] = []
-      let currentMessages = [...messages]
+      const currentMessages = [...messages]
       let iterations = 0
 
       while (iterations < this.maxToolIterations) {

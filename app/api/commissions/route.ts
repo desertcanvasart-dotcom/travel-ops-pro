@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate commission amount from rate if explicit amount missing.
-    let commissionAmount = hasExplicitAmount
+    const commissionAmount = hasExplicitAmount
       ? Number(body.commission_amount)
       : (Number(body.base_amount) * Number(body.commission_rate)) / 100
 

@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { setMockTables, createMockClient } from '../_mock-supabase'
 
 // POST /api/bookings (from an itinerary) must write the operator's payment
@@ -81,8 +83,6 @@ describe('no route hand-rolls a booking deposit', () => {
     // THE actual source of BKG-2026-0001..0004: confirming an itinerary
     // auto-creates its booking in app/api/itineraries/[id]/route.ts, and that
     // block computed deposit = total × 0.3 with no schedule at all.
-    const { readFileSync } = require('fs') as typeof import('fs')
-    const { join } = require('path') as typeof import('path')
     const src = readFileSync(join(__dirname, '..', '..', 'app', 'api', 'itineraries', '[id]', 'route.ts'), 'utf8')
     expect(src).not.toMatch(/\*\s*0\.3\b/)
     expect(src).toContain('buildBookingRow({')

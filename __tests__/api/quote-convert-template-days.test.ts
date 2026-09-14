@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'fs'
+import { readFileSync, readdirSync, statSync } from 'fs'
 import { join } from 'path'
 import { templateDaysToItineraryDays, addDays, packageTypeForTemplate, itineraryServiceType, serviceLineForItinerary } from '@/lib/itineraries/template-days'
 import { SERVICE_TYPES } from '@/lib/service-types'
@@ -94,7 +94,6 @@ describe('the convert route reads the programme from the template, never tour_da
   it('no API route embeds tour_days under tour_templates', () => {
     // The trap generalises: any select that nests tour_days inside a
     // tour_templates embed fails at runtime with PGRST200.
-    const { readdirSync, statSync } = require('fs') as typeof import('fs')
     const walk = (dir: string, out: string[] = []): string[] => {
       for (const e of readdirSync(dir)) {
         const p = join(dir, e)

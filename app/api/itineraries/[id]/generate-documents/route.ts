@@ -250,7 +250,7 @@ export async function POST(
           const supplier = suppliersMap[supplierId]
           
           if (!supplierGroups[supplierId]) {
-            let docType = SUPPLIER_TO_DOC_TYPE[supplier.type] || 
+            const docType = SUPPLIER_TO_DOC_TYPE[supplier.type] || 
                           serviceDocType || 
                           'service_order'
             

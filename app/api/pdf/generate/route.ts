@@ -72,7 +72,7 @@ function cleanServiceName(name: string, serviceType?: string): string {
 // Clean day title helper
 function cleanDayTitle(title: string, dayNumber: number, city: string): string {
   if (!title) return city || `Day ${dayNumber}`
-  let cleaned = title.replace(/^Day\s*\d+\s*[-:\u2013]\s*/i, '')
+  const cleaned = title.replace(/^Day\s*\d+\s*[-:\u2013]\s*/i, '')
   if (!cleaned.trim()) return city || `Day ${dayNumber}`
   return cleaned
 }

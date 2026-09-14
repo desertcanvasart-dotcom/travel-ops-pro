@@ -29,7 +29,7 @@ export async function GET(
     const email = (client as { email?: string } | null)?.email?.trim()
 
     const COLUMNS = 'id, itinerary_code, trip_name, status, start_date, end_date, num_adults, num_children, total_cost, currency, created_at'
-    let query = supabaseAdmin
+    const query = supabaseAdmin
       .from('itineraries')
       // currency travels with total_cost: the amount is meaningless without it,
       // and this operator prices in yen.

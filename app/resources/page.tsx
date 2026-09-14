@@ -329,7 +329,7 @@ export default function ResourcesPage() {
   ])).sort()
 
   // Filter function
-  const filterResources = <T extends any>(resourceArray: T[], cityField: string = 'city'): T[] => {
+  const filterResources = <T,>(resourceArray: T[], cityField: string = 'city'): T[] => {
     return resourceArray.filter(resource => {
       const matchesSearch = searchTerm === '' || 
       Object.values(resource as Record<string, unknown>).some(value => {

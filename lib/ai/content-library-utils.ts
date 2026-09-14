@@ -73,7 +73,7 @@ export async function fetchContentByTags(
 ): Promise<ContentForGeneration[]> {
   const supabase = createClient()
   
-  let query = supabase
+  const query = supabase
     .from('content_library')
     .select(`
       id,

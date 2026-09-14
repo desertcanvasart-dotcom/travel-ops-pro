@@ -35,6 +35,21 @@ jobs:
       - name: Unit tests (Vitest)
         run: npm test
 
+      # ESLint reported 4508 problems and nothing ran it: there was no step
+      # here, and Next 16 no longer lints during `next build`. It could never
+      # catch a regression because it had never been green — and among the
+      # noise sat three real React hook-order violations and a whole stale
+      # git worktree being linted as if it were the app.
+      #
+      # `npm run lint` exits non-zero on ERRORS and ignores warnings, which is
+      # exactly the contract wanted here: the error set is what the codebase
+      # holds itself to (see eslint.config.mjs for what was demoted and why),
+      # while the ~2200 remaining warnings stay visible without blocking a
+      # merge. It runs after the tests so a red suite is still the first thing
+      # a reader sees.
+      - name: Lint (errors fail, warnings do not)
+        run: npm run lint
+
       # Builds the entire schema from nothing against a real Postgres. Before
       # the baseline existed this could not pass at all — 17 of 125 migrations
       # applied. It is a gate now precisely because it finally can.

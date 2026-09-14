@@ -111,6 +111,86 @@ const CATEGORY_ICONS: Record<string, typeof Landmark> = {
 // DYNAMIC FORM FIELD COMPONENT
 // =====================================================
 
+/** The `list` field type: a list of free-text items, plus the "add one" box
+ *  whose own draft state is the useState this component exists to hold. */
+function DynamicListField({
+  field,
+  value,
+  onChange: handleChange,
+}: {
+  field: CategoryField
+  value: unknown
+  onChange: (newValue: unknown) => void
+}) {
+  const listItems = (value as string[]) || []
+  const [newItem, setNewItem] = useState('')
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        {field.label}
+        {field.required && <span className="text-red-500 ml-1">*</span>}
+      </label>
+      <div className="space-y-2">
+        {listItems.map((item, index) => (
+          <div key={index} className="flex items-center gap-2">
+            <input
+              type="text"
+              value={item}
+              onChange={(e) => {
+                const updated = [...listItems]
+                updated[index] = e.target.value
+                handleChange(updated)
+              }}
+              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
+            />
+            <button
+              type="button"
+              onClick={() => handleChange(listItems.filter((_, i) => i !== index))}
+              className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ))}
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={newItem}
+            onChange={(e) => setNewItem(e.target.value)}
+            placeholder={field.placeholder}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && newItem.trim()) {
+                e.preventDefault()
+                handleChange([...listItems, newItem.trim()])
+                setNewItem('')
+              }
+            }}
+            className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              if (newItem.trim()) {
+                handleChange([...listItems, newItem.trim()])
+                setNewItem('')
+              }
+            }}
+            className="p-2 text-[#647C47] hover:bg-[#647C47]/10 rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+      {field.helpText && (
+        <p className="mt-1 text-xs text-gray-500 flex items-center gap-1">
+          <Info className="w-3 h-3" />
+          {field.helpText}
+        </p>
+      )}
+    </div>
+  )
+}
+
 interface DynamicFieldProps {
   field: CategoryField
   value: unknown
@@ -366,73 +446,14 @@ function DynamicField({ field, value, onChange }: DynamicFieldProps) {
       )
 
     case 'list':
-      const listItems = (value as string[]) || []
-      const [newItem, setNewItem] = useState('')
-      return (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            {field.label}
-            {field.required && <span className="text-red-500 ml-1">*</span>}
-          </label>
-          <div className="space-y-2">
-            {listItems.map((item, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={item}
-                  onChange={(e) => {
-                    const updated = [...listItems]
-                    updated[index] = e.target.value
-                    handleChange(updated)
-                  }}
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleChange(listItems.filter((_, i) => i !== index))}
-                  className="p-2 text-gray-400 hover:text-red-500 transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={newItem}
-                onChange={(e) => setNewItem(e.target.value)}
-                placeholder={field.placeholder}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newItem.trim()) {
-                    e.preventDefault()
-                    handleChange([...listItems, newItem.trim()])
-                    setNewItem('')
-                  }
-                }}
-                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]/20 focus:border-[#647C47]"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  if (newItem.trim()) {
-                    handleChange([...listItems, newItem.trim()])
-                    setNewItem('')
-                  }
-                }}
-                className="p-2 text-[#647C47] hover:bg-[#647C47]/10 rounded-lg transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-          {field.helpText && (
-            <p className="mt-1 text-xs text-gray-500 flex items-center gap-1">
-              <Info className="w-3 h-3" />
-              {field.helpText}
-            </p>
-          )}
-        </div>
-      )
+      // A component, not an inline case: this branch needs useState, and a
+      // hook inside a switch makes DynamicField's hook COUNT depend on
+      // field.type. React matches hooks by call order, so the day a field's
+      // type changes under a stable key — an admin editing a category, a
+      // reordered list — React throws "Rendered more hooks than during the
+      // previous render" and the form dies. Its own component makes the hook
+      // unconditional again.
+      return <DynamicListField field={field} value={value} onChange={handleChange} />
 
     default:
       return null

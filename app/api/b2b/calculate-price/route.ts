@@ -281,7 +281,7 @@ async function selectGuideFromB2CTable(language: string = 'English', tier: strin
   }
 
   // Find guide matching tier
-  let selectedGuide = guides.find((g: any) => g.tier === tier) || guides[0]
+  const selectedGuide = guides.find((g: any) => g.tier === tier) || guides[0]
 
   return {
     rate: selectedGuide.daily_rate || 0,
