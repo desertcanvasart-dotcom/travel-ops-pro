@@ -9,37 +9,86 @@
 // Rule, same as the rates create routes since #341: an import never
 // rewrites a supplier that exists. A row whose name is already on file is
 // reported and skipped; edit that supplier on its page.
+//
+// SUPPLIER_CSV_COLUMNS below is the ONE definition of that sheet. The export
+// route, the template, the importer and the guard test all derive from it.
+// They used not to: the export was written by hand on the suppliers page with
+// its own nine display headers ("Code", "Contact", "Email"), none of which the
+// importer recognises, so export → delete → re-import came back missing the
+// supplier_code, every contact field, the website, the address and the notes.
+// The supplier_code loss was the worst of it, because a re-imported supplier
+// is auto-assigned a NEW SUP-#### by the DB trigger — which silently breaks
+// the supplier_code link in every rate CSV that had been exported alongside.
 
 import { SUPPLIER_TYPE_VALUES } from '@/lib/supplier-types'
 import { SUPPLIER_STATUSES } from '@/lib/suppliers/fields'
 import { buildSupplierInsert } from '@/lib/suppliers/create-payload'
 
-export const SUPPLIER_CSV_COLUMNS = [
-  { name: 'name', label: 'Name', required: true },
+export interface SupplierCsvColumn {
+  /** The CSV header, and the key the importer reads. */
+  name: string
+  label: string
+  required: boolean
+  hint?: string
+  /** The `suppliers` column this cell carries, when it is not `name`. */
+  column?: string
+  /** The column holds a list; the cell is a `; `-separated join of it. */
+  list?: boolean
+  /** A value for the template's example row. Omitted = an empty cell. */
+  sample?: string
+}
+
+export const SUPPLIER_CSV_COLUMNS: readonly SupplierCsvColumn[] = [
+  { name: 'name', label: 'Name', required: true, sample: 'EXAMPLE-DELETE-THIS-ROW' },
   { name: 'supplier_code', label: 'Supplier Code', required: false, hint: 'portable key (SUP-0001); leave blank to auto-assign' },
-  { name: 'roles', label: 'Roles', required: true, hint: `one or more of ${SUPPLIER_TYPE_VALUES.join(' | ')}, separated by ;` },
-  { name: 'status', label: 'Status', required: false, hint: SUPPLIER_STATUSES.join(' | ') },
-  { name: 'contact_name', label: 'Contact Person', required: false },
-  { name: 'contact_email', label: 'Email', required: false },
-  { name: 'contact_phone', label: 'Phone', required: false },
-  { name: 'whatsapp', label: 'WhatsApp', required: false },
-  { name: 'website', label: 'Website', required: false },
-  { name: 'city', label: 'City', required: false },
-  { name: 'country', label: 'Country', required: false },
+  { name: 'roles', label: 'Roles', required: true, column: 'types', list: true, sample: 'air_carrier', hint: `one or more of ${SUPPLIER_TYPE_VALUES.join(' | ')}, separated by ;` },
+  { name: 'status', label: 'Status', required: false, sample: 'active', hint: SUPPLIER_STATUSES.join(' | ') },
+  { name: 'contact_name', label: 'Contact Person', required: false, sample: 'Reservations desk' },
+  { name: 'contact_email', label: 'Email', required: false, sample: 'groups@example.com' },
+  { name: 'contact_phone', label: 'Phone', required: false, sample: '+20 2 0000 0000' },
+  { name: 'whatsapp', label: 'WhatsApp', required: false, sample: '+20 10 0000 0000' },
+  { name: 'website', label: 'Website', required: false, sample: 'https://example.com' },
+  { name: 'city', label: 'City', required: false, sample: 'Cairo' },
+  { name: 'country', label: 'Country', required: false, sample: 'Egypt' },
   { name: 'address', label: 'Address', required: false },
-  { name: 'notes', label: 'Notes', required: false },
-] as const
+  { name: 'notes', label: 'Notes', required: false, sample: 'Contract renews every October' },
+]
 
 export const EXAMPLE_SUPPLIER_NAME = 'EXAMPLE-DELETE-THIS-ROW'
 
+/** The sheet's headers, in order — what the export writes and the importer
+ *  reads. */
+export function supplierCsvHeaders(): string[] {
+  return SUPPLIER_CSV_COLUMNS.map(c => c.name)
+}
+
+/** One supplier row as the sheet's cells, keyed by header. */
+export function supplierCsvRow(supplier: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const c of SUPPLIER_CSV_COLUMNS) {
+    const value = supplier[c.column ?? c.name]
+    out[c.name] = c.list
+      ? (Array.isArray(value) ? value : value == null ? [] : [value]).filter(Boolean).join('; ')
+      : value == null ? '' : String(value)
+  }
+  return out
+}
+
+/** The example row, keyed by header. Built FROM the column list rather than
+ *  written out positionally — the hand-written array it replaces was one value
+ *  short, so every cell from `supplier_code` rightwards sat under the wrong
+ *  header and the sheet taught the wrong layout to anyone who copied it. */
+export function supplierCsvTemplateRow(): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const c of SUPPLIER_CSV_COLUMNS) out[c.name] = c.sample ?? ''
+  return out
+}
+
 /** The sheet to start from: a header row plus one example the import skips. */
 export function supplierCsvTemplate(): string {
-  const header = SUPPLIER_CSV_COLUMNS.map(c => c.name).join(',')
-  const example = [
-    EXAMPLE_SUPPLIER_NAME, 'air_carrier', 'active', 'Reservations desk', 'groups@example.com',
-    '+20 2 0000 0000', '+20 10 0000 0000', 'https://example.com', 'Cairo', 'Egypt', '', 'Contract renews every October',
-  ].map(v => `"${v}"`).join(',')
-  return `${header}\n${example}\n`
+  const row = supplierCsvTemplateRow()
+  const quote = (v: string) => `"${v.replace(/"/g, '""')}"`
+  return `${supplierCsvHeaders().join(',')}\n${supplierCsvHeaders().map(h => quote(row[h])).join(',')}\n`
 }
 
 export interface SupplierCsvRow { [column: string]: string | undefined }

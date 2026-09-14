@@ -220,6 +220,7 @@ export default function SuppliersContent() {
   const [bulkNotice, setBulkNotice] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null)
   const [formData, setFormData] = useState<Record<string, any>>({})
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const rowMenuRef = useRef<HTMLDivElement>(null)
@@ -464,26 +465,43 @@ export default function SuppliersContent() {
     }
   }
 
-  const handleExport = () => {
-    const csv = [
-      ['Code', 'Name', 'Roles', 'Contact', 'Email', 'Phone', 'WhatsApp', 'City', 'Status'].join(','),
-      ...filteredSuppliers.map(s => [
-        s.supplier_code,
-        s.name,
-        (s.types?.length ? s.types : [s.type]).join('; '),
-        s.contact_name,
-        s.contact_email,
-        s.contact_phone,
-        s.whatsapp,
-        s.city,
-        s.status
-      ].map(v => `"${v || ''}"`).join(','))
-    ].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `suppliers-${todayLocal()}.csv`
-    a.click()
+  // The file is built by POST /api/suppliers/export, not here. This page used
+  // to write it by hand with its own nine display headers and
+  // `"${v || ''}"` as the serialiser — headers the importer does not
+  // recognise (so a re-import lost the supplier_code, every contact field, the
+  // website, the address and the notes), and an escaper that corrupts any
+  // value holding a quote or a newline, which `notes` routinely does.
+  //
+  // The page still decides WHAT to export: it posts the ids its filters and
+  // search left on screen, in that order. Re-deriving the filter server-side
+  // would be a second implementation of the same rule.
+  const handleExport = async () => {
+    setExporting(true)
+    setError(null)
+    try {
+      const response = await fetch('/api/suppliers/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: filteredSuppliers.map(s => s.id) }),
+      })
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null)
+        throw new Error(detail?.error || 'Failed to export suppliers')
+      }
+      const blob = await response.blob()
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.href = url
+      link.download = `suppliers-${todayLocal()}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setExporting(false)
+    }
   }
 
   // The form is the same for every role — see lib/suppliers/fields.ts. Role
@@ -594,7 +612,7 @@ export default function SuppliersContent() {
               </div>
               <div className="w-px h-6 bg-gray-200" />
               <SupplierImportExport onImported={fetchSuppliers} />
-              <button type="button" onClick={handleExport} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+              <button type="button" onClick={handleExport} disabled={exporting} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">
                 <Download className="w-4 h-4" /> {t('export')}
               </button>
               <button type="button" onClick={handleAdd} className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700">

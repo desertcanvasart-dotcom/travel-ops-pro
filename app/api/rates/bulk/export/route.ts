@@ -101,6 +101,35 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // The property link travels as the property's NAME under its supplier, not
+    // as property_id — a UUID means nothing in the install the file is carried
+    // to. Hotels and cruises already denormalise that name onto the rate row;
+    // trains do not (their rows name only the operating COMPANY), so the sheet
+    // carries a virtual column that this fills from the joined property.
+    // Without it, export → delete → re-import unlinked every train and sleeper
+    // rate from the train it prices, with nothing on screen to show for it.
+    const link = config.propertyLink
+    if (link?.virtual) {
+      const propertyIds = Array.from(
+        new Set((data || []).map((r: Record<string, unknown>) => r.property_id).filter(Boolean))
+      ) as string[]
+      const nameById = new Map<string, string>()
+      if (propertyIds.length > 0) {
+        // A separate lookup, not a PostgREST embed: a database whose
+        // property_id migration has not landed yet must export blank, not fail
+        // the whole file (PGRST200).
+        const { data: props } = await supabase
+          .from('supplier_properties')
+          .select('id, name')
+          .in('id', propertyIds)
+        for (const pr of props || []) if (pr.name) nameById.set(pr.id, pr.name)
+      }
+      for (const r of data || []) {
+        const pid = (r as Record<string, unknown>).property_id
+        ;(r as Record<string, unknown>)[link.nameColumn] = pid ? nameById.get(pid as string) ?? '' : ''
+      }
+    }
+
     // The { fields, data } form, NOT unparse(rows, { columns }): the latter
     // returns an empty string for zero rows — no headers either — so exporting
     // an empty rate table handed back a completely blank file, at exactly the

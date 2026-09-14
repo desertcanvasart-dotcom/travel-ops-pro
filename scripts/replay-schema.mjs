@@ -35,117 +35,17 @@
 // after it; the 125 historical files moved to migrations/archive/ and are never
 // replayed. A fresh install is exactly what this script builds.
 
-import { PGlite } from '@electric-sql/pglite'
-import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto'
-import { uuid_ossp } from '@electric-sql/pglite/contrib/uuid_ossp'
-import { readFileSync, readdirSync } from 'node:fs'
-import { TRACKER_BOOTSTRAP } from './migrate-core.mjs'
-import { fileURLToPath } from 'node:url'
-import path from 'node:path'
+// The replay itself — the prelude, the exemptions and the file loop — lives in
+// replay-core.mjs so this CLI is not its only reader: a test asks the same
+// rebuilt schema which tables carry a supplier_id or a property_id, and must
+// get the same answer this gate does.
+import { replayMigrations, EXEMPT } from './replay-core.mjs'
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
-const MIGRATIONS = path.join(ROOT, 'migrations')
-
-// ---------------------------------------------------------------------------
-// THE SUPABASE PRELUDE
-// ---------------------------------------------------------------------------
-// A Supabase project hands the schema a few things before any migration runs:
-// the `auth` schema, the three API roles, and `auth.users`. A bare Postgres has
-// none of them, and without them eight migrations fail for reasons that have
-// nothing to do with whether they are correct.
-//
-// The sibling's answer was to EXEMPT those files. Stubbing is better: an
-// exempted migration is never tested at all, whereas a stubbed environment
-// still runs it. Only stub what Supabase genuinely provides — anything more and
-// the replay stops being evidence about a real install.
-const PRELUDE = `
-  CREATE SCHEMA IF NOT EXISTS auth;
-  -- Supabase installs extensions into their own schema, and the schema dump
-  -- refers to extensions.uuid_generate_v4() in column defaults.
-  CREATE SCHEMA IF NOT EXISTS extensions;
-  DO $$ BEGIN CREATE ROLE anon;          EXCEPTION WHEN duplicate_object THEN END $$;
-  DO $$ BEGIN CREATE ROLE authenticated; EXCEPTION WHEN duplicate_object THEN END $$;
-  DO $$ BEGIN CREATE ROLE service_role;  EXCEPTION WHEN duplicate_object THEN END $$;
-  CREATE EXTENSION IF NOT EXISTS pgcrypto    WITH SCHEMA extensions;
-  CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
-  -- Supabase's real auth.users has far more columns; migrations here only ever
-  -- reference it by id for foreign keys.
-  CREATE TABLE IF NOT EXISTS auth.users (
-    id uuid PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
-    email text,
-    -- Both of these are genuinely Supabase's, and both are read by the trigger
-    -- that turns a new auth user into a profile (and, on a virgin install, an
-    -- owner). Without them here the replay could not exercise the one thing a
-    -- fresh install does first.
-    raw_user_meta_data jsonb,
-    created_at timestamptz NOT NULL DEFAULT now()
-  );
-  -- auth.uid() is Supabase's "who is calling", read by 28 of these migrations
-  -- inside RLS policies. It reads a request-scoped JWT claim that does not
-  -- exist here, so the stub returns NULL — which is exactly what it returns
-  -- for an unauthenticated caller. Policies still compile and install; what
-  -- this replay proves is that the SCHEMA builds, not that RLS admits the
-  -- right people. That needs a different test.
-  CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
-    LANGUAGE sql STABLE AS $fn$ SELECT NULL::uuid $fn$;
-`
-
-// ---------------------------------------------------------------------------
-// EXEMPTIONS
-// ---------------------------------------------------------------------------
-// A file here is NOT tested. Each needs a reason that is about the test
-// environment, never about the migration being inconvenient — an exemption
-// added to make the numbers look better is a lie told to the next person.
-// Empty, and that is the goal. The one file that needed an exemption
-// (20260628_copilot_knowledge_rag.sql, which requires pgvector) is now in
-// migrations/archive/ and is not replayed; the baseline deliberately excludes
-// its pgvector-typed objects so this runs anywhere.
-const EXEMPT = new Map([])
 
 async function main() {
   const showAll = process.argv.includes('--all')
-  const files = readdirSync(MIGRATIONS).filter(f => f.endsWith('.sql')).sort()
 
-  const db = new PGlite({ extensions: { pgcrypto, uuid_ossp } })
-  await db.exec(PRELUDE)
-
-  // The RUNNER creates schema_migrations before applying anything, so a real
-  // install already has that table when the first migration runs. Replaying
-  // without it missed a genuine bug: the baseline dump still contained
-  // `CREATE TABLE schema_migrations` (production had been baselined when the
-  // dump was taken), and a from-scratch install died on "already exists".
-  // A green replay must mean what a real install would do.
-  await db.exec(TRACKER_BOOTSTRAP)
-
-  const applied = []
-  const failed = []
-  const skipped = []
-
-  for (const name of files) {
-    if (EXEMPT.has(name)) {
-      skipped.push(name)
-      continue
-    }
-    try {
-      await db.exec(readFileSync(path.join(MIGRATIONS, name), 'utf8'))
-      // Exactly what scripts/migrate-core.mjs does after each file. This used
-      // to be a workaround living only here, which is why the harness stayed
-      // green while a real install failed on the same session poisoning: the
-      // test fixed the problem the product still had. It belongs in the runner,
-      // and this line now mirrors it rather than compensating for its absence.
-      await db.exec("SELECT pg_catalog.set_config('search_path', 'public', false);")
-      applied.push(name)
-    } catch (error) {
-      failed.push({ name, message: String(error.message).split('\n')[0] })
-      // A failed statement poisons the session until the transaction ends.
-      // Roll back so the NEXT file is judged on its own merits.
-      try {
-        await db.exec('ROLLBACK')
-      } catch {
-        /* nothing open */
-      }
-    }
-  }
+  const { db, files, applied, failed, skipped } = await replayMigrations()
 
   // "N files applied" is weak evidence — an empty file would satisfy it. Count
   // what actually got built, and refuse to call a hollow schema a pass.

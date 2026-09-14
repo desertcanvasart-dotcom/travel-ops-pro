@@ -7,6 +7,7 @@ import type { ImportResult, ValidationError } from '@/lib/bulk-rate-service'
 import Papa from 'papaparse'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { batchResolveSuppliers } from '@/lib/suppliers/resolve-supplier'
+import { resolveRateProperties } from '@/lib/suppliers/resolve-property'
 import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
 
 const supabase = createServerClient()
@@ -265,6 +266,49 @@ export async function POST(request: NextRequest) {
     const dedupMap = new Map<string, Record<string, any>>()
     for (const r of keyedRows) dedupMap.set(String(r[uniqueKeyColumn]), r)
     const dedupedRows = Array.from(dedupMap.values())
+
+    // The property link. A CSV carries the property as its NAME under its
+    // supplier (the supplier_properties unique key), never as property_id — a
+    // foreign install's UUID is meaningless. Resolve it back here, through the
+    // SAME function the rate forms' create/update routes use, so a sheet and a
+    // form can never place the same rate on different properties.
+    //
+    // Before this, property_id was not a CSV column at all: export → delete →
+    // re-import silently unlinked every hotel, cruise, train and sleeper rate
+    // from the property it prices. The denormalised name survived, so nothing
+    // on screen changed.
+    //
+    // Placed HERE, after the dry-run return and after the unkeyed and example
+    // rows are dropped, because resolution find-or-CREATES the property: a dry
+    // run must write nothing, and the template's untouched sample row must not
+    // leave a ship called "Example Name" behind. Nothing here can fail a row —
+    // an unresolvable property leaves property_id null, exactly what the row
+    // had before — so there is nothing for the preview to report either.
+    const propertyLink = config.propertyLink
+    if (propertyLink) {
+      const resolutions = await resolveRateProperties(
+        supabase,
+        dedupedRows.map(row => ({
+          propertyType: propertyLink.propertyType,
+          supplierId: row.supplier_id as string | undefined,
+          name: row[propertyLink.nameColumn] as string | undefined,
+          propertyId: row.property_id as string | undefined,
+        })),
+      )
+      dedupedRows.forEach((row, i) => {
+        row.property_id = resolutions[i].property_id
+        // The property's canonical spelling wins, so the row and the property
+        // cannot disagree — but only where the rate table actually stores the
+        // name. A virtual column is stripped below instead.
+        const canonical = resolutions[i].name
+        if (canonical && !propertyLink.virtual) row[propertyLink.nameColumn] = canonical
+      })
+      // A virtual name column exists only on the sheet. It has done its job;
+      // the table has no such column and the upsert must never see it.
+      if (propertyLink.virtual) {
+        for (const row of dedupedRows) delete (row as Record<string, unknown>)[propertyLink.nameColumn]
+      }
+    }
 
     for (let i = 0; i < dedupedRows.length; i += BATCH_SIZE) {
       const batch = dedupedRows.slice(i, i + BATCH_SIZE)
