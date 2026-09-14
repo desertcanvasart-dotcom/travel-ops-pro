@@ -7,6 +7,7 @@ import type { ImportResult, ValidationError } from '@/lib/bulk-rate-service'
 import Papa from 'papaparse'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { batchResolveSuppliers } from '@/lib/suppliers/resolve-supplier'
+import { resolveRateProperties } from '@/lib/suppliers/resolve-property'
 import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
 
 const supabase = createServerClient()
@@ -95,7 +96,31 @@ export async function POST(request: NextRequest) {
     //   - row has explicit supplier_id → confirm it exists in suppliers, else error
     //   - row has supplier_name (no id) → resolve by lower(btrim(name)); exact-1 → set id; 0 or 2+ → error
     //   - row has neither → pass through (legitimate supplier-less row)
-    const parsedRows = preview.parsedValidRows ?? []
+    // The untouched sample row from a downloaded template, dropped HERE —
+    // before any resolver looks at it. Filling the sheet in underneath the
+    // example and importing the lot is the obvious mistake to make, and the
+    // importer has always meant to skip it; it just used to skip it much
+    // further down, after supplier resolution had already judged it.
+    //
+    // That ordering was a live bug. The sample names a supplier called
+    // "Example Name", which resolves to nothing, so the row was demoted as a
+    // validation error and the whole import returned "1 row(s) have validation
+    // errors" instead of the intended "example row skipped" — for every table
+    // whose sheet carries supplier_name. Now it never reaches the resolver,
+    // and no resolver added later can trip over it either.
+    const uniqueKeyColumn = config.uniqueKey[0] // 'service_code' | 'cruise_code' | 'cost_type'
+    let exampleRowsSkipped = 0
+    const parsedRows = (preview.parsedValidRows ?? []).filter(r => {
+      if (!isExampleRow(r[uniqueKeyColumn])) return true
+      exampleRowsSkipped++
+      return false
+    })
+    if (exampleRowsSkipped > 0) {
+      preview.parsedValidRows = parsedRows
+      preview.validRows -= exampleRowsSkipped
+      preview.sampleData = parsedRows.slice(0, 5)
+    }
+
     const resolution = await batchResolveSuppliers(parsedRows, supabase)
     const supplierErrors: ValidationError[] = []
     const indicesToDemote = new Set<number>()
@@ -236,24 +261,14 @@ export async function POST(request: NextRequest) {
     let updated = 0
     const importErrors: any[] = []
 
-    // Determine the unique key column for upsert
-    const uniqueKeyColumn = config.uniqueKey[0] // e.g., 'service_code' or 'cruise_code' or 'cost_type'
-
-    // The untouched sample row from a downloaded template. Filling the sheet in
-    // underneath it and importing the lot is the obvious mistake to make, so it
-    // is skipped rather than inserted as a rate called EXAMPLE-DELETE-THIS-ROW.
-    let exampleRowsSkipped = 0
-
     // Reject rows whose unique key is blank — without a key every such row is
-    // inserted as a brand-new record, creating uncontrolled duplicates.
+    // inserted as a brand-new record, creating uncontrolled duplicates. The
+    // template's example row is already gone by now (dropped before supplier
+    // resolution, above).
     const keyedRows = rowsToUpsert.filter(r => {
       const key = r[uniqueKeyColumn]
       if (key === undefined || key === null || String(key).trim() === '') {
         importErrors.push({ operation: 'validate', message: `Row missing required ${uniqueKeyColumn}; skipped` })
-        return false
-      }
-      if (isExampleRow(key)) {
-        exampleRowsSkipped++
         return false
       }
       return true
@@ -265,6 +280,49 @@ export async function POST(request: NextRequest) {
     const dedupMap = new Map<string, Record<string, any>>()
     for (const r of keyedRows) dedupMap.set(String(r[uniqueKeyColumn]), r)
     const dedupedRows = Array.from(dedupMap.values())
+
+    // The property link. A CSV carries the property as its NAME under its
+    // supplier (the supplier_properties unique key), never as property_id — a
+    // foreign install's UUID is meaningless. Resolve it back here, through the
+    // SAME function the rate forms' create/update routes use, so a sheet and a
+    // form can never place the same rate on different properties.
+    //
+    // Before this, property_id was not a CSV column at all: export → delete →
+    // re-import silently unlinked every hotel, cruise, train and sleeper rate
+    // from the property it prices. The denormalised name survived, so nothing
+    // on screen changed.
+    //
+    // Placed HERE, after the dry-run return and after the unkeyed and example
+    // rows are dropped, because resolution find-or-CREATES the property: a dry
+    // run must write nothing, and the template's untouched sample row must not
+    // leave a ship called "Example Name" behind. Nothing here can fail a row —
+    // an unresolvable property leaves property_id null, exactly what the row
+    // had before — so there is nothing for the preview to report either.
+    const propertyLink = config.propertyLink
+    if (propertyLink) {
+      const resolutions = await resolveRateProperties(
+        supabase,
+        dedupedRows.map(row => ({
+          propertyType: propertyLink.propertyType,
+          supplierId: row.supplier_id as string | undefined,
+          name: row[propertyLink.nameColumn] as string | undefined,
+          propertyId: row.property_id as string | undefined,
+        })),
+      )
+      dedupedRows.forEach((row, i) => {
+        row.property_id = resolutions[i].property_id
+        // The property's canonical spelling wins, so the row and the property
+        // cannot disagree — but only where the rate table actually stores the
+        // name. A virtual column is stripped below instead.
+        const canonical = resolutions[i].name
+        if (canonical && !propertyLink.virtual) row[propertyLink.nameColumn] = canonical
+      })
+      // A virtual name column exists only on the sheet. It has done its job;
+      // the table has no such column and the upsert must never see it.
+      if (propertyLink.virtual) {
+        for (const row of dedupedRows) delete (row as Record<string, unknown>)[propertyLink.nameColumn]
+      }
+    }
 
     for (let i = 0; i < dedupedRows.length; i += BATCH_SIZE) {
       const batch = dedupedRows.slice(i, i + BATCH_SIZE)

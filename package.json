@@ -18,7 +18,8 @@
     "licence": "node scripts/mint-licence.mjs",
     "release": "node scripts/release.mjs",
     "verify:deploy": "node scripts/verify-deploy.mjs",
-    "types:generate": "node --env-file=.env.local scripts/generate-db-types.mjs"
+    "types:generate": "node --env-file=.env.local scripts/generate-db-types.mjs",
+    "types:check": "node --env-file=.env.local scripts/generate-db-types.mjs --check"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",

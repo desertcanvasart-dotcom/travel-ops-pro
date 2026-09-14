@@ -16,6 +16,39 @@ export interface RateTableConfig {
   displayName: string
   columns: ColumnDef[]
   uniqueKey: string[]       // columns used for upsert matching
+  /** How this table's property_id travels through a CSV. Set on every rate
+   *  table that HAS a property_id — see PropertyLink. */
+  propertyLink?: PropertyLink
+}
+
+/**
+ * A rate row's link to the supplier_properties row it prices — the ship, the
+ * hotel, the train — carried through a CSV as the property's NAME under its
+ * supplier, never as its UUID. A foreign install's UUID means nothing; the
+ * name plus the supplier is the property's unique key (see the
+ * supplier_properties_unique_name constraint), and it is what a person
+ * reading the sheet recognises.
+ *
+ * `nameColumn` is the CSV column carrying that name. Two shapes exist,
+ * because the rate tables do:
+ *   - hotels and cruises already denormalise the name onto the rate row
+ *     (accommodation_rates.property_name, nile_cruises.ship_name), so the
+ *     natural key is a column the sheet already had — `virtual` is false and
+ *     the cell is written back to the table as before.
+ *   - trains carry only operator_name (the COMPANY), so there is no per-train
+ *     name on the row at all (see migrations/20260831_supplier_properties_
+ *     phase3_trains.sql). Those sheets get a VIRTUAL column, filled by the
+ *     export from the joined property and stripped by the import once it has
+ *     resolved property_id — exactly how supplier_code works.
+ */
+export interface PropertyLink {
+  /** The supplier_properties.property_type this table's rows point at. */
+  propertyType: 'ship' | 'hotel' | 'train'
+  /** The CSV column carrying the property's name. */
+  nameColumn: string
+  /** True when no rate-table column stores that name — the column exists only
+   *  on the sheet and must never reach the upsert. */
+  virtual?: boolean
 }
 
 export interface ColumnDef {
@@ -201,6 +234,9 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
     tableName: 'accommodation_rates',
     displayName: 'Hotels / Accommodation',
     uniqueKey: ['service_code'],
+    // The hotel is a supplier_properties row; property_name is already its
+    // natural key on this sheet, so the link needs no extra column.
+    propertyLink: { propertyType: 'hotel', nameColumn: 'property_name' },
     columns: [
       id(), serviceCode(),
       col('property_name', 'Property Name', 'text', true),
@@ -219,6 +255,8 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('reservations_email', 'Reservations Email', 'text', false),
       col('reservations_phone', 'Reservations Phone', 'text', false),
       rateCurrency(),
+      supplierId(),
+      col('supplier_name', 'Supplier Name', 'text', false),
       isActive(), createdAt(), updatedAt(),
     ],
   },
@@ -396,6 +434,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('rate_eur', 'Rate (EU passport)', 'number', true),
       col('description', 'Description', 'text', false),
       rateCurrency(),
+      supplierId(),
       notes(), isActive(),
     ],
   },
@@ -411,6 +450,7 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('rate_eur', 'Rate (EU passport)', 'number', true),
       col('description', 'Description', 'text', false),
       rateCurrency(),
+      supplierId(),
       notes(), isActive(),
     ],
   },
@@ -419,6 +459,9 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
     tableName: 'nile_cruises',
     displayName: 'Nile Cruises',
     uniqueKey: ['cruise_code'],
+    // The ship is a supplier_properties row; ship_name is already its natural
+    // key on this sheet, so the link needs no extra column.
+    propertyLink: { propertyType: 'ship', nameColumn: 'ship_name' },
     columns: [
       id(),
       col('cruise_code', 'Cruise Code', 'text', true),
@@ -449,6 +492,10 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
     tableName: 'train_rates',
     displayName: 'Train Rates',
     uniqueKey: ['service_code'],
+    // operator_name is the COMPANY. Which of that company's trains this rate
+    // prices lives only in property_id, so the sheet carries the train's name
+    // as a virtual column (injected below) and resolves it back on import.
+    propertyLink: { propertyType: 'train', nameColumn: 'property_name', virtual: true },
     columns: [
       id(), serviceCode(),
       col('origin_city', 'Origin City', 'text', true),
@@ -470,6 +517,8 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
     tableName: 'sleeping_train_rates',
     displayName: 'Sleeping Train Rates',
     uniqueKey: ['service_code'],
+    // As train_rates: the train itself is named only by property_id.
+    propertyLink: { propertyType: 'train', nameColumn: 'property_name', virtual: true },
     columns: [
       id(), serviceCode(),
       col('origin_city', 'Origin City', 'text', true),
@@ -520,6 +569,28 @@ for (const cfg of Object.values(RATE_TABLE_CONFIGS)) {
   if (sidIdx >= 0 && !cfg.columns.some(c => c.name === 'supplier_code')) {
     cfg.columns.splice(sidIdx + 1, 0, col('supplier_code', 'Supplier Code', 'text', false))
   }
+}
+
+// The property's name, for the tables whose rate rows do not store one
+// (trains). Same shape as supplier_code above: VIRTUAL — the export fills it
+// from the joined supplier_properties row, the import resolves it back to a
+// property_id and strips it, and the column is declared in exactly one place
+// (the config's propertyLink) so the export, the importer, the template and
+// the guard test all read the same answer.
+//
+// Without it, export → delete → re-import silently unlinked every sleeper and
+// train rate from the train it prices: property_id is not a CSV column, and
+// nothing else on the row names the train.
+for (const cfg of Object.values(RATE_TABLE_CONFIGS)) {
+  const link = cfg.propertyLink
+  if (!link?.virtual) continue
+  if (cfg.columns.some(c => c.name === link.nameColumn)) continue
+  const at = cfg.columns.findIndex(c => c.name === 'supplier_code')
+  const label = link.propertyType === 'train' ? 'Train Name'
+    : link.propertyType === 'ship' ? 'Ship Name'
+    : 'Property Name'
+  const column = col(link.nameColumn, label, 'text', false)
+  cfg.columns.splice(at >= 0 ? at + 1 : cfg.columns.length, 0, column)
 }
 
 // ============================================
