@@ -176,8 +176,13 @@ async function main() {
   const output = `/**
  * GENERATED FILE — do not edit by hand.
  *
- * Regenerate with: npm run types:generate
- * Drift check:     npm run types:check
+ * Regenerate with: npm run types:generate   (needs .env.local — production)
+ * Drift check:     npm run types:check      (needs .env.local — production)
+ *
+ * CI cannot run either: this repository is public and CI must never hold the
+ * production service-role key (__tests__/ci/workflow-secrets.test.ts). The
+ * credential-free guard is __tests__/lib/db-types-match-migrations.test.ts,
+ * which replays migrations/ and checks this file knows everything they build.
  *
  * Source: live production schema via PostgREST OpenAPI
  * (see scripts/generate-db-types.mjs for why not \`supabase gen types\`).

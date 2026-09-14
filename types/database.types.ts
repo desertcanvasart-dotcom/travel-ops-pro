@@ -1,12 +1,17 @@
 /**
  * GENERATED FILE — do not edit by hand.
  *
- * Regenerate with: npm run types:generate
- * Drift check:     npm run types:check
+ * Regenerate with: npm run types:generate   (needs .env.local — production)
+ * Drift check:     npm run types:check      (needs .env.local — production)
+ *
+ * CI cannot run either: this repository is public and CI must never hold the
+ * production service-role key (__tests__/ci/workflow-secrets.test.ts). The
+ * credential-free guard is __tests__/lib/db-types-match-migrations.test.ts,
+ * which replays migrations/ and checks this file knows everything they build.
  *
  * Source: live production schema via PostgREST OpenAPI
  * (see scripts/generate-db-types.mjs for why not `supabase gen types`).
- * Tables: 180
+ * Tables: 184
  */
 
 export type Json =
@@ -104,9 +109,9 @@ export interface Database {
           peak_single_supp_non_eur: number | null
           peak_triple_red_non_eur: number | null
           seasons: Json | null
-          supplements: Json
           rate_currency: string | null
           property_id: string | null
+          supplements: Json
         }
         Insert: {
           id?: string
@@ -191,9 +196,9 @@ export interface Database {
           peak_single_supp_non_eur?: number | null
           peak_triple_red_non_eur?: number | null
           seasons?: Json | null
-          supplements?: Json
           rate_currency?: string | null
           property_id?: string | null
+          supplements: Json
         }
         Update: {
           id?: string
@@ -278,9 +283,9 @@ export interface Database {
           peak_single_supp_non_eur?: number | null
           peak_triple_red_non_eur?: number | null
           seasons?: Json | null
-          supplements?: Json
           rate_currency?: string | null
           property_id?: string | null
+          supplements?: Json
         }
         Relationships: [
           {
@@ -5244,6 +5249,7 @@ export interface Database {
           created_at: string
           updated_at: string
           created_by: string | null
+          rate_currency: string | null
         }
         Insert: {
           id?: string
@@ -5259,6 +5265,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
           created_by?: string | null
+          rate_currency?: string | null
         }
         Update: {
           id?: string
@@ -5274,6 +5281,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
           created_by?: string | null
+          rate_currency?: string | null
         }
         Relationships: [
           {
@@ -5354,6 +5362,7 @@ export interface Database {
           created_at: string | null
           updated_at: string | null
           rate_currency: string | null
+          guide_rate: number | null
         }
         Insert: {
           id?: string
@@ -5386,6 +5395,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
           rate_currency?: string | null
+          guide_rate?: number | null
         }
         Update: {
           id?: string
@@ -5418,6 +5428,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
           rate_currency?: string | null
+          guide_rate?: number | null
         }
         Relationships: [
           {
@@ -7754,9 +7765,9 @@ export interface Database {
           rate_peak_triple_non_eur: number | null
           rate_peak_suite_non_eur: number | null
           seasons: Json | null
-          supplements: Json
           rate_currency: string | null
           property_id: string | null
+          supplements: Json
         }
         Insert: {
           id?: string
@@ -7823,9 +7834,9 @@ export interface Database {
           rate_peak_triple_non_eur?: number | null
           rate_peak_suite_non_eur?: number | null
           seasons?: Json | null
-          supplements?: Json
           rate_currency?: string | null
           property_id?: string | null
+          supplements: Json
         }
         Update: {
           id?: string
@@ -7892,9 +7903,9 @@ export interface Database {
           rate_peak_triple_non_eur?: number | null
           rate_peak_suite_non_eur?: number | null
           seasons?: Json | null
-          supplements?: Json
           rate_currency?: string | null
           property_id?: string | null
+          supplements?: Json
         }
         Relationships: [
           {
@@ -8041,6 +8052,62 @@ export interface Database {
         Relationships: [
           {
             foreignKeyName: "operator_capacity_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_vocabularies: {
+        Row: {
+          id: string
+          org_id: string
+          kind: string
+          key: string
+          label: string
+          label_ja: string | null
+          description: string | null
+          behavior: string | null
+          rank: number
+          meta: Json
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          kind: string
+          key: string
+          label: string
+          label_ja?: string | null
+          description?: string | null
+          behavior?: string | null
+          rank?: number
+          meta: Json
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          kind?: string
+          key?: string
+          label?: string
+          label_ja?: string | null
+          description?: string | null
+          behavior?: string | null
+          rank?: number
+          meta?: Json
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_vocabularies_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -8670,6 +8737,44 @@ export interface Database {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "user_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_subscriptions: {
+        Row: {
+          id: string
+          org_id: string
+          user_id: string | null
+          endpoint: string
+          p256dh: string
+          auth: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          user_id?: string | null
+          endpoint: string
+          p256dh: string
+          auth: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          user_id?: string | null
+          endpoint?: string
+          p256dh?: string
+          auth?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -9488,6 +9593,7 @@ export interface Database {
           supplier_id: string | null
           rate_currency: string | null
           property_id: string | null
+          guide_rate: number | null
         }
         Insert: {
           id?: string
@@ -9511,6 +9617,7 @@ export interface Database {
           supplier_id?: string | null
           rate_currency?: string | null
           property_id?: string | null
+          guide_rate?: number | null
         }
         Update: {
           id?: string
@@ -9534,6 +9641,7 @@ export interface Database {
           supplier_id?: string | null
           rate_currency?: string | null
           property_id?: string | null
+          guide_rate?: number | null
         }
         Relationships: [
           {
@@ -9548,6 +9656,61 @@ export interface Database {
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "supplier_properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_links: {
+        Row: {
+          id: string
+          org_id: string
+          itinerary_id: string
+          itinerary_resource_id: string
+          token: string
+          created_by: string | null
+          created_at: string
+          revoked_at: string | null
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          itinerary_id: string
+          itinerary_resource_id: string
+          token: string
+          created_by?: string | null
+          created_at?: string
+          revoked_at?: string | null
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          itinerary_id?: string
+          itinerary_resource_id?: string
+          token?: string
+          created_by?: string | null
+          created_at?: string
+          revoked_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_links_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_links_itinerary_id_fkey"
+            columns: ["itinerary_id"]
+            isOneToOne: false
+            referencedRelation: "itineraries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_links_itinerary_resource_id_fkey"
+            columns: ["itinerary_resource_id"]
+            isOneToOne: false
+            referencedRelation: "itinerary_resources"
             referencedColumns: ["id"]
           },
         ]
@@ -9969,6 +10132,7 @@ export interface Database {
           airport_location: string | null
           shift_times: string | null
           service_role: string | null
+          supplier_code: string | null
         }
         Insert: {
           id?: string
@@ -10014,6 +10178,7 @@ export interface Database {
           airport_location?: string | null
           shift_times?: string | null
           service_role?: string | null
+          supplier_code?: string | null
         }
         Update: {
           id?: string
@@ -10059,6 +10224,7 @@ export interface Database {
           airport_location?: string | null
           shift_times?: string | null
           service_role?: string | null
+          supplier_code?: string | null
         }
         Relationships: []
       }
@@ -10328,6 +10494,7 @@ export interface Database {
           updated_at: string | null
           description: string | null
           rate_currency: string | null
+          city: string | null
         }
         Insert: {
           id?: string
@@ -10342,6 +10509,7 @@ export interface Database {
           updated_at?: string | null
           description?: string | null
           rate_currency?: string | null
+          city?: string | null
         }
         Update: {
           id?: string
@@ -10356,6 +10524,7 @@ export interface Database {
           updated_at?: string | null
           description?: string | null
           rate_currency?: string | null
+          city?: string | null
         }
         Relationships: []
       }
@@ -10851,6 +11020,8 @@ export interface Database {
           season_uplift_percent: number
           season_uplift_amount: number
           org_id: string
+          guide_grade: string | null
+          guide_mode: string | null
         }
         Insert: {
           id?: string
@@ -10894,6 +11065,8 @@ export interface Database {
           season_uplift_percent?: number
           season_uplift_amount?: number
           org_id: string
+          guide_grade?: string | null
+          guide_mode?: string | null
         }
         Update: {
           id?: string
@@ -10937,6 +11110,8 @@ export interface Database {
           season_uplift_percent?: number
           season_uplift_amount?: number
           org_id?: string
+          guide_grade?: string | null
+          guide_mode?: string | null
         }
         Relationships: [
           {
@@ -11718,6 +11893,7 @@ export interface Database {
           supplier_id: string | null
           rate_currency: string | null
           property_id: string | null
+          guide_rate: number | null
         }
         Insert: {
           id?: string
@@ -11739,6 +11915,7 @@ export interface Database {
           supplier_id?: string | null
           rate_currency?: string | null
           property_id?: string | null
+          guide_rate?: number | null
         }
         Update: {
           id?: string
@@ -11760,6 +11937,7 @@ export interface Database {
           supplier_id?: string | null
           rate_currency?: string | null
           property_id?: string | null
+          guide_rate?: number | null
         }
         Relationships: [
           {
@@ -11862,10 +12040,10 @@ export interface Database {
           supplier_id: string | null
           duration: string | null
           area: string | null
-          vehicles: Json | null
           route_name: string | null
           includes: string | null
           rate_currency: string | null
+          vehicles: Json | null
         }
         Insert: {
           id?: string
@@ -11890,10 +12068,10 @@ export interface Database {
           supplier_id?: string | null
           duration?: string | null
           area?: string | null
-          vehicles?: Json | null
           route_name?: string | null
           includes?: string | null
           rate_currency?: string | null
+          vehicles?: Json | null
         }
         Update: {
           id?: string
@@ -11918,10 +12096,10 @@ export interface Database {
           supplier_id?: string | null
           duration?: string | null
           area?: string | null
-          vehicles?: Json | null
           route_name?: string | null
           includes?: string | null
           rate_currency?: string | null
+          vehicles?: Json | null
         }
         Relationships: [
           {
@@ -11929,6 +12107,80 @@ export interface Database {
             columns: ["supplier_id"]
             isOneToOne: false
             referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_events: {
+        Row: {
+          id: string
+          org_id: string
+          itinerary_id: string
+          itinerary_resource_id: string | null
+          event_kind: string
+          occurred_at: string
+          lat: number | null
+          lng: number | null
+          note: string | null
+          actor_name: string | null
+          actor_team_member_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          itinerary_id: string
+          itinerary_resource_id?: string | null
+          event_kind: string
+          occurred_at?: string
+          lat?: number | null
+          lng?: number | null
+          note?: string | null
+          actor_name?: string | null
+          actor_team_member_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          itinerary_id?: string
+          itinerary_resource_id?: string | null
+          event_kind?: string
+          occurred_at?: string
+          lat?: number | null
+          lng?: number | null
+          note?: string | null
+          actor_name?: string | null
+          actor_team_member_id?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_events_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_events_itinerary_id_fkey"
+            columns: ["itinerary_id"]
+            isOneToOne: false
+            referencedRelation: "itineraries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_events_itinerary_resource_id_fkey"
+            columns: ["itinerary_resource_id"]
+            isOneToOne: false
+            referencedRelation: "itinerary_resources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_events_actor_team_member_id_fkey"
+            columns: ["actor_team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -13043,6 +13295,21 @@ export interface Database {
           p_days?: Json
           p_itinerary_id?: string
           p_services?: Json
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Returns: any
+      }
+      seed_cruise_supplements: {
+        Args: {
+          p_org?: string
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Returns: any
+      }
+      seed_org_vocabulary: {
+        Args: {
+          p_kind?: string
+          p_org?: string
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any
