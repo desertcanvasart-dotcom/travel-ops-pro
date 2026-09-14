@@ -1000,7 +1000,7 @@ export default function ItineraryEditorPage() {
         const toUpdate = services.filter(s => !s.isNew && !s.isDeleted)
 
         // For non-English saves, fetch fresh base data from DB to avoid stale state
-        let freshBaseData: Record<string, { service_name: string; notes: string }> = {}
+        const freshBaseData: Record<string, { service_name: string; notes: string }> = {}
         if (activeLanguage !== 'en' && toUpdate.length > 0) {
           const updateIds = toUpdate.map(s => s.id).filter(id => !id.startsWith('new-'))
           if (updateIds.length > 0) {

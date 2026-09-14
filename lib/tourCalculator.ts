@@ -33,7 +33,7 @@ import {
     }
   
     const dailyBreakdown: DailyPricing[] = []
-    let totals: TourPricing = {
+    const totals: TourPricing = {
       tour_id: tour.id || '',
       pax,
       is_euro_passport: isEuroPassport,

@@ -57,7 +57,7 @@ function formatEmailBody(html: string): string {
   if (!html) return ''
 
   const lines = html.split(/<br\s*\/?>/gi)
-  let processedLines: string[] = []
+  const processedLines: string[] = []
   let inList = false
   let listItems: string[] = []
 
@@ -1890,7 +1890,7 @@ function ComposeModal({
     setShowSignatureDropdown(false)
   }
 
-  const useTemplate = (template: EmailTemplate) => {
+  const applyTemplate = (template: EmailTemplate) => {
     const placeholders = getPlaceholders(template.content + ' ' + template.subject)
     
     if (placeholders.length > 0) {
@@ -2088,7 +2088,7 @@ function ComposeModal({
               {categoryTemplates.map((template) => (
                 <button
                   key={template.id}
-                  onClick={() => useTemplate(template)}
+                  onClick={() => applyTemplate(template)}
                   className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 border-b border-gray-50"
                 >
                   <div className="flex items-center justify-between">

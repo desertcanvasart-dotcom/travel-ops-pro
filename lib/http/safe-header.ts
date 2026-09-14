@@ -9,7 +9,7 @@
 
 // CR, LF, and the other C0 control characters (0x00–0x1F) plus DEL (0x7F). Any
 // of these in a header value is either an injection attempt or corruption.
-// eslint-disable-next-line no-control-regex
+ 
 const CONTROL_CHARS = /[\x00-\x1F\x7F]/g
 
 /** Strip CR/LF and control chars so a value cannot break out of its header. */

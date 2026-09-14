@@ -118,7 +118,7 @@ export async function PUT(
 
     console.log(`[Meal Rate PUT] Updating ${id}. Table columns: [${[...existingColumns].join(', ')}]. Update payload:`, JSON.stringify(updateData))
 
-    let { data, error } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from('meal_rates')
       .update(updateData)
       .eq('id', id)

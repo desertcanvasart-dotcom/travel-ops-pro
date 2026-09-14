@@ -168,7 +168,7 @@ const FALLBACK_LABELS_EN: PdfLabels = {
 function cleanServiceName(name: string, type: string): string {
   if (!name) return type || 'Service'
   
-  let cleaned = name
+  const cleaned = name
     .replace(/^(Daily |Per Day |Standard )/i, '')
     .replace(/\s+/g, ' ')
     .trim()

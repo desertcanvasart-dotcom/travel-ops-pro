@@ -54,7 +54,9 @@ import {
   useSensor,
   useSensors,
   PointerSensor,
-  closestCenter
+  closestCenter,
+  useDroppable,
+  useDraggable
 } from '@dnd-kit/core'
 import { addToTotals, emptyTotals, formatTotals, type CurrencyTotals } from '@/lib/currency-totals'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
@@ -1149,7 +1151,6 @@ function StatCard({ icon, label, value, color, badge, onBadgeClick }: any) {
 }
 
 function MonthView({ currentDate, bookings, conflicts, getBookingsForDate, getStatusColor, getConflictTooltip, onShowDayDetail, t }: any) {
-  const { useDroppable } = require('@dnd-kit/core')
 
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(monthStart)
@@ -1218,7 +1219,6 @@ function MonthView({ currentDate, bookings, conflicts, getBookingsForDate, getSt
 }
 
 function CalendarCell({ date, bookings, isCurrentMonth, isToday, isPast, conflicts, getStatusColor, getConflictTooltip, onShowDayDetail, t }: any) {
-  const { useDroppable } = require('@dnd-kit/core')
 
   const { setNodeRef, isOver } = useDroppable({
     id: `date-${format(date, 'yyyy-MM-dd')}`,
@@ -1271,7 +1271,6 @@ function CalendarCell({ date, bookings, isCurrentMonth, isToday, isPast, conflic
 }
 
 function DraggableBooking({ booking, getStatusColor, conflicts, getConflictTooltip }: any) {
-  const { useDraggable } = require('@dnd-kit/core')
   
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: booking.id,

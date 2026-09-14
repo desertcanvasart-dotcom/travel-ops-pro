@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
 
     // Get single quote by ID
     if (id) {
-      let { data, error } = await supabaseAdmin
+      const { data: firstTry, error } = await supabaseAdmin
         .from('tour_quotes')
         .select(`
           *,
@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
         .eq('id', id)
         .eq('org_id', orgId)
         .single()
+      let data = firstTry
 
       // Fallback without itineraries join if schema cache is stale
       if (error) {
@@ -100,7 +101,8 @@ export async function GET(request: NextRequest) {
     if (partner_id) query = query.eq('partner_id', partner_id)
     if (status) query = query.eq('status', status)
 
-    let { data, error } = await query
+    const { data: firstTry, error } = await query
+    let data = firstTry
 
     // Fallback without itineraries join if schema cache is stale
     if (error) {

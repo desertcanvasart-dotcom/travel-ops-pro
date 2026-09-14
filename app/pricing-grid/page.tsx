@@ -366,7 +366,7 @@ function PricingGridContent() {
     if (decodedText.trim()) {
       pendingParseText.current = decodedText
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [searchParams])
 
   // Effect 2: Auto-parse once rates are loaded (fires immediately if rates already exist)
@@ -608,7 +608,7 @@ function PricingGridContent() {
     handleLoadItinerary(itineraryParam)
     // Clean the URL so a reload doesn't reload-by-param.
     window.history.replaceState({}, '', '/pricing-grid')
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [searchParams])
 
   // --- Save to Database ---

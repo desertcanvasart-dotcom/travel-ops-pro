@@ -1333,7 +1333,7 @@ export async function getCruiseRates(
   row: HotelOrCruiseRow
 } | null> {
   try {
-    let query = supabaseAdmin
+    const query = supabaseAdmin
       .from('nile_cruises')
       .select('*')
       .eq('tier', tier)
@@ -1475,12 +1475,13 @@ export async function getEntranceFee(
   normalizer?: RateNormalizer
 ): Promise<{ id: string; name: string; rate: number } | null> {
   try {
-    let { data: fees, error } = await supabaseAdmin
+    const { data: matched, error } = await supabaseAdmin
       .from('entrance_fees')
       .select('*')
       .eq('is_active', true)
       .ilike('attraction_name', `%${attractionName}%`)
       .limit(1)
+    let fees = matched
     if (normalizer && fees) fees = await normalizer.normalize('entrance_fees', fees) as typeof fees
 
     if (error || !fees || fees.length === 0) {

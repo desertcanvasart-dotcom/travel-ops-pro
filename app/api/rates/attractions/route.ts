@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     const language = searchParams.get('language') || 'en'
 
     // Build versions map for non-English languages
-    let versionsMap: Record<string, { attraction_name?: string; notes?: string }> = {}
+    const versionsMap: Record<string, { attraction_name?: string; notes?: string }> = {}
     if (language !== 'en' && data && data.length > 0) {
       const ids = data.map((item: any) => item.id)
       const { data: versions } = await supabase

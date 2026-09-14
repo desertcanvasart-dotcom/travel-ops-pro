@@ -284,7 +284,7 @@ function detectStructuredItinerary(text: string, extraCityCodes: string[] = []):
 
   // Method 1: Split by D1, D2, D3... pattern (Egyptian shorthand)
   const daySegmentPattern = /\bD(\d+)\b/gi
-  let lastIndex = 0
+  const lastIndex = 0
   let match
   const segments: { dayNum: number; content: string; startIndex: number }[] = []
 

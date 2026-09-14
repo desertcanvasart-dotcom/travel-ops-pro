@@ -5,9 +5,9 @@
 
 import type {
   GridDay, GridConfig, SlotValue, SelectedItem, RateOption,
-  DayCalc, GridTotals, PaxRangeResult, SLOT_DEFINITIONS,
+  DayCalc, GridTotals, PaxRangeResult,
 } from '../types'
-import { isSupplementItem, isSingleSupplementItem } from '../types'
+import { isSupplementItem, isSingleSupplementItem, SLOT_DEFINITIONS } from '../types'
 import { priceAcrossPax } from '@/lib/pricing/pax-range'
 import { computeUplift, seasonForDate, type SeasonWindow } from '@/lib/pricing/season-uplift'
 
@@ -415,7 +415,6 @@ function round2(n: number): number {
 // --- Create empty slot values for a new day ---
 
 export function createEmptySlots(): SlotValue[] {
-  const { SLOT_DEFINITIONS } = require('../types')
   return SLOT_DEFINITIONS.map((def: typeof SLOT_DEFINITIONS[number]) => ({
     slotId: def.slotId,
     selectedItems: [],

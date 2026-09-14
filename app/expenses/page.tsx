@@ -382,7 +382,7 @@ export default function ExpensesPage() {
   }
 
   const getCurrencySymbol = (currency: string) => {
-    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }  // eslint-disable-line -- kept for the form's option labels
+    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }   
     return symbols[currency] || currency
   }
 

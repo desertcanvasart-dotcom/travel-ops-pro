@@ -40,7 +40,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Gmail not connected' }, { status: 401 })
     }
 
-    let { access_token, refresh_token, token_expiry } = tokenData
+    const { refresh_token, token_expiry } = tokenData
+    let { access_token } = tokenData
 
     if (new Date(token_expiry) <= new Date()) {
       const newTokens = await refreshAccessToken(refresh_token)
