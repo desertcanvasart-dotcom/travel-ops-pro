@@ -96,7 +96,31 @@ export async function POST(request: NextRequest) {
     //   - row has explicit supplier_id → confirm it exists in suppliers, else error
     //   - row has supplier_name (no id) → resolve by lower(btrim(name)); exact-1 → set id; 0 or 2+ → error
     //   - row has neither → pass through (legitimate supplier-less row)
-    const parsedRows = preview.parsedValidRows ?? []
+    // The untouched sample row from a downloaded template, dropped HERE —
+    // before any resolver looks at it. Filling the sheet in underneath the
+    // example and importing the lot is the obvious mistake to make, and the
+    // importer has always meant to skip it; it just used to skip it much
+    // further down, after supplier resolution had already judged it.
+    //
+    // That ordering was a live bug. The sample names a supplier called
+    // "Example Name", which resolves to nothing, so the row was demoted as a
+    // validation error and the whole import returned "1 row(s) have validation
+    // errors" instead of the intended "example row skipped" — for every table
+    // whose sheet carries supplier_name. Now it never reaches the resolver,
+    // and no resolver added later can trip over it either.
+    const uniqueKeyColumn = config.uniqueKey[0] // 'service_code' | 'cruise_code' | 'cost_type'
+    let exampleRowsSkipped = 0
+    const parsedRows = (preview.parsedValidRows ?? []).filter(r => {
+      if (!isExampleRow(r[uniqueKeyColumn])) return true
+      exampleRowsSkipped++
+      return false
+    })
+    if (exampleRowsSkipped > 0) {
+      preview.parsedValidRows = parsedRows
+      preview.validRows -= exampleRowsSkipped
+      preview.sampleData = parsedRows.slice(0, 5)
+    }
+
     const resolution = await batchResolveSuppliers(parsedRows, supabase)
     const supplierErrors: ValidationError[] = []
     const indicesToDemote = new Set<number>()
@@ -237,24 +261,14 @@ export async function POST(request: NextRequest) {
     let updated = 0
     const importErrors: any[] = []
 
-    // Determine the unique key column for upsert
-    const uniqueKeyColumn = config.uniqueKey[0] // e.g., 'service_code' or 'cruise_code' or 'cost_type'
-
-    // The untouched sample row from a downloaded template. Filling the sheet in
-    // underneath it and importing the lot is the obvious mistake to make, so it
-    // is skipped rather than inserted as a rate called EXAMPLE-DELETE-THIS-ROW.
-    let exampleRowsSkipped = 0
-
     // Reject rows whose unique key is blank — without a key every such row is
-    // inserted as a brand-new record, creating uncontrolled duplicates.
+    // inserted as a brand-new record, creating uncontrolled duplicates. The
+    // template's example row is already gone by now (dropped before supplier
+    // resolution, above).
     const keyedRows = rowsToUpsert.filter(r => {
       const key = r[uniqueKeyColumn]
       if (key === undefined || key === null || String(key).trim() === '') {
         importErrors.push({ operation: 'validate', message: `Row missing required ${uniqueKeyColumn}; skipped` })
-        return false
-      }
-      if (isExampleRow(key)) {
-        exampleRowsSkipped++
         return false
       }
       return true
