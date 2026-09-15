@@ -93,6 +93,13 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   // flight). Editing it is a manager act; it was open to any session.
   { prefix: '/api/team-members', roles: ['admin', 'manager'] },
   { prefix: '/api/departments', roles: ['admin', 'manager'] },
+  // Listing and switching the workspaces you belong to is not an
+  // administrative act — it is how anyone in more than one agency chooses
+  // which they are working in. It must come BEFORE the '/api/organization'
+  // entry below, because .find() takes the first match and that prefix would
+  // otherwise gate this to admins, leaving a manager unable to reach their
+  // own second workspace. The route is still membership-checked in itself.
+  { prefix: '/api/organizations/mine', roles: ['owner', 'admin', 'manager', 'agent', 'viewer'] },
   { prefix: '/api/organization', roles: ['admin'] },
   { prefix: '/api/invitations', roles: ['admin'] },
   // Email, notification and WhatsApp-AI settings are operating configuration,

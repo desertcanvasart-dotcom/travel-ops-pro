@@ -92,9 +92,38 @@ describe('API mutation gate — coverage', () => {
     }
   })
 
+  // ---------------------------------------------------------------------
+  // The one kind of POST a viewer may make.
+  // ---------------------------------------------------------------------
+  // The rule is about mutating the AGENCY'S DATA. Choosing which workspace
+  // your own session is looking at mutates nothing anybody else can see, and
+  // a viewer who belongs to two agencies has to be able to reach the second
+  // one — otherwise they are locked into whichever membership is oldest and
+  // their invitation to the other was pointless.
+  //
+  // Each entry needs a reason that is about SESSION state. Anything that
+  // writes agency data does not belong here however convenient.
+  const VIEWER_MAY_POST: Record<string, string> = {
+    '/api/organizations/mine':
+      'sets the active-workspace cookie for your own session; the resolver honours it only where the membership is real, so it grants nothing and changes no agency data',
+  }
+
   it('never grants a viewer a mutation', () => {
     for (const entry of mutationPermissions()) {
+      if (entry.prefix in VIEWER_MAY_POST) continue
       expect(roleAllows('viewer', entry.roles), `viewer must not pass ${entry.prefix}`).toBe(false)
+    }
+  })
+
+  it('keeps the viewer exceptions few, real and explained', () => {
+    const prefixes = mutationPermissions().map(e => e.prefix)
+    for (const [prefix, reason] of Object.entries(VIEWER_MAY_POST)) {
+      expect(prefixes, `${prefix} is not a gated route — the exception is stale`).toContain(prefix)
+      expect(reason.length, `${prefix} needs a reason about session state`).toBeGreaterThan(60)
+      // An exception that no longer grants a viewer anything should be deleted
+      // rather than left to imply the hole is still open.
+      const entry = mutationPermissions().find(e => e.prefix === prefix)!
+      expect(roleAllows('viewer', entry.roles), `${prefix} no longer admits a viewer — remove the exception`).toBe(true)
     }
   })
 
