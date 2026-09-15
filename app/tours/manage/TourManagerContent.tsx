@@ -9,7 +9,6 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useTierOptions } from '@/hooks/useTierOptions'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
-import { useVocabulary } from '@/hooks/useVocabulary'
 import { defaultTierKey, suggestTourType } from '@/lib/vocabulary'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
@@ -157,11 +156,16 @@ const EGYPTIAN_CITIES: readonly string[] = EGYPT_CITIES
 // the tier list in particular was a live defect, since an agency could add a
 // fifth tier, see it on the hotel and meal rate pages, and then have no way to
 // build a tour variation for it. See migration 20261010.
+// The day ranges live in `meta`, the same shape the vocabulary stores them in,
+// because vocabOptionsFor lays the agency's meta OVER the built-in's. Without
+// them here an install whose migration has not run yet has no ranges at all —
+// every type then reads as 1–99 days, the current pick always "fits", and the
+// duration would stop suggesting anything. The E2E caught exactly that.
 const TOUR_TYPES = [
-  { value: 'half_day', label: 'Half Day Tour' },
-  { value: 'day_tour', label: 'Day Tour' },
-  { value: 'multi_day', label: 'Multi-Day Tour' },
-  { value: 'stopover', label: 'Stopover Tour' }
+  { value: 'half_day', label: 'Half Day Tour', meta: { min_days: 1, max_days: 1 } },
+  { value: 'day_tour', label: 'Day Tour', meta: { min_days: 1, max_days: 1 } },
+  { value: 'multi_day', label: 'Multi-Day Tour', meta: { min_days: 2, max_days: 99 } },
+  { value: 'stopover', label: 'Stopover Tour', meta: { min_days: 1, max_days: 1 } }
 ]
 
 const PHYSICAL_LEVELS = [
@@ -891,12 +895,13 @@ function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVaria
 export default function TourManagerContent() {
   const t = useTranslations('tours')
   // Every picker on this form lists the agency's own words; the built-in
-  // arrays above stand in until the vocabulary loads. tourTypeItems is the
-  // raw vocabulary because the duration auto-suggest reads each type's
-  // {min_days, max_days} meta, the way transport reads a vehicle's pax band.
+  // arrays above stand in until the vocabulary loads.
   const tierOptions = useTierOptions(key => TIER_CONFIG[key as keyof typeof TIER_CONFIG]?.label ?? key)
   const tourTypeOptions = useVocabOptions('tour_type', TOUR_TYPES)
-  const { items: tourTypeItems } = useVocabulary('tour_type')
+  // The suggestion reads the SAME list the picker offers, so it can never
+  // suggest a type that is not on screen — and it inherits the built-in day
+  // ranges when the vocabulary is empty.
+  const tourTypeRanges = tourTypeOptions.map(o => ({ key: o.value, meta: o.meta }))
   const physicalLevelOptions = useVocabOptions('physical_level', PHYSICAL_LEVELS)
   // "Best for" is label-valued — see the note on BEST_FOR_OPTIONS.
   const bestForOptions = useVocabOptions('tour_audience', BEST_FOR_OPTIONS.map(o => ({ value: o, label: o })))
@@ -1057,7 +1062,7 @@ export default function TourManagerContent() {
       // half day, day tour and stopover all admit) overwriting a deliberate
       // choice.
       if (name === 'duration_days' && typeof parsedValue === 'number') {
-        const suggested = suggestTourType(tourTypeItems, parsedValue, prev.tour_type)
+        const suggested = suggestTourType(tourTypeRanges, parsedValue, prev.tour_type)
         if (suggested) updated.tour_type = suggested
       }
       

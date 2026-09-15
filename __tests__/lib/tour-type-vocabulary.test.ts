@@ -108,14 +108,31 @@ describe('the three kinds are registered', () => {
 describe('before the migration lands', () => {
   // The code ships ahead of the migration, so for a while every install has
   // these kinds in the app and NOT in the database — which is the state
-  // production is in the moment this merges. An empty vocabulary must leave
-  // the form exactly as it was, or shipping the two in either order breaks it.
+  // production is in the moment this merges, and the state the E2E project is
+  // in permanently. An empty vocabulary must leave the form exactly as it was.
+  //
+  // The first version of this file got that wrong and SAID SO CONFIDENTLY: it
+  // asserted that with no vocabulary the suggestion "degrades to something
+  // usable". It does not. With no meta anywhere, every type reads as 1–99
+  // days, so the current pick always fits and suggestTourType returns null
+  // forever — the duration silently stops suggesting anything at all. The E2E
+  // caught it (half-day-tour.spec.ts: fill 3 days, expected multi_day, got
+  // half_day). The fix is that the BUILT-IN list carries the ranges too, in
+  // the same `meta` shape, so the fallback is behaviour-identical and not
+  // merely non-crashing.
+  //
+  // This is the built-in list as app/tours/manage/TourManagerContent.tsx
+  // declares it. If those two drift, the fallback silently loses its ranges
+  // again, which is precisely the failure being pinned here.
   const builtInTourTypes = [
-    { value: 'half_day', label: 'Half Day Tour' },
-    { value: 'day_tour', label: 'Day Tour' },
-    { value: 'multi_day', label: 'Multi-Day Tour' },
-    { value: 'stopover', label: 'Stopover Tour' },
+    { value: 'half_day', label: 'Half Day Tour', meta: { min_days: 1, max_days: 1 } },
+    { value: 'day_tour', label: 'Day Tour', meta: { min_days: 1, max_days: 1 } },
+    { value: 'multi_day', label: 'Multi-Day Tour', meta: { min_days: 2, max_days: 99 } },
+    { value: 'stopover', label: 'Stopover Tour', meta: { min_days: 1, max_days: 1 } },
   ]
+  /** What the form feeds suggestTourType: the options it is already showing. */
+  const rangesFrom = (items: Parameters<typeof vocabOptionsFor>[0]) =>
+    vocabOptionsFor(items, 'en', builtInTourTypes).map(o => ({ key: o.value, meta: o.meta }))
 
   it('an empty vocabulary falls back to the built-in list, unchanged', () => {
     const opts = vocabOptionsFor([], 'en', builtInTourTypes)
@@ -123,11 +140,24 @@ describe('before the migration lands', () => {
     expect(opts.map(o => o.label)).toEqual(['Half Day Tour', 'Day Tour', 'Multi-Day Tour', 'Stopover Tour'])
   })
 
-  it('and the duration suggestion degrades to something usable, not to nothing', () => {
-    // With no vocabulary there is no meta, so every type reads as 1–99 and the
-    // first one wins. A tour still gets a type; it is simply not a clever one.
-    const noMeta = builtInTourTypes.map(o => ({ key: o.value, meta: {} }))
-    expect(suggestTourType(noMeta, 5, null)).toBe('half_day')
-    expect(suggestTourType(noMeta, 5, 'multi_day')).toBeNull()
+  it('reproduces the E2E: 3 days moves Half Day on to Multi-Day', () => {
+    // e2e/half-day-tour.spec.ts, without a browser or a database.
+    expect(suggestTourType(rangesFrom([]), 3, 'half_day')).toBe('multi_day')
+  })
+
+  it('and 1 day still leaves Half Day alone', () => {
+    // The other half of that spec, and the older bug it was written for:
+    // duration used to force day_tour and silently undo the choice just made.
+    expect(suggestTourType(rangesFrom([]), 1, 'half_day')).toBeNull()
+  })
+
+  it('the agency\'s own ranges win once the vocabulary exists', () => {
+    // The built-in meta is a FALLBACK, not a floor: an agency that redefines
+    // half_day as a 1–2 day type must get its own answer.
+    const agency = [
+      { key: 'half_day', label: 'Half Day', label_ja: null, meta: { min_days: 1, max_days: 2 } },
+    ]
+    expect(suggestTourType(rangesFrom(agency), 2, 'half_day')).toBeNull()
+    expect(suggestTourType(rangesFrom([]), 2, 'half_day')).toBe('multi_day')
   })
 })
