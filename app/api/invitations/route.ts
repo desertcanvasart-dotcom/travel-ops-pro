@@ -60,7 +60,13 @@ export async function POST(request: NextRequest) {
     if (!orgId) return noOrgResponse()
 
     const body = await request.json()
-    const { email, role = 'agent', invited_by } = body
+    const { role = 'agent', invited_by } = body
+    // Normalised ONCE, and used for every check below and the insert. The
+    // accept route trims and lowercases the stored address, so an invitation
+    // for " Person@example.com " resolved to the same account as one for
+    // "person@example.com" — but the duplicate checks here compared the raw
+    // input and let the second invitation through.
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
 
     // Validate email
     if (!email || !email.includes('@')) {
@@ -98,7 +104,7 @@ export async function POST(request: NextRequest) {
     const { data: existingProfile } = await supabase
       .from('user_profiles')
       .select('id')
-      .eq('email', email.toLowerCase())
+      .eq('email', email)
       .maybeSingle()
 
     if (existingProfile) {
@@ -124,7 +130,7 @@ export async function POST(request: NextRequest) {
     const { data: existingInvitation } = await supabase
       .from('user_invitations')
       .select('id')
-      .eq('email', email.toLowerCase())
+      .eq('email', email)
       .eq('org_id', orgId)
       .is('accepted_at', null)
       .gt('expires_at', new Date().toISOString())
@@ -149,7 +155,7 @@ export async function POST(request: NextRequest) {
     const { data: invitation, error } = await supabase
       .from('user_invitations')
       .insert({
-        email: email.toLowerCase(),
+        email,
         role,
         invited_by,
         org_id: orgId,

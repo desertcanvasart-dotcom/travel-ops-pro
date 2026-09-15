@@ -4,6 +4,7 @@ import { cookies, headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { roleAllows } from './roles'
 import { VERIFIED_USER_HEADER, verifyVerifiedUserHeader } from '@/lib/auth/verified-user-header'
+import { ACTIVE_ORG_COOKIE, pickActiveMembership } from './active-org'
 
 // M3 Phase 2A — resolve the current request's org_id.
 //
@@ -84,43 +85,37 @@ async function resolveVerifiedUserId(): Promise<string | null> {
 // unrecognised falls back to the oldest membership, which is what every
 // single-workspace user has always got and still gets: ~147 callers of this
 // function see no change at all.
-export const ACTIVE_ORG_COOKIE = 'active_org_id'
+export { ACTIVE_ORG_COOKIE }
 
-/** Is this user a member of this org? The whole of the cookie's authority. */
-async function isMemberOf(userId: string, orgId: string): Promise<boolean> {
+/** This person's memberships, oldest first — the input to the one rule. */
+async function membershipsOf(userId: string): Promise<{ org_id: string; role: string }[]> {
   const { data } = await getAdmin()
     .from('organization_members')
-    .select('org_id')
+    .select('org_id, role, created_at')
     .eq('user_id', userId)
-    .eq('org_id', orgId)
-    .maybeSingle()
-  return Boolean(data)
+    .order('created_at', { ascending: true })
+  return (data ?? []) as { org_id: string; role: string }[]
+}
+
+/** The active-org cookie, or null outside a request context (background
+ *  workers, the cron scheduler): those have no person and no chosen
+ *  workspace, and the oldest membership is the right answer for them. */
+async function requestedOrgId(): Promise<string | null> {
+  try {
+    return (await cookies()).get(ACTIVE_ORG_COOKIE)?.value ?? null
+  } catch {
+    return null
+  }
 }
 
 /** The workspace this request is acting in. */
 export async function getCurrentOrgId(): Promise<string | null> {
   const userId = await resolveVerifiedUserId()
   if (!userId) return null
-
-  // The chosen workspace, honoured only where the membership is real.
-  try {
-    const requested = (await cookies()).get(ACTIVE_ORG_COOKIE)?.value
-    if (requested && await isMemberOf(userId, requested)) return requested
-  } catch {
-    // cookies() throws outside a request context (background workers, the
-    // cron scheduler). Those have no person and no chosen workspace; the
-    // oldest membership is the right answer for them.
-  }
-
-  const { data: membership } = await getAdmin()
-    .from('organization_members')
-    .select('org_id')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  return (membership as { org_id?: string } | null)?.org_id ?? null
+  // The same rule the middleware role gate applies (lib/auth/active-org.ts),
+  // so the workspace whose data a route reads is the workspace whose role
+  // the request was authorised with.
+  return pickActiveMembership(await membershipsOf(userId), await requestedOrgId())?.org_id ?? null
 }
 
 export interface MembershipSummary {
@@ -196,15 +191,7 @@ export function noOrgResponse() {
 export async function getCurrentUserRole(): Promise<string | null> {
   const userId = await resolveVerifiedUserId()
   if (!userId) return null
-  const orgId = await getCurrentOrgId()
-  if (!orgId) return null
-  const { data: membership } = await getAdmin()
-    .from('organization_members')
-    .select('role')
-    .eq('org_id', orgId)
-    .eq('user_id', userId)
-    .maybeSingle()
-  return (membership as { role?: string } | null)?.role ?? null
+  return pickActiveMembership(await membershipsOf(userId), await requestedOrgId())?.role ?? null
 }
 
 // 403 helper for role-gated routes. Fails closed: a null/insufficient role is

@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 import { roleAllows } from '@/lib/auth/roles'
 import { VERIFIED_USER_HEADER, signVerifiedUserHeader } from '@/lib/auth/verified-user-header'
+import { ACTIVE_ORG_COOKIE, pickActiveMembership } from '@/lib/auth/active-org'
 import type { NextFetchEvent } from 'next/server'
 import { recordActivity } from '@/lib/activity-log'
 
@@ -210,12 +211,20 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
           { auth: { persistSession: false } }
         )
           .from('organization_members')
-          .select('role')
+          .select('org_id, role, created_at')
           .eq('user_id', userId)
           .order('created_at', { ascending: true })
-          .limit(1)
-          .maybeSingle()
-        return (data as { role?: string } | null)?.role ?? null
+        // The role IN THE ACTIVE WORKSPACE — the same rule getCurrentOrgId()
+        // applies to scope the route's data (lib/auth/active-org.ts). This
+        // used to take the oldest membership's role regardless of the
+        // active-org cookie, so an admin in one agency who was a viewer in
+        // another could switch to the second and clear every admin-only gate
+        // there: the data was scoped to the workspace they chose, the role
+        // was read from the one they did not.
+        return pickActiveMembership(
+          (data ?? []) as { org_id: string; role: string }[],
+          request.cookies.get(ACTIVE_ORG_COOKIE)?.value,
+        )?.role ?? null
       })()
     }
     return membershipRolePromise
