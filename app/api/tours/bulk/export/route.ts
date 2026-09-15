@@ -37,11 +37,17 @@ export async function GET() {
     const rows = (data as unknown as Array<Record<string, unknown>>) || []
     const ids = rows.map(r => r.id).filter(Boolean) as string[]
     if (ids.length > 0) {
-      const { data: versions } = await supabaseAdmin
+      const { data: versions, error: versionsError } = await supabaseAdmin
         .from('tour_template_versions')
         .select('template_id, template_name')
         .eq('language', 'ja')
         .in('template_id', ids)
+      // Refused outright rather than exported with every Japanese name blank:
+      // a sheet like that looks complete, gets edited, and is re-imported —
+      // which would only be harmless because the importer skips empty cells.
+      if (versionsError) {
+        return NextResponse.json({ success: false, error: `Failed to fetch Japanese names: ${versionsError.message}` }, { status: 500 })
+      }
       const jaByTemplate = new Map((versions || []).map((v: { template_id: string; template_name: string }) => [v.template_id, v.template_name]))
       for (const r of rows) r.name_ja = jaByTemplate.get(r.id as string) ?? ''
     }

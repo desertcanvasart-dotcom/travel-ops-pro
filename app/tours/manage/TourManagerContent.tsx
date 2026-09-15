@@ -1204,6 +1204,7 @@ export default function TourManagerContent() {
       const json = await res.json()
       if (json.success) {
         showToast('success', `Imported: ${json.created} created, ${json.updated} updated${json.refusedRows ? `, ${json.refusedRows} skipped` : ''}`)
+        if (json.warning) showToast('error', json.warning)
         fetchTemplates()
       } else {
         showToast('error', json.error || 'Import failed')
