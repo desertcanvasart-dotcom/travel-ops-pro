@@ -1186,8 +1186,33 @@ export default function TourManagerContent() {
 
   // Flat CSV of the portable template metadata — a summary sheet and the shape
   // that can move to the other install. Server builds it; this just downloads.
-  const handleExportTemplates = () => {
-    window.location.href = '/api/tours/bulk/export'
+  //
+  // Fetched rather than navigated to: with `window.location.href` a failed
+  // export (a 500 with a JSON body) replaced the whole manager with a raw
+  // error page. Now the response is checked first and a failure is a toast;
+  // only a good CSV becomes a download.
+  const handleExportTemplates = async () => {
+    try {
+      const res = await fetch('/api/tours/bulk/export')
+      if (!res.ok) {
+        const json = await res.json().catch(() => null)
+        showToast('error', json?.error || `Export failed (${res.status})`)
+        return
+      }
+      const blob = await res.blob()
+      const filename = res.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1]
+        || `tour-templates-${new Date().toISOString().split('T')[0]}.csv`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e: any) {
+      showToast('error', e?.message || 'Export failed')
+    }
   }
 
   // Import that CSV: upserts by template_code (portable fields only, never the
@@ -1204,11 +1229,15 @@ export default function TourManagerContent() {
       const json = await res.json()
       if (json.success) {
         showToast('success', `Imported: ${json.created} created, ${json.updated} updated${json.refusedRows ? `, ${json.refusedRows} skipped` : ''}`)
-        if (json.warning) showToast('error', json.warning)
-        fetchTemplates()
       } else {
         showToast('error', json.error || 'Import failed')
       }
+      // A warning (a template saved without its Japanese name) is shown
+      // either way — a failed row elsewhere in the sheet must not hide it —
+      // and the list is refreshed whenever ANY row landed, not only when all
+      // of them did.
+      if (json.warning) showToast('error', json.warning)
+      if (json.success || json.created || json.updated) fetchTemplates()
     } catch (e: any) {
       showToast('error', e?.message || 'Import failed')
     } finally {
