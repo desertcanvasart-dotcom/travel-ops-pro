@@ -30,8 +30,8 @@ import {
 
 interface Notice { kind: 'success' | 'error'; text: string }
 
-type AddForm = { label: string; label_ja: string; key: string; keyTouched: boolean; behavior: string; min_pax: string; max_pax: string; needs_destination: boolean; code: string; description: string }
-const EMPTY_ADD: AddForm = { label: '', label_ja: '', key: '', keyTouched: false, behavior: 'other', min_pax: '1', max_pax: '4', needs_destination: false, code: '', description: '' }
+type AddForm = { label: string; label_ja: string; key: string; keyTouched: boolean; behavior: string; min_pax: string; max_pax: string; min_days: string; max_days: string; needs_destination: boolean; code: string; description: string }
+const EMPTY_ADD: AddForm = { label: '', label_ja: '', key: '', keyTouched: false, behavior: 'other', min_pax: '1', max_pax: '4', min_days: '1', max_days: '1', needs_destination: false, code: '', description: '' }
 
 const inputCls = 'px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent'
 
@@ -42,7 +42,7 @@ export default function VocabularySettingsPage() {
   const [kind, setKind] = useState<VocabularyKind>('tier')
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
-  const [editing, setEditing] = useState<{ id: string; label: string; label_ja: string; behavior: string; min_pax: string; max_pax: string; needs_destination: boolean; code: string } | null>(null)
+  const [editing, setEditing] = useState<{ id: string; label: string; label_ja: string; behavior: string; min_pax: string; max_pax: string; min_days: string; max_days: string; needs_destination: boolean; code: string } | null>(null)
   const [add, setAdd] = useState<AddForm | null>(null)
 
   // Thirty-five lists in six groups is a wall, so the group nav behaves like
@@ -140,6 +140,7 @@ export default function VocabularySettingsPage() {
     const body: Record<string, unknown> = { label: editing.label, label_ja: editing.label_ja }
     if (kind === 'supplier_type') body.behavior = editing.behavior
     if (kind === 'vehicle_type') body.meta = { ...item.meta, min_pax: Number(editing.min_pax), max_pax: Number(editing.max_pax) }
+    if (kind === 'tour_type') body.meta = { ...item.meta, min_days: Number(editing.min_days), max_days: Number(editing.max_days) }
     if (kind === 'transport_service_type') body.meta = { ...item.meta, needs_destination: editing.needs_destination }
     if (kind === 'airline') body.meta = { ...item.meta, code: editing.code.trim().toUpperCase() }
     if (await patch(item, body, 'Saved')) setEditing(null)
@@ -151,6 +152,7 @@ export default function VocabularySettingsPage() {
     if (add.keyTouched && add.key) body.key = add.key
     if (kind === 'supplier_type') body.behavior = add.behavior
     if (kind === 'vehicle_type') body.meta = { min_pax: Number(add.min_pax), max_pax: Number(add.max_pax) }
+    if (kind === 'tour_type') body.meta = { min_days: Number(add.min_days), max_days: Number(add.max_days) }
     if (kind === 'transport_service_type') body.meta = { needs_destination: add.needs_destination }
     if (kind === 'airline') body.meta = { code: add.code.trim().toUpperCase() }
     if (await call('add', () => fetch('/api/vocabulary', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), `"${add.label}" added`)) setAdd(null)
@@ -159,6 +161,7 @@ export default function VocabularySettingsPage() {
   const startEdit = (item: VocabularyItem) => setEditing({
     id: item.id, label: item.label, label_ja: item.label_ja || '', behavior: item.behavior || 'other',
     min_pax: String(item.meta?.min_pax ?? 1), max_pax: String(item.meta?.max_pax ?? 4),
+    min_days: String(item.meta?.min_days ?? 1), max_days: String(item.meta?.max_days ?? 1),
     needs_destination: Boolean(item.meta?.needs_destination),
     code: typeof item.meta?.code === 'string' ? item.meta.code : '',
   })
@@ -323,6 +326,12 @@ export default function VocabularySettingsPage() {
                               <input type="number" min={1} value={editing.max_pax} onChange={e => setEditing({ ...editing, max_pax: e.target.value })} className={`${inputCls} w-16`} /> pax
                             </span>
                           )}
+                          {kind === 'tour_type' && (
+                            <span className="flex items-center gap-1 text-sm text-gray-600">
+                              <input type="number" min={1} value={editing.min_days} onChange={e => setEditing({ ...editing, min_days: e.target.value })} className={`${inputCls} w-16`} />–
+                              <input type="number" min={1} value={editing.max_days} onChange={e => setEditing({ ...editing, max_days: e.target.value })} className={`${inputCls} w-16`} /> days
+                            </span>
+                          )}
                           {kind === 'transport_service_type' && (
                             <label className="flex items-center gap-1.5 text-sm text-gray-600">
                               <input type="checkbox" checked={editing.needs_destination} onChange={e => setEditing({ ...editing, needs_destination: e.target.checked })} className="w-3.5 h-3.5" />
@@ -342,6 +351,9 @@ export default function VocabularySettingsPage() {
                             {item.label}
                             {kind === 'vehicle_type' && item.meta?.min_pax != null && (
                               <span className="ml-2 text-xs font-normal text-gray-500">{String(item.meta.min_pax)}–{String(item.meta.max_pax)} pax</span>
+                            )}
+                            {kind === 'tour_type' && item.meta?.min_days != null && (
+                              <span className="ml-2 text-xs font-normal text-gray-500">{String(item.meta.min_days)}–{String(item.meta.max_days)} days</span>
                             )}
                             {kind === 'transport_service_type' && item.meta?.needs_destination === true && (
                               <span className="ml-2 text-xs font-normal text-gray-500">→ needs a destination</span>
@@ -414,6 +426,15 @@ export default function VocabularySettingsPage() {
                         <span className="flex items-center gap-1 text-sm text-gray-600">
                           <input type="number" min={1} value={add.min_pax} onChange={e => setAdd({ ...add, min_pax: e.target.value })} className={`${inputCls} w-16`} />–
                           <input type="number" min={1} value={add.max_pax} onChange={e => setAdd({ ...add, max_pax: e.target.value })} className={`${inputCls} w-16`} />
+                        </span>
+                      </div>
+                    )}
+                    {kind === 'tour_type' && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Days</label>
+                        <span className="flex items-center gap-1 text-sm text-gray-600">
+                          <input type="number" min={1} value={add.min_days} onChange={e => setAdd({ ...add, min_days: e.target.value })} className={`${inputCls} w-16`} />–
+                          <input type="number" min={1} value={add.max_days} onChange={e => setAdd({ ...add, max_days: e.target.value })} className={`${inputCls} w-16`} />
                         </span>
                       </div>
                     )}

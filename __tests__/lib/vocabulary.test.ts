@@ -7,18 +7,33 @@ import { describe, it, expect } from 'vitest'
 import {
   PRESET_TIERS, VOCABULARY_KINDS, presetTierFor, tierFromPreset,
   localizedLabelFor, slugifyKey, KEY_PATTERN, vehicleForPax, tierMultiplier,
-  tierOptionsFor, isPresetTier,
+  tierOptionsFor, isPresetTier, VOCABULARY_KIND_INFO, VOCABULARY_GROUPS,
 } from '@/lib/vocabulary'
 
 describe('frozen keys (the skeleton under the custom words)', () => {
   it('the 4 preset tier positions never change', () => {
     expect([...PRESET_TIERS]).toEqual(['budget', 'standard', 'deluxe', 'luxury'])
   })
-  it('exactly 36 vocabulary kinds, incl. tier + supplier_type', () => {
-    expect(VOCABULARY_KINDS.length).toBe(36)
-    expect(VOCABULARY_KINDS).toContain('cruise_supplement')
-    expect(VOCABULARY_KINDS).toContain('tier')
-    expect(VOCABULARY_KINDS).toContain('supplier_type')
+  it('every kind is one the settings screen can actually render', () => {
+    // This replaced a bare `length === 36`. A count is a copy of the answer:
+    // it had to be bumped for every new kind and, on its own, proved nothing —
+    // a kind could be added with no settings copy at all and the count would
+    // still pass. What matters is that each kind can be shown and filed.
+    for (const kind of VOCABULARY_KINDS) {
+      const info = VOCABULARY_KIND_INFO[kind]
+      expect(info, `${kind} has no VOCABULARY_KIND_INFO — Settings cannot render it`).toBeDefined()
+      expect(info.kind, `${kind}'s info is filed under the wrong key`).toBe(kind)
+      expect(VOCABULARY_GROUPS, `${kind} sits in a group the screen does not know`).toContain(info.group)
+      expect(info.title.trim().length, `${kind} needs a title`).toBeGreaterThan(0)
+    }
+    // The load-bearing ones, named so a rename cannot pass quietly.
+    for (const kind of ['tier', 'supplier_type', 'cruise_supplement']) {
+      expect(VOCABULARY_KINDS).toContain(kind)
+    }
+  })
+
+  it('has no duplicate kinds', () => {
+    expect(new Set(VOCABULARY_KINDS).size).toBe(VOCABULARY_KINDS.length)
   })
 })
 
