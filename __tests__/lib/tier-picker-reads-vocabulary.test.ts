@@ -114,7 +114,11 @@ const VOCAB_PICKERS: Record<string, string[]> = {
   // 2026-09-15: the tour template form's own three lists (migration 20261010).
   // tour_audience is label-valued by design — best_for is translated with the
   // rest of the tour copy — but WHICH words are offered still comes from here.
-  'app/tours/manage/TourManagerContent.tsx': ['tour_type', 'physical_level', 'tour_audience'],
+  'app/tours/manage/TourManagerContent.tsx': ['tour_type', 'physical_level', 'tour_audience', 'tour_theme'],
+  // 2026-09-15: themes were left out of 20261010 on the mistaken reasoning
+  // that living in a table made them customizable. /api/tours/categories has a
+  // POST nothing ever called and no screen could add, rename or remove one.
+  'app/tours/tours-browser-page.tsx': ['tour_theme'],
 }
 
 // Calling useVocabOptions somewhere in a file is not enough: the transportation
@@ -133,6 +137,8 @@ const RETIRED_FORM_LISTS: Record<string, string[]> = {
   'app/tours/manage/TourManagerContent.tsx': [
     '{TOUR_TYPES.map(', '{PHYSICAL_LEVELS.map(', '{BEST_FOR_OPTIONS.map(',
     'Object.entries(TIER_CONFIG)',
+    // The theme picker must not go back to the install-local UUID table.
+    "fetch('/api/tours/categories')", '{themes.map(',
   ],
   // POPULAR_ROUTES was an Egypt city-pair list; the quick-select chips come from the agency's own rates now.
   'app/rates/flights/flights-content.tsx': ['{FLIGHT_TYPES.map(', '{CABIN_CLASSES.map(', '{FREQUENCIES.map(', 'POPULAR_ROUTES'],

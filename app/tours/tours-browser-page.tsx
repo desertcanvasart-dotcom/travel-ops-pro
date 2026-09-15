@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
 import { useTierOptions } from '@/hooks/useTierOptions'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
 
 // A preset's emoji in the tier filter; an agency-added tier gets a star.
 const TIER_EMOJI: Record<string, string> = { budget: '💰', standard: '💎', deluxe: '✨', luxury: '👑' }
@@ -24,6 +25,10 @@ interface TourTemplate {
   short_description: string | null
   is_featured: boolean
   cover_image_url: string | null
+  /** The portable theme key (org_vocabularies tour_theme). */
+  theme_key: string | null
+  /** The install-local UUID link theme_key replaces. Still populated for
+   *  tours saved before migration 20261011, so their theme still shows. */
   category: {
     id: string
     category_name: string
@@ -55,6 +60,15 @@ export default function ToursBrowsePage() {
   const [error, setError] = useState<string | null>(null)
   const [filterTier, setFilterTier] = useState<string>('all')
   const [filterCategory, setFilterCategory] = useState<string>('all')
+  // Themes are the agency's own words since migration 20261011. A tour saved
+  // before it has no theme_key, only the embedded tour_categories row, so both
+  // shapes resolve here rather than at each of the four places a theme is shown.
+  const themeOptions = useVocabOptions('tour_theme', [])
+  const themeLabel = (tour: Pick<TourTemplate, 'theme_key' | 'category'>): string =>
+    themeOptions.find(o => o.value === tour.theme_key)?.label
+      ?? tour.theme_key
+      ?? tour.category?.category_name
+      ?? ''
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [deleteTarget, setDeleteTarget] = useState<TourTemplate | null>(null)
@@ -118,8 +132,10 @@ export default function ToursBrowsePage() {
     // Filter by tier - check if the tour has the selected tier available
     const matchesTier = filterTier === 'all' || tour.available_tiers?.includes(filterTier)
 
-    // Filter by category
-    const matchesCategory = filterCategory === 'all' || tour.category?.category_name === filterCategory
+    // Filter by theme. Matched on the LABEL so the dropdown keeps working for
+    // tours saved before migration 20261011, which carry only the legacy
+    // embedded category and no theme_key.
+    const matchesCategory = filterCategory === 'all' || themeLabel(tour) === filterCategory
 
     // Search by name, description, or cities
     const searchLower = searchQuery.toLowerCase()
@@ -132,7 +148,7 @@ export default function ToursBrowsePage() {
   })
 
   // Get unique categories from the tours
-  const uniqueCategories = [...new Set(tours.map(t => t.category?.category_name).filter(Boolean))]
+  const uniqueCategories = [...new Set(tours.map(themeLabel).filter(Boolean))] as string[]
 
   const getTierBadge = (tier: string) => {
     const styles: Record<string, string> = {
@@ -402,10 +418,10 @@ export default function ToursBrowsePage() {
                     <span className="text-gray-400">👥</span>
                     <span>{tour.min_pax || 1}-{tour.max_pax || 15} {t('card.passengers')}</span>
                   </div>
-                  {tour.category && (
+                  {themeLabel(tour) && (
                     <div className="flex items-center gap-2">
                       <span className="text-gray-400">🏷️</span>
-                      <span className="text-gray-500 text-xs">{tour.category.category_name}</span>
+                      <span className="text-gray-500 text-xs">{themeLabel(tour)}</span>
                     </div>
                   )}
                   {tour.uses_day_builder && (
@@ -479,10 +495,10 @@ export default function ToursBrowsePage() {
                   <div className="flex items-center gap-3 text-xs text-gray-500">
                     <span className="font-mono uppercase text-gray-400">{tour.template_code}</span>
                     <span>{tour.cities_covered?.join(', ') || 'Egypt'}</span>
-                    {tour.category && (
+                    {themeLabel(tour) && (
                       <>
                         <span className="text-gray-300">|</span>
-                        <span>{tour.category.category_name}</span>
+                        <span>{themeLabel(tour)}</span>
                       </>
                     )}
                   </div>
@@ -589,7 +605,7 @@ export default function ToursBrowsePage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500">
-                      {tour.category?.category_name || '—'}
+                      {themeLabel(tour) || '—'}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1 flex-wrap">

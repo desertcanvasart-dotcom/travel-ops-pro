@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const category = searchParams.get('category_id')
+    const themeKey = searchParams.get('theme_key')
     const tourType = searchParams.get('tour_type')
     const isActive = searchParams.get('is_active')
 
@@ -44,6 +45,9 @@ export async function GET(request: NextRequest) {
       `)
       .order('created_at', { ascending: false })
 
+    if (themeKey) {
+      query = query.eq('theme_key', themeKey)
+    }
     if (category) {
       query = query.eq('category_id', category)
     }
@@ -143,6 +147,10 @@ export async function POST(request: NextRequest) {
     const templateData = {
       template_code: templateCode,
       template_name: body.template_name,
+      // The portable theme key (org_vocabularies tour_theme). category_id is
+      // the install-local UUID it replaces — still written when a stale client
+      // sends one, never read. See migration 20261011.
+      theme_key: body.theme_key || null,
       category_id: body.category_id || null,
       tour_type: body.tour_type,
       duration_days: body.duration_days || 1,

@@ -54,6 +54,7 @@ export async function GET(request: NextRequest) {
         cached_starting_price,
         cached_starting_tier,
         cached_price_updated_at,
+        theme_key,
         tour_categories (
           id,
           category_name,
@@ -158,6 +159,10 @@ export async function GET(request: NextRequest) {
         is_featured: template.is_featured,
         cover_image_url: template.image_url,
         category: template.tour_categories,
+        // The portable theme key. The tour_categories embed above is the
+        // install-local UUID link it replaces — kept so tours saved before
+        // migration 20261011 still show a theme.
+        theme_key: template.theme_key ?? null,
 
         // Variations summary
         variations_count: variations.length,
