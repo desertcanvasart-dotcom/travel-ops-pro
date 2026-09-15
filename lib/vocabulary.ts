@@ -538,6 +538,16 @@ export function validateVocabularyItem(input: {
       return { ok: false, error: 'A vehicle type needs a passenger range (minimum 1, maximum at least the minimum)' }
     }
   }
+  // The same invariant for a tour type's day range. Without it an inverted
+  // range such as 10–5 saved fine — the inputs' min attributes are advisory —
+  // and suggestTourType, which needs both bounds to admit a duration, could
+  // then never suggest that type for anything.
+  if (input.kind === 'tour_type') {
+    const min = Number(input.meta?.min_days), max = Number(input.meta?.max_days)
+    if (!Number.isInteger(min) || !Number.isInteger(max) || min < 1 || max < min) {
+      return { ok: false, error: 'A tour type needs a day range (minimum 1, maximum at least the minimum)' }
+    }
+  }
   return { ok: true }
 }
 

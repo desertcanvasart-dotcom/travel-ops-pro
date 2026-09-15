@@ -14,7 +14,7 @@
 // its length. suggestTourType returns null whenever the current choice already
 // fits.
 import { describe, it, expect } from 'vitest'
-import { tourTypeDays, suggestTourType, vocabOptionsFor, VOCABULARY_KINDS, VOCABULARY_KIND_INFO } from '@/lib/vocabulary'
+import { tourTypeDays, suggestTourType, vocabOptionsFor, validateVocabularyItem, VOCABULARY_KINDS, VOCABULARY_KIND_INFO } from '@/lib/vocabulary'
 
 /** The seeded preset list, in rank order (migration 20261010). */
 const PRESETS = [
@@ -159,5 +159,36 @@ describe('before the migration lands', () => {
     ]
     expect(suggestTourType(rangesFrom(agency), 2, 'half_day')).toBeNull()
     expect(suggestTourType(rangesFrom([]), 2, 'half_day')).toBe('multi_day')
+  })
+})
+
+describe('validateVocabularyItem — a tour type needs a usable day range', () => {
+  // The vocabulary screen's inputs carry min attributes, but those are
+  // advisory: an inverted range such as 10–5 saved fine, and a type whose
+  // bounds can never both admit a duration is one suggestTourType can never
+  // suggest. Validated server-side for POST and PATCH alike, as the vehicle
+  // pax range already was.
+  const item = (meta: Record<string, unknown> | undefined) =>
+    validateVocabularyItem({ kind: 'tour_type', key: 'expedition', label: 'Expedition', meta })
+
+  it('accepts an ordered range', () => {
+    expect(item({ min_days: 5, max_days: 21 })).toEqual({ ok: true })
+    expect(item({ min_days: 1, max_days: 1 })).toEqual({ ok: true })
+  })
+
+  it('refuses an inverted range', () => {
+    expect(item({ min_days: 10, max_days: 5 }).ok).toBe(false)
+  })
+
+  it('refuses a zero, negative, fractional or missing bound', () => {
+    expect(item({ min_days: 0, max_days: 5 }).ok).toBe(false)
+    expect(item({ min_days: -1, max_days: 5 }).ok).toBe(false)
+    expect(item({ min_days: 1.5, max_days: 5 }).ok).toBe(false)
+    expect(item({ min_days: 1 }).ok).toBe(false)
+    expect(item(undefined).ok).toBe(false)
+  })
+
+  it('leaves other kinds alone', () => {
+    expect(validateVocabularyItem({ kind: 'tour_theme', key: 'diving', label: 'Diving', meta: {} })).toEqual({ ok: true })
   })
 })

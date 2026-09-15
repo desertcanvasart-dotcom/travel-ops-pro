@@ -59,6 +59,11 @@ export async function POST(request: NextRequest) {
 
     let created = 0, updated = 0
     const errors: Array<{ code: string; message: string }> = []
+    // Rows whose template DID save but whose Japanese name did not. Kept apart
+    // from `errors` because they must not flip `success` — the UI treated a
+    // lost translation as a failed import and did not even refresh the list,
+    // although the template was created or updated.
+    const warnings: Array<{ code: string; message: string }> = []
     for (const rec of records) {
       // `rec` already holds only the non-empty portable fields, so an update
       // never nulls a description the sheet left blank.
@@ -97,14 +102,15 @@ export async function POST(request: NextRequest) {
           .from('tour_template_versions')
           .upsert({ template_id: templateId, language: 'ja', template_name: nameJa } as never,
                   { onConflict: 'template_id,language' })
-        if (jaError) errors.push({ code: rec.template_code, message: `Japanese name not saved: ${jaError.message}` })
+        if (jaError) warnings.push({ code: rec.template_code, message: `Japanese name not saved: ${jaError.message}` })
       }
     }
 
     return NextResponse.json({
       success: errors.length === 0,
       ...(errors.length ? { error: `Import failed for ${errors.length} row(s): ${errors[0].message}` } : {}),
-      created, updated, refusedRows: refused.length, refused, errors,
+      ...(warnings.length ? { warning: `${warnings.length} row(s) imported without their Japanese name: ${warnings[0].message}` } : {}),
+      created, updated, refusedRows: refused.length, refused, errors, warnings,
     })
   } catch (error: any) {
     return NextResponse.json({ success: false, error: `Import failed: ${error?.message || 'Unknown error'}` }, { status: 500 })
