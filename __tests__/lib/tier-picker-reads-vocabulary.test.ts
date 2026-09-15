@@ -31,6 +31,12 @@ const TIER_PICKERS = [
   'app/whatsapp-parser/whatsapp-parser-content.tsx',
   'app/settings/page.tsx',
   'app/tours/tours-browser-page.tsx',
+  // 2026-09-15: the tour TEMPLATE form was never converted, and it was the one
+  // that mattered most — an agency could add a tier, watch it appear on the
+  // hotel and meal rate pages, and then find no way to build a tour variation
+  // for it. The variation modal rendered its own TIER_CONFIG and merely
+  // relabelled the four built-ins.
+  'app/tours/manage/TourManagerContent.tsx',
   'app/content-library/page.tsx',
   'app/content-library/[id]/page.tsx',
 ]
@@ -105,6 +111,10 @@ const VOCAB_PICKERS: Record<string, string[]> = {
   // 2026-09-13: the flights pickers were never converted — a type removed in
   // Settings stayed on the form.
   'app/rates/flights/flights-content.tsx': ['flight_type', 'flight_cabin', 'flight_frequency'],
+  // 2026-09-15: the tour template form's own three lists (migration 20261010).
+  // tour_audience is label-valued by design — best_for is translated with the
+  // rest of the tour copy — but WHICH words are offered still comes from here.
+  'app/tours/manage/TourManagerContent.tsx': ['tour_type', 'physical_level', 'tour_audience'],
 }
 
 // Calling useVocabOptions somewhere in a file is not enough: the transportation
@@ -116,6 +126,14 @@ const VOCAB_PICKERS: Record<string, string[]> = {
 // constants may still be passed to useVocabOptions as the built-in fallback.
 const RETIRED_FORM_LISTS: Record<string, string[]> = {
   'app/rates/transportation/transportation-content.tsx': ['{SERVICE_TYPES.map('],
+  // The tour form's constants survive only as the useVocabOptions fallback;
+  // rendering one again would put the built-ins back on screen. TIER_CONFIG is
+  // still read for a preset's icon and colours, but never iterated to build
+  // the picker — that is what Object.entries(TIER_CONFIG) did.
+  'app/tours/manage/TourManagerContent.tsx': [
+    '{TOUR_TYPES.map(', '{PHYSICAL_LEVELS.map(', '{BEST_FOR_OPTIONS.map(',
+    'Object.entries(TIER_CONFIG)',
+  ],
   // POPULAR_ROUTES was an Egypt city-pair list; the quick-select chips come from the agency's own rates now.
   'app/rates/flights/flights-content.tsx': ['{FLIGHT_TYPES.map(', '{CABIN_CLASSES.map(', '{FREQUENCIES.map(', 'POPULAR_ROUTES'],
 }

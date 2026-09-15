@@ -7,7 +7,9 @@ export const dynamic = 'force-dynamic'
 import React, { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { useTierLabel } from '@/hooks/useTierLabel'
+import { useTierOptions } from '@/hooks/useTierOptions'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
+import { defaultTierKey, suggestTourType } from '@/lib/vocabulary'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import {
@@ -147,16 +149,24 @@ type ViewMode = 'table' | 'cards' | 'compact'
 // own copy was missing Abu Simbel, among others.
 const EGYPTIAN_CITIES: readonly string[] = EGYPT_CITIES
 
+// The BUILT-IN lists. Every picker below now offers the agency's own words
+// from Settings → Vocabulary (useVocabOptions / useTierOptions); these stand
+// in until the vocabulary loads and wherever an agency has left a list empty.
+// This form was the last significant one still driven by its own constants —
+// the tier list in particular was a live defect, since an agency could add a
+// fifth tier, see it on the hotel and meal rate pages, and then have no way to
+// build a tour variation for it. See migration 20261010.
+// The day ranges live in `meta`, the same shape the vocabulary stores them in,
+// because vocabOptionsFor lays the agency's meta OVER the built-in's. Without
+// them here an install whose migration has not run yet has no ranges at all —
+// every type then reads as 1–99 days, the current pick always "fits", and the
+// duration would stop suggesting anything. The E2E caught exactly that.
 const TOUR_TYPES = [
-  { value: 'half_day', label: 'Half Day Tour', minDays: 1, maxDays: 1 },
-  { value: 'day_tour', label: 'Day Tour', minDays: 1, maxDays: 1 },
-  { value: 'multi_day', label: 'Multi-Day Tour', minDays: 2, maxDays: 99 },
-  { value: 'stopover', label: 'Stopover Tour', minDays: 1, maxDays: 1 }
+  { value: 'half_day', label: 'Half Day Tour', meta: { min_days: 1, max_days: 1 } },
+  { value: 'day_tour', label: 'Day Tour', meta: { min_days: 1, max_days: 1 } },
+  { value: 'multi_day', label: 'Multi-Day Tour', meta: { min_days: 2, max_days: 99 } },
+  { value: 'stopover', label: 'Stopover Tour', meta: { min_days: 1, max_days: 1 } }
 ]
-
-/** The single-day types. Duration 1 is ambiguous between them, so entering it
- *  must not overwrite a choice the user has already made. */
-const SINGLE_DAY_TYPES = TOUR_TYPES.filter(t => t.maxDays === 1).map(t => t.value)
 
 const PHYSICAL_LEVELS = [
   { value: 'easy', label: 'Easy - Suitable for all' },
@@ -165,6 +175,9 @@ const PHYSICAL_LEVELS = [
   { value: 'demanding', label: 'Demanding - Fit travelers only' }
 ]
 
+// "Best for" stores the WORDS, not a key — that text is translated with the
+// rest of the tour copy (TOUR_TEMPLATE_TRANSLATION_FIELDS), so the value has
+// to stay prose. The vocabulary supplies which words are OFFERED.
 const BEST_FOR_OPTIONS = [
   'Families', 'Couples', 'Solo Travelers', 'Groups', 'Seniors',
   'History Buffs', 'Adventure Seekers', 'Photography', 'Relaxation',
@@ -237,6 +250,21 @@ const TIER_CONFIG = {
       meal_quality: 'gourmet'
     }
   }
+}
+
+/** A tier the agency added in Settings → Vocabulary has no preset icon,
+ *  colours or defaults. Without a stand-in it could not be rendered at all,
+ *  which is how it came to be missing from this picker in the first place.
+ *  The defaults are Standard's — the middle of the ladder is the least
+ *  surprising starting point for a rung nobody has described yet. */
+const CUSTOM_TIER_CONFIG = {
+  label: '',
+  icon: '⭐',
+  description: 'Your own tier',
+  bgColor: 'bg-green-50',
+  textColor: 'text-green-800',
+  borderColor: 'border-green-200',
+  defaults: TIER_CONFIG.standard.defaults,
 }
 
 // ============================================
@@ -640,16 +668,22 @@ interface AddVariationModalProps {
 }
 
 function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVariationModalProps) {
-  const tierLabel = useTierLabel()
+  // The agency's OWN ladder from Settings → Vocabulary, not the four presets.
+  // Until this read the vocabulary, a tier added in Settings showed up on the
+  // hotel and meal rate pages and then could not be given a tour variation —
+  // the picker rendered TIER_CONFIG and merely relabelled its four built-ins.
+  const tierOptions = useTierOptions(key => TIER_CONFIG[key as keyof typeof TIER_CONFIG]?.label ?? key)
   // Determine which tiers already exist for this template
   const existingTiers = new Set<string>(
     (template.variations || []).map(v => v.tier)
   )
 
-  // Pre-select 'standard' only if it doesn't already exist
+  // Pre-select the ladder's own middle rung — 'standard' itself may not exist
+  // once an agency has reshaped its tiers.
   const initialSelection = new Set<string>()
-  if (!existingTiers.has('standard')) {
-    initialSelection.add('standard')
+  const preselect = defaultTierKey(tierOptions.map(o => o.value))
+  if (preselect && !existingTiers.has(preselect)) {
+    initialSelection.add(preselect)
   }
 
   const [selectedTiers, setSelectedTiers] = useState<Set<string>>(initialSelection)
@@ -739,7 +773,12 @@ function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVaria
           </p>
 
           <div className="space-y-3">
-            {(Object.entries(TIER_CONFIG) as [string, typeof TIER_CONFIG.budget][]).map(([tier, config]) => {
+            {tierOptions.map(option => {
+              const tier = option.value
+              // A tier the agency invented has no preset icon, colours or
+              // defaults; CUSTOM_TIER_CONFIG carries neutral ones so it is
+              // selectable rather than absent.
+              const config = TIER_CONFIG[tier as keyof typeof TIER_CONFIG] ?? CUSTOM_TIER_CONFIG
               const alreadyExists = existingTiers.has(tier)
               return (
               <div
@@ -765,7 +804,7 @@ function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVaria
                     <div className="flex items-center gap-2">
                       <span className="text-lg">{config.icon}</span>
                       <span className={`font-medium ${alreadyExists ? 'text-gray-400' : selectedTiers.has(tier) ? config.textColor : 'text-gray-900'}`}>
-                        {tierLabel(tier, config.label)}
+                        {option.label}
                       </span>
                       {alreadyExists && (
                         <span className="text-xs bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full">Already exists</span>
@@ -855,7 +894,17 @@ function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVaria
 
 export default function TourManagerContent() {
   const t = useTranslations('tours')
-  const tierLabel = useTierLabel()
+  // Every picker on this form lists the agency's own words; the built-in
+  // arrays above stand in until the vocabulary loads.
+  const tierOptions = useTierOptions(key => TIER_CONFIG[key as keyof typeof TIER_CONFIG]?.label ?? key)
+  const tourTypeOptions = useVocabOptions('tour_type', TOUR_TYPES)
+  // The suggestion reads the SAME list the picker offers, so it can never
+  // suggest a type that is not on screen — and it inherits the built-in day
+  // ranges when the vocabulary is empty.
+  const tourTypeRanges = tourTypeOptions.map(o => ({ key: o.value, meta: o.meta }))
+  const physicalLevelOptions = useVocabOptions('physical_level', PHYSICAL_LEVELS)
+  // "Best for" is label-valued — see the note on BEST_FOR_OPTIONS.
+  const bestForOptions = useVocabOptions('tour_audience', BEST_FOR_OPTIONS.map(o => ({ value: o, label: o })))
   const { confirmDelete } = useConfirmDialog()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [templates, setTemplates] = useState<TourTemplate[]>([])
@@ -880,6 +929,9 @@ export default function TourManagerContent() {
    */
   const tourTypeLabel = (raw: string | null | undefined): string => {
     if (!raw) return ''
+    // The agency's own word wins — a type they added exists only there.
+    const own = tourTypeOptions.find(o => o.value === raw)
+    if (own) return own.label
     const key = `tourTypes.${raw}`
     const translated = t(key)
     if (!translated || translated.endsWith(key)) {
@@ -1003,17 +1055,15 @@ export default function TourManagerContent() {
         [name]: parsedValue
       }
       
-      // Auto-suggest tour_type based on duration_days
+      // Auto-suggest tour_type from the duration, using each type's own day
+      // range from Settings → Vocabulary — so a type the agency added at
+      // 5–21 days is suggested for a 7-day tour. suggestTourType returns null
+      // when the current pick already fits, which is what stops 1 day (which
+      // half day, day tour and stopover all admit) overwriting a deliberate
+      // choice.
       if (name === 'duration_days' && typeof parsedValue === 'number') {
-        if (parsedValue === 1) {
-          // Duration 1 does not decide WHICH single-day type this is, so only
-          // suggest one when the current choice is a multi-day type.
-          if (!SINGLE_DAY_TYPES.includes(prev.tour_type)) {
-            updated.tour_type = 'day_tour'
-          }
-        } else if (parsedValue >= 2) {
-          updated.tour_type = 'multi_day'
-        }
+        const suggested = suggestTourType(tourTypeRanges, parsedValue, prev.tour_type)
+        if (suggested) updated.tour_type = suggested
       }
       
       return updated
@@ -1546,8 +1596,8 @@ export default function TourManagerContent() {
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm appearance-none"
               >
                 <option value="all">{t('filters.allTypes')}</option>
-                {TOUR_TYPES.map(type => (
-                  <option key={type.value} value={type.value}>{t(`tourTypes.${type.value}`)}</option>
+                {tourTypeOptions.map(type => (
+                  <option key={type.value} value={type.value}>{tourTypeLabel(type.value)}</option>
                 ))}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -1836,7 +1886,7 @@ export default function TourManagerContent() {
                       <Calendar className="w-4 h-4" />
                       <span>{template.duration_days} day{template.duration_days > 1 ? 's' : ''}</span>
                       <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">
-                        {TOUR_TYPES.find(t => t.value === template.tour_type)?.label}
+                        {tourTypeLabel(template.tour_type)}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-gray-600">
@@ -2071,7 +2121,7 @@ export default function TourManagerContent() {
                         onChange={handleChange}
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                       >
-                        {TOUR_TYPES.map(type => (
+                        {tourTypeOptions.map(type => (
                           <option key={type.value} value={type.value}>{type.label}</option>
                         ))}
                       </select>
@@ -2107,8 +2157,10 @@ export default function TourManagerContent() {
                         onChange={handleChange}
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                       >
-                        {PHYSICAL_LEVELS.map(level => (
-                          <option key={level.value} value={level.value}>{level.label}</option>
+                        {physicalLevelOptions.map(level => (
+                          <option key={level.value} value={level.value}>
+                            {level.description ? `${level.label} - ${level.description}` : level.label}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -2306,15 +2358,15 @@ export default function TourManagerContent() {
                   <div className="border-t pt-6">
                     <label className="block text-xs font-medium text-gray-600 mb-2">Best For</label>
                     <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                      {BEST_FOR_OPTIONS.map(option => (
-                        <label key={option} className="flex items-center gap-2 cursor-pointer">
+                      {bestForOptions.map(option => (
+                        <label key={option.value} className="flex items-center gap-2 cursor-pointer">
                           <input
                             type="checkbox"
-                            checked={formData.best_for.includes(option)}
-                            onChange={() => toggleBestFor(option)}
+                            checked={formData.best_for.includes(option.label)}
+                            onChange={() => toggleBestFor(option.label)}
                             className="w-4 h-4 text-green-600 border-gray-300 rounded"
                           />
-                          <span className="text-xs text-gray-700">{option}</span>
+                          <span className="text-xs text-gray-700">{option.label}</span>
                         </label>
                       ))}
                     </div>
@@ -2332,7 +2384,10 @@ export default function TourManagerContent() {
                   </div>
 
                   <div className="space-y-3">
-                    {(Object.entries(TIER_CONFIG) as [string, typeof TIER_CONFIG.budget][]).map(([tier, config]) => (
+                    {tierOptions.map(option => {
+                      const tier = option.value
+                      const config = TIER_CONFIG[tier as keyof typeof TIER_CONFIG] ?? CUSTOM_TIER_CONFIG
+                      return (
                       <div
                         key={tier}
                         className={`border rounded-lg p-4 cursor-pointer transition-all ${
@@ -2353,7 +2408,7 @@ export default function TourManagerContent() {
                             <div className="flex items-center gap-2">
                               <span className="text-lg">{config.icon}</span>
                               <span className={`font-medium ${newTemplateVariations.has(tier) ? config.textColor : 'text-gray-900'}`}>
-                                {tierLabel(tier, config.label)}
+                                {option.label}
                               </span>
                             </div>
                             <p className="text-xs text-gray-500 mt-1">{config.description}</p>
@@ -2392,7 +2447,8 @@ export default function TourManagerContent() {
                           </div>
                         </div>
                       </div>
-                    ))}
+                      )
+                    })}
                   </div>
 
                   <div className="bg-gray-50 rounded-lg p-3">

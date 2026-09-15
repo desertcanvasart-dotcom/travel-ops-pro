@@ -19,6 +19,7 @@ export const VOCABULARY_KINDS = [
   'activity_type', 'activity_duration', 'activity_unit', 'guide_grade',
   'guide_duration', 'guide_language', 'rate_season', 'airline', 'hotel_supplement',
   'airport_direction', 'activity_pricing_type', 'cruise_supplement',
+  'tour_type', 'physical_level', 'tour_audience',
 ] as const
 export type VocabularyKind = (typeof VOCABULARY_KINDS)[number]
 
@@ -28,7 +29,7 @@ export function isVocabularyKind(v: unknown): v is VocabularyKind {
 
 /** How the settings screen groups the kinds — a flat list of 29 is a wall. */
 export const VOCABULARY_GROUPS = [
-  'General', 'Hotels & cruises', 'Transport & tickets', 'Guides & tipping', 'Meals', 'Attractions & activities',
+  'General', 'Tours', 'Hotels & cruises', 'Transport & tickets', 'Guides & tipping', 'Meals', 'Attractions & activities',
 ] as const
 export type VocabularyGroup = (typeof VOCABULARY_GROUPS)[number]
 
@@ -352,6 +353,33 @@ export const VOCABULARY_KIND_INFO: Record<VocabularyKind, VocabularyKindInfo> = 
     usedIn: 'Cruise rates, programme days, pricing engine',
     minItems: 1,
     example: 'Upper Deck / Panoramic Window / Private Balcony',
+  },
+  tour_type: {
+    kind: 'tour_type',
+    group: 'Tours',
+    title: 'Tour types',
+    description: 'The shapes of tour you sell. Each carries the day range it covers, which is what the tour form uses to suggest a type when somebody types a duration — so a "Expedition" you add at 5–21 days is suggested for a 7-day tour.',
+    usedIn: 'Tour templates, the tours browser, tour CSV import',
+    minItems: 1,
+    example: 'Half Day / Day Tour / Multi-Day — or add "Expedition" at 5–21 days',
+  },
+  physical_level: {
+    kind: 'physical_level',
+    group: 'Tours',
+    title: 'Physical levels',
+    description: 'How demanding a tour is. The note on each entry is the gloss shown beside it on the tour form.',
+    usedIn: 'Tour templates, public tour pages',
+    minItems: 1,
+    example: 'Easy (suitable for all) / Moderate (some walking) / Demanding',
+  },
+  tour_audience: {
+    kind: 'tour_audience',
+    group: 'Tours',
+    title: 'Best for',
+    description: 'Who a tour suits — the checkboxes on the tour form, saved into its "Best for" list. Unlike every other list here, a tour keeps the WORDS you ticked rather than a reference, because that text is translated with the rest of the tour copy. So renaming an entry changes what is offered from now on and leaves tours already written alone.',
+    usedIn: 'Tour templates, public tour pages',
+    minItems: 1,
+    example: 'Families / Couples / History Buffs — or "Pilgrimage groups"',
   },
   airport_direction: {
     kind: 'airport_direction',
@@ -777,6 +805,36 @@ export function airlineCode(items: readonly Pick<VocabularyItem, 'key' | 'meta'>
   if (!key) return ''
   const code = items.find(i => i.key === key)?.meta?.code
   return typeof code === 'string' ? code.trim().toUpperCase() : ''
+}
+
+/** tour_type meta: the day range a type covers. Defaults are deliberately
+ *  permissive — a type with no range set must not stop anyone saving a tour. */
+export function tourTypeDays(
+  items: readonly Pick<VocabularyItem, 'key' | 'meta'>[],
+  key: string | null | undefined,
+): { min: number; max: number } {
+  const meta = key ? items.find(i => i.key === key)?.meta : undefined
+  const min = Number(meta?.min_days)
+  const max = Number(meta?.max_days)
+  return {
+    min: Number.isFinite(min) && min > 0 ? min : 1,
+    max: Number.isFinite(max) && max > 0 ? max : 99,
+  }
+}
+
+/** The tour type to suggest for a duration: the first whose range admits it,
+ *  in the agency's own order. Null when the current choice already fits, so
+ *  typing a duration never overwrites a deliberate pick — 1 day is ambiguous
+ *  between a half day, a day tour and a stopover. */
+export function suggestTourType(
+  items: readonly Pick<VocabularyItem, 'key' | 'meta'>[],
+  days: number,
+  current: string | null | undefined,
+): string | null {
+  if (!Number.isFinite(days) || days < 1) return null
+  const fits = (k: string) => { const d = tourTypeDays(items, k); return days >= d.min && days <= d.max }
+  if (current && fits(current)) return null
+  return items.find(i => fits(i.key))?.key ?? null
 }
 
 /** transport_service_type meta: does this journey need a destination city? */
