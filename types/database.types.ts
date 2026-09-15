@@ -11387,6 +11387,7 @@ export interface Database {
           cached_starting_tier: string | null
           cached_price_updated_at: string | null
           hotels: Json
+          theme_key: string | null
         }
         Insert: {
           id?: string
@@ -11427,6 +11428,7 @@ export interface Database {
           cached_starting_tier?: string | null
           cached_price_updated_at?: string | null
           hotels: Json
+          theme_key?: string | null
         }
         Update: {
           id?: string
@@ -11467,6 +11469,7 @@ export interface Database {
           cached_starting_tier?: string | null
           cached_price_updated_at?: string | null
           hotels?: Json
+          theme_key?: string | null
         }
         Relationships: [
           {
@@ -13309,6 +13312,20 @@ export interface Database {
       seed_org_vocabulary: {
         Args: {
           p_kind?: string
+          p_org?: string
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Returns: any
+      }
+      seed_tour_template_vocabulary: {
+        Args: {
+          p_org?: string
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Returns: any
+      }
+      seed_tour_themes: {
+        Args: {
           p_org?: string
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

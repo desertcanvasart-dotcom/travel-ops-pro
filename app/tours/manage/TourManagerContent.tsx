@@ -52,12 +52,6 @@ import DaySupplementsPicker from '@/components/DaySupplementsPicker'
 // INTERFACES
 // ============================================
 
-interface TourTheme {
-  id: string
-  category_name: string  // Keep DB field name, just rename interface
-  category_code: string
-}
-
 interface TourVariation {
   id: string
   template_id: string
@@ -83,7 +77,7 @@ interface TourTemplate {
   id: string
   template_code: string
   template_name: string
-  category_id?: string
+  theme_key?: string
   tour_type: string
   duration_days: number
   duration_nights?: number
@@ -100,7 +94,6 @@ interface TourTemplate {
   created_at: string
   uses_day_builder?: boolean
   pricing_mode?: string
-  category?: TourTheme  // Renamed to theme conceptually, DB field stays same
   variations?: TourVariation[]
   itinerary?: ItineraryDay[]
   inclusions?: string[]   // NEW: What's included
@@ -902,13 +895,17 @@ export default function TourManagerContent() {
   // suggest a type that is not on screen — and it inherits the built-in day
   // ranges when the vocabulary is empty.
   const tourTypeRanges = tourTypeOptions.map(o => ({ key: o.value, meta: o.meta }))
+  // Themes were the one picker 20261010 left out, on the mistaken reasoning
+  // that a table meant they were already customizable. /api/tours/categories
+  // has a POST that nothing calls and there was no screen to add, rename or
+  // remove a theme — see migration 20261011.
+  const themeOptions = useVocabOptions('tour_theme', [])
   const physicalLevelOptions = useVocabOptions('physical_level', PHYSICAL_LEVELS)
   // "Best for" is label-valued — see the note on BEST_FOR_OPTIONS.
   const bestForOptions = useVocabOptions('tour_audience', BEST_FOR_OPTIONS.map(o => ({ value: o, label: o })))
   const { confirmDelete } = useConfirmDialog()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [templates, setTemplates] = useState<TourTemplate[]>([])
-  const [themes, setThemes] = useState<TourTheme[]>([])  // Renamed from categories
   const [attractions, setAttractions] = useState<Attraction[]>([])  // NEW: Attractions from DB
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -958,7 +955,7 @@ export default function TourManagerContent() {
   const [formData, setFormData] = useState({
     template_code: '',
     template_name: '',
-    category_id: '',
+    theme_key: '',
     tour_type: 'day_tour',
     duration_days: 1,
     duration_nights: 0,
@@ -1010,17 +1007,6 @@ export default function TourManagerContent() {
     }
   }
 
-  const fetchThemes = async () => {  // Renamed from fetchCategories
-    try {
-      const response = await fetch('/api/tours/categories')  // API endpoint stays same
-      const data = await response.json()
-      if (data.success) {
-        setThemes(data.data)
-      }
-    } catch (error) {
-      console.error('Error fetching themes:', error)
-    }
-  }
 
   // NEW: Fetch attractions from entrance_fees table
   const fetchAttractions = async () => {
@@ -1040,7 +1026,6 @@ export default function TourManagerContent() {
   useEffect(() => {
     Promise.all([
       fetchTemplates(), 
-      fetchThemes(),  // Renamed from fetchCategories
       fetchAttractions()  // NEW: Fetch attractions on load
     ]).finally(() => setLoading(false))
   }, [])
@@ -1235,7 +1220,7 @@ export default function TourManagerContent() {
     setFormData({
       template_code: '',
       template_name: '',
-      category_id: themes[0]?.id || '',
+      theme_key: themeOptions[0]?.value || '',
       tour_type: 'day_tour',
       duration_days: 1,
       duration_nights: 0,
@@ -1276,7 +1261,7 @@ export default function TourManagerContent() {
     setFormData({
       template_code: template.template_code,
       template_name: template.template_name,
-      category_id: template.category_id || '',
+      theme_key: template.theme_key || '',
       tour_type: template.tour_type,
       duration_days: template.duration_days,
       duration_nights: template.duration_nights || 0,
@@ -1431,7 +1416,7 @@ export default function TourManagerContent() {
       template.template_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
       template.cities_covered?.some(c => c.toLowerCase().includes(searchTerm.toLowerCase()))
     
-    const matchesTheme = selectedTheme === 'all' || template.category_id === selectedTheme
+    const matchesTheme = selectedTheme === 'all' || template.theme_key === selectedTheme
     const matchesType = selectedType === 'all' || template.tour_type === selectedType
     const matchesActive = showInactive || template.is_active
     
@@ -1583,8 +1568,8 @@ export default function TourManagerContent() {
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent shadow-sm appearance-none"
               >
                 <option value="all">{t('filters.allThemes')}</option>
-                {themes.map(theme => (
-                  <option key={theme.id} value={theme.id}>{theme.category_name}</option>
+                {themeOptions.map(theme => (
+                  <option key={theme.value} value={theme.value}>{theme.label}</option>
                 ))}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
@@ -2102,14 +2087,14 @@ export default function TourManagerContent() {
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1">Theme</label>
                       <select
-                        name="category_id"
-                        value={formData.category_id}
+                        name="theme_key"
+                        value={formData.theme_key}
                         onChange={handleChange}
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                       >
                         <option value="">Select Theme...</option>
-                        {themes.map(theme => (
-                          <option key={theme.id} value={theme.id}>{theme.category_name}</option>
+                        {themeOptions.map(theme => (
+                          <option key={theme.value} value={theme.value}>{theme.label}</option>
                         ))}
                       </select>
                     </div>

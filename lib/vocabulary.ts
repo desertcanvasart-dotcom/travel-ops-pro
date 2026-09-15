@@ -19,7 +19,7 @@ export const VOCABULARY_KINDS = [
   'activity_type', 'activity_duration', 'activity_unit', 'guide_grade',
   'guide_duration', 'guide_language', 'rate_season', 'airline', 'hotel_supplement',
   'airport_direction', 'activity_pricing_type', 'cruise_supplement',
-  'tour_type', 'physical_level', 'tour_audience',
+  'tour_type', 'physical_level', 'tour_audience', 'tour_theme',
 ] as const
 export type VocabularyKind = (typeof VOCABULARY_KINDS)[number]
 
@@ -353,6 +353,15 @@ export const VOCABULARY_KIND_INFO: Record<VocabularyKind, VocabularyKindInfo> = 
     usedIn: 'Cruise rates, programme days, pricing engine',
     minItems: 1,
     example: 'Upper Deck / Panoramic Window / Private Balcony',
+  },
+  tour_theme: {
+    kind: 'tour_theme',
+    group: 'Tours',
+    title: 'Tour themes',
+    description: 'What a tour is ABOUT — the angle you sell it on, as opposed to its shape or length. Tours are filed under one, and the tours list filters by it.',
+    usedIn: 'Tour templates, the tours browser',
+    minItems: 1,
+    example: 'Cultural & Historical / Diving / Food & Culinary — or "Pilgrimage"',
   },
   tour_type: {
     kind: 'tour_type',
