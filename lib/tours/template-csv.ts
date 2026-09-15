@@ -14,21 +14,61 @@ export interface TemplateCsvColumn {
   label: string
   required?: boolean
   kind?: 'text' | 'int' | 'bool' | 'list'
+  /** Not a column on tour_templates. The export fills it from elsewhere and
+   *  the import must STRIP it before writing, or the row is rejected.
+   *
+   *  `name_ja` was this without saying so, and it broke both directions: the
+   *  export names every column in its select, so PostgREST refused the whole
+   *  query (42703 column tour_templates.name_ja does not exist) and the tour
+   *  CSV export returned a 500 for everyone; the import wrote the unknown
+   *  column and 400'd any row carrying a Japanese name. The sample sheet
+   *  shipped with one filled in. A Japanese name lives in
+   *  tour_template_versions (language='ja'), which is where it now goes. */
+  virtual?: true
 }
 
 export const TEMPLATE_CSV_COLUMNS: TemplateCsvColumn[] = [
   { name: 'template_code', label: 'Code', required: true },
   { name: 'template_name', label: 'Name', required: true },
-  { name: 'name_ja', label: 'Name (JA)' },
+  { name: 'name_ja', label: 'Name (JA)', virtual: true },
   { name: 'tour_type', label: 'Type', required: true },
+  { name: 'theme_key', label: 'Theme' },
   { name: 'duration_days', label: 'Duration Days', required: true, kind: 'int' },
   { name: 'duration_nights', label: 'Duration Nights', kind: 'int' },
+  { name: 'physical_level', label: 'Physical Level' },
   { name: 'cities_covered', label: 'Cities', kind: 'list' },
+  { name: 'best_for', label: 'Best For', kind: 'list' },
+  { name: 'highlights', label: 'Highlights', kind: 'list' },
+  { name: 'main_attractions', label: 'Main Attractions', kind: 'list' },
+  { name: 'inclusions', label: 'Inclusions', kind: 'list' },
+  { name: 'exclusions', label: 'Exclusions', kind: 'list' },
+  { name: 'meals_included', label: 'Meals Included', kind: 'list' },
   { name: 'short_description', label: 'Short Description' },
   { name: 'long_description', label: 'Long Description' },
+  { name: 'image_url', label: 'Image URL' },
+  { name: 'pickup_required', label: 'Pickup Required', kind: 'bool' },
   { name: 'is_featured', label: 'Featured', kind: 'bool' },
   { name: 'is_active', label: 'Active', kind: 'bool' },
 ]
+
+/** The columns the export may name in a select, and the import may write. */
+export const TEMPLATE_CSV_DB_COLUMNS = TEMPLATE_CSV_COLUMNS.filter(c => !c.virtual)
+
+/** Split a parsed record into the tour_templates row and the virtual cells the
+ *  caller has to place itself. */
+export function splitVirtualFields(rec: Record<string, unknown>): {
+  row: Record<string, unknown>
+  virtual: Record<string, unknown>
+} {
+  const row: Record<string, unknown> = {}
+  const virtual: Record<string, unknown> = {}
+  const isVirtual = new Set(TEMPLATE_CSV_COLUMNS.filter(c => c.virtual).map(c => c.name))
+  for (const [k, v] of Object.entries(rec)) {
+    if (isVirtual.has(k)) virtual[k] = v
+    else row[k] = v
+  }
+  return { row, virtual }
+}
 
 const csvCell = (v: unknown): string => {
   const s = Array.isArray(v) ? v.join('; ') : v == null ? '' : String(v)
@@ -60,11 +100,24 @@ export function sampleTemplateCsv(): string {
     template_name: 'Giza Pyramids & Egyptian Museum',
     name_ja: 'ギザのピラミッドとエジプト博物館',
     tour_type: 'day_tour',
+    // Theme, Physical Level and Type are vocabulary KEYS — the stable values
+    // in Settings → Vocabulary, not the words shown on screen, so a sheet
+    // still imports after an agency renames one.
+    theme_key: 'cultural',
     duration_days: 1,
     duration_nights: 0,
+    physical_level: 'easy',
     cities_covered: ['Cairo', 'Giza'],
+    best_for: ['Families', 'First-time Visitors'],
+    highlights: ['The Great Pyramid', 'The Sphinx', 'Tutankhamun’s treasures'],
+    main_attractions: ['Pyramids of Giza', 'Egyptian Museum'],
+    inclusions: ['Private transport', 'Egyptologist guide', 'Entrance fees'],
+    exclusions: ['Tipping', 'Personal expenses'],
+    meals_included: ['Lunch'],
     short_description: 'A classic full-day tour of Cairo’s headline sights.',
     long_description: 'Pyramids of Giza, the Sphinx, and the Egyptian Museum, with lunch.',
+    image_url: '',
+    pickup_required: true,
     is_featured: false,
     is_active: true,
   }
@@ -74,13 +127,24 @@ export function sampleTemplateCsv(): string {
 export interface TemplateCsvRecord {
   template_code: string
   template_name: string
+  /** Virtual — lives in tour_template_versions, not on tour_templates. */
   name_ja?: string
   tour_type: string
+  theme_key?: string
   duration_days: number
   duration_nights?: number
+  physical_level?: string
   cities_covered?: string[]
+  best_for?: string[]
+  highlights?: string[]
+  main_attractions?: string[]
+  inclusions?: string[]
+  exclusions?: string[]
+  meals_included?: string[]
   short_description?: string
   long_description?: string
+  image_url?: string
+  pickup_required?: boolean
   is_featured?: boolean
   is_active?: boolean
 }
