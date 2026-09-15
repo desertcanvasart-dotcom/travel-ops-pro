@@ -64,7 +64,18 @@ describe('parseTemplatesCsv', () => {
   })
 
   it('imports real rows alongside the example row (example skipped)', () => {
-    const csv = sampleTemplateCsv() + '"EGY-DAY-9","Real Tour","","day_tour","1","0","Cairo","","","false","true"\n'
+    // The appended row is BUILT from the column list, not written out
+    // positionally. The hand-written version silently shifted every value one
+    // header to the left the moment the sheet gained a column — the same
+    // defect the suppliers template had, where the example row was one value
+    // short and taught a layout that did not work.
+    const row = (values: Partial<Record<string, string>>) =>
+      TEMPLATE_CSV_COLUMNS.map(c => `"${values[c.name] ?? ''}"`).join(',') + '\n'
+    const csv = sampleTemplateCsv() + row({
+      template_code: 'EGY-DAY-9', template_name: 'Real Tour', tour_type: 'day_tour',
+      duration_days: '1', duration_nights: '0', cities_covered: 'Cairo',
+      is_featured: 'false', is_active: 'true',
+    })
     const { records } = parseTemplatesCsv(csv, papa)
     expect(records.map(r => r.template_code)).toEqual(['EGY-DAY-9'])
   })

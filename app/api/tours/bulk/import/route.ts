@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Papa from 'papaparse'
-import { parseTemplatesCsv } from '@/lib/tours/template-csv'
+import { parseTemplatesCsv, splitVirtualFields } from '@/lib/tours/template-csv'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -62,17 +62,42 @@ export async function POST(request: NextRequest) {
     for (const rec of records) {
       // `rec` already holds only the non-empty portable fields, so an update
       // never nulls a description the sheet left blank.
+      //
+      // The virtual cells are split off FIRST. name_ja is not a column on
+      // tour_templates, and writing it rejected the whole row — so any sheet
+      // carrying a Japanese name failed to import, while the sample sheet
+      // shipped with one filled in.
+      const { row, virtual } = splitVirtualFields(rec as unknown as Record<string, unknown>)
+      let templateId: string | null = null
       if (existingCodes.has(rec.template_code)) {
-        const { error } = await supabaseAdmin
+        const { data, error } = await supabaseAdmin
           .from('tour_templates')
-          .update(rec as never)
+          .update(row as never)
           .eq('template_code', rec.template_code)
+          .select('id')
+          .maybeSingle()
         if (error) errors.push({ code: rec.template_code, message: error.message })
-        else updated++
+        else { updated++; templateId = (data as { id: string } | null)?.id ?? null }
       } else {
-        const { error } = await supabaseAdmin.from('tour_templates').insert(rec as never)
+        const { data, error } = await supabaseAdmin
+          .from('tour_templates')
+          .insert(row as never)
+          .select('id')
+          .maybeSingle()
         if (error) errors.push({ code: rec.template_code, message: error.message })
-        else created++
+        else { created++; templateId = (data as { id: string } | null)?.id ?? null }
+      }
+
+      // The Japanese name belongs on the ja version row, keyed by
+      // (template_id, language). Best-effort: a template that imported must
+      // not be reported as failed because its translation did not land.
+      const nameJa = typeof virtual.name_ja === 'string' ? virtual.name_ja.trim() : ''
+      if (templateId && nameJa) {
+        const { error: jaError } = await supabaseAdmin
+          .from('tour_template_versions')
+          .upsert({ template_id: templateId, language: 'ja', template_name: nameJa } as never,
+                  { onConflict: 'template_id,language' })
+        if (jaError) errors.push({ code: rec.template_code, message: `Japanese name not saved: ${jaError.message}` })
       }
     }
 
