@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { useRole, UserRole } from '@/hooks/useRole'
 import NotificationBell from '@/components/NotificationBell'
+import WorkspaceSwitcher from '@/components/WorkspaceSwitcher'
 import {
   Percent,
   LayoutDashboard,
@@ -496,6 +497,10 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
             <NotificationBell />
           </div>
         )}
+
+        {/* Which agency am I working in. Renders nothing at all unless this
+            person belongs to more than one, which is almost everybody. */}
+        <WorkspaceSwitcher collapsed={isCollapsed} />
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent hover:scrollbar-thumb-gray-400">
