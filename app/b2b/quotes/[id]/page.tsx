@@ -15,6 +15,8 @@ import ConvertToBookingCard from '@/app/components/ConvertToBookingCard'
 import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { useConfirm } from '@/components/ConfirmDialog'
+import { quoteCompleteness, describeGaps } from '@/lib/pricing/quote-completeness'
 
 // ============================================
 // B2B QUOTE DETAIL PAGE
@@ -102,6 +104,7 @@ export default function QuoteDetailPage() {
   const params = useParams()
   const quoteId = params?.id as string
   const t = useTranslations('b2bQuotes')
+  const confirmDialog = useConfirm()
 
   const [quote, setQuote] = useState<Quote | null>(null)
   const [loading, setLoading] = useState(true)
@@ -153,12 +156,18 @@ export default function QuoteDetailPage() {
 
   const convertToItinerary = async () => {
     if (!quote) return
+    // A quote with services that have no rate converts only when the operator
+    // says so: the itinerary would carry a total that leaves them out.
+    const { complete, gaps } = quoteCompleteness(quote.services_snapshot)
+    if (!complete && !(await confirmDialog(t('convertIncompleteConfirm', { count: gaps.length, services: describeGaps(gaps) }), {
+      title: t('incompleteTitle'), confirmText: t('continueAnyway'), variant: 'warning',
+    }))) return
     setConverting(true)
     try {
       const res = await fetch(`/api/b2b/quotes/${quoteId}/convert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        body: JSON.stringify(complete ? {} : { allow_incomplete: true })
       })
       const data = await res.json()
       if (data.success) {
@@ -305,6 +314,19 @@ export default function QuoteDetailPage() {
   const partner = quote.b2b_partners
   const itinerarySource = quote.itineraries
   const services = quote.services_snapshot || []
+  const completeness = quoteCompleteness(services)
+
+  const downloadPdf = async () => {
+    const url = `/api/b2b/quotes/${quote.id}/pdf`
+    if (completeness.complete) {
+      window.open(url, '_blank')
+      return
+    }
+    const ok = await confirmDialog(t('pdfIncompleteConfirm', { count: completeness.gaps.length, services: describeGaps(completeness.gaps) }), {
+      title: t('incompleteTitle'), confirmText: t('continueAnyway'), variant: 'warning',
+    })
+    if (ok) window.open(`${url}?allow_incomplete=1`, '_blank')
+  }
 
   // Derive display values from either template or itinerary
   const displayName = template?.template_name || quote.trip_name || itinerarySource?.trip_name || t('tourPackage')
@@ -341,15 +363,35 @@ export default function QuoteDetailPage() {
               <Eye className="w-4 h-4" />View Itinerary
             </Link>
           )}
-          <a
-            href={`/api/b2b/quotes/${quote.id}/pdf`}
-            target="_blank"
+          {/* A button, not a link: an incomplete quote asks first, and the
+              server refuses it without the explicit go-ahead — which a plain
+              link would have shown as raw error text in a new tab. */}
+          <button
+            type="button"
+            onClick={downloadPdf}
             className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
           >
             <Download className="w-4 h-4" />{t('downloadPdf')}
-          </a>
+          </button>
         </div>
       </div>
+
+      {/* Saved with services that have no rate. The PDF, converting and
+          booking all ask before going ahead with a total that leaves them out. */}
+      {!completeness.complete && (
+        <div className="mb-6 rounded-lg border border-red-300 bg-red-50 p-4">
+          <p className="text-sm font-semibold text-red-900">{t('incompleteTitle')}</p>
+          <p className="text-sm text-red-800 mt-1">{t('incompleteBody', { count: completeness.gaps.length })}</p>
+          <ul className="mt-2 space-y-0.5 text-sm text-red-900 list-disc pl-5">
+            {completeness.gaps.map((g, i) => (
+              <li key={i}>
+                <span className="font-medium">{g.day ? t('gapOnDay', { day: g.day, name: g.name }) : g.name}</span>
+                <span className="text-red-700"> · {g.issue}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}
@@ -403,11 +445,16 @@ export default function QuoteDetailPage() {
                 </thead>
                 <tbody className="divide-y">
                   {services.map((service: any, idx: number) => (
-                    <tr key={idx} className="hover:bg-gray-50">
-                      <td className="px-4 py-2">{service.service_name || t('serviceColumn')}</td>
+                    <tr key={idx} className={service.unpriced ? 'bg-red-50' : 'hover:bg-gray-50'}>
+                      <td className="px-4 py-2">
+                        <span className={service.unpriced ? 'text-red-800 font-medium' : undefined}>{service.service_name || t('serviceColumn')}</span>
+                        {service.unpriced && (
+                          <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] font-medium bg-red-600 text-white">{t('noRate')}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2 text-right">{service.quantity || 1}</td>
-                      <td className="px-4 py-2 text-right">{rateSymbol}{(service.unit_cost || 0).toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right font-medium">{rateSymbol}{(service.line_total || 0).toFixed(2)}</td>
+                      <td className={`px-4 py-2 text-right ${service.unpriced ? 'text-red-700' : ''}`}>{rateSymbol}{(service.unit_cost || 0).toFixed(2)}</td>
+                      <td className={`px-4 py-2 text-right font-medium ${service.unpriced ? 'text-red-700' : ''}`}>{rateSymbol}{(service.line_total || 0).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>

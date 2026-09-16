@@ -4,6 +4,7 @@ import { reassertClientId } from '@/lib/itineraries/reassert-client'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
+import { allowsIncomplete } from '@/lib/pricing/quote-completeness'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { paymentRuleFrom } from '@/lib/payment-schedule'
 import { computeDeposit } from '@/lib/booking-creation'
@@ -86,10 +87,24 @@ export async function POST(
 
     // Output gate (harness Layer 2): don't convert a quote with a non-deliverable
     // price into a "quoted" itinerary that then flows to PDFs/invoices.
-    const priceCheck = checkAmountDeliverable(quote.selling_price, { currency: quote.currency })
+    // An itinerary built from a quote with unpriced services inherits the gap
+    // silently — it carries a total that leaves them out. Refused unless the
+    // operator has knowingly chosen to go ahead.
+    const priceCheck = checkAmountDeliverable(quote.selling_price, {
+      currency: quote.currency,
+      servicesSnapshot: quote.services_snapshot ?? [],
+      allowIncomplete: allowsIncomplete(body?.allow_incomplete),
+    })
     if (!priceCheck.ok) {
       return NextResponse.json(
-        { error: 'Quote price is not deliverable', violations: priceCheck.violations },
+        {
+          error: priceCheck.incomplete
+            ? `This quote has ${priceCheck.gaps?.length ?? 0} service(s) with no rate.`
+            : 'Quote price is not deliverable',
+          violations: priceCheck.violations,
+          incomplete: priceCheck.incomplete ?? false,
+          gaps: priceCheck.gaps ?? [],
+        },
         { status: 422 }
       )
     }

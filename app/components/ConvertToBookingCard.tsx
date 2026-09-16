@@ -11,6 +11,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { useConfirm } from '@/components/ConfirmDialog'
+import { describeGaps, type QuoteGap } from '@/lib/pricing/quote-completeness'
 import { Loader2, BookmarkCheck, AlertTriangle } from 'lucide-react'
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -49,6 +51,7 @@ export default function ConvertToBookingCard({
   existingBooking = null,
 }: Props) {
   const t = useTranslations('bookings.fromQuote')
+  const confirmDialog = useConfirm()
   const router = useRouter()
   const [depositPercent, setDepositPercent] = useState(30)
   const [busy, setBusy] = useState(false)
@@ -60,7 +63,7 @@ export default function ConvertToBookingCard({
   // Rounded the same way the server does, so the preview matches what is stored.
   const depositAmount = Math.round(((total * depositPercent) / 100) * 100) / 100
 
-  const convert = async () => {
+  const convert = async (allowIncomplete = false) => {
     setBusy(true)
     setError(null)
     try {
@@ -71,11 +74,23 @@ export default function ConvertToBookingCard({
           quote_id: quoteId,
           quote_type: quoteType,
           deposit_percent: depositPercent,
+          ...(allowIncomplete ? { allow_incomplete: true } : {}),
         }),
       })
       const json = await res.json()
 
       if (!json.success) {
+        // Services with no rate: the deposit would be a percentage of a total
+        // that leaves them out. Book only if the operator says so.
+        if (res.status === 422 && json.incomplete && !allowIncomplete) {
+          const gaps: QuoteGap[] = Array.isArray(json.gaps) ? json.gaps : []
+          setBusy(false)
+          const ok = await confirmDialog(t('incompleteConfirm', { count: gaps.length, services: describeGaps(gaps) }), {
+            title: t('incompleteTitle'), confirmText: t('continueAnyway'), variant: 'warning',
+          })
+          if (ok) await convert(true)
+          return
+        }
         // A 409 carries the booking that already exists — show it as the outcome
         // rather than as a failure, since the quote IS booked.
         if (res.status === 409 && json.booking_id) {
@@ -152,7 +167,7 @@ export default function ConvertToBookingCard({
       </div>
 
       <button
-        onClick={convert}
+        onClick={() => convert()}
         disabled={busy || total <= 0}
         className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] font-medium text-sm transition-colors disabled:opacity-50"
       >

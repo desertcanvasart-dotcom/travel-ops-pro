@@ -4,6 +4,7 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
 import puppeteer from 'puppeteer'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
+import { allowsIncomplete } from '@/lib/pricing/quote-completeness'
 import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
 import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
 import { currencySymbol } from '@/lib/currency-totals'
@@ -696,10 +697,23 @@ export async function GET(
 
     // Output gate (harness Layer 2): never render a customer PDF for a
     // non-deliverable price.
-    const priceCheck = checkAmountDeliverable(finalQuote.selling_price, { currency: finalQuote.currency })
+    // A quote with services that have no rate is refused too, unless the
+    // operator has knowingly chosen to go ahead (the quote page asks first).
+    const priceCheck = checkAmountDeliverable(finalQuote.selling_price, {
+      currency: finalQuote.currency,
+      servicesSnapshot: finalQuote.services_snapshot ?? [],
+      allowIncomplete: allowsIncomplete(request.nextUrl.searchParams.get('allow_incomplete')),
+    })
     if (!priceCheck.ok) {
       return NextResponse.json(
-        { error: 'Quote price is not deliverable', violations: priceCheck.violations },
+        {
+          error: priceCheck.incomplete
+            ? `This quote has ${priceCheck.gaps?.length ?? 0} service(s) with no rate.`
+            : 'Quote price is not deliverable',
+          violations: priceCheck.violations,
+          incomplete: priceCheck.incomplete ?? false,
+          gaps: priceCheck.gaps ?? [],
+        },
         { status: 422 }
       )
     }
