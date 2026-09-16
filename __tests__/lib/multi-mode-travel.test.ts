@@ -148,3 +148,50 @@ describe('cruise boarding and leaving', () => {
     })
   })
 })
+
+describe('one boarding or leaving event is charged once', () => {
+  // Review of #447: the first and last days of a trip are FORCED to hotel
+  // check-in and check-out. When the first night is aboard, or the last day is
+  // spent leaving the ship, that forced hotel line and the cruise line are the
+  // same event — and both priced at the same assistance rate.
+  const priceDays = async (itinerary: Record<string, unknown>[]) => {
+    const t = fullRateTables()
+    t.tour_templates = [{ ...t.tour_templates[0], duration_days: itinerary.length, itinerary }]
+    setMockTables(t)
+    return calculateDayBasedPricing({ templateId: TEMPLATE_ID, tier: 'standard', isEurPassport: true })
+  }
+  const ids = (r: Awaited<ReturnType<typeof priceDays>>, n: number) =>
+    r.services.filter(s => s.dayNumber === n).map(s => s.id)
+
+  it('a trip that starts aboard charges embarkation, not also a hotel check-in', async () => {
+    const r = await priceDays([
+      day(1, 'Luxor', { accommodation_type: 'cruise', is_cruise_day: true }),
+      day(2, 'Aswan', { accommodation_type: 'cruise', is_cruise_day: true }),
+      day(3, 'Cairo'),
+      day(4, 'Cairo', { accommodation_type: 'none' }),
+    ])
+    expect(ids(r, 1)).toContain('day1-cruise-embark')
+    expect(ids(r, 1)).not.toContain('day1-hotel-checkin')
+  })
+
+  it('a trip that ends leaving the ship charges disembarkation, not also a hotel check-out', async () => {
+    const r = await priceDays([
+      day(1, 'Cairo'),
+      day(2, 'Luxor', { accommodation_type: 'cruise', is_cruise_day: true }),
+      day(3, 'Aswan', { accommodation_type: 'none' }),
+    ])
+    expect(ids(r, 3)).toContain('day3-cruise-disembark')
+    expect(ids(r, 3)).not.toContain('day3-hotel-checkout')
+  })
+
+  it('leaving the ship and checking into a hotel the same day are two events, both charged', async () => {
+    const r = await priceDays([
+      day(1, 'Cairo'),
+      day(2, 'Luxor', { accommodation_type: 'cruise', is_cruise_day: true }),
+      day(3, 'Abu Simbel', { services: { ...svc, hotel_checkin: true } }),
+      day(4, 'Cairo', { accommodation_type: 'none' }),
+    ])
+    expect(ids(r, 3)).toContain('day3-cruise-disembark')
+    expect(ids(r, 3)).toContain('day3-hotel-checkin')
+  })
+})

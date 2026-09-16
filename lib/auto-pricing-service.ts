@@ -2864,7 +2864,15 @@ export async function calculateDayBasedPricing(
     }
 
     // ----- HOTEL SERVICES (fixed per service) -----
-    if (day.services.hotel_checkin) {
+    // The first and last days are FORCED to hotel check-in and check-out
+    // (parseItinerary). When the first night is aboard, that "check-in" is the
+    // embarkation; when the day follows a night aboard, that "check-out" is the
+    // disembarkation. Charging both prices one event twice at the same rate
+    // (review of #447). Leaving the ship and then checking INTO a hotel the same
+    // day are two real events, and both still charge.
+    const checkinIsEmbarkation = Boolean(day.services.cruise_embark) && day.accommodation_type === 'cruise'
+    const checkoutIsDisembarkation = Boolean(day.services.cruise_disembark) && previousDay?.accommodation_type === 'cruise'
+    if (day.services.hotel_checkin && !checkinIsEmbarkation) {
       const found = resolveHotelServiceRate('checkin_assist')
       const rate = found.rate
       if (rate != null) {
@@ -2896,7 +2904,7 @@ export async function calculateDayBasedPricing(
       }
     }
 
-    if (day.services.hotel_checkout) {
+    if (day.services.hotel_checkout && !checkoutIsDisembarkation) {
       const found = resolveHotelServiceRate('checkout_assist')
       const rate = found.rate
       if (rate != null) {
