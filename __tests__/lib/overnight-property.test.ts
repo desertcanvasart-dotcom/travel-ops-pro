@@ -111,7 +111,8 @@ describe('is the named property still in the rates (staff warning)', () => {
     const route = readFileSync('app/api/itineraries/[id]/days/route.ts', 'utf8')
     expect(route).toContain('property_rate_status')
     // A failed catalog read withholds the status instead of flagging every hotel.
-    expect(route).toContain('property && catalogLoaded ? propertyRateStatus(property, catalog) : null')
+    expect(route).toContain('property && loadedFor[property.kind] ? propertyRateStatus(property, catalog) : null')
+    expect(route).toContain('const loadedFor = { hotel: !hotelError, cruise: !shipError }')
     expect(readFileSync('app/itineraries/[id]/page.tsx', 'utf8')).toContain('overnight-stale')
     expect(readFileSync('lib/itinerary-share.ts', 'utf8')).not.toContain('property_rate_status')
   })
