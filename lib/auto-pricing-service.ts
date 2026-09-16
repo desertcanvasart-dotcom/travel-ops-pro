@@ -46,6 +46,7 @@ import { sortByItineraryFlow } from '@/lib/pricing/breakdown-order'
 import { periodRatesFor, plainPeriodName as seasonNameOf } from '@/lib/rates/rate-seasons'
 import { cruiseCandidates, hotelCandidates, propertyById } from '@/lib/pricing/property-candidates'
 import { choicesForTier, sanitizePropertyChoice } from '@/lib/pricing/property-choice'
+import { durationFor, isRoadTransfer, isSightseeing, sanitizeTransportLines, type TransportLine } from '@/lib/pricing/transport-lines'
 import { resolveSupplementsForDate, sanitizeSupplementKeys } from '@/lib/rates/supplements'
 import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
 import { tripAccommodationCost, type NightRates } from '@/lib/pricing/rooming'
@@ -171,6 +172,10 @@ export interface ItineraryDay {
    *  (night aboard) chosen for this stay. Absent for a tier = the automatic
    *  pick. One hotel per city, one ship per sailing (lib/pricing/property-choice). */
   property_by_tier?: Record<string, string>
+  /** The operator's own transport for the day (lib/pricing/transport-lines).
+   *  Present = exactly these lines, the rules below stay out of the day;
+   *  absent = the rules decide. */
+  transport_lines?: TransportLine[]
   /** The whole day is spent travelling to or from the destination (an
    *  overnight flight): no bed, no transfer, no assistance, no guide. */
   in_transit?: boolean
@@ -568,6 +573,21 @@ export function determineTransportNeeds(
   // service_type for this day). Returns one line; extras still get added.
   const lines: TransportNeed[] = []
 
+  // The operator's own list for the day, as the day editor showed and they
+  // changed it: exactly these lines, nothing derived added behind it.
+  if (day.transport_lines) {
+    return day.transport_lines.map(line => ({
+      serviceType: line.service_type,
+      duration: durationFor(line.service_type),
+      area: isSightseeing(line.service_type) && day.attractions?.length ? detectAreaFromAttractions(day.attractions) : null,
+      useSpecialVehicle: false,
+      ...(line.city ? { city: line.city } : {}),
+      ...(isRoadTransfer(line.service_type)
+        ? { originCity: line.from || previousDay?.city, destinationCity: line.to || day.city }
+        : {}),
+    }))
+  }
+
   if (day.transport?.service_type) {
     lines.push({
       serviceType: day.transport.service_type,
@@ -946,6 +966,8 @@ export function parseItinerary(itineraryData: any, opts?: {
       supplements: supplementKeys,
       // The hotel or ship chosen for this stay, per tier (property-choice).
       property_by_tier: sanitizePropertyChoice(day.property_by_tier),
+      // The operator's own transport list, when they changed the day's.
+      transport_lines: sanitizeTransportLines(day.transport_lines),
       // Nile Cruise package flag - uses bundled transport instead of individual vehicle costs
       is_cruise_day: day.is_cruise_day || false
     }

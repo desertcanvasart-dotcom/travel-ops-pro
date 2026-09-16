@@ -18,6 +18,9 @@ import TravelLegPicker, { storedRoadTransfers } from '@/components/TravelLegPick
 import { toEditableDay } from '@/lib/itineraries/editable-day'
 import DaySupplementsPicker from '@/components/DaySupplementsPicker'
 import DayPropertyPicker from '@/components/DayPropertyPicker'
+import DayTransportEditor from '@/components/DayTransportEditor'
+import type { PreviewDay } from '@/app/api/b2b/transport-preview/route'
+import type { TransportLine } from '@/lib/pricing/transport-lines'
 import type { AccommodationOption } from '@/app/api/b2b/accommodation-options/route'
 import { applyStayChoice, chosenForStay, hotelCityOf } from '@/lib/pricing/property-choice'
 
@@ -342,6 +345,11 @@ export default function TourPriceCalculator() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [savingItinerary, setSavingItinerary] = useState(false)
   const [loadingItinerary, setLoadingItinerary] = useState(true)
+  // Each day's transport as the engine will price it, for the day editor to
+  // list (/api/b2b/transport-preview). Refreshed as the days change.
+  const [transportPreview, setTransportPreview] = useState<{ days: PreviewDay[]; currency: string } | null>(null)
+  const [transportLoading, setTransportLoading] = useState(false)
+  const [transportFailed, setTransportFailed] = useState(false)
   const [itineraryExpanded, setItineraryExpanded] = useState(true)
   const [expandedEditorDays, setExpandedEditorDays] = useState<Set<number>>(new Set())
 
@@ -455,6 +463,36 @@ export default function TourPriceCalculator() {
   const [propertyInUse, setPropertyInUse] = useState<Record<number, AccommodationOption | null>>({})
   const reportProperty = (dayIndex: number, option: AccommodationOption | null) =>
     setPropertyInUse(prev => (prev[dayIndex]?.id === option?.id && dayIndex in prev ? prev : { ...prev, [dayIndex]: option }))
+
+  // undefined = back to the rules; a list (even empty) = the operator's own.
+  const setDayTransport = (dayIndex: number, lines: TransportLine[] | undefined) =>
+    updateDay(dayIndex, 'transport_lines', lines)
+
+  useEffect(() => {
+    if (editableDays.length === 0) return
+    const controller = new AbortController()
+    // Debounced: typing a city should not fire a request per keystroke.
+    const timer = setTimeout(async () => {
+      setTransportLoading(true)
+      try {
+        const res = await fetch('/api/b2b/transport-preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ days: editableDays, template_id: templateId, num_pax: numPax }),
+          signal: controller.signal,
+        })
+        const json = await res.json()
+        if (!json.success) throw new Error(json.error)
+        setTransportPreview({ days: json.days, currency: json.currency })
+        setTransportFailed(false)
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') setTransportFailed(true)
+      } finally {
+        if (!controller.signal.aborted) setTransportLoading(false)
+      }
+    }, 500)
+    return () => { clearTimeout(timer); controller.abort() }
+  }, [editableDays, templateId, numPax])
 
   const setDaySupplements = (dayIndex: number, keys: string[] | undefined) => {
     setEditableDays(prev => {
@@ -1353,6 +1391,18 @@ export default function TourPriceCalculator() {
                                 onChange={(mode, rateId, road) => setTravelLeg(index, mode, rateId, road)}
                               />
                             </div>
+
+                            {/* Row 5d: The day's transport, listed and changeable like its attractions */}
+                            <DayTransportEditor
+                              preview={transportPreview?.days[index]}
+                              loading={transportLoading}
+                              failed={transportFailed}
+                              value={day.transport_lines}
+                              city={day.city}
+                              prevCity={editableDays[index - 1]?.city ?? null}
+                              format={(amount) => `${currencySymbol(transportPreview?.currency || extrasRateCurrency)}${amount.toFixed(2)}`}
+                              onChange={(lines) => setDayTransport(index, lines)}
+                            />
 
                             {/* Row 6: Attractions */}
                             <div>
