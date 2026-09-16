@@ -12,6 +12,15 @@ import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages
 
 const supabase = createServerClient()
 
+/** The Add forms' defaults for a rate with no validity dates entered
+ *  (app/api/rates/transportation, app/api/rates/entrance-fees). */
+const OPEN_ENDED_VALID_TO = '2099-12-31'
+const todayIso = () => new Date().toISOString().slice(0, 10)
+/** Tables whose rate_valid_from/to are NOT NULL with no default. Only these
+ *  get defaults: elsewhere a blank date is a legitimate "no dates" and must
+ *  stay blank (accommodation_rates, nile_cruises…). */
+const VALIDITY_REQUIRED_TABLES = new Set(['transportation_rates', 'entrance_fees'])
+
 /**
  * POST /api/rates/bulk/import
  * Body: { table: string, csvData: string, dryRun?: boolean }
@@ -324,6 +333,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const hasValidity = VALIDITY_REQUIRED_TABLES.has(config.tableName)
     for (let i = 0; i < dedupedRows.length; i += BATCH_SIZE) {
       const batch = dedupedRows.slice(i, i + BATCH_SIZE)
 
@@ -333,14 +343,30 @@ export async function POST(request: NextRequest) {
         .filter(Boolean)
 
       let existingKeys = new Set<string>()
+      const existingValidity = new Map<string, { rate_valid_from?: string | null; rate_valid_to?: string | null }>()
       if (keyValues.length > 0) {
         const { data: existing } = await supabase
           .from(config.tableName)
-          .select(uniqueKeyColumn)
+          .select(hasValidity ? `${uniqueKeyColumn}, rate_valid_from, rate_valid_to` : uniqueKeyColumn)
           .in(uniqueKeyColumn, keyValues)
 
         if (existing) {
           existingKeys = new Set(existing.map((r: any) => r[uniqueKeyColumn]))
+          for (const r of existing as any[]) existingValidity.set(r[uniqueKeyColumn], r)
+        }
+      }
+
+      // Blank validity dates. The sheet marks them optional, but
+      // transportation_rates and entrance_fees store them NOT NULL with no
+      // default, and a batch upsert sends a missing cell as NULL — so one row
+      // without dates failed its whole batch (2026-09-16: a 143-row transport
+      // sheet imported nothing). A row already in the table keeps its own
+      // dates; a new row gets what the Add form gives it: today, open-ended.
+      if (hasValidity) {
+        for (const row of batch) {
+          const kept = existingValidity.get(row[uniqueKeyColumn])
+          if (!row.rate_valid_from) row.rate_valid_from = kept?.rate_valid_from || todayIso()
+          if (!row.rate_valid_to) row.rate_valid_to = kept?.rate_valid_to || OPEN_ENDED_VALID_TO
         }
       }
 
