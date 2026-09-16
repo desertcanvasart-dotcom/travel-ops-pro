@@ -89,11 +89,28 @@ export interface SourceProgramHotel {
   address?: string | null
 }
 
+/** One night of a CUSTOMER'S trip and the hotel or ship it was sold with
+ *  (lib/itineraries/overnight-property), with what the property record says
+ *  to print. Only present when the 日程表 is for a trip, not the programme. */
+export interface TripStay {
+  /** The programme day whose night this is. */
+  day: number
+  kind: 'hotel' | 'cruise'
+  /** The English name the rates use. */
+  name: string
+  name_ja: string | null
+  phone: string | null
+  address: string | null
+}
+
 export interface AssembleProgramInput {
   template_code: string
   itinerary: SourceProgramDay[] | null
   hotels: SourceProgramHotel[] | null
   created_date: string
+  /** The trip's own hotels and ship, night by night. Absent = the bare
+   *  programme: 利用ホテル lists the imported standard hotels as before. */
+  trip_stays?: TripStay[] | null
   font_face_css: string
   org: OrgBranding | null
   /** Departure-specific facts, all optional — absent renders the blank
@@ -192,6 +209,65 @@ function withStayDates<T extends { check_in: string; check_out: string }>(
   })
 }
 
+/** The office's own wording for a stay aboard: the row reads ナイル川クルーズ船
+ *  and the ship goes after クルーズ船名： in the address column, exactly where
+ *  the imported programmes leave it blank. */
+const CRUISE_ROW_LABEL = 'ナイル川クルーズ船'
+
+/**
+ * 利用ホテル for a customer's trip (operator, 2026-09-17): one row per stay of
+ * the programme, filled from the hotel or ship the TRIP was sold with.
+ *
+ * A stay whose nights name no property (a night with no rate, or an itinerary
+ * converted before its cruise nights were priced) keeps the imported row for
+ * that stay when the imported list pairs with the stays, else a row with only
+ * the dates — never a guessed hotel. Dates come from the departure date, the
+ * same arithmetic as withStayDates.
+ */
+export function tripHotelRows(
+  imported: Array<{ hotel: string; check_in: string; check_out: string; phone: string; address: string }>,
+  stays: TripStay[],
+  days: SourceProgramDay[],
+  startDate: string | null
+): Array<{ hotel: string; check_in: string; check_out: string; phone: string; address: string }> {
+  const runs = overnightRuns(days)
+  const paired = imported.length === runs.length
+  const shown = (s: TripStay) => (s.name_ja ?? '').trim() || s.name.trim()
+  const same = (a: TripStay, b: TripStay) => a.kind === b.kind && a.name.trim().toLowerCase() === b.name.trim().toLowerCase()
+
+  return runs.flatMap((run, i) => {
+    const base = paired ? imported[i] : { hotel: '', check_in: '', check_out: '', phone: '', address: '' }
+    // A programme stay is one city; the TRIP may have moved hotels inside it
+    // (two Cairo hotels on consecutive nights). Split the stay where the sold
+    // property changes, so each hotel is a row with its own dates (Greptile
+    // on #457). Nights that name no property are their own segment: a named
+    // hotel is never printed over a night the itinerary does not name.
+    const segments: Array<{ startDay: number; endDay: number; stay: TripStay | null }> = []
+    for (let day = run.startDay; day <= run.endDay; day++) {
+      const stay = stays.find(s => s.day === day) ?? null
+      const last = segments[segments.length - 1]
+      const continues = last && (stay === null ? last.stay === null : last.stay !== null && same(last.stay, stay))
+      if (continues) last.endDay = day
+      else segments.push({ startDay: day, endDay: day, stay })
+    }
+
+    return segments.map(seg => {
+      const stay = seg.stay
+      const row = !stay
+        ? { ...base }
+        : stay.kind === 'cruise'
+          ? { hotel: CRUISE_ROW_LABEL, check_in: base.check_in, check_out: base.check_out, phone: (stay.phone ?? '').trim(), address: `クルーズ船名：${shown(stay)}` }
+          : { hotel: shown(stay), check_in: base.check_in, check_out: base.check_out, phone: (stay.phone ?? '').trim(), address: (stay.address ?? '').trim() }
+      if (startDate) {
+        const checkIn = dateLabel(startDate, seg.startDay)
+        const checkOut = dateLabel(startDate, seg.endDay + 1)
+        if (checkIn && checkOut) return { ...row, check_in: checkIn.md, check_out: checkOut.md }
+      }
+      return row
+    })
+  })
+}
+
 export function assembleProgramItinerary(input: AssembleProgramInput): DailyItineraryContext {
   const days = [...(input.itinerary ?? [])].sort((a, b) => (a.day ?? 0) - (b.day ?? 0))
 
@@ -216,19 +292,18 @@ export function assembleProgramItinerary(input: AssembleProgramInput): DailyItin
   // them: names/phones/addresses filled. Check-in/out are per-departure — the
   // source holds only the office's blank mark ("/") — so they are computed
   // from the departure date, and left exactly as found without one.
-  const hotelRows = withStayDates(
-    (input.hotels ?? [])
-      .filter(h => (h.hotel ?? '').trim())
-      .map(h => ({
-        hotel: (h.hotel ?? '').trim(),
-        check_in: (h.check_in ?? '').trim(),
-        check_out: (h.check_out ?? '').trim(),
-        phone: (h.phone ?? '').trim(),
-        address: (h.address ?? '').trim(),
-      })),
-    days,
-    startDate
-  )
+  const importedRows = (input.hotels ?? [])
+    .filter(h => (h.hotel ?? '').trim())
+    .map(h => ({
+      hotel: (h.hotel ?? '').trim(),
+      check_in: (h.check_in ?? '').trim(),
+      check_out: (h.check_out ?? '').trim(),
+      phone: (h.phone ?? '').trim(),
+      address: (h.address ?? '').trim(),
+    }))
+  const hotelRows = input.trip_stays?.length
+    ? tripHotelRows(importedRows, input.trip_stays, days, startDate)
+    : withStayDates(importedRows, days, startDate)
 
   const org = input.org
   const contacts = org?.document_contacts ?? {}

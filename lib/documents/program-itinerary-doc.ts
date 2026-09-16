@@ -16,6 +16,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { getTemplate } from './registry'
 import { assembleProgramItinerary } from './assemble-program-itinerary'
 import { inlineImage } from './inline-image'
+import { loadTripStays } from './trip-stays'
 import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
 import type { DocumentPage } from './types'
 
@@ -70,6 +71,9 @@ export async function buildProgramItineraryHtml(input: {
   departure: ProgramItineraryDeparture
   /** Raw YYYY-MM-DD; formatting and the today-fallback happen here. */
   createdDate?: string | null
+  /** The customer's trip this copy is for. Its own hotels and ship fill
+   *  利用ホテル (lib/documents/trip-stays); absent = the programme's list. */
+  itineraryId?: string | null
 }): Promise<{ html: string; page: DocumentPage; templateCode: string }> {
   const { supabase, orgId, templateId, departure } = input
 
@@ -102,6 +106,7 @@ export async function buildProgramItineraryHtml(input: {
     template_code: program.template_code,
     itinerary: program.itinerary,
     hotels: (program as any).hotels ?? null,
+    trip_stays: input.itineraryId ? await loadTripStays(supabase, input.itineraryId, orgId) : null,
     created_date: formatCreatedDate(input.createdDate ?? null),
     font_face_css: await getJapaneseFontFace(),
     org: orgForDoc,

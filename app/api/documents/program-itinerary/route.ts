@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
         supabase,
         orgId: org_id,
         templateId,
+        itineraryId,
         createdDate: params.get('created_date'),
         departure: {
           start_date: params.get('departure_date') ?? trip?.start_date ?? null,

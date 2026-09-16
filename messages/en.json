@@ -2264,7 +2264,11 @@
       "importing": "Importing…",
       "cancel": "Cancel",
       "close": "Close"
-    }
+    },
+    "propertyNameJa": "Japanese name (customer documents)",
+    "propertyNameJaPlaceholder": "e.g. シュタイゲンベルガー ピラミッズ カイロ",
+    "propertyAddress": "Address (customer documents)",
+    "propertyDocHint": "Printed with the phone above in the 日程表 hotel list for trips staying here. Blank prints the English name / no address."
   },
   "copilot": {
     "concierge": {

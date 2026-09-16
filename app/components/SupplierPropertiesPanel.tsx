@@ -42,11 +42,15 @@ type Draft = {
   contact_name: string
   contact_phone: string
   contact_email: string
+  /** Printed on Japanese customer documents (日程表 利用ホテル). */
+  name_ja: string
+  address: string
 }
 
 const EMPTY = (type: PropertyType): Draft => ({
   property_type: type, name: '', city: '', category: '',
   contact_name: '', contact_phone: '', contact_email: '',
+  name_ja: '', address: '',
 })
 
 export default function SupplierPropertiesPanel({ supplierId, supplierRoles }: Props) {
@@ -159,6 +163,7 @@ export default function SupplierPropertiesPanel({ supplierId, supplierRoles }: P
                       id: p.id, property_type: p.property_type, name: p.name,
                       city: p.city || '', category: p.category || '',
                       contact_name: p.contact_name || '', contact_phone: p.contact_phone || '', contact_email: p.contact_email || '',
+                      name_ja: p.name_ja || '', address: p.address || '',
                     })} className="p-1.5 text-gray-400 hover:text-primary-600" title={t('edit')}>
                       <Pencil className="w-4 h-4" />
                     </button>
@@ -232,6 +237,16 @@ export default function SupplierPropertiesPanel({ supplierId, supplierRoles }: P
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-600 mb-1">{t('propertyContactEmail')}</label>
               <input type="email" value={draft.contact_email} onChange={e => setDraft({ ...draft, contact_email: e.target.value })} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
+            </div>
+            {/* What the 日程表 prints for this hotel or ship (利用ホテル). */}
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-600 mb-1">{t('propertyNameJa')}</label>
+              <input value={draft.name_ja} onChange={e => setDraft({ ...draft, name_ja: e.target.value })} placeholder={t('propertyNameJaPlaceholder')} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-600 mb-1">{t('propertyAddress')}</label>
+              <input value={draft.address} onChange={e => setDraft({ ...draft, address: e.target.value })} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
+              <p className="text-[11px] text-gray-500 mt-1">{t('propertyDocHint')}</p>
             </div>
           </div>
           <div className="flex justify-end gap-2">
