@@ -44,6 +44,8 @@ import { priceAcrossPax } from '@/lib/pricing/pax-range'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { sortByItineraryFlow } from '@/lib/pricing/breakdown-order'
 import { periodRatesFor, plainPeriodName as seasonNameOf } from '@/lib/rates/rate-seasons'
+import { cruiseCandidates, hotelCandidates, propertyById } from '@/lib/pricing/property-candidates'
+import { choicesForTier, sanitizePropertyChoice } from '@/lib/pricing/property-choice'
 import { resolveSupplementsForDate, sanitizeSupplementKeys } from '@/lib/rates/supplements'
 import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
 import { tripAccommodationCost, type NightRates } from '@/lib/pricing/rooming'
@@ -165,6 +167,10 @@ export interface ItineraryDay {
   // NEW: Nile Cruise package flag - when true, uses bundled transport package
   // instead of calculating individual transport costs for this day
   is_cruise_day?: boolean
+  /** tier key → the accommodation_rates id (hotel night) or nile_cruises id
+   *  (night aboard) chosen for this stay. Absent for a tier = the automatic
+   *  pick. One hotel per city, one ship per sailing (lib/pricing/property-choice). */
+  property_by_tier?: Record<string, string>
   /** The whole day is spent travelling to or from the destination (an
    *  overnight flight): no bed, no transfer, no assistance, no guide. */
   in_transit?: boolean
@@ -938,6 +944,8 @@ export function parseItinerary(itineraryData: any, opts?: {
       road_transfers: typeof day.road_transfers === 'boolean' ? day.road_transfers : undefined,
       // The supplements the night is sold with (vocabulary keys).
       supplements: supplementKeys,
+      // The hotel or ship chosen for this stay, per tier (property-choice).
+      property_by_tier: sanitizePropertyChoice(day.property_by_tier),
       // Nile Cruise package flag - uses bundled transport instead of individual vehicle costs
       is_cruise_day: day.is_cruise_day || false
     }
@@ -1468,54 +1476,77 @@ export function resolveTicketRow(
  * the result itself are the ones for `travelDate`, or the row's base columns
  * when no dated period covers it.
  */
-export async function getCruiseRates(
-  tier: ServiceTier,
-  embarkCity?: string,
-  isEurPassport: boolean = true,
-  travelDate?: string | null,
-  /** Converts a row entered in another currency — see lib/rates/rate-currency. */
-  normalizer?: RateNormalizer
-): Promise<{
+export type CruiseStayRates = {
   shipName: string
   ppdNight: number
   singleSuppNight: number
   durationNights: number
   seasonName: string | null
   row: HotelOrCruiseRow
-} | null> {
+  /** The operator chose this ship on the programme days (lib/pricing/property-choice). */
+  chosen: boolean
+}
+
+/** Why a CHOSEN property could not be used — the engine names it in the
+ *  hole instead of quietly pricing another property. */
+export type ChosenPropertyProblem = 'gone' | 'inactive' | 'bad_nights' | 'wrong_tier' | 'wrong_city'
+
+/** A chosen row must still fit the stay it prices: the tier being priced and,
+ *  for a hotel, the city it sleeps in — the same match the candidate list
+ *  uses. A stay whose city was edited after the choice, or a row re-tiered
+ *  since, is a hole asking to choose again, never another city's hotel
+ *  priced as "chosen" (Greptile on #453). */
+export function chosenRowMismatch(row: Record<string, unknown>, tier: string, city?: string): ChosenPropertyProblem | undefined {
+  if (String(row.tier ?? '') !== tier) return 'wrong_tier'
+  if (city !== undefined && !String(row.city ?? '').toLowerCase().includes(city.trim().toLowerCase())) return 'wrong_city'
+  return undefined
+}
+
+export async function getCruiseRates(
+  tier: ServiceTier,
+  embarkCity?: string,
+  isEurPassport: boolean = true,
+  travelDate?: string | null,
+  /** Converts a row entered in another currency — see lib/rates/rate-currency. */
+  normalizer?: RateNormalizer,
+  /** A nile_cruises id chosen on the programme days; wins over the automatic pick. */
+  chosenId?: string
+): Promise<CruiseStayRates | null> {
+  return (await resolveCruiseStay(tier, embarkCity, isEurPassport, travelDate, normalizer, chosenId)).rates
+}
+
+/** getCruiseRates, saying why a chosen ship could not be used. */
+export async function resolveCruiseStay(
+  tier: ServiceTier,
+  embarkCity?: string,
+  isEurPassport: boolean = true,
+  travelDate?: string | null,
+  normalizer?: RateNormalizer,
+  chosenId?: string
+): Promise<{ rates: CruiseStayRates | null; problem?: ChosenPropertyProblem }> {
   try {
-    const query = supabaseAdmin
-      .from('nile_cruises')
-      .select('*')
-      .eq('tier', tier)
-      .eq('is_active', true)
-
-    // The operator's preferred ship first — the star on the cruise rates page
-    // is how they say which boat a programme sails on. It used to be
-    // whichever row PostgREST returned first.
-    const preferredFirst = (q: typeof query) =>
-      q.order('is_preferred', { ascending: false }).order('created_at', { ascending: false }).limit(1)
-
-    // A programme's cruise days are usually filed under "Nile Cruise", not a
-    // port, so an embarkation filter that matches nothing is retried without
-    // it: the preferred standard ship, whichever way it sails. A port that IS
-    // named (Luxor, Aswan) still narrows the choice.
-    let { data: rawCruises, error } = embarkCity
-      ? await preferredFirst(query.ilike('embark_city', `%${embarkCity}%`))
-      : await preferredFirst(query)
-    if (!error && embarkCity && (!rawCruises || rawCruises.length === 0)) {
-      ;({ data: rawCruises, error } = await preferredFirst(
-        supabaseAdmin.from('nile_cruises').select('*').eq('tier', tier).eq('is_active', true)
-      ))
+    let raw: HotelOrCruiseRow | null
+    if (chosenId) {
+      const found = await propertyById(supabaseAdmin, 'nile_cruises', chosenId)
+      if (!found.row) return { rates: null, problem: found.inactive ? 'inactive' : 'gone' }
+      const mismatch = chosenRowMismatch(found.row, tier)
+      if (mismatch) return { rates: null, problem: mismatch }
+      raw = found.row
+    } else {
+      // The starred ship first, then newest; a port that matches nothing
+      // falls back to every ship at the tier — lib/pricing/property-candidates,
+      // the same list the day editor offers.
+      raw = (await cruiseCandidates(supabaseAdmin, tier, embarkCity))[0] ?? null
     }
-    const cruises = normalizer && rawCruises ? await normalizer.normalize('nile_cruises', rawCruises) as typeof rawCruises : rawCruises
+    const cruise = (raw && normalizer
+      ? (await normalizer.normalize('nile_cruises', [raw]))?.[0]
+      : raw) as Record<string, any> | null | undefined
 
-    if (error || !cruises || cruises.length === 0) {
+    if (!cruise) {
       debugLog(`⚠️ No cruise rate for tier ${tier} — flagging hole (no fabrication)`)
-      return null
+      return { rates: null }
     }
 
-    const cruise = cruises[0]
     // Rates are per-person PER-NIGHT (double occupancy). Do NOT divide by
     // duration_nights — callers already multiply by the itinerary's cruise
     // nights.
@@ -1524,23 +1555,26 @@ export async function getCruiseRates(
       : null
     if (!safeNights) {
       console.warn(`⚠️ Cruise ${cruise.ship_name} has invalid duration_nights (${cruise.duration_nights}) — flagging hole (no fabrication)`)
-      return null
+      return { rates: null, problem: chosenId ? 'bad_nights' : undefined }
     }
     const resolved = resolveCruiseRatesForDate(cruise, isEurPassport, travelDate)
 
     debugLog(`✅ Cruise: ${cruise.ship_name} | Period: ${resolved.seasonName ?? 'base rate'} | PPD/night: ${resolved.ppdNight.toFixed(2)} | SingleSupp/night: ${resolved.singleSuppNight.toFixed(2)}`)
 
     return {
-      shipName: cruise.ship_name,
-      ppdNight: resolved.ppdNight,
-      singleSuppNight: resolved.singleSuppNight,
-      durationNights: safeNights,
-      seasonName: resolved.seasonName,
-      row: cruise,
+      rates: {
+        shipName: cruise.ship_name,
+        ppdNight: resolved.ppdNight,
+        singleSuppNight: resolved.singleSuppNight,
+        durationNights: safeNights,
+        seasonName: resolved.seasonName,
+        row: cruise,
+        chosen: Boolean(chosenId),
+      },
     }
   } catch (err) {
     console.error('Error fetching cruise rates:', err)
-    return null
+    return { rates: null }
   }
 }
 
@@ -1552,66 +1586,109 @@ export async function getCruiseRates(
  * read the base pp_double_/single_supp_ columns and took no travel date, so a
  * hotel priced at its cheapest season whenever the client actually travelled.
  * It now resolves the dated period covering `travelDate` (migration
- * 20260826_rate_seasons), falling back to the base columns when no period
- * covers it — which is also what a row with no periods entered does, so
- * nothing regresses.
+ * 20260826_rate_seasons); a date no period covers has no rate
+ * (periodRatesFor). A hotel CHOSEN on the programme days wins over the
+ * automatic pick (lib/pricing/property-choice).
  *
  * `row` comes back with the result so a caller pricing several nights can
  * re-resolve each night's own date against the same catalog row (see
  * resolveHotelRatesForDate) instead of re-querying per night.
  */
+export type HotelStayRates = {
+  hotelName: string
+  ppdNight: number
+  singleSuppNight: number
+  seasonName: string | null
+  row: HotelOrCruiseRow
+  /** The operator chose this hotel on the programme days. */
+  chosen: boolean
+}
+
+/** "Chosen · Summer 2026 · EU passport · per person in a double, per night" */
+export function rateSourceNote(src: { chosen: boolean; period: string | null; isEurPassport: boolean; basis: string }): string {
+  return [
+    src.chosen ? 'Chosen on the day' : 'Automatic pick',
+    src.period ? `period "${src.period}"` : 'no dated period (base rate)',
+    src.isEurPassport ? 'EU passport' : 'non-EU passport',
+    src.basis,
+  ].join(' · ')
+}
+
+/** The hole message for a chosen hotel or ship that cannot be used. The
+ *  engine never swaps in another property for one the operator chose. */
+export function chosenPropertyMessage(kind: 'hotel' | 'cruise', problem: ChosenPropertyProblem, city?: string): string {
+  const what = kind === 'hotel' ? `The hotel chosen for ${city ?? 'this stay'}` : 'The ship chosen for this sailing'
+  const where = kind === 'hotel' ? 'Rates → Hotels' : 'Rates → Cruises'
+  if (problem === 'inactive') return `${what} is switched off in ${where}. Switch it back on, or choose another on the day.`
+  if (problem === 'bad_nights') return `${what} has no valid number of nights in ${where}. Fix it, or choose another ship on the day.`
+  if (problem === 'wrong_tier') return `${what} is not at the tier being priced. Choose again on the day for this tier.`
+  if (problem === 'wrong_city') return `${what} is in another city — the stay's city was changed after it was chosen. Choose again on the day.`
+  return `${what} is no longer in ${where}. Choose another on the day.`
+}
+
 export async function getHotelRates(
   city: string,
   tier: ServiceTier,
   isEurPassport: boolean = true,
   travelDate?: string | null,
   /** Converts a row entered in another currency — see lib/rates/rate-currency. */
-  normalizer?: RateNormalizer
-): Promise<{
-  hotelName: string
-  ppdNight: number
-  singleSuppNight: number
-  seasonName: string | null
-  row: HotelOrCruiseRow
-} | null> {
-  try {
-    // Query accommodation_rates (the authoritative rates table with per-person pricing)
-    const { data: rawHotels, error } = await supabaseAdmin
-      .from('accommodation_rates')
-      .select('*')
-      .eq('tier', tier)
-      .eq('is_active', true)
-      .ilike('city', `%${city}%`)
-      // Newest first. Hotels have NO preferred flag (the star is a cruises
-      // column only); ordering by is_preferred here made PostgREST reject the
-      // query and every hotel night in production went unpriced for a day
-      // (2026-09-02). __tests__/lib/engine-order-columns.test.ts guards it.
-      .order('created_at', { ascending: false })
-      .limit(1)
-    const hotels = normalizer && rawHotels ? await normalizer.normalize('accommodation_rates', rawHotels) as typeof rawHotels : rawHotels
+  normalizer?: RateNormalizer,
+  /** An accommodation_rates id chosen for this city; wins over the automatic pick. */
+  chosenId?: string
+): Promise<HotelStayRates | null> {
+  return (await resolveHotelStay(city, tier, isEurPassport, travelDate, normalizer, chosenId)).rates
+}
 
-    if (error || !hotels || hotels.length === 0) {
-      // Per the harness policy we do NOT substitute an adjacent tier (fuzzy) or a
-      // hardcoded default — a missing exact city+tier rate is a hole the caller flags.
+/** getHotelRates, saying why a chosen hotel could not be used. */
+export async function resolveHotelStay(
+  city: string,
+  tier: ServiceTier,
+  isEurPassport: boolean = true,
+  travelDate?: string | null,
+  normalizer?: RateNormalizer,
+  chosenId?: string
+): Promise<{ rates: HotelStayRates | null; problem?: ChosenPropertyProblem }> {
+  try {
+    let raw: HotelOrCruiseRow | null
+    if (chosenId) {
+      const found = await propertyById(supabaseAdmin, 'accommodation_rates', chosenId)
+      if (!found.row) return { rates: null, problem: found.inactive ? 'inactive' : 'gone' }
+      const mismatch = chosenRowMismatch(found.row, tier, city)
+      if (mismatch) return { rates: null, problem: mismatch }
+      raw = found.row
+    } else {
+      // Newest active hotel in the city at the tier — the same list the day
+      // editor offers (lib/pricing/property-candidates). Per the harness
+      // policy no adjacent tier and no hardcoded default: a missing exact
+      // city+tier rate is a hole the caller flags.
+      raw = (await hotelCandidates(supabaseAdmin, city, tier))[0] ?? null
+    }
+    const hotel = (raw && normalizer
+      ? (await normalizer.normalize('accommodation_rates', [raw]))?.[0]
+      : raw) as Record<string, any> | null | undefined
+
+    if (!hotel) {
       debugLog(`⚠️ No ${tier} hotel rate for ${city} — flagging hole (no fabrication)`)
-      return null
+      return { rates: null }
     }
 
-    const hotel = hotels[0]
     const resolved = resolveHotelRatesForDate(hotel, isEurPassport, travelDate)
 
     debugLog(`✅ Hotel: ${hotel.property_name} | Period: ${resolved.seasonName ?? 'base rate'} | PPD/night: ${resolved.ppdNight.toFixed(2)} | SingleSupp/night: ${resolved.singleSuppNight.toFixed(2)} (${isEurPassport ? 'EUR' : 'non-EUR'})`)
 
     return {
-      hotelName: hotel.property_name,
-      ppdNight: resolved.ppdNight,
-      singleSuppNight: resolved.singleSuppNight,
-      seasonName: resolved.seasonName,
-      row: hotel,
+      rates: {
+        hotelName: hotel.property_name,
+        ppdNight: resolved.ppdNight,
+        singleSuppNight: resolved.singleSuppNight,
+        seasonName: resolved.seasonName,
+        row: hotel,
+        chosen: Boolean(chosenId),
+      },
     }
   } catch (err) {
     console.error('Error fetching hotel rates:', err)
-    return null
+    return { rates: null }
   }
 }
 
@@ -2467,6 +2544,9 @@ export async function calculateDayBasedPricing(
 
   const firstCruiseDay = cruiseDays[0]
   const hotelCities = [...new Set(hotelDays.map(d => d.overnight_city || d.city))]
+  // The hotel chosen for each city and the ship chosen for the sailing, at
+  // the tier being priced. None = the automatic pick.
+  const propertyChoices = choicesForTier(itinerary, tier)
 
   // Rows entered in another currency (rate_currency, per-rate currency work)
   // are converted into this run's currency at the fetch boundary, so every
@@ -2481,8 +2561,8 @@ export async function calculateDayBasedPricing(
   const [
     transportCache,
     cruiseTransportPricingRules,
-    cruiseRates,
-    hotelRatesList,
+    cruiseStay,
+    hotelStays,
     ticketRates,
     guideRate,
     mealRates,
@@ -2498,9 +2578,9 @@ export async function calculateDayBasedPricing(
     fetchCruiseTransportPricingRules(rateNormalizer),
     // Cruise rates only apply when the itinerary has cruise nights
     cruiseNights > 0
-      ? getCruiseRates(tier, firstCruiseDay?.city, isEurPassport, dateForDay(firstCruiseDay?.day), rateNormalizer)
-      : Promise.resolve(null as Awaited<ReturnType<typeof getCruiseRates>>),
-    Promise.all(hotelCities.map(city => getHotelRates(city, tier, isEurPassport, params.travelDate, rateNormalizer))),
+      ? resolveCruiseStay(tier, firstCruiseDay?.city, isEurPassport, dateForDay(firstCruiseDay?.day), rateNormalizer, propertyChoices.cruiseId)
+      : Promise.resolve({ rates: null } as Awaited<ReturnType<typeof resolveCruiseStay>>),
+    Promise.all(hotelCities.map(city => resolveHotelStay(city, tier, isEurPassport, params.travelDate, rateNormalizer, propertyChoices.hotelByCity.get(city.toLowerCase())))),
     fetchTicketRates(ticketLegs, rateNormalizer),
     getGuideRate(language, tier, rateNormalizer, { grade: guideGrade }),
     getMealRates(tier, rateNormalizer),
@@ -2539,22 +2619,28 @@ export async function calculateDayBasedPricing(
     warnings.push(`Rate ${miss.id ?? ''} in ${miss.table} is entered in ${miss.currency} and no exchange rate was available — treated as missing`)
   }
 
+  const cruiseRates = cruiseStay.rates
   if (cruiseNights > 0 && !cruiseRates) {
     addHole({
       kind: 'cruise',
       reason: 'missing',
       city: firstCruiseDay?.city,
-      lookupAttempted: `nile_cruises tier=${tier} embark~${firstCruiseDay?.city ?? 'any'}`,
-      message: `No ${tier} cruise rate found. Add it in Rates → Cruises.`,
+      lookupAttempted: propertyChoices.cruiseId
+        ? `nile_cruises id=${propertyChoices.cruiseId} (chosen)`
+        : `nile_cruises tier=${tier} embark~${firstCruiseDay?.city ?? 'any'}`,
+      message: cruiseStay.problem
+        ? chosenPropertyMessage('cruise', cruiseStay.problem)
+        : `No ${tier} cruise rate found. Add it in Rates → Cruises.`,
     })
   }
 
-  const hotelRatesMap = new Map<string, Awaited<ReturnType<typeof getHotelRates>>>()
+  const hotelRatesMap = new Map<string, HotelStayRates>()
+  // Why a city's CHOSEN hotel could not be used, for its nights' holes.
+  const hotelChoiceProblem = new Map<string, ChosenPropertyProblem>()
   hotelCities.forEach((city, idx) => {
-    const rates = hotelRatesList[idx]
-    if (rates) {
-      hotelRatesMap.set(city, rates)
-    }
+    const stay = hotelStays[idx]
+    if (stay.rates) hotelRatesMap.set(city, stay.rates)
+    else if (stay.problem) hotelChoiceProblem.set(city, stay.problem)
   })
 
   // In-memory resolvers that replicate getAirportServiceRate/getHotelServiceRate
@@ -3025,9 +3111,15 @@ export async function calculateDayBasedPricing(
           rateSource: 'accommodation_rates',
           isPerPax: true,
           isOptional: false,
-          notes: nightly.seasonName
-            ? `PPD (Per Person Double) — ${nightly.seasonName}`
-            : 'PPD (Per Person Double)'
+          // Where the number came from, so the operator can check it against
+          // the contract: the property, chosen or automatic, the period and
+          // the passport group (operator, 2026-09-16).
+          notes: rateSourceNote({
+            chosen: hotelRate.chosen,
+            period: nightly.seasonName,
+            isEurPassport,
+            basis: 'per person in a double, per night',
+          })
         })
       } else {
         // The row exists and its per-person-double for this night is blank.
@@ -3122,13 +3214,18 @@ export async function calculateDayBasedPricing(
         }
       }
     } else {
+      const problem = hotelChoiceProblem.get(hotelCity)
       listUnpriced({ id: `day${day.day}-hotel`, dayNumber: day.day, serviceType: 'accommodation', serviceName: `Hotel (${hotelCity})`, isPerPax: true }, {
         kind: 'hotel',
         reason: 'missing',
         dayNumber: day.day,
         city: hotelCity,
-        lookupAttempted: `accommodation_rates city~${hotelCity} tier=${tier}`,
-        message: `No ${tier} hotel rate for "${hotelCity}". Add it in Rates → Hotels.`,
+        lookupAttempted: problem
+          ? `accommodation_rates id=${propertyChoices.hotelByCity.get(hotelCity.toLowerCase())} (chosen)`
+          : `accommodation_rates city~${hotelCity} tier=${tier}`,
+        message: problem
+          ? chosenPropertyMessage('hotel', problem, hotelCity)
+          : `No ${tier} hotel rate for "${hotelCity}". Add it in Rates → Hotels.`,
       })
     }
   }
@@ -3167,7 +3264,12 @@ export async function calculateDayBasedPricing(
           rateSource: 'nile_cruises',
           isOptional: false,
           // No currency symbol: the result carries the org's rate currency.
-          notes: n.seasonName ? `PPD per night — ${n.seasonName}` : 'PPD per night',
+          notes: rateSourceNote({
+            chosen: cruiseRates.chosen,
+            period: n.seasonName,
+            isEurPassport,
+            basis: 'per person in a double cabin, per night',
+          }),
         })
         return
       }

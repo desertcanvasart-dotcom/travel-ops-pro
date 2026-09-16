@@ -17,6 +17,9 @@ import AttractionPicker from '@/components/AttractionPicker'
 import TravelLegPicker, { storedRoadTransfers } from '@/components/TravelLegPicker'
 import { toEditableDay } from '@/lib/itineraries/editable-day'
 import DaySupplementsPicker from '@/components/DaySupplementsPicker'
+import DayPropertyPicker from '@/components/DayPropertyPicker'
+import type { AccommodationOption } from '@/app/api/b2b/accommodation-options/route'
+import { applyStayChoice, chosenForStay, hotelCityOf } from '@/lib/pricing/property-choice'
 
 // ============================================
 // B2B TOUR PRICE CALCULATOR PAGE
@@ -439,6 +442,19 @@ export default function TourPriceCalculator() {
     })
     setHasUnsavedChanges(true)
   }
+
+  // The hotel or ship each stay uses at the pricing tier — ONE per city, one
+  // per sailing, kept per tier (lib/pricing/property-choice). Choosing on any
+  // night sets every night of that stay.
+  const setDayProperty = (dayIndex: number, id: string | undefined) => {
+    setEditableDays(prev => applyStayChoice(prev, dayIndex, variationTier, id))
+    setHasUnsavedChanges(true)
+  }
+  // The property actually in use per day (chosen or automatic), reported by
+  // the picker, so the supplements picker offers only what it carries.
+  const [propertyInUse, setPropertyInUse] = useState<Record<number, AccommodationOption | null>>({})
+  const reportProperty = (dayIndex: number, option: AccommodationOption | null) =>
+    setPropertyInUse(prev => (prev[dayIndex]?.id === option?.id && dayIndex in prev ? prev : { ...prev, [dayIndex]: option }))
 
   const setDaySupplements = (dayIndex: number, keys: string[] | undefined) => {
     setEditableDays(prev => {
@@ -1298,16 +1314,33 @@ export default function TourPriceCalculator() {
                               </div>
                             </div>
 
-                            {/* Row 5a: What the night is sold with — priced at the property's rate */}
+                            {/* Row 5a: The hotel or ship this stay uses at the pricing tier */}
+                            {(day.accommodation_type === 'hotel' || day.accommodation_type === 'cruise') && (
+                              <DayPropertyPicker
+                                kind={day.accommodation_type}
+                                city={hotelCityOf(day)}
+                                embark={editableDays.find(d => d.accommodation_type === 'cruise')?.city ?? null}
+                                tier={variationTier}
+                                tierLabel={tierLabel(variationTier, t(`tiers.${variationTier}`))}
+                                value={chosenForStay(editableDays, index, variationTier)}
+                                onChange={(id) => setDayProperty(index, id)}
+                                onResolved={(option) => reportProperty(index, option)}
+                              />
+                            )}
+
+                            {/* Row 5b: What the night is sold with — priced at the property's rate,
+                                offered from what that property carries */}
                             {day.accommodation_type !== 'none' && (
                               <DaySupplementsPicker
                                 accommodationType={day.accommodation_type}
                                 value={day.supplements}
                                 onChange={(keys) => setDaySupplements(index, keys)}
+                                carried={propertyInUse[index] ? propertyInUse[index]!.supplements : undefined}
+                                propertyName={propertyInUse[index]?.name}
                               />
                             )}
 
-                            {/* Row 5b: How the day travels (leg pricing) */}
+                            {/* Row 5c: How the day travels (leg pricing) */}
                             <div>
                               <label className="block text-xs font-medium text-gray-600 mb-2">{tLeg('label')}</label>
                               <TravelLegPicker
