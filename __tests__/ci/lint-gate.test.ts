@@ -25,6 +25,36 @@ const config = readFileSync(join(ROOT, 'eslint.config.mjs'), 'utf8')
  *  comments legitimately quote the old numbers to explain the history. */
 const ciSteps = ci.split('\n').filter(l => !l.trim().startsWith('#')).join('\n')
 
+/**
+ * The complete YAML step that contains `needle` — every key of it, in any
+ * order.
+ *
+ * The check here used to start at `npm run lint` and read 200 characters
+ * forward, which only ever saw the keys written BELOW `run:`. YAML mapping
+ * keys are unordered, so `continue-on-error: true` written above it is just as
+ * valid and would have switched the gate off while both assertions still
+ * passed — the silent failure this file exists to prevent.
+ */
+export function stepContaining(yaml: string, needle: RegExp): string | null {
+  const lines = yaml.split('\n')
+  const at = lines.findIndex(l => needle.test(l))
+  if (at === -1) return null
+  // Back up to the '-' that opens this step...
+  let start = at
+  while (start > 0 && !/^\s*-\s/.test(lines[start])) start--
+  const indent = lines[start].match(/^\s*/)![0].length
+  // ...then forward to the next step at the same indent, or out of the list.
+  let end = start + 1
+  for (; end < lines.length; end++) {
+    const line = lines[end]
+    if (!line.trim()) continue
+    const ind = line.match(/^\s*/)![0].length
+    if (ind < indent) break
+    if (ind === indent && /^\s*-\s/.test(line)) break
+  }
+  return lines.slice(start, end).join('\n')
+}
+
 describe('CI runs the linter', () => {
   it('has a step that actually invokes it', () => {
     expect(ciSteps, 'ci.yml must run `npm run lint` — without it the error set drifts back').toMatch(
@@ -33,12 +63,50 @@ describe('CI runs the linter', () => {
   })
 
   it('does not neuter it with a flag that swallows failures', () => {
-    // `|| true`, `continue-on-error`, or `--max-warnings` set absurdly high on
-    // this step would leave the step present and the gate gone — the worst
-    // outcome, because it still LOOKS enforced.
-    const step = ciSteps.slice(ciSteps.indexOf('npm run lint'))
-    expect(step.slice(0, 200)).not.toMatch(/\|\|\s*true/)
-    expect(step.slice(0, 200)).not.toMatch(/continue-on-error:\s*true/)
+    // `|| true`, `continue-on-error`, or `--max-warnings` set absurdly high
+    // would leave the step present and the gate gone — the worst outcome,
+    // because it still LOOKS enforced. Read the WHOLE step, not a window
+    // after `run:`.
+    const step = stepContaining(ciSteps, /run:\s*npm run lint\b/)
+    expect(step, 'no YAML step runs `npm run lint`').not.toBeNull()
+    expect(step!).not.toMatch(/\|\|\s*true/)
+    expect(step!).not.toMatch(/continue-on-error:\s*true/)
+    // --max-warnings is allowed only where it makes the gate stricter.
+    const maxWarnings = step!.match(/--max-warnings[= ](\d+)/)
+    if (maxWarnings) expect(Number(maxWarnings[1])).toBe(0)
+  })
+})
+
+describe('the step reader itself', () => {
+  // The bug was in the READING, so the reading is what needs covering: a
+  // synthetic workflow with the escape hatch written ABOVE `run:` — legal
+  // YAML that the old 200-character window could not see.
+  const yaml = [
+    '    steps:',
+    '      - name: Unit tests',
+    '        run: npm test',
+    '',
+    '      - name: Lint',
+    '        continue-on-error: true',
+    '        run: npm run lint',
+    '',
+    '      - name: Build',
+    '        run: npm run build',
+  ].join('\n')
+
+  it('sees a continue-on-error written above the run key', () => {
+    const step = stepContaining(yaml, /run:\s*npm run lint\b/)
+    expect(step).toContain('continue-on-error: true')
+  })
+
+  it('stops at the next step rather than swallowing the rest of the file', () => {
+    const step = stepContaining(yaml, /run:\s*npm run lint\b/)
+    expect(step).not.toContain('npm run build')
+    expect(step).not.toContain('npm test')
+  })
+
+  it('returns null when nothing matches', () => {
+    expect(stepContaining(yaml, /run:\s*npm run nonesuch\b/)).toBeNull()
   })
 })
 
