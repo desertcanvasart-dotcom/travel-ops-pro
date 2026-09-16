@@ -10,14 +10,19 @@
 // and 6 January–March has five periods and five different rates, and the last
 // two had nowhere to go.
 //
-// So the periods are a list: add one, give it dates, give it its rates. The
-// same component serves both catalogs — only the rate fields differ.
+// So the periods are a list: add one, give it dates, give it its rates — up to
+// MAX_RATE_PERIODS (six, operator 2026-09-16). Each period takes the agency's
+// own season word (Settings → Vocabulary → Rate seasons) and free text beside
+// it. The same component serves both catalogs — only the rate fields differ.
 // ============================================
 
 import { useTranslations } from 'next-intl'
 import { CalendarPlus, Copy, Trash2, AlertTriangle } from 'lucide-react'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
 import {
+  MAX_RATE_PERIODS,
   overlappingSeasons,
+  periodTitle,
   seasonGaps,
   RATE_FIELDS,
   type RateSeason,
@@ -105,6 +110,9 @@ export default function RateSeasonsEditor({
 }: Props) {
   const t = useTranslations('rates.ratePeriods')
   const tSupp = useTranslations('rates.supplements')
+  const seasonOptions = useVocabOptions('rate_season', [])
+  const atLimit = seasons.length >= MAX_RATE_PERIODS
+  const seasonWord = (key: string) => seasonOptions.find(o => o.value === key)?.label ?? key
 
   // A cruise period is entered the hotel way, so its base rate reads
   // "PP Dbl" like a hotel's, not the cabin word the column is stored under.
@@ -122,6 +130,7 @@ export default function RateSeasonsEditor({
     })
 
   const addPeriod = () => {
+    if (atLimit) return
     // A new period starts the day after the last one ends, which is how a
     // contract reads and saves the operator re-typing a date they just typed.
     const last = seasons[seasons.length - 1]
@@ -130,6 +139,7 @@ export default function RateSeasonsEditor({
   }
 
   const duplicatePeriod = (index: number) => {
+    if (atLimit) return
     // Copies the rates, not the dates: the common case is two windows at the
     // same price, and the dates are the part that must differ.
     const source = seasons[index]
@@ -157,7 +167,7 @@ export default function RateSeasonsEditor({
       <div className="flex items-start justify-between gap-4 mb-4">
         <p className="text-xs text-gray-500">{t('help')}</p>
         <span className="text-xs text-gray-500 shrink-0">
-          {t('count', { count: seasons.length })}
+          {t('countOfMax', { count: seasons.length, max: MAX_RATE_PERIODS })}
         </span>
       </div>
 
@@ -171,6 +181,24 @@ export default function RateSeasonsEditor({
         {seasons.map((season, index) => (
           <div key={index} data-testid="rate-period" className="border border-gray-200 rounded-lg p-3 bg-gray-50">
             <div className="flex flex-wrap items-end gap-3 mb-3">
+              <div className="min-w-[9rem]">
+                <label className="block text-xs font-medium text-gray-600 mb-1">{t('season')}</label>
+                <select
+                  value={season.season ?? ''}
+                  disabled={disabled}
+                  onChange={e => update(index, { season: e.target.value || undefined })}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#647C47] bg-white"
+                >
+                  <option value="">{t('noSeason')}</option>
+                  {seasonOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                  {/* A word since removed from the vocabulary still shows. */}
+                  {season.season && !seasonOptions.some(o => o.value === season.season) && (
+                    <option value={season.season}>{season.season}</option>
+                  )}
+                </select>
+              </div>
               <div className="flex-1 min-w-[10rem]">
                 <label className="block text-xs font-medium text-gray-600 mb-1">{t('periodName')}</label>
                 <input
@@ -206,7 +234,7 @@ export default function RateSeasonsEditor({
               <div className="flex items-center gap-1 pb-1">
                 <button
                   type="button"
-                  disabled={disabled}
+                  disabled={disabled || atLimit}
                   onClick={() => duplicatePeriod(index)}
                   title={t('duplicate')}
                   aria-label={t('duplicate')}
@@ -309,15 +337,21 @@ export default function RateSeasonsEditor({
         ))}
       </div>
 
-      <button
-        type="button"
-        onClick={addPeriod}
-        disabled={disabled}
-        className="mt-3 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-[#647C47] border border-[#647C47] rounded-lg hover:bg-[#647C47] hover:text-white disabled:opacity-50"
-      >
-        <CalendarPlus className="w-4 h-4" />
-        {t('addPeriod')}
-      </button>
+      {atLimit ? (
+        <p className="mt-3 text-xs text-gray-500" data-testid="period-limit">
+          {t('limitReached', { max: MAX_RATE_PERIODS })}
+        </p>
+      ) : (
+        <button
+          type="button"
+          onClick={addPeriod}
+          disabled={disabled}
+          className="mt-3 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-[#647C47] border border-[#647C47] rounded-lg hover:bg-[#647C47] hover:text-white disabled:opacity-50"
+        >
+          <CalendarPlus className="w-4 h-4" />
+          {t('addPeriod')}
+        </button>
+      )}
 
       {/* Nothing here blocks a save. Overlap is legitimate — a Christmas window
           inside a broad high season — and a gap may be a period the operator
@@ -328,15 +362,15 @@ export default function RateSeasonsEditor({
           {backwards.map(({ i }) => (
             <p key={`b${i}`} className="text-xs text-red-600 flex items-start gap-1.5">
               <AlertTriangle className="w-3.5 h-3.5 mt-px shrink-0" />
-              {t('backwards', { period: periodLabel(seasons[i], i, t) })}
+              {t('backwards', { period: periodLabel(seasons[i], i, t, seasonWord) })}
             </p>
           ))}
           {overlaps.map(([a, b]) => (
             <p key={`o${a}-${b}`} className="text-xs text-amber-700 flex items-start gap-1.5">
               <AlertTriangle className="w-3.5 h-3.5 mt-px shrink-0" />
               {t('overlap', {
-                first: periodLabel(complete[a], a, t),
-                second: periodLabel(complete[b], b, t),
+                first: periodLabel(complete[a], a, t, seasonWord),
+                second: periodLabel(complete[b], b, t, seasonWord),
               })}
             </p>
           ))}
@@ -356,8 +390,8 @@ const periodLabel = (
   season: RateSeason | undefined,
   index: number,
   t: (key: string, values?: Record<string, string | number>) => string,
-) =>
-  season?.name?.trim() || t('unnamed', { number: index + 1 })
+  seasonWord: (key: string) => string,
+) => periodTitle(season, seasonWord, t('unnamed', { number: index + 1 }))
 
 const addDays = (iso: string, days: number): string => {
   const d = new Date(`${iso}T00:00:00Z`)

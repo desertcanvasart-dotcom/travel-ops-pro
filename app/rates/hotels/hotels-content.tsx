@@ -49,7 +49,7 @@ import RateSeasonsEditor from '@/components/rates/RateSeasonsEditor'
 import RateSupplementsPicker from '@/components/rates/RateSupplementsPicker'
 import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
 import { supplementsForRow, type RateSupplement } from '@/lib/rates/supplements'
-import { hotelPpDoubleRange } from '@/lib/rates/hotel-display-rate'
+import RatePeriodLines, { pricedDoubles } from '@/components/rates/RatePeriodLines'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
 
@@ -830,7 +830,8 @@ export default function HotelsContent() {
   // Stats
   const activeRates = rates.filter(r => r.is_active).length
   const linkedRates = rates.filter(r => r.supplier_id).length
-  const avgRate = averageRatesByCurrency(rates, r => r.pp_double_eur, r => r.rate_currency)
+  // Every priced double across every period and both passport groups.
+  const avgRate = averageRatesByCurrency(pricedDoubles(rates, 'accommodation'), d => d.amount, d => d.currency)
 
   // Prevent hydration mismatch
   // Hooks run before any early return: this page shows a spinner while it loads,
@@ -943,7 +944,7 @@ export default function HotelsContent() {
               <span className="text-gray-400">💶</span>
               <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
             </div>
-            <p className="text-xs text-gray-600">{t('avgPPDblLow')}</p>
+            <p className="text-xs text-gray-600">{tPeriods('avgDouble')}</p>
             <p className="text-2xl font-bold text-gray-900">{formatRateAverages(avgRate, formatRate)}</p>
           </div>
 
@@ -1073,8 +1074,7 @@ export default function HotelsContent() {
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{tCommon('tier')}</th>
                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{tCommon('city')}</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{t('board')}</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('lowPPDbl')}</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">{t('highPPDbl')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">{tPeriods('periodsColumn')}</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{tCommon('status')}</th>
                     <th className="px-4 py-2 text-center text-xs font-semibold text-gray-600">{tCommon('actions')}</th>
                   </tr>
@@ -1114,21 +1114,12 @@ export default function HotelsContent() {
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium">
-                          {rate.board_basis || 'BB'}
+                          {boardBasisLabel(rate.board_basis || 'bb', (rate.board_basis || 'bb').toUpperCase())}
                         </span>
                       </td>
-                      {/* Low/High = cheapest/dearest priced PERIOD. The legacy
-                          high_pp_double_eur column is never written by the
-                          periods editor and read as $0.00 on every row. */}
-                      <td className="px-4 py-3 text-right">
-                        <span className="text-sm font-bold text-green-600">
-                          {formatRateInRowCurrency(hotelPpDoubleRange(rate).low.eur, rate, formatRate)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="text-sm text-orange-600">
-                          {formatRateInRowCurrency(hotelPpDoubleRange(rate).high.eur, rate, formatRate)}
-                        </span>
+                      <td className="px-4 py-3">
+                        {/* Every period, one line each, as entered in the form. */}
+                        <RatePeriodLines row={rate} entity="accommodation" format={amount => formatRateInRowCurrency(amount, rate, formatRate)} />
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -1216,7 +1207,7 @@ export default function HotelsContent() {
                     <div className="flex items-center gap-2 mb-3">
                       <TierBadge tier={rate.tier} t={t} />
                       <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium">
-                        {rate.board_basis || 'BB'}
+                        {boardBasisLabel(rate.board_basis || 'bb', (rate.board_basis || 'bb').toUpperCase())}
                       </span>
                       {rate.city && (
                         <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
@@ -1249,22 +1240,8 @@ export default function HotelsContent() {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-3 gap-2 pt-3 border-t border-gray-100">
-                      {/* Low/High span every priced period; the third cell
-                          counts them — the fixed "Peak" column is never
-                          written by the periods editor. */}
-                      <div className="text-center">
-                        <p className="text-xs text-blue-600 font-medium">{t('low')}</p>
-                        <p className="text-sm font-bold text-gray-700">{formatRateInRowCurrency(hotelPpDoubleRange(rate).low.eur, rate, formatRate)}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xs text-orange-600 font-medium">{t('high')}</p>
-                        <p className="text-sm font-bold text-gray-700">{formatRateInRowCurrency(hotelPpDoubleRange(rate).high.eur, rate, formatRate)}</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-xs text-gray-500 font-medium">{tPeriods('title')}</p>
-                        <p className="text-sm font-bold text-gray-700">{hotelPpDoubleRange(rate).periods}</p>
-                      </div>
+                    <div className="pt-3 border-t border-gray-100">
+                      <RatePeriodLines compact row={rate} entity="accommodation" format={amount => formatRateInRowCurrency(amount, rate, formatRate)} />
                     </div>
                   </div>
 

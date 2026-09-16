@@ -24,6 +24,7 @@ const NEW_SHIP = '__new__'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import RatePeriodsImportExport from '@/app/components/RatePeriodsImportExport'
 import RateSeasonsEditor from '@/components/rates/RateSeasonsEditor'
+import RatePeriodLines, { pricedDoubles } from '@/components/rates/RatePeriodLines'
 import RateSupplementsPicker from '@/components/rates/RateSupplementsPicker'
 import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
 import { supplementsForRow, type RateSupplement } from '@/lib/rates/supplements'
@@ -738,7 +739,9 @@ export default function CruisesPage() {
     active: cruises.filter(c => c.is_active).length,
     preferred: cruises.filter(c => c.is_preferred).length,
     ships: new Set(cruises.map(c => c.ship_name)).size,
-    avgRate: averageRatesByCurrency(cruises, c => c.rate_double_eur, c => c.rate_currency)
+    // Every priced double across every period and both passport groups —
+    // not the first period's EU column alone.
+    avgRate: averageRatesByCurrency(pricedDoubles(cruises, 'cruise'), d => d.amount, d => d.currency)
   }
 
   // Hooks run before any early return: this page shows a spinner while it loads,
@@ -833,7 +836,7 @@ export default function CruisesPage() {
             <p className="text-2xl font-bold text-blue-600">{stats.ships}</p>
           </div>
           <div className="bg-white p-3 rounded-lg shadow-md border">
-            <p className="text-xs text-gray-600">{t('stats.avgDoubleRate')}</p>
+            <p className="text-xs text-gray-600">{tPeriods('avgDouble')}</p>
             <p className="text-2xl font-bold text-purple-600">{formatRateAverages(stats.avgRate, formatRate)}</p>
           </div>
         </div>
@@ -909,9 +912,7 @@ export default function CruisesPage() {
                   <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.nights')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.cabin')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.tier')}</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">{t('table.ppDouble')}</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">{t('table.singleSupp')}</th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold text-blue-800">{t('table.tripleRed')}</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">{tPeriods('periodsColumn')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.status')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.actions')}</th>
                 </tr>
@@ -958,15 +959,9 @@ export default function CruisesPage() {
                     <td className="px-4 py-3 text-center">
                       <TierBadge tier={cruise.tier} t={t} />
                     </td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-green-600">
-                      {/* Stored as cabin rates; shown the hotel way. */}
-                      {formatRateInRowCurrency(Math.max(0, (cruise.rate_single_eur || 0) - (cruise.rate_double_eur || 0)), cruise, formatRate)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-blue-600">
-                      {formatRateInRowCurrency(cruise.rate_double_eur, cruise, formatRate)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-purple-600">
-                      {cruise.rate_triple_eur ? formatRateInRowCurrency(Math.max(0, (cruise.rate_double_eur || 0) - cruise.rate_triple_eur), cruise, formatRate) : '-'}
+                    <td className="px-4 py-3">
+                      {/* Every period, one line each, as entered in the form. */}
+                      <RatePeriodLines row={cruise} entity="cruise" format={amount => formatRateInRowCurrency(amount, cruise, formatRate)} />
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${

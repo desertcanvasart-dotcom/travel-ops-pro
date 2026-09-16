@@ -25,7 +25,7 @@
 // carries at a blank rate — is an UNPRICED HOLE, never silently free.
 
 import { KEY_PATTERN } from '@/lib/vocabulary'
-import { ratesForTravelDate, seasonsForRow, SUPPLEMENT_FIELD, type RateSeasonEntity } from './rate-seasons'
+import { periodRatesFor, SUPPLEMENT_FIELD, type RateSeasonEntity } from './rate-seasons'
 
 export interface RateSupplement {
   key: string
@@ -101,13 +101,11 @@ export function resolveSupplementsForDate(
   keys: readonly string[]
 ): ResolvedSupplement[] {
   const carried = new Map(supplementsForRow(row).map(s => [s.key, s.name]))
-  // The night's own period; with no travel date, or a date no period covers,
-  // the FIRST period — the same one the base columns mirror for date-less
-  // readers (rate-seasons legacyColumnMirror), so a template priced without
-  // a departure date and a template priced with one agree on what a
-  // supplement costs at base.
-  const hit = ratesForTravelDate(row, entity, travelDate)
-  const rates: Record<string, number> = hit?.rates ?? seasonsForRow(row, entity)[0]?.rates ?? {}
+  // The night's own period; with no travel date, the FIRST period. A date no
+  // period covers has no price — the same rule as the room itself
+  // (rate-seasons periodRatesFor), so the supplement is a hole, not free and
+  // not borrowed from another season.
+  const rates: Record<string, number> = periodRatesFor(row, entity, travelDate)?.rates ?? {}
   const suffix: SupplementSuffix = isEurPassport ? 'eur' : 'non_eur'
   return keys.map(key => {
     const value = Number(rates[supplementField(key, suffix)])

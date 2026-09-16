@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { clientMessage } from '@/lib/api-errors'
-import { sanitizeSeasons, legacyColumnMirror } from '@/lib/rates/rate-seasons'
+import { sanitizeSeasons, legacyColumnMirror, datedPeriodCount, tooManyPeriodsMessage } from '@/lib/rates/rate-seasons'
 import { sanitizeSupplements } from '@/lib/rates/supplements'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
@@ -61,6 +61,8 @@ export async function POST(request: NextRequest) {
     // `seasons` is JSONB straight off the request, so it is validated rather
     // than spread through — and the first period is mirrored onto the base
     // columns for readers that have no travel date.
+    const periodLimit = tooManyPeriodsMessage(datedPeriodCount(body.seasons))
+    if (periodLimit) return NextResponse.json({ success: false, error: periodLimit }, { status: 400 })
     const cruiseSeasons = sanitizeSeasons(body.seasons, 'cruise')
 
     // Supplier-HAS-properties (Phase 1): link the rate to its ship, creating

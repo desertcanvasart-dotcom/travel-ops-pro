@@ -1,7 +1,7 @@
 // app/api/rates/cruises/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { sanitizeSeasons, legacyColumnMirror } from '@/lib/rates/rate-seasons'
+import { sanitizeSeasons, legacyColumnMirror, datedPeriodCount, tooManyPeriodsMessage } from '@/lib/rates/rate-seasons'
 import { sanitizeSupplements } from '@/lib/rates/supplements'
 import { createServerClient } from '@/lib/supabase-server'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
@@ -31,6 +31,8 @@ export async function PUT(
     // first period is mirrored onto the base columns for readers that have no
     // travel date.
     if ('seasons' in body) {
+      const periodLimit = tooManyPeriodsMessage(datedPeriodCount(body.seasons))
+      if (periodLimit) return NextResponse.json({ success: false, error: periodLimit }, { status: 400 })
       const cruiseSeasons = sanitizeSeasons(body.seasons, 'cruise')
       updateBody = {
         ...updateBody,

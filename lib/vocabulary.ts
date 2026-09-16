@@ -322,10 +322,10 @@ export const VOCABULARY_KIND_INFO: Record<VocabularyKind, VocabularyKindInfo> = 
     kind: 'rate_season',
     group: 'General',
     title: 'Rate seasons',
-    description: "The supplier's season a rate row is tagged with (a sleeper fare for peak season, an entrance fee for summer). A label only: the dates and the uplift you charge are the Demand calendar under Settings → Seasonal Premiums.",
-    usedIn: 'Attraction, sleeping-train and other rate rows; CSV import',
+    description: "Your own words for a supplier's season — Low, High, Peak, Summer, Winter, Christmas, New Year, Shoulder: whatever your contracts say. Each hotel and cruise rate period takes one (the dates on the period decide what it prices), and attraction and sleeping-train rows are tagged with one. A label only: the uplift you charge is the Demand calendar under Settings → Seasonal Premiums.",
+    usedIn: 'Hotel and cruise rate periods; attraction and sleeping-train rate rows; period and rate CSV import',
     minItems: 1,
-    example: 'All Year / Low Season / High Season / Peak Season',
+    example: 'Low Season / High Season / Christmas / New Year',
   },
   airline: {
     kind: 'airline',

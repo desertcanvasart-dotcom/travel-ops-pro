@@ -57,15 +57,18 @@ describe('days in transit', () => {
     expect((r.services ?? []).find((s: any) => s.id === 'day1-hotel')).toBeDefined()
   })
 
-  it('warns when a hotel has dated periods and none covers the night', async () => {
+  it('lists the night as No rate, naming the date, when a hotel has dated periods and none covers it', async () => {
     const t = fullRateTables() as any
     for (const row of t.accommodation_rates) {
       row.seasons = [{ name: 'Summer', from: '2026-05-01', to: '2026-10-31', rates: { pp_double_eur: 999, pp_double_non_eur: 999 } }]
     }
     setMockTables(t)
     const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-11-03' })
-    expect(r.warnings.some((w: string) => /No rate period on .* covers 2026-11-03/.test(w))).toBe(true)
-    // …and the base rate, not the summer one, priced the night
-    expect((r.services ?? []).find((s: any) => s.id === 'day1-hotel')?.unitCost).toBe(95)
+    const night = (r.services ?? []).find((s: any) => s.id === 'day1-hotel')
+    // Neither the summer rate nor the base columns (95) price it: there is
+    // no default period (operator, 2026-09-16).
+    expect(night?.unitCost).toBe(0)
+    expect(night?.unpriced).toBe(true)
+    expect(night?.issue).toMatch(/rate periods covers 2026-11-03/)
   })
 })

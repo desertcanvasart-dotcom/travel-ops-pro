@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { sanitizeSeasons, legacyColumnMirror } from '@/lib/rates/rate-seasons'
+import { sanitizeSeasons, legacyColumnMirror, datedPeriodCount, tooManyPeriodsMessage } from '@/lib/rates/rate-seasons'
 import { sanitizeSupplements } from '@/lib/rates/supplements'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
@@ -46,6 +46,8 @@ export async function PUT(
     const body = await request.json()
     // A malformed periods payload reads as "no periods" and the row keeps
     // pricing off its base columns — never a 500 on a rate save.
+    const periodLimit = tooManyPeriodsMessage(datedPeriodCount(body.seasons))
+    if (periodLimit) return NextResponse.json({ success: false, error: periodLimit }, { status: 400 })
     const hotelSeasons = sanitizeSeasons(body.seasons, 'accommodation')
 
     const supplierCheck = await validateAndResolveSupplierFields(body, supabaseAdmin)

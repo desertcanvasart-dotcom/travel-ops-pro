@@ -43,7 +43,7 @@ import type { PricingHole } from '@/lib/pricing-types'
 import { priceAcrossPax } from '@/lib/pricing/pax-range'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { sortByItineraryFlow } from '@/lib/pricing/breakdown-order'
-import { ratesForTravelDate } from '@/lib/rates/rate-seasons'
+import { periodRatesFor, plainPeriodName as seasonNameOf } from '@/lib/rates/rate-seasons'
 import { resolveSupplementsForDate, sanitizeSupplementKeys } from '@/lib/rates/supplements'
 import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
 import { tripAccommodationCost, type NightRates } from '@/lib/pricing/rooming'
@@ -1299,18 +1299,19 @@ type HotelOrCruiseRow = Record<string, unknown>
 // so an itinerary spanning a season boundary prices each night at its own
 // period instead of one rate for the whole stay.
 //
-// No date, or a date outside every period, falls back to the row's base
-// columns — the historical behaviour, and the only behaviour available for
-// rows with no periods entered.
+// No date prices at the FIRST period. A date outside every period has NO
+// rate — `outsidePeriods` comes back true and the caller lists the night as
+// an unpriced hole naming the date (lib/rates/rate-seasons periodRatesFor).
+// Only a row with no periods at all reads its base columns.
 
 /** Per-person-per-night double rate and single supplement for one night. */
 export function resolveHotelRatesForDate(
   row: HotelOrCruiseRow,
   isEurPassport: boolean,
   travelDate?: string | null
-): { ppdNight: number; singleSuppNight: number; tripleRedNight: number; seasonName: string | null } {
+): { ppdNight: number; singleSuppNight: number; tripleRedNight: number; seasonName: string | null; outsidePeriods: boolean } {
   const suffix = isEurPassport ? 'eur' : 'non_eur'
-  const hit = ratesForTravelDate(row, 'accommodation', travelDate)
+  const hit = periodRatesFor(row, 'accommodation', travelDate)
   const ppd = hit ? hit.rates[`pp_double_${suffix}`] : (row[`pp_double_${suffix}`] || 0)
   const supp = hit ? hit.rates[`single_supp_${suffix}`] : (row[`single_supp_${suffix}`] || 0)
   const red = hit ? hit.rates[`triple_red_${suffix}`] : (row[`triple_red_${suffix}`] || 0)
@@ -1320,7 +1321,8 @@ export function resolveHotelRatesForDate(
     singleSuppNight: Math.max(0, Number(supp) || 0),
     // Reduction per person in a triple (lib/pricing/rooming.ts).
     tripleRedNight: Math.max(0, Number(red) || 0),
-    seasonName: hit?.season.name ?? null,
+    seasonName: hit?.season ? seasonNameOf(hit.season) : null,
+    outsidePeriods: hit?.outside ?? false,
   }
 }
 
@@ -1334,7 +1336,7 @@ export function resolveGuideBedRateForDate(
   entity: 'accommodation' | 'cruise',
   travelDate?: string | null
 ): number {
-  const hit = ratesForTravelDate(row, entity, travelDate)
+  const hit = periodRatesFor(row, entity, travelDate)
   return Number(hit?.rates.guide_rate) || 0
 }
 
@@ -1345,9 +1347,9 @@ export function resolveCruiseRatesForDate(
   row: HotelOrCruiseRow,
   isEurPassport: boolean,
   travelDate?: string | null
-): { ppdNight: number; singleSuppNight: number; tripleRedNight: number; seasonName: string | null } {
+): { ppdNight: number; singleSuppNight: number; tripleRedNight: number; seasonName: string | null; outsidePeriods: boolean } {
   const suffix = isEurPassport ? 'eur' : 'non_eur'
-  const hit = ratesForTravelDate(row, 'cruise', travelDate)
+  const hit = periodRatesFor(row, 'cruise', travelDate)
   // The legacy flat columns are EUR-only, so a non-EUR passport on a row with
   // no periods falls back to the seasonal low columns before the flat ones.
   const double = hit
@@ -1367,7 +1369,8 @@ export function resolveCruiseRatesForDate(
     // against the double. A triple rate of 0 means "no triple cabin" — no
     // reduction, not a free cabin.
     tripleRedNight: (Number(triple) || 0) > 0 ? Math.max(0, dbl - (Number(triple) || 0)) : 0,
-    seasonName: hit?.season.name ?? null,
+    seasonName: hit?.season ? seasonNameOf(hit.season) : null,
+    outsidePeriods: hit?.outside ?? false,
   }
 }
 
@@ -2990,19 +2993,13 @@ export async function calculateDayBasedPricing(
   // takes the reduction. The per-person lines stay per-person-in-double.
   const accommodationNights: NightRates[] = []
 
-  // A hotel or ship with dated periods that none of covers this night is
-  // priced from its base columns — which may be last year's, or zero. Say
-  // so once per property: the Al Farida's only period ended 31 Oct and a
-  // 3 Nov sailing priced silently from the base row (2026-09-03).
-  const noPeriodWarned = new Set<string>()
+  // A night that none of a hotel's or ship's dated periods covers has NO
+  // rate: it is listed as unpriced, naming the date. It used to price from
+  // the base columns (a copy of the first period) with only a warning — the
+  // Al Farida's only period ended 31 Oct and a 3 Nov sailing priced silently
+  // from it (2026-09-03). There is no default period (operator, 2026-09-16).
   // One guide-bed hole per property, not one per night.
   const guideBedHoleNamed = new Set<string>()
-  const warnIfNoPeriod = (row: { seasons?: unknown } | null | undefined, seasonName: string | null, name: string, date: string | null | undefined) => {
-    const periods = Array.isArray(row?.seasons) ? row!.seasons as unknown[] : []
-    if (periods.length === 0 || seasonName || noPeriodWarned.has(name)) return
-    noPeriodWarned.add(name)
-    warnings.push(`No rate period on ${name} covers ${date ?? 'the travel date'} — priced from its base rate. Add the period in Rates.`)
-  }
 
   // Hotel PPD — use overnight_city for day trips (e.g., Alexandria day trip sleeps in Cairo)
   for (const day of hotelDays) {
@@ -3013,7 +3010,6 @@ export async function calculateDayBasedPricing(
       const nightly = resolveHotelRatesForDate(
         hotelRate.row, isEurPassport, dateForDay(day.day)
       )
-      warnIfNoPeriod(hotelRate.row, nightly.seasonName, hotelRate.hotelName, dateForDay(day.day))
       if (nightly.ppdNight > 0) {
         accommodationNights.push({ ppd: nightly.ppdNight, singleSupp: nightly.singleSuppNight, tripleRed: nightly.tripleRedNight })
         accommodationPPD += nightly.ppdNight
@@ -3044,7 +3040,9 @@ export async function calculateDayBasedPricing(
           dayNumber: day.day,
           city: hotelCity,
           lookupAttempted: `accommodation_rates ${hotelRate.hotelName} pp_double ${dateForDay(day.day) ?? 'base'}`,
-          message: `${hotelRate.hotelName} has no per-person double rate for ${dateForDay(day.day) ?? 'this night'}. Fill it in Rates → Hotels.`,
+          message: nightly.outsidePeriods
+            ? `None of ${hotelRate.hotelName}'s rate periods covers ${dateForDay(day.day)}. Add a period for that date in Rates → Hotels.`
+            : `${hotelRate.hotelName} has no per-person double rate for ${dateForDay(day.day) ?? 'this night'}. Fill it in Rates → Hotels.`,
         })
       }
 
@@ -3139,9 +3137,7 @@ export async function calculateDayBasedPricing(
   // into peak is not billed at the rate of the night it embarked.
   if (cruiseRates && cruiseNights > 0) {
     const nightly = cruiseDays.map(day => {
-      const n = resolveCruiseRatesForDate(cruiseRates.row, isEurPassport, dateForDay(day.day))
-      warnIfNoPeriod(cruiseRates.row, n.seasonName, cruiseRates.shipName, dateForDay(day.day))
-      return n
+      return resolveCruiseRatesForDate(cruiseRates.row, isEurPassport, dateForDay(day.day))
     })
     // One line per night, each on its own day. This was a single line for the
     // whole sailing parked on the first cruise day, so a four-night cruise
@@ -3175,7 +3171,9 @@ export async function calculateDayBasedPricing(
         })
         return
       }
-      const message = `${cruiseRates.shipName} has no per-person double cabin rate for ${dateForDay(day.day) ?? 'this night'}. Fill it in Rates → Cruises.`
+      const message = n.outsidePeriods
+        ? `None of ${cruiseRates.shipName}'s rate periods covers ${dateForDay(day.day)}. Add a period for that date in Rates → Cruises.`
+        : `${cruiseRates.shipName} has no per-person double cabin rate for ${dateForDay(day.day) ?? 'this night'}. Fill it in Rates → Cruises.`
       if (!cruiseNightHoleAdded) {
         cruiseNightHoleAdded = true
         listUnpriced(line, {

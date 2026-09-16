@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
+  MAX_RATE_PERIODS,
+  datedPeriodCount,
+  periodRatesFor,
+  periodTitle,
+  tooManyPeriodsMessage,
   sanitizeSeasons,
   seasonForTravelDate,
   seasonsForRow,
@@ -253,5 +258,50 @@ describe('editor warnings', () => {
       period('Christmas', '2026-12-20', '2027-01-05', 140),
     ]
     expect(seasonGaps(seasons)).toEqual([])
+  })
+})
+
+// ── Season words, the six-period limit, and no default period ────────────
+// Operator, 2026-09-16: periods take the agency's own season word, a rate
+// carries at most six, and "the default period is confusing" — a date no
+// period covers has no rate.
+describe('season word, limit and periodRatesFor', () => {
+  const p = (from: string, to: string, extra: Record<string, unknown> = {}) =>
+    ({ name: '', from, to, rates: { pp_double_eur: 100 }, ...extra })
+
+  it('keeps a vocabulary season key and drops anything that is not a key', () => {
+    const out = sanitizeSeasons([
+      p('2026-01-01', '2026-03-31', { season: 'low_season' }),
+      p('2026-04-01', '2026-06-30', { season: 'Not A Key!' }),
+    ], 'accommodation')!
+    expect(out[0].season).toBe('low_season')
+    expect(out[0].name).toBe('')
+    expect(out[1].season).toBeUndefined()
+    expect(out[1].name).toBe('2026-04-01 – 2026-06-30')
+  })
+
+  it('counts only dated rows toward the limit, and names the limit when over it', () => {
+    const rows = Array.from({ length: 6 }, (_, i) => p(`2026-0${i + 1}-01`, `2026-0${i + 1}-10`))
+    expect(datedPeriodCount([...rows, { name: 'half-typed', from: '', to: '' }])).toBe(6)
+    expect(tooManyPeriodsMessage(6)).toBeNull()
+    expect(tooManyPeriodsMessage(7)).toMatch(/at most 6/)
+    expect(MAX_RATE_PERIODS).toBe(6)
+  })
+
+  it('titles a period by its season word, then its free text', () => {
+    const label = (k: string) => ({ high_season: 'High Season' } as Record<string, string>)[k] ?? k
+    expect(periodTitle({ name: '2026', season: 'high_season' }, label, 'Period 1')).toBe('High Season · 2026')
+    expect(periodTitle({ name: '', season: 'high_season' }, label, 'Period 1')).toBe('High Season')
+    expect(periodTitle({ name: 'high season' , season: 'high_season' }, label, 'Period 1')).toBe('High Season')
+    expect(periodTitle({ name: '' }, label, 'Period 1')).toBe('Period 1')
+  })
+
+  it('no date → the first period; a covered date → its period; an uncovered date → outside, no rates', () => {
+    const row = { pp_double_eur: 70, seasons: [p('2026-01-01', '2026-03-31'), p('2026-04-01', '2026-06-30', { rates: { pp_double_eur: 150 } })] }
+    expect(periodRatesFor(row, 'accommodation', null)).toMatchObject({ outside: false, rates: { pp_double_eur: 100 } })
+    expect(periodRatesFor(row, 'accommodation', '2026-05-05')).toMatchObject({ outside: false, rates: { pp_double_eur: 150 } })
+    expect(periodRatesFor(row, 'accommodation', '2026-09-01')).toEqual({ season: null, rates: {}, outside: true })
+    // A row with no periods at all is the caller's to read from its columns.
+    expect(periodRatesFor({ pp_double_eur: 70 }, 'accommodation', '2026-09-01')).toBeNull()
   })
 })
