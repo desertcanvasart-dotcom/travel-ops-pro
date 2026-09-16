@@ -4939,7 +4939,7 @@
     "ratePeriods": {
       "title": "Rate periods",
       "titleWithCurrency": "Rate periods ({currency})",
-      "help": "One period per dated block on the contract, each with its own rates — up to 6. A departure is priced at the period its dates fall in; a date no period covers has no rate.",
+      "help": "One period per dated block on the contract, each with its own rates — up to 6. A departure is priced at the period its dates fall in; dates outside every period have no rate.",
       "count": "{count, plural, =0 {no periods} =1 {1 period} other {# periods}}",
       "empty": "No periods yet. Add one for each dated block on the supplier's contract.",
       "addPeriod": "Add period",
