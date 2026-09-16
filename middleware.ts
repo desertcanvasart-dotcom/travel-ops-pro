@@ -214,6 +214,7 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
           .select('org_id, role, created_at')
           .eq('user_id', userId)
           .order('created_at', { ascending: true })
+          .order('org_id', { ascending: true })
         // The role IN THE ACTIVE WORKSPACE — the same rule getCurrentOrgId()
         // applies to scope the route's data (lib/auth/active-org.ts). This
         // used to take the oldest membership's role regardless of the
@@ -222,7 +223,7 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
         // there: the data was scoped to the workspace they chose, the role
         // was read from the one they did not.
         return pickActiveMembership(
-          (data ?? []) as { org_id: string; role: string }[],
+          (data ?? []) as { org_id: string; role: string; created_at: string | null }[],
           request.cookies.get(ACTIVE_ORG_COOKIE)?.value,
         )?.role ?? null
       })()

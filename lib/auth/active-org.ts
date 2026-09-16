@@ -18,13 +18,41 @@
 // oldest membership, which is what every single-workspace user has always had.
 export const ACTIVE_ORG_COOKIE = 'active_org_id'
 
+/** A membership, as much of one as the rule needs. */
+export interface OrderableMembership {
+  org_id: string
+  /** When the person joined. NOT unique: two memberships written in one
+   *  transaction share it to the microsecond. */
+  created_at?: string | null
+}
+
+/**
+ * Oldest first, org_id breaking ties.
+ *
+ * The tie-break is the whole point. `created_at` is not unique, and an SQL
+ * ORDER BY on a non-unique column alone may return equal rows in any order —
+ * so middleware and getCurrentOrgId(), which issue SEPARATE queries, could
+ * each take a different "first" membership. Middleware would then authorise
+ * with one workspace's role while the route scoped its service-role reads and
+ * writes to another: the same divergence pickActiveMembership exists to stop,
+ * reached by a different road.
+ */
+export function byOldestMembership(a: OrderableMembership, b: OrderableMembership): number {
+  const at = a.created_at ?? ''
+  const bt = b.created_at ?? ''
+  if (at !== bt) return at < bt ? -1 : 1
+  return a.org_id < b.org_id ? -1 : a.org_id > b.org_id ? 1 : 0
+}
+
 /**
  * The membership a request acts under.
  *
- * @param memberships this person's memberships, OLDEST FIRST
+ * @param memberships this person's memberships, in ANY order — the rule sorts
+ *   them itself, so no caller can make two layers disagree by querying
+ *   differently
  * @param requestedOrgId the active-org cookie, if any
  */
-export function pickActiveMembership<T extends { org_id: string }>(
+export function pickActiveMembership<T extends OrderableMembership>(
   memberships: readonly T[],
   requestedOrgId: string | null | undefined,
 ): T | null {
@@ -32,5 +60,5 @@ export function pickActiveMembership<T extends { org_id: string }>(
     const chosen = memberships.find(m => m.org_id === requestedOrgId)
     if (chosen) return chosen
   }
-  return memberships[0] ?? null
+  return [...memberships].sort(byOldestMembership)[0] ?? null
 }
