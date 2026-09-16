@@ -40,6 +40,16 @@ export function knownAirportCode(city: string | null | undefined): string | null
   return AIRPORT_CODES[String(city ?? '').trim().toLowerCase()] ?? null
 }
 
+/** The airport a typed route end names: a city on file, or a typed
+ *  three-letter code (NRT). null = no airport — priced as a hole naming the
+ *  place, never as Cairo (Greptile on #458). */
+export function routeAirportCode(place: string | null | undefined): string | null {
+  const known = knownAirportCode(place)
+  if (known) return known
+  const typed = String(place ?? '').trim()
+  return /^[A-Za-z]{3}$/.test(typed) ? typed.toUpperCase() : null
+}
+
 const place = (v: unknown): string | undefined => {
   const s = typeof v === 'string' ? v.trim().slice(0, 80) : ''
   return s || undefined
@@ -61,8 +71,8 @@ export function sanitizeLegAssist(v: unknown): LegAssist | undefined {
 /**
  * Whether each end of a FLIGHT leg gets assistance.
  *
- * On the arrival day — the first day in the destination, after nothing or a
- * night in the air — the party is met where the international flight lands
+ * On the arrival day — the first day on the ground (the first day not spent
+ * in the air), the SAME rule in the day editor and in pricing — the party is met where the international flight lands
  * (the leg's departure airport, already the day's Meet & Greet) and again at
  * the connection's destination: both default ON. On any other flight day
  * both default OFF, which is what every existing programme priced. A day

@@ -28,7 +28,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Plane, TrainFront, MoonStar, Car } from 'lucide-react'
-import { knownAirportCode, legAssistance, type LegAssist } from '@/lib/pricing/flight-leg'
+import { legAssistance, routeAirportCode, type LegAssist } from '@/lib/pricing/flight-leg'
 
 export type TravelLegMode = 'ground' | 'flight' | 'train' | 'sleeping_train'
 
@@ -223,12 +223,12 @@ export default function TravelLegPicker({ mode, rateId, road, prevCity, city, ne
           <label className="flex items-center gap-1">
             <input type="checkbox" checked={assist.from} disabled={disabled} onChange={e => setAssist('from', e.target.checked)} />
             {isArrivalDay
-              ? t('assistArrivalMeet', { airport: knownAirportCode(from) ?? from })
-              : t('assistDeparture', { airport: knownAirportCode(from) ?? from })}
+              ? t('assistArrivalMeet', { airport: routeAirportCode(from) ?? from })
+              : t('assistDeparture', { airport: routeAirportCode(from) ?? from })}
           </label>
           <label className="flex items-center gap-1">
             <input type="checkbox" checked={assist.to} disabled={disabled} onChange={e => setAssist('to', e.target.checked)} />
-            {t('assistArrival', { airport: knownAirportCode(to) ?? to })}
+            {t('assistArrival', { airport: routeAirportCode(to) ?? to })}
           </label>
         </div>
       )}

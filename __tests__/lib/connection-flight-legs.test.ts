@@ -94,6 +94,41 @@ describe('the arrival transfer after an overnight flight (was missing)', () => {
   })
 })
 
+describe('review fixes (Greptile on #458)', () => {
+  const day2 = {
+    day: 2, title: 'Nile Cruise', city: 'Nile Cruise', accommodation_type: 'cruise', is_cruise_day: true,
+    transport_type: 'flight', leg_from: 'Cairo', leg_to: 'Luxor', attractions: [], meals: {}, services: {},
+  }
+  const last = { day: 3, title: 'Departure', city: 'Luxor', accommodation_type: 'none', attractions: [], meals: {}, services: {} }
+
+  it('a route end with no airport on file is a hole naming it, never Cairo; a typed code is used as-is', async () => {
+    const { routeAirportCode } = await import('@/lib/pricing/flight-leg')
+    expect(routeAirportCode('Luxor')).toBe('LXR')
+    expect(routeAirportCode('nrt')).toBe('NRT')
+    expect(routeAirportCode('Nile Cruise')).toBeNull()
+    const t = tables([inTheAir, { ...day2, leg_to: 'Kom Ombo' }, last])
+    t.flight_rates.push({ ...t.flight_rates[0], id: 'fl-cai-kom', route_to: 'Kom Ombo' })
+    setMockTables(t)
+    const leg = onDay(await calculateAutoPricing(BASE), 2).find((s: any) => s.id === 'day2-airport-leg-to')
+    expect(leg).toMatchObject({ unpriced: true })
+    expect(leg.issue).toMatch(/No airport on file for "Kom Ombo"/)
+  })
+
+  it('the arrival day is the first day on the ground whatever the package: ticked assistance prices without the airport_arrival flag', async () => {
+    // services: {} and a template that is not full-package can leave the flag unset.
+    setMockTables(tables([inTheAir, day2, last]))
+    const ids = onDay(await calculateAutoPricing({ ...BASE, packageType: 'land-package' } as never), 2).map((s: any) => s.id)
+    expect(ids).toContain('day2-airport-leg-to')
+    expect(ids).toContain('day2-airport-arrival')
+  })
+
+  it('the day editor uses the same arrival-day rule', async () => {
+    const { readFileSync } = await import('node:fs')
+    expect(readFileSync('app/b2b/calculator/[id]/page.tsx', 'utf8')).toContain('isArrivalDay={index === editableDays.findIndex(d => d.in_transit !== true)}')
+    expect(readFileSync('lib/auto-pricing-service.ts', 'utf8')).toContain('const firstGroundedIndex = itinerary.findIndex(d => d.in_transit !== true)')
+  })
+})
+
 describe('a mid-trip flight keeps today\'s price unless assistance is asked for', () => {
   const trip = (assist?: { from?: boolean; to?: boolean }) => [
     { day: 1, title: 'Cairo', city: 'Cairo', accommodation_type: 'hotel', attractions: [], meals: {}, services: {} },

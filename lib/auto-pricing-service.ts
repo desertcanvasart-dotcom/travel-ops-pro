@@ -47,7 +47,7 @@ import { periodRatesFor, plainPeriodName as seasonNameOf } from '@/lib/rates/rat
 import { cruiseCandidates, hotelCandidates, propertyById } from '@/lib/pricing/property-candidates'
 import { choicesForTier, sanitizePropertyChoice } from '@/lib/pricing/property-choice'
 import { durationFor, isRoadTransfer, isSightseeing, sanitizeTransportLines, type TransportLine } from '@/lib/pricing/transport-lines'
-import { getAirportCode, legAssistance, sanitizeLegAssist, sanitizeLegPlace, type LegAssist } from '@/lib/pricing/flight-leg'
+import { getAirportCode, legAssistance, routeAirportCode, sanitizeLegAssist, sanitizeLegPlace, type LegAssist } from '@/lib/pricing/flight-leg'
 import { resolveSupplementsForDate, sanitizeSupplementKeys } from '@/lib/rates/supplements'
 import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
 import { tripAccommodationCost, type NightRates } from '@/lib/pricing/rooming'
@@ -2949,22 +2949,39 @@ export async function calculateDayBasedPricing(
     // the party is met where the international flight lands — the leg's
     // origin — and, by default, again at the connection's destination.
     const flightLeg = ticketLegs.find(l => l.day === day.day && l.mode === 'flight')
-    const isArrivalDay = Boolean(day.services.airport_arrival) && (i === 0 || itinerary[i - 1]?.in_transit === true)
+    // The first day on the ground — exactly what the day editor shows as the
+    // arrival day, so its ticked assistance is what prices (Greptile on #458).
+    const firstGroundedIndex = itinerary.findIndex(d => d.in_transit !== true)
+    const isArrivalDay = i === firstGroundedIndex
     const legAssist = flightLeg ? legAssistance(day.leg_assist, isArrivalDay) : { from: false, to: false }
-    // The arrival Meet & Greet IS the origin-end assistance on a connection
-    // day, so turning that end off removes it.
-    const meetOnArrival = day.services.airport_arrival && !(flightLeg && isArrivalDay && !legAssist.from)
-    const assistLine = (code: string, direction: 'arrival' | 'departure', id: string, name: string) => {
+    // On an arrival-day flight the origin-end assistance IS the Meet & Greet
+    // where the international flight lands: the checkbox decides it. Every
+    // other day keeps the airport_arrival flag.
+    const connectionArrival = Boolean(flightLeg && isArrivalDay)
+    const meetOnArrival = connectionArrival ? legAssist.from : day.services.airport_arrival
+    const assistLine = (place: string, direction: 'arrival' | 'departure', id: string, name: (code: string) => string) => {
+      const code = routeAirportCode(place)
+      if (!code) {
+        listUnpriced({ id, dayNumber: day.day, serviceType: 'airport_service', serviceName: name(place), isPerPax: false }, {
+          kind: 'airport_service',
+          reason: 'missing',
+          dayNumber: day.day,
+          city: place,
+          lookupAttempted: `airport code for "${place}"`,
+          message: `No airport on file for "${place}". Use a city with an airport (Cairo, Luxor, Aswan…) or its three-letter code in the day's route.`,
+        })
+        return
+      }
       const found = resolveAirportServiceRate(code, direction)
       if (found.rate != null) {
         fixedCosts += found.rate
         services.push({
-          id, dayNumber: day.day, serviceType: 'airport_service', serviceName: name,
+          id, dayNumber: day.day, serviceType: 'airport_service', serviceName: name(code),
           quantity: 1, quantityMode: 'fixed', unitCost: found.rate, lineTotal: found.rate,
           rateSource: 'airport_staff_rates', isPerPax: false, isOptional: false,
         })
       } else {
-        listUnpriced({ id, dayNumber: day.day, serviceType: 'airport_service', serviceName: name, isPerPax: false }, {
+        listUnpriced({ id, dayNumber: day.day, serviceType: 'airport_service', serviceName: name(code), isPerPax: false }, {
           kind: 'airport_service',
           reason: found.rowExists ? 'unpriced' : 'missing',
           dayNumber: day.day,
@@ -2977,17 +2994,19 @@ export async function calculateDayBasedPricing(
       }
     }
     if (flightLeg && legAssist.from && !isArrivalDay) {
-      const code = getAirportCode(flightLeg.from)
-      assistLine(code, 'departure', `day${day.day}-airport-leg-from`, `Airport Departure Assistance (${code}) — ${flightLeg.from} → ${flightLeg.to}`)
+      assistLine(flightLeg.from, 'departure', `day${day.day}-airport-leg-from`, code => `Airport Departure Assistance (${code}) — ${flightLeg.from} → ${flightLeg.to}`)
     }
     if (flightLeg && legAssist.to) {
-      const code = getAirportCode(flightLeg.to)
-      assistLine(code, 'arrival', `day${day.day}-airport-leg-to`, `Airport Arrival Assistance (${code}) — ${flightLeg.from} → ${flightLeg.to}`)
+      assistLine(flightLeg.to, 'arrival', `day${day.day}-airport-leg-to`, code => `Airport Arrival Assistance (${code}) — ${flightLeg.from} → ${flightLeg.to}`)
+    }
+    if (connectionArrival && flightLeg && meetOnArrival && !routeAirportCode(flightLeg.from)) {
+      // Landed at a place with no airport on file: a hole naming it, not Cairo.
+      assistLine(flightLeg.from, 'arrival', `day${day.day}-airport-arrival`, code => `Airport Meet & Greet (${code})`)
     }
 
-    if (meetOnArrival) {
+    if (meetOnArrival && !(connectionArrival && flightLeg && !routeAirportCode(flightLeg.from))) {
       // Where the party lands: the connection's origin, else the day's city.
-      const airportCode = getAirportCode(flightLeg && isArrivalDay ? flightLeg.from : day.city)
+      const airportCode = connectionArrival && flightLeg ? routeAirportCode(flightLeg.from)! : getAirportCode(day.city)
       const found = resolveAirportServiceRate(airportCode, 'arrival')
       const rate = found.rate
       if (rate != null) {
