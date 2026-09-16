@@ -7285,7 +7285,9 @@
     "rateSheetIncompleteCsv": "未完成: 料金未設定のサービス{count}件は含まれていません",
     "saveIncompleteTitle": "未完成の見積りを保存しますか？",
     "saveIncompleteBody": "料金が設定されていないサービスが{count}件あるため、この見積りはその分だけ安くなっています。このまま保存しますか？",
-    "saveAnyway": "このまま保存"
+    "saveAnyway": "このまま保存",
+    "cruiseEmbark": "クルーズ乗船アシスト",
+    "cruiseDisembark": "クルーズ下船アシスト"
   },
   "bookings": {
     "title": "予約管理",
@@ -8141,6 +8143,24 @@
     "pickOne": "該当 {count} 件 — 列車を選択…",
     "auto": "自動",
     "noRate": "このルートの料金がありません。Rates で登録してください。",
-    "label": "移動手段"
+    "label": "移動手段",
+    "combo": {
+      "ground": {
+        "withRoad": "この日は車で移動します。",
+        "withoutRoad": "この日は車を使いません。"
+      },
+      "flight": {
+        "withRoad": "航空便と、発着両空港での送迎。",
+        "withoutRoad": "航空便のみ（空港送迎なし）。"
+      },
+      "train": {
+        "withRoad": "昼行列車と、発着両駅での送迎。",
+        "withoutRoad": "昼行列車のみ（駅送迎なし）。"
+      },
+      "sleeping_train": {
+        "withRoad": "寝台列車と、乗車駅・到着駅での送迎。",
+        "withoutRoad": "寝台列車のみ（駅送迎なし）。"
+      }
+    }
   }
 }
