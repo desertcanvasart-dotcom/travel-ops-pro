@@ -283,6 +283,10 @@ export interface PricedService {
   included?: boolean
   /** The operator-facing reason for an unpriced, included or unmatched line. */
   issue?: string
+  /** The hotel or ship a night line is for — carried onto the itinerary's
+   *  service row as supplier_name so the itinerary, PDF and share page can
+   *  name the overnight (lib/itineraries/overnight-property). */
+  propertyName?: string
 }
 
 // Complete pricing result
@@ -3126,6 +3130,7 @@ export async function calculateDayBasedPricing(
           dayNumber: day.day,
           serviceType: 'accommodation',
           serviceName: `Hotel - ${hotelRate.hotelName} (${hotelCity})`,
+          propertyName: hotelRate.hotelName,
           quantity: 1,
           quantityMode: 'per_pax',
           unitCost: nightly.ppdNight,
@@ -3273,6 +3278,7 @@ export async function calculateDayBasedPricing(
         serviceType: 'cruise',
         serviceName: `Nile Cruise - ${cruiseRates.shipName} (night ${k + 1} of ${cruiseNights})`,
         isPerPax: true,
+        propertyName: cruiseRates.shipName,
       }
       if (n.ppdNight > 0) {
         accommodationNights.push({ ppd: n.ppdNight, singleSupp: n.singleSuppNight, tripleRed: n.tripleRedNight })

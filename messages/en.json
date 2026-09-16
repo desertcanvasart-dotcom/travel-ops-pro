@@ -1411,7 +1411,9 @@
       "gapOnDay": "Day {day}: {name}",
       "noCost": "No cost",
       "continueAnyway": "Send anyway",
-      "sendIncompleteConfirm": "This itinerary has {count, plural, one {# service} other {# services}} with no cost ({services}), so the client will see a total that leaves them out. Send anyway?"
+      "sendIncompleteConfirm": "This itinerary has {count, plural, one {# service} other {# services}} with no cost ({services}), so the client will see a total that leaves them out. Send anyway?",
+      "overnightAt": "Overnight at {place}",
+      "aboardShip": "Aboard {name}"
     },
     "editAction": "Edit",
     "share": {

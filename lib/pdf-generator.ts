@@ -3,6 +3,7 @@
 // File: lib/pdf-generator.ts
 // ============================================
 
+import { overnightLabel, overnightProperty } from '@/lib/itineraries/overnight-property'
 import { jsPDF } from 'jspdf'
 import { loadJapaneseFont, pickFontFamily } from './pdf-fonts'
 import { formatMoney } from '@/lib/currency-totals'
@@ -20,6 +21,8 @@ interface Service {
   rate_non_eur?: number
   total_cost: number
   notes?: string
+  service_code?: string | null
+  supplier_name?: string | null
 }
 
 interface DayWithServices {
@@ -437,10 +440,12 @@ export async function generateItineraryPDF(
         labels.dayN(day.day_number || 0),
         formatShortDate(day.date, locale),
         cleanDayTitle(day.title, day.day_number) || day.city || '',
-        day.overnight_city || ''
+        // The hotel or ship, not just the city (operator, 2026-09-17).
+        overnightLabel(overnightProperty(day.services), day.overnight_city)
       ])
       
-      yPos = drawTable(doc, yPos, [labels.day, labels.date, labels.activities, labels.overnight], daysData, [20, 25, 90, 45], margin, fontFamily)
+      // Overnight widened for property names; the row total is unchanged.
+      yPos = drawTable(doc, yPos, [labels.day, labels.date, labels.activities, labels.overnight], daysData, [20, 25, 72, 63], margin, fontFamily)
       
       yPos += 5
     }

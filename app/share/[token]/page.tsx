@@ -73,7 +73,9 @@ const loadShare = cache(async function loadShare(
 
   const [{ data: itinerary }, { data: days }, { data: org }, lines] = await Promise.all([
     supabase.from('itineraries').select('*').eq('id', share.itinerary_id).maybeSingle(),
-    supabase.from('itinerary_days').select('*').eq('itinerary_id', share.itinerary_id),
+    // The day's service lines ride along ONLY so toClientItinerary can name
+    // the night's hotel or ship; it copies the name and nothing else.
+    supabase.from('itinerary_days').select('*, services:itinerary_services(service_type, service_code, service_name, supplier_name)').eq('itinerary_id', share.itinerary_id),
     supabase
       .from('organizations')
       .select('name, logo_url, primary_color, contact_email, company_phone, company_website')
@@ -276,7 +278,9 @@ export default async function SharedItineraryPage({
                     {day.airportDeparture && <span>🛫 {day.airportDeparture}</span>}
                     {day.lunchIncluded && <span>🍽 Lunch included</span>}
                     {day.dinnerIncluded && <span>🌙 Dinner included</span>}
-                    {day.hotelIncluded && <span>🏨 Hotel included</span>}
+                    {day.overnightProperty
+                      ? <span data-testid="share-overnight">{day.overnightProperty.kind === 'cruise' ? '🚢 Aboard' : '🏨 Overnight at'} {day.overnightProperty.name}</span>
+                      : day.hotelIncluded && <span>🏨 Hotel included</span>}
                   </div>
                 </div>
               </li>

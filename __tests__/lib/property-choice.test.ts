@@ -98,6 +98,8 @@ describe('pricing follows the choice', () => {
     expect(line.serviceName).toBe('Hotel - Cairo Standard Hotel (Cairo)')
     expect(line.unitCost).toBe(95)
     expect(line.notes).toMatch(/^Chosen on the day/)
+    // Carried onto the quote line, so the itinerary can name the overnight.
+    expect(line.propertyName).toBe('Cairo Standard Hotel')
   })
 
   it('a choice made for ANOTHER tier does not apply', async () => {

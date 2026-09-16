@@ -1,5 +1,6 @@
 'use client'
 
+import { overnightLabel, overnightProperty } from '@/lib/itineraries/overnight-property'
 import { todayLocal } from '@/lib/today'
 import { useEffect, useState, useMemo } from 'react'
 import { formatMoney } from '@/lib/currency-totals'
@@ -91,6 +92,8 @@ interface Service {
   rate_non_eur: number
   total_cost: number
   notes: string
+  service_code?: string | null
+  supplier_name?: string | null
 }
 
 interface DayWithServices extends ItineraryDay {
@@ -1872,7 +1875,23 @@ export default function ViewItineraryPage() {
                   ) : (
                     <div className="text-center py-6 text-gray-500"><p className="text-sm">{t('noServicesAdded')}</p></div>
                   )}
-                  {day.overnight_city && <div className="mt-3 pt-3 border-t border-gray-200"><p className="text-xs text-gray-600">🌙 {t('overnightIn', { city: day.overnight_city })}</p></div>}
+                  {(() => {
+                    // The hotel or ship the night is at, read off the day's own
+                    // accommodation line (lib/itineraries/overnight-property).
+                    const property = overnightProperty(day.services)
+                    if (!property && !day.overnight_city) return null
+                    return (
+                      <div className="mt-3 pt-3 border-t border-gray-200" data-testid="day-overnight">
+                        <p className="text-xs text-gray-600">
+                          {property?.kind === 'cruise'
+                            ? `🚢 ${t('aboardShip', { name: property.name })}`
+                            : property
+                              ? `🏨 ${t('overnightAt', { place: overnightLabel(property, day.overnight_city) })}`
+                              : `🌙 ${t('overnightIn', { city: day.overnight_city })}`}
+                        </p>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
             </div>

@@ -1838,7 +1838,9 @@
       "gapOnDay": "{day}日目: {name}",
       "noCost": "費用未入力",
       "continueAnyway": "このまま送信",
-      "sendIncompleteConfirm": "この旅程には費用未入力のサービスが{count}件あります（{services}）。お客様にはそれらを含まない合計が表示されます。このまま送信しますか？"
+      "sendIncompleteConfirm": "この旅程には費用未入力のサービスが{count}件あります（{services}）。お客様にはそれらを含まない合計が表示されます。このまま送信しますか？",
+      "overnightAt": "宿泊: {place}",
+      "aboardShip": "乗船: {name}"
     },
     "editAction": "編集",
     "share": {

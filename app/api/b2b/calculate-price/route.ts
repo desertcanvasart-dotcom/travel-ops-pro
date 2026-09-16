@@ -74,6 +74,8 @@ interface CalculatedService {
   included?: boolean
   /** Why the line is unpriced, included, or unmatched. */
   issue?: string
+  /** The hotel or ship a night line is for. */
+  property_name?: string
 }
 
 interface PriceCalculationResult {
@@ -618,6 +620,7 @@ export async function POST(request: NextRequest) {
         ...(s.unpriced ? { unpriced: true } : {}),
         ...(s.included ? { included: true } : {}),
         ...(s.issue ? { issue: s.issue } : {}),
+        ...(s.propertyName ? { property_name: s.propertyName } : {}),
       }))
 
       // The per-person accommodation lines are per-person-in-double. A solo
