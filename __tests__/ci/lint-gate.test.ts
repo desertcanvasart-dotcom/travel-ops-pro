@@ -25,6 +25,78 @@ const config = readFileSync(join(ROOT, 'eslint.config.mjs'), 'utf8')
  *  comments legitimately quote the old numbers to explain the history. */
 const ciSteps = ci.split('\n').filter(l => !l.trim().startsWith('#')).join('\n')
 
+/**
+ * The complete YAML step that contains `needle` — every key of it, in any
+ * order.
+ *
+ * The check here used to start at `npm run lint` and read 200 characters
+ * forward, which only ever saw the keys written BELOW `run:`. YAML mapping
+ * keys are unordered, so `continue-on-error: true` written above it is just as
+ * valid and would have switched the gate off while both assertions still
+ * passed — the silent failure this file exists to prevent.
+ *
+ * The step boundary is the indentation of the `steps:` entries, NOT "any line
+ * beginning with a dash": a block scalar (`run: |`) may legitimately contain
+ * such a line, and mistaking one for the start of the step would hide every
+ * key above it — the same blindness in a new place.
+ */
+export function stepContaining(yaml: string, needle: RegExp): string | null {
+  const lines = yaml.split('\n')
+  const indentOf = (l: string) => l.match(/^\s*/)![0].length
+  const at = lines.findIndex(l => needle.test(l))
+  if (at === -1) return null
+
+  // The `steps:` key enclosing the match...
+  let stepsAt = -1
+  for (let i = at; i >= 0; i--) {
+    if (/^\s*steps:\s*$/.test(lines[i])) { stepsAt = i; break }
+  }
+  if (stepsAt === -1) return null
+
+  // ...and the indent its entries sit at. A block scalar's content must be
+  // indented deeper than the key introducing it, so no scalar line can ever
+  // land on this exact column.
+  const stepsIndent = indentOf(lines[stepsAt])
+  let entryIndent = -1
+  for (let i = stepsAt + 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue
+    if (indentOf(lines[i]) <= stepsIndent) break
+    if (/^\s*-\s/.test(lines[i])) { entryIndent = indentOf(lines[i]); break }
+  }
+  if (entryIndent === -1) return null
+
+  const opensStep = (l: string) => indentOf(l) === entryIndent && /^\s*-\s/.test(l)
+
+  let from = at
+  while (from > stepsAt && !opensStep(lines[from])) from--
+  if (!opensStep(lines[from])) return null
+
+  let to = from + 1
+  for (; to < lines.length; to++) {
+    const line = lines[to]
+    if (!line.trim()) continue
+    if (indentOf(line) < entryIndent) break
+    if (opensStep(line)) break
+  }
+  return lines.slice(from, to).join('\n')
+}
+
+/**
+ * Why this step would NOT fail the build, or null if it genuinely would.
+ *
+ * Each of these leaves the step present and the gate gone — the worst
+ * outcome, because it still LOOKS enforced.
+ */
+export function escapeHatchIn(step: string): string | null {
+  if (/\|\|\s*true/.test(step)) return '`|| true` discards the exit code'
+  if (/continue-on-error:\s*true/.test(step)) return 'continue-on-error: true'
+  // ESLint reads a NEGATIVE limit as unlimited, so `--max-warnings -1` is the
+  // quietest way of all to switch this off. Only 0 tightens the gate.
+  const limit = step.match(/--max-warnings[= ](-?\d+)/)
+  if (limit && Number(limit[1]) !== 0) return `--max-warnings ${limit[1]} — only 0 tightens the gate`
+  return null
+}
+
 describe('CI runs the linter', () => {
   it('has a step that actually invokes it', () => {
     expect(ciSteps, 'ci.yml must run `npm run lint` — without it the error set drifts back').toMatch(
@@ -33,12 +105,85 @@ describe('CI runs the linter', () => {
   })
 
   it('does not neuter it with a flag that swallows failures', () => {
-    // `|| true`, `continue-on-error`, or `--max-warnings` set absurdly high on
-    // this step would leave the step present and the gate gone — the worst
-    // outcome, because it still LOOKS enforced.
-    const step = ciSteps.slice(ciSteps.indexOf('npm run lint'))
-    expect(step.slice(0, 200)).not.toMatch(/\|\|\s*true/)
-    expect(step.slice(0, 200)).not.toMatch(/continue-on-error:\s*true/)
+    const step = stepContaining(ciSteps, /run:\s*npm run lint\b/)
+    expect(step, 'no YAML step runs `npm run lint`').not.toBeNull()
+    expect(escapeHatchIn(step!), 'the lint step would not fail the build').toBeNull()
+  })
+})
+
+describe('the step reader itself', () => {
+  // The bug was in the READING, so the reading is what needs covering.
+  const build = (lintStep: string[]) => [
+    '    steps:',
+    '      - name: Unit tests',
+    '        run: npm test',
+    '',
+    ...lintStep,
+    '',
+    '      - name: Build',
+    '        run: npm run build',
+  ].join('\n')
+
+  const plain = build([
+    '      - name: Lint',
+    '        continue-on-error: true',
+    '        run: npm run lint',
+  ])
+
+  it('sees a continue-on-error written above the run key', () => {
+    expect(stepContaining(plain, /run:\s*npm run lint\b/)).toContain('continue-on-error: true')
+  })
+
+  it('is not fooled by a dash inside a block scalar', () => {
+    // Legal YAML: the heredoc's content merely LOOKS like a list. Treating
+    // that line as the step boundary would hide the continue-on-error above.
+    const scalar = build([
+      '      - name: Lint',
+      '        continue-on-error: true',
+      '        run: |',
+      '          cat <<YAML',
+      '          - name: not actually a step',
+      '          YAML',
+      '          npm run lint',
+    ])
+    const step = stepContaining(scalar, /npm run lint\b/)
+    expect(step, 'the scalar line must not be mistaken for the start of the step').toContain(
+      'continue-on-error: true',
+    )
+  })
+
+  it('stops at the next step rather than swallowing the rest of the file', () => {
+    const step = stepContaining(plain, /run:\s*npm run lint\b/)
+    expect(step).not.toContain('npm run build')
+    expect(step).not.toContain('npm test')
+  })
+
+  it('returns null when nothing matches', () => {
+    expect(stepContaining(plain, /run:\s*npm run nonesuch\b/)).toBeNull()
+  })
+})
+
+describe('the escape hatches it has to recognise', () => {
+  it('catches the obvious two', () => {
+    expect(escapeHatchIn('run: npm run lint || true')).toContain('|| true')
+    expect(escapeHatchIn('continue-on-error: true\nrun: npm run lint')).toContain('continue-on-error')
+  })
+
+  it('catches a NEGATIVE warning limit, which eslint reads as unlimited', () => {
+    expect(escapeHatchIn('run: npm run lint -- --max-warnings -1')).toContain('--max-warnings -1')
+    expect(escapeHatchIn('run: npm run lint -- --max-warnings=-1')).toContain('--max-warnings -1')
+  })
+
+  it('catches an absurdly high one', () => {
+    expect(escapeHatchIn('run: npm run lint -- --max-warnings 99999')).toContain('99999')
+  })
+
+  it('allows the one value that tightens the gate', () => {
+    expect(escapeHatchIn('run: npm run lint -- --max-warnings 0')).toBeNull()
+  })
+
+  it('passes a step with no escape hatch at all', () => {
+    expect(escapeHatchIn('- name: Lint\n  run: npm run lint')).toBeNull()
   })
 })
 

@@ -22,7 +22,7 @@ const compat = new FlatCompat({
 // three-thousand-change mechanical diff across the whole app, with real
 // regression risk and little to show for it — and while that rule stays an
 // error, every OTHER error is invisible in the noise. Among those others were
-// six genuine React hook-order violations.
+// three genuine React hook-order violations.
 //
 // So the rule is demoted to a warning: still reported, still discouraged,
 // never a merge blocker. What remains as an error is what the codebase
