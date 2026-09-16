@@ -75,3 +75,26 @@ export function overnightLabel(property: OvernightProperty | null, city: string 
     ? `${property.name}, ${c}`
     : property.name
 }
+
+// ── Is the named property still in the rates? ───────────────────────────
+// An itinerary keeps the lines it was sold with, so a hotel deleted from
+// Rates later still names the night — ITN-26-010 says "Kempinski Nile Hotel",
+// removed from Rates 34 minutes after its quote was priced (operator,
+// 2026-09-17). Staff see a warning; the client never does.
+
+export type PropertyRateStatus = 'on_file' | 'switched_off' | 'not_on_file'
+
+/** Names compare case-, spacing- and edge-insensitively: the Kempinski row
+ *  was stored as "Kempinski Nile Hotel " with a trailing space. */
+export const propertyKey = (name: string | null | undefined): string =>
+  String(name ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
+
+export function propertyRateStatus(
+  property: OvernightProperty,
+  catalog: { hotels: ReadonlyArray<{ name: unknown; active: unknown }>; ships: ReadonlyArray<{ name: unknown; active: unknown }> }
+): PropertyRateStatus {
+  const key = propertyKey(property.name)
+  const rows = (property.kind === 'cruise' ? catalog.ships : catalog.hotels).filter(r => propertyKey(String(r.name ?? '')) === key)
+  if (rows.length === 0) return 'not_on_file'
+  return rows.some(r => r.active !== false) ? 'on_file' : 'switched_off'
+}

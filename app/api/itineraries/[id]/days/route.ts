@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { propertyFromService } from '@/lib/itineraries/overnight-property'
+import { propertyFromService, propertyRateStatus, type PropertyRateStatus } from '@/lib/itineraries/overnight-property'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
@@ -83,6 +83,24 @@ export async function GET(
           .eq('language', language)
       : { data: [] as any[] }
 
+    // Every hotel and ship name in the rates, for the "no longer in your
+    // rates" warning on a night whose property was deleted or switched off
+    // after the itinerary was sold. Small tables, read whole.
+    const [{ data: hotelRows, error: hotelError }, { data: shipRows, error: shipError }] = await Promise.all([
+      supabase.from('accommodation_rates').select('property_name, is_active'),
+      supabase.from('nile_cruises').select('ship_name, is_active'),
+    ])
+    // A catalog that failed to load says nothing about its properties: no
+    // status rather than a false "no longer in your rates" — withheld only for
+    // the kind whose table failed, so a ship-table error does not hide hotel
+    // warnings (Greptile on #456).
+    const loadedFor = { hotel: !hotelError, cruise: !shipError }
+    if (hotelError || shipError) console.warn('[days-api] rates catalog partly unavailable; affected overnight statuses withheld', hotelError?.message ?? shipError?.message)
+    const catalog = {
+      hotels: (hotelRows ?? []).map(r => ({ name: r.property_name, active: r.is_active })),
+      ships: (shipRows ?? []).map(r => ({ name: r.ship_name, active: r.is_active })),
+    }
+
     // Index by day / service id for in-memory joins.
     const servicesByDay = new Map<string, any[]>()
     for (const s of (allServices || [])) {
@@ -109,6 +127,11 @@ export async function GET(
           // translation replaces its name — the translated text no longer
           // matches "Hotel - <name> (<city>)" (Greptile on #455).
           property_name: propertyFromService(service)?.name ?? null,
+          // Staff-only: whether that hotel or ship is still in Rates.
+          property_rate_status: ((): PropertyRateStatus | null => {
+            const property = propertyFromService(service)
+            return property && loadedFor[property.kind] ? propertyRateStatus(property, catalog) : null
+          })(),
           service_name: version?.service_name || service.service_name,
           notes: version?.notes ?? service.notes
         }

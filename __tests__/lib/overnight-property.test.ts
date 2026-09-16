@@ -88,3 +88,32 @@ describe('the share page gets the NAME only', () => {
     expect(toClientItinerary({}, [{ day_number: 1, city: 'Cairo' }]).days[0].overnightProperty).toBeNull()
   })
 })
+
+describe('is the named property still in the rates (staff warning)', () => {
+  // Late import keeps the earlier blocks independent of this helper.
+  it('matches names ignoring case, spacing and edges — the Kempinski row had a trailing space', async () => {
+    const { propertyRateStatus, propertyKey } = await import('@/lib/itineraries/overnight-property')
+    expect(propertyKey('  Kempinski  Nile Hotel ')).toBe('kempinski nile hotel')
+    const catalog = {
+      hotels: [{ name: 'Steigenberger Nile Palace', active: true }, { name: 'Old Hotel', active: false }],
+      ships: [{ name: 'Al Farida Nile Cruise', active: true }],
+    }
+    expect(propertyRateStatus({ name: 'steigenberger nile palace', kind: 'hotel' }, catalog)).toBe('on_file')
+    expect(propertyRateStatus({ name: 'Kempinski Nile Hotel', kind: 'hotel' }, catalog)).toBe('not_on_file')
+    expect(propertyRateStatus({ name: 'Old Hotel', kind: 'hotel' }, catalog)).toBe('switched_off')
+    // A hotel name is not a ship.
+    expect(propertyRateStatus({ name: 'Steigenberger Nile Palace', kind: 'cruise' }, catalog)).toBe('not_on_file')
+    expect(propertyRateStatus({ name: 'Al Farida Nile Cruise', kind: 'cruise' }, catalog)).toBe('on_file')
+  })
+
+  it('the days API reports it per night line and the page warns; the share page never sees it', async () => {
+    const { readFileSync } = await import('node:fs')
+    const route = readFileSync('app/api/itineraries/[id]/days/route.ts', 'utf8')
+    expect(route).toContain('property_rate_status')
+    // A failed catalog read withholds the status instead of flagging every hotel.
+    expect(route).toContain('property && loadedFor[property.kind] ? propertyRateStatus(property, catalog) : null')
+    expect(route).toContain('const loadedFor = { hotel: !hotelError, cruise: !shipError }')
+    expect(readFileSync('app/itineraries/[id]/page.tsx', 'utf8')).toContain('overnight-stale')
+    expect(readFileSync('lib/itinerary-share.ts', 'utf8')).not.toContain('property_rate_status')
+  })
+})

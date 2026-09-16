@@ -94,6 +94,8 @@ interface Service {
   notes: string
   service_code?: string | null
   supplier_name?: string | null
+  /** Whether the night's hotel or ship is still in Rates (days API). */
+  property_rate_status?: 'on_file' | 'switched_off' | 'not_on_file' | null
 }
 
 interface DayWithServices extends ItineraryDay {
@@ -1880,6 +1882,9 @@ export default function ViewItineraryPage() {
                     // accommodation line (lib/itineraries/overnight-property).
                     const property = overnightProperty(day.services)
                     if (!property && !day.overnight_city) return null
+                    // The night line that named it says whether it is still in Rates.
+                    const status = day.services.find(s => s.property_rate_status)?.property_rate_status
+                    const stale = property && (status === 'not_on_file' || status === 'switched_off')
                     return (
                       <div className="mt-3 pt-3 border-t border-gray-200" data-testid="day-overnight">
                         <p className="text-xs text-gray-600">
@@ -1889,6 +1894,13 @@ export default function ViewItineraryPage() {
                               ? `🏨 ${t('overnightAt', { place: overnightLabel(property, day.overnight_city) })}`
                               : `🌙 ${t('overnightIn', { city: day.overnight_city })}`}
                         </p>
+                        {stale && (
+                          <p className="mt-1 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1" data-testid="overnight-stale">
+                            ⚠ {status === 'switched_off'
+                              ? t('propertySwitchedOff', { name: property!.name })
+                              : t('propertyNotInRates', { name: property!.name })}
+                          </p>
+                        )}
                       </div>
                     )
                   })()}

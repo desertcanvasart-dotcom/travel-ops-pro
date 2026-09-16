@@ -72,3 +72,40 @@ describe('days in transit', () => {
     expect(night?.issue).toMatch(/rate periods covers 2026-11-03/)
   })
 })
+
+// Operator, 2026-09-17: NMS803 day 1 lost its imported overnight_kind, so the
+// rule above no longer saw a flight night and nothing in the editor could say
+// so. "In the air" in the day editor stores in_transit: true.
+describe('a night the operator marks as in the air', () => {
+  it('sells nothing that day even with a city and attractions left on it', async () => {
+    const t = withFlightDay()
+    const flight = t.tour_templates[0].itinerary[0]
+    flight.overnight_kind = undefined
+    flight.city = 'Tokyo'
+    flight.attractions = ['Giza Plateau']
+    flight.in_transit = true
+    flight.accommodation_type = 'none'
+    setMockTables(t)
+    const r = await calculateAutoPricing(BASE)
+    expect((r.services ?? []).filter((s: any) => s.dayNumber === 1)).toEqual([])
+    // …and the arrival moves to day 2, as with the imported marker.
+    expect((r.services ?? []).filter((s: any) => s.dayNumber === 2).some((s: any) => /airport|meet/i.test(s.id))).toBe(true)
+  })
+
+  it('without the flag, the same day with no marker still books a bed (why the choice was needed)', async () => {
+    const t = withFlightDay()
+    const flight = t.tour_templates[0].itinerary[0]
+    flight.overnight_kind = undefined
+    flight.city = 'Cairo'
+    setMockTables(t)
+    const r = await calculateAutoPricing(BASE)
+    expect((r.services ?? []).some((s: any) => s.id === 'day1-hotel')).toBe(true)
+  })
+
+  it('the calculator offers the choice and stores in_transit + overnight_kind flight', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('app/b2b/calculator/[id]/page.tsx', 'utf8')
+    expect(src).toContain('<option value="in_flight">')
+    expect(src).toMatch(/next\.overnight_kind = 'flight'\s+next\.in_transit = true/)
+  })
+})

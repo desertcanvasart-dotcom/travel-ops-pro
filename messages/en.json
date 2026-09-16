@@ -1413,7 +1413,9 @@
       "continueAnyway": "Send anyway",
       "sendIncompleteConfirm": "This itinerary has {count, plural, one {# service} other {# services}} with no cost ({services}), so the client will see a total that leaves them out. Send anyway?",
       "overnightAt": "Overnight at {place}",
-      "aboardShip": "Aboard {name}"
+      "aboardShip": "Aboard {name}",
+      "propertyNotInRates": "{name} is no longer in your rates. This itinerary still carries it from when it was priced — check the booking, or reprice with a hotel you have on file.",
+      "propertySwitchedOff": "{name} is switched off in your rates. Check it is still bookable before confirming."
     },
     "editAction": "Edit",
     "share": {
@@ -6792,7 +6794,8 @@
         "sound_light": "Sound & light transfer",
         "dinner_transfer": "Dinner transfer"
       }
-    }
+    },
+    "inFlightNight": "In the air (overnight flight) — nothing sold this day"
   },
   "bookings": {
     "title": "Bookings",

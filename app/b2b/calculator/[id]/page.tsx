@@ -183,6 +183,9 @@ interface TemplateItineraryDay {
    *  flight, off for trains). */
   road_transfers?: boolean
   accommodation_type: string // 'hotel' | 'cruise' | 'none'
+  /** The whole day is in the air (overnight flight): nothing is sold. Set by
+   *  the "In the air" accommodation choice. */
+  in_transit?: boolean
   services: {
     airport_arrival: boolean
     airport_departure: boolean
@@ -463,6 +466,32 @@ export default function TourPriceCalculator() {
   const [propertyInUse, setPropertyInUse] = useState<Record<number, AccommodationOption | null>>({})
   const reportProperty = (dayIndex: number, option: AccommodationOption | null) =>
     setPropertyInUse(prev => (prev[dayIndex]?.id === option?.id && dayIndex in prev ? prev : { ...prev, [dayIndex]: option }))
+
+  // How the night is spent. "In the air" is a whole day in transit: no bed,
+  // no transfer, no assistance, nothing sold (the engine's in_transit), and
+  // the 日程表 prints 機中泊 from overnight_kind 'flight'. Any other choice
+  // takes that back; an importer kind that is not a flight (cruise, train) is
+  // left alone.
+  const setDayAccommodation = (dayIndex: number, value: string) => {
+    setEditableDays(prev => prev.map((d, i) => {
+      if (i !== dayIndex) return d
+      const next: TemplateItineraryDay = { ...d }
+      if (value === 'in_flight') {
+        next.accommodation_type = 'none'
+        next.overnight_kind = 'flight'
+        next.in_transit = true
+        next.is_cruise_day = false
+        return next
+      }
+      delete next.in_transit
+      if (next.overnight_kind === 'flight' || next.overnight_kind === 'none') delete next.overnight_kind
+      next.accommodation_type = value
+      // Couple with cruise day flag
+      if (value === 'cruise') next.is_cruise_day = true
+      return next
+    }))
+    setHasUnsavedChanges(true)
+  }
 
   // undefined = back to the rules; a list (even empty) = the operator's own.
   const setDayTransport = (dayIndex: number, lines: TransportLine[] | undefined) =>
@@ -1260,19 +1289,14 @@ export default function TourPriceCalculator() {
                               <div>
                                 <label className="block text-xs font-medium text-gray-600 mb-1">{t('accommodationType')}</label>
                                 <select
-                                  value={day.accommodation_type || 'hotel'}
-                                  onChange={(e) => {
-                                    updateDay(index, 'accommodation_type', e.target.value)
-                                    // Couple with cruise day flag
-                                    if (e.target.value === 'cruise') {
-                                      updateDay(index, 'is_cruise_day', true)
-                                    }
-                                  }}
+                                  value={day.in_transit === true ? 'in_flight' : (day.accommodation_type || 'hotel')}
+                                  onChange={(e) => setDayAccommodation(index, e.target.value)}
                                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none text-sm bg-white"
                                 >
                                   <option value="hotel">{t('hotel')}</option>
                                   <option value="cruise">{t('cruise')}</option>
                                   <option value="none">{t('noAccommodation')}</option>
+                                  <option value="in_flight">{t('inFlightNight')}</option>
                                 </select>
                               </div>
                               <div className="flex items-center pt-5">
