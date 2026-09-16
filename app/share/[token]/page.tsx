@@ -26,6 +26,8 @@ import {
   type ClientItinerary,
   type ShareDayType,
 } from '@/lib/itinerary-share'
+import { loadItineraryServiceLines } from '@/lib/pricing/itinerary-completeness'
+import { sharePriceDecision } from '@/lib/itineraries/share-approval'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,18 +58,20 @@ const DEFAULT_BRAND = '#647C47'
  */
 const loadShare = cache(async function loadShare(
   token: string
-): Promise<{ itinerary: ClientItinerary; operator: Operator } | null> {
+): Promise<{ itinerary: ClientItinerary; operator: Operator; priceWithheld: boolean } | null> {
   if (!isValidShareToken(token)) return null
   const supabase = admin()
 
   const { data: share } = await supabase
     .from('itinerary_shares')
-    .select('id, itinerary_id, org_id, revoked_at, view_count')
+    // '*' rather than a column list: a column added by a migration not yet
+    // applied must not turn every live link into a 404.
+    .select('*')
     .eq('token', token)
     .maybeSingle()
   if (!share || share.revoked_at) return null
 
-  const [{ data: itinerary }, { data: days }, { data: org }] = await Promise.all([
+  const [{ data: itinerary }, { data: days }, { data: org }, lines] = await Promise.all([
     supabase.from('itineraries').select('*').eq('id', share.itinerary_id).maybeSingle(),
     supabase.from('itinerary_days').select('*').eq('itinerary_id', share.itinerary_id),
     supabase
@@ -75,8 +79,21 @@ const loadShare = cache(async function loadShare(
       .select('name, logo_url, primary_color, contact_email, company_phone, company_website')
       .eq('id', share.org_id)
       .maybeSingle(),
+    loadItineraryServiceLines(supabase, share.itinerary_id, share.org_id),
   ])
   if (!itinerary) return null
+
+  // Re-checked on every view. The link was created with the price as it stood
+  // then, and the operator approved exactly the gaps it had. A service that has
+  // lost its cost since, a return to draft, or services that cannot be read
+  // withhold the total — the trip itself still shows.
+  const price = sharePriceDecision({
+    status: itinerary.status,
+    totalCost: itinerary.total_cost,
+    currency: itinerary.currency,
+    lines,
+    approvedGaps: share.incomplete_approved_gaps,
+  })
 
   // Engagement signal, best-effort — a failed count must never break the page.
   // Read-modify-write is fine at this fidelity: it is a signal, not a ledger.
@@ -92,6 +109,7 @@ const loadShare = cache(async function loadShare(
 
   return {
     itinerary: toClientItinerary(itinerary, days ?? []),
+    priceWithheld: !price.show,
     operator: {
       name: org?.name || '',
       logoUrl: org?.logo_url || null,
@@ -175,7 +193,7 @@ export default async function SharedItineraryPage({
   const data = await loadShare(token)
   if (!data) notFound()
 
-  const { itinerary: it, operator: op } = data
+  const { itinerary: it, operator: op, priceWithheld } = data
   const travellers = it.numAdults + it.numChildren + it.numInfants
 
   return (
@@ -299,7 +317,18 @@ export default async function SharedItineraryPage({
         )}
 
         {/* Price — the client total, the only money on this page */}
-        {it.totalPrice !== null && it.totalPrice > 0 && (
+        {priceWithheld && (
+          <div className="mt-8 bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm text-gray-500">Price</p>
+              <p className="text-base text-gray-900">
+                Your price is being updated. {op.name || 'We'} will confirm it with you shortly.
+              </p>
+            </div>
+            {it.code && <span className="text-xs text-gray-400 shrink-0">Ref: {it.code}</span>}
+          </div>
+        )}
+        {!priceWithheld && it.totalPrice !== null && it.totalPrice > 0 && (
           <div className="mt-8 bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex items-center justify-between gap-4">
             <div>
               <p className="text-sm text-gray-500">

@@ -1428,7 +1428,13 @@
       "copyFailed": "Could not copy — select the link and copy it manually.",
       "incompleteTitle": "Incomplete price",
       "incompleteConfirm": "This itinerary has {count, plural, one {# service} other {# services}} with no cost ({services}). The traveller will see a total that leaves them out. Share anyway?",
-      "continueAnyway": "Share anyway"
+      "continueAnyway": "Share anyway",
+      "priceHiddenGaps": "The traveller cannot see the price: {count, plural, one {# service has} other {# services have}} no cost since you shared ({services}). Fill in the cost, or review and share anyway.",
+      "priceHiddenDraft": "The traveller cannot see the price while this itinerary is a draft.",
+      "priceHiddenAmount": "The traveller cannot see the price: the total is not a valid amount.",
+      "reviewAgain": "Review and share anyway",
+      "approvedGaps": "Shared knowingly with {count, plural, one {# service} other {# services}} without a cost.",
+      "priceUnchecked": "The price status could not be checked, so the traveller is not seeing the price right now. Reload this page to try again."
     },
     "nittei": {
       "button": "Customer 日程表",
