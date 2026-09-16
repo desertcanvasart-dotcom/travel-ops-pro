@@ -16,6 +16,10 @@ const supabase = createServerClient()
  *  (app/api/rates/transportation, app/api/rates/entrance-fees). */
 const OPEN_ENDED_VALID_TO = '2099-12-31'
 const todayIso = () => new Date().toISOString().slice(0, 10)
+/** Tables whose rate_valid_from/to are NOT NULL with no default. Only these
+ *  get defaults: elsewhere a blank date is a legitimate "no dates" and must
+ *  stay blank (accommodation_rates, nile_cruises…). */
+const VALIDITY_REQUIRED_TABLES = new Set(['transportation_rates', 'entrance_fees'])
 
 /**
  * POST /api/rates/bulk/import
@@ -329,8 +333,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const hasValidity = config.columns.some(c => c.name === 'rate_valid_from')
-      && config.columns.some(c => c.name === 'rate_valid_to')
+    const hasValidity = VALIDITY_REQUIRED_TABLES.has(config.tableName)
     for (let i = 0; i < dedupedRows.length; i += BATCH_SIZE) {
       const batch = dedupedRows.slice(i, i + BATCH_SIZE)
 
