@@ -14,6 +14,7 @@
 // a quote row must point at one), and the quote. The itinerary, booking and
 // documents follow from the quote's own Convert button, unchanged.
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { isBookableLine } from '@/lib/pricing/breakdown-order'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { calculateAutoPricing, calculatePricingWithPassengerBreakdown } from '@/lib/auto-pricing-service'
@@ -181,7 +182,9 @@ export async function processTourUpOrder(
 
   // 3. The quote, lines shaped exactly as the calculator saves them.
   type QuoteLine = { service_id: string; service_name: string; service_category: string; rate_type: string; rate_source: string | undefined; quantity_mode: string; quantity: number; unit_cost: number; line_total: number; is_optional: boolean; day_number: number | null; pricing_note: string | undefined }
-  const lines: QuoteLine[] = priced.services.map(s => ({
+  // Only real services travel into the quote: included meals and unmatched
+  // sightseeing notes are breakdown-only (lib/pricing/breakdown-order).
+  const lines: QuoteLine[] = priced.services.filter(isBookableLine).map(s => ({
     service_id: s.id, service_name: s.serviceName, service_category: s.serviceType, rate_type: s.serviceType,
     rate_source: s.rateSource, quantity_mode: s.quantityMode, quantity: s.quantity, unit_cost: s.unitCost,
     line_total: s.lineTotal, is_optional: s.isOptional, day_number: s.dayNumber, pricing_note: s.notes,

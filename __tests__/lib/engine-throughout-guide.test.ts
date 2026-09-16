@@ -81,7 +81,7 @@ describe('throughout mode ("+1")', () => {
   it('a property with no guide_rate on its period is a HOLE, never a free bed', async () => {
     setMockTables(seasonedHotel(0))
     const r = await calculateAutoPricing({ ...BASE, guideMode: 'throughout' })
-    expect(line(r, 'day1-guide-bed')).toBeUndefined()
+    expect(line(r, 'day1-guide-bed')).toMatchObject({ unpriced: true, unitCost: 0, lineTotal: 0 })
     const holes = guideHoles(r)
     expect(holes.some((h: any) => h.reason === 'unpriced' && /guide bed/i.test(h.message))).toBe(true)
     expect(r.complete).toBe(false)
@@ -92,7 +92,7 @@ describe('throughout mode ("+1")', () => {
     t.guide_rates = t.guide_rates.filter((g: any) => g.tour_duration !== 'meet_greet')
     setMockTables(t)
     const r = await calculateAutoPricing({ ...BASE, guideMode: 'throughout' })
-    expect(line(r, 'day2-guide')).toBeUndefined()
+    expect(line(r, 'day2-guide')).toMatchObject({ unpriced: true, unitCost: 0, lineTotal: 0 })
     expect(guideHoles(r).some((h: any) => /meet\/assist/i.test(h.message))).toBe(true)
   })
 
@@ -128,7 +128,7 @@ describe('guide grades', () => {
     t.guide_rates = t.guide_rates.filter((g: any) => g.guide_type !== 'senior')
     setMockTables(t)
     const r = await calculateAutoPricing({ ...BASE, guideGrade: 'senior' })
-    expect(line(r, 'day1-guide')).toBeUndefined()
+    expect(line(r, 'day1-guide')).toMatchObject({ unpriced: true, unitCost: 0, lineTotal: 0 })
     expect(guideHoles(r).some((h: any) => /guide_type=senior/.test(h.lookupAttempted))).toBe(true)
   })
 })

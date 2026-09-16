@@ -25,7 +25,10 @@ function tablesWith(day1: Record<string, unknown>, aliases: { alias: string; can
   return t
 }
 
-const ticketLines = (r: any) => (r.services ?? []).filter((s: any) => s.serviceType === 'entrance')
+/** Tickets actually charged. A sight with no matched fee is also listed on its
+ *  day, as a zero note line, so the day reads whole (2026-09-16). */
+const ticketLines = (r: any) => (r.services ?? []).filter((s: any) => s.serviceType === 'entrance' && s.lineTotal > 0)
+const noteLines = (r: any) => (r.services ?? []).filter((s: any) => s.serviceType === 'entrance' && s.issue && s.lineTotal === 0 && !s.included)
 
 beforeAll(() => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://localhost')
@@ -44,6 +47,8 @@ describe('engine entrance tickets', () => {
     const r = await calculateAutoPricing({ ...BASE, numPax: 2 })
     expect(ticketLines(r)).toEqual([])
     expect(r.warnings).toContain(`No entrance fee found for "${JA}"`)
+    // …and the unmatched sight is listed on its day as a note, not only in the warnings.
+    expect(noteLines(r).map((s: any) => [s.serviceName, s.dayNumber])).toEqual([[JA, 1]])
   })
 
   it('…and prices through attraction_aliases once it does', async () => {
@@ -66,5 +71,6 @@ describe('engine entrance tickets', () => {
     const r = await calculateAutoPricing({ ...BASE, numPax: 2 })
     expect(ticketLines(r)).toEqual([])
     expect(r.warnings.some((w: string) => w.includes('ent-deleted'))).toBe(true)
+    expect(noteLines(r)).toHaveLength(1)
   })
 })
