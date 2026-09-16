@@ -60,7 +60,13 @@ export async function POST(request: NextRequest) {
     if (!orgId) return noOrgResponse()
 
     const body = await request.json()
-    const { email, role = 'agent', invited_by } = body
+    const { role = 'agent', invited_by } = body
+    // Normalised ONCE, and used for every check below and the insert. The
+    // accept route trims and lowercases the stored address, so an invitation
+    // for " Person@example.com " resolved to the same account as one for
+    // "person@example.com" — but the duplicate checks here compared the raw
+    // input and let the second invitation through.
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
 
     // Validate email
     if (!email || !email.includes('@')) {
@@ -79,18 +85,42 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if user already exists
-    const { data: existingUser } = await supabase
+    // Already in THIS workspace?
+    //
+    // This asked user_profiles instead, which has no org_id: it is one global
+    // row per account in the whole Supabase project. So the question it
+    // actually asked was "has this address ever signed up here at all", and
+    // any email known to the project was refused with "User with this email
+    // already exists" — true, and useless, because the person was not in your
+    // workspace and you had no way to add them. A fresh agency with one member
+    // could not invite anyone who had ever been invited by anyone else.
+    //
+    // The check immediately below already had the right rule, and said so:
+    // the same person may legitimately be invited by several agencies. This is
+    // now scoped the same way, to organization_members — the sole authority on
+    // membership — so it refuses only a genuine duplicate. An existing account
+    // that belongs elsewhere is invited normally, and the accept route links
+    // it to this org without touching its password (see decideAcceptAction).
+    const { data: existingProfile } = await supabase
       .from('user_profiles')
-      .select('id, email')
-      .eq('email', email.toLowerCase())
-      .single()
+      .select('id')
+      .eq('email', email)
+      .maybeSingle()
 
-    if (existingUser) {
-      return NextResponse.json(
-        { success: false, error: 'User with this email already exists' },
-        { status: 400 }
-      )
+    if (existingProfile) {
+      const { data: existingMember } = await supabase
+        .from('organization_members')
+        .select('user_id')
+        .eq('org_id', orgId)
+        .eq('user_id', (existingProfile as { id: string }).id)
+        .maybeSingle()
+
+      if (existingMember) {
+        return NextResponse.json(
+          { success: false, error: 'That person is already a member of this workspace' },
+          { status: 400 }
+        )
+      }
     }
 
     // Check if there's already a pending invitation FOR THIS ORG. A pending
@@ -100,7 +130,7 @@ export async function POST(request: NextRequest) {
     const { data: existingInvitation } = await supabase
       .from('user_invitations')
       .select('id')
-      .eq('email', email.toLowerCase())
+      .eq('email', email)
       .eq('org_id', orgId)
       .is('accepted_at', null)
       .gt('expires_at', new Date().toISOString())
@@ -125,7 +155,7 @@ export async function POST(request: NextRequest) {
     const { data: invitation, error } = await supabase
       .from('user_invitations')
       .insert({
-        email: email.toLowerCase(),
+        email,
         role,
         invited_by,
         org_id: orgId,

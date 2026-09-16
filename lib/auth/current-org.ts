@@ -4,6 +4,7 @@ import { cookies, headers } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { roleAllows } from './roles'
 import { VERIFIED_USER_HEADER, verifyVerifiedUserHeader } from '@/lib/auth/verified-user-header'
+import { ACTIVE_ORG_COOKIE, pickActiveMembership } from './active-org'
 
 // M3 Phase 2A — resolve the current request's org_id.
 //
@@ -66,19 +67,88 @@ async function resolveVerifiedUserId(): Promise<string | null> {
   return user?.id ?? null
 }
 
+// ============================================
+// ONE IDENTITY, MANY WORKSPACES
+// ============================================
+// organization_members is keyed (org_id, user_id), so the schema has always
+// allowed one person to belong to several agencies — a bookkeeper working for
+// two operators, a consultant, the same address invited by a second company.
+// The SESSION did not: this resolver took whichever membership was oldest, so
+// a second membership was invisible and every one of its records unreachable.
+// That is the deferred G1 gate, and it is also why the invitation route
+// refused any email already known to the project.
+//
+// The active workspace is a cookie, and it is NEVER trusted on its own. The
+// value only takes effect if the caller is genuinely a member of that org, so
+// editing the cookie by hand grants exactly nothing — it is a PREFERENCE that
+// selects among memberships already held, never a claim to one. Anything
+// unrecognised falls back to the oldest membership, which is what every
+// single-workspace user has always got and still gets: ~147 callers of this
+// function see no change at all.
+export { ACTIVE_ORG_COOKIE }
+
+/** This person's memberships, oldest first — the input to the one rule. */
+async function membershipsOf(userId: string): Promise<{ org_id: string; role: string }[]> {
+  const { data } = await getAdmin()
+    .from('organization_members')
+    .select('org_id, role, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+  return (data ?? []) as { org_id: string; role: string }[]
+}
+
+/** The active-org cookie, or null outside a request context (background
+ *  workers, the cron scheduler): those have no person and no chosen
+ *  workspace, and the oldest membership is the right answer for them. */
+async function requestedOrgId(): Promise<string | null> {
+  try {
+    return (await cookies()).get(ACTIVE_ORG_COOKIE)?.value ?? null
+  } catch {
+    return null
+  }
+}
+
+/** The workspace this request is acting in. */
 export async function getCurrentOrgId(): Promise<string | null> {
   const userId = await resolveVerifiedUserId()
   if (!userId) return null
+  // The same rule the middleware role gate applies (lib/auth/active-org.ts),
+  // so the workspace whose data a route reads is the workspace whose role
+  // the request was authorised with.
+  return pickActiveMembership(await membershipsOf(userId), await requestedOrgId())?.org_id ?? null
+}
 
-  const { data: membership } = await getAdmin()
+export interface MembershipSummary {
+  org_id: string
+  name: string
+  role: string
+  /** True for the workspace this request is currently acting in. */
+  active: boolean
+}
+
+/** Every workspace this person belongs to, oldest first — what the switcher
+ *  lists, and what tells the UI whether to show a switcher at all. */
+export async function getMyOrganizations(): Promise<MembershipSummary[]> {
+  const userId = await resolveVerifiedUserId()
+  if (!userId) return []
+  const activeOrgId = await getCurrentOrgId()
+
+  const { data } = await getAdmin()
     .from('organization_members')
-    .select('org_id')
+    .select('org_id, role, created_at, organizations(name)')
     .eq('user_id', userId)
     .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
 
-  return (membership as { org_id?: string } | null)?.org_id ?? null
+  type Row = { org_id: string; role: string; organizations?: { name?: string } | { name?: string }[] | null }
+  return ((data ?? []) as Row[]).map(r => {
+    const org = Array.isArray(r.organizations) ? r.organizations[0] : r.organizations
+    return {
+      org_id: r.org_id,
+      name: org?.name ?? 'Workspace',
+      role: r.role,
+      active: r.org_id === activeOrgId,
+    }
+  })
 }
 
 // Resolve the current request's authenticated user id from the session cookie.
@@ -121,15 +191,7 @@ export function noOrgResponse() {
 export async function getCurrentUserRole(): Promise<string | null> {
   const userId = await resolveVerifiedUserId()
   if (!userId) return null
-  const orgId = await getCurrentOrgId()
-  if (!orgId) return null
-  const { data: membership } = await getAdmin()
-    .from('organization_members')
-    .select('role')
-    .eq('org_id', orgId)
-    .eq('user_id', userId)
-    .maybeSingle()
-  return (membership as { role?: string } | null)?.role ?? null
+  return pickActiveMembership(await membershipsOf(userId), await requestedOrgId())?.role ?? null
 }
 
 // 403 helper for role-gated routes. Fails closed: a null/insufficient role is
