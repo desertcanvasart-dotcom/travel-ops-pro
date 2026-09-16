@@ -16,6 +16,8 @@
 //    fails closed. The tests feed it a row containing the whole cost base and
 //    assert none of it survives.
 
+import { overnightProperty } from '@/lib/itineraries/overnight-property'
+
 /** itinerary_days.day_type — the CHECK-constrained vocabulary (see 20260627). */
 export type ShareDayType = 'arrival' | 'tour' | 'transfer' | 'cruise' | 'free' | 'departure'
 
@@ -47,6 +49,10 @@ export interface ClientDay {
   description: string | null
   city: string | null
   overnightCity: string | null
+  /** The hotel or ship the night is at — its NAME only, from the day's own
+   *  accommodation line (operator, 2026-09-17: clients may see it). Never the
+   *  line's price, supplier id or notes. */
+  overnightProperty: { name: string; kind: 'hotel' | 'cruise' } | null
   attractions: string[]
   /** Null when the row predates day_type or carries an unknown value. */
   dayType: ShareDayType | null
@@ -133,6 +139,7 @@ export function toClientItinerary(
           description: str(d.description),
           city: str(d.city),
           overnightCity: str(d.overnight_city),
+          overnightProperty: overnightProperty(Array.isArray(d.services) ? d.services : []),
           attractions: Array.isArray(d.attractions)
             ? d.attractions.filter((a): a is string => typeof a === 'string')
             : [],

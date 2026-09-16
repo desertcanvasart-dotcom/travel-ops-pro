@@ -8,6 +8,7 @@ import { loadItineraryServiceLines } from '@/lib/pricing/itinerary-completeness'
 import { createClient as createPdfDbClient } from '@supabase/supabase-js'
 
 import { escapeHtml as esc, money } from '@/lib/html-escape'
+import { overnightLabel, overnightProperty } from '@/lib/itineraries/overnight-property'
 
 // Reads the stored itinerary's services for the completeness gate (service role,
 // scoped by the session's org inside loadItineraryServiceLines).
@@ -50,6 +51,8 @@ interface Service {
   quantity: number
   total_cost: number
   notes?: string
+  service_code?: string | null
+  supplier_name?: string | null
 }
 
 // Clean service name helper
@@ -547,7 +550,12 @@ function generateHTML(itinerary: Itinerary, days: Day[], identity: OrgIdentity):
           ${day.city ? `<span class="day-city">${esc(day.city)}</span>` : ''}
         </div>
         ${day.description ? `<div class="day-description">${esc(day.description)}</div>` : ''}
-        ${day.overnight_city ? `<div class="overnight">Overnight: ${esc(day.overnight_city)}</div>` : ''}
+        ${(() => {
+          const property = overnightProperty(day.services)
+          const place = overnightLabel(property, day.overnight_city)
+          if (!place) return ''
+          return `<div class="overnight">${property?.kind === 'cruise' ? 'Aboard' : 'Overnight'}: ${esc(place)}</div>`
+        })()}
       </div>
     `).join('')}
     

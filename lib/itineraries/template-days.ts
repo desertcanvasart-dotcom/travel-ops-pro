@@ -207,6 +207,8 @@ export interface SnapshotLine {
   /** Kept at 0 in the quote because no rate exists (lib/pricing/quote-completeness). */
   unpriced?: boolean
   issue?: string | null
+  /** The hotel or ship a night line is for (calculator quotes from 2026-09-17). */
+  property_name?: string | null
 }
 
 export interface ItineraryServiceRow {
@@ -222,6 +224,8 @@ export interface ItineraryServiceRow {
   supplier_cost_original: number
   exchange_rate_used: number
   notes: string | null
+  /** The hotel or ship, on a night line — how the itinerary names the overnight. */
+  supplier_name: string | null
 }
 
 /** One itinerary_services row for one quote line, for a party of `pax`. */
@@ -241,6 +245,7 @@ export function serviceLineForItinerary(
     service_type: serviceType,
     service_code: line.service_id ?? null,
     service_name: line.service_name,
+    supplier_name: line.property_name?.trim() || null,
     quantity,
     rate_eur: Math.round(perUnit * 100) / 100,
     total_cost: total,
