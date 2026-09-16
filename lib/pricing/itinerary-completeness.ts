@@ -50,27 +50,37 @@ export function itineraryCompleteness(days: readonly ItineraryDayRow[] | null | 
   return quoteCompleteness(itineraryServiceLines(days))
 }
 
+export type ItineraryLinesResult =
+  | { ok: true; lines: ReturnType<typeof itineraryServiceLines> }
+  | { ok: false; status: 404 | 503; error: string }
+
 /**
  * The itinerary's lines, loaded from the database — never from a request
- * body, which a caller controls. Null when the itinerary is not in this org.
+ * body, which a caller controls.
+ *
+ * FAILS CLOSED. If ownership or the services cannot be read, the result says
+ * so and the delivery route must refuse: returning "no lines" on a database
+ * error let the gate fall back to the amount-only check, so a transient
+ * failure could send an incomplete itinerary with no override (review of #449).
  */
 export async function loadItineraryServiceLines(
   supabase: SupabaseClient,
   itineraryId: string,
   orgId: string | null,
-) {
-  if (!itineraryId || !orgId) return null
-  const { data: owned } = await supabase
+): Promise<ItineraryLinesResult> {
+  if (!itineraryId || !orgId) return { ok: false, status: 404, error: 'Itinerary not found' }
+  const { data: owned, error: ownedError } = await supabase
     .from('itineraries')
     .select('id')
     .eq('id', itineraryId)
     .eq('org_id', orgId)
     .maybeSingle()
-  if (!owned) return null
+  if (ownedError) return { ok: false, status: 503, error: "Could not check this itinerary's services. Try again." }
+  if (!owned) return { ok: false, status: 404, error: 'Itinerary not found' }
   const { data: days, error } = await supabase
     .from('itinerary_days')
     .select('day_number, services:itinerary_services(service_name, rate_eur, total_cost, notes)')
     .eq('itinerary_id', itineraryId)
-  if (error) return null
-  return itineraryServiceLines((days ?? []) as ItineraryDayRow[])
+  if (error) return { ok: false, status: 503, error: "Could not check this itinerary's services. Try again." }
+  return { ok: true, lines: itineraryServiceLines((days ?? []) as ItineraryDayRow[]) }
 }

@@ -68,13 +68,21 @@ export async function POST(request: Request) {
       // Itinerary email with PDF — output gate (harness Layer 2): never email a
       // non-deliverable price. (Generic reminder/cron emails carry no price.)
       // Services with no cost are loaded from the itinerary itself, never
-      // taken from the body.
-      const lines = itineraryId
-        ? await loadItineraryServiceLines(supabase, String(itineraryId), await getCurrentOrgId())
-        : null
+      // taken from the body — and an itinerary email must say which itinerary
+      // it prices, or its completeness cannot be checked at all.
+      if (!itineraryId) {
+        return NextResponse.json(
+          { success: false, error: 'itineraryId is required to email an itinerary' },
+          { status: 400 }
+        )
+      }
+      const loaded = await loadItineraryServiceLines(supabase, String(itineraryId), await getCurrentOrgId())
+      if (!loaded.ok) {
+        return NextResponse.json({ success: false, error: loaded.error }, { status: loaded.status })
+      }
       const priceCheck = checkAmountDeliverable(totalCost, {
         currency,
-        ...(lines ? { servicesSnapshot: lines } : {}),
+        servicesSnapshot: loaded.lines,
         allowIncomplete: allowsIncomplete(allow_incomplete),
       })
       if (!priceCheck.ok) {

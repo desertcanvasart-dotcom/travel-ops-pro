@@ -129,6 +129,20 @@ export default function ViewItineraryPage() {
     })
     return ok ? 'go' : 'stop'
   }
+
+  /** The server is the authority. If it finds services with no cost this
+   *  page did not know about — added by someone else after the page loaded —
+   *  ask with the SERVER's list, so the send can still go ahead knowingly
+   *  instead of dead-ending on an error (review of #449). */
+  const confirmServerIncomplete = async (data: { gaps?: unknown }): Promise<boolean> => {
+    const gaps = Array.isArray(data?.gaps) ? (data.gaps as Array<{ name: string; day: number | null; issue: string }>) : []
+    return dialog.confirm({
+      title: t('incompleteTitle'),
+      message: t('sendIncompleteConfirm', { count: gaps.length, services: describeGaps(gaps) }),
+      confirmText: t('continueAnyway'),
+      variant: 'warning',
+    })
+  }
   const params = useParams()
   const router = useRouter()
   const supabase = createClient()
@@ -885,18 +899,23 @@ export default function ViewItineraryPage() {
     setSendingEmail(true) // Reuse loading state for UI feedback
   
     try {
-      const response = await fetch('/api/whatsapp/send-quote', {
+      const send = (allowIncomplete: boolean) => fetch('/api/whatsapp/send-quote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           itineraryId: itinerary.id,
           clientPhone: itinerary.client_phone,
           clientName: itinerary.client_name,
-          ...(decision === 'go' ? { allow_incomplete: true } : {}),
+          ...(allowIncomplete ? { allow_incomplete: true } : {}),
         })
       })
-  
-      const data = await response.json()
+      let response = await send(decision === 'go')
+      let data = await response.json()
+      if (response.status === 422 && data.incomplete && decision !== 'go') {
+        if (!(await confirmServerIncomplete(data))) return
+        response = await send(true)
+        data = await response.json()
+      }
   
       if (!response.ok || !data.success) {
         throw new Error(data.error || t('failedToSendWhatsApp'))
@@ -934,7 +953,7 @@ export default function ViewItineraryPage() {
       const pdfBlob = pdf.output('blob')
       const pdfBase64 = await blobToBase64(pdfBlob)
 
-      const response = await fetch('/api/send-email', {
+      const send = (allowIncomplete: boolean) => fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -946,11 +965,16 @@ export default function ViewItineraryPage() {
           totalCost: effectiveTotalCost.toFixed(2),
           currency: itinerary.currency,
           pdfBase64: pdfBase64.split(',')[1],
-          ...(decision === 'go' ? { allow_incomplete: true } : {}),
+          ...(allowIncomplete ? { allow_incomplete: true } : {}),
         })
       })
-
-      const data = await response.json()
+      let response = await send(decision === 'go')
+      let data = await response.json()
+      if (response.status === 422 && data.incomplete && decision !== 'go') {
+        if (!(await confirmServerIncomplete(data))) return
+        response = await send(true)
+        data = await response.json()
+      }
 
       if (data.success) {
         setSendSuccess(t('emailSentSuccessfully'))

@@ -47,10 +47,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Output gate (harness Layer 2): never send a non-deliverable price.
-    const lines = await loadItineraryServiceLines(supabase, String(itineraryId), await getCurrentOrgId())
+    const loaded = await loadItineraryServiceLines(supabase, String(itineraryId), await getCurrentOrgId())
+    if (!loaded.ok) {
+      return NextResponse.json({ success: false, error: loaded.error }, { status: loaded.status })
+    }
     const priceCheck = checkAmountDeliverable(itinerary.total_cost, {
       currency: itinerary.currency,
-      ...(lines ? { servicesSnapshot: lines } : {}),
+      servicesSnapshot: loaded.lines,
       allowIncomplete: allowsIncomplete(allow_incomplete),
     })
     if (!priceCheck.ok) {

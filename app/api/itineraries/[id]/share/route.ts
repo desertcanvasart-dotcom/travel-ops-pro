@@ -61,10 +61,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     )
   }
   const body = await request.json().catch(() => ({}))
-  const lines = await loadItineraryServiceLines(supabase!, id, org_id!)
+  const loaded = await loadItineraryServiceLines(supabase!, id, org_id!)
+  if (!loaded.ok) {
+    return NextResponse.json({ success: false, error: loaded.error }, { status: loaded.status })
+  }
   const priceCheck = checkAmountDeliverable(itinerary.total_cost, {
     currency: itinerary.currency,
-    ...(lines ? { servicesSnapshot: lines } : {}),
+    servicesSnapshot: loaded.lines,
     allowIncomplete: allowsIncomplete(body?.allow_incomplete),
   })
   if (!priceCheck.ok) {

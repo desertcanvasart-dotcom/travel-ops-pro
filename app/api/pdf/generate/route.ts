@@ -644,12 +644,16 @@ export async function POST(request: NextRequest) {
     // non-deliverable price.
     // Services with no cost come from the stored itinerary — the posted
     // `days` are the caller's, and would let a gap be edited out of the check.
-    const lines = itinerary.id
-      ? await loadItineraryServiceLines(pdfDb, String(itinerary.id), await getCurrentOrgId())
-      : null
+    if (!itinerary.id) {
+      return NextResponse.json({ error: 'itinerary.id is required' }, { status: 400 })
+    }
+    const loaded = await loadItineraryServiceLines(pdfDb, String(itinerary.id), await getCurrentOrgId())
+    if (!loaded.ok) {
+      return NextResponse.json({ error: loaded.error }, { status: loaded.status })
+    }
     const priceCheck = checkAmountDeliverable(itinerary.total_cost, {
       currency: itinerary.currency,
-      ...(lines ? { servicesSnapshot: lines } : {}),
+      servicesSnapshot: loaded.lines,
       allowIncomplete: allowsIncomplete(allow_incomplete),
     })
     if (!priceCheck.ok) {

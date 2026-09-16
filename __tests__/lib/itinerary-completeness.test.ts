@@ -103,7 +103,61 @@ describe('every path an itinerary reaches a client by checks its services', () =
 
   it('the itinerary page sends the override only after asking', () => {
     const s = src('app/itineraries/[id]/page.tsx')
-    expect(s.match(/decision === 'go' \? \{ allow_incomplete: true \} : \{\}/g)).toHaveLength(2)
     expect(s.match(/const decision = await confirmIncompleteSend\(days\)/g)).toHaveLength(2)
+    expect(s.match(/let response = await send\(decision === 'go'\)/g)).toHaveLength(2)
+  })
+
+  it('a gap the server finds but the page did not know about still asks, then retries', () => {
+    // Review of #449: someone adds a zero-cost service after the page loads.
+    // The page's own check passes, the server refuses — and the send must not
+    // dead-end on an error.
+    const s = src('app/itineraries/[id]/page.tsx')
+    expect(s.match(/if \(response\.status === 422 && data\.incomplete && decision !== 'go'\) \{\s*if \(!\(await confirmServerIncomplete\(data\)\)\) return\s*response = await send\(true\)/g)).toHaveLength(2)
+  })
+
+  it('every delivery route fails CLOSED when the services cannot be read', () => {
+    // Review of #449: a lookup that returned "no lines" on a database error let
+    // the gate fall back to the amount-only check.
+    for (const path of ['app/api/send-email/route.ts', 'app/api/whatsapp/send-quote/route.ts', 'app/api/itineraries/[id]/share/route.ts', 'app/api/pdf/generate/route.ts']) {
+      const s = src(path)
+      expect(s, path).toMatch(/if \(!loaded\.ok\) \{/)
+      expect(s, path).toContain('servicesSnapshot: loaded.lines')
+      expect(s, path).not.toMatch(/\.\.\.\(lines \? \{ servicesSnapshot/)
+    }
+  })
+})
+
+describe('loadItineraryServiceLines fails closed', () => {
+  // A minimal stand-in for the two queries it makes.
+  const client = (opts: { ownedError?: boolean; owned?: boolean; daysError?: boolean; days?: unknown[] }) => ({
+    from(table: string) {
+      const chain: Record<string, unknown> = {}
+      chain.select = () => chain
+      chain.eq = () => chain
+      chain.maybeSingle = async () => ({ data: opts.owned === false ? null : { id: 'it-1' }, error: opts.ownedError ? { message: 'boom' } : null })
+      if (table === 'itinerary_days') {
+        chain.eq = async () => ({ data: opts.days ?? [], error: opts.daysError ? { message: 'boom' } : null })
+      }
+      return chain
+    },
+  }) as any
+
+  it('a database error on either query is a refusal, never "no gaps"', async () => {
+    const { loadItineraryServiceLines } = await import('@/lib/pricing/itinerary-completeness')
+    expect(await loadItineraryServiceLines(client({ ownedError: true }), 'it-1', 'org-1')).toMatchObject({ ok: false, status: 503 })
+    expect(await loadItineraryServiceLines(client({ daysError: true }), 'it-1', 'org-1')).toMatchObject({ ok: false, status: 503 })
+  })
+
+  it('an itinerary outside the org, or no org, is not found', async () => {
+    const { loadItineraryServiceLines } = await import('@/lib/pricing/itinerary-completeness')
+    expect(await loadItineraryServiceLines(client({ owned: false }), 'it-1', 'org-1')).toMatchObject({ ok: false, status: 404 })
+    expect(await loadItineraryServiceLines(client({}), 'it-1', null)).toMatchObject({ ok: false, status: 404 })
+  })
+
+  it('a readable itinerary returns its lines', async () => {
+    const { loadItineraryServiceLines } = await import('@/lib/pricing/itinerary-completeness')
+    const r = await loadItineraryServiceLines(client({ days: [{ day_number: 6, services: [noCost] }] }), 'it-1', 'org-1')
+    expect(r.ok).toBe(true)
+    expect(r.ok && r.lines[0].unpriced).toBe(true)
   })
 })
