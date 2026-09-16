@@ -18,10 +18,17 @@
 // the alternative to Flight, so a flying day looked like it had no road at all
 // (operator, 2026-09-16). Road on a train day adds the station transfers.
 // Road off on a day with no ticket means no road vehicle that day.
+//
+// A ticket leg may name its OWN route (From / To) when "yesterday's city →
+// today's" is not the journey — the arrival-day connection Cairo → Luxor
+// after an overnight flight, on a day filed under "Nile Cruise" (operator,
+// 2026-09-17). A flight also says whether each airport gets assistance
+// (lib/pricing/flight-leg).
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Plane, TrainFront, MoonStar, Car } from 'lucide-react'
+import { legAssistance, routeAirportCode, type LegAssist } from '@/lib/pricing/flight-leg'
 
 export type TravelLegMode = 'ground' | 'flight' | 'train' | 'sleeping_train'
 
@@ -60,6 +67,14 @@ interface Props {
   nextCity?: string | null
   /** road: the effective road choice after this change. */
   onChange: (mode: TravelLegMode, rateId: string | undefined, road: boolean) => void
+  /** The leg's own route, when the day names one. */
+  legFrom?: string | null
+  legTo?: string | null
+  legAssist?: LegAssist | null
+  /** The first day in the destination: a flight's assistance defaults on. */
+  isArrivalDay?: boolean
+  /** Route or assistance changed; undefined clears a field back to its default. */
+  onLegChange?: (patch: { leg_from?: string; leg_to?: string; leg_assist?: LegAssist }) => void
   disabled?: boolean
 }
 
@@ -71,7 +86,7 @@ const TICKET_META: Array<{ value: Exclude<TravelLegMode, 'ground'>; icon: typeof
 
 const num = (v: unknown): number => Number(v) || 0
 
-export default function TravelLegPicker({ mode, rateId, road, prevCity, city, nextCity, onChange, disabled }: Props) {
+export default function TravelLegPicker({ mode, rateId, road, prevCity, city, nextCity, onChange, legFrom, legTo, legAssist, isArrivalDay = false, onLegChange, disabled }: Props) {
   const t = useTranslations('travelLeg')
   const currentMode: TravelLegMode =
     mode === 'flight' || mode === 'train' || mode === 'sleeping_train' ? mode : 'ground'
@@ -79,8 +94,18 @@ export default function TravelLegPicker({ mode, rateId, road, prevCity, city, ne
   const [rows, setRows] = useState<Record<string, RowOption[]> | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const from = currentMode === 'sleeping_train' ? city : prevCity
-  const to = currentMode === 'sleeping_train' ? nextCity : city
+  const defaultFrom = currentMode === 'sleeping_train' ? city : prevCity
+  const defaultTo = currentMode === 'sleeping_train' ? nextCity : city
+  const from = legFrom || defaultFrom
+  const to = legTo || defaultTo
+  const assist = legAssistance(legAssist ?? undefined, isArrivalDay)
+  const setAssist = (end: 'from' | 'to', on: boolean) => {
+    const next: LegAssist = { ...(legAssist ?? {}) }
+    // Store only a departure from the day's default.
+    if (on === legAssistance(undefined, isArrivalDay)[end]) delete next[end]
+    else next[end] = on
+    onLegChange?.({ leg_assist: Object.keys(next).length ? next : undefined })
+  }
   const routeKey = `${currentMode}|${cityKey(from)}|${cityKey(to)}`
 
   useEffect(() => {
@@ -169,6 +194,44 @@ export default function TravelLegPicker({ mode, rateId, road, prevCity, city, ne
       <p className={`text-[11px] ${!roadOn && currentMode === 'ground' ? 'text-amber-700' : 'text-gray-500'}`}>
         {t(`combo.${currentMode}.${roadOn ? 'withRoad' : 'withoutRoad'}`)}
       </p>
+
+      {currentMode !== 'ground' && onLegChange && (
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-gray-600">
+          <span>{t('route')}</span>
+          <input
+            value={legFrom ?? ''}
+            placeholder={defaultFrom || t('from')}
+            disabled={disabled}
+            onChange={e => onLegChange({ leg_from: e.target.value || undefined })}
+            aria-label={t('from')}
+            className={`w-28 px-1.5 py-0.5 border rounded ${from ? 'border-gray-300' : 'border-amber-400'}`}
+          />
+          <span>→</span>
+          <input
+            value={legTo ?? ''}
+            placeholder={defaultTo || t('to')}
+            disabled={disabled}
+            onChange={e => onLegChange({ leg_to: e.target.value || undefined })}
+            aria-label={t('to')}
+            className={`w-28 px-1.5 py-0.5 border rounded ${to ? 'border-gray-300' : 'border-amber-400'}`}
+          />
+        </div>
+      )}
+
+      {currentMode === 'flight' && onLegChange && from && to && (
+        <div className="flex flex-wrap gap-3 text-[11px] text-gray-600" data-testid="leg-assist">
+          <label className="flex items-center gap-1">
+            <input type="checkbox" checked={assist.from} disabled={disabled} onChange={e => setAssist('from', e.target.checked)} />
+            {isArrivalDay
+              ? t('assistArrivalMeet', { airport: routeAirportCode(from) ?? from })
+              : t('assistDeparture', { airport: routeAirportCode(from) ?? from })}
+          </label>
+          <label className="flex items-center gap-1">
+            <input type="checkbox" checked={assist.to} disabled={disabled} onChange={e => setAssist('to', e.target.checked)} />
+            {t('assistArrival', { airport: routeAirportCode(to) ?? to })}
+          </label>
+        </div>
+      )}
 
       {currentMode !== 'ground' && (
         !from || !to ? (

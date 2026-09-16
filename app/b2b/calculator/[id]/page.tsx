@@ -467,6 +467,21 @@ export default function TourPriceCalculator() {
   const reportProperty = (dayIndex: number, option: AccommodationOption | null) =>
     setPropertyInUse(prev => (prev[dayIndex]?.id === option?.id && dayIndex in prev ? prev : { ...prev, [dayIndex]: option }))
 
+  // A ticket leg's own route and airport assistance (lib/pricing/flight-leg).
+  // A key set to undefined is removed, so the day falls back to its default.
+  const setDayLegRoute = (dayIndex: number, patch: Record<string, unknown>) => {
+    setEditableDays(prev => prev.map((d, i) => {
+      if (i !== dayIndex) return d
+      const next: TemplateItineraryDay = { ...d }
+      for (const [key, value] of Object.entries(patch)) {
+        if (value === undefined) delete next[key]
+        else next[key] = value
+      }
+      return next
+    }))
+    setHasUnsavedChanges(true)
+  }
+
   // How the night is spent. "In the air" is a whole day in transit: no bed,
   // no transfer, no assistance, nothing sold (the engine's in_transit), and
   // the 日程表 prints 機中泊 from overnight_kind 'flight'. Any other choice
@@ -1414,6 +1429,11 @@ export default function TourPriceCalculator() {
                                 city={day.city}
                                 nextCity={editableDays[index + 1]?.city ?? null}
                                 onChange={(mode, rateId, road) => setTravelLeg(index, mode, rateId, road)}
+                                legFrom={day.leg_from as string | undefined}
+                                legTo={day.leg_to as string | undefined}
+                                legAssist={day.leg_assist as { from?: boolean; to?: boolean } | undefined}
+                                isArrivalDay={index === editableDays.findIndex(d => d.in_transit !== true)}
+                                onLegChange={(patch) => setDayLegRoute(index, patch)}
                               />
                             </div>
 

@@ -47,6 +47,7 @@ import { periodRatesFor, plainPeriodName as seasonNameOf } from '@/lib/rates/rat
 import { cruiseCandidates, hotelCandidates, propertyById } from '@/lib/pricing/property-candidates'
 import { choicesForTier, sanitizePropertyChoice } from '@/lib/pricing/property-choice'
 import { durationFor, isRoadTransfer, isSightseeing, sanitizeTransportLines, type TransportLine } from '@/lib/pricing/transport-lines'
+import { getAirportCode, legAssistance, routeAirportCode, sanitizeLegAssist, sanitizeLegPlace, type LegAssist } from '@/lib/pricing/flight-leg'
 import { resolveSupplementsForDate, sanitizeSupplementKeys } from '@/lib/rates/supplements'
 import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
 import { tripAccommodationCost, type NightRates } from '@/lib/pricing/rooming'
@@ -201,6 +202,14 @@ export interface ItineraryDay {
    *  route served by exactly one row; more than one without a pick is a
    *  hole, never a guess. */
   transport_rate_id?: string
+  /** The leg's own route when it is not "yesterday's city → today's" — a
+   *  connection on the arrival day (Cairo → Luxor after the overnight flight),
+   *  or a day filed under a non-city like "Nile Cruise" (lib/pricing/flight-leg). */
+  leg_from?: string
+  leg_to?: string
+  /** Airport assistance at each end of a flight leg; absent = the default for
+   *  the day (on for an arrival-day connection, off otherwise). */
+  leg_assist?: LegAssist
 
   // Additive transport line items independent of the day's primary, e.g.
   // ['sound_light'] for an evening Sound & Light show transfer at Karnak
@@ -476,19 +485,8 @@ export function getVehicleTypeByPax(totalPax: number, city?: string): VehicleTyp
 /**
  * Get airport code from city name
  */
-export function getAirportCode(city: string): string {
-  const cityMap: Record<string, string> = {
-    'cairo': 'CAI',
-    'luxor': 'LXR',
-    'aswan': 'ASW',
-    'hurghada': 'HRG',
-    'sharm el-sheikh': 'SSH',
-    'sharm': 'SSH',
-    'alexandria': 'ALY',
-    'abu simbel': 'ABS'
-  }
-  return cityMap[city.toLowerCase()] || 'CAI'
-}
+// The airport map lives in lib/pricing/flight-leg (client-safe); re-exported here.
+export { getAirportCode }
 
 /**
  * Map tier to hotel category for hotel_staff_rates
@@ -657,8 +655,28 @@ export function determineTransportNeeds(
     lines.push(stationTransfer())
   }
 
+  // The first and last day IN THE DESTINATION: no neighbour, or a neighbour
+  // spent in the air. An overnight flight from Japan used to leave day 2 with
+  // its Meet & Greet but no airport transfer (operator, 2026-09-17).
+  const firstInDestination = !previousDay || previousDay.in_transit === true
+  const lastInDestination = !nextDay || nextDay.in_transit === true
+
+  // Arrival day with a connecting flight: landed internationally at the leg's
+  // origin and flies on, airside, to its destination — the transfer is at the
+  // FINAL airport, and there is no departure-side transfer. On a cruise-
+  // package day the ship's package carries the sightseeing, so it is a plain
+  // airport transfer.
+  if (day.services.airport_arrival && firstInDestination && isFlightDay) {
+    lines.push({
+      serviceType: hasAttractions && !isCruise ? 'airport_with_sightseeing' : 'airport_transfer',
+      duration: 'one_way',
+      area: hasAttractions && !isCruise ? transportArea : null,
+      useSpecialVehicle: false,
+      ...(day.leg_to ? { city: day.leg_to } : {}),
+    })
+  }
   // First day (arrival).
-  if (day.services.airport_arrival && !previousDay) {
+  else if (day.services.airport_arrival && firstInDestination) {
     if (day.skip_arrival_checkin && hasAttractions) {
       // One bundled line: airport → sites → hotel.
       lines.push({
@@ -686,7 +704,7 @@ export function determineTransportNeeds(
     }
   }
   // Last day (departure).
-  else if (day.services.airport_departure && !nextDay) {
+  else if (day.services.airport_departure && lastInDestination) {
     lines.push({
       serviceType: 'airport_transfer',
       duration: 'one_way',
@@ -700,22 +718,25 @@ export function determineTransportNeeds(
   // package covers cruise → airport, so the departure-side leg is suppressed
   // and only the arrival-side leg is emitted. On a boarding day (previous
   // day NOT on cruise) both legs are emitted normally.
-  else if (isCityChange && isFlightDay) {
-    if (!isCruiseDisembarkFlight && previousDay) {
+  else if ((isCityChange || day.leg_from || day.leg_to) && isFlightDay) {
+    const departureCity = day.leg_from || previousDay?.city
+    if (!isCruiseDisembarkFlight && departureCity) {
       lines.push({
         serviceType: 'airport_transfer',
         duration: 'one_way',
         area: null,
         useSpecialVehicle: false,
-        city: previousDay.city, // departure-side: previous city's airport
+        city: departureCity, // departure-side: the leg's origin airport
       })
     }
-    // Arrival-side leg — upgrade to airport_with_sightseeing when attractions.
+    // Arrival-side leg — upgrade to airport_with_sightseeing when attractions,
+    // except on a cruise-package day, whose package carries the sightseeing.
     lines.push({
-      serviceType: hasAttractions ? 'airport_with_sightseeing' : 'airport_transfer',
+      serviceType: hasAttractions && !isCruise ? 'airport_with_sightseeing' : 'airport_transfer',
       duration: 'one_way',
-      area: transportArea,
+      area: hasAttractions && !isCruise ? transportArea : null,
       useSpecialVehicle: false,
+      ...(day.leg_to ? { city: day.leg_to } : {}),
     })
   }
   // Cruise day (non-flight): primary ground excursion transport is bundled
@@ -971,6 +992,9 @@ export function parseItinerary(itineraryData: any, opts?: {
       transport: day.transport || undefined,
       transport_type: sleepingAboard ? 'sleeping_train' : (day.transport_type || undefined),
       transport_rate_id: day.transport_rate_id ? String(day.transport_rate_id) : undefined,
+      leg_from: sanitizeLegPlace(day.leg_from),
+      leg_to: sanitizeLegPlace(day.leg_to),
+      leg_assist: sanitizeLegAssist(day.leg_assist),
       road_transfers: typeof day.road_transfers === 'boolean' ? day.road_transfers : undefined,
       // The supplements the night is sold with (vocabulary keys).
       supplements: supplementKeys,
@@ -1442,21 +1466,24 @@ const cityKey = (c: string | null | undefined): string => {
 }
 
 /** The ticket legs an itinerary actually rides, in day order. */
-export function collectTicketLegs(itinerary: Array<{ day: number; city: string; transport_type?: string; transport_rate_id?: string }>): TicketLeg[] {
+export function collectTicketLegs(itinerary: Array<{ day: number; city: string; transport_type?: string; transport_rate_id?: string; leg_from?: string; leg_to?: string }>): TicketLeg[] {
   const legs: TicketLeg[] = []
   for (let i = 0; i < itinerary.length; i++) {
     const day = itinerary[i]
     const mode = day.transport_type
     if (mode === 'flight' || mode === 'train') {
-      const prev = itinerary[i - 1]
-      if (prev?.city && day.city && cityKey(prev.city) !== cityKey(day.city)) {
-        legs.push({ day: day.day, mode, from: prev.city, to: day.city, rateId: day.transport_rate_id })
+      // The day's own route wins (lib/pricing/flight-leg); else yesterday → today.
+      const from = day.leg_from || itinerary[i - 1]?.city
+      const to = day.leg_to || day.city
+      if (from && to && cityKey(from) !== cityKey(to)) {
+        legs.push({ day: day.day, mode, from, to, rateId: day.transport_rate_id })
       }
     } else if (mode === 'sleeping_train') {
       // Board tonight, wake up in the next day's city.
-      const next = itinerary[i + 1]
-      if (day.city && next?.city && cityKey(day.city) !== cityKey(next.city)) {
-        legs.push({ day: day.day, mode, from: day.city, to: next.city, rateId: day.transport_rate_id })
+      const from = day.leg_from || day.city
+      const to = day.leg_to || itinerary[i + 1]?.city
+      if (from && to && cityKey(from) !== cityKey(to)) {
+        legs.push({ day: day.day, mode, from, to, rateId: day.transport_rate_id })
       }
     }
   }
@@ -2918,8 +2945,68 @@ export async function calculateDayBasedPricing(
     }
 
     // ----- AIRPORT SERVICES (fixed per service) -----
-    if (day.services.airport_arrival) {
-      const airportCode = getAirportCode(day.city)
+    // A flight leg's two ends (lib/pricing/flight-leg). On the arrival day
+    // the party is met where the international flight lands — the leg's
+    // origin — and, by default, again at the connection's destination.
+    const flightLeg = ticketLegs.find(l => l.day === day.day && l.mode === 'flight')
+    // The first day on the ground — exactly what the day editor shows as the
+    // arrival day, so its ticked assistance is what prices (Greptile on #458).
+    const firstGroundedIndex = itinerary.findIndex(d => d.in_transit !== true)
+    const isArrivalDay = i === firstGroundedIndex
+    const legAssist = flightLeg ? legAssistance(day.leg_assist, isArrivalDay) : { from: false, to: false }
+    // On an arrival-day flight the origin-end assistance IS the Meet & Greet
+    // where the international flight lands: the checkbox decides it. Every
+    // other day keeps the airport_arrival flag.
+    const connectionArrival = Boolean(flightLeg && isArrivalDay)
+    const meetOnArrival = connectionArrival ? legAssist.from : day.services.airport_arrival
+    const assistLine = (place: string, direction: 'arrival' | 'departure', id: string, name: (code: string) => string) => {
+      const code = routeAirportCode(place)
+      if (!code) {
+        listUnpriced({ id, dayNumber: day.day, serviceType: 'airport_service', serviceName: name(place), isPerPax: false }, {
+          kind: 'airport_service',
+          reason: 'missing',
+          dayNumber: day.day,
+          city: place,
+          lookupAttempted: `airport code for "${place}"`,
+          message: `No airport on file for "${place}". Use a city with an airport (Cairo, Luxor, Aswan…) or its three-letter code in the day's route.`,
+        })
+        return
+      }
+      const found = resolveAirportServiceRate(code, direction)
+      if (found.rate != null) {
+        fixedCosts += found.rate
+        services.push({
+          id, dayNumber: day.day, serviceType: 'airport_service', serviceName: name(code),
+          quantity: 1, quantityMode: 'fixed', unitCost: found.rate, lineTotal: found.rate,
+          rateSource: 'airport_staff_rates', isPerPax: false, isOptional: false,
+        })
+      } else {
+        listUnpriced({ id, dayNumber: day.day, serviceType: 'airport_service', serviceName: name(code), isPerPax: false }, {
+          kind: 'airport_service',
+          reason: found.rowExists ? 'unpriced' : 'missing',
+          dayNumber: day.day,
+          city: day.city,
+          lookupAttempted: `airport_staff_rates ${code}/${direction}`,
+          message: found.rowExists
+            ? `The airport service rate for ${code} (${direction}) has no price. Open it in Rates → Airport Services and set one.`
+            : `No airport service rate for ${code} (${direction}). Add it in Rates → Airport Services.`,
+        })
+      }
+    }
+    if (flightLeg && legAssist.from && !isArrivalDay) {
+      assistLine(flightLeg.from, 'departure', `day${day.day}-airport-leg-from`, code => `Airport Departure Assistance (${code}) — ${flightLeg.from} → ${flightLeg.to}`)
+    }
+    if (flightLeg && legAssist.to) {
+      assistLine(flightLeg.to, 'arrival', `day${day.day}-airport-leg-to`, code => `Airport Arrival Assistance (${code}) — ${flightLeg.from} → ${flightLeg.to}`)
+    }
+    if (connectionArrival && flightLeg && meetOnArrival && !routeAirportCode(flightLeg.from)) {
+      // Landed at a place with no airport on file: a hole naming it, not Cairo.
+      assistLine(flightLeg.from, 'arrival', `day${day.day}-airport-arrival`, code => `Airport Meet & Greet (${code})`)
+    }
+
+    if (meetOnArrival && !(connectionArrival && flightLeg && !routeAirportCode(flightLeg.from))) {
+      // Where the party lands: the connection's origin, else the day's city.
+      const airportCode = connectionArrival && flightLeg ? routeAirportCode(flightLeg.from)! : getAirportCode(day.city)
       const found = resolveAirportServiceRate(airportCode, 'arrival')
       const rate = found.rate
       if (rate != null) {
