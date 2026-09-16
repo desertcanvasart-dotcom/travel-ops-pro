@@ -8,7 +8,8 @@
 // So what the editor shows is what Calculate Price will charge; there is no
 // second copy of the rules to drift.
 //
-// Body: { days: <editor days>, template_id?: string, num_pax?: number }
+// Body: { days: <editor days>, template_id?: string, num_pax?: number,
+//         guide_mode?: 'spot'|'throughout', tour_leader_included?: boolean }
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
@@ -61,6 +62,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'days is required' }, { status: 400 })
   }
   const numPax = Math.min(60, Math.max(1, Number(body?.num_pax) || 2))
+  // Seats in the vehicle, as the quote sizes it: a throughout guide rides
+  // with the group, and so does an included tour leader (pax-range
+  // transportAt(pax + 1)). Sizing on travellers alone showed a smaller
+  // vehicle's price than Calculate Price charges (Greptile on #454).
+  const seats = numPax + (body?.guide_mode === 'throughout' ? 1 : 0) + (body?.tour_leader_included === true ? 1 : 0)
 
   try {
     const db = createServerClient()
@@ -89,7 +95,7 @@ export async function POST(request: NextRequest) {
           city,
           duration: needs.duration,
           area: needs.area,
-          pax: numPax,
+          pax: seats,
           vehicleType: needs.useSpecialVehicle ? needs.specialVehicleType : undefined,
           originCity: from ?? undefined,
           destinationCity: to,
@@ -108,7 +114,7 @@ export async function POST(request: NextRequest) {
           message: cost != null
             ? null
             : rate
-              ? `The ${label.toLowerCase()} rate for ${where} has no price for ${numPax}. Fill its vehicles in Rates → Transportation.`
+              ? `The ${label.toLowerCase()} rate for ${where} has no price for ${seats} seats. Fill its vehicles in Rates → Transportation.`
               : `No ${label.toLowerCase()} rate for ${where}. Add it in Rates → Transportation.`,
         }
       })
@@ -116,7 +122,7 @@ export async function POST(request: NextRequest) {
       return { index: i, custom: Array.isArray(raw?.transport_lines), cruise_package: day.is_cruise_day === true, lines }
     })
 
-    return NextResponse.json({ success: true, currency, num_pax: numPax, days })
+    return NextResponse.json({ success: true, currency, num_pax: numPax, seats, days })
   } catch (error) {
     console.error('[transport-preview] failed:', error)
     return NextResponse.json({ success: false, error: 'Could not work out the transport' }, { status: 500 })

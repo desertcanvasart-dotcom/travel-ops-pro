@@ -15,7 +15,7 @@ import { useTranslations } from 'next-intl'
 import { Car, Plus, RotateCcw, X, AlertTriangle, Ship } from 'lucide-react'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import {
-  TRANSPORT_SERVICE_TYPES, isRoadTransfer, sanitizeTransportLines,
+  TRANSPORT_SERVICE_TYPES, isRoadTransfer,
   type TransportLine, type TransportLineType,
 } from '@/lib/pricing/transport-lines'
 import type { PreviewDay, PreviewLine } from '@/app/api/b2b/transport-preview/route'
@@ -49,16 +49,32 @@ function fromPreview(lines: PreviewLine[], city: string, prevCity: string | null
   })
 }
 
+/** Whether a preview line describes this editor line: same service, and
+ *  wherever the line names its own place, the same place. */
+export function lineMatches(line: TransportLine, priced: PreviewLine): boolean {
+  if (line.service_type !== priced.service_type) return false
+  if (line.city && line.city !== priced.city) return false
+  if (isRoadTransfer(line.service_type)) {
+    if (line.from && line.from !== priced.from) return false
+    if (line.to && line.to !== priced.to) return false
+  }
+  return true
+}
+
 export default function DayTransportEditor({ preview, loading, failed, value, city, prevCity, format, onChange }: Props) {
   const t = useTranslations('b2bCalculator.transport')
   const vocabLabel = useVocabLabel('transport_service_type')
   const label = (type: string) => vocabLabel(type, t.has(`types.${type}`) ? t(`types.${type}`) : type)
 
-  const stored = sanitizeTransportLines(value)
+  // The list as typed. Not sanitised here: cleaning trims places, and doing
+  // it on every keystroke would eat the space in "Abu Simbel" as it is typed.
+  // The engine and the preview clean it (sanitizeTransportLines) when pricing.
+  const stored = Array.isArray(value) ? (value as TransportLine[]) : undefined
   const custom = stored !== undefined
   // The list being edited: the operator's own, else what the rules made.
   const base = (): TransportLine[] => stored ?? fromPreview(preview?.lines ?? [], city, prevCity)
-  const canEdit = custom || Boolean(preview)
+  // A failed first load still lets the operator build the day's list by hand.
+  const canEdit = custom || Boolean(preview) || failed
 
   const change = (i: number, patch: Partial<TransportLine>) => {
     const next = base().map((l, k) => {
@@ -105,8 +121,12 @@ export default function DayTransportEditor({ preview, loading, failed, value, ci
 
       <div className="space-y-1.5">
         {rows.map((line, i) => {
-          // The engine's result for this line — same order as the list.
-          const priced = shown[i]
+          // The engine's result for this line — same order as the list — but
+          // only while it is still about THIS line: right after an edit the
+          // preview describes the old one until the refresh lands (Greptile
+          // on #454), and showing its cost against the new service misleads.
+          const candidate = shown[i]
+          const priced = candidate && lineMatches(line, candidate) ? candidate : undefined
           const road = isRoadTransfer(line.service_type)
           return (
             <div key={i} className={`rounded-lg border px-2 py-1.5 ${priced && priced.cost == null ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}`} data-testid="transport-line">
@@ -146,7 +166,7 @@ export default function DayTransportEditor({ preview, loading, failed, value, ci
                     aria-label={t('city')}
                   />
                 )}
-                <span className={`ml-auto text-xs font-medium ${priced?.cost == null ? 'text-red-700' : 'text-gray-800'}`}>
+                <span className={`ml-auto text-xs font-medium ${loading ? 'opacity-50' : ''} ${priced && priced.cost == null ? 'text-red-700' : 'text-gray-800'}`}>
                   {!priced ? '…' : priced.cost == null ? t('noRate') : format(priced.cost)}
                 </span>
                 <button type="button" onClick={() => remove(i)} className="p-1 text-gray-400 hover:text-red-600" aria-label={t('remove')} title={t('remove')}>

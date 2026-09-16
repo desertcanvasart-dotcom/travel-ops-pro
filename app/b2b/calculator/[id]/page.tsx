@@ -471,14 +471,15 @@ export default function TourPriceCalculator() {
   useEffect(() => {
     if (editableDays.length === 0) return
     const controller = new AbortController()
+    // Stale from this moment: the editor dims the costs until the new ones land.
+    setTransportLoading(true)
     // Debounced: typing a city should not fire a request per keystroke.
     const timer = setTimeout(async () => {
-      setTransportLoading(true)
       try {
         const res = await fetch('/api/b2b/transport-preview', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ days: editableDays, template_id: templateId, num_pax: numPax }),
+          body: JSON.stringify({ days: editableDays, template_id: templateId, num_pax: numPax, guide_mode: guideMode, tour_leader_included: tourLeaderIncluded }),
           signal: controller.signal,
         })
         const json = await res.json()
@@ -492,7 +493,7 @@ export default function TourPriceCalculator() {
       }
     }, 500)
     return () => { clearTimeout(timer); controller.abort() }
-  }, [editableDays, templateId, numPax])
+  }, [editableDays, templateId, numPax, guideMode, tourLeaderIncluded])
 
   const setDaySupplements = (dayIndex: number, keys: string[] | undefined) => {
     setEditableDays(prev => {

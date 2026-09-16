@@ -132,3 +132,23 @@ describe('the editor shows what pricing charges', () => {
     }
   })
 })
+
+describe('review fixes (Greptile on #454)', () => {
+  it('the preview sizes the vehicle with the throughout guide and the tour leader aboard, like the quote', () => {
+    const src = readFileSync('app/api/b2b/transport-preview/route.ts', 'utf8')
+    expect(src).toMatch(/guide_mode === 'throughout' \? 1 : 0/)
+    expect(src).toMatch(/tour_leader_included === true \? 1 : 0/)
+    expect(src).toContain('pax: seats')
+    const page = readFileSync('app/b2b/calculator/[id]/page.tsx', 'utf8')
+    expect(page).toContain('guide_mode: guideMode, tour_leader_included: tourLeaderIncluded')
+  })
+
+  it('a cost is shown against a line only while the preview still describes that line', async () => {
+    const { lineMatches } = await import('@/components/DayTransportEditor')
+    const priced = { service_type: 'intercity', label: '', city: 'Luxor', from: 'Cairo', to: 'Luxor', rate_name: null, cost: 90, message: null }
+    expect(lineMatches({ service_type: 'intercity' }, priced)).toBe(true)
+    expect(lineMatches({ service_type: 'half_day' }, priced)).toBe(false)
+    expect(lineMatches({ service_type: 'intercity', from: 'Aswan' }, priced)).toBe(false)
+    expect(lineMatches({ service_type: 'intercity', to: 'Luxor' }, priced)).toBe(true)
+  })
+})
