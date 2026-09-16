@@ -15,7 +15,7 @@ test('rate periods editor: six periods, overlap and gap warnings', async ({ page
   await expect(page.getByText(/Rate periods/).first()).toBeVisible({ timeout: 15_000 })
 
   const addBtn = page.getByRole('button', { name: /add period/i })
-  const nameBoxes = page.getByPlaceholder('e.g. Christmas / New Year')
+  const nameBoxes = page.getByPlaceholder('e.g. 2026, Christmas week')
 
   // Six periods, the shape the old three-season model could not hold.
   const periods = [
@@ -33,6 +33,10 @@ test('rate periods editor: six periods, overlap and gap warnings', async ({ page
     await card.locator('input[type="date"]').nth(0).fill(periods[i][1])
     await card.locator('input[type="date"]').nth(1).fill(periods[i][2])
   }
+
+  // Six is the most a rate carries (operator, 2026-09-16): no seventh.
+  await expect(addBtn).toHaveCount(0)
+  await expect(page.getByTestId('period-limit')).toBeVisible()
 
   // Back-to-back periods: nothing to warn about.
   await expect(page.getByText(/overlap/i)).toHaveCount(0)

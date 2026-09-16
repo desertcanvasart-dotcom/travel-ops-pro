@@ -135,9 +135,19 @@ describe('parsePeriodRows', () => {
     expect(errors[0].message).toContain('is before')
   })
 
-  it('drops a bad row without losing the good ones', () => {
+  it('refuses a rate with a bad row WHOLE — never replaces its periods with the rows that parsed', () => {
     const { byKey, errors } = parsePeriodRows(HOTEL, [row(), row({ To: 'nonsense' })])
-    expect(byKey.get('ACC-1')).toHaveLength(1)
+    expect(byKey.has('ACC-1')).toBe(false)
+    expect(errors).toHaveLength(1)
+  })
+
+  it('a bad row for one rate does not stop another rate loading', () => {
+    const { byKey, errors } = parsePeriodRows(HOTEL, [
+      row({ To: 'nonsense' }),
+      row({ 'Service Code': 'ACC-2' }),
+    ])
+    expect(byKey.has('ACC-1')).toBe(false)
+    expect(byKey.get('ACC-2')).toHaveLength(1)
     expect(errors).toHaveLength(1)
   })
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { periodFigures, blankGroups, pricedDoubles } from '@/components/rates/RatePeriodLines'
+import { periodFigures, blankGroups, pricedDoubles, displayPeriods } from '@/components/rates/RatePeriodLines'
 import { sanitizeSeasons } from '@/lib/rates/rate-seasons'
 
 // The hotels and cruises lists show every period, one line each. The cruises
@@ -69,5 +69,26 @@ describe('the lists use it', () => {
       expect(check, file).toBeGreaterThan(-1)
       expect(check, file).toBeLessThan(src.indexOf('sanitizeSeasons(body.seasons'))
     }
+  })
+})
+
+describe('a rate with no dated periods still shows what it prices at', () => {
+  it('hotel base columns become one undated line and count toward the average', () => {
+    const legacy = { rate_currency: 'USD', pp_double_eur: 90, single_supp_eur: 40, triple_red_eur: 5, pp_double_non_eur: 95 }
+    const { periods, undated } = displayPeriods(legacy, 'accommodation')
+    expect(undated).toBe(true)
+    expect(periodFigures('accommodation', periods[0], 'eur')).toEqual({ double: 90, singleSupp: 40, tripleRed: 5 })
+    expect(pricedDoubles([legacy], 'accommodation').map(d => d.amount)).toEqual([90, 95])
+  })
+
+  it('cruise base columns read the way the engine reads them', () => {
+    const legacy = { rate_double_eur: 100, rate_single_eur: 160, rate_triple_eur: 90, rate_low_double_non_eur: 120, rate_low_single_non_eur: 170 }
+    const { periods } = displayPeriods(legacy, 'cruise')
+    expect(periodFigures('cruise', periods[0], 'eur')).toEqual({ double: 100, singleSupp: 60, tripleRed: 10 })
+    expect(periodFigures('cruise', periods[0], 'non_eur')).toEqual({ double: 120, singleSupp: 50, tripleRed: null })
+  })
+
+  it('nothing priced anywhere is still "no periods"', () => {
+    expect(displayPeriods({ pp_double_eur: 0 }, 'accommodation')).toEqual({ periods: [], undated: false })
   })
 })

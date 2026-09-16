@@ -344,6 +344,15 @@ export function parsePeriodRows(
     }
   }
 
+  // So is a rate with ANY bad row. The import REPLACES a rate's periods, and
+  // the preview lets the operator apply despite row errors — keeping the good
+  // rows would replace a five-period contract with the four that parsed and
+  // leave the fifth window unpriced (Greptile on #452). Other rates load.
+  for (const key of new Set(errors.map(e => e.key).filter(Boolean))) {
+    byKey.delete(key)
+    supplementsByKey.delete(key)
+  }
+
   // Sort each rate's periods by start date, so the file's row order never
   // decides anything.
   for (const [, list] of byKey) {
