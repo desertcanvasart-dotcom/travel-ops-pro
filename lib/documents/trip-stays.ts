@@ -37,13 +37,25 @@ export async function loadTripStays(supabase: SupabaseClient, itineraryId: strin
     supabase.from('supplier_properties').select('id, name, property_type, name_ja, contact_phone, address').in('property_type', ['hotel', 'ship']),
   ])
   const byId = new Map((properties as PropertyRow[] | null ?? []).map(p => [p.id, p]))
-  const linked = new Map<string, string>()
-  for (const r of hotels ?? []) if (r.property_id) linked.set(`hotel|${propertyKey(r.property_name)}`, r.property_id)
-  for (const r of ships ?? []) if (r.property_id) linked.set(`cruise|${propertyKey(r.ship_name)}`, r.property_id)
+  // name → every property id a rate row of that name links to. A name linked
+  // to MORE than one property is ambiguous: the night carries only the name,
+  // so no record is chosen rather than printing another property's phone and
+  // address (Greptile on #457).
+  const linked = new Map<string, Set<string>>()
+  const link = (key: string, id: string | null) => {
+    if (!id) return
+    const ids = linked.get(key) ?? new Set<string>()
+    ids.add(id)
+    linked.set(key, ids)
+  }
+  for (const r of hotels ?? []) link(`hotel|${propertyKey(r.property_name)}`, r.property_id)
+  for (const r of ships ?? []) link(`cruise|${propertyKey(r.ship_name)}`, r.property_id)
 
   const recordFor = (kind: 'hotel' | 'cruise', name: string): PropertyRow | null => {
     const viaRate = linked.get(`${kind}|${propertyKey(name)}`)
-    if (viaRate && byId.has(viaRate)) return byId.get(viaRate)!
+    if (viaRate && viaRate.size > 1) return null
+    const onlyId = viaRate ? [...viaRate][0] : undefined
+    if (onlyId && byId.has(onlyId)) return byId.get(onlyId)!
     const type = kind === 'hotel' ? 'hotel' : 'ship'
     const same = (properties as PropertyRow[] | null ?? []).filter(p => p.property_type === type && propertyKey(p.name) === propertyKey(name))
     return same.length === 1 ? same[0] : null

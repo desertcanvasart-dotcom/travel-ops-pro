@@ -232,21 +232,38 @@ export function tripHotelRows(
 ): Array<{ hotel: string; check_in: string; check_out: string; phone: string; address: string }> {
   const runs = overnightRuns(days)
   const paired = imported.length === runs.length
-  return runs.map((run, i) => {
+  const shown = (s: TripStay) => (s.name_ja ?? '').trim() || s.name.trim()
+  const same = (a: TripStay, b: TripStay) => a.kind === b.kind && a.name.trim().toLowerCase() === b.name.trim().toLowerCase()
+
+  return runs.flatMap((run, i) => {
     const base = paired ? imported[i] : { hotel: '', check_in: '', check_out: '', phone: '', address: '' }
-    const stay = stays.find(s => s.day >= run.startDay && s.day <= run.endDay)
-    const shown = (s: TripStay) => (s.name_ja ?? '').trim() || s.name.trim()
-    const row = !stay
-      ? { ...base }
-      : stay.kind === 'cruise'
-        ? { hotel: CRUISE_ROW_LABEL, check_in: base.check_in, check_out: base.check_out, phone: (stay.phone ?? '').trim(), address: `クルーズ船名：${shown(stay)}` }
-        : { hotel: shown(stay), check_in: base.check_in, check_out: base.check_out, phone: (stay.phone ?? '').trim(), address: (stay.address ?? '').trim() }
-    if (startDate) {
-      const checkIn = dateLabel(startDate, run.startDay)
-      const checkOut = dateLabel(startDate, run.endDay + 1)
-      if (checkIn && checkOut) return { ...row, check_in: checkIn.md, check_out: checkOut.md }
+    // A programme stay is one city; the TRIP may have moved hotels inside it
+    // (two Cairo hotels on consecutive nights). Split the stay where the sold
+    // property changes, so each hotel is a row with its own dates (Greptile
+    // on #457). A night with no named property belongs to the segment before.
+    const segments: Array<{ startDay: number; endDay: number; stay: TripStay | null }> = []
+    for (let day = run.startDay; day <= run.endDay; day++) {
+      const stay = stays.find(s => s.day === day) ?? null
+      const last = segments[segments.length - 1]
+      if (last && (!stay || (last.stay && same(last.stay, stay)))) last.endDay = day
+      else if (last && !last.stay && stay && segments.length === 1) { last.stay = stay; last.endDay = day }
+      else segments.push({ startDay: day, endDay: day, stay })
     }
-    return row
+
+    return segments.map(seg => {
+      const stay = seg.stay
+      const row = !stay
+        ? { ...base }
+        : stay.kind === 'cruise'
+          ? { hotel: CRUISE_ROW_LABEL, check_in: base.check_in, check_out: base.check_out, phone: (stay.phone ?? '').trim(), address: `クルーズ船名：${shown(stay)}` }
+          : { hotel: shown(stay), check_in: base.check_in, check_out: base.check_out, phone: (stay.phone ?? '').trim(), address: (stay.address ?? '').trim() }
+      if (startDate) {
+        const checkIn = dateLabel(startDate, seg.startDay)
+        const checkOut = dateLabel(startDate, seg.endDay + 1)
+        if (checkIn && checkOut) return { ...row, check_in: checkIn.md, check_out: checkOut.md }
+      }
+      return row
+    })
   })
 }
 

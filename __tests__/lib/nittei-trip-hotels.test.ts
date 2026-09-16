@@ -66,6 +66,26 @@ describe('利用ホテル for a customer trip', () => {
     expect(rows[0].check_in).toBe('12/6')
   })
 
+  it('two different hotels inside one programme stay are two rows with their own dates', () => {
+    const cairoTwice: SourceProgramDay[] = [
+      { day: 1, description: null, attractions: null, meals: null, overnight_city: 'Cairo' },
+      { day: 2, description: null, attractions: null, meals: null, overnight_city: 'Cairo' },
+      { day: 3, description: null, attractions: null, meals: null, overnight_city: 'Cairo' },
+      { day: 4, description: null, attractions: null, meals: null, overnight_city: null },
+    ]
+    const rows = assembleProgramItinerary({
+      template_code: 'X', itinerary: cairoTwice, hotels: [{ hotel: 'メナ ハウス ホテル' }],
+      trip_stays: [
+        { day: 1, kind: 'hotel', name: 'Mena House', name_ja: null, phone: null, address: null },
+        { day: 2, kind: 'hotel', name: 'Nile Ritz', name_ja: null, phone: null, address: null },
+        { day: 3, kind: 'hotel', name: 'Nile Ritz', name_ja: null, phone: null, address: null },
+      ],
+      created_date: '', font_face_css: '', org: null,
+      departure: { start_date: '2026-12-01', cairo_guide: null, south_guide: null, author: null, customer_name: null },
+    }).hotel_rows
+    expect(rows.map(r => `${r.hotel}:${r.check_in}→${r.check_out}`)).toEqual(['Mena House:12/1→12/2', 'Nile Ritz:12/2→12/4'])
+  })
+
   it('the bare programme (no trip) is unchanged: the imported list', () => {
     expect(assemble(null).map(r => r.hotel)).toEqual(IMPORTED.map(h => h.hotel))
   })
@@ -82,5 +102,42 @@ describe('both 日程表 doors pass the trip', () => {
     for (const f of ['app/api/suppliers/[id]/properties/route.ts', 'app/api/suppliers/[id]/properties/[propertyId]/route.ts']) {
       expect(readFileSync(f, 'utf8')).toContain("'name_ja', 'address'")
     }
+  })
+})
+
+describe('which property record prints (Greptile on #457)', () => {
+  it('a name linked to more than one property picks none rather than the wrong phone and address', async () => {
+    const { vi } = await import('vitest')
+    const tables: Record<string, unknown[]> = {
+      itineraries: [{ id: 'it1', org_id: 'org' }],
+      itinerary_days: [{ itinerary_id: 'it1', day_number: 2, services: [{ service_type: 'accommodation', service_code: 'day2-hotel', service_name: 'Hotel - Steigenberger Nile Palace (Cairo)', supplier_name: null }] }],
+      accommodation_rates: [
+        { property_name: 'Steigenberger Nile Palace', property_id: 'p-cairo' },
+        { property_name: 'Steigenberger Nile Palace', property_id: 'p-luxor' },
+      ],
+      nile_cruises: [],
+      supplier_properties: [
+        { id: 'p-cairo', name: 'Steigenberger Nile Palace', property_type: 'hotel', name_ja: 'カイロ', contact_phone: '02', address: 'Cairo' },
+        { id: 'p-luxor', name: 'Steigenberger Nile Palace', property_type: 'hotel', name_ja: 'ルクソール', contact_phone: '095', address: 'Luxor' },
+      ],
+    }
+    // Minimal chainable client: filters are ignored except eq on id/itinerary.
+    const client = {
+      from: (table: string) => {
+        let rows = [...(tables[table] ?? [])] as Record<string, unknown>[]
+        const q: Record<string, unknown> = {
+          select: () => q,
+          eq: (col: string, val: unknown) => { rows = rows.filter(r => !(col in r) || r[col] === val); return q },
+          in: () => q,
+          maybeSingle: async () => ({ data: rows[0] ?? null, error: null }),
+          then: (resolve: (v: unknown) => void) => resolve({ data: rows, error: null }),
+        }
+        return q
+      },
+    }
+    const { loadTripStays } = await import('@/lib/documents/trip-stays')
+    const stays = await loadTripStays(client as never, 'it1', 'org')
+    expect(stays).toEqual([{ day: 2, kind: 'hotel', name: 'Steigenberger Nile Palace', name_ja: null, phone: null, address: null }])
+    vi.restoreAllMocks()
   })
 })
