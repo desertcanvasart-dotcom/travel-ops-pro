@@ -68,6 +68,12 @@ interface CalculatedService {
   price_basis?: 'operator_price' | 'cost_plus_margin'
   day_number: number | null
   pricing_note?: string
+  /** No usable rate: listed in its place at 0 (the gap is also a hole). */
+  unpriced?: boolean
+  /** Already paid for inside another line — shown so the day reads whole. */
+  included?: boolean
+  /** Why the line is unpriced, included, or unmatched. */
+  issue?: string
 }
 
 interface PriceCalculationResult {
@@ -608,7 +614,10 @@ export async function POST(request: NextRequest) {
         line_total: s.lineTotal,
         is_optional: s.isOptional,
         day_number: s.dayNumber,
-        pricing_note: s.notes
+        pricing_note: s.notes,
+        ...(s.unpriced ? { unpriced: true } : {}),
+        ...(s.included ? { included: true } : {}),
+        ...(s.issue ? { issue: s.issue } : {}),
       }))
 
       // The per-person accommodation lines are per-person-in-double. A solo

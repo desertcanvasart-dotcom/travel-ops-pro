@@ -6686,7 +6686,21 @@
     "guideModeSpot": "Spot (per city)",
     "guideModeThroughout": "Throughout",
     "guideModeSpotHint": "A city guide on sightseeing days only.",
-    "guideModeThroughoutHint": "One guide with the group day 1 to the end: daily fee, bed at each property’s guide rate, an extra seat; meals charged for groups of 3 or fewer."
+    "guideModeThroughoutHint": "One guide with the group day 1 to the end: daily fee, bed at each property’s guide rate, an extra seat; meals charged for groups of 3 or fewer.",
+    "wholeTrip": "Whole trip",
+    "dayWithPlace": "Day {day} · {place}",
+    "dayGaps": "{count, plural, one {# without a rate} other {# without a rate}}",
+    "noRate": "No rate",
+    "included": "Included",
+    "checkLine": "Check",
+    "incompleteTitle": "Incomplete price",
+    "incompleteBody": "{count, plural, one {# service has no rate} other {# services have no rate}}. Each is listed at 0 in red on its day below, and the totals leave it out. Add the rate and calculate again.",
+    "incompleteBadge": "incomplete",
+    "rateSheetIncomplete": "{count, plural, one {# service could not be priced and is left out of these rates} other {# services could not be priced and are left out of these rates}}. Calculate the price to see which.",
+    "rateSheetIncompleteCsv": "INCOMPLETE: {count, plural, one {# service has no rate and is left out} other {# services have no rate and are left out}}",
+    "saveIncompleteTitle": "Save an incomplete quote?",
+    "saveIncompleteBody": "{count, plural, one {# service has no rate} other {# services have no rate}}, so this quote is short by whatever they cost. Save it anyway?",
+    "saveAnyway": "Save anyway"
   },
   "bookings": {
     "title": "Bookings",

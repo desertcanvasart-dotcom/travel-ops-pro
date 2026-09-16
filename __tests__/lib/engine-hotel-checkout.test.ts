@@ -44,7 +44,8 @@ describe('hotel check-out assistance', () => {
     t.hotel_staff_rates = [row('checkin_assist', 10)]
     setMockTables(t)
     const r = await calculateAutoPricing(BASE)
-    expect(checkoutLine(r)).toBeUndefined()
+    // Listed on its day at 0 so the gap is visible there — never charged.
+    expect(checkoutLine(r)).toMatchObject({ unpriced: true, unitCost: 0, lineTotal: 0 })
     expect((r.holes ?? []).some((h: any) => h.kind === 'hotel_service' && /check-out assistance/.test(h.message))).toBe(true)
   })
 })

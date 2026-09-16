@@ -42,6 +42,7 @@ import { applyB2BDayRules } from '@/lib/ai/day-rules-engine'
 import type { PricingHole } from '@/lib/pricing-types'
 import { priceAcrossPax } from '@/lib/pricing/pax-range'
 import { usableRate } from '@/lib/pricing/usable-rate'
+import { sortByItineraryFlow } from '@/lib/pricing/breakdown-order'
 import { ratesForTravelDate } from '@/lib/rates/rate-seasons'
 import { resolveSupplementsForDate, sanitizeSupplementKeys } from '@/lib/rates/supplements'
 import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
@@ -81,6 +82,24 @@ export type TransportServiceType =
   | 'extended_day_tour'
   | 'sound_light'
   | 'dinner_transfer'
+
+/** How a transport line reads to the operator when it has to be listed without a row to name it. */
+export function transportServiceLabel(serviceType: string): string {
+  const labels: Record<string, string> = {
+    airport_transfer: 'Airport transfer',
+    airport_with_sightseeing: 'Airport transfer with sightseeing',
+    city_transfer: 'City transfer',
+    city_tour: 'City tour vehicle',
+    intercity: 'Road transfer',
+    intercity_with_sightseeing: 'Road transfer with sightseeing',
+    half_day: 'Half-day vehicle',
+    day_tour: 'Full-day vehicle',
+    extended_day_tour: 'Extended-day vehicle',
+    sound_light: 'Sound & light transfer',
+    dinner_transfer: 'Dinner transfer',
+  }
+  return labels[serviceType] ?? 'Transport'
+}
 
 export type TransportDuration = 'full_day' | 'half_day' | 'one_way'
 
@@ -229,6 +248,15 @@ export interface PricedService {
   isPerPax: boolean  // true = scales with pax, false = fixed cost
   isOptional: boolean  // true = optional add-on service
   notes?: string
+  /** No usable rate. Listed IN ITS PLACE at 0 rather than dropped, so the
+   *  operator sees the gap on the day it belongs to (operator, 2026-09-16).
+   *  The same gap is recorded in `holes`, so the price is not complete. */
+  unpriced?: boolean
+  /** Already paid for inside another line — breakfast in the hotel rate,
+   *  meals aboard the cruise. Shown so the day reads whole; costs nothing. */
+  included?: boolean
+  /** The operator-facing reason for an unpriced, included or unmatched line. */
+  issue?: string
 }
 
 // Complete pricing result
@@ -714,14 +742,19 @@ export function parseItinerary(itineraryData: any, opts?: {
       lunch: 'none' as MealStatus,
       dinner: 'none' as MealStatus
     }
+    // Ticked meals from the list format, resolved to included/external once
+    // the day's bed is known (below) — whether a lunch costs anything depends
+    // on whether the party is aboard the ship or on a board basis.
+    let tickedMeals: Set<string> | null = null
 
     if (day.meals) {
       if (Array.isArray(day.meals)) {
-        // Old format: ["Breakfast", "Lunch", "Dinner"]
-        const mealArray = day.meals.map((m: string) => m.toLowerCase())
-        meals.breakfast = mealArray.includes('breakfast') ? 'included' : 'none'
-        meals.lunch = mealArray.includes('lunch') ? 'included' : 'none'
-        meals.dinner = mealArray.includes('dinner') ? 'included' : 'none'
+        // The list format — ["breakfast", "lunch", "dinner"] — is the ONLY
+        // one the calculator writes, and every template day in production
+        // uses it. It used to map every tick to 'included', while the engine
+        // only ever charges 'external': so every lunch and dinner an operator
+        // ticked priced at nothing, with no hole and no warning.
+        tickedMeals = new Set(day.meals.map((m: string) => String(m).toLowerCase()))
       } else {
         // New format: { breakfast: 'included', lunch: 'external', dinner: 'none' }
         meals = {
@@ -816,6 +849,11 @@ export function parseItinerary(itineraryData: any, opts?: {
     // A day spent entirely in the air, with no city and nothing to see, is
     // outside the destination: no arrival transfer, no hotel assistance.
     const inTransit = NO_BED_KINDS.has(overnightKind) && !day.city && attractions.length === 0
+    const accommodationType: AccommodationType = noBed ? 'none' : (day.accommodation_type || inferAccommodationType(day, itineraryData))
+    const supplementKeys = sanitizeSupplementKeys(day.supplements)
+    if (tickedMeals) {
+      meals = mealsFromTicks(tickedMeals, { aboard: accommodationType === 'cruise', supplements: supplementKeys ?? [] })
+    }
 
     return {
       day: day.day || index + 1,
@@ -823,7 +861,7 @@ export function parseItinerary(itineraryData: any, opts?: {
       description: day.description || '',
       city: day.city || inferCityFromTitle(day.title || '', opts?.defaultCity),
       overnight_city: day.overnight_city || undefined,
-      accommodation_type: noBed ? 'none' : (day.accommodation_type || inferAccommodationType(day, itineraryData)),
+      accommodation_type: accommodationType,
       in_transit: inTransit || undefined,
       meals,
       attractions,
@@ -834,7 +872,7 @@ export function parseItinerary(itineraryData: any, opts?: {
       transport_type: sleepingAboard ? 'sleeping_train' : (day.transport_type || undefined),
       transport_rate_id: day.transport_rate_id ? String(day.transport_rate_id) : undefined,
       // The supplements the night is sold with (vocabulary keys).
-      supplements: sanitizeSupplementKeys(day.supplements),
+      supplements: supplementKeys,
       // Nile Cruise package flag - uses bundled transport instead of individual vehicle costs
       is_cruise_day: day.is_cruise_day || false
     }
@@ -1097,7 +1135,46 @@ function inferCityFromTitle(title: string, defaultCity: string = 'Cairo'): strin
  *  lib/itineraries/template-days.ts NO_BED). */
 const NO_BED_KINDS = new Set(['none', 'flight', 'in_flight', 'airport'])
 
-function inferAccommodationType(day: any, allDays: any[]): AccommodationType {
+/** Hotel board supplements (vocabulary keys) and the meals each one covers. */
+const BOARD_MEALS: Record<string, ReadonlyArray<'lunch' | 'dinner'>> = {
+  half_board: ['dinner'],
+  full_board: ['lunch', 'dinner'],
+  all_inclusive: ['lunch', 'dinner'],
+  ultra_all_inclusive: ['lunch', 'dinner'],
+}
+
+/**
+ * Which ticked meals the operator has to BUY, and which are already paid for.
+ *
+ * - Breakfast is in the hotel or cabin rate: always included.
+ * - A day aboard the ship is full board: every meal is in the cabin rate.
+ * - A hotel night sold with a board supplement covers the meals that board
+ *   includes (half board = dinner; full board and all-inclusive = both).
+ * - Any other ticked lunch or dinner is eaten out and costs a meal rate.
+ */
+export function mealsFromTicks(
+  ticked: ReadonlySet<string>,
+  ctx: { aboard: boolean; supplements: readonly string[] }
+): ItineraryDay['meals'] {
+  const boarded = new Set(ctx.supplements.flatMap(k => BOARD_MEALS[k] ?? []))
+  const status = (meal: 'breakfast' | 'lunch' | 'dinner'): MealStatus => {
+    if (!ticked.has(meal)) return 'none'
+    if (meal === 'breakfast' || ctx.aboard) return 'included'
+    return boarded.has(meal) ? 'included' : 'external'
+  }
+  return { breakfast: status('breakfast'), lunch: status('lunch'), dinner: status('dinner') }
+}
+
+/**
+ * The bed for a day that does not say. Only EXPLICIT wording decides.
+ *
+ * This used to fall back on the whole programme: if ANY day anywhere mentioned
+ * "cruise", every unmarked night — the Cairo hotel after disembarking
+ * included — became a cruise night, billed at the ship's rate with no hotel
+ * line and no hole. A guess that silently moves a night onto the wrong rate is
+ * worse than a hotel night with no rate, which is at least listed and visible.
+ */
+export function inferAccommodationType(day: any, _allDays?: any[]): AccommodationType {
   if (day.accommodation_type) {
     return day.accommodation_type
   }
@@ -1106,29 +1183,22 @@ function inferAccommodationType(day: any, allDays: any[]): AccommodationType {
   const description = (day.description || '').toLowerCase()
   const combined = title + ' ' + description
 
-  // Check for cruise indicators
-  if (combined.includes('cruise') || combined.includes('cruiser') || 
+  // Leaving the ship ("disembark" contains "embark") sleeps ashore.
+  if (combined.includes('disembark')) {
+    return 'hotel'
+  }
+
+  // The day itself says it is aboard.
+  if (combined.includes('cruise') || combined.includes('cruiser') ||
       combined.includes('sail') || combined.includes('aboard') ||
       combined.includes('on board') || combined.includes('embark')) {
     return 'cruise'
   }
 
-  // Check if it's a departure day (usually last day)
+  // The day itself says the trip is leaving.
   if (combined.includes('departure') || combined.includes('fly out') ||
-      combined.includes('transfer to airport') || combined.includes('end of')) {
+      combined.includes('transfer to airport')) {
     return 'none'
-  }
-
-  // Default based on tour theme (check all days for cruise mentions)
-  const hasCruiseDays = allDays.some((d: any) => 
-    ((d.title || '') + ' ' + (d.description || '')).toLowerCase().includes('cruise')
-  )
-
-  if (hasCruiseDays) {
-    const isArrival = title.includes('arrival')
-    const isDeparture = title.includes('departure')
-    if (isDeparture) return 'none'
-    return 'cruise'
   }
 
   return 'hotel'
@@ -1977,19 +2047,12 @@ export function findTransportRate(
     }
   }
 
-  // Priority 5: Fallback to nearby cities
-  if (!record) {
-    const fallbackCities = ['luxor', 'aswan', 'cairo', 'alexandria', 'hurghada']
-    for (const fallbackCity of fallbackCities) {
-      if (fallbackCity === cityLower) continue
-      const fallbackKey = [serviceType, fallbackCity, duration, ''].join('|')
-      if (cache.has(fallbackKey)) {
-        record = cache.get(fallbackKey)!
-        debugLog(`⚠️ Transport fallback city: ${fallbackCity} for ${city}`)
-        break
-      }
-    }
-  }
+  // There is deliberately NO "nearby city" fallback. One used to sit here: a
+  // missing Aswan → Cairo leg was priced from whichever of Luxor, Aswan,
+  // Cairo, Alexandria or Hurghada had any row of the same service type — a
+  // 700 km road leg billed as a short hop in another city, with no hole and
+  // no warning. A wrong price that looks right is worse than a missing one;
+  // a missing one is listed and marks the price incomplete (2026-09-16).
 
   if (!record) {
     debugLog(`❌ No transport rate found for: ${serviceType} | ${city} | ${duration} | ${area} | pax=${pax}`)
@@ -2184,6 +2247,31 @@ export async function calculateDayBasedPricing(
   // Holes = rate gaps that make the price non-deliverable. Never auto-filled.
   const holes: PricingHole[] = []
   const addHole = (h: Omit<PricingHole, 'tier'>) => holes.push({ ...h, tier })
+
+  // A service the day needs but the rates cannot price is LISTED, at 0, on
+  // its own day — never silently dropped. It adds nothing to any running
+  // total (those are separate accumulators below), so the arithmetic is
+  // untouched; the hole beside it is what marks the price incomplete.
+  type LineShape = Pick<PricedService, 'id' | 'dayNumber' | 'serviceType' | 'serviceName' | 'isPerPax'>
+  const zeroLine = (line: LineShape, extra: Pick<PricedService, 'unpriced' | 'included' | 'issue'>): PricedService => ({
+    ...line,
+    quantity: 1,
+    quantityMode: line.isPerPax ? 'per_pax' : 'fixed',
+    unitCost: 0,
+    lineTotal: 0,
+    rateSource: 'none',
+    isOptional: false,
+    ...extra,
+  })
+  /** Record the hole AND list the service in its place. */
+  const listUnpriced = (line: LineShape, hole: Omit<PricingHole, 'tier'>) => {
+    addHole(hole)
+    services.push(zeroLine(line, { unpriced: true, issue: hole.message }))
+  }
+  /** List the service in its place for a hole already recorded once for the trip. */
+  const listUnpricedLine = (line: LineShape, message: string) => {
+    services.push(zeroLine(line, { unpriced: true, issue: message }))
+  }
 
   // ============================================
   // STEP 1: Fetch template and parse itinerary
@@ -2452,12 +2540,14 @@ export async function calculateDayBasedPricing(
 
   // Flag missing rates that the itinerary actually needs (no fabrication).
   const needsGuide = guideMode === 'throughout' || itinerary.some(hasSightseeingDay)
+  const noGuideRateMessage = `No ${language} guide rate (${tier}). Add it in Rates → Guides.`
+  const noMeetGreetRateMessage = `No ${language} meet/assist-day guide rate (${guideGrade}). A throughout guide bills arrival and departure days at it — add a Guides rate with duration "Meet & Assist day".`
   if (needsGuide && !guideRate) {
     addHole({
       kind: 'guide',
       reason: 'missing',
       lookupAttempted: `guide_rates language~${language} guide_type=${guideGrade} tier=${tier}`,
-      message: `No ${language} guide rate (${tier}). Add it in Rates → Guides.`,
+      message: noGuideRateMessage,
     })
   }
   if (guideMode === 'throughout' && !meetGreetGuideRate && itinerary.some(d => !hasSightseeingDay(d))) {
@@ -2465,17 +2555,25 @@ export async function calculateDayBasedPricing(
       kind: 'guide',
       reason: 'missing',
       lookupAttempted: `guide_rates language~${language} guide_type=${guideGrade} tour_duration=meet_greet`,
-      message: `No ${language} meet/assist-day guide rate (${guideGrade}). A throughout guide bills arrival and departure days at it — add a Guides rate with duration "Meet & Assist day".`,
+      message: noMeetGreetRateMessage,
     })
   }
-  const needsMeals = itinerary.some(d => d.meals.lunch === 'external' || d.meals.dinner === 'external')
-  if (needsMeals && !mealRates) {
-    addHole({
-      kind: 'meal',
-      reason: 'missing',
-      lookupAttempted: 'meal_rates is_active=true',
-      message: 'No meal rates found. Add them in Rates → Meals.',
-    })
+  // One hole per meal TYPE the trip needs and cannot price — a tier with
+  // lunch rates but no dinner rate used to price every dinner at 0 with no
+  // hole at all (rateFor returns 0, and only a both-zero result was null).
+  const needsMeal = (meal: 'lunch' | 'dinner') => itinerary.some(d => d.meals[meal] === 'external')
+  const mealRateFor = (meal: 'lunch' | 'dinner'): number => usableRate(mealRates?.[meal]) ?? 0
+  const noMealRateMessage = (meal: 'lunch' | 'dinner') =>
+    `No ${tier} ${meal} rate. Add one in Rates → Meals.`
+  for (const meal of ['lunch', 'dinner'] as const) {
+    if (needsMeal(meal) && mealRateFor(meal) <= 0) {
+      addHole({
+        kind: 'meal',
+        reason: mealRates ? 'unpriced' : 'missing',
+        lookupAttempted: `meal_rates meal_type=${meal} tier=${tier}`,
+        message: noMealRateMessage(meal),
+      })
+    }
   }
 
   // Water cost comes from fixedDailyCosts (fetched in the Step 4 batch above)
@@ -2556,7 +2654,13 @@ export async function calculateDayBasedPricing(
           isPerPax: false,
           isOptional: false
         })
+      } else if (hasSightseeing) {
+        listUnpricedLine({ id: `day${day.day}-guide`, dayNumber: day.day, serviceType: 'guide', serviceName: `Throughout Guide — ${language}`, isPerPax: false }, noGuideRateMessage)
+      } else {
+        listUnpricedLine({ id: `day${day.day}-guide`, dayNumber: day.day, serviceType: 'guide', serviceName: `Throughout Guide — ${language} (meet/assist day)`, isPerPax: false }, noMeetGreetRateMessage)
       }
+    } else if (hasSightseeing && !guideRate) {
+      listUnpricedLine({ id: `day${day.day}-guide`, dayNumber: day.day, serviceType: 'guide', serviceName: `${language} Speaking Guide`, isPerPax: false }, noGuideRateMessage)
     } else if (hasSightseeing && guideRate) {
       fixedCosts += guideRate.dailyRate
       services.push({
@@ -2635,7 +2739,7 @@ export async function calculateDayBasedPricing(
           isOptional: false
         })
       } else {
-        addHole({
+        listUnpriced({ id: `day${day.day}-airport-arrival`, dayNumber: day.day, serviceType: 'airport_service', serviceName: `Airport Meet & Greet (${airportCode})`, isPerPax: false }, {
           kind: 'airport_service',
           reason: found.rowExists ? 'unpriced' : 'missing',
           dayNumber: day.day,
@@ -2668,7 +2772,7 @@ export async function calculateDayBasedPricing(
           isOptional: false
         })
       } else {
-        addHole({
+        listUnpriced({ id: `day${day.day}-airport-departure`, dayNumber: day.day, serviceType: 'airport_service', serviceName: `Airport Departure Assist (${airportCode})`, isPerPax: false }, {
           kind: 'airport_service',
           reason: found.rowExists ? 'unpriced' : 'missing',
           dayNumber: day.day,
@@ -2701,7 +2805,7 @@ export async function calculateDayBasedPricing(
           isOptional: false
         })
       } else {
-        addHole({
+        listUnpriced({ id: `day${day.day}-hotel-checkin`, dayNumber: day.day, serviceType: 'hotel_service', serviceName: 'Hotel Check-in Assistance', isPerPax: false }, {
           kind: 'hotel_service',
           reason: found.rowExists ? 'unpriced' : 'missing',
           dayNumber: day.day,
@@ -2736,7 +2840,7 @@ export async function calculateDayBasedPricing(
           isOptional: false
         })
       } else {
-        addHole({
+        listUnpriced({ id: `day${day.day}-hotel-checkout`, dayNumber: day.day, serviceType: 'hotel_service', serviceName: 'Hotel Check-out Assistance', isPerPax: false }, {
           kind: 'hotel_service',
           reason: found.rowExists ? 'unpriced' : 'missing',
           dayNumber: day.day,
@@ -2787,24 +2891,39 @@ export async function calculateDayBasedPricing(
         hotelRate.row, isEurPassport, dateForDay(day.day)
       )
       warnIfNoPeriod(hotelRate.row, nightly.seasonName, hotelRate.hotelName, dateForDay(day.day))
-      accommodationNights.push({ ppd: nightly.ppdNight, singleSupp: nightly.singleSuppNight, tripleRed: nightly.tripleRedNight })
-      accommodationPPD += nightly.ppdNight
-      services.push({
-        id: `day${day.day}-hotel`,
-        dayNumber: day.day,
-        serviceType: 'accommodation',
-        serviceName: `Hotel - ${hotelRate.hotelName} (${hotelCity})`,
-        quantity: 1,
-        quantityMode: 'per_pax',
-        unitCost: nightly.ppdNight,
-        lineTotal: nightly.ppdNight,
-        rateSource: 'accommodation_rates',
-        isPerPax: true,
-        isOptional: false,
-        notes: nightly.seasonName
-          ? `PPD (Per Person Double) — ${nightly.seasonName}`
-          : 'PPD (Per Person Double)'
-      })
+      if (nightly.ppdNight > 0) {
+        accommodationNights.push({ ppd: nightly.ppdNight, singleSupp: nightly.singleSuppNight, tripleRed: nightly.tripleRedNight })
+        accommodationPPD += nightly.ppdNight
+        services.push({
+          id: `day${day.day}-hotel`,
+          dayNumber: day.day,
+          serviceType: 'accommodation',
+          serviceName: `Hotel - ${hotelRate.hotelName} (${hotelCity})`,
+          quantity: 1,
+          quantityMode: 'per_pax',
+          unitCost: nightly.ppdNight,
+          lineTotal: nightly.ppdNight,
+          rateSource: 'accommodation_rates',
+          isPerPax: true,
+          isOptional: false,
+          notes: nightly.seasonName
+            ? `PPD (Per Person Double) — ${nightly.seasonName}`
+            : 'PPD (Per Person Double)'
+        })
+      } else {
+        // The row exists and its per-person-double for this night is blank.
+        // This used to price the night at 0.00 with no hole — the one bed
+        // path that never went through the "blank is not a price" rule the
+        // guide and assistance rates already follow.
+        listUnpriced({ id: `day${day.day}-hotel`, dayNumber: day.day, serviceType: 'accommodation', serviceName: `Hotel - ${hotelRate.hotelName} (${hotelCity})`, isPerPax: true }, {
+          kind: 'hotel',
+          reason: 'unpriced',
+          dayNumber: day.day,
+          city: hotelCity,
+          lookupAttempted: `accommodation_rates ${hotelRate.hotelName} pp_double ${dateForDay(day.day) ?? 'base'}`,
+          message: `${hotelRate.hotelName} has no per-person double rate for ${dateForDay(day.day) ?? 'this night'}. Fill it in Rates → Hotels.`,
+        })
+      }
 
       // The supplements this night is sold with — a view, a floor, a meal
       // plan from the agency's own list — each at the hotel's per-person
@@ -2830,7 +2949,7 @@ export async function calculateDayBasedPricing(
             notes: nightly.seasonName ? `Per person per night — ${nightly.seasonName}` : 'Per person per night'
           })
         } else {
-          addHole({
+          listUnpriced({ id: `day${day.day}-hotel-supp-${supp.key}`, dayNumber: day.day, serviceType: 'accommodation', serviceName: `Hotel supplement - ${supp.name} (${hotelRate.hotelName})`, isPerPax: true }, {
             kind: 'hotel',
             reason: supp.carried ? 'unpriced' : 'missing',
             dayNumber: day.day,
@@ -2862,20 +2981,27 @@ export async function calculateDayBasedPricing(
             isPerPax: false,
             isOptional: false
           })
-        } else if (!guideBedHoleNamed.has(hotelRate.hotelName)) {
-          guideBedHoleNamed.add(hotelRate.hotelName)
-          addHole({
-            kind: 'guide',
-            reason: 'unpriced',
-            dayNumber: day.day,
-            city: hotelCity,
-            lookupAttempted: `accommodation_rates ${hotelRate.hotelName} period guide_rate`,
-            message: `${hotelRate.hotelName} has no throughout-guide bed rate on the period covering this stay. Open the hotel in Rates → Hotels and fill "Guide bed / night" on its rate periods.`,
-          })
+        } else {
+          const guideBedMessage = `${hotelRate.hotelName} has no throughout-guide bed rate on the period covering this stay. Open the hotel in Rates → Hotels and fill "Guide bed / night" on its rate periods.`
+          const guideBedLine = { id: `day${day.day}-guide-bed`, dayNumber: day.day, serviceType: 'accommodation', serviceName: `Throughout Guide — bed (${hotelRate.hotelName})`, isPerPax: false }
+          // One hole per property, but every night it affects is listed.
+          if (!guideBedHoleNamed.has(hotelRate.hotelName)) {
+            guideBedHoleNamed.add(hotelRate.hotelName)
+            listUnpriced(guideBedLine, {
+              kind: 'guide',
+              reason: 'unpriced',
+              dayNumber: day.day,
+              city: hotelCity,
+              lookupAttempted: `accommodation_rates ${hotelRate.hotelName} period guide_rate`,
+              message: guideBedMessage,
+            })
+          } else {
+            listUnpricedLine(guideBedLine, guideBedMessage)
+          }
         }
       }
     } else {
-      addHole({
+      listUnpriced({ id: `day${day.day}-hotel`, dayNumber: day.day, serviceType: 'accommodation', serviceName: `Hotel (${hotelCity})`, isPerPax: true }, {
         kind: 'hotel',
         reason: 'missing',
         dayNumber: day.day,
@@ -2894,34 +3020,52 @@ export async function calculateDayBasedPricing(
       warnIfNoPeriod(cruiseRates.row, n.seasonName, cruiseRates.shipName, dateForDay(day.day))
       return n
     })
-    for (const n of nightly) accommodationNights.push({ ppd: n.ppdNight, singleSupp: n.singleSuppNight, tripleRed: n.tripleRedNight })
-    const cruiseTotal = nightly.reduce((sum, n) => sum + n.ppdNight, 0)
-    const periodsUsed = [...new Set(nightly.map(n => n.seasonName).filter(Boolean))]
-    // One line for the sailing, so unitCost is the per-night average whenever
-    // the nights did not all price the same.
-    const perNight = cruiseNights > 0 ? cruiseTotal / cruiseNights : 0
-
-    accommodationPPD += cruiseTotal
-    services.push({
-      id: `cruise-accommodation`,
-      dayNumber: cruiseDays[0]?.day || 1,
-      serviceType: 'cruise',
-      serviceName: `Nile Cruise - ${cruiseRates.shipName} (${cruiseNights} nights)`,
-      quantity: cruiseNights,
-      quantityMode: 'per_pax',
-      unitCost: perNight,
-      lineTotal: cruiseTotal,
-      rateSource: 'nile_cruises',
-      isPerPax: true,
-      isOptional: false,
-      // No currency symbol: rates are kept in the org's rate_currency (USD
-      // since 2026-08-22), and the result carries that currency on itself.
-      // The '€' this line used to print was a euro assumption on a note the
-      // operator reads. lib/auto-pricing-service.ts is outside the scan list
-      // of the no-hardcoded-rate-currency guard, so nothing caught it.
-      notes: periodsUsed.length > 1
-        ? `PPD ${perNight.toFixed(2)}/night avg × ${cruiseNights} nights (${periodsUsed.join(', ')})`
-        : `PPD ${perNight.toFixed(2)}/night × ${cruiseNights} nights`
+    // One line per night, each on its own day. This was a single line for the
+    // whole sailing parked on the first cruise day, so a four-night cruise
+    // read as nothing on days three to five and the day-by-day breakdown had
+    // three nights with no bed (operator, 2026-09-16). The total is the same
+    // sum. A night the ship has no double rate for is LISTED at 0 — it used to
+    // add a silent 0.00 into that single line.
+    let cruiseNightHoleAdded = false
+    cruiseDays.forEach((day, k) => {
+      const n = nightly[k]
+      const line = {
+        id: `day${day.day}-cruise`,
+        dayNumber: day.day,
+        serviceType: 'cruise',
+        serviceName: `Nile Cruise - ${cruiseRates.shipName} (night ${k + 1} of ${cruiseNights})`,
+        isPerPax: true,
+      }
+      if (n.ppdNight > 0) {
+        accommodationNights.push({ ppd: n.ppdNight, singleSupp: n.singleSuppNight, tripleRed: n.tripleRedNight })
+        accommodationPPD += n.ppdNight
+        services.push({
+          ...line,
+          quantity: 1,
+          quantityMode: 'per_pax',
+          unitCost: n.ppdNight,
+          lineTotal: n.ppdNight,
+          rateSource: 'nile_cruises',
+          isOptional: false,
+          // No currency symbol: the result carries the org's rate currency.
+          notes: n.seasonName ? `PPD per night — ${n.seasonName}` : 'PPD per night',
+        })
+        return
+      }
+      const message = `${cruiseRates.shipName} has no per-person double cabin rate for ${dateForDay(day.day) ?? 'this night'}. Fill it in Rates → Cruises.`
+      if (!cruiseNightHoleAdded) {
+        cruiseNightHoleAdded = true
+        listUnpriced(line, {
+          kind: 'cruise',
+          reason: 'unpriced',
+          dayNumber: day.day,
+          city: day.city,
+          lookupAttempted: `nile_cruises ${cruiseRates.shipName} double ${dateForDay(day.day) ?? 'base'}`,
+          message,
+        })
+      } else {
+        listUnpricedLine(line, message)
+      }
     })
 
     // The supplements the sailing is sold with — a deck, a balcony from the
@@ -2955,7 +3099,7 @@ export async function calculateDayBasedPricing(
           notes: `Per person per night × ${nightsAsked} nights`
         })
       } else {
-        addHole({
+        listUnpriced({ id: `day${cruiseDays[0]?.day || 1}-cruise-supp-${key}`, dayNumber: cruiseDays[0]?.day || 1, serviceType: 'cruise', serviceName: `Cruise supplement - ${name}, ${cruiseRates.shipName}`, isPerPax: true }, {
           kind: 'cruise',
           reason: carried ? 'unpriced' : 'missing',
           dayNumber: cruiseDays[0]?.day || 1,
@@ -2990,7 +3134,7 @@ export async function calculateDayBasedPricing(
           isOptional: false
         })
       } else {
-        addHole({
+        listUnpriced({ id: `day${cruiseDays[0]?.day || 1}-guide-cabin`, dayNumber: cruiseDays[0]?.day || 1, serviceType: 'cruise', serviceName: `Throughout Guide — cabin, ${cruiseRates.shipName} (${cruiseNights} nights)`, isPerPax: false }, {
           kind: 'guide',
           reason: 'unpriced',
           dayNumber: cruiseDays[0]?.day,
@@ -2999,6 +3143,13 @@ export async function calculateDayBasedPricing(
         })
       }
     }
+  } else if (cruiseNights > 0) {
+    // No ship at all for this tier: the hole was recorded once above; every
+    // night aboard is still listed on its own day.
+    cruiseDays.forEach((day, k) => listUnpricedLine(
+      { id: `day${day.day}-cruise`, dayNumber: day.day, serviceType: 'cruise', serviceName: `Nile Cruise (night ${k + 1} of ${cruiseNights})`, isPerPax: true },
+      `No ${tier} cruise rate found. Add it in Rates → Cruises.`,
+    ))
   }
 
   // ----- Ticket legs: flights, day trains, sleeping trains (per pax) -----
@@ -3045,7 +3196,7 @@ export async function calculateDayBasedPricing(
           })
         }
       } else {
-        addHole({
+        listUnpriced({ id: `day${leg.day}-ticket-flight`, dayNumber: leg.day, serviceType: 'flight', serviceName: `Domestic Flight ${routeLabel}`, isPerPax: true }, {
           kind: 'transport', reason: pick.ambiguous.length ? 'fuzzy' : 'missing',
           dayNumber: leg.day, city: leg.to,
           lookupAttempted: `flight_rates ${routeLabel} economy${leg.rateId ? ` id=${leg.rateId}` : ''}`,
@@ -3085,7 +3236,7 @@ export async function calculateDayBasedPricing(
           })
         }
       } else {
-        addHole({
+        listUnpriced({ id: `day${leg.day}-ticket-train`, dayNumber: leg.day, serviceType: 'transportation', serviceName: `Train ${routeLabel}`, isPerPax: true }, {
           kind: 'transport', reason: pick.ambiguous.length ? 'fuzzy' : 'missing',
           dayNumber: leg.day, city: leg.to,
           lookupAttempted: `train_rates ${routeLabel}${leg.rateId ? ` id=${leg.rateId}` : ''}`,
@@ -3149,7 +3300,7 @@ export async function calculateDayBasedPricing(
       }
     } else {
       const trainNames = [...new Set(routeRows.map(r => r.operator_name || r.service_code))]
-      addHole({
+      listUnpriced({ id: `day${leg.day}-ticket-sleeper`, dayNumber: leg.day, serviceType: 'transportation', serviceName: `Sleeping Train ${routeLabel}`, isPerPax: true }, {
         kind: 'transport', reason: chosenKey === null && routeRows.length > 0 && !namedMissing ? 'fuzzy' : 'missing',
         dayNumber: leg.day, city: leg.to,
         lookupAttempted: `sleeping_train_rates ${routeLabel}${leg.rateId ? ` id=${leg.rateId}` : ''}`,
@@ -3160,6 +3311,29 @@ export async function calculateDayBasedPricing(
             : `No Half Twin sleeping-train rate for ${routeLabel}. Add it in Rates → Sleeping Trains.`,
       })
     }
+  }
+
+  // A day marked flight, train or sleeping train that yields no leg — the day
+  // before (the day after, for a sleeper) has no city or the same city — used
+  // to price nothing and record nothing: a free flight. List it on its day so
+  // the missing route is visible.
+  const legDays = new Set(ticketLegs.map(l => l.day))
+  for (const day of itinerary) {
+    const mode = day.transport_type
+    if (mode !== 'flight' && mode !== 'train' && mode !== 'sleeping_train') continue
+    if (legDays.has(day.day)) continue
+    const slug = mode === 'sleeping_train' ? 'sleeper' : mode
+    const label = mode === 'flight' ? 'Domestic Flight' : mode === 'train' ? 'Train' : 'Sleeping Train'
+    listUnpriced({ id: `day${day.day}-ticket-${slug}`, dayNumber: day.day, serviceType: mode === 'flight' ? 'flight' : 'transportation', serviceName: `${label} (route not set)`, isPerPax: true }, {
+      kind: 'transport',
+      reason: 'missing',
+      dayNumber: day.day,
+      city: day.city,
+      lookupAttempted: `ticket leg day ${day.day} (${mode}) — no distinct origin and destination`,
+      message: mode === 'sleeping_train'
+        ? `Day ${day.day} is marked sleeping train, but the next day has no city or the same one, so there is no route to price. Set the city on both days.`
+        : `Day ${day.day} is marked ${mode}, but the day before has no city or the same one, so there is no route to price. Set the city on both days.`,
+    })
   }
 
   // ----- Entrance Fees (per pax) -----
@@ -3174,8 +3348,14 @@ export async function calculateDayBasedPricing(
   for (const fee of resolved.tickets) {
     processedAttractions.add(fee.name.toLowerCase())
     // A free site (rate 0, e.g. Colossi of Memnon) is a resolved visit with
-    // nothing to charge — not a missing rate.
-    if (fee.rate <= 0) continue
+    // nothing to charge — not a missing rate. Listed so the day reads whole.
+    if (fee.rate <= 0) {
+      services.push(zeroLine(
+        { id: `entrance-${fee.id}`, dayNumber: fee.day, serviceType: 'entrance', serviceName: fee.name, isPerPax: true },
+        { included: true, issue: 'Free entry' },
+      ))
+      continue
+    }
     entranceFeesPerPax += fee.rate
     services.push({
       id: `entrance-${fee.id}`,
@@ -3192,49 +3372,62 @@ export async function calculateDayBasedPricing(
       notes: isEurPassport ? 'EUR rate' : 'non-EUR rate'
     })
   }
-  for (const miss of resolved.unresolved) {
+  // A sight the programme names that matched no fee. It may be free (a photo
+  // stop), or a ticket nobody has taught the alias table yet — the engine
+  // cannot tell, so it is a note on its day, not a hole. It used to live only
+  // in the warnings list, away from the day it belongs to.
+  resolved.unresolved.forEach((miss, i) => {
     warnings.push(`No entrance fee found for "${miss.text}"`)
-  }
-  for (const miss of resolved.missingIds) {
+    services.push(zeroLine(
+      { id: `day${miss.day}-entrance-unmatched-${i}`, dayNumber: miss.day, serviceType: 'entrance', serviceName: miss.text, isPerPax: true },
+      { issue: 'No entrance fee matched. Pick the ticket on the day if one is needed.' },
+    ))
+  })
+  resolved.missingIds.forEach((miss, i) => {
     warnings.push(`Day ${miss.day}: picked attraction ${miss.id} is no longer in the entrance fees table`)
-  }
+    services.push(zeroLine(
+      { id: `day${miss.day}-entrance-missing-${i}`, dayNumber: miss.day, serviceType: 'entrance', serviceName: 'Picked ticket', isPerPax: true },
+      { issue: 'The ticket picked for this day is no longer in Rates → Entrance Fees. Pick it again on the day.' },
+    ))
+  })
 
   // ----- External Meals (per pax) -----
   let externalMealsPerPax = 0
 
-  for (const day of itinerary) {
-    if (day.meals.lunch === 'external' && mealRates) {
-      externalMealsPerPax += mealRates.lunch
-      services.push({
-        id: `day${day.day}-lunch`,
-        dayNumber: day.day,
-        serviceType: 'meal',
-        serviceName: 'Lunch',
-        quantity: 1,
-        quantityMode: 'per_pax',
-        unitCost: mealRates.lunch,
-        lineTotal: mealRates.lunch,
-        rateSource: 'meal_rates',
-        isPerPax: true,
-        isOptional: false
-      })
-    }
+  const MEAL_LABEL = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' } as const
+  const includedMealReason = (day: ItineraryDay, meal: 'breakfast' | 'lunch' | 'dinner'): string => {
+    if (day.accommodation_type === 'cruise') return 'Included aboard the cruise'
+    if (meal === 'breakfast') return 'Included in the hotel rate'
+    return 'Included in the hotel board'
+  }
 
-    if (day.meals.dinner === 'external' && mealRates) {
-      externalMealsPerPax += mealRates.dinner
-      services.push({
-        id: `day${day.day}-dinner`,
-        dayNumber: day.day,
-        serviceType: 'meal',
-        serviceName: 'Dinner',
-        quantity: 1,
-        quantityMode: 'per_pax',
-        unitCost: mealRates.dinner,
-        lineTotal: mealRates.dinner,
-        rateSource: 'meal_rates',
-        isPerPax: true,
-        isOptional: false
-      })
+  for (const day of itinerary) {
+    for (const meal of ['breakfast', 'lunch', 'dinner'] as const) {
+      const status = day.meals[meal]
+      const line = { id: `day${day.day}-${meal}`, dayNumber: day.day, serviceType: 'meal', serviceName: MEAL_LABEL[meal], isPerPax: true }
+      if (status === 'included') {
+        services.push(zeroLine(line, { included: true, issue: includedMealReason(day, meal) }))
+        continue
+      }
+      // There is no breakfast rate to buy: an "external" breakfast has never
+      // priced, and still does not.
+      if (status !== 'external' || meal === 'breakfast') continue
+      const rate = mealRateFor(meal)
+      if (rate > 0) {
+        externalMealsPerPax += rate
+        services.push({
+          ...line,
+          quantity: 1,
+          quantityMode: 'per_pax',
+          unitCost: rate,
+          lineTotal: rate,
+          rateSource: 'meal_rates',
+          isOptional: false,
+        })
+      } else {
+        // The hole was recorded once per meal type above.
+        listUnpricedLine(line, noMealRateMessage(meal))
+      }
     }
   }
 
@@ -3248,7 +3441,9 @@ export async function calculateDayBasedPricing(
     for (const day of itinerary) {
       for (const meal of ['lunch', 'dinner'] as const) {
         if (day.meals[meal] !== 'external') continue
-        const rate = mealRates[meal]
+        const rate = mealRateFor(meal)
+        // No rate for this meal: the customer's own line already shows it.
+        if (rate <= 0) continue
         fixedCosts += rate
         services.push({
           id: `day${day.day}-guide-${meal}`,
@@ -3386,8 +3581,11 @@ export async function calculateDayBasedPricing(
     // Single-leg days keep the original `day${N}-transport` shape to avoid
     // churn in callers that may key on the existing id format.
     const idSuffix = info.legIndex > 0 ? `-${info.legIndex + 1}` : ''
-    if (rate) {
-      baseTransportCost += rate.base_rate_eur
+    // A matched row whose vehicle band for this group has no price used to
+    // come back "as-is" and add undefined/0 into the total silently.
+    const usable = rate ? usableRate(rate.base_rate_eur) : null
+    if (rate && usable != null) {
+      baseTransportCost += usable
       services.push({
         id: `day${info.day}-transport${idSuffix}`,
         dayNumber: info.day,
@@ -3395,23 +3593,36 @@ export async function calculateDayBasedPricing(
         serviceName: rate.route_name || `${rate.vehicle_type || baseVehicleType} - ${info.city}`,
         quantity: 1,
         quantityMode: 'fixed',
-        unitCost: rate.base_rate_eur,
-        lineTotal: rate.base_rate_eur,
+        unitCost: usable,
+        lineTotal: usable,
         rateSource: 'transportation_rates',
         isPerPax: false,
         isOptional: false,
         notes: `${needs.serviceType} | ${needs.duration}${needs.area ? ` | ${needs.area}` : ''}`
       })
     } else {
-      addHole({
+      const origin = info.needs.originCity || itinerary[info.day - 2]?.city
+      const destination = info.needs.destinationCity || info.city
+      const where = (needs.serviceType === 'intercity' || needs.serviceType === 'intercity_with_sightseeing') && origin && destination && cityKey(origin) !== cityKey(destination)
+        ? `${origin} → ${destination}`
+        : info.city
+      listUnpriced({
+        id: `day${info.day}-transport${idSuffix}`,
+        dayNumber: info.day,
+        serviceType: 'transportation',
+        serviceName: `${transportServiceLabel(needs.serviceType)} — ${where}`,
+        isPerPax: false,
+      }, {
         kind: 'transport',
-        reason: 'missing',
+        reason: rate ? 'unpriced' : 'missing',
         dayNumber: info.day,
         city: info.city,
-        lookupAttempted: `transportation_rates ${needs.serviceType}/${needs.duration}@${info.city}`,
-        message: `No transport rate in ${info.city} (${needs.serviceType}/${needs.duration}). Add it in Rates → Transportation.`,
+        lookupAttempted: `transportation_rates ${needs.serviceType}/${needs.duration}@${where}`,
+        message: rate
+          ? `The ${transportServiceLabel(needs.serviceType).toLowerCase()} rate for ${where} has no price for a group of 2. Fill its vehicles in Rates → Transportation.`
+          : `No ${transportServiceLabel(needs.serviceType).toLowerCase()} rate for ${where}. Add it in Rates → Transportation.`,
       })
-      warnings.push(`No transport rate in ${info.city} (${needs.serviceType}/${needs.duration})`)
+      warnings.push(`No transport rate in ${where} (${needs.serviceType}/${needs.duration})`)
     }
   }
 
@@ -3437,9 +3648,10 @@ export async function calculateDayBasedPricing(
       })
       debugLog(`🚢 Cruise package cost (2 pax): €${baseCruisePackageCost.toFixed(2)} (${cruisePackageInfo.packageName})`)
     } else {
-      addHole({
+      listUnpriced({ id: 'cruise-transport-package', dayNumber: cruisePackageDays[0]?.day || 1, serviceType: 'transportation', serviceName: `Cruise transport package (${cruisePackageDays.length} days)`, isPerPax: false }, {
         kind: 'transport',
         reason: 'missing',
+        dayNumber: cruisePackageDays[0]?.day,
         lookupAttempted: `b2b_transport_packages cruise (${cruisePackageDays.length}D)`,
         message: `No cruise transport package for a ${cruisePackageDays.length}D cruise. Add it in Rates → Transport Packages.`,
       })
@@ -3472,7 +3684,7 @@ export async function calculateDayBasedPricing(
         originCity: info.needs.originCity || itinerary[info.day - 2]?.city,
         destinationCity: info.needs.destinationCity || info.city,
       })
-      if (rate) total += rate.base_rate_eur
+      total += usableRate(rate?.base_rate_eur) ?? 0
     }
     if (hasCruisePackage) {
       const cp = calculateCruisePackageInfo(itinerary, cruiseTransportPricingRules, pax)
@@ -3980,14 +4192,14 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
     numPayingPax: numPax,
     tourLeaderIncluded,
     totalDays: dayResult.totalDays,
-    services: dayResult.services
-      .filter(s => !s.notes?.includes('optional'))
-      .sort((a, b) => {
-        if (a.isPerPax === b.isPerPax) {
-          return a.dayNumber - b.dayNumber
-        }
-        return a.isPerPax ? 1 : -1
-      }),
+    // Day by day, each day in the order it runs (lib/pricing/breakdown-order).
+    // This sorted every fixed cost ahead of every per-person cost, so a day
+    // read guide, tips, transfer, then hotel, fees, meals — a shuffled list
+    // an operator could not check against the programme.
+    services: sortByItineraryFlow(
+      dayResult.services.filter(s => !s.notes?.includes('optional')),
+      s => ({ id: s.id, category: s.serviceType, dayNumber: s.dayNumber }),
+    ),
     optionalServices: dayResult.services.filter(s => s.notes?.includes('optional')),
     subtotalCost: pricing.totalCost - (tourLeaderIncluded ? paxResult.withLeader.tourLeaderCost : 0),
     optionalTotal: 0,

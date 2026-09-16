@@ -97,7 +97,7 @@ describe('flight legs', () => {
   it('a route with no economy row is a hole naming Rates → Flights', async () => {
     setMockTables(withDays([day(1, 'Cairo'), day(2, 'Aswan', { transport_type: 'flight' })]))
     const r = await calculateAutoPricing(BASE)
-    expect(line(r, 'day2-ticket-flight')).toBeUndefined()
+    expect(line(r, 'day2-ticket-flight')).toMatchObject({ unpriced: true, unitCost: 0, lineTotal: 0 })
     expect(legHoles(r).some((h: any) => /No economy flight rate for Cairo → Aswan/.test(h.message))).toBe(true)
   })
 })
@@ -116,7 +116,7 @@ describe('day-train legs', () => {
     t.train_rates.push(second)
     setMockTables(t)
     const ambiguous = await calculateAutoPricing(BASE)
-    expect(line(ambiguous, 'day2-ticket-train')).toBeUndefined()
+    expect(line(ambiguous, 'day2-ticket-train')).toMatchObject({ unpriced: true, unitCost: 0, lineTotal: 0 })
     expect(legHoles(ambiguous).some((h: any) => /2 trains serve/.test(h.message) && /Watania/.test(h.message) && /OldLine/.test(h.message))).toBe(true)
 
     t = withDays([day(1, 'Cairo'), day(2, 'Luxor', { transport_type: 'train', transport_rate_id: 'tr-2' })])

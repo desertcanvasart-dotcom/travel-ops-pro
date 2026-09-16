@@ -7271,7 +7271,21 @@
     "guideModeSpot": "スポット（都市ごと）",
     "guideModeThroughout": "スルー",
     "guideModeSpotHint": "観光日のみ都市ガイドが同行します。",
-    "guideModeThroughoutHint": "初日から最終日まで1名のガイドが同行：毎日のガイド料、各施設のガイド料金での宿泊、車両の追加席。3名以下のグループはガイドの食事も計上されます。"
+    "guideModeThroughoutHint": "初日から最終日まで1名のガイドが同行：毎日のガイド料、各施設のガイド料金での宿泊、車両の追加席。3名以下のグループはガイドの食事も計上されます。",
+    "wholeTrip": "旅行全体",
+    "dayWithPlace": "{day}日目 · {place}",
+    "dayGaps": "料金未設定 {count}件",
+    "noRate": "料金未設定",
+    "included": "込み",
+    "checkLine": "要確認",
+    "incompleteTitle": "料金が未完成です",
+    "incompleteBody": "料金が設定されていないサービスが{count}件あります。下の各日に赤字で0として表示されており、合計には含まれていません。料金を登録してから再計算してください。",
+    "incompleteBadge": "未完成",
+    "rateSheetIncomplete": "{count}件のサービスは料金を算出できず、この料金表に含まれていません。どの項目かは料金計算で確認できます。",
+    "rateSheetIncompleteCsv": "未完成: 料金未設定のサービス{count}件は含まれていません",
+    "saveIncompleteTitle": "未完成の見積りを保存しますか？",
+    "saveIncompleteBody": "料金が設定されていないサービスが{count}件あるため、この見積りはその分だけ安くなっています。このまま保存しますか？",
+    "saveAnyway": "このまま保存"
   },
   "bookings": {
     "title": "予約管理",

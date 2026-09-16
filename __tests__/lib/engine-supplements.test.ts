@@ -62,7 +62,10 @@ describe('engine — hotel supplements', () => {
   it('a supplement the hotel carries but has not priced is an UNPRICED hole, never free', async () => {
     setMockTables(withSupplements({ carried: true, priced: false, asked: ['view_nile'] }))
     const r = await calculateAutoPricing(BASE)
-    expect(r.services.some(s => s.id.includes('-hotel-supp-'))).toBe(false)
+    // Listed on the night at 0 — never charged, never silently dropped.
+    const supp = r.services.filter(s => s.id.includes('-hotel-supp-'))
+    expect(supp).toHaveLength(1)
+    expect(supp[0]).toMatchObject({ unpriced: true, unitCost: 0, lineTotal: 0 })
     const hole = (r.holes ?? []).find(h => h.lookupAttempted.includes('supplement=view_nile'))
     expect(hole).toBeTruthy()
     expect(hole!.reason).toBe('unpriced')

@@ -5,6 +5,8 @@ import React, { useState, useEffect, Fragment } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { isBookableLine, sortByItineraryFlow } from '@/lib/pricing/breakdown-order'
+import { useConfirm } from '@/components/ConfirmDialog'
 import { useTierLabel } from '@/hooks/useTierLabel'
 import { useTierOptions } from '@/hooks/useTierOptions'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
@@ -54,6 +56,12 @@ interface PricingResult {
     day_number: number | null
     pricing_note?: string
     is_optional?: boolean
+    /** No usable rate: listed in its place at 0; the price is incomplete. */
+    unpriced?: boolean
+    /** Paid for inside another line (breakfast in the hotel, meals aboard). */
+    included?: boolean
+    /** Why the line is unpriced, included, or unmatched. */
+    issue?: string
   }>
   optional_services?: Array<{
     service_id: string
@@ -127,6 +135,16 @@ interface SavedQuote {
   quote_number: string
 }
 
+type BreakdownLine = { unpriced?: boolean; included?: boolean; issue?: string; line_total: number; rate_source?: string }
+
+/** How a breakdown line reads: priced, no rate (red), included (grey), or a note to check (amber). */
+function lineState(line: BreakdownLine): 'priced' | 'unpriced' | 'included' | 'note' {
+  if (line.unpriced) return 'unpriced'
+  if (line.included) return 'included'
+  if (line.issue && line.line_total === 0) return 'note'
+  return 'priced'
+}
+
 interface TemplateItineraryDay {
   day: number
   title: string
@@ -187,6 +205,7 @@ function AttractionInput({ onAdd, placeholder }: { onAdd: (name: string) => void
 export default function TourPriceCalculator() {
   const { rateSymbol } = useCurrency()
   const t = useTranslations('b2bCalculator')
+  const confirmDialog = useConfirm()
   const tierLabel = useTierLabel()
   const tierOptions = useTierOptions(key => t(`tiers.${key}`))
   const guideGradeLabel = useVocabLabel('guide_grade')
@@ -199,6 +218,9 @@ export default function TourPriceCalculator() {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<PricingResult | null>(null)
   const [rateSheet, setRateSheet] = useState<RateSheetRow[]>([])
+  // How many services the rate sheet could not price. A rate sheet is sent to
+  // partners as a price list, so it must say when it is short.
+  const [rateSheetGaps, setRateSheetGaps] = useState(0)
   const [generatingSheet, setGeneratingSheet] = useState(false)
 
   // Form state
@@ -592,6 +614,7 @@ export default function TourPriceCalculator() {
             }
           })
         setRateSheet(sheet)
+        setRateSheetGaps(data.data.complete === false ? Math.max(1, (data.data.holes ?? []).length) : 0)
       } else {
         setError(data.error || t('failedToGenerateSheet'))
       }
@@ -604,6 +627,15 @@ export default function TourPriceCalculator() {
 
   const handleSaveQuote = async () => {
     if (!result) return
+    if (result.complete === false) {
+      const gaps = result.services.filter(s => s.unpriced).length || (result.holes ?? []).length || 1
+      const ok = await confirmDialog(t('saveIncompleteBody', { count: gaps }), {
+        title: t('saveIncompleteTitle'),
+        confirmText: t('saveAnyway'),
+        variant: 'warning',
+      })
+      if (!ok) return
+    }
 
     setSaving(true)
     setError(null)
@@ -628,7 +660,7 @@ export default function TourPriceCalculator() {
           // edit page recomputes the total from the services it can see and
           // loses the difference (docs/plans/extras-and-upgrades.md §5a).
           services_snapshot: [
-            ...result.services,
+            ...result.services.filter(isBookableLine),
             ...(result.optional_services || []).filter(s => s.is_selected),
           ],
           // The currency the engine priced in (the org's rate currency). Without
@@ -691,31 +723,34 @@ export default function TourPriceCalculator() {
       row.price_per_person.toFixed(2),
       (row.single_supplement || 0).toFixed(2)
     ])
+    // A short rate sheet says so inside the file too — it travels without the screen.
+    if (rateSheetGaps > 0) rows.push([`"${t('rateSheetIncompleteCsv', { count: rateSheetGaps })}"`, '', '', '', '', ''])
     const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `rate-sheet-${result?.variation_name || 'tour'}${tourLeaderSuffix}-${travelDate}.csv`
+    a.download = `rate-sheet-${result?.variation_name || 'tour'}${tourLeaderSuffix}-${travelDate}${rateSheetGaps > 0 ? '-INCOMPLETE' : ''}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
 
-  // Group services by day for cost breakdown
+  // Group services by day for the cost breakdown, each day in the order it
+  // runs (lib/pricing/breakdown-order) — the same rule the engine sorts by, so
+  // extras folded in after pricing land in their place too.
   const groupedServices = result ? (() => {
-    const grouped: Record<number, typeof result.services> = {}
-    for (const svc of result.services) {
+    const ordered = sortByItineraryFlow(result.services, s => ({
+      id: s.service_id,
+      category: s.service_category,
+      dayNumber: s.day_number,
+    }))
+    const grouped = new Map<number, typeof result.services>()
+    for (const svc of ordered) {
       const key = svc.day_number ?? -1
-      if (!grouped[key]) grouped[key] = []
-      grouped[key].push(svc)
+      if (!grouped.has(key)) grouped.set(key, [])
+      grouped.get(key)!.push(svc)
     }
-    return Object.entries(grouped)
-      .map(([k, v]) => ({ dayNum: Number(k), services: v }))
-      .sort((a, b) => {
-        if (a.dayNum === -1) return 1
-        if (b.dayNum === -1) return -1
-        return a.dayNum - b.dayNum
-      })
+    return [...grouped.entries()].map(([dayNum, services]) => ({ dayNum, services }))
   })() : []
 
   return (
@@ -1391,27 +1426,32 @@ export default function TourPriceCalculator() {
                     with a failed calculation, so an 8-day deluxe cruise priced
                     at $343 — no cabin, no guide, no entrance fees — looked
                     complete. A total that hides its holes is a wrong total. */}
-                {((result.holes && result.holes.length > 0) || (result.warnings && result.warnings.length > 0)) && (
-                  <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-4">
-                    <p className="text-sm font-semibold text-amber-900">
-                      {t('couldNotPrice')}
-                      {result.holes && result.holes.length > 0 && <span className="ml-2 text-xs font-normal text-amber-800">({result.holes.length})</span>}
+                {/* An incomplete price says so ABOVE the totals, not beside
+                    them. Each missing service is also listed at 0, in red,
+                    on its own day in the breakdown below. */}
+                {result.complete === false && (
+                  <div className="mb-4 rounded-lg border border-red-300 bg-red-50 p-4">
+                    <p className="text-sm font-semibold text-red-900">{t('incompleteTitle')}</p>
+                    <p className="text-sm text-red-800 mt-1">
+                      {t('incompleteBody', { count: result.services.filter(s => s.unpriced).length || (result.holes ?? []).length })}
                     </p>
-                    <p className="text-xs text-amber-800 mt-1">{t('couldNotPriceHint')}</p>
                     {result.holes && result.holes.length > 0 && (
-                      <ul className="mt-2 space-y-0.5 text-sm text-amber-900 list-disc pl-5">
-                        {result.holes.map((h, i) => <li key={`h-${i}`}><span className="font-mono text-xs mr-1">{h.kind}</span>{h.message}</li>)}
-                      </ul>
-                    )}
-                    {result.warnings && result.warnings.length > 0 && (
                       <details className="mt-2">
-                        <summary className="text-xs text-amber-800 cursor-pointer">{t('pricingNotes')} ({result.warnings.length})</summary>
-                        <ul className="mt-1 space-y-0.5 text-xs text-amber-900 list-disc pl-5">
-                          {result.warnings.map((w, i) => <li key={`w-${i}`}>{w}</li>)}
+                        <summary className="text-xs text-red-800 cursor-pointer">{t('couldNotPrice')} ({result.holes.length})</summary>
+                        <ul className="mt-1 space-y-0.5 text-sm text-red-900 list-disc pl-5">
+                          {result.holes.map((h, i) => <li key={`h-${i}`}><span className="font-mono text-xs mr-1">{h.kind}</span>{h.message}</li>)}
                         </ul>
                       </details>
                     )}
                   </div>
+                )}
+                {result.warnings && result.warnings.length > 0 && (
+                  <details className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2">
+                    <summary className="text-xs text-amber-800 cursor-pointer">{t('pricingNotes')} ({result.warnings.length})</summary>
+                    <ul className="mt-1 space-y-0.5 text-xs text-amber-900 list-disc pl-5">
+                      {result.warnings.map((w, i) => <li key={`w-${i}`}>{w}</li>)}
+                    </ul>
+                  </details>
                 )}
 
                 <div className="grid grid-cols-4 gap-4">
@@ -1424,11 +1464,11 @@ export default function TourPriceCalculator() {
                     <p className="text-xl font-bold text-green-600">{sym}{result.margin_amount.toFixed(2)}</p>
                   </div>
                   <div className="bg-[#647C47]/10 rounded-lg p-4">
-                    <p className="text-xs text-gray-500 mb-1">{t('sellingPrice')}</p>
+                    <p className="text-xs text-gray-500 mb-1">{t('sellingPrice')}{result.complete === false && <span className="ml-1 font-semibold text-red-600">· {t('incompleteBadge')}</span>}</p>
                     <p className="text-xl font-bold text-[#647C47]">{sym}{result.selling_price.toFixed(2)}</p>
                   </div>
                   <div className="bg-[#647C47]/10 rounded-lg p-4">
-                    <p className="text-xs text-gray-500 mb-1">{t('perPerson')}</p>
+                    <p className="text-xs text-gray-500 mb-1">{t('perPerson')}{result.complete === false && <span className="ml-1 font-semibold text-red-600">· {t('incompleteBadge')}</span>}</p>
                     <p className="text-xl font-bold text-[#647C47]">{sym}{result.price_per_person.toFixed(2)}</p>
                   </div>
                 </div>
@@ -1512,7 +1552,14 @@ export default function TourPriceCalculator() {
                     {groupedServices.map(({ dayNum, services: daySvcs }) => {
                       const dayTotal = daySvcs.reduce((sum, s) => sum + s.line_total, 0)
                       const isExpanded = expandedDays.has(dayNum)
-                      const dayLabel = dayNum === -1 ? t('generalServices') : t('dayNumber', { day: dayNum })
+                      // Name the day the way the programme does, so the
+                      // breakdown can be read against the itinerary above.
+                      const dayInfo = editableDays.find(d => d.day === dayNum)
+                      const place = dayInfo ? (dayInfo.title || dayInfo.city || '').trim() : ''
+                      const dayLabel = dayNum === -1
+                        ? t('wholeTrip')
+                        : place ? t('dayWithPlace', { day: dayNum, place }) : t('dayNumber', { day: dayNum })
+                      const dayGaps = daySvcs.filter(s => s.unpriced).length
 
                       return (
                         <Fragment key={dayNum}>
@@ -1531,22 +1578,50 @@ export default function TourPriceCalculator() {
                                 <span className="text-xs text-gray-500 font-normal">
                                   ({daySvcs.length} {daySvcs.length === 1 ? t('service') : t('services')})
                                 </span>
+                                {dayGaps > 0 && (
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                                    {t('dayGaps', { count: dayGaps })}
+                                  </span>
+                                )}
                               </div>
                             </td>
-                            <td className="px-4 py-2 text-right font-medium text-gray-700">
+                            <td className={`px-4 py-2 text-right font-medium ${dayGaps > 0 ? 'text-red-700' : 'text-gray-700'}`}>
                               {sym}{dayTotal.toFixed(2)}
                             </td>
                           </tr>
-                          {/* Individual service rows */}
-                          {isExpanded && daySvcs.map((service, idx) => (
-                            <tr key={idx} className="hover:bg-gray-50 border-b border-gray-100">
+                          {/* Individual service rows, in the order the day runs.
+                              A line with no rate stays in its place at 0, in red,
+                              with what to add — the operator asked to see the gap
+                              where it belongs, not in a list elsewhere. */}
+                          {isExpanded && daySvcs.map((service, idx) => {
+                            const state = lineState(service)
+                            return (
+                            <tr
+                              key={idx}
+                              className={`border-b border-gray-100 ${
+                                state === 'unpriced' ? 'bg-red-50 hover:bg-red-100/60'
+                                : state === 'included' ? 'text-gray-400 hover:bg-gray-50'
+                                : state === 'note' ? 'bg-amber-50/60 hover:bg-amber-50'
+                                : 'hover:bg-gray-50'
+                              }`}
+                            >
                               <td className="px-4 py-2 pl-10">
-                                <div>{service.service_name}</div>
+                                <div className={state === 'unpriced' ? 'text-red-800 font-medium' : undefined}>{service.service_name}</div>
+                                {service.issue && state !== 'included' && (
+                                  <div className={`text-xs mt-0.5 ${state === 'unpriced' ? 'text-red-700' : 'text-amber-800'}`}>{service.issue}</div>
+                                )}
                                 {service.pricing_note && (
                                   <div className="text-xs text-gray-400 mt-0.5">{service.pricing_note}</div>
                                 )}
                               </td>
                               <td className="px-4 py-2 text-center">
+                                {state === 'unpriced' ? (
+                                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-600 text-white">{t('noRate')}</span>
+                                ) : state === 'included' ? (
+                                  <span className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-500">{service.issue || t('included')}</span>
+                                ) : state === 'note' ? (
+                                  <span className="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800">{t('checkLine')}</span>
+                                ) : (
                                 <span className={`px-2 py-0.5 rounded text-xs ${
                                   service.rate_source === 'extras_catalogue'
                                     ? 'bg-purple-100 text-purple-700'
@@ -1558,13 +1633,15 @@ export default function TourPriceCalculator() {
                                 }`}>
                                   {service.rate_source === 'extras_catalogue' ? t('extraBadge') : (service.rate_type || service.rate_source)}
                                 </span>
+                                )}
                               </td>
                               <td className="px-4 py-2 text-center text-gray-500">{service.quantity_mode}</td>
                               <td className="px-4 py-2 text-right">{service.quantity}</td>
-                              <td className="px-4 py-2 text-right">{sym}{service.unit_cost.toFixed(2)}</td>
-                              <td className="px-4 py-2 text-right font-medium">{sym}{service.line_total.toFixed(2)}</td>
+                              <td className={`px-4 py-2 text-right ${state === 'unpriced' ? 'text-red-700' : ''}`}>{sym}{service.unit_cost.toFixed(2)}</td>
+                              <td className={`px-4 py-2 text-right font-medium ${state === 'unpriced' ? 'text-red-700' : ''}`}>{sym}{service.line_total.toFixed(2)}</td>
                             </tr>
-                          ))}
+                            )
+                          })}
                         </Fragment>
                       )
                     })}
@@ -1654,6 +1731,9 @@ export default function TourPriceCalculator() {
                   <h3 className="text-base font-semibold">{t('rateSheet')}</h3>
                   {tourLeaderIncluded && (
                     <p className="text-xs text-blue-600">{t('tourLeaderIncludedNote')}</p>
+                  )}
+                  {rateSheetGaps > 0 && (
+                    <p className="mt-1 text-sm font-medium text-red-700">{t('rateSheetIncomplete', { count: rateSheetGaps })}</p>
                   )}
                 </div>
                 <button
