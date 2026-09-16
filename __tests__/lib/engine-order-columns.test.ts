@@ -33,7 +33,7 @@ function orderChains(source: string): { table: string; column: string }[] {
 }
 
 describe('pricing engine ORDER BY columns exist', () => {
-  const files = ['lib/auto-pricing-service.ts', 'app/api/b2b/calculate-price/route.ts']
+  const files = ['lib/auto-pricing-service.ts', 'app/api/b2b/calculate-price/route.ts', 'lib/pricing/property-candidates.ts']
   for (const f of files) {
     it(f, () => {
       const src = readFileSync(path.join(ROOT, f), 'utf8')

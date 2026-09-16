@@ -5833,7 +5833,9 @@
       "allAdded": "用語集のすべてのサプリメントがこの料金に追加済みです。",
       "noneDefined": "サプリメントが未定義です。設定 → 用語集で追加してください。",
       "periodTitle": "サプリメント（1名1泊あたり）",
-      "dayLabel": "この夜のサプリメント"
+      "dayLabel": "この夜のサプリメント",
+      "noneCarried": "{name}には追加料金項目が登録されていません。",
+      "notCarried": "取り消し線: {name}では提供されていないため「料金なし」になります。クリックで外せます。"
     },
     "extras": {
       "title": "オプション",
@@ -7325,7 +7327,23 @@
     "saveIncompleteBody": "料金が設定されていないサービスが{count}件あるため、この見積りはその分だけ安くなっています。このまま保存しますか？",
     "saveAnyway": "このまま保存",
     "cruiseEmbark": "クルーズ乗船アシスト",
-    "cruiseDisembark": "クルーズ下船アシスト"
+    "cruiseDisembark": "クルーズ下船アシスト",
+    "property": {
+      "hotelLabel": "ホテル({tier})",
+      "shipLabel": "クルーズ船({tier})",
+      "loading": "読み込み中…",
+      "loadFailed": "一覧を読み込めませんでした。ページを再読み込みしてください。",
+      "automatic": "自動選択: {name}",
+      "automaticNone": "自動選択",
+      "noHotels": "{city}に{tier}のホテルがありません。料金 → ホテルで追加するか、別のグレードで計算してください。",
+      "noShips": "{tier}のクルーズ船がありません。料金 → クルーズで追加するか、別のグレードで計算してください。",
+      "unavailable": "選択した施設(利用不可)",
+      "chosenMissingHotel": "{city}で選択したホテルは無効化または削除されています。別のホテルを選んでください。",
+      "chosenMissingShip": "選択したクルーズ船は無効化または削除されています。別の船を選んでください。",
+      "wholeStayHotel": "{city}の全泊でこのホテルを使用します。",
+      "wholeStayShip": "乗船中の全泊でこの船を使用します。",
+      "nights": "{count}泊"
+    }
   },
   "bookings": {
     "title": "予約管理",

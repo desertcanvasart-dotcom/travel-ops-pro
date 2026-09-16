@@ -4993,7 +4993,9 @@
       "allAdded": "Every supplement in your vocabulary is on this rate.",
       "noneDefined": "No supplements are defined yet. Add them in Settings → Vocabulary.",
       "periodTitle": "Supplements (per person per night)",
-      "dayLabel": "Supplements for this night"
+      "dayLabel": "Supplements for this night",
+      "noneCarried": "{name} has no supplements on file.",
+      "notCarried": "Crossed out: {name} does not offer it — it will show as No rate. Click to remove."
     },
     "extras": {
       "title": "Extras",
@@ -6740,7 +6742,23 @@
     "saveIncompleteBody": "{count, plural, one {# service has no rate} other {# services have no rate}}, so this quote is short by whatever they cost. Save it anyway?",
     "saveAnyway": "Save anyway",
     "cruiseEmbark": "Cruise Check-in",
-    "cruiseDisembark": "Cruise Check-out"
+    "cruiseDisembark": "Cruise Check-out",
+    "property": {
+      "hotelLabel": "Hotel ({tier})",
+      "shipLabel": "Ship ({tier})",
+      "loading": "Loading…",
+      "loadFailed": "Could not load the list. Reload the page.",
+      "automatic": "Automatic: {name}",
+      "automaticNone": "Automatic",
+      "noHotels": "No {tier} hotel in {city}. Add one in Rates → Hotels, or price at another tier.",
+      "noShips": "No {tier} ship. Add one in Rates → Cruises, or price at another tier.",
+      "unavailable": "Chosen property (no longer available)",
+      "chosenMissingHotel": "The hotel chosen for {city} is switched off or no longer on file. Choose another.",
+      "chosenMissingShip": "The ship chosen for this sailing is switched off or no longer on file. Choose another.",
+      "wholeStayHotel": "Every night in {city} uses this hotel.",
+      "wholeStayShip": "Every night aboard uses this ship.",
+      "nights": "{count, plural, one {# night} other {# nights}}"
+    }
   },
   "bookings": {
     "title": "Bookings",
