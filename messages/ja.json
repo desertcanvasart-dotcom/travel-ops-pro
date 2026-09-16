@@ -1832,7 +1832,13 @@
       "noMembersInDept": "この部門にメンバーがいません",
       "generate": "タスクを生成",
       "pdfNeedsDays": "この旅程にはまだ日程がないため、見積PDFに載せる内容がありません。先にエディターで日程を追加してください。",
-      "pdfTooltip": "この旅程の日程と料金から作成する見積PDF"
+      "pdfTooltip": "この旅程の日程と料金から作成する見積PDF",
+      "incompleteTitle": "料金が未完成です",
+      "incompleteBody": "費用が入力されていないサービスが{count}件あり、合計にはそれらが含まれていません。各サービスの費用を入力するか、承知のうえで送信してください。",
+      "gapOnDay": "{day}日目: {name}",
+      "noCost": "費用未入力",
+      "continueAnyway": "このまま送信",
+      "sendIncompleteConfirm": "この旅程には費用未入力のサービスが{count}件あります（{services}）。お客様にはそれらを含まない合計が表示されます。このまま送信しますか？"
     },
     "editAction": "編集",
     "share": {
@@ -1846,7 +1852,10 @@
       "notViewedYet": "未閲覧",
       "createFailed": "共有リンクを作成できませんでした。",
       "revokeFailed": "共有リンクを無効化できませんでした。",
-      "copyFailed": "コピーできませんでした。リンクを選択して手動でコピーしてください。"
+      "copyFailed": "コピーできませんでした。リンクを選択して手動でコピーしてください。",
+      "incompleteTitle": "料金が未完成です",
+      "incompleteConfirm": "この旅程には費用未入力のサービスが{count}件あります（{services}）。旅行者にはそれらを含まない合計が表示されます。このまま共有しますか？",
+      "continueAnyway": "このまま共有"
     },
     "nittei": {
       "button": "お客様用 日程表",

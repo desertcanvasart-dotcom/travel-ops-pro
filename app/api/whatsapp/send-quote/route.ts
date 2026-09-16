@@ -7,12 +7,15 @@ import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createServerClient } from '@/lib/supabase-server'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
+import { allowsIncomplete } from '@/lib/pricing/quote-completeness'
+import { loadItineraryServiceLines } from '@/lib/pricing/itinerary-completeness'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     
-    const { itineraryId, clientName, clientPhone } = body
+    const { itineraryId, clientName, clientPhone, allow_incomplete } = body
 
     if (!itineraryId) {
       return NextResponse.json(
@@ -44,10 +47,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Output gate (harness Layer 2): never send a non-deliverable price.
-    const priceCheck = checkAmountDeliverable(itinerary.total_cost, { currency: itinerary.currency })
+    const lines = await loadItineraryServiceLines(supabase, String(itineraryId), await getCurrentOrgId())
+    const priceCheck = checkAmountDeliverable(itinerary.total_cost, {
+      currency: itinerary.currency,
+      ...(lines ? { servicesSnapshot: lines } : {}),
+      allowIncomplete: allowsIncomplete(allow_incomplete),
+    })
     if (!priceCheck.ok) {
       return NextResponse.json(
-        { success: false, error: 'Quote price is not deliverable', violations: priceCheck.violations },
+        {
+          success: false,
+          error: priceCheck.incomplete
+            ? `This itinerary has ${priceCheck.gaps?.length ?? 0} service(s) with no cost.`
+            : 'Quote price is not deliverable',
+          violations: priceCheck.violations,
+          incomplete: priceCheck.incomplete ?? false,
+          gaps: priceCheck.gaps ?? [],
+        },
         { status: 422 }
       )
     }
