@@ -46,6 +46,22 @@ describe('reading the property off a day\'s services', () => {
   })
 })
 
+describe('a translated itinerary still names the property (Greptile on #455)', () => {
+  it('the days API resolves property_name from the canonical line; the translated name alone would not parse', () => {
+    const translated = { service_type: 'accommodation', service_code: 'day7-hotel', service_name: 'ホテル - ステイゲンバーガー・ナイル・パレス(カイロ)' }
+    expect(propertyFromService(translated)).toBeNull()
+    expect(propertyFromService({ ...translated, property_name: 'Steigenberger Nile Palace' })).toEqual({ name: 'Steigenberger Nile Palace', kind: 'hotel' })
+  })
+
+  it('the days route computes it before merging the translation', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('app/api/itineraries/[id]/days/route.ts', 'utf8')
+    const resolve = src.indexOf('property_name: propertyFromService(service)')
+    expect(resolve).toBeGreaterThan(-1)
+    expect(resolve).toBeLessThan(src.indexOf('service_name: version?.service_name || service.service_name'))
+  })
+})
+
 describe('the name travels from the quote to the itinerary', () => {
   it('a quote line\'s property_name becomes the service row\'s supplier_name', () => {
     const row = serviceLineForItinerary(

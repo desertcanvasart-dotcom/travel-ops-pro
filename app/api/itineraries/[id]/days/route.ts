@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { propertyFromService } from '@/lib/itineraries/overnight-property'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
@@ -104,6 +105,10 @@ export async function GET(
         const version = serviceVersionById.get(service.id)
         return {
           ...service,
+          // The night's hotel or ship, read off the CANONICAL line before a
+          // translation replaces its name — the translated text no longer
+          // matches "Hotel - <name> (<city>)" (Greptile on #455).
+          property_name: propertyFromService(service)?.name ?? null,
           service_name: version?.service_name || service.service_name,
           notes: version?.notes ?? service.notes
         }

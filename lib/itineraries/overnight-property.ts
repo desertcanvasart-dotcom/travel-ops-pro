@@ -26,6 +26,9 @@ type ServiceLike = {
   service_code?: string | null
   service_name?: string | null
   supplier_name?: string | null
+  /** Resolved by the days API from the untranslated line, so a Japanese view
+   *  (translated service_name) still names the property. Wins when present. */
+  property_name?: string | null
 }
 
 const NOT_THE_NIGHT = /^(hotel supplement|cruise supplement|throughout guide|single supplement|triple reduction)\b/i
@@ -41,6 +44,8 @@ export function propertyFromService(s: ServiceLike): OvernightProperty | null {
   // Engine line ids: the night itself is day<N>-hotel / day<N>-cruise.
   if (code && /^day\d+-/.test(code) && !/^day\d+-(hotel|cruise)$/.test(code)) return null
 
+  const resolved = String(s.property_name ?? '').trim()
+  if (resolved) return { name: resolved, kind }
   const supplier = String(s.supplier_name ?? '').trim()
   if (supplier) return { name: supplier, kind }
 
