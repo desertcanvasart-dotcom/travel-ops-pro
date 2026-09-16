@@ -18,6 +18,9 @@ export interface SupplierProperty {
   contact_name: string | null
   contact_phone: string | null
   contact_email: string | null
+  /** Printed on Japanese customer documents (日程表 利用ホテル); null = the English name. */
+  name_ja?: string | null
+  address?: string | null
   notes: string | null
   is_active: boolean
   created_at: string

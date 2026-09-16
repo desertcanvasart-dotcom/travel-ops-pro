@@ -15,7 +15,7 @@ import { PROPERTY_TYPES, type PropertyType } from '@/lib/supplier-properties'
 const supabaseAdmin = createServerClient()
 
 // What a caller may set. id/supplier_id/timestamps are never writable.
-const WRITABLE = ['property_type', 'name', 'city', 'category', 'contact_name', 'contact_phone', 'contact_email', 'notes', 'is_active'] as const
+const WRITABLE = ['property_type', 'name', 'city', 'category', 'contact_name', 'contact_phone', 'contact_email', 'notes', 'is_active', 'name_ja', 'address'] as const
 
 function pickWritable(body: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {}

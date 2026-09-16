@@ -10051,6 +10051,8 @@ export interface Database {
           contact_name: string | null
           contact_phone: string | null
           contact_email: string | null
+          name_ja: string | null
+          address: string | null
           notes: string | null
           is_active: boolean
           created_at: string
@@ -10066,6 +10068,8 @@ export interface Database {
           contact_name?: string | null
           contact_phone?: string | null
           contact_email?: string | null
+          name_ja?: string | null
+          address?: string | null
           notes?: string | null
           is_active?: boolean
           created_at?: string
@@ -10081,6 +10085,8 @@ export interface Database {
           contact_name?: string | null
           contact_phone?: string | null
           contact_email?: string | null
+          name_ja?: string | null
+          address?: string | null
           notes?: string | null
           is_active?: boolean
           created_at?: string

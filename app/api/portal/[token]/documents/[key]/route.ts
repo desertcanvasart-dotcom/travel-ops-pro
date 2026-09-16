@@ -118,6 +118,7 @@ export async function GET(
         supabase,
         orgId: booking.org_id,
         templateId: itinerary.template_id as string,
+        itineraryId: booking.itinerary_id as string,
         departure: {
           start_date: booking.start_date ?? null,
           cairo_guide: null,

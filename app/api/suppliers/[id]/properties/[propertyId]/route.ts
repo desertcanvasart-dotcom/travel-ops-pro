@@ -6,7 +6,7 @@ import { createServerClient } from '@/lib/supabase-server'
 
 const supabaseAdmin = createServerClient()
 
-const WRITABLE = ['property_type', 'name', 'city', 'category', 'contact_name', 'contact_phone', 'contact_email', 'notes', 'is_active'] as const
+const WRITABLE = ['property_type', 'name', 'city', 'category', 'contact_name', 'contact_phone', 'contact_email', 'notes', 'is_active', 'name_ja', 'address'] as const
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string; propertyId: string }> }) {
   try {

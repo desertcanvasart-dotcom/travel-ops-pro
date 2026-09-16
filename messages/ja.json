@@ -3130,7 +3130,11 @@
       "importing": "インポート中…",
       "cancel": "キャンセル",
       "close": "閉じる"
-    }
+    },
+    "propertyNameJa": "日本語名(お客様用書類)",
+    "propertyNameJaPlaceholder": "例: シュタイゲンベルガー ピラミッズ カイロ",
+    "propertyAddress": "住所(お客様用書類)",
+    "propertyDocHint": "ここに宿泊する旅程の日程表「利用ホテル」に、上の電話番号と一緒に印刷されます。空欄の場合は英語名のまま・住所なしで印刷されます。"
   },
   "copilot": {
     "concierge": {
