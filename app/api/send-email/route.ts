@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateEmailTemplate } from '@/lib/communication-utils'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
+import { allowsIncomplete } from '@/lib/pricing/quote-completeness'
+import { loadItineraryServiceLines } from '@/lib/pricing/itinerary-completeness'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { lookupServerMessage } from '@/lib/i18n/server-messages'
 import { resolveClientLocaleByEmail, type RecipientLocale } from '@/lib/i18n/recipient-locale'
 import { sendEmailInternal } from '@/lib/email-send'
@@ -19,6 +22,8 @@ export async function POST(request: Request) {
       itineraryId,
       clientName,
       clientEmail,
+      // Services with no cost on this itinerary block the email unless allowed.
+      allow_incomplete,
       itineraryCode,
       tripName,
       totalCost,
@@ -62,10 +67,35 @@ export async function POST(request: Request) {
     } else if (clientName && itineraryCode && tripName) {
       // Itinerary email with PDF — output gate (harness Layer 2): never email a
       // non-deliverable price. (Generic reminder/cron emails carry no price.)
-      const priceCheck = checkAmountDeliverable(totalCost, { currency })
+      // Services with no cost are loaded from the itinerary itself, never
+      // taken from the body — and an itinerary email must say which itinerary
+      // it prices, or its completeness cannot be checked at all.
+      if (!itineraryId) {
+        return NextResponse.json(
+          { success: false, error: 'itineraryId is required to email an itinerary' },
+          { status: 400 }
+        )
+      }
+      const loaded = await loadItineraryServiceLines(supabase, String(itineraryId), await getCurrentOrgId())
+      if (!loaded.ok) {
+        return NextResponse.json({ success: false, error: loaded.error }, { status: loaded.status })
+      }
+      const priceCheck = checkAmountDeliverable(totalCost, {
+        currency,
+        servicesSnapshot: loaded.lines,
+        allowIncomplete: allowsIncomplete(allow_incomplete),
+      })
       if (!priceCheck.ok) {
         return NextResponse.json(
-          { success: false, error: 'Itinerary price is not deliverable', violations: priceCheck.violations },
+          {
+            success: false,
+          error: priceCheck.incomplete
+            ? `This itinerary has ${priceCheck.gaps?.length ?? 0} service(s) with no cost.`
+            : 'Itinerary price is not deliverable',
+          violations: priceCheck.violations,
+          incomplete: priceCheck.incomplete ?? false,
+          gaps: priceCheck.gaps ?? [],
+          },
           { status: 422 }
         )
       }

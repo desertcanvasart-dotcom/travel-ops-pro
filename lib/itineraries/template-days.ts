@@ -204,6 +204,9 @@ export interface SnapshotLine {
   line_total?: number | null
   pricing_note?: string | null
   day_number?: number | null
+  /** Kept at 0 in the quote because no rate exists (lib/pricing/quote-completeness). */
+  unpriced?: boolean
+  issue?: string | null
 }
 
 export interface ItineraryServiceRow {
@@ -245,6 +248,8 @@ export function serviceLineForItinerary(
     supplier_currency: opts.currency,
     supplier_cost_original: total,
     exchange_rate_used: 1,
-    notes: [line.pricing_note, remapped ? `category: ${line.service_category}` : null].filter(Boolean).join(' · ') || null,
+    // A line with no rate converts to a zero row — the itinerary's own record
+    // of the gap (lib/pricing/itinerary-completeness) — carrying the reason.
+    notes: [line.unpriced ? `No rate: ${line.issue ?? 'add it in Rates'}` : null, line.pricing_note, remapped ? `category: ${line.service_category}` : null].filter(Boolean).join(' · ') || null,
   }
 }

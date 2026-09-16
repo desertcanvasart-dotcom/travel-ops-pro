@@ -155,7 +155,10 @@ export async function POST(
     }
 
     // Output gate (harness Layer 2): don't generate operational paperwork for an
-    // itinerary whose price isn't deliverable.
+    // itinerary whose price isn't deliverable. Deliberately NOT the completeness
+    // gate the customer sends use: these are supplier vouchers, and a hotel with
+    // no rate entered still has to be booked — blocking the voucher would stop
+    // the very work that fixes the gap.
     const priceCheck = checkAmountDeliverable(itinerary.total_cost, { currency: itinerary.currency })
     if (!priceCheck.ok) {
       return NextResponse.json(

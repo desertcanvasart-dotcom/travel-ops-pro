@@ -13,6 +13,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { orgAuth } from '@/lib/auth/org-auth'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
+import { allowsIncomplete } from '@/lib/pricing/quote-completeness'
+import { loadItineraryServiceLines } from '@/lib/pricing/itinerary-completeness'
 import { generateShareToken } from '@/lib/itinerary-share'
 import { clientMessage } from '@/lib/api-errors'
 
@@ -58,10 +60,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       { status: 422 }
     )
   }
-  const priceCheck = checkAmountDeliverable(itinerary.total_cost, { currency: itinerary.currency })
+  const body = await request.json().catch(() => ({}))
+  const loaded = await loadItineraryServiceLines(supabase!, id, org_id!)
+  if (!loaded.ok) {
+    return NextResponse.json({ success: false, error: loaded.error }, { status: loaded.status })
+  }
+  const priceCheck = checkAmountDeliverable(itinerary.total_cost, {
+    currency: itinerary.currency,
+    servicesSnapshot: loaded.lines,
+    allowIncomplete: allowsIncomplete(body?.allow_incomplete),
+  })
   if (!priceCheck.ok) {
     return NextResponse.json(
-      { success: false, error: 'Itinerary price is not deliverable', violations: priceCheck.violations },
+      {
+        success: false,
+        error: priceCheck.incomplete
+          ? `This itinerary has ${priceCheck.gaps?.length ?? 0} service(s) with no cost.`
+          : 'Itinerary price is not deliverable',
+        violations: priceCheck.violations,
+        incomplete: priceCheck.incomplete ?? false,
+        gaps: priceCheck.gaps ?? [],
+      },
       { status: 422 }
     )
   }

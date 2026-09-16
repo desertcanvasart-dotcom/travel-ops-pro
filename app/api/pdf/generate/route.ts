@@ -3,7 +3,15 @@ import { businessIdentity, monogram, orgIdentity, type OrgIdentity } from '@/lib
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import puppeteer from 'puppeteer'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
+import { allowsIncomplete } from '@/lib/pricing/quote-completeness'
+import { loadItineraryServiceLines } from '@/lib/pricing/itinerary-completeness'
+import { createClient as createPdfDbClient } from '@supabase/supabase-js'
+
 import { escapeHtml as esc, money } from '@/lib/html-escape'
+
+// Reads the stored itinerary's services for the completeness gate (service role,
+// scoped by the session's org inside loadItineraryServiceLines).
+const pdfDb = createPdfDbClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
 // Fonts are the only thing this document legitimately fetches. Everything else
 // requested by the page is refused — see blockOffsiteRequests below.
@@ -626,7 +634,7 @@ function generateHTML(itinerary: Itinerary, days: Day[], identity: OrgIdentity):
 
 export async function POST(request: NextRequest) {
   try {
-    const { itinerary, days } = await request.json()
+    const { itinerary, days, allow_incomplete } = await request.json()
     
     if (!itinerary) {
       return NextResponse.json({ error: 'Itinerary data required' }, { status: 400 })
@@ -634,10 +642,30 @@ export async function POST(request: NextRequest) {
 
     // Output gate (harness Layer 2): never render a customer PDF for a
     // non-deliverable price.
-    const priceCheck = checkAmountDeliverable(itinerary.total_cost, { currency: itinerary.currency })
+    // Services with no cost come from the stored itinerary — the posted
+    // `days` are the caller's, and would let a gap be edited out of the check.
+    if (!itinerary.id) {
+      return NextResponse.json({ error: 'itinerary.id is required' }, { status: 400 })
+    }
+    const loaded = await loadItineraryServiceLines(pdfDb, String(itinerary.id), await getCurrentOrgId())
+    if (!loaded.ok) {
+      return NextResponse.json({ error: loaded.error }, { status: loaded.status })
+    }
+    const priceCheck = checkAmountDeliverable(itinerary.total_cost, {
+      currency: itinerary.currency,
+      servicesSnapshot: loaded.lines,
+      allowIncomplete: allowsIncomplete(allow_incomplete),
+    })
     if (!priceCheck.ok) {
       return NextResponse.json(
-        { error: 'Itinerary price is not deliverable', violations: priceCheck.violations },
+        {
+          error: priceCheck.incomplete
+            ? `This itinerary has ${priceCheck.gaps?.length ?? 0} service(s) with no cost.`
+            : 'Itinerary price is not deliverable',
+          violations: priceCheck.violations,
+          incomplete: priceCheck.incomplete ?? false,
+          gaps: priceCheck.gaps ?? [],
+        },
         { status: 422 }
       )
     }

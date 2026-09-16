@@ -9,6 +9,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { useConfirm } from '@/components/ConfirmDialog'
+import { describeGaps, type QuoteGap } from '@/lib/pricing/quote-completeness'
 import { Link2, Copy, Check, EyeOff, Eye, Loader2, AlertTriangle } from 'lucide-react'
 
 interface ShareState {
@@ -20,6 +22,7 @@ interface ShareState {
 
 export default function ShareLinkCard({ itineraryId }: { itineraryId: string }) {
   const t = useTranslations('itineraries.share')
+  const confirmDialog = useConfirm()
   const [state, setState] = useState<ShareState | null>(null)
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -40,13 +43,28 @@ export default function ShareLinkCard({ itineraryId }: { itineraryId: string }) 
     void load()
   }, [load])
 
-  const create = async () => {
+  const create = async (allowIncomplete = false) => {
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch(`/api/itineraries/${itineraryId}/share`, { method: 'POST' })
+      const res = await fetch(`/api/itineraries/${itineraryId}/share`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(allowIncomplete ? { allow_incomplete: true } : {}),
+      })
       const json = await res.json()
       if (!json.success) {
+        // Services with no cost: a traveller would see a price that leaves
+        // them out. Share only if the operator says so.
+        if (res.status === 422 && json.incomplete && !allowIncomplete) {
+          const gaps: QuoteGap[] = Array.isArray(json.gaps) ? json.gaps : []
+          setBusy(false)
+          const ok = await confirmDialog(t('incompleteConfirm', { count: gaps.length, services: describeGaps(gaps) }), {
+            title: t('incompleteTitle'), confirmText: t('continueAnyway'), variant: 'warning',
+          })
+          if (ok) await create(true)
+          return
+        }
         // 422 carries the real reason (draft, or a broken price) — show it.
         setError(json.error || t('createFailed'))
         return
@@ -148,7 +166,7 @@ export default function ShareLinkCard({ itineraryId }: { itineraryId: string }) 
       ) : (
         <button
           type="button"
-          onClick={create}
+          onClick={() => create()}
           disabled={busy}
           className="h-10 px-4 rounded-md text-sm font-medium flex items-center gap-2 bg-primary-600 text-white hover:bg-primary-700 transition-colors disabled:opacity-50"
         >

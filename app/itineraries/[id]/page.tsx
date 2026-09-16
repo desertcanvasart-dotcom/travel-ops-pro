@@ -25,6 +25,8 @@ import ItineraryExpenses from '@/app/components/ItineraryExpenses'
 import { createClient } from '@/lib/supabase'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { itineraryCompleteness } from '@/lib/pricing/itinerary-completeness'
+import { describeGaps } from '@/lib/pricing/quote-completeness'
 import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
 import type { Language, ItineraryVersion } from '@/types/multilingual'
 
@@ -112,6 +114,35 @@ export default function ViewItineraryPage() {
   // fetch resolves, and the generator draws nothing for a blank brand.
   const company = useCompanyInfo()
   const dialog = useConfirmDialog()
+
+  // Services with no cost (a zero rate and total). The email, WhatsApp and
+  // share link all refuse to send them without the operator's go-ahead, and
+  // ask first here (lib/pricing/itinerary-completeness).
+  const confirmIncompleteSend = async (days: Array<{ day_number: number; services: Array<{ service_name: string; rate_eur: number; total_cost: number; notes: string }> }>): Promise<'complete' | 'go' | 'stop'> => {
+    const { complete, gaps } = itineraryCompleteness(days)
+    if (complete) return 'complete'
+    const ok = await dialog.confirm({
+      title: t('incompleteTitle'),
+      message: t('sendIncompleteConfirm', { count: gaps.length, services: describeGaps(gaps) }),
+      confirmText: t('continueAnyway'),
+      variant: 'warning',
+    })
+    return ok ? 'go' : 'stop'
+  }
+
+  /** The server is the authority. If it finds services with no cost this
+   *  page did not know about — added by someone else after the page loaded —
+   *  ask with the SERVER's list, so the send can still go ahead knowingly
+   *  instead of dead-ending on an error (review of #449). */
+  const confirmServerIncomplete = async (data: { gaps?: unknown }): Promise<boolean> => {
+    const gaps = Array.isArray(data?.gaps) ? (data.gaps as Array<{ name: string; day: number | null; issue: string }>) : []
+    return dialog.confirm({
+      title: t('incompleteTitle'),
+      message: t('sendIncompleteConfirm', { count: gaps.length, services: describeGaps(gaps) }),
+      confirmText: t('continueAnyway'),
+      variant: 'warning',
+    })
+  }
   const params = useParams()
   const router = useRouter()
   const supabase = createClient()
@@ -863,20 +894,28 @@ export default function ViewItineraryPage() {
     }
   
     setShowSendModal(false)
+    const decision = await confirmIncompleteSend(days)
+    if (decision === 'stop') return
     setSendingEmail(true) // Reuse loading state for UI feedback
   
     try {
-      const response = await fetch('/api/whatsapp/send-quote', {
+      const send = (allowIncomplete: boolean) => fetch('/api/whatsapp/send-quote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           itineraryId: itinerary.id,
           clientPhone: itinerary.client_phone,
-          clientName: itinerary.client_name
+          clientName: itinerary.client_name,
+          ...(allowIncomplete ? { allow_incomplete: true } : {}),
         })
       })
-  
-      const data = await response.json()
+      let response = await send(decision === 'go')
+      let data = await response.json()
+      if (response.status === 422 && data.incomplete && decision !== 'go') {
+        if (!(await confirmServerIncomplete(data))) return
+        response = await send(true)
+        data = await response.json()
+      }
   
       if (!response.ok || !data.success) {
         throw new Error(data.error || t('failedToSendWhatsApp'))
@@ -901,8 +940,10 @@ export default function ViewItineraryPage() {
       return
     }
 
-    setSendingEmail(true)
     setShowSendModal(false)
+    const decision = await confirmIncompleteSend(days)
+    if (decision === 'stop') return
+    setSendingEmail(true)
     
     try {
       const pdf = await generateItineraryPDF(itinerary, days, {
@@ -912,7 +953,7 @@ export default function ViewItineraryPage() {
       const pdfBlob = pdf.output('blob')
       const pdfBase64 = await blobToBase64(pdfBlob)
 
-      const response = await fetch('/api/send-email', {
+      const send = (allowIncomplete: boolean) => fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -923,11 +964,17 @@ export default function ViewItineraryPage() {
           tripName: itinerary.trip_name,
           totalCost: effectiveTotalCost.toFixed(2),
           currency: itinerary.currency,
-          pdfBase64: pdfBase64.split(',')[1]
+          pdfBase64: pdfBase64.split(',')[1],
+          ...(allowIncomplete ? { allow_incomplete: true } : {}),
         })
       })
-
-      const data = await response.json()
+      let response = await send(decision === 'go')
+      let data = await response.json()
+      if (response.status === 422 && data.incomplete && decision !== 'go') {
+        if (!(await confirmServerIncomplete(data))) return
+        response = await send(true)
+        data = await response.json()
+      }
 
       if (data.success) {
         setSendSuccess(t('emailSentSuccessfully'))
@@ -1253,6 +1300,24 @@ export default function ViewItineraryPage() {
       </div>
 
       {/* Success Messages */}
+      {(() => {
+        const { complete, gaps } = itineraryCompleteness(days)
+        if (complete) return null
+        return (
+          <div className="container mx-auto px-4 pt-3">
+            <div className="rounded-lg border border-red-300 bg-red-50 p-4">
+              <p className="text-sm font-semibold text-red-900">{t('incompleteTitle')}</p>
+              <p className="text-sm text-red-800 mt-1">{t('incompleteBody', { count: gaps.length })}</p>
+              <ul className="mt-2 space-y-0.5 text-sm text-red-900 list-disc pl-5">
+                {gaps.map((g, i) => (
+                  <li key={i}>{g.day ? t('gapOnDay', { day: g.day, name: g.name }) : g.name}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )
+      })()}
+
       {sendSuccess && (
         <div className="container mx-auto px-4 pt-3">
           <div className="bg-green-50 border border-green-200 p-3 rounded-md">
@@ -1770,12 +1835,17 @@ export default function ViewItineraryPage() {
                     <div>
                       <h4 className="text-sm font-semibold text-gray-900 mb-3">{t('servicesIncluded')}</h4>
                       <div className="space-y-2">
-                        {day.services.map((service) => (
-                          <div key={service.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors">
+                        {day.services.map((service) => {
+                          const noCost = (Number(service.rate_eur) || 0) === 0 && (Number(service.total_cost) || 0) === 0
+                          return (
+                          <div key={service.id} className={`flex items-center justify-between p-3 rounded-md transition-colors ${noCost ? 'bg-red-50 hover:bg-red-100/70 border border-red-200' : 'bg-gray-50 hover:bg-gray-100'}`}>
                             <div className="flex items-center gap-2 flex-1">
                               <span className="text-lg">{getServiceIcon(service.service_type)}</span>
                               <div>
-                                <p className="text-sm font-medium text-gray-900">{service.service_name}</p>
+                                <p className={`text-sm font-medium ${noCost ? 'text-red-800' : 'text-gray-900'}`}>
+                                  {service.service_name}
+                                  {noCost && <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] font-medium bg-red-600 text-white align-middle">{t('noCost')}</span>}
+                                </p>
                                 <p className="text-xs text-gray-500">{tEdit.has(`serviceTypes.${service.service_type}`) ? tEdit(`serviceTypes.${service.service_type}`) : service.service_type.replace('_', ' ')}{service.quantity > 1 && ` • ${t('qty')}: ${service.quantity}`}</p>
                                 {service.notes && !service.notes.startsWith('__grid:') && <p className="text-xs text-gray-600 mt-0.5">{service.notes}</p>}
                               </div>
@@ -1795,7 +1865,8 @@ export default function ViewItineraryPage() {
                               )}
                             </div>
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   ) : (

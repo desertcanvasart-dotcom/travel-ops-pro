@@ -1405,7 +1405,13 @@
       "sendViaEmail": "Send via email",
       "sendingEmail": "Sending email...",
       "pdfNeedsDays": "This itinerary has no days yet, so there is nothing to put in a quote PDF. Add days in the editor first.",
-      "pdfTooltip": "Quote PDF built from this itinerary’s days and prices"
+      "pdfTooltip": "Quote PDF built from this itinerary’s days and prices",
+      "incompleteTitle": "Incomplete price",
+      "incompleteBody": "{count, plural, one {# service has no cost} other {# services have no cost}}, so the total leaves them out. Enter the cost on each, or send knowingly.",
+      "gapOnDay": "Day {day}: {name}",
+      "noCost": "No cost",
+      "continueAnyway": "Send anyway",
+      "sendIncompleteConfirm": "This itinerary has {count, plural, one {# service} other {# services}} with no cost ({services}), so the client will see a total that leaves them out. Send anyway?"
     },
     "editAction": "Edit",
     "share": {
@@ -1419,7 +1425,10 @@
       "notViewedYet": "Not opened yet",
       "createFailed": "Could not create the share link.",
       "revokeFailed": "Could not revoke the share link.",
-      "copyFailed": "Could not copy — select the link and copy it manually."
+      "copyFailed": "Could not copy — select the link and copy it manually.",
+      "incompleteTitle": "Incomplete price",
+      "incompleteConfirm": "This itinerary has {count, plural, one {# service} other {# services}} with no cost ({services}). The traveller will see a total that leaves them out. Share anyway?",
+      "continueAnyway": "Share anyway"
     },
     "nittei": {
       "button": "Customer 日程表",
