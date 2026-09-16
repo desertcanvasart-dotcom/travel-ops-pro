@@ -88,13 +88,14 @@ async function resolveVerifiedUserId(): Promise<string | null> {
 export { ACTIVE_ORG_COOKIE }
 
 /** This person's memberships, oldest first — the input to the one rule. */
-async function membershipsOf(userId: string): Promise<{ org_id: string; role: string }[]> {
+async function membershipsOf(userId: string): Promise<{ org_id: string; role: string; created_at: string | null }[]> {
   const { data } = await getAdmin()
     .from('organization_members')
     .select('org_id, role, created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: true })
-  return (data ?? []) as { org_id: string; role: string }[]
+    .order('org_id', { ascending: true })
+  return (data ?? []) as { org_id: string; role: string; created_at: string | null }[]
 }
 
 /** The active-org cookie, or null outside a request context (background
@@ -138,6 +139,7 @@ export async function getMyOrganizations(): Promise<MembershipSummary[]> {
     .select('org_id, role, created_at, organizations(name)')
     .eq('user_id', userId)
     .order('created_at', { ascending: true })
+    .order('org_id', { ascending: true })
 
   type Row = { org_id: string; role: string; organizations?: { name?: string } | { name?: string }[] | null }
   return ((data ?? []) as Row[]).map(r => {
