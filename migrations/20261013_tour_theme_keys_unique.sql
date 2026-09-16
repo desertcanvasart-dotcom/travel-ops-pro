@@ -19,17 +19,30 @@
 --      no vocabulary entry behind it — an orphan, which the browser renders as
 --      the raw key and which no picker can represent.
 --
--- The fix is one SELECT. Keys are assigned by row_number() over the normalised
--- code, so the second and later categories sharing one get 'desert_safari_2',
--- 'desert_safari_3' and so on; and inactive categories are seeded too, as
--- INACTIVE entries. An inactive entry is exactly right for a retired theme:
--- useVocabulary resolves labels from `all` (so the tour reads "Desert Safari"
--- and not `desert_safari`) while the pickers offer only `items`, so nobody can
--- newly file a tour under a theme the agency retired.
+-- The fix allocates keys instead of deriving them. Every category's natural
+-- base key is reserved up front, so a generated suffix can never land on one:
+-- with codes 'FOO', 'foo' and 'FOO_2' the first two both want 'foo', and the
+-- loser must NOT be handed 'foo_2' — that is 'FOO_2's own key, and taking it
+-- would drop that category exactly the way this migration exists to stop.
 --
--- WHICH category keeps the base key matters. After a collision the surviving
--- entry carries one category's NAME as its label, so the ordering puts that
--- category first: repairing the split must not swap two themes' labels round.
+-- Inactive categories are seeded too, as INACTIVE entries. That is exactly
+-- right for a retired theme: useVocabulary resolves labels from `all` (so the
+-- tour reads "Desert Safari" and not `desert_safari`) while the pickers offer
+-- only `items`, so nobody can newly file a tour under a retired theme.
+--
+-- WHICH category keeps the base key matters, and cannot always be known. After
+-- a collision the surviving entry carries one category's NAME as its label,
+-- and that label is the only link back — one the agency is free to rewrite in
+-- Settings. So:
+--
+--   * names exactly one of the colliding categories → that one keeps the base
+--     key and the others take allocated suffixes;
+--   * names none of them (it was relabelled) → the group is LEFT ALONE and
+--     reported. Guessing would both duplicate the entry that exists and leave
+--     a category with none, which is worse than the split it set out to mend.
+--
+-- A lone category always owns its base key, so relabelling an ordinary theme
+-- is safe and the common repair — the retired-theme orphan — is unaffected.
 --
 -- What this migration deliberately does NOT do is re-point existing tours.
 -- Since 20261011 the tour form writes theme_key and no longer reads
@@ -39,6 +52,22 @@
 -- in the picker, and the NOTICE below names the tours worth a second look.
 BEGIN;
 
+-- The key a category would take if nothing else wanted it. A code with nothing
+-- key-shaped left in it ('!!!') would fail org_vocabularies' key CHECK and
+-- take the whole statement down, so it falls back to a legal base and the
+-- allocator below keeps it unique.
+CREATE OR REPLACE FUNCTION public.tour_theme_base(p_code text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT CASE
+    WHEN lower(regexp_replace(COALESCE(p_code, ''), '[^A-Za-z0-9_]', '_', 'g')) ~ '^[a-z0-9][a-z0-9_]{0,59}$'
+    THEN lower(regexp_replace(p_code, '[^A-Za-z0-9_]', '_', 'g'))
+    ELSE 'theme'
+  END
+$$;
+
 CREATE OR REPLACE FUNCTION public.seed_tour_themes(p_org uuid)
 RETURNS integer
 LANGUAGE plpgsql
@@ -46,56 +75,19 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
-  n integer;
+  n integer := 0;
+  total integer := 0;
+  taken text[];
+  grp RECORD;
+  c RECORD;
+  existing_label text;
+  owner_id uuid;
+  matches integer;
+  candidate text;
+  suffix integer;
+  first_of_group boolean;
 BEGIN
-  IF EXISTS (SELECT 1 FROM public.tour_categories) THEN
-    WITH normalised AS (
-      SELECT
-        c.category_name,
-        c.description,
-        c.sort_order,
-        c.is_active,
-        c.category_code,
-        -- A code with nothing key-shaped left in it (punctuation only, or
-        -- empty) would fail org_vocabularies' key CHECK and take the whole
-        -- statement down with it. It gets a legal base instead and the
-        -- row_number below keeps it unique.
-        CASE
-          WHEN lower(regexp_replace(c.category_code, '[^A-Za-z0-9_]', '_', 'g')) ~ '^[a-z0-9][a-z0-9_]{0,59}$'
-          THEN lower(regexp_replace(c.category_code, '[^A-Za-z0-9_]', '_', 'g'))
-          ELSE 'theme'
-        END AS base
-      FROM public.tour_categories c
-    ),
-    ranked AS (
-      SELECT
-        nm.*,
-        row_number() OVER (
-          PARTITION BY nm.base
-          ORDER BY
-            -- The category that already owns this key keeps it.
-            (EXISTS (
-              SELECT 1 FROM public.org_vocabularies v
-               WHERE v.org_id = p_org AND v.kind = 'tour_theme'
-                 AND v.key = nm.base AND v.label = nm.category_name
-            )) DESC,
-            COALESCE(nm.sort_order, 999),
-            nm.category_code
-        ) AS pos
-      FROM normalised nm
-    )
-    INSERT INTO public.org_vocabularies (org_id, kind, key, label, description, rank, is_active)
-    SELECT
-      p_org,
-      'tour_theme',
-      CASE WHEN pos = 1 THEN base ELSE left(base, 56) || '_' || pos END,
-      category_name,
-      description,
-      COALESCE(sort_order, 999),
-      COALESCE(is_active, true)
-    FROM ranked
-    ON CONFLICT ON CONSTRAINT org_vocabularies_unique_key DO NOTHING;
-  ELSE
+  IF NOT EXISTS (SELECT 1 FROM public.tour_categories) THEN
     INSERT INTO public.org_vocabularies (org_id, kind, key, label, label_ja, rank) VALUES
       (p_org, 'tour_theme', 'cultural',     'Cultural & Historical', '文化・歴史',     1),
       (p_org, 'tour_theme', 'adventure',    'Adventure & Active',    'アドベンチャー', 2),
@@ -104,9 +96,73 @@ BEGIN
       (p_org, 'tour_theme', 'luxury',       'Luxury Experience',     'ラグジュアリー', 5),
       (p_org, 'tour_theme', 'culinary',     'Food & Culinary',       '食・グルメ',     6)
     ON CONFLICT ON CONSTRAINT org_vocabularies_unique_key DO NOTHING;
+    GET DIAGNOSTICS n = ROW_COUNT;
+    RETURN n;
   END IF;
-  GET DIAGNOSTICS n = ROW_COUNT;
-  RETURN n;
+
+  -- Every natural base, reserved before a single key is handed out.
+  SELECT array_agg(DISTINCT public.tour_theme_base(category_code))
+    INTO taken
+    FROM public.tour_categories;
+
+  FOR grp IN
+    SELECT public.tour_theme_base(category_code) AS base, count(*) AS members
+      FROM public.tour_categories
+     GROUP BY 1
+     ORDER BY 1
+  LOOP
+    SELECT label INTO existing_label
+      FROM public.org_vocabularies
+     WHERE org_id = p_org AND kind = 'tour_theme' AND key = grp.base;
+
+    owner_id := NULL;
+    IF grp.members > 1 AND existing_label IS NOT NULL THEN
+      SELECT count(*) INTO matches
+        FROM public.tour_categories
+       WHERE public.tour_theme_base(category_code) = grp.base
+         AND category_name = existing_label;
+      IF matches = 1 THEN
+        SELECT id INTO owner_id
+          FROM public.tour_categories
+         WHERE public.tour_theme_base(category_code) = grp.base
+           AND category_name = existing_label;
+      ELSE
+        RAISE WARNING 'tour themes: % category codes normalise to "%" and the entry there ("%") names none of them — rename one category_code, then re-run seed_tour_themes()',
+          grp.members, grp.base, existing_label;
+        CONTINUE;
+      END IF;
+    END IF;
+
+    first_of_group := true;
+    FOR c IN
+      SELECT id, category_name, description, sort_order, is_active, category_code
+        FROM public.tour_categories
+       WHERE public.tour_theme_base(category_code) = grp.base
+       ORDER BY (id = owner_id) DESC NULLS LAST, COALESCE(sort_order, 999), category_code
+    LOOP
+      IF first_of_group THEN
+        candidate := grp.base;
+        first_of_group := false;
+      ELSE
+        suffix := 2;
+        LOOP
+          candidate := left(grp.base, 56) || '_' || suffix;
+          EXIT WHEN NOT (candidate = ANY (taken));
+          suffix := suffix + 1;
+        END LOOP;
+        taken := array_append(taken, candidate);
+      END IF;
+
+      INSERT INTO public.org_vocabularies (org_id, kind, key, label, description, rank, is_active)
+      VALUES (p_org, 'tour_theme', candidate, c.category_name, c.description,
+              COALESCE(c.sort_order, 999), COALESCE(c.is_active, true))
+      ON CONFLICT ON CONSTRAINT org_vocabularies_unique_key DO NOTHING;
+      GET DIAGNOSTICS n = ROW_COUNT;
+      total := total + n;
+    END LOOP;
+  END LOOP;
+
+  RETURN total;
 END;
 $$;
 

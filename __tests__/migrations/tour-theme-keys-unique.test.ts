@@ -69,7 +69,12 @@ beforeAll(async () => {
     ('DESERT-SAFARI', 'Desert Safari (hyphen)',    2),
     ('DESERT_SAFARI', 'Desert Safari (underscore)',3),
     ('RETIRED_THEME', 'Retired Theme',             4),
-    ('!!!',           'Punctuation Only',          5);`)
+    ('!!!',           'Punctuation Only',          5),
+    -- 'FOO' and 'foo' both want 'foo'; 'FOO_2' owns 'foo_2' outright. A
+    -- generated suffix that ignored the third would drop it.
+    ('FOO',           'Foo Upper',                 6),
+    ('foo',           'Foo Lower',                 7),
+    ('FOO_2',         'Foo Two',                   8);`)
   await db.exec(`UPDATE tour_categories SET is_active = false WHERE category_code = 'RETIRED_THEME';`)
   const id = async (code: string) => (await rows(`SELECT id FROM tour_categories WHERE category_code='${code}'`))[0].id
   await db.exec(`INSERT INTO tour_templates (template_code, template_name, tour_type, duration_days, category_id) VALUES
@@ -177,5 +182,69 @@ describe('a new organisation, seeded by the trigger', () => {
     for (const key of Object.keys(await themes(FRESH))) {
       expect(key).toMatch(/^[a-z0-9][a-z0-9_]{0,59}$/)
     }
+  })
+})
+
+describe('a generated suffix never takes another category\'s own key', () => {
+  it('gives all three of FOO / foo / FOO_2 a key of their own', async () => {
+    const t = await themes()
+    const byLabel = Object.fromEntries(Object.entries(t).map(([k, v]) => [v.label, k]))
+    const keys = [byLabel['Foo Upper'], byLabel['Foo Lower'], byLabel['Foo Two']]
+    expect(keys.every(Boolean), 'every colliding category must end up with an entry').toBe(true)
+    expect(new Set(keys).size, 'three categories, three distinct keys').toBe(3)
+  })
+
+  it('leaves FOO_2 holding its natural key rather than a suffix winner', async () => {
+    const t = await themes()
+    expect(t.foo_2?.label).toBe('Foo Two')
+  })
+
+  it('every key it hands out is legal', async () => {
+    for (const key of Object.keys(await themes())) {
+      expect(key).toMatch(/^[a-z0-9][a-z0-9_]{0,59}$/)
+    }
+  })
+})
+
+describe('a relabelled collision survivor', () => {
+  // The label is the only link from a surviving entry back to its category,
+  // and Settings lets an agency rewrite it. When it names none of the
+  // colliding categories, the group cannot be attributed — and guessing would
+  // BOTH duplicate the entry that exists AND leave a category with none.
+  const RELABELLED = '44444444-4444-4444-8444-444444444444'
+
+  beforeAll(async () => {
+    await db.exec(`INSERT INTO organizations (id, name) VALUES ('${RELABELLED}','Relabelled Agency');`)
+    await db.exec(`UPDATE org_vocabularies SET label = 'Ancient Sands'
+                    WHERE org_id='${RELABELLED}' AND kind='tour_theme' AND key='desert_safari';`)
+    // Everything else about the group is removed, so only the relabelled
+    // survivor is left to attribute.
+    await db.exec(`DELETE FROM org_vocabularies
+                    WHERE org_id='${RELABELLED}' AND kind='tour_theme' AND key='desert_safari_2';`)
+    await db.query(`SELECT seed_tour_themes('${RELABELLED}')`)
+  })
+
+  it('does not duplicate the entry that is already there', async () => {
+    const dupes = await rows(`SELECT label, count(*) AS n FROM org_vocabularies
+                               WHERE org_id='${RELABELLED}' AND kind='tour_theme'
+                               GROUP BY label HAVING count(*) > 1`)
+    expect(dupes).toEqual([])
+  })
+
+  it('leaves the agency\'s own words alone', async () => {
+    const t = await themes(RELABELLED)
+    expect(t.desert_safari.label).toBe('Ancient Sands')
+  })
+
+  it('invents no key for a group it cannot attribute', async () => {
+    const t = await themes(RELABELLED)
+    expect(t.desert_safari_2).toBeUndefined()
+  })
+
+  it('still repairs every group it CAN attribute', async () => {
+    const t = await themes(RELABELLED)
+    // The retired theme is a lone category, so it owns its base key whatever
+    // anybody has renamed.
+    expect(t.retired_theme?.is_active).toBe(false)
   })
 })
