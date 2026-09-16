@@ -1840,7 +1840,9 @@
       "continueAnyway": "このまま送信",
       "sendIncompleteConfirm": "この旅程には費用未入力のサービスが{count}件あります（{services}）。お客様にはそれらを含まない合計が表示されます。このまま送信しますか？",
       "overnightAt": "宿泊: {place}",
-      "aboardShip": "乗船: {name}"
+      "aboardShip": "乗船: {name}",
+      "propertyNotInRates": "{name}は現在の料金表にありません。見積時の内容のまま残っています。手配を確認するか、登録済みの施設で再計算してください。",
+      "propertySwitchedOff": "{name}は料金表で無効になっています。確定前に手配可能か確認してください。"
     },
     "editAction": "編集",
     "share": {
@@ -7377,7 +7379,8 @@
         "sound_light": "音と光のショー送迎",
         "dinner_transfer": "夕食送迎"
       }
-    }
+    },
+    "inFlightNight": "機中泊(夜行便)— この日は手配なし"
   },
   "bookings": {
     "title": "予約管理",

@@ -942,7 +942,13 @@ export function parseItinerary(itineraryData: any, opts?: {
     const noBed = NO_BED_KINDS.has(overnightKind) || isLastDay || sleepingAboard
     // A day spent entirely in the air, with no city and nothing to see, is
     // outside the destination: no arrival transfer, no hotel assistance.
-    const inTransit = NO_BED_KINDS.has(overnightKind) && !day.city && attractions.length === 0
+    // `in_transit: true` is the operator SAYING so in the day editor ("In the
+    // air — overnight flight"): it wins whatever the day's city or leftover
+    // attractions, because the imported marker this rule reads was lost from
+    // some programmes and could not be restored from the UI (NMS803 day 1,
+    // operator 2026-09-17).
+    const inTransit = day.in_transit === true ||
+      (NO_BED_KINDS.has(overnightKind) && !day.city && attractions.length === 0)
     const accommodationType: AccommodationType = noBed ? 'none' : (day.accommodation_type || inferAccommodationType(day, itineraryData))
     const supplementKeys = sanitizeSupplementKeys(day.supplements)
     if (tickedMeals) {
