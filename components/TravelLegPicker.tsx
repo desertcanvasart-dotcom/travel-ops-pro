@@ -11,12 +11,31 @@
 // Flight/day-train legs run FROM the previous day's city TO this day's
 // city; a sleeping train boards tonight and wakes in the NEXT day's city.
 // Flights price the economy cabin always (operator, 2026-09-04).
+//
+// ROAD IS NOT ONE OF THE MODES. It is a toggle that sits beside at most one
+// ticket: a flight day with road on is the flight AND both airport transfers,
+// which is how the engine has always priced it — but the picker drew Road as
+// the alternative to Flight, so a flying day looked like it had no road at all
+// (operator, 2026-09-16). Road on a train day adds the station transfers.
+// Road off on a day with no ticket means no road vehicle that day.
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Plane, TrainFront, MoonStar, Car } from 'lucide-react'
 
 export type TravelLegMode = 'ground' | 'flight' | 'train' | 'sleeping_train'
+
+/** Road's value when the day does not say — mirrors the engine
+ *  (ItineraryDay.road_transfers): on for road and flight days, off for trains. */
+export function defaultRoadTransfers(mode: string | null | undefined): boolean {
+  return !(mode === 'train' || mode === 'sleeping_train')
+}
+
+/** What to store: nothing when road is at the mode's default, so the default
+ *  can still evolve; the explicit choice otherwise. */
+export function storedRoadTransfers(mode: string | null | undefined, road: boolean): boolean | undefined {
+  return road === defaultRoadTransfers(mode) ? undefined : road
+}
 
 // Cairo's sleeper leaves from Giza — one city for route matching (mirrors
 // the engine's STATION_CITY_ALIAS).
@@ -31,18 +50,20 @@ interface RowOption { id: string; label: string }
 interface Props {
   mode?: string | null
   rateId?: string | null
+  /** The day's road_transfers; absent = the mode's default. */
+  road?: boolean | null
   /** Previous day's city — origin for flight / day-train legs. */
   prevCity?: string | null
   /** This day's city. */
   city?: string | null
   /** Next day's city — where a sleeping train wakes up. */
   nextCity?: string | null
-  onChange: (mode: TravelLegMode, rateId: string | undefined) => void
+  /** road: the effective road choice after this change. */
+  onChange: (mode: TravelLegMode, rateId: string | undefined, road: boolean) => void
   disabled?: boolean
 }
 
-const MODE_META: Array<{ value: TravelLegMode; icon: typeof Car }> = [
-  { value: 'ground', icon: Car },
+const TICKET_META: Array<{ value: Exclude<TravelLegMode, 'ground'>; icon: typeof Car }> = [
   { value: 'flight', icon: Plane },
   { value: 'train', icon: TrainFront },
   { value: 'sleeping_train', icon: MoonStar },
@@ -50,10 +71,11 @@ const MODE_META: Array<{ value: TravelLegMode; icon: typeof Car }> = [
 
 const num = (v: unknown): number => Number(v) || 0
 
-export default function TravelLegPicker({ mode, rateId, prevCity, city, nextCity, onChange, disabled }: Props) {
+export default function TravelLegPicker({ mode, rateId, road, prevCity, city, nextCity, onChange, disabled }: Props) {
   const t = useTranslations('travelLeg')
   const currentMode: TravelLegMode =
     mode === 'flight' || mode === 'train' || mode === 'sleeping_train' ? mode : 'ground'
+  const roadOn = typeof road === 'boolean' ? road : defaultRoadTransfers(currentMode)
   const [rows, setRows] = useState<Record<string, RowOption[]> | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -103,13 +125,34 @@ export default function TravelLegPicker({ mode, rateId, prevCity, city, nextCity
 
   return (
     <div className="space-y-1.5">
-      <div className="flex gap-1">
-        {MODE_META.map(({ value, icon: Icon }) => (
+      <div className="flex flex-wrap gap-1">
+        {/* Road: a toggle, combinable with a ticket. */}
+        <button
+          type="button"
+          disabled={disabled}
+          aria-pressed={roadOn}
+          onClick={() => onChange(currentMode, rateId ?? undefined, !roadOn)}
+          title={t('mode.ground')}
+          className={`flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors ${
+            roadOn
+              ? 'bg-[#647C47] text-white border-[#647C47]'
+              : 'bg-white text-gray-600 border-gray-300 hover:border-[#647C47]'
+          }`}
+        >
+          <Car className="w-3 h-3" />
+          {t('mode.ground')}
+        </button>
+        {/* At most one ticket. Clicking the chosen one again removes it; a
+            new ticket starts from its own road default. */}
+        {TICKET_META.map(({ value, icon: Icon }) => (
           <button
             key={value}
             type="button"
             disabled={disabled}
-            onClick={() => onChange(value, undefined)}
+            aria-pressed={currentMode === value}
+            onClick={() => currentMode === value
+              ? onChange('ground', undefined, defaultRoadTransfers('ground'))
+              : onChange(value, undefined, defaultRoadTransfers(value))}
             title={t(`mode.${value}`)}
             className={`flex items-center gap-1 px-2 py-1 rounded text-xs border transition-colors ${
               currentMode === value
@@ -122,6 +165,10 @@ export default function TravelLegPicker({ mode, rateId, prevCity, city, nextCity
           </button>
         ))}
       </div>
+      {/* What the combination prices, in words. */}
+      <p className={`text-[11px] ${!roadOn && currentMode === 'ground' ? 'text-amber-700' : 'text-gray-500'}`}>
+        {t(`combo.${currentMode}.${roadOn ? 'withRoad' : 'withoutRoad'}`)}
+      </p>
 
       {currentMode !== 'ground' && (
         !from || !to ? (
@@ -135,7 +182,7 @@ export default function TravelLegPicker({ mode, rateId, prevCity, city, nextCity
               <select
                 value={rateId ?? ''}
                 disabled={disabled}
-                onChange={e => onChange(currentMode, e.target.value || undefined)}
+                onChange={e => onChange(currentMode, e.target.value || undefined, roadOn)}
                 className={`px-1.5 py-0.5 border rounded text-[11px] bg-white ${rateId ? 'border-gray-300' : 'border-amber-400'}`}
               >
                 <option value="">{t('pickOne', { count: options.length })}</option>

@@ -14,7 +14,8 @@ import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileS
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { currencySymbol } from '@/lib/currency-totals'
 import AttractionPicker from '@/components/AttractionPicker'
-import TravelLegPicker from '@/components/TravelLegPicker'
+import TravelLegPicker, { storedRoadTransfers } from '@/components/TravelLegPicker'
+import { toEditableDay } from '@/lib/itineraries/editable-day'
 import DaySupplementsPicker from '@/components/DaySupplementsPicker'
 
 // ============================================
@@ -137,6 +138,15 @@ interface SavedQuote {
 
 type BreakdownLine = { unpriced?: boolean; included?: boolean; issue?: string; line_total: number; rate_source?: string }
 
+/** The engine's own rule for a day that does not say (lib/auto-pricing-service
+ *  parseItinerary): boarding = first night aboard after a night ashore or none;
+ *  leaving = first day ashore after a night aboard. */
+function cruiseBoundaryDefault(days: Array<{ accommodation_type: string }>, index: number, key: 'cruise_embark' | 'cruise_disembark'): boolean {
+  const aboard = days[index]?.accommodation_type === 'cruise'
+  const prevAboard = index > 0 && days[index - 1]?.accommodation_type === 'cruise'
+  return key === 'cruise_embark' ? aboard && !prevAboard : !aboard && prevAboard
+}
+
 /** How a breakdown line reads: priced, no rate (red), included (grey), or a note to check (amber). */
 function lineState(line: BreakdownLine): 'priced' | 'unpriced' | 'included' | 'note' {
   if (line.unpriced) return 'unpriced'
@@ -162,6 +172,10 @@ interface TemplateItineraryDay {
   transport_rate_id?: string
   /** Supplements the night is sold with (vocabulary keys); included in the price. */
   supplements?: string[]
+  /** Road transfers alongside a ticket leg, or the day's road vehicle on a day
+   *  with no ticket. Absent = the default for the mode (on for road and
+   *  flight, off for trains). */
+  road_transfers?: boolean
   accommodation_type: string // 'hotel' | 'cruise' | 'none'
   services: {
     airport_arrival: boolean
@@ -169,7 +183,13 @@ interface TemplateItineraryDay {
     hotel_checkin: boolean
     hotel_checkout: boolean
     guide_required: boolean
+    /** Absent = derived: the first night aboard / the first day ashore. */
+    cruise_embark?: boolean
+    cruise_disembark?: boolean
   }
+  /** Fields the editor does not render (overnight_kind, transport override,
+   *  extras…) travel through untouched — see lib/itineraries/editable-day. */
+  [key: string]: unknown
 }
 
 // Inline attraction input sub-component
@@ -350,26 +370,10 @@ export default function TourPriceCalculator() {
         setTemplateName(data.template_name || '')
         if (data.tier) setImportedTier(String(data.tier))
         // Ensure each day has the full enriched structure
-        const days: TemplateItineraryDay[] = (data.itinerary || []).map((d: any, i: number) => ({
-          day: d.day || i + 1,
-          title: d.title || `Day ${i + 1}`,
-          description: d.description || '',
-          meals: Array.isArray(d.meals) ? d.meals : [],
-          city: d.city || '',
-          overnight_city: d.overnight_city || null,
-          is_cruise_day: d.is_cruise_day || false,
-          attractions: Array.isArray(d.attractions) ? d.attractions : [],
-          attraction_ids: Array.isArray(d.attraction_ids) ? d.attraction_ids.filter(Boolean) : [],
-          supplements: Array.isArray(d.supplements) && d.supplements.length ? d.supplements.filter(Boolean) : undefined,
-          accommodation_type: d.accommodation_type || 'hotel',
-          services: {
-            airport_arrival: d.services?.airport_arrival || false,
-            airport_departure: d.services?.airport_departure || false,
-            hotel_checkin: d.services?.hotel_checkin || false,
-            hotel_checkout: d.services?.hotel_checkout || false,
-            guide_required: d.services?.guide_required || false,
-          }
-        }))
+        // Every stored field is kept (lib/itineraries/editable-day): the old
+        // fixed field list dropped the travel mode, the picked ticket and the
+        // overnight-in-flight marker, and the next save erased them.
+        const days: TemplateItineraryDay[] = (data.itinerary || []).map((d: unknown, i: number) => toEditableDay(d, i) as TemplateItineraryDay)
         setEditableDays(days)
         setOriginalDays(JSON.parse(JSON.stringify(days)))
       }
@@ -445,13 +449,14 @@ export default function TourPriceCalculator() {
     setHasUnsavedChanges(true)
   }
 
-  const setTravelLeg = (dayIndex: number, mode: string, rateId: string | undefined) => {
+  const setTravelLeg = (dayIndex: number, mode: string, rateId: string | undefined, road: boolean) => {
     setEditableDays(prev => {
       const updated = [...prev]
       updated[dayIndex] = {
         ...updated[dayIndex],
         transport_type: mode === 'ground' ? undefined : mode,
         transport_rate_id: rateId,
+        road_transfers: storedRoadTransfers(mode === 'ground' ? undefined : mode, road),
       }
       return updated
     })
@@ -1262,11 +1267,27 @@ export default function TourPriceCalculator() {
                                   { key: 'hotel_checkin', label: t('hotelCheckin'), icon: Building2 },
                                   { key: 'hotel_checkout', label: t('hotelCheckout'), icon: Building2 },
                                   { key: 'guide_required', label: t('guideRequired'), icon: User },
+                                  // Boarding and leaving the ship. Shown only on the days
+                                  // where they can happen; unticked-but-unsaved means the
+                                  // engine's own rule decides (first night aboard / first
+                                  // day ashore), which is what the tick shows.
+                                  ...(day.accommodation_type === 'cruise' || editableDays[index - 1]?.accommodation_type === 'cruise'
+                                    ? [
+                                        { key: 'cruise_embark', label: t('cruiseEmbark'), icon: Ship },
+                                        { key: 'cruise_disembark', label: t('cruiseDisembark'), icon: Ship },
+                                      ] as const
+                                    : []),
                                 ] as const).map(svc => (
                                   <label key={svc.key} className="flex items-center gap-1.5 cursor-pointer">
                                     <input
                                       type="checkbox"
-                                      checked={(day.services as any)?.[svc.key] || false}
+                                      checked={
+                                        svc.key === 'cruise_embark' || svc.key === 'cruise_disembark'
+                                          ? (typeof day.services?.[svc.key] === 'boolean'
+                                              ? Boolean(day.services[svc.key])
+                                              : cruiseBoundaryDefault(editableDays, index, svc.key))
+                                          : ((day.services as any)?.[svc.key] || false)
+                                      }
                                       onChange={(e) => updateDayService(index, svc.key, e.target.checked)}
                                       className="w-4 h-4 text-[#647C47] rounded border-gray-300 focus:ring-[#647C47]"
                                     />
@@ -1292,10 +1313,11 @@ export default function TourPriceCalculator() {
                               <TravelLegPicker
                                 mode={day.transport_type}
                                 rateId={day.transport_rate_id}
+                                road={day.road_transfers}
                                 prevCity={editableDays[index - 1]?.city ?? null}
                                 city={day.city}
                                 nextCity={editableDays[index + 1]?.city ?? null}
-                                onChange={(mode, rateId) => setTravelLeg(index, mode, rateId)}
+                                onChange={(mode, rateId, road) => setTravelLeg(index, mode, rateId, road)}
                               />
                             </div>
 

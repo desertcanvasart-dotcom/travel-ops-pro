@@ -139,7 +139,22 @@ export interface ItineraryDay {
     hotel_checkin: boolean
     hotel_checkout: boolean
     guide_required: boolean
+    /** Assistance boarding the ship. Derived by parseItinerary when the day
+     *  does not say: the first night aboard after a night ashore (or none). */
+    cruise_embark?: boolean
+    /** Assistance leaving the ship: the first day ashore after a night aboard. */
+    cruise_disembark?: boolean
   }
+  /**
+   * Road alongside the day's travel. On a flight or train day: the transfers
+   * to and from the airport or station. On any other day: the day's road
+   * vehicle at all. Absent = the historical default for the mode — on for road
+   * and flight days, off for day and sleeping trains (operator, 2026-09-04: a
+   * train ticket alone is the day's transport). A flight day with road ON is
+   * the ticket AND both airport transfers — "flight and road", which is what
+   * the operator asked the picker to show (2026-09-16).
+   */
+  road_transfers?: boolean
   // NEW: Transport overrides (optional)
   transport?: {
     service_type?: TransportServiceType
@@ -570,8 +585,13 @@ export function determineTransportNeeds(
   // not a transfer). Cruise *boundaries* (hotel → cruise on a boarding day,
   // cruise → hotel on a disembarkation day) ARE city changes and need their
   // own transport line.
+  // The party arrived this morning on a sleeping train: the journey is the
+  // ticket priced on the boarding day. This day used to count as a city change
+  // and priced a full road intercity for the same journey on top of it.
+  const arrivedBySleeper = previousDay?.transport_type === 'sleeping_train'
   const isCityChange = !!(previousDay &&
     previousDay.city.toLowerCase() !== cityLower &&
+    !arrivedBySleeper &&
     !(day.accommodation_type === 'cruise' && previousDay.accommodation_type === 'cruise'))
   // On a disembarkation flight day, the cruise → airport transfer is bundled
   // in the cruise package — suppress the departure-side leg.
@@ -583,6 +603,29 @@ export function determineTransportNeeds(
   const isTicketLeg = day.transport_type === 'train' || day.transport_type === 'sleeping_train'
   const isCruise = day.is_cruise_day === true
   const transportArea = hasAttractions ? detectAreaFromAttractions(day.attractions) : null
+
+  // Road alongside the day's travel (see ItineraryDay.road_transfers). Off on
+  // a day with no train ticket means no road vehicle that day at all — only
+  // the explicit extras. On a train day it only adds or removes the station
+  // transfers; the day's own sightseeing vehicle is unaffected.
+  const roadOn = day.road_transfers ?? !isTicketLeg
+  if (!roadOn && !isTicketLeg) {
+    appendExtras(lines, day)
+    return lines
+  }
+  const stationTransfer = (city?: string): TransportNeed => ({
+    serviceType: 'city_transfer',
+    duration: 'one_way',
+    area: null,
+    useSpecialVehicle: false,
+    ...(city ? { city } : {}),
+  })
+
+  // Off the sleeping train and into town — only when the boarding day asked
+  // for its transfers.
+  if (arrivedBySleeper && previousDay?.road_transfers === true) {
+    lines.push(stationTransfer())
+  }
 
   // First day (arrival).
   if (day.services.airport_arrival && !previousDay) {
@@ -664,6 +707,21 @@ export function determineTransportNeeds(
       destinationCity: day.city,
     })
   }
+  // Day train with its station transfers asked for: to the station in the
+  // previous city (unless leaving the ship, where the cruise package covers
+  // it, the same rule as a disembarkation flight), and from the station here.
+  else if (isCityChange && day.transport_type === 'train' && roadOn) {
+    if (!isCruiseDisembarkFlight && previousDay) lines.push(stationTransfer(previousDay.city))
+    lines.push(stationTransfer())
+    if (hasAttractions) {
+      lines.push({
+        serviceType: sightseeingServiceType(attractionCount),
+        duration: sightseeingDuration(attractionCount),
+        area: transportArea,
+        useSpecialVehicle: false,
+      })
+    }
+  }
   // Same-city sightseeing day: tier by attraction count.
   else if (hasAttractions) {
     lines.push({
@@ -672,6 +730,12 @@ export function determineTransportNeeds(
       area: transportArea,
       useSpecialVehicle: false,
     })
+  }
+
+  // Boarding a sleeping train tonight with its transfers asked for: to the
+  // station in this city, after the day's own sightseeing.
+  if (day.transport_type === 'sleeping_train' && roadOn) {
+    lines.push(stationTransfer())
   }
 
   // Extras are always additive — even on cruise days (e.g. Day 4 sound &
@@ -871,11 +935,25 @@ export function parseItinerary(itineraryData: any, opts?: {
       transport: day.transport || undefined,
       transport_type: sleepingAboard ? 'sleeping_train' : (day.transport_type || undefined),
       transport_rate_id: day.transport_rate_id ? String(day.transport_rate_id) : undefined,
+      road_transfers: typeof day.road_transfers === 'boolean' ? day.road_transfers : undefined,
       // The supplements the night is sold with (vocabulary keys).
       supplements: supplementKeys,
       // Nile Cruise package flag - uses bundled transport instead of individual vehicle costs
       is_cruise_day: day.is_cruise_day || false
     }
+  })
+
+  // Cruise boarding and leaving. A day that says so explicitly wins; otherwise
+  // the boundary decides: the first night aboard after a night ashore (or no
+  // bed) is embarkation, and the first day ashore after a night aboard is
+  // disembarkation. Neither was modelled here, so an embarkation day priced no
+  // assistance and recorded nothing (operator, NMS803 day 2, 2026-09-16) —
+  // although the itinerary generator has always sold both.
+  parsed.forEach((d: any, i: number) => {
+    const aboard = d.accommodation_type === 'cruise'
+    const prevAboard = i > 0 && parsed[i - 1].accommodation_type === 'cruise'
+    if (typeof d.services.cruise_embark !== 'boolean') d.services.cruise_embark = aboard && !prevAboard
+    if (typeof d.services.cruise_disembark !== 'boolean') d.services.cruise_disembark = !aboard && prevAboard
   })
 
   // Apply B2B Day Rules Engine for deterministic enforcement
@@ -2786,7 +2864,15 @@ export async function calculateDayBasedPricing(
     }
 
     // ----- HOTEL SERVICES (fixed per service) -----
-    if (day.services.hotel_checkin) {
+    // The first and last days are FORCED to hotel check-in and check-out
+    // (parseItinerary). When the first night is aboard, that "check-in" is the
+    // embarkation; when the day follows a night aboard, that "check-out" is the
+    // disembarkation. Charging both prices one event twice at the same rate
+    // (review of #447). Leaving the ship and then checking INTO a hotel the same
+    // day are two real events, and both still charge.
+    const checkinIsEmbarkation = Boolean(day.services.cruise_embark) && day.accommodation_type === 'cruise'
+    const checkoutIsDisembarkation = Boolean(day.services.cruise_disembark) && previousDay?.accommodation_type === 'cruise'
+    if (day.services.hotel_checkin && !checkinIsEmbarkation) {
       const found = resolveHotelServiceRate('checkin_assist')
       const rate = found.rate
       if (rate != null) {
@@ -2818,7 +2904,7 @@ export async function calculateDayBasedPricing(
       }
     }
 
-    if (day.services.hotel_checkout) {
+    if (day.services.hotel_checkout && !checkoutIsDisembarkation) {
       const found = resolveHotelServiceRate('checkout_assist')
       const rate = found.rate
       if (rate != null) {
@@ -2849,6 +2935,43 @@ export async function calculateDayBasedPricing(
           message: found.rowExists
             ? `The hotel check-out assistance rate (${tier}) has no price. Open it in Rates → Hotel Assistants and set one.`
             : `No hotel check-out assistance rate (${tier}). Add it in Rates → Hotel Assistants.`,
+        })
+      }
+    }
+
+    // ----- CRUISE BOARDING / LEAVING ASSISTANCE (fixed per service) -----
+    // Priced from the hotel assistance rates — check-in for boarding,
+    // check-out (or porter, or full service) for leaving — the same source the
+    // itinerary generator has always used for these lines
+    // (lib/ai/service-creation). No separate rate type exists yet.
+    for (const event of ['embark', 'disembark'] as const) {
+      if (!(event === 'embark' ? day.services.cruise_embark : day.services.cruise_disembark)) continue
+      const found = resolveHotelServiceRate(event === 'embark' ? 'checkin_assist' : 'checkout_assist')
+      const serviceName = event === 'embark' ? 'Cruise Embarkation Assistance' : 'Cruise Disembarkation Assistance'
+      const line = { id: `day${day.day}-cruise-${event}`, dayNumber: day.day, serviceType: 'hotel_service', serviceName, isPerPax: false }
+      if (found.rate != null) {
+        fixedCosts += found.rate
+        services.push({
+          ...line,
+          quantity: 1,
+          quantityMode: 'fixed',
+          unitCost: found.rate,
+          lineTotal: found.rate,
+          rateSource: 'hotel_staff_rates',
+          isOptional: false,
+          notes: event === 'embark' ? 'Priced at the hotel check-in assistance rate' : 'Priced at the hotel check-out assistance rate',
+        })
+      } else {
+        const what = event === 'embark' ? 'check-in' : 'check-out'
+        listUnpriced(line, {
+          kind: 'hotel_service',
+          reason: found.rowExists ? 'unpriced' : 'missing',
+          dayNumber: day.day,
+          city: day.city,
+          lookupAttempted: `hotel_staff_rates ${event === 'embark' ? 'checkin_assist' : 'checkout_assist|porter'} tier=${tier} (cruise ${event})`,
+          message: found.rowExists
+            ? `Cruise ${event}ation assistance is priced at the hotel ${what} assistance rate (${tier}), which has no price. Set it in Rates → Hotel Assistants.`
+            : `Cruise ${event}ation assistance is priced at the hotel ${what} assistance rate, and there is none (${tier}). Add it in Rates → Hotel Assistants.`,
         })
       }
     }

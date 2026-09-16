@@ -6700,7 +6700,9 @@
     "rateSheetIncompleteCsv": "INCOMPLETE: {count, plural, one {# service has no rate and is left out} other {# services have no rate and are left out}}",
     "saveIncompleteTitle": "Save an incomplete quote?",
     "saveIncompleteBody": "{count, plural, one {# service has no rate} other {# services have no rate}}, so this quote is short by whatever they cost. Save it anyway?",
-    "saveAnyway": "Save anyway"
+    "saveAnyway": "Save anyway",
+    "cruiseEmbark": "Cruise Check-in",
+    "cruiseDisembark": "Cruise Check-out"
   },
   "bookings": {
     "title": "Bookings",
@@ -7556,6 +7558,24 @@
     "pickOne": "Pick the exact one ({count} serve this route)…",
     "auto": "Auto",
     "noRate": "No rate for this route — add it in Rates, or the day prices as a hole.",
-    "label": "Travel"
+    "label": "Travel",
+    "combo": {
+      "ground": {
+        "withRoad": "Road transport for the day.",
+        "withoutRoad": "No road vehicle this day."
+      },
+      "flight": {
+        "withRoad": "Flight, with airport transfers at both ends.",
+        "withoutRoad": "Flight only: no airport transfers."
+      },
+      "train": {
+        "withRoad": "Day train, with station transfers at both ends.",
+        "withoutRoad": "Day train only: no station transfers."
+      },
+      "sleeping_train": {
+        "withRoad": "Sleeping train, with station transfers tonight and on arrival.",
+        "withoutRoad": "Sleeping train only: no station transfers."
+      }
+    }
   }
 }

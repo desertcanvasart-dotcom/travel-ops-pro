@@ -59,7 +59,9 @@ export function flowRank(line: Pick<FlowLine, 'id' | 'category'>): number {
   if (id.includes('-lunch')) return RANK.lunch
   if (id.includes('-dinner')) return RANK.dinner
 
-  if (id.includes('hotel-checkout')) return RANK.hotelCheckout
+  // "disembark" contains "embark": leaving the ship is checked first.
+  if (id.includes('hotel-checkout') || id.includes('cruise-disembark')) return RANK.hotelCheckout
+  if (id.includes('cruise-embark')) return RANK.hotelCheckin
   if (id.includes('hotel-checkin')) return RANK.hotelCheckin
   if (id.includes('airport-departure')) return RANK.airportDeparture
   if (id.includes('airport-arrival')) return RANK.airportArrival

@@ -45,7 +45,7 @@ import {
 import { LanguageIndicator } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
 import AttractionPicker from '@/components/AttractionPicker'
-import TravelLegPicker from '@/components/TravelLegPicker'
+import TravelLegPicker, { storedRoadTransfers } from '@/components/TravelLegPicker'
 import DaySupplementsPicker from '@/components/DaySupplementsPicker'
 
 // ============================================
@@ -623,10 +623,11 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
                   <TravelLegPicker
                     mode={(day as { transport_type?: string }).transport_type}
                     rateId={(day as { transport_rate_id?: string }).transport_rate_id}
+                    road={(day as { road_transfers?: boolean }).road_transfers}
                     prevCity={itinerary[index - 1]?.city ?? null}
                     city={day.city}
                     nextCity={itinerary[index + 1]?.city ?? null}
-                    onChange={(mode, rateId) => onChange(itinerary.map((d, i) => (i === index ? { ...d, transport_type: mode === 'ground' ? undefined : mode, transport_rate_id: rateId } : d)))}
+                    onChange={(mode, rateId, road) => onChange(itinerary.map((d, i) => (i === index ? { ...d, transport_type: mode === 'ground' ? undefined : mode, transport_rate_id: rateId, road_transfers: storedRoadTransfers(mode === 'ground' ? undefined : mode, road) } : d)))}
                   />
                 </div>
               </div>
