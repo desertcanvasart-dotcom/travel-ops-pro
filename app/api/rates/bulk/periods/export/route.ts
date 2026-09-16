@@ -73,6 +73,8 @@ export async function GET(request: NextRequest) {
     }
     const config = withSupplementColumns(baseConfig, [...carried].map(([key, label]) => ({ key, label })))
 
+    // Season keys go out as the agency's word; the import reads either.
+    const seasonWord = new Map((await vocabularyItemsForCurrentOrg('rate_season')).map(v => [v.key, v.label]))
     const csvRows = rows.flatMap((row: Record<string, unknown>) => {
       const seasons = seasonsForRow(row, config.entity)
       if (seasons.length === 0) return []
@@ -80,7 +82,7 @@ export async function GET(request: NextRequest) {
         key: String(row[config.keyColumn] ?? ''),
         displayName: String(row[config.displayColumn] ?? ''),
         seasons,
-      })
+      }, key => seasonWord.get(key) ?? key)
     })
 
     const csv = Papa.unparse({ fields: periodHeaders(config), data: csvRows })

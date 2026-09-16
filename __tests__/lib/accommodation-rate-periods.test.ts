@@ -71,17 +71,23 @@ describe('resolveHotelRatesForDate', () => {
     expect(resolveHotelRatesForDate(hotelRow, false, '2026-12-25').singleSuppNight).toBe(72)
   })
 
-  it('falls back to the base columns with no travel date', () => {
-    // A template priced with no departure has no period to resolve against.
+  it('prices at the FIRST period, and names it, with no travel date', () => {
+    // A template priced with no departure has no date to resolve — period 1,
+    // said out loud, never an anonymous base rate.
     const out = resolveHotelRatesForDate(hotelRow, true, null)
     expect(out.ppdNight).toBe(70)
-    expect(out.seasonName).toBeNull()
+    expect(out.seasonName).toBe(hotelRow.seasons[0].name)
+    expect(out.outsidePeriods).toBe(false)
   })
 
-  it('falls back to the base columns for a date outside every period', () => {
+  it('has NO rate for a date outside every period — no default period (operator, 2026-09-16)', () => {
+    // The base columns still hold 70 (period 1's copy); a date past the
+    // contract must not borrow it.
     const out = resolveHotelRatesForDate(hotelRow, true, '2027-09-01')
-    expect(out.ppdNight).toBe(70)
+    expect(out.ppdNight).toBe(0)
+    expect(out.singleSuppNight).toBe(0)
     expect(out.seasonName).toBeNull()
+    expect(out.outsidePeriods).toBe(true)
   })
 
   it('prices a pre-migration row off its old low/high/peak windows', () => {

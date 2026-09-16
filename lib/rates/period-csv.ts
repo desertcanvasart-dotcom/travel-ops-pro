@@ -16,7 +16,7 @@
 // broke a real production import once ("23/06/2026" rejected by the database).
 // Both forms are accepted here, exactly as the wide importer accepts them.
 
-import { RATE_FIELDS, SUPPLEMENT_FIELD, type RateSeason, type RateSeasonEntity } from '@/lib/rates/rate-seasons'
+import { MAX_RATE_PERIODS, RATE_FIELDS, SUPPLEMENT_FIELD, type RateSeason, type RateSeasonEntity } from '@/lib/rates/rate-seasons'
 import { supplementField, type RateSupplement, type SupplementSuffix } from '@/lib/rates/supplements'
 
 export interface PeriodColumn {
@@ -82,6 +82,9 @@ const commonColumns = (keyLabel: string, nameLabel: string): PeriodColumn[] => [
   { label: keyLabel, field: 'key' },
   { label: nameLabel, field: 'display_name' },
   { label: 'Period Name', field: 'name' },
+  // The agency's word for the period (Settings → Vocabulary → Rate seasons).
+  // Exported as the word; imported by word or key. Optional.
+  { label: 'Season', field: 'season' },
   { label: 'From', field: 'from' },
   { label: 'To', field: 'to' },
 ]
@@ -145,7 +148,9 @@ export const periodHeaders = (config: PeriodSheetConfig): string[] =>
 /** One CSV row per period, for export. */
 export function periodsToRows(
   config: PeriodSheetConfig,
-  rate: { key: string; displayName: string; seasons: RateSeason[] }
+  rate: { key: string; displayName: string; seasons: RateSeason[] },
+  /** The agency's word for a season key; the key itself when not given. */
+  seasonWord: (key: string) => string = key => key
 ): Record<string, string | number>[] {
   return rate.seasons.map(season => {
     const row: Record<string, string | number> = {}
@@ -153,6 +158,7 @@ export function periodsToRows(
       if (col.field === 'key') row[col.label] = rate.key
       else if (col.field === 'display_name') row[col.label] = rate.displayName
       else if (col.field === 'name') row[col.label] = season.name
+      else if (col.field === 'season') row[col.label] = season.season ? seasonWord(season.season) : ''
       else if (col.field === 'from') row[col.label] = season.from
       else if (col.field === 'to') row[col.label] = season.to
       else row[col.label] = season.rates[col.field] ?? 0
@@ -175,6 +181,7 @@ export function periodTemplateRows(config: PeriodSheetConfig): Record<string, st
       if (col.field === 'key') row[col.label] = PERIOD_EXAMPLE_KEY
       else if (col.field === 'display_name') row[col.label] = 'Example Name'
       else if (col.field === 'name') row[col.label] = name
+      else if (col.field === 'season') row[col.label] = ''
       else if (col.field === 'from') row[col.label] = from
       else if (col.field === 'to') row[col.label] = to
       // Supplements and reductions are smaller than the headline rate; a
@@ -240,7 +247,10 @@ const num = (raw: unknown): number => {
  */
 export function parsePeriodRows(
   config: PeriodSheetConfig,
-  rows: Record<string, unknown>[]
+  rows: Record<string, unknown>[],
+  /** Resolves a Season cell (the agency's word, or a key) to a vocabulary
+   *  key; null = not in the vocabulary, which is a row error. */
+  seasonKeyFor?: (cell: string) => string | null
 ): ParsedPeriodSheet {
   const byKey = new Map<string, RateSeason[]>()
   const errors: PeriodRowError[] = []
@@ -256,10 +266,12 @@ export function parsePeriodRows(
     }
   }
   const supplementsByKey = new Map<string, RateSupplement[]>()
-  const keyLabel = config.columns[0].label
-  const nameLabel = config.columns[2].label
-  const fromLabel = config.columns[3].label
-  const toLabel = config.columns[4].label
+  const labelOf = (field: string) => config.columns.find(c => c.field === field)!.label
+  const keyLabel = labelOf('key')
+  const nameLabel = labelOf('name')
+  const seasonLabel = labelOf('season')
+  const fromLabel = labelOf('from')
+  const toLabel = labelOf('to')
 
   rows.forEach((raw, index) => {
     const line = index + 2 // header is row 1
@@ -304,11 +316,42 @@ export function parsePeriodRows(
       }
     }
 
-    const name = String(raw[nameLabel] ?? '').trim().slice(0, 80) || `${from} – ${to}`
+    // An older sheet has no Season column: the period simply has no word.
+    const seasonCell = String(raw[seasonLabel] ?? '').trim()
+    let season: string | undefined
+    if (seasonCell) {
+      const resolved = seasonKeyFor ? seasonKeyFor(seasonCell) : seasonCell
+      if (!resolved) {
+        errors.push({ row: line, key, message: `${seasonLabel} "${seasonCell}" is not in your list. Add it in Settings → Vocabulary → Rate seasons, or leave the cell blank.` })
+        return
+      }
+      season = resolved
+    }
+
+    const name = String(raw[nameLabel] ?? '').trim().slice(0, 80) || (season ? '' : `${from} – ${to}`)
     const list = byKey.get(key) ?? []
-    list.push({ name, from, to, rates })
+    list.push(season ? { name, season, from, to, rates } : { name, from, to, rates })
     byKey.set(key, list)
   })
+
+  // A rate over the limit is refused whole — loading its first six and
+  // dropping the rest would leave dates silently unpriced.
+  for (const [key, list] of byKey) {
+    if (list.length > MAX_RATE_PERIODS) {
+      errors.push({ row: 0, key, message: `${list.length} periods for ${key}; a rate can carry at most ${MAX_RATE_PERIODS}. Merge or remove rows for it.` })
+      byKey.delete(key)
+      supplementsByKey.delete(key)
+    }
+  }
+
+  // So is a rate with ANY bad row. The import REPLACES a rate's periods, and
+  // the preview lets the operator apply despite row errors — keeping the good
+  // rows would replace a five-period contract with the four that parsed and
+  // leave the fifth window unpriced (Greptile on #452). Other rates load.
+  for (const key of new Set(errors.map(e => e.key).filter(Boolean))) {
+    byKey.delete(key)
+    supplementsByKey.delete(key)
+  }
 
   // Sort each rate's periods by start date, so the file's row order never
   // decides anything.

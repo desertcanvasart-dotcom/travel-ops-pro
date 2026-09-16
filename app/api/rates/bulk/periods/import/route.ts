@@ -60,7 +60,13 @@ export async function POST(request: NextRequest) {
       transformHeader: h => h.trim(),
     })
 
-    const { byKey, errors, exampleRows, hasSupplementColumns, supplementsByKey } = parsePeriodRows(config, parsed.data ?? [])
+    // The Season column is the agency's word (or a key) from its own list.
+    const seasonWords = await vocabularyItemsForCurrentOrg('rate_season')
+    const seasonKeyFor = (cell: string): string | null => {
+      const wanted = cell.trim().toLowerCase()
+      return seasonWords.find(v => v.key === wanted || v.label.trim().toLowerCase() === wanted)?.key ?? null
+    }
+    const { byKey, errors, exampleRows, hasSupplementColumns, supplementsByKey } = parsePeriodRows(config, parsed.data ?? [], seasonKeyFor)
     const rowErrors: PeriodRowError[] = [...errors]
 
     // The list a rate carries follows the file: a key priced anywhere in the

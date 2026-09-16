@@ -36,17 +36,17 @@ describe('parseSheetDate', () => {
 })
 
 describe('the sheet shape', () => {
-  it('leads with the key, the name and the window', () => {
-    expect(periodHeaders(HOTEL).slice(0, 5))
-      .toEqual(['Service Code', 'Property Name', 'Period Name', 'From', 'To'])
-    expect(periodHeaders(CRUISE).slice(0, 5))
-      .toEqual(['Cruise Code', 'Ship Name', 'Period Name', 'From', 'To'])
+  it('leads with the key, the name, the season word and the window', () => {
+    expect(periodHeaders(HOTEL).slice(0, 6))
+      .toEqual(['Service Code', 'Property Name', 'Period Name', 'Season', 'From', 'To'])
+    expect(periodHeaders(CRUISE).slice(0, 6))
+      .toEqual(['Cruise Code', 'Ship Name', 'Period Name', 'Season', 'From', 'To'])
   })
 
   it('carries every rate field for its catalog', () => {
     // +1 on each: the throughout-guide bed rate (2026-09-04).
-    expect(periodHeaders(HOTEL)).toHaveLength(5 + 7)
-    expect(periodHeaders(CRUISE)).toHaveLength(5 + 9)
+    expect(periodHeaders(HOTEL)).toHaveLength(6 + 7)
+    expect(periodHeaders(CRUISE)).toHaveLength(6 + 9)
     expect(periodHeaders(CRUISE)).toContain('Suite (non-EU passport)')
     expect(periodHeaders(HOTEL)).toContain('Guide Bed / Night')
     expect(periodHeaders(CRUISE)).toContain('Guide Bed / Night')
@@ -135,9 +135,19 @@ describe('parsePeriodRows', () => {
     expect(errors[0].message).toContain('is before')
   })
 
-  it('drops a bad row without losing the good ones', () => {
+  it('refuses a rate with a bad row WHOLE — never replaces its periods with the rows that parsed', () => {
     const { byKey, errors } = parsePeriodRows(HOTEL, [row(), row({ To: 'nonsense' })])
-    expect(byKey.get('ACC-1')).toHaveLength(1)
+    expect(byKey.has('ACC-1')).toBe(false)
+    expect(errors).toHaveLength(1)
+  })
+
+  it('a bad row for one rate does not stop another rate loading', () => {
+    const { byKey, errors } = parsePeriodRows(HOTEL, [
+      row({ To: 'nonsense' }),
+      row({ 'Service Code': 'ACC-2' }),
+    ])
+    expect(byKey.has('ACC-1')).toBe(false)
+    expect(byKey.get('ACC-2')).toHaveLength(1)
     expect(errors).toHaveLength(1)
   })
 
@@ -237,5 +247,52 @@ describe('supplement columns', () => {
   it('the sample rows carry supplement figures too, smaller than the headline', () => {
     const [summer] = periodTemplateRows(SHEET)
     expect(summer['Supplement: Nile View [view_nile] (EU passport)']).toBe(50)
+  })
+})
+
+// The agency's season word (Settings → Vocabulary → Rate seasons) and the
+// six-period limit (operator, 2026-09-16).
+describe('season words and the period limit', () => {
+  const row = (key: string, from: string, to: string, season = '') => ({
+    'Service Code': key, 'Property Name': 'X', 'Period Name': '', Season: season, From: from, To: to,
+    'PP Double (EU passport)': '100', 'PP Double (non-EU passport)': '110',
+  })
+  const vocab = [{ key: 'high_season', label: 'High Season' }, { key: 'christmas', label: 'Christmas' }]
+  const keyFor = (cell: string) =>
+    vocab.find(v => v.key === cell.toLowerCase() || v.label.toLowerCase() === cell.toLowerCase())?.key ?? null
+
+  it('reads the Season cell by the agency word or the key, and exports the word back', () => {
+    const out = parsePeriodRows(HOTEL, [
+      row('H1', '2026-10-01', '2026-12-19', 'high season'),
+      row('H1', '2026-12-20', '2027-01-05', 'christmas'),
+    ], keyFor)
+    expect(out.errors).toEqual([])
+    const periods = out.byKey.get('H1')!
+    expect(periods.map(p => p.season)).toEqual(['high_season', 'christmas'])
+    // A season word stands on its own — no invented "from – to" name.
+    expect(periods[0].name).toBe('')
+    const exported = periodsToRows(HOTEL, { key: 'H1', displayName: 'X', seasons: periods }, k => vocab.find(v => v.key === k)!.label)
+    expect(exported.map(r => r.Season)).toEqual(['High Season', 'Christmas'])
+  })
+
+  it('refuses a Season word that is not in the list, by row', () => {
+    const out = parsePeriodRows(HOTEL, [row('H1', '2026-10-01', '2026-12-19', 'Monsoon')], keyFor)
+    expect(out.byKey.size).toBe(0)
+    expect(out.errors[0]).toMatchObject({ row: 2, key: 'H1' })
+    expect(out.errors[0].message).toMatch(/Monsoon/)
+  })
+
+  it('a blank Season cell, or an older sheet with no Season column, is simply no word', () => {
+    const out = parsePeriodRows(HOTEL, [row('H1', '2026-10-01', '2026-12-19')], keyFor)
+    expect(out.byKey.get('H1')![0].season).toBeUndefined()
+  })
+
+  it('refuses a rate with more than six periods WHOLE — never loads the first six', () => {
+    const seven = Array.from({ length: 7 }, (_, i) => row('H7', `2026-0${i + 1}-01`, `2026-0${i + 1}-20`))
+    const six = Array.from({ length: 6 }, (_, i) => row('H6', `2026-0${i + 1}-01`, `2026-0${i + 1}-20`))
+    const out = parsePeriodRows(HOTEL, [...seven, ...six], keyFor)
+    expect(out.byKey.has('H7')).toBe(false)
+    expect(out.byKey.get('H6')).toHaveLength(6)
+    expect(out.errors.some(e => e.key === 'H7' && /at most 6/.test(e.message))).toBe(true)
   })
 })

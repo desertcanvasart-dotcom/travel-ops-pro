@@ -92,9 +92,11 @@ describe('resolveSupplementsForDate', () => {
     expect(sea).toEqual({ key: 'view_sea', name: 'view_sea', night: 0, carried: false })
   })
 
-  it('with no travel date, or a date no period covers, reads the FIRST period like the base columns do', () => {
+  it('with no travel date reads the FIRST period; a date no period covers has no price', () => {
     expect(resolveSupplementsForDate(hotel, 'accommodation', true, null, ['view_nile'])[0].night).toBe(15)
-    expect(resolveSupplementsForDate(hotel, 'accommodation', true, '2027-03-01', ['view_nile'])[0].night).toBe(15)
+    const outside = resolveSupplementsForDate(hotel, 'accommodation', true, '2027-03-01', ['view_nile'])[0]
+    expect(outside.night).toBe(0)
+    expect(outside.carried).toBe(true)
   })
 
   it('works for a cruise row the same way', () => {

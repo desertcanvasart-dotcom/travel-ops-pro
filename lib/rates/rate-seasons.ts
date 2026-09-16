@@ -18,12 +18,64 @@
 // the operator to name a priority, and reads the way a contract does: the
 // specific Christmas line overrides the general October–April line.
 
-/** Dates are 'YYYY-MM-DD'. Rates are entity-specific — see RATE_FIELDS. */
+/** Dates are 'YYYY-MM-DD'. Rates are entity-specific — see RATE_FIELDS.
+ *
+ *  `season` is the agency's own word for the period — a KEY from the
+ *  `rate_season` vocabulary (Low, High, Peak, Summer, Christmas…: Settings →
+ *  Vocabulary). `name` is free text beside it ("2026", "Winter 26/27"). Either
+ *  may be empty; the dates alone decide which period prices a night. */
 export interface RateSeason {
   name: string
+  season?: string
   from: string
   to: string
   rates: Record<string, number>
+}
+
+/** The most dated periods one hotel or ship rate may carry (operator,
+ *  2026-09-16). Saves and imports over it are REFUSED, never truncated —
+ *  cutting a contract's last periods off silently would un-price them. */
+export const MAX_RATE_PERIODS = 6
+
+const SEASON_KEY = /^[a-z0-9][a-z0-9_]{0,59}$/
+
+/** How many periods a raw payload would save (rows with both dates — a
+ *  half-filled editor row is dropped by sanitizeSeasons, so it does not count). */
+export function datedPeriodCount(input: unknown): number {
+  if (!Array.isArray(input)) return 0
+  return input.filter(raw => {
+    const s = (raw ?? {}) as Record<string, unknown>
+    return typeof s.from === 'string' && ISO_DATE.test(s.from.trim())
+      && typeof s.to === 'string' && ISO_DATE.test(s.to.trim())
+  }).length
+}
+
+/** The message every save path returns when a payload is over the limit. */
+export function tooManyPeriodsMessage(count: number): string | null {
+  return count > MAX_RATE_PERIODS
+    ? `A rate can carry at most ${MAX_RATE_PERIODS} periods; this one has ${count}. Merge or remove periods, then save again.`
+    : null
+}
+
+/** A period's name where no vocabulary is at hand (server-side pricing
+ *  notes): the free text, else the season key made readable, else the dates. */
+export function plainPeriodName(season: Pick<RateSeason, 'name' | 'season' | 'from' | 'to'>): string {
+  return season.name?.trim()
+    || (season.season ? season.season.replace(/_/g, ' ') : '')
+    || `${season.from} – ${season.to}`
+}
+
+/** How a period reads to a person: the season word, then the free text.
+ *  `seasonLabel` turns a vocabulary key into the agency's word. */
+export function periodTitle(
+  season: Pick<RateSeason, 'name' | 'season'> | null | undefined,
+  seasonLabel: (key: string) => string,
+  fallback: string
+): string {
+  const word = season?.season ? seasonLabel(season.season) : ''
+  const name = season?.name?.trim() ?? ''
+  const parts = [word, name && name.toLowerCase() !== word.toLowerCase() ? name : ''].filter(Boolean)
+  return parts.length ? parts.join(' · ') : fallback
 }
 
 /** The rate fields each catalog's periods carry, in display order.
@@ -88,10 +140,15 @@ export function sanitizeSeasons(input: unknown, entity: RateSeasonEntity): RateS
       if (SUPPLEMENT_FIELD.test(field)) rates[field] = readRate(src[field])
     }
 
+    const season = typeof s.season === 'string' && SEASON_KEY.test(s.season.trim())
+      ? s.season.trim()
+      : undefined
+    // With a season word the free text is optional; with neither, the dates
+    // are the only name the period has.
     const name = typeof s.name === 'string' && s.name.trim()
       ? s.name.trim().slice(0, 80)
-      : `${from} – ${to}`
-    seasons.push({ name, from, to, rates })
+      : season ? '' : `${from} – ${to}`
+    seasons.push(season ? { name, season, from, to, rates } : { name, from, to, rates })
   }
   if (seasons.length === 0) return null
   seasons.sort((a, b) => (a.from < b.from ? -1 : a.from > b.from ? 1 : 0))
@@ -142,9 +199,9 @@ export function overlappingSeasons(seasons: RateSeason[]): Array<[number, number
   return pairs
 }
 
-/** Dates inside the contract's overall span that no period covers. A date
- *  falling in a gap prices at the legacy base rate, which is almost never what
- *  the operator meant — the editor surfaces these. */
+/** Dates inside the contract's overall span that no period covers. A night
+ *  falling in a gap has NO rate (see periodRatesFor) — the editor surfaces
+ *  these so a missing period is seen before a quote finds it. */
 export function seasonGaps(seasons: RateSeason[]): Array<{ from: string; to: string }> {
   if (seasons.length < 2) return []
   const sorted = [...seasons].sort((a, b) => (a.from < b.from ? -1 : 1))
@@ -258,7 +315,7 @@ export function seasonsForRow(input: object, entity: RateSeasonEntity): RateSeas
 }
 
 /** The rates that apply to a rate row on a travel date, or null when no period
- *  covers it (the caller then falls back to the row's base columns). */
+ *  covers it. Pricing reads periodRatesFor, which says WHY there is nothing. */
 export function ratesForTravelDate(
   row: object,
   entity: RateSeasonEntity,
@@ -268,6 +325,34 @@ export function ratesForTravelDate(
   return season ? { season, rates: season.rates } : null
 }
 
+/**
+ * The period that prices a night — the one rule every pricing path uses.
+ *
+ *   - The row has no periods at all → null: the caller reads its base columns
+ *     (rows from before periods existed).
+ *   - No travel date (a template priced without a departure) → the FIRST
+ *     period, by start date, named as such.
+ *   - A date a period covers → that period.
+ *   - A date NO period covers → `outside: true` and no rates. That night has
+ *     no price; it is an unpriced hole. There is no default period: it used
+ *     to fall back to the base columns (the first period's copy), so a trip
+ *     after the contract ended priced silently at the wrong season
+ *     (operator, 2026-09-16: "the default period is confusing").
+ */
+export function periodRatesFor(
+  row: object,
+  entity: RateSeasonEntity,
+  travelDate: string | null | undefined
+): { season: RateSeason | null; rates: Record<string, number>; outside: boolean } | null {
+  const seasons = seasonsForRow(row, entity)
+  if (seasons.length === 0) return null
+  if (!travelDate) return { season: seasons[0], rates: seasons[0].rates, outside: false }
+  const season = seasonForTravelDate(seasons, travelDate)
+  return season
+    ? { season, rates: season.rates, outside: false }
+    : { season: null, rates: {}, outside: true }
+}
+
 // ── Base-column mirror ───────────────────────────────────────────────────
 // Plenty of readers take a rate row with no travel date in hand and use its
 // base columns: the pricing grid, the B2B calculators, the tour builder's
@@ -275,6 +360,8 @@ export function ratesForTravelDate(
 // template with no departure date has no period to resolve against.
 //
 // So the FIRST period is mirrored back onto those columns on every save.
+// That copy is plumbing for readers without a date, never a fallback for a
+// date no period covers — periodRatesFor makes that night a hole.
 // Before this the base columns were the low season, which was the first period
 // anyway; the meaning is unchanged and the mirror keeps one source of truth.
 // The later high_/peak_ columns are left alone: once `seasons` is set nothing
