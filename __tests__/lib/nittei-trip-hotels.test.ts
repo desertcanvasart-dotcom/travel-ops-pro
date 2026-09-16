@@ -86,6 +86,17 @@ describe('利用ホテル for a customer trip', () => {
     expect(rows.map(r => `${r.hotel}:${r.check_in}→${r.check_out}`)).toEqual(['Mena House:12/1→12/2', 'Nile Ritz:12/2→12/4'])
   })
 
+  it('a named hotel never covers a night the itinerary does not name', () => {
+    const rows = assemble([
+      // Cruise nights 2–3 unnamed, 4–5 named.
+      ...[4, 5].map(day => ({ day, kind: 'cruise' as const, name: 'Al Farida Nile Cruise', name_ja: null, phone: null, address: null })),
+    ])
+    expect(rows.slice(0, 2).map(r => `${r.address}:${r.check_in}→${r.check_out}`)).toEqual([
+      'クルーズ船名：:12/6→12/8',
+      'クルーズ船名：Al Farida Nile Cruise:12/8→12/10',
+    ])
+  })
+
   it('the bare programme (no trip) is unchanged: the imported list', () => {
     expect(assemble(null).map(r => r.hotel)).toEqual(IMPORTED.map(h => h.hotel))
   })

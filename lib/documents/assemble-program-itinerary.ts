@@ -240,13 +240,14 @@ export function tripHotelRows(
     // A programme stay is one city; the TRIP may have moved hotels inside it
     // (two Cairo hotels on consecutive nights). Split the stay where the sold
     // property changes, so each hotel is a row with its own dates (Greptile
-    // on #457). A night with no named property belongs to the segment before.
+    // on #457). Nights that name no property are their own segment: a named
+    // hotel is never printed over a night the itinerary does not name.
     const segments: Array<{ startDay: number; endDay: number; stay: TripStay | null }> = []
     for (let day = run.startDay; day <= run.endDay; day++) {
       const stay = stays.find(s => s.day === day) ?? null
       const last = segments[segments.length - 1]
-      if (last && (!stay || (last.stay && same(last.stay, stay)))) last.endDay = day
-      else if (last && !last.stay && stay && segments.length === 1) { last.stay = stay; last.endDay = day }
+      const continues = last && (stay === null ? last.stay === null : last.stay !== null && same(last.stay, stay))
+      if (continues) last.endDay = day
       else segments.push({ startDay: day, endDay: day, stay })
     }
 
