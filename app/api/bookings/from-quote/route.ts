@@ -25,6 +25,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
+import { allowsIncomplete } from '@/lib/pricing/quote-completeness'
 import {
   buildBookingRow,
   populateSuppliersFromItinerary,
@@ -68,6 +69,8 @@ interface ResolvedQuote {
   selling_price: number | null
   currency: string | null
   quote_number: string | null
+  /** B2B only — the saved lines, whose unpriced ones make the price incomplete. */
+  services_snapshot?: unknown
 }
 
 export async function POST(request: NextRequest) {
@@ -119,7 +122,7 @@ export async function POST(request: NextRequest) {
         ? supabaseAdmin
             .from(table)
             .select(
-              'id, status, itinerary_id, converted_to_itinerary_id, selling_price, currency, quote_number'
+              'id, status, itinerary_id, converted_to_itinerary_id, selling_price, currency, quote_number, services_snapshot'
             )
             .eq('id', quote_id)
         : supabaseAdmin
@@ -166,13 +169,23 @@ export async function POST(request: NextRequest) {
 
     // The agreed number. A booking whose total is missing or broken would put a
     // wrong deposit in front of a client, so it runs the same gate as the send paths.
-    const priceCheck = checkAmountDeliverable(quote.selling_price, { currency: quote.currency })
+    // A deposit is a percentage of a total; a total missing services makes a
+    // wrong deposit. Refused unless the operator knowingly goes ahead.
+    const priceCheck = checkAmountDeliverable(quote.selling_price, {
+      currency: quote.currency,
+      ...(quoteType === 'b2b' ? { servicesSnapshot: quote.services_snapshot ?? [] } : {}),
+      allowIncomplete: allowsIncomplete(body?.allow_incomplete),
+    })
     if (!priceCheck.ok) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Quote price is not usable for a booking',
+          error: priceCheck.incomplete
+            ? `This quote has ${priceCheck.gaps?.length ?? 0} service(s) with no rate.`
+            : 'Quote price is not usable for a booking',
           violations: priceCheck.violations,
+          incomplete: priceCheck.incomplete ?? false,
+          gaps: priceCheck.gaps ?? [],
         },
         { status: 422 }
       )

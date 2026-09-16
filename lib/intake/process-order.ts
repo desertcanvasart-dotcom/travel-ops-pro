@@ -181,13 +181,15 @@ export async function processTourUpOrder(
   }
 
   // 3. The quote, lines shaped exactly as the calculator saves them.
-  type QuoteLine = { service_id: string; service_name: string; service_category: string; rate_type: string; rate_source: string | undefined; quantity_mode: string; quantity: number; unit_cost: number; line_total: number; is_optional: boolean; day_number: number | null; pricing_note: string | undefined }
+  type QuoteLine = { service_id: string; service_name: string; service_category: string; rate_type: string; rate_source: string | undefined; quantity_mode: string; quantity: number; unit_cost: number; line_total: number; is_optional: boolean; day_number: number | null; pricing_note: string | undefined; unpriced?: boolean; issue?: string }
   // Only real services travel into the quote: included meals and unmatched
   // sightseeing notes are breakdown-only (lib/pricing/breakdown-order).
   const lines: QuoteLine[] = priced.services.filter(isBookableLine).map(s => ({
     service_id: s.id, service_name: s.serviceName, service_category: s.serviceType, rate_type: s.serviceType,
     rate_source: s.rateSource, quantity_mode: s.quantityMode, quantity: s.quantity, unit_cost: s.unitCost,
     line_total: s.lineTotal, is_optional: s.isOptional, day_number: s.dayNumber, pricing_note: s.notes,
+    // The saved record of what could not be priced (lib/pricing/quote-completeness).
+    ...(s.unpriced ? { unpriced: true, issue: s.issue } : {}),
   }))
   const rooming = roomingAdjustment(numPax, priced.accommodationNights ?? [])
   if (rooming !== 0) {

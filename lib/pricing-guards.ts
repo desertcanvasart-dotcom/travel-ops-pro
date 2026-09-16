@@ -11,6 +11,7 @@
 // Ported from the sibling app (autoura-saas). See PRICING-HARNESS-PLAN.md.
 
 import type { PricingHole } from './pricing-types'
+import { quoteCompleteness, describeGaps, type QuoteGap } from './pricing/quote-completeness'
 
 export interface DeliverablePriceInput {
   /** From the engine result — when present, must be true. */
@@ -30,6 +31,11 @@ export interface DeliverableCheck {
   ok: boolean
   violations: string[]
   holes: PricingHole[]
+  /** Set when the price is blocked ONLY because services have no rate — the
+   *  one refusal an operator may knowingly override (allowIncomplete). */
+  incomplete?: boolean
+  /** The services with no rate, from the saved quote lines. */
+  gaps?: QuoteGap[]
 }
 
 export const MARGIN_MIN = 0
@@ -113,21 +119,49 @@ export function checkDeliverablePrice(input: DeliverablePriceInput): Deliverable
 }
 
 /**
- * Structural gate for a PERSISTED row at send/export time. The stored row carries
- * no completeness metadata, so this enforces structural sanity only: the headline
- * money figure must be a positive finite number, and (when present) the currency
- * must be set. Use `amountField` to name the relevant column for the message.
+ * Gate for a PERSISTED row at send/export time: the headline money figure must
+ * be a positive finite number and (when present) the currency must be set.
+ *
+ * When the row is a quote, pass its `servicesSnapshot`: a quote whose saved
+ * lines include services with NO RATE is refused as well (lib/pricing/
+ * quote-completeness). Until 2026-09-16 a stored quote carried no completeness
+ * at all, so a quote missing every hotel night and transfer passed this gate
+ * and went out as a customer PDF, an itinerary, and a booking. The operator may
+ * still knowingly proceed — `allowIncomplete` — but never by default.
  */
 export function checkAmountDeliverable(
   amount: number | null | undefined,
-  opts: { label?: string; currency?: string | null; pricePerPerson?: number | null; numPax?: number | null } = {}
+  opts: {
+    label?: string
+    currency?: string | null
+    pricePerPerson?: number | null
+    numPax?: number | null
+    servicesSnapshot?: unknown
+    allowIncomplete?: boolean
+  } = {}
 ): DeliverableCheck {
-  return checkDeliverablePrice({
+  const check = checkDeliverablePrice({
     sellingPrice: amount,
     pricePerPerson: opts.pricePerPerson,
     numPax: opts.numPax,
     currency: opts.currency,
   })
+  if (opts.servicesSnapshot === undefined) return check
+
+  const { complete, gaps } = quoteCompleteness(opts.servicesSnapshot)
+  if (complete || opts.allowIncomplete) return { ...check, gaps }
+  const violations = [
+    ...check.violations,
+    `${gaps.length} service(s) have no rate: ${describeGaps(gaps)}.`,
+  ]
+  return {
+    ok: false,
+    violations,
+    holes: check.holes,
+    // Only incomplete — nothing structurally wrong — is overridable.
+    incomplete: check.ok,
+    gaps,
+  }
 }
 
 export class PriceNotDeliverableError extends Error {

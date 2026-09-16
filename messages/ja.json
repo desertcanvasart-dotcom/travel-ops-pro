@@ -6974,7 +6974,14 @@
     "convertedDescription": "この見積もりは旅程に変換されました。旅程を確認して予約を作成してください。",
     "viewItinerary": "旅程を表示",
     "seasonPremium": "{season}割増（{percent}%）",
-    "newQuoteHint": "見積はツアーから始まります。ツアーバリエーションを選び、計算機で価格を設定して保存します。"
+    "newQuoteHint": "見積はツアーから始まります。ツアーバリエーションを選び、計算機で価格を設定して保存します。",
+    "incompleteTitle": "料金が未完成です",
+    "incompleteBody": "この見積りには料金が設定されていないサービスが{count}件あり、合計にはそれらが含まれていません。料金を登録して再計算するか、承知のうえで進めてください。",
+    "gapOnDay": "{day}日目: {name}",
+    "noRate": "料金未設定",
+    "continueAnyway": "このまま進める",
+    "pdfIncompleteConfirm": "この見積りには料金未設定のサービスが{count}件あります（{services}）。PDFの合計にはそれらが含まれません。このまま作成しますか？",
+    "convertIncompleteConfirm": "この見積りには料金未設定のサービスが{count}件あります（{services}）。作成される旅程の合計にはそれらが含まれません。このまま変換しますか？"
   },
   "b2bPricingRules": {
     "title": "輸送パッケージ",
@@ -7384,7 +7391,10 @@
       "convert": "予約に変換",
       "converting": "予約を作成中…",
       "alreadyBooked": "この見積はすでに予約済みです",
-      "failed": "予約を作成できませんでした。"
+      "failed": "予約を作成できませんでした。",
+      "incompleteTitle": "料金が未完成です",
+      "incompleteConfirm": "この見積りには料金未設定のサービスが{count}件あります（{services}）。予約の合計と手付金にはそれらが含まれません。このまま予約しますか？",
+      "continueAnyway": "このまま予約"
     }
   },
   "supplierDocuments": {

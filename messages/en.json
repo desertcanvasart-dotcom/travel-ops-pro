@@ -6389,7 +6389,14 @@
     "convertedDescription": "This quote has been converted to an itinerary. Review and confirm the itinerary to create a booking.",
     "viewItinerary": "View Itinerary",
     "seasonPremium": "{season} premium ({percent}%)",
-    "newQuoteHint": "A quote starts from a tour: pick a tour variation, then price and save it in the calculator."
+    "newQuoteHint": "A quote starts from a tour: pick a tour variation, then price and save it in the calculator.",
+    "incompleteTitle": "Incomplete price",
+    "incompleteBody": "{count, plural, one {# service in this quote has no rate} other {# services in this quote have no rate}}, so its total leaves them out. Add the rates and price it again, or go ahead knowingly.",
+    "gapOnDay": "Day {day}: {name}",
+    "noRate": "No rate",
+    "continueAnyway": "Continue anyway",
+    "pdfIncompleteConfirm": "This quote has {count, plural, one {# service} other {# services}} with no rate ({services}), so the PDF will show a total that leaves them out. Create it anyway?",
+    "convertIncompleteConfirm": "This quote has {count, plural, one {# service} other {# services}} with no rate ({services}). The itinerary will carry a total that leaves them out. Convert anyway?"
   },
   "b2bPricingRules": {
     "title": "Transport Packages",
@@ -6799,7 +6806,10 @@
       "convert": "Convert to booking",
       "converting": "Creating booking…",
       "alreadyBooked": "This quote is already booked",
-      "failed": "Could not create the booking."
+      "failed": "Could not create the booking.",
+      "incompleteTitle": "Incomplete price",
+      "incompleteConfirm": "This quote has {count, plural, one {# service} other {# services}} with no rate ({services}), so the booking total and deposit leave them out. Book anyway?",
+      "continueAnyway": "Book anyway"
     }
   },
   "supplierDocuments": {
