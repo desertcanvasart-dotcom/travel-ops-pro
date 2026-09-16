@@ -108,7 +108,10 @@ describe('is the named property still in the rates (staff warning)', () => {
 
   it('the days API reports it per night line and the page warns; the share page never sees it', async () => {
     const { readFileSync } = await import('node:fs')
-    expect(readFileSync('app/api/itineraries/[id]/days/route.ts', 'utf8')).toContain('property_rate_status')
+    const route = readFileSync('app/api/itineraries/[id]/days/route.ts', 'utf8')
+    expect(route).toContain('property_rate_status')
+    // A failed catalog read withholds the status instead of flagging every hotel.
+    expect(route).toContain('property && catalogLoaded ? propertyRateStatus(property, catalog) : null')
     expect(readFileSync('app/itineraries/[id]/page.tsx', 'utf8')).toContain('overnight-stale')
     expect(readFileSync('lib/itinerary-share.ts', 'utf8')).not.toContain('property_rate_status')
   })

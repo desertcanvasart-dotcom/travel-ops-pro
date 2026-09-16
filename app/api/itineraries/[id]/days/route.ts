@@ -86,10 +86,15 @@ export async function GET(
     // Every hotel and ship name in the rates, for the "no longer in your
     // rates" warning on a night whose property was deleted or switched off
     // after the itinerary was sold. Small tables, read whole.
-    const [{ data: hotelRows }, { data: shipRows }] = await Promise.all([
+    const [{ data: hotelRows, error: hotelError }, { data: shipRows, error: shipError }] = await Promise.all([
       supabase.from('accommodation_rates').select('property_name, is_active'),
       supabase.from('nile_cruises').select('ship_name, is_active'),
     ])
+    // A catalog that failed to load says nothing about any hotel: no status
+    // rather than a false "no longer in your rates" on every night (Greptile
+    // on #456).
+    const catalogLoaded = !hotelError && !shipError
+    if (!catalogLoaded) console.warn('[days-api] rates catalog unavailable; overnight rate status withheld', hotelError?.message ?? shipError?.message)
     const catalog = {
       hotels: (hotelRows ?? []).map(r => ({ name: r.property_name, active: r.is_active })),
       ships: (shipRows ?? []).map(r => ({ name: r.ship_name, active: r.is_active })),
@@ -124,7 +129,7 @@ export async function GET(
           // Staff-only: whether that hotel or ship is still in Rates.
           property_rate_status: ((): PropertyRateStatus | null => {
             const property = propertyFromService(service)
-            return property ? propertyRateStatus(property, catalog) : null
+            return property && catalogLoaded ? propertyRateStatus(property, catalog) : null
           })(),
           service_name: version?.service_name || service.service_name,
           notes: version?.notes ?? service.notes
