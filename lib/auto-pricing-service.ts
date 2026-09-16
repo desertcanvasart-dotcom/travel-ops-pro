@@ -46,6 +46,7 @@ import { sortByItineraryFlow } from '@/lib/pricing/breakdown-order'
 import { periodRatesFor, plainPeriodName as seasonNameOf } from '@/lib/rates/rate-seasons'
 import { cruiseCandidates, hotelCandidates, propertyById } from '@/lib/pricing/property-candidates'
 import { choicesForTier, sanitizePropertyChoice } from '@/lib/pricing/property-choice'
+import { guideLanguageWord, sameGuideLanguage } from '@/lib/guides/guide-language'
 import { durationFor, isRoadTransfer, isSightseeing, sanitizeTransportLines, type TransportLine } from '@/lib/pricing/transport-lines'
 import { getAirportCode, legAssistance, routeAirportCode, sanitizeLegAssist, sanitizeLegPlace, type LegAssist } from '@/lib/pricing/flight-leg'
 import { resolveSupplementsForDate, sanitizeSupplementKeys } from '@/lib/rates/supplements'
@@ -1897,28 +1898,24 @@ export async function getGuideRate(
   const grade = opts?.grade ?? 'egyptologist'
   const duration = opts?.duration ?? 'full_day'
   try {
-    // 1. Exact grade + duration in guide_rates.
-    let { data: rawGuideRate } = await supabaseAdmin
+    // The language is matched EXACTLY, by vocabulary key, in memory: rows
+    // hold the word ("Japanese") or the key ("japanese") and callers ask by
+    // either (lib/guides/guide-language). It was an ilike substring, so any
+    // language whose name contained the one asked for could price the guide.
+    const { data: activeRows } = await supabaseAdmin
       .from('guide_rates')
       .select('*')
       .eq('is_active', true)
-      .ilike('guide_language', `%${language}%`)
-      .eq('guide_type', grade)
-      .eq('tour_duration', duration)
-      .limit(1)
-      .single()
+    const ofLanguage = ((activeRows ?? []) as Record<string, any>[]).filter(r => sameGuideLanguage(r.guide_language, language))
+
+    // 1. Exact grade + duration in guide_rates.
+    let rawGuideRate: Record<string, any> | null =
+      ofLanguage.find(r => r.guide_type === grade && r.tour_duration === duration) ?? null
 
     // 2. Default ask only: the pre-grades behaviour (first active row of the
     //    language, any type/duration) so nothing priced yesterday holes today.
     if (!rawGuideRate && grade === 'egyptologist' && duration === 'full_day') {
-      const fallback = await supabaseAdmin
-        .from('guide_rates')
-        .select('*')
-        .eq('is_active', true)
-        .ilike('guide_language', `%${language}%`)
-        .limit(1)
-        .single()
-      rawGuideRate = fallback.data
+      rawGuideRate = ofLanguage[0] ?? null
     }
     const guideRate = normalizer && rawGuideRate
       ? (await normalizer.normalize('guide_rates', [rawGuideRate]))?.[0]
@@ -1930,7 +1927,7 @@ export async function getGuideRate(
         debugLog(`✅ Guide (guide_rates): ${language} | €${dailyRate}/day`)
         return {
           id: guideRate.id,
-          name: `${language} Speaking Guide`,
+          name: `${guideLanguageWord(language)} Speaking Guide`,
           dailyRate
         }
       }

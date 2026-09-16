@@ -10,6 +10,9 @@ import { useConfirm } from '@/components/ConfirmDialog'
 import { useTierLabel } from '@/hooks/useTierLabel'
 import { useTierOptions } from '@/hooks/useTierOptions'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
+import { optionsFromLabels } from '@/lib/vocabulary'
+import { BUILT_IN_GUIDE_LANGUAGES, guideLanguageKey } from '@/lib/guides/guide-language'
 import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileSpreadsheet, TrendingUp, AlertCircle, UserPlus, Save, X, CheckCircle2, Building2, User, Mail, Phone, FileText, ChevronDown, ChevronUp, Pencil, Plane, Ship, MapPin, Plus, RotateCcw, Tag, Star } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { currencySymbol } from '@/lib/currency-totals'
@@ -272,19 +275,23 @@ export default function TourPriceCalculator() {
   // the engine: cost + this quote's margin, or the operator's set price as-is.
   const [availableExtras, setAvailableExtras] = useState<CatalogueExtraOption[]>([])
   const [selectedExtraIds, setSelectedExtraIds] = useState<string[]>([])
+  // Guide languages: Settings → Vocabulary's list, in its order and words;
+  // those with no active guide rate are shown but not selectable, so the
+  // three places agree (lib/guides/guide-language). guideLanguages holds the
+  // KEYS that have a rate.
+  const guideLanguageVocab = useVocabOptions('guide_language', optionsFromLabels(BUILT_IN_GUIDE_LANGUAGES))
   useEffect(() => {
     fetch('/api/rates/guides')
       .then(r => r.json())
       .then(j => {
-        const langs: string[] = []
+        const keys: string[] = []
         for (const row of (j?.data ?? []) as { guide_language?: string; is_active?: boolean }[]) {
-          const l = (row.guide_language ?? '').trim()
-          if (l && row.is_active !== false && !langs.includes(l)) langs.push(l)
+          const k = guideLanguageKey(row.guide_language)
+          if (k && row.is_active !== false && !keys.includes(k)) keys.push(k)
         }
-        setGuideLanguages(langs)
-        setGuideLanguage(prev => prev || langs[0] || 'English')
+        setGuideLanguages(keys)
       })
-      .catch(() => setGuideLanguage(prev => prev || 'English'))
+      .catch(() => setGuideLanguages([]))
   }, [])
 
   useEffect(() => {
@@ -339,6 +346,14 @@ export default function TourPriceCalculator() {
   // Offered from the languages that HAVE a guide rate, first one preselected.
   const [guideLanguages, setGuideLanguages] = useState<string[]>([])
   const [guideLanguage, setGuideLanguage] = useState<string>('')
+  // The first language in the vocabulary's order that has a rate.
+  const vocabOrder = guideLanguageVocab.map(o => o.value).join('|')
+  useEffect(() => {
+    if (guideLanguage && guideLanguages.includes(guideLanguage)) return
+    const first = guideLanguageVocab.find(o => guideLanguages.includes(o.value))?.value ?? guideLanguages[0]
+    if (first) setGuideLanguage(first)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guideLanguages, vocabOrder])
 
   // Itinerary editor state
   const [templateId, setTemplateId] = useState<string | null>(null)
@@ -1042,7 +1057,7 @@ export default function TourPriceCalculator() {
                 )}
               </div>
 
-              {/* Guide language — from the languages a guide rate exists for */}
+              {/* Guide language — the vocabulary's list; languages with no guide rate greyed */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <User className="w-4 h-4 inline mr-1" />{t('guideLanguage')}
@@ -1053,8 +1068,14 @@ export default function TourPriceCalculator() {
                   className="w-full px-3 py-2 border rounded-lg bg-white"
                   data-testid="guide-language"
                 >
-                  {(guideLanguages.length ? guideLanguages : ['English']).map(l => (
-                    <option key={l} value={l}>{guideLanguageLabel(l, l)}</option>
+                  {guideLanguageVocab.map(o => (
+                    <option key={o.value} value={o.value} disabled={!guideLanguages.includes(o.value)}>
+                      {guideLanguages.includes(o.value) ? o.label : t('guideLanguageNoRate', { language: o.label })}
+                    </option>
+                  ))}
+                  {/* A rate in a language the vocabulary no longer lists still prices. */}
+                  {guideLanguages.filter(k => !guideLanguageVocab.some(o => o.value === k)).map(k => (
+                    <option key={k} value={k}>{guideLanguageLabel(k, k)}</option>
                   ))}
                 </select>
               </div>

@@ -2,6 +2,7 @@
 // Fetches all available rate options from existing Supabase tables,
 // structured by grid slot for dropdown population.
 
+import { guideLanguageWord } from '@/lib/guides/guide-language'
 import { NextRequest, NextResponse } from 'next/server'
 import { seasonsForRow, type RateSeasonEntity } from '@/lib/rates/rate-seasons'
 import { supplementsForRow, supplementField } from '@/lib/rates/supplements'
@@ -138,11 +139,11 @@ export async function GET(request: NextRequest) {
 
       guide: (nGuides || []).map((r: any) => ({
         id: r.id,
-        name: `${r.guide_language || 'Guide'} (${r.guide_type || 'Egyptologist'})`,
+        name: `${r.guide_language ? guideLanguageWord(r.guide_language) : 'Guide'} (${r.guide_type || 'Egyptologist'})`,
         rateEur: toNum(r.base_rate_eur || r.rate_eur),
         rateNonEur: toNum(r.base_rate_non_eur || r.rate_non_eur || r.base_rate_eur || r.rate_eur),
         city: r.city,
-        details: r.guide_language,
+        details: r.guide_language ? guideLanguageWord(r.guide_language) : r.guide_language,
       })),
 
       airport_services: (nAirport || []).map((r: any) => ({

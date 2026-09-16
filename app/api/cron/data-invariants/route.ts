@@ -19,6 +19,7 @@
 // a 500 would read as "endpoint broken", not "data broken").
 // ============================================
 
+import { guideLanguageKey } from '@/lib/guides/guide-language'
 import { NextRequest, NextResponse } from 'next/server'
 import { withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
@@ -41,7 +42,8 @@ function money(v: unknown): number {
 // key is conditional), so this nightly check is that table's only global
 // duplicate detection.
 function guideRateKey(r: any): string {
-  return [r.supplier_id ?? 'null', r.guide_language, r.guide_type, r.tour_duration, r.city ?? ''].join('|')
+  // Language by vocabulary key: "Japanese" and "japanese" are one rate.
+  return [r.supplier_id ?? 'null', guideLanguageKey(r.guide_language), r.guide_type, r.tour_duration, r.city ?? ''].join('|')
 }
 function activityRateKey(r: any): string {
   return [r.supplier_id ?? 'null', String(r.activity_name ?? '').toLowerCase(), r.city ?? ''].join('|')

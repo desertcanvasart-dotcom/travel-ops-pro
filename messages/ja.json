@@ -7384,7 +7384,8 @@
         "dinner_transfer": "夕食送迎"
       }
     },
-    "inFlightNight": "機中泊(夜行便)— この日は手配なし"
+    "inFlightNight": "機中泊(夜行便)— この日は手配なし",
+    "guideLanguageNoRate": "{language}(ガイド料金なし)"
   },
   "bookings": {
     "title": "予約管理",
