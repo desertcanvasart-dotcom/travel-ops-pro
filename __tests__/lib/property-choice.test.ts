@@ -114,6 +114,22 @@ describe('pricing follows the choice', () => {
     expect(line.issue).toMatch(/The hotel chosen for Cairo is switched off/)
   })
 
+  it('a chosen hotel in another city (the stay was moved after choosing) is a hole, not that hotel', async () => {
+    const t = withSecondHotel({ standard: 'acc-luxor' })
+    t.accommodation_rates.push({ id: 'acc-luxor', tier: 'standard', is_active: true, city: 'Luxor', property_name: 'Luxor Hotel', pp_double_eur: 50, pp_double_non_eur: 50, created_at: '2025-01-01T00:00:00Z' })
+    setMockTables(t)
+    const line = hotelLine(await calculateAutoPricing(BASE))
+    expect(line.unpriced).toBe(true)
+    expect(line.issue).toMatch(/in another city/)
+  })
+
+  it('a chosen hotel re-tiered since is a hole for this tier', async () => {
+    const t = withSecondHotel({ standard: 'acc-cairo-std' })
+    t.accommodation_rates.find((r: any) => r.id === 'acc-cairo-std').tier = 'deluxe'
+    setMockTables(t)
+    expect(hotelLine(await calculateAutoPricing(BASE)).issue).toMatch(/not at the tier being priced/)
+  })
+
   it('a chosen hotel that no longer exists is a hole too', async () => {
     setMockTables(withSecondHotel({ standard: 'deleted-id' }))
     expect(hotelLine(await calculateAutoPricing(BASE)).issue).toMatch(/no longer in Rates → Hotels/)

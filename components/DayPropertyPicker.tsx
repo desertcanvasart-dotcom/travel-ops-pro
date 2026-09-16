@@ -62,11 +62,17 @@ export default function DayPropertyPicker({ kind, city, embark = null, tier, tie
     let live = true
     setData(null)
     setFailed(false)
+    // Until the new list is in, the property in use is unknown: say so, so
+    // the supplements picker never filters by the previous city's hotel
+    // (Greptile on #453).
+    onResolved?.(null)
     if (kind === 'hotel' && !city) return
     load(kind, tier, city, embark)
       .then(d => { if (live) setData(d) })
       .catch(() => { if (live) setFailed(true) })
     return () => { live = false }
+    // onResolved is a fresh closure each render; the query is what matters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind, city, embark, tier])
 
   const options = data?.options ?? []

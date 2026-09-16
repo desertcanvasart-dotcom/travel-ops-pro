@@ -1489,7 +1489,18 @@ export type CruiseStayRates = {
 
 /** Why a CHOSEN property could not be used — the engine names it in the
  *  hole instead of quietly pricing another property. */
-export type ChosenPropertyProblem = 'gone' | 'inactive' | 'bad_nights'
+export type ChosenPropertyProblem = 'gone' | 'inactive' | 'bad_nights' | 'wrong_tier' | 'wrong_city'
+
+/** A chosen row must still fit the stay it prices: the tier being priced and,
+ *  for a hotel, the city it sleeps in — the same match the candidate list
+ *  uses. A stay whose city was edited after the choice, or a row re-tiered
+ *  since, is a hole asking to choose again, never another city's hotel
+ *  priced as "chosen" (Greptile on #453). */
+export function chosenRowMismatch(row: Record<string, unknown>, tier: string, city?: string): ChosenPropertyProblem | undefined {
+  if (String(row.tier ?? '') !== tier) return 'wrong_tier'
+  if (city !== undefined && !String(row.city ?? '').toLowerCase().includes(city.trim().toLowerCase())) return 'wrong_city'
+  return undefined
+}
 
 export async function getCruiseRates(
   tier: ServiceTier,
@@ -1518,6 +1529,8 @@ export async function resolveCruiseStay(
     if (chosenId) {
       const found = await propertyById(supabaseAdmin, 'nile_cruises', chosenId)
       if (!found.row) return { rates: null, problem: found.inactive ? 'inactive' : 'gone' }
+      const mismatch = chosenRowMismatch(found.row, tier)
+      if (mismatch) return { rates: null, problem: mismatch }
       raw = found.row
     } else {
       // The starred ship first, then newest; a port that matches nothing
@@ -1608,6 +1621,8 @@ export function chosenPropertyMessage(kind: 'hotel' | 'cruise', problem: ChosenP
   const where = kind === 'hotel' ? 'Rates → Hotels' : 'Rates → Cruises'
   if (problem === 'inactive') return `${what} is switched off in ${where}. Switch it back on, or choose another on the day.`
   if (problem === 'bad_nights') return `${what} has no valid number of nights in ${where}. Fix it, or choose another ship on the day.`
+  if (problem === 'wrong_tier') return `${what} is not at the tier being priced. Choose again on the day for this tier.`
+  if (problem === 'wrong_city') return `${what} is in another city — the stay's city was changed after it was chosen. Choose again on the day.`
   return `${what} is no longer in ${where}. Choose another on the day.`
 }
 
@@ -1638,6 +1653,8 @@ export async function resolveHotelStay(
     if (chosenId) {
       const found = await propertyById(supabaseAdmin, 'accommodation_rates', chosenId)
       if (!found.row) return { rates: null, problem: found.inactive ? 'inactive' : 'gone' }
+      const mismatch = chosenRowMismatch(found.row, tier, city)
+      if (mismatch) return { rates: null, problem: mismatch }
       raw = found.row
     } else {
       // Newest active hotel in the city at the tier — the same list the day
