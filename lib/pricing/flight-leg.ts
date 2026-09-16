@@ -1,0 +1,76 @@
+// ============================================
+// A day's flight or train leg: its route, and airport assistance at each end
+// ============================================
+// A ticket leg ran FROM the previous day's city TO this day's city. That
+// cannot say NMS803's day 2 (operator, 2026-09-17): the party lands in Cairo
+// on the overnight flight from Narita, connects to Luxor, and boards the ship
+// — day 1 has no city (it is in the air) and day 2 is filed under "Nile
+// Cruise". So a day may name its leg's own route (`leg_from` / `leg_to`) and
+// whether it wants assistance at each airport (`leg_assist`).
+//
+// Client-safe: no database, no engine import.
+
+export interface LegAssist {
+  /** Assistance at the departure airport. */
+  from?: boolean
+  /** Assistance at the arrival airport. */
+  to?: boolean
+}
+
+const AIRPORT_CODES: Record<string, string> = {
+  cairo: 'CAI',
+  giza: 'CAI',
+  luxor: 'LXR',
+  aswan: 'ASW',
+  hurghada: 'HRG',
+  'sharm el-sheikh': 'SSH',
+  sharm: 'SSH',
+  alexandria: 'ALY',
+  'abu simbel': 'ABS',
+}
+
+/** The airport code for a city. Unknown cities read as Cairo — the engine's
+ *  long-standing behaviour, kept for callers that price an unnamed day. */
+export function getAirportCode(city: string): string {
+  return AIRPORT_CODES[String(city ?? '').trim().toLowerCase()] || 'CAI'
+}
+
+/** The airport code for a city, or null when the city has no airport on file. */
+export function knownAirportCode(city: string | null | undefined): string | null {
+  return AIRPORT_CODES[String(city ?? '').trim().toLowerCase()] ?? null
+}
+
+const place = (v: unknown): string | undefined => {
+  const s = typeof v === 'string' ? v.trim().slice(0, 80) : ''
+  return s || undefined
+}
+
+export function sanitizeLegPlace(v: unknown): string | undefined {
+  return place(v)
+}
+
+export function sanitizeLegAssist(v: unknown): LegAssist | undefined {
+  if (!v || typeof v !== 'object') return undefined
+  const r = v as Record<string, unknown>
+  const out: LegAssist = {}
+  if (typeof r.from === 'boolean') out.from = r.from
+  if (typeof r.to === 'boolean') out.to = r.to
+  return Object.keys(out).length ? out : undefined
+}
+
+/**
+ * Whether each end of a FLIGHT leg gets assistance.
+ *
+ * On the arrival day — the first day in the destination, after nothing or a
+ * night in the air — the party is met where the international flight lands
+ * (the leg's departure airport, already the day's Meet & Greet) and again at
+ * the connection's destination: both default ON. On any other flight day
+ * both default OFF, which is what every existing programme priced. A day
+ * that says so explicitly wins.
+ */
+export function legAssistance(assist: LegAssist | undefined, isArrivalDay: boolean): { from: boolean; to: boolean } {
+  return {
+    from: assist?.from ?? isArrivalDay,
+    to: assist?.to ?? isArrivalDay,
+  }
+}

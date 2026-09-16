@@ -7676,6 +7676,12 @@
         "withRoad": "Sleeping train, with station transfers tonight and on arrival.",
         "withoutRoad": "Sleeping train only: no station transfers."
       }
-    }
+    },
+    "route": "Route",
+    "from": "From",
+    "to": "To",
+    "assistArrivalMeet": "Meet & greet on landing at {airport}",
+    "assistDeparture": "Departure assistance at {airport}",
+    "assistArrival": "Arrival assistance at {airport}"
   }
 }

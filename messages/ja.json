@@ -8261,6 +8261,12 @@
         "withRoad": "寝台列車と、乗車駅・到着駅での送迎。",
         "withoutRoad": "寝台列車のみ（駅送迎なし）。"
       }
-    }
+    },
+    "route": "区間",
+    "from": "出発",
+    "to": "到着",
+    "assistArrivalMeet": "{airport}到着時のお出迎え",
+    "assistDeparture": "{airport}での出発アシスタンス",
+    "assistArrival": "{airport}での到着アシスタンス"
   }
 }
