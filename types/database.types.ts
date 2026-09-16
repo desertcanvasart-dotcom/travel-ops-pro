@@ -7392,6 +7392,9 @@ export interface Database {
           revoked_at: string | null
           view_count: number
           last_viewed_at: string | null
+          incomplete_approved_gaps: Json | null
+          incomplete_approved_at: string | null
+          incomplete_approved_by: string | null
         }
         Insert: {
           id?: string
@@ -7403,6 +7406,9 @@ export interface Database {
           revoked_at?: string | null
           view_count?: number
           last_viewed_at?: string | null
+          incomplete_approved_gaps?: Json | null
+          incomplete_approved_at?: string | null
+          incomplete_approved_by?: string | null
         }
         Update: {
           id?: string
@@ -7414,6 +7420,9 @@ export interface Database {
           revoked_at?: string | null
           view_count?: number
           last_viewed_at?: string | null
+          incomplete_approved_gaps?: Json | null
+          incomplete_approved_at?: string | null
+          incomplete_approved_by?: string | null
         }
         Relationships: [
           {

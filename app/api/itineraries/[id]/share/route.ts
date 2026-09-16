@@ -13,9 +13,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { orgAuth } from '@/lib/auth/org-auth'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
-import { allowsIncomplete } from '@/lib/pricing/quote-completeness'
+import { allowsIncomplete, quoteCompleteness } from '@/lib/pricing/quote-completeness'
 import { loadItineraryServiceLines } from '@/lib/pricing/itinerary-completeness'
 import { generateShareToken } from '@/lib/itinerary-share'
+import { sharePriceDecision, toApprovedGaps } from '@/lib/itineraries/share-approval'
 import { clientMessage } from '@/lib/api-errors'
 
 export const dynamic = 'force-dynamic'
@@ -85,15 +86,36 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     )
   }
 
+  // The approval, recorded on the link. Reaching here with gaps means the
+  // operator said "share anyway" for exactly these; the public page shows the
+  // price only while no other gap appears. A complete itinerary clears it.
+  const { gaps } = quoteCompleteness(loaded.lines)
+  const approval = gaps.length > 0
+    ? {
+        incomplete_approved_gaps: toApprovedGaps(gaps),
+        incomplete_approved_at: new Date().toISOString(),
+        incomplete_approved_by: user?.id ?? null,
+      }
+    : { incomplete_approved_gaps: null, incomplete_approved_at: null, incomplete_approved_by: null }
+
   // An existing active link wins — one URL per itinerary.
   const { data: existing } = await supabase!
     .from('itinerary_shares')
-    .select('token')
+    .select('id, token')
     .eq('itinerary_id', id)
     .is('revoked_at', null)
     .maybeSingle()
 
   let token: string | undefined = existing?.token
+  if (existing) {
+    const { error: approvalErr } = await supabase!
+      .from('itinerary_shares')
+      .update(approval)
+      .eq('id', existing.id)
+    if (approvalErr) {
+      return NextResponse.json({ success: false, error: clientMessage(approvalErr, 'Failed to update share link') }, { status: 500 })
+    }
+  }
   if (!token) {
     token = generateShareToken()
     const { error: insErr } = await supabase!.from('itinerary_shares').insert({
@@ -101,6 +123,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       itinerary_id: id,
       token,
       created_by: user?.id ?? null,
+      ...approval,
     })
 
     if (insErr) {
@@ -114,10 +137,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (insErr.code === '23505') {
         const { data: raced } = await supabase!
           .from('itinerary_shares')
-          .select('token')
+          .select('id, token')
           .eq('itinerary_id', id)
           .is('revoked_at', null)
           .maybeSingle()
+        // Record this approval on the winner's link too; if that fails the
+        // page simply keeps withholding the price, which is the safe side.
+        if (raced) await supabase!.from('itinerary_shares').update(approval).eq('id', raced.id)
         token = raced?.token
       }
 
@@ -144,7 +170,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const { data, error } = await auth.supabase!
     .from('itinerary_shares')
-    .select('token, created_at, view_count, last_viewed_at')
+    .select('token, created_at, view_count, last_viewed_at, incomplete_approved_gaps, incomplete_approved_at')
     .eq('itinerary_id', id)
     .eq('org_id', auth.org_id!)
     .is('revoked_at', null)
@@ -155,6 +181,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
   if (!data) return NextResponse.json({ success: true, shared: false })
 
+  // What the traveller sees right now — the same decision the public page makes.
+  const [{ data: itinerary }, lines] = await Promise.all([
+    auth.supabase!.from('itineraries').select('status, total_cost, currency').eq('id', id).eq('org_id', auth.org_id!).maybeSingle(),
+    loadItineraryServiceLines(auth.supabase!, id, auth.org_id!),
+  ])
+  const price = sharePriceDecision({
+    status: itinerary?.status,
+    totalCost: itinerary?.total_cost,
+    currency: itinerary?.currency,
+    lines,
+    approvedGaps: data.incomplete_approved_gaps,
+  })
+
   return NextResponse.json({
     success: true,
     shared: true,
@@ -163,6 +202,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     created_at: data.created_at,
     view_count: data.view_count ?? 0,
     last_viewed_at: data.last_viewed_at,
+    approved_gaps: Array.isArray(data.incomplete_approved_gaps) ? data.incomplete_approved_gaps : [],
+    approved_at: data.incomplete_approved_at,
+    price_hidden: price.show ? null : price.reason,
+    price_hidden_gaps: price.show ? [] : price.gaps ?? [],
   })
 }
 

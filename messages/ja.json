@@ -1855,7 +1855,12 @@
       "copyFailed": "コピーできませんでした。リンクを選択して手動でコピーしてください。",
       "incompleteTitle": "料金が未完成です",
       "incompleteConfirm": "この旅程には費用未入力のサービスが{count}件あります（{services}）。旅行者にはそれらを含まない合計が表示されます。このまま共有しますか？",
-      "continueAnyway": "このまま共有"
+      "continueAnyway": "このまま共有",
+      "priceHiddenGaps": "お客様には料金が表示されていません：共有後に原価未入力のサービスが{count}件あります（{services}）。原価を入力するか、確認のうえ共有してください。",
+      "priceHiddenDraft": "この日程が下書きの間、お客様には料金が表示されません。",
+      "priceHiddenAmount": "お客様には料金が表示されていません：合計金額が正しくありません。",
+      "reviewAgain": "確認して共有する",
+      "approvedGaps": "原価未入力のサービス{count}件を承認のうえ共有しました。"
     },
     "nittei": {
       "button": "お客様用 日程表",

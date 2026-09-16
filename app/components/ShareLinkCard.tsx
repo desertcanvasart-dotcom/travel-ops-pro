@@ -18,6 +18,10 @@ interface ShareState {
   url?: string
   view_count?: number
   last_viewed_at?: string | null
+  /** Why the traveller cannot see the price right now, or null when they can. */
+  price_hidden?: 'unchecked' | 'draft' | 'amount' | 'new_gaps' | null
+  price_hidden_gaps?: QuoteGap[]
+  approved_gaps?: Array<{ day: number | null; name: string }>
 }
 
 export default function ShareLinkCard({ itineraryId }: { itineraryId: string }) {
@@ -70,6 +74,8 @@ export default function ShareLinkCard({ itineraryId }: { itineraryId: string }) 
         return
       }
       setState({ shared: true, url: json.url, view_count: 0, last_viewed_at: null })
+      // Re-read so the price status reflects the approval just recorded.
+      void load()
     } catch {
       setError(t('createFailed'))
     } finally {
@@ -144,6 +150,39 @@ export default function ShareLinkCard({ itineraryId }: { itineraryId: string }) 
               {copied ? t('copied') : t('copy')}
             </button>
           </div>
+
+          {state.price_hidden && state.price_hidden !== 'unchecked' && (
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md flex gap-2">
+              <AlertTriangle className="w-4 h-4 text-yellow-700 shrink-0 mt-0.5" />
+              <div className="text-yellow-800 text-xs space-y-2">
+                <p>
+                  {state.price_hidden === 'new_gaps'
+                    ? t('priceHiddenGaps', {
+                        count: state.price_hidden_gaps?.length ?? 0,
+                        services: describeGaps(state.price_hidden_gaps ?? []),
+                      })
+                    : state.price_hidden === 'draft'
+                      ? t('priceHiddenDraft')
+                      : t('priceHiddenAmount')}
+                </p>
+                {state.price_hidden === 'new_gaps' && (
+                  <button
+                    type="button"
+                    onClick={() => create()}
+                    disabled={busy}
+                    className="h-7 px-2.5 rounded-md font-medium border border-yellow-300 bg-white hover:bg-yellow-100 disabled:opacity-50"
+                  >
+                    {t('reviewAgain')}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          {!state.price_hidden && (state.approved_gaps?.length ?? 0) > 0 && (
+            <p className="text-xs text-gray-600">
+              {t('approvedGaps', { count: state.approved_gaps!.length })}
+            </p>
+          )}
 
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-1.5 text-xs text-gray-600">
