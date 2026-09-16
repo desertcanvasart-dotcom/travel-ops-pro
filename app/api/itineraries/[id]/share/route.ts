@@ -141,9 +141,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           .eq('itinerary_id', id)
           .is('revoked_at', null)
           .maybeSingle()
-        // Record this approval on the winner's link too; if that fails the
-        // page simply keeps withholding the price, which is the safe side.
-        if (raced) await supabase!.from('itinerary_shares').update(approval).eq('id', raced.id)
+        // Record this approval on the winner's link too, and say so if that
+        // fails — the operator approved, and must not be told it took.
+        if (raced) {
+          const { error: racedErr } = await supabase!.from('itinerary_shares').update(approval).eq('id', raced.id)
+          if (racedErr) {
+            return NextResponse.json({ success: false, error: clientMessage(racedErr, 'Failed to update share link') }, { status: 500 })
+          }
+        }
         token = raced?.token
       }
 

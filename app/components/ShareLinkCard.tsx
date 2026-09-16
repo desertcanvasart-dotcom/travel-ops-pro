@@ -151,7 +151,7 @@ export default function ShareLinkCard({ itineraryId }: { itineraryId: string }) 
             </button>
           </div>
 
-          {state.price_hidden && state.price_hidden !== 'unchecked' && (
+          {state.price_hidden && (
             <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md flex gap-2">
               <AlertTriangle className="w-4 h-4 text-yellow-700 shrink-0 mt-0.5" />
               <div className="text-yellow-800 text-xs space-y-2">
@@ -163,7 +163,9 @@ export default function ShareLinkCard({ itineraryId }: { itineraryId: string }) 
                       })
                     : state.price_hidden === 'draft'
                       ? t('priceHiddenDraft')
-                      : t('priceHiddenAmount')}
+                      : state.price_hidden === 'unchecked'
+                        ? t('priceUnchecked')
+                        : t('priceHiddenAmount')}
                 </p>
                 {state.price_hidden === 'new_gaps' && (
                   <button

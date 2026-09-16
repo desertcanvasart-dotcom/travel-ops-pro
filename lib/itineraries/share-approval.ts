@@ -30,14 +30,25 @@ export function toApprovedGaps(gaps: readonly QuoteGap[]): ApprovedGap[] {
   return gaps.map(g => ({ day: g.day ?? null, name: g.name }))
 }
 
-/** Current gaps the stored approval does not cover. Anything unreadable covers nothing. */
+/**
+ * Current gaps the stored approval does not cover. Anything unreadable covers
+ * nothing. Counted, not just matched: a day may hold two services with the same
+ * name, and approving one gap must not cover a second one added later.
+ */
 export function unapprovedGaps(current: readonly QuoteGap[], approved: unknown): QuoteGap[] {
-  const keys = new Set(
-    (Array.isArray(approved) ? approved : [])
-      .filter((a): a is Record<string, unknown> => !!a && typeof a === 'object')
-      .map(keyOf),
-  )
-  return current.filter(g => !keys.has(keyOf(g)))
+  const remaining = new Map<string, number>()
+  for (const a of Array.isArray(approved) ? approved : []) {
+    if (!a || typeof a !== 'object') continue
+    const k = keyOf(a as Record<string, unknown>)
+    remaining.set(k, (remaining.get(k) ?? 0) + 1)
+  }
+  return current.filter(g => {
+    const k = keyOf(g)
+    const left = remaining.get(k) ?? 0
+    if (left === 0) return true
+    remaining.set(k, left - 1)
+    return false
+  })
 }
 
 export type SharePriceDecision =

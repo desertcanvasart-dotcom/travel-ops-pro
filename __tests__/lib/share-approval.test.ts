@@ -29,6 +29,12 @@ describe('unapprovedGaps', () => {
     expect(unapprovedGaps(gaps, [{ day: 1, name: 'Airport transfer' }, { day: 3, name: 'Lunch' }]).map(g => g.day)).toEqual([2])
   })
 
+  it('a second same-named gap on the same day is not covered by one approval', () => {
+    const twice = [...gaps, { day: 2, name: 'Lunch', issue: 'x' }]
+    expect(unapprovedGaps(twice, [{ day: 1, name: 'Airport transfer' }, { day: 2, name: 'Lunch' }]).map(g => g.name)).toEqual(['Lunch'])
+    expect(unapprovedGaps(twice, toApprovedGaps(twice))).toEqual([])
+  })
+
   it('round-trips the stored record', () => {
     expect(unapprovedGaps(gaps, JSON.parse(JSON.stringify(toApprovedGaps(gaps))))).toEqual([])
   })
@@ -77,6 +83,8 @@ describe('wiring', () => {
     expect(route).toContain('toApprovedGaps(gaps)')
     expect(route).toMatch(/\.update\(approval\)\s*\.eq\('id', existing\.id\)/)
     expect(route).toContain('...approval,')
+    // The race path reports a failed approval rather than claiming success.
+    expect(route).toContain("if (racedErr)")
   })
 
   it('the public page re-checks on every view and renders no total when withheld', () => {

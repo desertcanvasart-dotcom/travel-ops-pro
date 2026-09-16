@@ -1433,7 +1433,8 @@
       "priceHiddenDraft": "The traveller cannot see the price while this itinerary is a draft.",
       "priceHiddenAmount": "The traveller cannot see the price: the total is not a valid amount.",
       "reviewAgain": "Review and share anyway",
-      "approvedGaps": "Shared knowingly with {count, plural, one {# service} other {# services}} without a cost."
+      "approvedGaps": "Shared knowingly with {count, plural, one {# service} other {# services}} without a cost.",
+      "priceUnchecked": "The price status could not be checked, so the traveller is not seeing the price right now. Reload this page to try again."
     },
     "nittei": {
       "button": "Customer 日程表",
