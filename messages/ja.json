@@ -7343,6 +7343,38 @@
       "wholeStayHotel": "{city}の全泊でこのホテルを使用します。",
       "wholeStayShip": "乗船中の全泊でこの船を使用します。",
       "nights": "{count}泊"
+    },
+    "transport": {
+      "label": "交通",
+      "automatic": "自動",
+      "custom": "この日で変更済み",
+      "reset": "自動に戻す",
+      "loading": "交通を計算中…",
+      "loadFailed": "交通を計算できませんでした。日程を編集するか再読み込みしてください。",
+      "cruisePackage": "観光の交通はクルーズ交通パッケージに含まれます。",
+      "none": "この日は交通なし。",
+      "service": "サービス",
+      "from": "出発",
+      "to": "到着",
+      "city": "都市",
+      "noRate": "料金なし",
+      "remove": "削除",
+      "add": "交通を追加…",
+      "customHint": "この日は上記の交通のみを使用し、自動ルール(道路の切り替えを含む)は適用されません。",
+      "costNote": "グループ料金(マージン前)。航空券・列車は別計算です。",
+      "types": {
+        "airport_transfer": "空港送迎",
+        "airport_with_sightseeing": "空港送迎(観光付き)",
+        "city_transfer": "市内送迎",
+        "city_tour": "市内観光車両",
+        "half_day": "半日車両",
+        "day_tour": "1日車両",
+        "extended_day_tour": "長時間車両",
+        "intercity": "都市間移動",
+        "intercity_with_sightseeing": "都市間移動(観光付き)",
+        "sound_light": "音と光のショー送迎",
+        "dinner_transfer": "夕食送迎"
+      }
     }
   },
   "bookings": {

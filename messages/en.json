@@ -6758,6 +6758,38 @@
       "wholeStayHotel": "Every night in {city} uses this hotel.",
       "wholeStayShip": "Every night aboard uses this ship.",
       "nights": "{count, plural, one {# night} other {# nights}}"
+    },
+    "transport": {
+      "label": "Transport",
+      "automatic": "Automatic",
+      "custom": "Changed on this day",
+      "reset": "Reset to automatic",
+      "loading": "Working out the transport…",
+      "loadFailed": "Could not work out the transport. Edit the day or reload to try again.",
+      "cruisePackage": "Sightseeing transport is in the cruise transport package.",
+      "none": "No transport on this day.",
+      "service": "Service",
+      "from": "From",
+      "to": "To",
+      "city": "City",
+      "noRate": "No rate",
+      "remove": "Remove",
+      "add": "Add transport…",
+      "customHint": "This day uses exactly the lines above; the automatic rules no longer change it (the Road toggle included).",
+      "costNote": "Cost for the group, before margin. Flights and trains are priced separately.",
+      "types": {
+        "airport_transfer": "Airport transfer",
+        "airport_with_sightseeing": "Airport transfer with sightseeing",
+        "city_transfer": "City transfer",
+        "city_tour": "City tour vehicle",
+        "half_day": "Half-day vehicle",
+        "day_tour": "Full-day vehicle",
+        "extended_day_tour": "Extended-day vehicle",
+        "intercity": "Road transfer",
+        "intercity_with_sightseeing": "Road transfer with sightseeing",
+        "sound_light": "Sound & light transfer",
+        "dinner_transfer": "Dinner transfer"
+      }
     }
   },
   "bookings": {
