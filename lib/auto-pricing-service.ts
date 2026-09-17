@@ -56,6 +56,8 @@ import { tripAccommodationCost, type NightRates } from '@/lib/pricing/rooming'
 import { resolveAttractions, buildAliasMap } from '@/lib/pricing/attractions'
 import { PRESET_TIERS, presetTierFor } from '@/lib/vocabulary'
 import { cruiseSailings, packageForDuration, type Sailing } from '@/lib/pricing/cruise-package'
+import { vehicleKeyLabel, vehicleRateForPax } from '@/lib/rates/vehicle-bands'
+import { rateGuideMode } from '@/lib/guides/guide-mode'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -385,6 +387,9 @@ interface CruiseTransportPackage {
   minibus_capacity: number | null
   bus_rate: number | null
   bus_capacity: number | null
+  /** The vehicles list (20261018) — read through lib/rates/vehicle-bands, which
+   *  falls back to the five columns above for a row from before it. */
+  vehicles?: unknown
   includes: string | null
   notes: string | null
   is_active: boolean
@@ -397,7 +402,8 @@ export interface CruisePackageInfo {
   /** The sailing's length in days: nights aboard + 1 (lib/pricing/cruise-package). */
   durationDays: number
   packageRate: number
-  vehicleType: VehicleType
+  /** The vehicle's word (its vocabulary key, readable). */
+  vehicleType: string
   includes: string | null
   /** The sailing this package is for. */
   sailing?: Sailing
@@ -1945,10 +1951,14 @@ export async function getGuideRate(
   /** Converts rows entered in another currency into the run currency —
    *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
   normalizer?: RateNormalizer,
-  opts?: { grade?: GuideGrade; duration?: 'full_day' | 'meet_greet' }
+  opts?: { grade?: GuideGrade; duration?: 'full_day' | 'meet_greet'; mode?: 'spot' | 'throughout' }
 ): Promise<{ id: string; name: string; dailyRate: number } | null> {
   const grade = opts?.grade ?? 'egyptologist'
   const duration = opts?.duration ?? 'full_day'
+  // A rate is for spot or throughout guiding (guide_rates.guide_mode, 20261018);
+  // a quote's guide is priced from its own mode only — a throughout quote with
+  // no throughout rate is No rate, never the spot rate (operator, 2026-09-17).
+  const mode = opts?.mode ?? 'spot'
   try {
     // The language is matched EXACTLY, by vocabulary key, in memory: rows
     // hold the word ("Japanese") or the key ("japanese") and callers ask by
@@ -1958,7 +1968,8 @@ export async function getGuideRate(
       .from('guide_rates')
       .select('*')
       .eq('is_active', true)
-    const ofLanguage = ((activeRows ?? []) as Record<string, any>[]).filter(r => sameGuideLanguage(r.guide_language, language))
+    const ofLanguage = ((activeRows ?? []) as Record<string, any>[])
+      .filter(r => sameGuideLanguage(r.guide_language, language) && rateGuideMode(r) === mode)
 
     // 1. Exact grade + duration in guide_rates.
     let rawGuideRate: Record<string, any> | null =
@@ -1966,7 +1977,7 @@ export async function getGuideRate(
 
     // 2. Default ask only: the pre-grades behaviour (first active row of the
     //    language, any type/duration) so nothing priced yesterday holes today.
-    if (!rawGuideRate && grade === 'egyptologist' && duration === 'full_day') {
+    if (!rawGuideRate && grade === 'egyptologist' && duration === 'full_day' && mode === 'spot') {
       rawGuideRate = ofLanguage[0] ?? null
     }
     const guideRate = normalizer && rawGuideRate
@@ -1988,8 +1999,8 @@ export async function getGuideRate(
     // 3. Legacy fallback to the guides supplier view — default ask only: a
     //    'senior' or 'meet_greet' ask must never be silently priced from a
     //    supplier's generic daily_rate.
-    if (grade !== 'egyptologist' || duration !== 'full_day') {
-      console.warn(`⚠️ No guide rate for ${language} ${grade}/${duration} — flagging hole (no fabrication)`)
+    if (grade !== 'egyptologist' || duration !== 'full_day' || mode !== 'spot') {
+      console.warn(`⚠️ No ${mode} guide rate for ${language} ${grade}/${duration} — flagging hole (no fabrication)`)
       return null
     }
     const { data: guides, error } = await supabaseAdmin
@@ -2419,33 +2430,18 @@ export function findCruiseTransportRule(
 }
 
 /**
- * Select the vehicle + rate from a cruise transport package by group size:
- * smallest vehicle whose capacity fits numPax. Byte-for-byte the same selection
- * as app/api/b2b/calculate-price's selectVehicleFromPackage — so the two paths
- * produce the same cruise-transport cost for the same itinerary/pax.
+ * Select the vehicle + rate from a cruise transport package by group size —
+ * the SAME rule as a transportation rate (lib/rates/vehicle-bands
+ * vehicleRateForPax: the vehicle whose vocabulary size the group falls in,
+ * else the smallest that covers it, else the largest offered). A package that
+ * offers no vehicle answers rate 0, which pricing treats as No rate.
  */
 export function getCruiseTransportRate(
   pkg: CruiseTransportPackage,
   numPax: number
-): { vehicleType: VehicleType; rate: number } {
-  if (pkg.sedan_capacity != null && numPax <= pkg.sedan_capacity && pkg.sedan_rate) {
-    return { vehicleType: 'Sedan', rate: pkg.sedan_rate }
-  }
-  if (pkg.minivan_capacity != null && numPax <= pkg.minivan_capacity && pkg.minivan_rate) {
-    return { vehicleType: 'Minivan', rate: pkg.minivan_rate }
-  }
-  if (pkg.van_capacity != null && numPax <= pkg.van_capacity && pkg.van_rate) {
-    return { vehicleType: 'Van', rate: pkg.van_rate }
-  }
-  if (pkg.minibus_capacity != null && numPax <= pkg.minibus_capacity && pkg.minibus_rate) {
-    return { vehicleType: 'Minibus', rate: pkg.minibus_rate }
-  }
-  // Overflow: largest PRICED vehicle. A package's blank vehicles are ones the
-  // operator does not run — fall through them rather than pricing at 0.
-  return {
-    vehicleType: 'Bus',
-    rate: pkg.bus_rate ?? pkg.minibus_rate ?? pkg.van_rate ?? pkg.minivan_rate ?? pkg.sedan_rate ?? 0,
-  }
+): { vehicleType: string; rate: number } {
+  const band = vehicleRateForPax(pkg as unknown as Record<string, unknown>, numPax)
+  return band ? { vehicleType: vehicleKeyLabel(band.key), rate: band.rate_eur } : { vehicleType: 'Vehicle', rate: 0 }
 }
 
 /**
@@ -2699,7 +2695,7 @@ export async function calculateDayBasedPricing(
       : Promise.resolve({ rates: null } as Awaited<ReturnType<typeof resolveCruiseStay>>),
     Promise.all(hotelCities.map(city => resolveHotelStay(city, tier, isEurPassport, params.travelDate, rateNormalizer, propertyChoices.hotelByCity.get(city.toLowerCase())))),
     fetchTicketRates(ticketLegs, rateNormalizer),
-    getGuideRate(language, tier, rateNormalizer, { grade: guideGrade }),
+    getGuideRate(language, tier, rateNormalizer, { grade: guideGrade, mode: guideMode }),
     getMealRates(tier, rateNormalizer),
     getItemizedTips(tier, rateNormalizer),
     // Water cost from DB (fixed_daily_costs table) instead of hardcoding
@@ -2819,18 +2815,20 @@ export async function calculateDayBasedPricing(
   // sightseeing bill at it, not at the full guiding day (operator, 2026-09-04).
   const hasSightseeingDay = (d: (typeof itinerary)[number]) => d.services.guide_required || d.attractions.length > 0
   const meetGreetGuideRate = guideMode === 'throughout'
-    ? await getGuideRate(language, tier, rateNormalizer, { grade: guideGrade, duration: 'meet_greet' })
+    ? await getGuideRate(language, tier, rateNormalizer, { grade: guideGrade, duration: 'meet_greet', mode: 'throughout' })
     : null
 
   // Flag missing rates that the itinerary actually needs (no fabrication).
   const needsGuide = guideMode === 'throughout' || itinerary.some(hasSightseeingDay)
-  const noGuideRateMessage = `No ${language} guide rate (${tier}). Add it in Rates → Guides.`
-  const noMeetGreetRateMessage = `No ${language} meet/assist-day guide rate (${guideGrade}). A throughout guide bills arrival and departure days at it — add a Guides rate with duration "Meet & Assist day".`
+  const noGuideRateMessage = guideMode === 'throughout'
+    ? `No throughout ${language} guide rate (${guideGrade}). Add it in Rates → Guides with Guide mode "Throughout".`
+    : `No ${language} guide rate (${tier}). Add it in Rates → Guides.`
+  const noMeetGreetRateMessage = `No throughout ${language} meet/assist-day guide rate (${guideGrade}). A throughout guide bills arrival and departure days at it — add a Guides rate with Guide mode "Throughout" and duration "Meet & Assist day".`
   if (needsGuide && !guideRate) {
     addHole({
       kind: 'guide',
       reason: 'missing',
-      lookupAttempted: `guide_rates language~${language} guide_type=${guideGrade} tier=${tier}`,
+      lookupAttempted: `guide_rates language~${language} guide_type=${guideGrade} guide_mode=${guideMode} tier=${tier}`,
       message: noGuideRateMessage,
     })
   }
@@ -2838,7 +2836,7 @@ export async function calculateDayBasedPricing(
     addHole({
       kind: 'guide',
       reason: 'missing',
-      lookupAttempted: `guide_rates language~${language} guide_type=${guideGrade} tour_duration=meet_greet`,
+      lookupAttempted: `guide_rates language~${language} guide_type=${guideGrade} guide_mode=throughout tour_duration=meet_greet`,
       message: noMeetGreetRateMessage,
     })
   }
@@ -3798,7 +3796,8 @@ export async function calculateDayBasedPricing(
 
   const MEAL_LABEL = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' } as const
   const includedMealReason = (day: ItineraryDay, meal: 'breakfast' | 'lunch' | 'dinner'): string => {
-    if (day.accommodation_type === 'cruise') return 'Included aboard the cruise'
+    // Operator, 2026-09-17: "call it included on board".
+    if (day.accommodation_type === 'cruise') return 'Included on board'
     if (meal === 'breakfast') return 'Included in the hotel rate'
     return 'Included in the hotel board'
   }

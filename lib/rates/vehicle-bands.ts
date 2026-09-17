@@ -24,12 +24,16 @@
 //   - a vehicle absent from the list is not offered; a blank or zero rate
 //     never was ("leave the rate blank and it is never used", PR #102)
 //   - rate_non_eur null means "same as EUR"
-//   - capacity bands are the ROW's own (the agency's contract), not the
-//     vocabulary's — the vocabulary's min/max are only the default for a
-//     NEW row
+//   - capacity bands are the VOCABULARY's (operator, 2026-09-17:
+//     "transportation rates always follow the Vocabulary vehicle sizes"):
+//     every write stamps them (stampVocabularyBands) and a band changed in
+//     Settings re-stamps every row (lib/rates/vehicle-bands-server). A vehicle
+//     the vocabulary no longer lists keeps the band it was entered with.
+//   - transport packages (b2b_transport_packages, 20261018) carry the same
+//     list; a package row from before it reads its five columns
 // ============================================
 
-import { KEY_PATTERN, slugifyKey, vehicleForPax } from '@/lib/vocabulary'
+import { KEY_PATTERN, slugifyKey, vehicleForPax, type VehicleBand } from '@/lib/vocabulary'
 
 export interface VehicleBandRate {
   /** The vocabulary vehicle key ('sedan', '4x4', …). */
@@ -112,12 +116,51 @@ export function parseVehicles(value: unknown): VehicleBandRate[] | null {
   return sanitizeVehicles(value)
 }
 
+/** The five vehicle columns a transport package carried before its list
+ *  (20261018): a rate and a MAXIMUM each; a band starts one above the column
+ *  before it. The migration's backfill, for a row read before it ran. */
+const PACKAGE_COLUMN_DEFAULT_MAX: Record<PresetVehicleKey, number> = { sedan: 3, minivan: 7, van: 12, minibus: 20, bus: 50 }
+function packageColumnBands(row: Record<string, unknown>): VehicleBandRate[] | null {
+  if (!PRESET_VEHICLE_KEYS.some(k => `${k}_rate` in row)) return null
+  const out: VehicleBandRate[] = []
+  let floor = 1
+  for (const k of PRESET_VEHICLE_KEYS) {
+    const max = num(row[`${k}_capacity`]) ?? PACKAGE_COLUMN_DEFAULT_MAX[k]
+    const rate = num(row[`${k}_rate`])
+    if (rate !== null && rate > 0) {
+      out.push({ key: k, rate_eur: rate, rate_non_eur: null, capacity_min: floor, capacity_max: Math.max(max, floor) })
+    }
+    floor = max + 1
+  }
+  return out.sort(byBand)
+}
+
+/** The vocabulary's band on every vehicle it lists (min_pax/max_pax), the
+ *  rest as they are, re-sorted by band. `bands` empty = unchanged. */
+export function stampVocabularyBands(vehicles: readonly VehicleBandRate[], bands: readonly VehicleBand[]): VehicleBandRate[] {
+  const byKey = new Map(bands.filter(b => b.max_pax >= Math.max(b.min_pax, 1)).map(b => [b.key, b]))
+  return vehicles
+    .map(v => {
+      const b = byKey.get(v.key)
+      return b ? { ...v, capacity_min: Math.max(b.min_pax, 1), capacity_max: b.max_pax } : { ...v }
+    })
+    .sort(byBand)
+}
+
+/** Whether stamping changed anything — so a re-stamp writes only rows that differ. */
+export function sameVehicleBands(a: readonly VehicleBandRate[], b: readonly VehicleBandRate[]): boolean {
+  return a.length === b.length && a.every((v, i) => v.key === b[i].key && v.capacity_min === b[i].capacity_min && v.capacity_max === b[i].capacity_max && v.rate_eur === b[i].rate_eur && v.rate_non_eur === b[i].rate_non_eur)
+}
+
 /** The vehicles this row offers, sorted smallest band first — from the
- *  `vehicles` list when the row has one, else the oldest shape (one
- *  base_rate for one vehicle_type). Empty when the row prices nothing. */
+ *  `vehicles` list when the row has one, else a transport package's five
+ *  columns, else the oldest shape (one base_rate for one vehicle_type).
+ *  Empty when the row prices nothing. */
 export function vehicleBands(row: Record<string, unknown>): VehicleBandRate[] {
   const listed = parseVehicles(row.vehicles)
   if (listed) return listed
+  const packaged = packageColumnBands(row)
+  if (packaged) return packaged
 
   const base = num(row.base_rate_eur)
   if (base !== null && base > 0) {
@@ -202,12 +245,12 @@ export function unknownVehicleKeys(vehicles: readonly VehicleBandRate[], allowed
 
 // ---- Flat sheets (the CSV importer / exporter) ----------------------------
 
-/** The vehicles a FLAT sheet row carries: one <key>_rate_eur / _capacity_min /
- *  _capacity_max column-set per vehicle in `specs` (the agency's sheet). A
- *  sheet row is the whole list — every vehicle it prices — so this REPLACES,
- *  where a form's legacy fields patch. A vehicle without a rate is not
- *  offered; a band the sheet leaves blank is the spec's (Settings). Null
- *  when a band is malformed. */
+/** The vehicles a FLAT sheet row carries: one <key>_rate_eur column-set per
+ *  vehicle in `specs` (the agency's sheet). A sheet row is the whole list —
+ *  every vehicle it prices — so this REPLACES, where a form's legacy fields
+ *  patch. A vehicle without a rate is not offered. The band is always the
+ *  spec's (Settings → Vocabulary); the sheet's capacity cells are written
+ *  on export for reading and ignored on import. Null when a band is malformed. */
 export function vehiclesFromFlatRow(
   row: Record<string, unknown>,
   specs: readonly { key: string; min: number; max: number }[],
@@ -216,8 +259,8 @@ export function vehiclesFromFlatRow(
     key: s.key,
     rate_eur: row[`${s.key}_rate_eur`],
     rate_non_eur: row[`${s.key}_rate_non_eur`],
-    capacity_min: num(row[`${s.key}_capacity_min`]) ?? s.min,
-    capacity_max: num(row[`${s.key}_capacity_max`]) ?? s.max,
+    capacity_min: s.min,
+    capacity_max: s.max,
   }))
   return sanitizeVehicles(raw)
 }

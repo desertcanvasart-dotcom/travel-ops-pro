@@ -6,6 +6,7 @@ import { convertAmount } from '../lib/calculator'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
 import { useTierOptions } from '@/hooks/useTierOptions'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 
 interface GridHeaderProps {
   config: GridConfig
@@ -34,6 +35,7 @@ const DEFAULT_MARGINS: Record<ClientType, number> = {
 }
 
 export default function GridHeader({ config, onChange, totals }: GridHeaderProps) {
+  const guideModeLabel = useVocabLabel('guide_mode')
   const tierOptions = useTierOptions(presetTierLabel)
   const [partners, setPartners] = useState<B2BPartner[]>([])
   const update = (partial: Partial<GridConfig>) => onChange({ ...config, ...partial })
@@ -212,7 +214,8 @@ export default function GridHeader({ config, onChange, totals }: GridHeaderProps
                   : 'bg-gray-100 border-gray-200 text-gray-500 hover:bg-gray-150'
               }`}
             >
-              {(config.guideMode ?? 'spot') === 'throughout' ? 'Throughout' : 'Spot'}
+              {/* The agency's words (Settings → Vocabulary → Guide modes). */}
+              {guideModeLabel(config.guideMode ?? 'spot', (config.guideMode ?? 'spot') === 'throughout' ? 'Throughout' : 'Spot')}
             </button>
           )}
 

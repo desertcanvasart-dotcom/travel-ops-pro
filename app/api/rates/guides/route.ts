@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { guideModeKey } from '@/lib/guides/guide-mode'
 import { guideLanguageKey, sameGuideLanguage } from '@/lib/guides/guide-language'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
@@ -64,6 +65,8 @@ export async function POST(request: NextRequest) {
       guide_type: body.guide_type || 'licensed',
       city: body.city || null,
       tour_duration: body.tour_duration || 'full_day',
+      // spot / throughout — which quotes this rate prices (lib/guides/guide-mode).
+      guide_mode: guideModeKey(body.guide_mode),
       base_rate_eur: parseFloat(body.base_rate_eur) || 0,
       base_rate_non_eur: parseFloat(body.base_rate_non_eur) || 0,
       season: body.season || null,
@@ -81,6 +84,7 @@ export async function POST(request: NextRequest) {
       .select('*')
       .eq('guide_type', newRate.guide_type)
       .eq('tour_duration', newRate.tour_duration)
+      .eq('guide_mode', newRate.guide_mode)
     if (newRate.city) {
       existingQuery = existingQuery.eq('city', newRate.city)
     } else {

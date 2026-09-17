@@ -52,12 +52,14 @@ describe('transportationConfigFor — the sheet for an agency', () => {
 })
 
 describe('a sheet row ↔ the vehicles list', () => {
-  it('folds the cells into a list — the whole list, a blank band from the spec, no rate = not offered', () => {
+  it('folds the cells into a list — the whole list, sizes always from the spec (Vocabulary), no rate = not offered', () => {
+    // A size typed in the sheet is ignored: rates follow the Vocabulary's
+    // vehicle sizes (operator, 2026-09-17).
     const row = { service_code: 'LXR-1', sedan_rate_eur: 45, '4x4_rate_eur': '85', '4x4_capacity_max': '5', bus_rate_eur: '' }
     const list = vehiclesFromFlatRow(row, agency)
     expect(list).toEqual([
       { key: 'sedan', rate_eur: 45, rate_non_eur: null, capacity_min: 1, capacity_max: 2 },
-      { key: '4x4', rate_eur: 85, rate_non_eur: null, capacity_min: 1, capacity_max: 5 },
+      { key: '4x4', rate_eur: 85, rate_non_eur: null, capacity_min: 1, capacity_max: 6 },
     ])
   })
   it('strips every vehicle cell so none reaches the upsert — the table has no per-vehicle column (20261006)', () => {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { guideModeKey } from '@/lib/guides/guide-mode'
 import { guideLanguageKey } from '@/lib/guides/guide-language'
 import { clientMessage } from '@/lib/api-errors'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
@@ -47,6 +48,7 @@ export async function PUT(
     if (body.guide_type !== undefined) updateData.guide_type = body.guide_type
     if (body.city !== undefined) updateData.city = body.city || null
     if (body.tour_duration !== undefined) updateData.tour_duration = body.tour_duration
+    if (body.guide_mode !== undefined) updateData.guide_mode = guideModeKey(body.guide_mode)
     if (body.base_rate_eur !== undefined) updateData.base_rate_eur = parseFloat(body.base_rate_eur) || 0
     if (body.base_rate_non_eur !== undefined) updateData.base_rate_non_eur = parseFloat(body.base_rate_non_eur) || 0
     if (body.rate_currency !== undefined) updateData.rate_currency = body.rate_currency || null

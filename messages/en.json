@@ -3703,14 +3703,12 @@
       "van": "Van",
       "minibus": "Minibus",
       "bus": "Bus",
-      "useSettingsBand": "Use Settings band ({min}–{max})",
       "alignBands": "Align bands with Settings",
       "alignBandsNone": "Every rate already uses the bands in Settings.",
       "alignBandsConfirm": "{count} rates carry passenger bands that differ from Settings → Vocabulary → Vehicle types. Set them to the Settings bands? Rates stay as they are, but a group may fall into a different vehicle afterwards, so prices can change.",
       "alignBandsDone": "{count} rates now use the Settings bands.",
-      "settingsBandDiffers": "Settings says {min}–{max}",
       "notInVocabulary": "not in your vehicle types",
-      "vehicleRatesHint": "Leave the rate empty for a vehicle you do not run — it is then never used to price a trip, and the next vehicle up takes the group. Capacity is yours to set per route; a new rate starts from the bands in Settings → Vocabulary → Vehicle types.",
+      "vehicleRatesHint": "Leave the price empty for a vehicle you do not run — it is never used to price a trip, and the next vehicle up takes the group. Passenger sizes come from Settings → Vocabulary → Vehicle types.",
       "suv": "SUV",
       "fourByFour": "4x4",
       "selectDepartureCity": "Select Departure City",
@@ -3757,7 +3755,9 @@
           "same_day_return": "There and back the same day — used when the day sleeps back at its start.",
           "overnight_return": "Stays the night and drives back the next day — charged once, on the day out; the day back lists the drive as included."
         }
-      }
+      },
+      "sizeFromVocabulary": "Set in Settings → Vocabulary → Vehicle types",
+      "paxRange": "{min}–{max} pax"
     },
     "cruises": {
       "title": "Cruise Rates",
@@ -4183,7 +4183,8 @@
         "activeBookings": "Active (available for bookings)",
         "cancel": "Cancel",
         "update": "Update Rate",
-        "create": "Create Rate"
+        "create": "Create Rate",
+        "guideMode": "Guide mode"
       },
       "table": {
         "language": "Language",
@@ -4241,7 +4242,11 @@
       "noLanguages": "No languages recorded yet",
       "languagesSaved": "Languages saved for {name}",
       "languagesFailed": "Failed to save languages",
-      "languagesHint": "Used by the pricing engine to match a guide to a language when no guide rate row exists."
+      "languagesHint": "Used by the pricing engine to match a guide to a language when no guide rate row exists.",
+      "guideModes": {
+        "spot": "Spot guide",
+        "throughout": "Throughout guide"
+      }
     },
     "attractions": {
       "title": "Attractions & Entrance Fees",
@@ -6485,11 +6490,6 @@
     "tier3Default": "Tier 3",
     "tier4Default": "Tier 4",
     "includes": "Includes:",
-    "sedan": "Sedan",
-    "minivan": "Minivan",
-    "van": "Van",
-    "minibus": "Minibus",
-    "bus": "Bus",
     "editPricingRule": "Edit Pricing Rule",
     "addPricingRule": "Add Pricing Rule",
     "serviceName": "Service Name",
@@ -6554,8 +6554,7 @@
     "failedToDeletePackage": "Failed to delete package",
     "deletePackageConfirm": "Delete transport package \"{packageName}\"?",
     "leaveZeroUnlimited": "Leave 0 for unlimited",
-    "vehicleRatesHint": "Leave the rate empty for a vehicle you do not run — it is never used to price a trip, and the next vehicle up takes the group. Capacity is yours to set.",
-    "vehicleNotUsed": "Not used (no rate)"
+    "vehicleRateRequired": "Enter a price for at least one vehicle"
   },
   "b2bPartners": {
     "title": "B2B Partners",

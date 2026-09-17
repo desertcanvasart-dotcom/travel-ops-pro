@@ -11,6 +11,8 @@ import { Copy, Settings2, Plus, Edit, Trash2, X, Save, Loader2,
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import VehicleRatesTable, { useVehicleOptions, vehicleListFromRows, vehicleRowsFor, type VehicleFormRows } from '@/components/rates/VehicleRatesTable'
+import { vehicleBands } from '@/lib/rates/vehicle-bands'
 
 // ============================================
 // B2B PRICING RULES MANAGEMENT
@@ -27,16 +29,9 @@ interface TransportPackage {
   destination_city: string
   duration_days: number
   rate_currency?: string | null
-  sedan_rate: number | null
-  sedan_capacity: number
-  minivan_rate: number | null
-  minivan_capacity: number
-  van_rate: number | null
-  van_capacity: number
-  minibus_rate: number | null
-  minibus_capacity: number
-  bus_rate: number | null
-  bus_capacity: number
+  /** The vehicles list (20261018); a row from before it reads its five
+   *  <vehicle>_rate / _capacity columns (lib/rates/vehicle-bands). */
+  vehicles?: unknown
   description: string | null
   includes: string | null
   is_active: boolean
@@ -56,16 +51,8 @@ interface PackageFormData {
   destination_city: string
   duration_days: number
   rate_currency: string
-  sedan_rate: number
-  sedan_capacity: number
-  minivan_rate: number
-  minivan_capacity: number
-  van_rate: number
-  van_capacity: number
-  minibus_rate: number
-  minibus_capacity: number
-  bus_rate: number
-  bus_capacity: number
+  /** One row per vocabulary vehicle — the transportation form's table. */
+  vehicles: VehicleFormRows
   description: string
   includes: string
   is_active: boolean
@@ -79,23 +66,14 @@ const DEFAULT_PACKAGE_FORM: PackageFormData = {
   destination_city: 'Aswan',
   duration_days: 5,
   rate_currency: '',
-  sedan_rate: 180,
-  sedan_capacity: 3,
-  minivan_rate: 250,
-  minivan_capacity: 7,
-  van_rate: 320,
-  van_capacity: 12,
-  minibus_rate: 400,
-  minibus_capacity: 20,
-  bus_rate: 500,
-  bus_capacity: 50,
+  vehicles: {},
   description: '',
   includes: '',
   is_active: true
 }
 
 export default function B2BPricingRulesPage() {
-  const { rateCurrency, rateSymbol, formatWithConversion } = useCurrency()
+  const { rateCurrency, formatWithConversion } = useCurrency()
 
   // A package stores the currency its rates were entered in. Showing the
   // ORG symbol in front of a row's raw number said "$2000" for a package
@@ -118,6 +96,9 @@ export default function B2BPricingRulesPage() {
   const [expandedPackages, setExpandedPackages] = useState(true)
 
   const [packageForm, setPackageForm] = useState<PackageFormData>(DEFAULT_PACKAGE_FORM)
+  // The vehicles the agency lists, with the vocabulary's sizes — the same
+  // rows a transportation rate is entered with.
+  const { options: vehicleOptions, vehicleName } = useVehicleOptions()
   const { confirmDelete } = useConfirmDialog()
 
   const showToast = (type: 'success' | 'error', message: string) => {
@@ -150,29 +131,9 @@ export default function B2BPricingRulesPage() {
   // TRANSPORT PACKAGES HANDLERS
   // ============================================
 
-  // Mirror of the engine's vehicle selection (selectVehicleFromPackage): a
-  // vehicle with NO rate is skipped, so the next priced vehicle takes the group
-  // from the previous PRICED vehicle's capacity. The band starts shown here
-  // follow the same rule — what the operator sees is what the engine does.
-  // (Same model as the Transportation Rates screen: blank rate = vehicle not run.)
-  const pkgBandStart = (vehicle: 'minivan' | 'van' | 'minibus' | 'bus'): number => {
-    const chain = [
-      ['sedan', packageForm.sedan_rate, packageForm.sedan_capacity],
-      ['minivan', packageForm.minivan_rate, packageForm.minivan_capacity],
-      ['van', packageForm.van_rate, packageForm.van_capacity],
-      ['minibus', packageForm.minibus_rate, packageForm.minibus_capacity],
-    ] as const
-    const upto = { minivan: 1, van: 2, minibus: 3, bus: 4 }[vehicle]
-    let start = 1
-    for (const [, rate, capacity] of chain.slice(0, upto)) {
-      if (rate) start = capacity + 1
-    }
-    return start
-  }
-
   const handleAddPackage = () => {
     setEditingPackage(null)
-    setPackageForm(DEFAULT_PACKAGE_FORM)
+    setPackageForm({ ...DEFAULT_PACKAGE_FORM, vehicles: vehicleRowsFor(null, vehicleOptions) })
     setShowPackageModal(true)
   }
 
@@ -196,16 +157,7 @@ export default function B2BPricingRulesPage() {
       destination_city: pkg.destination_city || 'Aswan',
       duration_days: pkg.duration_days || 5,
       rate_currency: pkg.rate_currency || '',
-      sedan_rate: pkg.sedan_rate || 0,
-      sedan_capacity: pkg.sedan_capacity || 3,
-      minivan_rate: pkg.minivan_rate || 0,
-      minivan_capacity: pkg.minivan_capacity || 7,
-      van_rate: pkg.van_rate || 0,
-      van_capacity: pkg.van_capacity || 12,
-      minibus_rate: pkg.minibus_rate || 0,
-      minibus_capacity: pkg.minibus_capacity || 20,
-      bus_rate: pkg.bus_rate || 0,
-      bus_capacity: pkg.bus_capacity || 50,
+      vehicles: vehicleRowsFor(pkg as unknown as Record<string, unknown>, vehicleOptions),
       description: pkg.description || '',
       includes: pkg.includes || '',
       is_active: pkg.is_active
@@ -216,6 +168,11 @@ export default function B2BPricingRulesPage() {
   const handleSavePackage = async () => {
     if (!packageForm.package_name) {
       showToast('error', t('packageNameRequired'))
+      return
+    }
+    const vehicles = vehicleListFromRows(packageForm.vehicles)
+    if (vehicles.length === 0) {
+      showToast('error', t('vehicleRateRequired'))
       return
     }
 
@@ -229,9 +186,11 @@ export default function B2BPricingRulesPage() {
         method: editingPackage ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify((() => {
-          const { rate_currency: pickedCurrency, ...rest } = packageForm
+          const { rate_currency: pickedCurrency, vehicles: _rows, ...rest } = packageForm
+          void _rows
           return {
             ...rest,
+            vehicles,
             package_code: packageForm.package_code || `PKG-${Date.now()}`,
             ...rateCurrencyPatch(pickedCurrency, editingPackage?.rate_currency),
           }
@@ -373,32 +332,14 @@ export default function B2BPricingRulesPage() {
                             )}
                           </div>
                           
-                          <div className="grid grid-cols-5 gap-2 text-sm mt-3">
-                            <div className="text-center p-2 bg-gray-50 rounded">
-                              <p className="text-xs text-gray-500">{t('sedan')}</p>
-                              <p className="font-semibold text-gray-900">{pkgRate(pkg.sedan_rate, pkg)}</p>
-                              <p className="text-xs text-gray-400">1-{pkg.sedan_capacity} pax</p>
-                            </div>
-                            <div className="text-center p-2 bg-gray-50 rounded">
-                              <p className="text-xs text-gray-500">{t('minivan')}</p>
-                              <p className="font-semibold text-gray-900">{pkgRate(pkg.minivan_rate, pkg)}</p>
-                              <p className="text-xs text-gray-400">{pkg.sedan_capacity + 1}-{pkg.minivan_capacity} pax</p>
-                            </div>
-                            <div className="text-center p-2 bg-gray-50 rounded">
-                              <p className="text-xs text-gray-500">{t('van')}</p>
-                              <p className="font-semibold text-gray-900">{pkgRate(pkg.van_rate, pkg)}</p>
-                              <p className="text-xs text-gray-400">{pkg.minivan_capacity + 1}-{pkg.van_capacity} pax</p>
-                            </div>
-                            <div className="text-center p-2 bg-gray-50 rounded">
-                              <p className="text-xs text-gray-500">{t('minibus')}</p>
-                              <p className="font-semibold text-gray-900">{pkgRate(pkg.minibus_rate, pkg)}</p>
-                              <p className="text-xs text-gray-400">{pkg.van_capacity + 1}-{pkg.minibus_capacity} pax</p>
-                            </div>
-                            <div className="text-center p-2 bg-gray-50 rounded">
-                              <p className="text-xs text-gray-500">{t('bus')}</p>
-                              <p className="font-semibold text-gray-900">{pkgRate(pkg.bus_rate, pkg)}</p>
-                              <p className="text-xs text-gray-400">{pkg.minibus_capacity + 1}+ pax</p>
-                            </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-sm mt-3">
+                            {vehicleBands(pkg as unknown as Record<string, unknown>).map(band => (
+                              <div key={band.key} className="text-center p-2 bg-gray-50 rounded">
+                                <p className="text-xs text-gray-500">{vehicleName(band.key)}</p>
+                                <p className="font-semibold text-gray-900">{pkgRate(band.rate_eur, pkg)}</p>
+                                <p className="text-xs text-gray-400">{band.capacity_min}-{band.capacity_max} pax</p>
+                              </div>
+                            ))}
                           </div>
 
                           {pkg.includes && (
@@ -507,127 +448,15 @@ export default function B2BPricingRulesPage() {
               </div>
 
               <div>
-                <h4 className="font-medium text-gray-900 mb-1">{t('vehicleRates', { currency: rateCurrency })}</h4>
-                <p className="text-xs text-gray-500 mb-3">{t('vehicleRatesHint')}</p>
-                <div className="grid grid-cols-5 gap-3">
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <label className="block text-xs font-medium text-gray-600 mb-2">{t('sedan')}</label>
-                    <input
-                      type="number"
-                      value={packageForm.sedan_rate || ''}
-                      onChange={(e) => setPackageForm({ ...packageForm, sedan_rate: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-2"
-                      placeholder={packageForm.rate_currency || rateSymbol}
-                    />
-                    {packageForm.sedan_rate ? (
-                    <div className="flex items-center gap-1 text-xs text-gray-500">
-                      <span>1-</span>
-                      <input
-                        type="number"
-                        value={packageForm.sedan_capacity}
-                        onChange={(e) => setPackageForm({ ...packageForm, sedan_capacity: parseInt(e.target.value) || 3 })}
-                        className="w-10 px-1 py-0.5 border border-gray-300 rounded text-center"
-                      />
-                      <span>pax</span>
-                    </div>
-                    ) : (
-                    <div className="text-xs text-gray-400 italic">{t('vehicleNotUsed')}</div>
-                    )}
-                  </div>
-                  
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <label className="block text-xs font-medium text-gray-600 mb-2">{t('minivan')}</label>
-                    <input
-                      type="number"
-                      value={packageForm.minivan_rate || ''}
-                      onChange={(e) => setPackageForm({ ...packageForm, minivan_rate: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-2"
-                      placeholder={packageForm.rate_currency || rateSymbol}
-                    />
-                    {packageForm.minivan_rate ? (
-                    <div className="flex items-center gap-1 text-xs text-gray-500">
-                      <span>{pkgBandStart('minivan')}-</span>
-                      <input
-                        type="number"
-                        value={packageForm.minivan_capacity}
-                        onChange={(e) => setPackageForm({ ...packageForm, minivan_capacity: parseInt(e.target.value) || 7 })}
-                        className="w-10 px-1 py-0.5 border border-gray-300 rounded text-center"
-                      />
-                      <span>pax</span>
-                    </div>
-                    ) : (
-                    <div className="text-xs text-gray-400 italic">{t('vehicleNotUsed')}</div>
-                    )}
-                  </div>
-
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <label className="block text-xs font-medium text-gray-600 mb-2">{t('van')}</label>
-                    <input
-                      type="number"
-                      value={packageForm.van_rate || ''}
-                      onChange={(e) => setPackageForm({ ...packageForm, van_rate: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-2"
-                      placeholder={packageForm.rate_currency || rateSymbol}
-                    />
-                    {packageForm.van_rate ? (
-                    <div className="flex items-center gap-1 text-xs text-gray-500">
-                      <span>{pkgBandStart('van')}-</span>
-                      <input
-                        type="number"
-                        value={packageForm.van_capacity}
-                        onChange={(e) => setPackageForm({ ...packageForm, van_capacity: parseInt(e.target.value) || 12 })}
-                        className="w-10 px-1 py-0.5 border border-gray-300 rounded text-center"
-                      />
-                      <span>pax</span>
-                    </div>
-                    ) : (
-                    <div className="text-xs text-gray-400 italic">{t('vehicleNotUsed')}</div>
-                    )}
-                  </div>
-
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <label className="block text-xs font-medium text-gray-600 mb-2">{t('minibus')}</label>
-                    <input
-                      type="number"
-                      value={packageForm.minibus_rate || ''}
-                      onChange={(e) => setPackageForm({ ...packageForm, minibus_rate: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-2"
-                      placeholder={packageForm.rate_currency || rateSymbol}
-                    />
-                    {packageForm.minibus_rate ? (
-                    <div className="flex items-center gap-1 text-xs text-gray-500">
-                      <span>{pkgBandStart('minibus')}-</span>
-                      <input
-                        type="number"
-                        value={packageForm.minibus_capacity}
-                        onChange={(e) => setPackageForm({ ...packageForm, minibus_capacity: parseInt(e.target.value) || 20 })}
-                        className="w-10 px-1 py-0.5 border border-gray-300 rounded text-center"
-                      />
-                      <span>pax</span>
-                    </div>
-                    ) : (
-                    <div className="text-xs text-gray-400 italic">{t('vehicleNotUsed')}</div>
-                    )}
-                  </div>
-
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <label className="block text-xs font-medium text-gray-600 mb-2">{t('bus')}</label>
-                    <input
-                      type="number"
-                      value={packageForm.bus_rate || ''}
-                      onChange={(e) => setPackageForm({ ...packageForm, bus_rate: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm mb-2"
-                      placeholder={packageForm.rate_currency || rateSymbol}
-                    />
-                    {packageForm.bus_rate ? (
-                    <div className="text-xs text-gray-500">
-                      {pkgBandStart('bus')}+ pax
-                    </div>
-                    ) : (
-                    <div className="text-xs text-gray-400 italic">{t('vehicleNotUsed')}</div>
-                    )}
-                  </div>
-                </div>
+                <h4 className="font-medium text-gray-900 mb-2">{t('vehicleRates', { currency: packageForm.rate_currency || rateCurrency })}</h4>
+                {/* The transportation form's table: the vocabulary's vehicles
+                    and sizes, one price each (components/rates/VehicleRatesTable). */}
+                <VehicleRatesTable
+                  rows={packageForm.vehicles}
+                  onChange={vehicles => setPackageForm(prev => ({ ...prev, vehicles }))}
+                  vehicleName={vehicleName}
+                  currency={packageForm.rate_currency || rateCurrency}
+                />
               </div>
 
               <div>

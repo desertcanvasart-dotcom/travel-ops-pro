@@ -58,7 +58,7 @@ beforeAll(async () => {
   await db.exec(PRELUDE)
   await db.exec(TRACKER_BOOTSTRAP)
   // Everything up to, but not including, the backfill and its repair.
-  for (const f of readdirSync(MIGRATIONS).filter((f: string) => f.endsWith('.sql') && f !== BACKFILL && f !== TARGET).sort()) {
+  for (const f of readdirSync(MIGRATIONS).filter((f: string) => f.endsWith('.sql') && f < BACKFILL).sort()) {
     await db.exec(sql(f))
     await db.exec("SELECT pg_catalog.set_config('search_path','public',false);")
   }

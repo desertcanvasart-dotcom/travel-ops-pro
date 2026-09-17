@@ -296,6 +296,8 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('guide_type', 'Guide Type', 'text', true),
       col('city', 'City', 'text', false),
       col('tour_duration', 'Tour Duration', 'text', true),
+      // spot | throughout (Settings → Vocabulary → Guide modes); blank = spot.
+      col('guide_mode', 'Guide Mode', 'text', false),
       col('base_rate_eur', 'Rate', 'number', true),
       legacyRate('base_rate_non_eur', 'Rate (non-EU passport, legacy)', 'base_rate_eur'),
       season(), rateValidFrom(), rateValidTo(),

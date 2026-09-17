@@ -1,5 +1,7 @@
 'use client'
 
+import { useVocabOptions } from '@/hooks/useVocabOptions'
+import { isEngineGuideMode } from '@/lib/guides/guide-mode'
 import { DayBandRow, DAY_LINE_EDGE } from '@/components/pricing/DayBand'
 import { groupLinesByDay } from '@/lib/pricing/group-by-day'
 import { todayLocal } from '@/lib/today'
@@ -270,6 +272,10 @@ export default function TourPriceCalculator() {
   // guide rate, extra seat) — distinct from the tour leader above.
   const [guideGrade, setGuideGrade] = useState<'egyptologist' | 'senior'>('egyptologist')
   const [guideMode, setGuideMode] = useState<'spot' | 'throughout'>('spot')
+  const guideModeOptions = useVocabOptions('guide_mode', [
+    { value: 'spot', label: t('guideModeSpot') },
+    { value: 'throughout', label: t('guideModeThroughout') },
+  ]).filter(o => isEngineGuideMode(o.value))
   // Catalogue extras (Rates → Extras) offered on this quote — priced through
   // the engine: cost + this quote's margin, or the operator's set price as-is.
   const [availableExtras, setAvailableExtras] = useState<CatalogueExtraOption[]>([])
@@ -948,25 +954,20 @@ export default function TourPriceCalculator() {
                   <option value="egyptologist">{guideGradeLabel('egyptologist', t('guideGradeEgyptologist'))}</option>
                   <option value="senior">{guideGradeLabel('senior', t('guideGradeSenior'))}</option>
                 </select>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setGuideMode('spot')}
-                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      guideMode === 'spot' ? 'bg-[#647C47] text-white' : 'bg-white border text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    {t('guideModeSpot')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setGuideMode('throughout')}
-                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      guideMode === 'throughout' ? 'bg-[#647C47] text-white' : 'bg-white border text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    {t('guideModeThroughout')}
-                  </button>
+                {/* Settings → Vocabulary → Guide modes: the agency's words; the two the engine prices. */}
+                <div className="flex gap-2" data-testid="guide-mode-choice">
+                  {guideModeOptions.map(o => (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onClick={() => setGuideMode(o.value as 'spot' | 'throughout')}
+                      className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        guideMode === o.value ? 'bg-[#647C47] text-white' : 'bg-white border text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
                   {guideMode === 'throughout' ? t('guideModeThroughoutHint') : t('guideModeSpotHint')}

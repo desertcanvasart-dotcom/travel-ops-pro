@@ -60,6 +60,8 @@ export const RATE_MONETARY_COLUMNS = {
     'rate_low_single_non_eur', 'rate_low_double_non_eur', 'rate_low_triple_non_eur', 'rate_low_suite_non_eur',
     'rate_single_eur', 'rate_double_eur', 'rate_triple_eur', 'rate_suite_eur',
   ],
+  // The vehicles list (20261018) is converted below; the five columns are
+  // what a package read before it carries.
   b2b_transport_packages: ['sedan_rate', 'minivan_rate', 'van_rate', 'minibus_rate', 'bus_rate'],
   // Catalogue extras (migration 20260902): a pinned selling_price is money in
   // the same currency as the cost, so both convert together.
@@ -130,7 +132,7 @@ export function createRateNormalizer(runCurrency: string, deps?: {
     for (const col of RATE_MONETARY_COLUMNS[table]) copy[col] = null
     if (table === 'activity_rates') copy.tiers = null
     if (table === 'accommodation_rates' || table === 'nile_cruises') copy.seasons = null
-    if (table === 'transportation_rates') copy.vehicles = null
+    if (table === 'transportation_rates' || table === 'b2b_transport_packages') copy.vehicles = null
     misses.push({ table, id: (row.id as string | number | undefined) ?? null, currency: String(row.rate_currency) })
     return copy as T
   }
@@ -162,7 +164,7 @@ export function createRateNormalizer(runCurrency: string, deps?: {
           : t
       )
     }
-    if (table === 'transportation_rates' && Array.isArray(copy.vehicles)) {
+    if ((table === 'transportation_rates' || table === 'b2b_transport_packages') && Array.isArray(copy.vehicles)) {
       // The vehicles list (20261005) is where every per-vehicle rate lives
       // (lib/rates/vehicle-bands.ts) — an unconverted list handed the engine
       // raw EGP as if it were the run currency for the 22 minutes this branch

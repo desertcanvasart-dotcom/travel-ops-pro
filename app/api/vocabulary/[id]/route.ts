@@ -14,6 +14,7 @@ import {
   VOCABULARY_KIND_INFO,
 } from '@/lib/vocabulary'
 import { COLS, vocabAuth } from '../route'
+import { restampVehicleBands } from '@/lib/rates/vehicle-bands-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,6 +60,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const { data, error } = await supabase.from('org_vocabularies').update(patch).eq('id', id).eq('org_id', orgId).select(COLS).maybeSingle()
     if (error) throw error
     if (!data) return NextResponse.json({ success: false, error: 'Entry not found' }, { status: 404 })
+    // Rates follow the vocabulary's vehicle sizes (operator, 2026-09-17): a
+    // changed size reaches every transportation rate and transport package.
+    if (current.kind === 'vehicle_type' && 'meta' in patch) {
+      const before = current.meta as Record<string, unknown> | null
+      const after = patch.meta as Record<string, unknown>
+      if (Number(before?.min_pax) !== Number(after.min_pax) || Number(before?.max_pax) !== Number(after.max_pax)) {
+        await restampVehicleBands(supabase, orgId)
+      }
+    }
     return NextResponse.json({ success: true, data })
   } catch (error) {
     console.error('PATCH vocabulary error:', error)

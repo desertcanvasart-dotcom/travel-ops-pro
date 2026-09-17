@@ -30,12 +30,14 @@ let db: { query(s: string): Promise<{ rows: any[] }>; exec(s: string): Promise<u
 const rows = async (s: string) => (await db.query(s)).rows
 
 beforeAll(async () => {
-  // Replay everything EXCEPT the migration under test, so the database can be
-  // put into the state a live install is in before it runs.
+  // Replay everything BEFORE the migration under test, so the database can be
+  // put into the state a live install is in before it runs. (Later migrations
+  // re-declare the vocabulary kind list, so replaying them first is a state no
+  // install is ever in.)
   db = new PGlite({ extensions: { pgcrypto, uuid_ossp } }) as any
   await db.exec(PRELUDE)
   await db.exec(TRACKER_BOOTSTRAP)
-  for (const f of readdirSync(MIGRATIONS).filter((f: string) => f.endsWith('.sql') && f !== TARGET).sort()) {
+  for (const f of readdirSync(MIGRATIONS).filter((f: string) => f.endsWith('.sql') && f < TARGET).sort()) {
     await db.exec(readFileSync(path.join(MIGRATIONS, f), 'utf8'))
     await db.exec("SELECT pg_catalog.set_config('search_path','public',false);")
   }
