@@ -22,6 +22,26 @@ describe('groupLinesByDay', () => {
     expect(groups[1].lines.map(l => l.id)).toEqual(['day2-guide', 'day2-hotel'])
   })
 
+  it('lines covering several days go under Whole trip, last — not into their first day\'s total', () => {
+    const groups = groupLinesByDay([
+      line('cruise-transport-package', 2, 'transportation'),
+      line('day2-guide', 2),
+      line('day2-cruise-supp-upper_deck', 2, 'cruise'),
+      line('day3-guide', 3),
+    ], toLine)
+    expect(groups.map(g => [g.day, g.lines.map(l => l.id)])).toEqual([
+      [2, ['day2-guide']],
+      [3, ['day3-guide']],
+      [-1, ['cruise-transport-package', 'day2-cruise-supp-upper_deck']],
+    ])
+  })
+
+  it('the day toggle is keyboard-operable with aria-expanded', () => {
+    const src = readFileSync('components/pricing/DayBand.tsx', 'utf8')
+    expect(src).toContain("'aria-expanded': Boolean(expanded)")
+    expect(src).toMatch(/e\.key === 'Enter' \|\| e\.key === ' '/)
+  })
+
   it('treats day 0 like no day', () => {
     expect(groupLinesByDay([line('x', 0)], toLine)[0].day).toBe(-1)
   })

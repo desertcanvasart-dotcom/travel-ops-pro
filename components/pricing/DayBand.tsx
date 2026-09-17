@@ -11,7 +11,7 @@
 // band on the calculator's Cost Breakdown, a saved quote and a tour's price
 // breakdown.
 
-import { Fragment, type ReactNode } from 'react'
+import React, { Fragment, type ReactNode } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 
 /** The first cell of a line row inside a day band. */
@@ -46,8 +46,17 @@ export function DayBandRow({ columns, day, label, meta, badge, total, hasGaps, f
       )}
       <tr
         data-testid="day-band"
-        className={`border-t-4 border-[#647C47] bg-[#647C47]/10 ${onToggle ? 'cursor-pointer hover:bg-[#647C47]/15' : ''} transition-colors`}
+        className={`border-t-4 border-[#647C47] bg-[#647C47]/10 ${onToggle ? 'cursor-pointer hover:bg-[#647C47]/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#647C47]' : ''} transition-colors`}
         onClick={onToggle}
+        // A toggle a keyboard can reach and a screen reader can name (Greptile on #460).
+        {...(onToggle ? {
+          role: 'button',
+          tabIndex: 0,
+          'aria-expanded': Boolean(expanded),
+          onKeyDown: (e: React.KeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle() }
+          },
+        } : {})}
       >
         <td colSpan={columns - 1} className="px-4 py-2.5">
           <div className="flex items-center gap-2.5">

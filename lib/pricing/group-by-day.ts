@@ -14,6 +14,16 @@ export interface DayGroup<T> {
   lines: T[]
 }
 
+/** Lines that cover more than one day, though the engine files them on the
+ *  first day they touch: the cruise transport package (every cruise day), a
+ *  cruise supplement or the throughout guide's cabin (the whole sailing), the
+ *  rooming adjustment (the whole stay). In a day's band they inflated that
+ *  day's total (Greptile on #460) — they belong under Whole trip. */
+export function isTripWideLine(id: string | null | undefined): boolean {
+  const v = String(id ?? '')
+  return v === 'cruise-transport-package' || v === 'rooming-adjustment' || /-cruise-supp-/.test(v) || /-guide-cabin$/.test(v)
+}
+
 export function groupLinesByDay<T>(
   lines: readonly T[],
   toLine: (line: T) => { id?: string | null; category?: string | null; dayNumber?: number | null }
@@ -24,10 +34,14 @@ export function groupLinesByDay<T>(
   })
   const groups = new Map<number, T[]>()
   for (const line of ordered) {
-    const d = toLine(line).dayNumber
-    const key = typeof d === 'number' && d > 0 ? d : -1
+    const x = toLine(line)
+    const d = x.dayNumber
+    const key = typeof d === 'number' && d > 0 && !isTripWideLine(x.id) ? d : -1
     if (!groups.has(key)) groups.set(key, [])
     groups.get(key)!.push(line)
   }
-  return [...groups.entries()].map(([day, grouped]) => ({ day, lines: grouped }))
+  // Whole trip last, after every day.
+  return [...groups.entries()]
+    .sort(([a], [b]) => (a === -1 ? 1 : 0) - (b === -1 ? 1 : 0))
+    .map(([day, grouped]) => ({ day, lines: grouped }))
 }
