@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { REPLY_OVERDUE_HOURS, waitingLabel } from '@/lib/email/reply-status'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
@@ -12,14 +13,17 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 //   * traveller forms (申込書) not yet submitted by every passenger
 //   * no guide assigned on the linked itinerary
 //   * pending portal change requests (e.g. add-traveller)
+// And, not tied to a departure: customer emails waiting longer than
+// REPLY_OVERDUE_HOURS for an answer (lib/email/reply-status, 20261019).
 // Each item carries a deep link to the screen that fixes it. Severity:
 // 'urgent' = overdue or departing within 7 days; 'soon' = everything else.
 
 const HORIZON_DAYS = 45
 
 interface AttentionItem {
-  type: 'balance_due' | 'forms_incomplete' | 'no_guide' | 'change_request' | 'extra_request'
+  type: 'balance_due' | 'forms_incomplete' | 'no_guide' | 'change_request' | 'extra_request' | 'reply_overdue'
   severity: 'urgent' | 'soon'
+  /** Empty for an item that is not about a booking (reply_overdue). */
   bookingId: string
   bookingCode: string | null
   tripName: string | null
@@ -207,6 +211,31 @@ export async function GET() {
           href: `/bookings/${b.id}`,
         })
       }
+    }
+
+    // Customers waiting too long for an email answer. email_conversations has
+    // no org_id (one organisation per install — DEFERRED_GATES G1).
+    const overdueBefore = new Date(Date.now() - REPLY_OVERDUE_HOURS * 3_600_000).toISOString()
+    const { data: waiting } = await supabase
+      .from('email_conversations')
+      .select('id, client_name, client_email, subject, awaiting_reply_since')
+      .not('awaiting_reply_since', 'is', null)
+      .lte('awaiting_reply_since', overdueBefore)
+      .or('is_hidden.is.null,is_hidden.eq.false')
+      .order('awaiting_reply_since', { ascending: true })
+      .limit(20)
+    for (const c of (waiting ?? []) as { id: string; client_name: string | null; client_email: string | null; subject: string | null; awaiting_reply_since: string }[]) {
+      items.push({
+        type: 'reply_overdue',
+        severity: 'urgent', // a customer has written and is waiting
+        bookingId: '',
+        bookingCode: null,
+        tripName: c.subject,
+        clientName: c.client_name || c.client_email,
+        startDate: null,
+        detail: { conversationId: c.id, waitingSince: c.awaiting_reply_since, waiting: waitingLabel(c.awaiting_reply_since) },
+        href: '/communications?awaiting_reply=1',
+      })
     }
 
     // Urgent first, then by departure date (rows already date-ordered)

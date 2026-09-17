@@ -28,6 +28,8 @@ export async function GET(request: NextRequest) {
     const agentId = searchParams.get('agent_id')
     const unassignedOnly = searchParams.get('unassigned_only') === 'true'
     const hasUnread = searchParams.get('has_unread') === 'true'
+    // Customers still waiting for an answer (email; lib/email/reply-status).
+    const awaitingReply = searchParams.get('awaiting_reply') === 'true'
     const search = sanitizeSearchTerm(searchParams.get('search')) || ''
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
@@ -242,6 +244,7 @@ export async function GET(request: NextRequest) {
       if (agentId) emailQuery = emailQuery.eq('assigned_team_member_id', agentId)
       if (unassignedOnly) emailQuery = emailQuery.is('assigned_team_member_id', null)
       if (hasUnread) emailQuery = emailQuery.gt('unread_count', 0)
+      if (awaitingReply) emailQuery = emailQuery.not('awaiting_reply_since', 'is', null)
       if (search) {
         emailQuery = emailQuery.or(`client_email.ilike.%${search}%,client_name.ilike.%${search}%,subject.ilike.%${search}%`)
       }
@@ -265,6 +268,7 @@ export async function GET(request: NextRequest) {
           last_message_at: conv.last_message_at,
           unread_count: conv.unread_count || 0,
           status: conv.status,
+          awaiting_reply_since: conv.awaiting_reply_since ?? null,
           assigned_team_member_id: conv.assigned_team_member_id,
           assigned_at: conv.assigned_at,
           created_at: conv.created_at,
@@ -276,6 +280,13 @@ export async function GET(request: NextRequest) {
           } : null,
           assigned_agent: conv.assigned_agent
         })
+      }
+    }
+
+    // Awaiting reply is an email state; the other channels have none.
+    if (awaitingReply) {
+      for (let i = conversations.length - 1; i >= 0; i--) {
+        if (!conversations[i].awaiting_reply_since) conversations.splice(i, 1)
       }
     }
 

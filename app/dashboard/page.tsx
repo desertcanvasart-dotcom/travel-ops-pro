@@ -480,9 +480,10 @@ export default function DashboardPage() {
                     {item.type === 'forms_incomplete' && t('attnForms', { submitted: item.detail.submitted, total: item.detail.total })}
                     {item.type === 'no_guide' && t('attnNoGuide')}
                     {item.type === 'change_request' && t('attnChangeRequest')}
+                    {item.type === 'reply_overdue' && t('attnReplyOverdue', { time: String(item.detail.waiting ?? '') })}
                   </p>
                   <p className="text-xs text-gray-500 truncate">
-                    {[item.bookingCode, item.tripName || item.clientName, item.startDate ? t('departsOn', { date: item.startDate }) : null]
+                    {(item.type === 'reply_overdue' ? [item.clientName, item.tripName] : [item.bookingCode, item.tripName || item.clientName, item.startDate ? t('departsOn', { date: item.startDate }) : null])
                       .filter(Boolean).join(' · ')}
                   </p>
                 </div>

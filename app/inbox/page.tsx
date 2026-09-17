@@ -1,5 +1,7 @@
 'use client'
 
+import { newRequestKey, sendGuardedEmail } from '@/lib/email/send-with-guard'
+import { useSendConflictConfirm } from '@/lib/email/use-send-conflict-confirm'
 import { looksLikeTourUpOrder } from '@/lib/intake/tour-up-order'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
@@ -1630,6 +1632,10 @@ function ComposeModal({
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // One key for this reply (lib/email/send-with-guard): a double click or a
+  // retry is the same attempt, never a second email.
+  const requestKeyRef = useRef<string>(newRequestKey())
+  const confirmSendConflict = useSendConflictConfirm()
   const [isExpanded, setIsExpanded] = useState(false)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [signatures, setSignatures] = useState<EmailSignature[]>([])
@@ -1948,27 +1954,29 @@ function ComposeModal({
       if (!proceed) return
     }
 
+    if (sending) return
     setSending(true)
     setError(null)
 
     try {
-      const response = await fetch('/api/gmail/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          to,
-          subject,
-          body,
-          threadId: replyTo?.threadId,
-          attachments: attachments.length > 0 ? attachments : undefined,
-        }),
+      // Replying: the message being answered is the newest one on screen — a
+      // reply sent after it (by a colleague, or from Gmail) is reported first.
+      const answered = replyTo?.date ? new Date(replyTo.date) : null
+      const sent = await sendGuardedEmail({
+        userId,
+        to,
+        subject,
+        body,
+        threadId: replyTo?.threadId,
+        attachments: attachments.length > 0 ? attachments : undefined,
+      }, {
+        requestKey: requestKeyRef.current,
+        seenUpTo: replyTo ? (answered && !isNaN(answered.getTime()) ? answered.toISOString() : null) : undefined,
+        confirmConflict: confirmSendConflict,
       })
-
-      const data = await response.json()
-
-      if (data.error) {
-        throw new Error(data.error)
+      if (!sent.ok) {
+        if (sent.cancelled) return
+        throw new Error(sent.error)
       }
 
       onSent()

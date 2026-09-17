@@ -457,7 +457,8 @@
     "itemsCount": "{count} 件",
     "receivedThisMonth": "今月の入金",
     "spentThisMonth": "今月の支出",
-    "paymentsCount": "{count} 件"
+    "paymentsCount": "{count} 件",
+    "attnReplyOverdue": "お客様のメールが返信待ち · {time}"
   },
   "analytics": {
     "title": "分析ダッシュボード",
@@ -1317,7 +1318,10 @@
     "portalNotifyNoRecipient": "返信は保存されましたが、メールは送信されていません。この予約にメールアドレスが登録されていません。通知するには追加してください。",
     "portalNotifyNoAccount": "返信は保存されましたが、メールは送信されていません。メールが接続されていません。設定 → メール で Gmail を接続してください。",
     "portalNotifyNoLink": "返信は保存されましたが、メールは送信されていません。この予約に有効なポータルリンクがありません。通知するには作成してください。",
-    "portalNotifyFailed": "返信は保存されましたが、通知メールの送信に失敗しました。お客様はリンクを再度開いた場合のみ確認できます。"
+    "portalNotifyFailed": "返信は保存されましたが、通知メールの送信に失敗しました。お客様はリンクを再度開いた場合のみ確認できます。",
+    "awaitingReplyOnly": "返信待ち",
+    "awaitingReply": "返信待ち · {time}",
+    "awaitingReplySince": "{when} からお客様が返信を待っています"
   },
   "pdf": {
     "quote": "見積",
@@ -8296,5 +8300,12 @@
     "assistArrivalMeet": "{airport}到着時のお出迎え",
     "assistDeparture": "{airport}での出発アシスタンス",
     "assistArrival": "{airport}での到着アシスタンス"
+  },
+  "emailSendGuard": {
+    "title": "返信済みではありませんか？",
+    "alreadyRepliedBy": "{who} がこの会話に {when} に返信済みです（開いた後の返信）。それでも送信しますか？",
+    "alreadyReplied": "この会話には {when} に返信が送信済みです（開いた後の返信）。それでも送信しますか？",
+    "sameReply": "同じ返信が {when} にこの会話へ送信されています。もう一度送信しますか？",
+    "sendAnyway": "それでも送信"
   }
 }

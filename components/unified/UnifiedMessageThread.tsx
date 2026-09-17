@@ -1,5 +1,7 @@
 'use client'
 
+import { newRequestKey, sendGuardedEmail } from '@/lib/email/send-with-guard'
+import { useSendConflictConfirm } from '@/lib/email/use-send-conflict-confirm'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
 import Link from 'next/link'
@@ -245,6 +247,9 @@ export function UnifiedMessageThread({
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
+  // One key per email reply (lib/email/send-with-guard): kept until it is sent.
+  const replyKeyRef = useRef<string>(newRequestKey())
+  const confirmSendConflict = useSendConflictConfirm()
   // Portal replies: the message stored fine, but the traveller may not have
   // been told (no address, mail not connected, no live link). The booking
   // page says this out loud; the inbox used to stay silent, which made the
@@ -482,6 +487,22 @@ export function UnifiedMessageThread({
           threadId: conversation.identifier, // thread_id for email
           userId: 'current', // Will be handled by the API
         }
+      }
+
+      if (conversation.channel === 'email') {
+        // Through the duplicate guard: never the same reply twice, and told
+        // when someone answered after this thread was opened.
+        const newestShown = messages.reduce<string | null>((max, m) => (m.sent_at && (!max || m.sent_at > max) ? m.sent_at : max), null)
+        const sent = await sendGuardedEmail(body, { requestKey: replyKeyRef.current, seenUpTo: newestShown, confirmConflict: confirmSendConflict })
+        if (sent.ok) {
+          replyKeyRef.current = newRequestKey()
+          setNewMessage('')
+          setTranslatedMessage('')
+          fetchMessages(false)
+        } else if (!sent.cancelled) {
+          setSendNotice(sent.error)
+        }
+        return
       }
 
       const res = await fetch(url, {

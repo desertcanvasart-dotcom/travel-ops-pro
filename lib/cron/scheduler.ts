@@ -33,6 +33,9 @@ export const CRON_JOBS: CronJob[] = [
   { name: 'data-invariants', schedule: '15 3 * * *', handler: () => import('@/app/api/cron/data-invariants/route').then(m => m.GET) },
   // Retention: destroy traveller passport scans once their trip has ended.
   { name: 'purge-traveller-documents', schedule: '45 3 * * *', handler: () => import('@/app/api/cron/purge-traveller-documents/route').then(m => m.GET) },
+  // The shared inbox: new mail and replies sent from Gmail directly, so
+  // "awaiting reply" is current (lib/email/sync-mailbox).
+  { name: 'gmail-sync', schedule: '*/10 * * * *', handler: () => import('@/app/api/cron/gmail-sync/route').then(m => m.GET) },
 ]
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

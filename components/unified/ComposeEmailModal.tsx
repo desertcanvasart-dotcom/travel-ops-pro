@@ -1,5 +1,7 @@
 'use client'
 
+import { newRequestKey, sendGuardedEmail } from '@/lib/email/send-with-guard'
+import { useSendConflictConfirm } from '@/lib/email/use-send-conflict-confirm'
 import { useState, useEffect, useRef } from 'react'
 import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
 import {
@@ -67,6 +69,10 @@ export default function ComposeEmailModal({
   const [subject, setSubject] = useState(defaultSubject)
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
+  // One key for this email (lib/email/send-with-guard): a double click or a
+  // retry is the same attempt, never a second email.
+  const requestKeyRef = useRef<string>(newRequestKey())
+  const confirmSendConflict = useSendConflictConfirm()
   const [error, setError] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [signatures, setSignatures] = useState<EmailSignature[]>([])
@@ -271,24 +277,22 @@ export default function ComposeEmailModal({
       return
     }
 
+    if (sending) return
     setSending(true)
     setError(null)
 
     try {
-      const response = await fetch('/api/gmail/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          to,
-          subject,
-          body,
-          attachments: attachments.length > 0 ? attachments : undefined,
-        }),
-      })
-
-      const data = await response.json()
-      if (data.error) throw new Error(data.error)
+      const sent = await sendGuardedEmail({
+        userId,
+        to,
+        subject,
+        body,
+        attachments: attachments.length > 0 ? attachments : undefined,
+      }, { requestKey: requestKeyRef.current, confirmConflict: confirmSendConflict })
+      if (!sent.ok) {
+        if (sent.cancelled) return
+        throw new Error(sent.error)
+      }
 
       onSent?.()
       onClose()
