@@ -71,10 +71,15 @@ describe('the three places read the vocabulary', () => {
     expect(src).toContain("useVocabOptions('guide_language'")
   })
 
-  it('the calculator offers the vocabulary list and greys languages with no rate', () => {
-    const src = readFileSync('app/b2b/calculator/[id]/page.tsx', 'utf8')
+  it('the calculator and the tour page offer the vocabulary list and grey languages with no rate', () => {
+    const src = readFileSync('components/pricing/GuideLanguageSelect.tsx', 'utf8')
     expect(src).toContain("useVocabOptions('guide_language'")
-    expect(src).toContain('disabled={!guideLanguages.includes(o.value)}')
+    expect(src).toContain('disabled={!withRate.includes(o.value)}')
+    for (const page of ['app/b2b/calculator/[id]/page.tsx', 'app/tours/[code]/page.tsx']) {
+      const p = readFileSync(page, 'utf8')
+      expect(p).toContain('<GuideLanguageSelect')
+      expect(p).toContain('language: guideLanguage')
+    }
   })
 
   it('the guide rate API stores the key and finds duplicates by key', () => {

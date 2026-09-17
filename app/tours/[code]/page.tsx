@@ -6,6 +6,7 @@
 // ============================================
 
 import { DayBandBlock } from '@/components/pricing/DayBand'
+import GuideLanguageSelect, { useGuideLanguageChoice } from '@/components/pricing/GuideLanguageSelect'
 import { groupLinesByDay } from '@/lib/pricing/group-by-day'
 import { todayLocal } from '@/lib/today'
 import { useCompanyInfo } from '@/lib/use-company-info'
@@ -100,6 +101,12 @@ interface PricingResult {
     unit_cost: number
     line_total: number
     day_number?: number | null
+    /** No usable rate: listed at 0, and the price is incomplete. */
+    unpriced?: boolean
+    /** Paid for inside another line (the cruise transport package, a meal aboard). */
+    included?: boolean
+    /** Why the line is unpriced or included. */
+    issue?: string
   }>
   optional_services: Array<{
     service_id: string
@@ -180,6 +187,11 @@ export default function TourDetailPage() {
     return date.toISOString().split('T')[0]
   })
   const [isEurPassport, setIsEurPassport] = useState(true)
+  // The guide language priced — the calculator's own picker; English asked
+  // for when the office has only Japanese guide rates priced every guide day
+  // as No rate, shown here as a plain 0.
+  const guideLanguageChoice = useGuideLanguageChoice()
+  const guideLanguage = guideLanguageChoice.value
   const [pricing, setPricing] = useState<PricingResult | null>(null)
   // 日程表 generation dialog — departure-specific facts, all optional
   const [showNitteiDialog, setShowNitteiDialog] = useState(false)
@@ -207,10 +219,11 @@ export default function TourDetailPage() {
   // Calculate price when tour loads or params change. Programmes without
   // variations (imported catalogue) price template-direct at the default tier.
   useEffect(() => {
-    if (tour?.variation_id || tour?.template_id) {
+    // Wait for the guide language, or the first price asks for English.
+    if ((tour?.variation_id || tour?.template_id) && guideLanguage) {
       calculatePrice()
     }
-  }, [tour?.variation_id, tour?.template_id, selectedPax, travelDate, isEurPassport])
+  }, [tour?.variation_id, tour?.template_id, selectedPax, travelDate, isEurPassport, guideLanguage])
 
   const fetchTourDetail = async (code: string) => {
     try {
@@ -259,6 +272,7 @@ export default function TourDetailPage() {
           num_pax: selectedPax,
           travel_date: travelDate,
           is_eur_passport: isEurPassport,
+          language: guideLanguage,
           margin_percent: 0,
           include_optionals: false
         })
@@ -755,6 +769,18 @@ export default function TourDetailPage() {
               <p className="text-xs text-gray-500 mt-1">{t('detail.affectsEntranceFees')}</p>
             </div>
 
+            {/* Guide language */}
+            <div className="mb-4">
+              <label htmlFor="tour-guide-language" className="block text-sm font-medium text-gray-700 mb-2">
+                {t('detail.guideLanguage')}
+              </label>
+              <GuideLanguageSelect
+                id="tour-guide-language"
+                choice={guideLanguageChoice}
+                className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] outline-none bg-white"
+              />
+            </div>
+
             {/* Pricing Result */}
             {pricingLoading ? (
               <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg mb-4 flex items-center justify-center">
@@ -789,6 +815,12 @@ export default function TourDetailPage() {
                     <span className="text-sm text-gray-600">{t('detail.totalFor')} {selectedPax} {selectedPax === 1 ? t('detail.person') : t('detail.people')}</span>
                     <span className="text-lg font-semibold text-gray-900">{formatWithConversion(pricing.selling_price, rateCurrency)}</span>
                   </div>
+                  {pricing.services.some(s => s.unpriced) && (
+                    <p className="mt-3 text-xs text-red-700 flex items-start gap-1.5" data-testid="tour-price-incomplete">
+                      <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                      {t('detail.priceIncomplete', { count: pricing.services.filter(s => s.unpriced).length })}
+                    </p>
+                  )}
                 </div>
 
                 {/* Toggle Breakdown */}
@@ -821,12 +853,27 @@ export default function TourDetailPage() {
                             total={formatWithConversion(group.lines.reduce((sum, s) => sum + s.line_total, 0), rateCurrency)}
                           >
                             {group.lines.map((service, idx) => (
-                              <div key={idx} className="flex items-center justify-between text-sm">
-                                <span className="flex items-center gap-2 text-gray-600 min-w-0">
-                                  <span>{getCategoryIcon(service.service_category)}</span>
-                                  <span className="truncate max-w-[180px]">{service.service_name}</span>
-                                </span>
-                                <span className="text-gray-900 font-medium">{formatWithConversion(service.line_total, rateCurrency)}</span>
+                              <div
+                                key={idx}
+                                className={`text-sm ${service.unpriced ? 'bg-red-50 -mx-2 px-2 py-1 rounded' : ''}`}
+                                data-testid={service.unpriced ? 'tour-line-unpriced' : service.included ? 'tour-line-included' : undefined}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className={`flex items-center gap-2 min-w-0 ${service.unpriced ? 'text-red-800 font-medium' : service.included ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    <span>{getCategoryIcon(service.service_category)}</span>
+                                    <span className="truncate max-w-[180px]" title={service.service_name}>{service.service_name}</span>
+                                  </span>
+                                  {service.unpriced ? (
+                                    <span className="shrink-0 px-1.5 py-0.5 rounded text-[11px] font-medium bg-red-600 text-white">{t('detail.noRate')}</span>
+                                  ) : service.included ? (
+                                    <span className="shrink-0 px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-500">{t('detail.included')}</span>
+                                  ) : (
+                                    <span className="text-gray-900 font-medium">{formatWithConversion(service.line_total, rateCurrency)}</span>
+                                  )}
+                                </div>
+                                {service.issue && (service.unpriced || service.included) && (
+                                  <p className={`text-xs mt-0.5 ${service.unpriced ? 'text-red-700' : 'text-gray-400'}`}>{service.issue}</p>
+                                )}
                               </div>
                             ))}
                           </DayBandBlock>

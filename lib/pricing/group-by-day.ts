@@ -15,13 +15,14 @@ export interface DayGroup<T> {
 }
 
 /** Lines that cover more than one day, though the engine files them on the
- *  first day they touch: the cruise transport package (every cruise day), a
+ *  first day they touch: the cruise transport package (every cruise day — one
+ *  per sailing; each covered day lists its own Included line), a
  *  cruise supplement or the throughout guide's cabin (the whole sailing), the
  *  rooming adjustment (the whole stay). In a day's band they inflated that
  *  day's total (Greptile on #460) — they belong under Whole trip. */
 export function isTripWideLine(id: string | null | undefined): boolean {
   const v = String(id ?? '')
-  return v === 'cruise-transport-package' || v === 'rooming-adjustment' || /-cruise-supp-/.test(v) || /-guide-cabin$/.test(v)
+  return /^cruise-transport-package(-\d+)?$/.test(v) || v === 'rooming-adjustment' || /-cruise-supp-/.test(v) || /-guide-cabin$/.test(v)
 }
 
 export function groupLinesByDay<T>(

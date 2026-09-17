@@ -6363,7 +6363,11 @@
       "docCreated": "Created (作成日)",
       "seasonBadge": "{season} +{percent}%",
       "dayNumber": "Day {day}",
-      "wholeTrip": "Whole trip"
+      "wholeTrip": "Whole trip",
+      "guideLanguage": "Guide language",
+      "noRate": "No rate",
+      "included": "Included",
+      "priceIncomplete": "{count, plural, one {# service has} other {# services have}} no rate — this price is incomplete. See the breakdown."
     }
   },
   "b2bQuotes": {
@@ -6453,7 +6457,8 @@
     "dayNumber": "Day {day}",
     "wholeTrip": "Whole trip",
     "servicesCount": "{count, plural, one {# service} other {# services}}",
-    "dayGaps": "{count} without a rate"
+    "dayGaps": "{count} without a rate",
+    "included": "Included"
   },
   "b2bPricingRules": {
     "title": "Transport Packages",
