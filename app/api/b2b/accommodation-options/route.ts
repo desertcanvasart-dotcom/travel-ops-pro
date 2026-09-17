@@ -1,7 +1,7 @@
 // ============================================
 // GET /api/b2b/accommodation-options
 //   ?kind=hotel&city=Cairo&tier=standard
-//   ?kind=cruise&tier=standard[&embark=Luxor]
+//   ?kind=cruise&tier=standard[&embark=Luxor][&nights=4]
 // ============================================
 // The hotels (or ships) a programme stay can use at a tier, in the order the
 // pricing engine reads them — the first is the one it picks when the day has
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     const db = createServerClient()
     const rows = kind === 'hotel'
       ? await hotelCandidates(db, city, tier)
-      : await cruiseCandidates(db, tier, params.get('embark'))
+      : await cruiseCandidates(db, tier, params.get('embark'), Number(params.get('nights')) || null)
 
     const options: AccommodationOption[] = rows.map(r => ({
       id: String(r.id),

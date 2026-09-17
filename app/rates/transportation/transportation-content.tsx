@@ -1,5 +1,6 @@
 'use client'
 
+import { TRIP_SHAPES, isRoadTransferType, rateTripShape, sanitizeTripShape, tripShapeFromName } from '@/lib/pricing/road-trips'
 import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import CityOptions from '@/app/components/CityOptions'
@@ -48,6 +49,8 @@ interface TransportationRate {
   duration?: string | null
   area?: string | null
   route_name?: string | null
+  /** Road transfers: one_way / same_day_return / overnight_return. */
+  trip_shape?: string | null
   includes?: string | null
   rate_currency?: string | null
   /** The vehicles list (lib/rates/vehicle-bands) — every vehicle the row prices. */
@@ -110,6 +113,7 @@ interface FormData {
   service_type: string
   city: string
   destination_city: string
+  trip_shape: string
   includes: string
   season: string
   rate_currency: string
@@ -158,6 +162,7 @@ const initialFormData: FormData = {
   service_type: 'airport_transfer',
   city: '',
   destination_city: '',
+  trip_shape: 'one_way',
   includes: '',
   season: '',
   rate_currency: '',
@@ -474,6 +479,8 @@ export default function TransportationContent() {
       service_type: rate.service_type,
       city: rate.city,
       destination_city: rate.destination_city || '',
+      // A row from before trip shapes reads its shape from its name.
+      trip_shape: sanitizeTripShape(rate.trip_shape) ?? tripShapeFromName(rate.service_code, rate.route_name),
       includes: rate.includes || '',
       season: rate.season || '',
       rate_currency: rate.rate_currency || '',
@@ -556,6 +563,7 @@ export default function TransportationContent() {
         service_type: formData.service_type,
         city: formData.city,
         destination_city: formData.destination_city || null,
+        trip_shape: isRoadTransferType(formData.service_type) ? formData.trip_shape : null,
         includes: formData.includes || null,
         season: formData.season || null,
         ...rateCurrencyPatch(formData.rate_currency, editingRate?.rate_currency),
@@ -933,6 +941,11 @@ export default function TransportationContent() {
                             <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded">
                               {serviceLabel}
                             </span>
+                            {isRoadTransferType(rate.service_type) && (
+                              <span className="text-xs px-1.5 py-0.5 bg-amber-50 text-amber-800 rounded" data-testid="trip-shape-badge">
+                                {t(`tripShape.${rateTripShape(rate)}`)}
+                              </span>
+                            )}
                             {isIntercity && rate.destination_city ? (
                               <span className="text-xs text-gray-500">
                                 {translateCity(rate.city)} → {translateCity(rate.destination_city)}
@@ -1063,6 +1076,9 @@ export default function TransportationContent() {
                         {isIntercity && rate.destination_city
                           ? `${translateCity(rate.city)} → ${translateCity(rate.destination_city)}`
                           : translateCity(rate.city)}
+                        {isRoadTransferType(rate.service_type) && (
+                          <span className="ml-1 text-[11px] text-amber-800">· {t(`tripShape.${rateTripShape(rate)}`)}</span>
+                        )}
                       </td>
                       {vehicleOptions.map(o => {
                         const band = getActiveTiers(rate).find(b => b.key === o.value)
@@ -1147,9 +1163,9 @@ export default function TransportationContent() {
               // The agency's word for the stored key — a removed entry shows its key.
               const serviceLabel = serviceTypeLabelFor(rate.service_type)
               const isIntercity = needsDestinationCity(rate.service_type)
-              const cityDisplay = isIntercity && rate.destination_city
+              const cityDisplay = (isIntercity && rate.destination_city
                 ? `${translateCity(rate.city)} → ${translateCity(rate.destination_city)}`
-                : translateCity(rate.city)
+                : translateCity(rate.city)) + (isRoadTransferType(rate.service_type) ? ` · ${t(`tripShape.${rateTripShape(rate)}`)}` : '')
 
               return (
                 <div
@@ -1585,6 +1601,27 @@ export default function TransportationContent() {
                     </div>
                   )}
                 </div>
+
+                {/* Road transfers: one way, back the same day, or back the next day —
+                    each a different price for the same route (lib/pricing/road-trips). */}
+                {isRoadTransferType(formData.service_type) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
+                      {t('tripShape.label')} <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={formData.trip_shape}
+                      onChange={(e) => setFormData(prev => ({ ...prev, trip_shape: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                      data-testid="trip-shape"
+                    >
+                      {TRIP_SHAPES.map(shape => (
+                        <option key={shape} value={shape}>{t(`tripShape.${shape}`)}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">{t(`tripShape.hint.${formData.trip_shape}`)}</p>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-600 mb-1.5">

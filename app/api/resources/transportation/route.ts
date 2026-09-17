@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isRoadTransferType, sanitizeTripShape } from '@/lib/pricing/road-trips'
 import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
 import { createServerClient } from '@/lib/supabase-server'
 
@@ -76,6 +77,8 @@ export async function POST(request: NextRequest) {
       city: body.city,
       origin_city: body.origin_city || null,
       destination_city: body.destination_city || null,
+      // Road transfers: the trip's shape (lib/pricing/road-trips); others none.
+      trip_shape: isRoadTransferType(body.service_type) ? (sanitizeTripShape(body.trip_shape) ?? 'one_way') : null,
       duration: body.duration || null,
       area: body.area || null,
       includes: body.includes || null,

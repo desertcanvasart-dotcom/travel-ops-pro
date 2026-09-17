@@ -14,6 +14,8 @@
 //
 // Client-safe: no database, no engine import.
 
+import { sanitizeTripShape, type TripShape } from './road-trips'
+
 export const TRANSPORT_SERVICE_TYPES = [
   'airport_transfer',
   'airport_with_sightseeing',
@@ -37,6 +39,9 @@ export interface TransportLine {
   /** Road transfers only: from and to; absent = yesterday's city → today's. */
   from?: string
   to?: string
+  /** Road transfers only: one_way / same_day_return / overnight_return
+   *  (lib/pricing/road-trips); absent = what the day's plan says. */
+  shape?: TripShape
 }
 
 export const isRoadTransfer = (t: string): boolean => t === 'intercity' || t === 'intercity_with_sightseeing'
@@ -73,8 +78,10 @@ export function sanitizeTransportLines(input: unknown): TransportLine[] | undefi
     if (isRoadTransfer(type)) {
       const from = place(r.from)
       const to = place(r.to)
+      const shape = sanitizeTripShape(r.shape)
       if (from) line.from = from
       if (to) line.to = to
+      if (shape) line.shape = shape
     }
     out.push(line)
   }

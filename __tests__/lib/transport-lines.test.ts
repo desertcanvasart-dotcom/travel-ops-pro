@@ -145,7 +145,7 @@ describe('review fixes (Greptile on #454)', () => {
 
   it('a cost is shown against a line only while the preview still describes that line', async () => {
     const { lineMatches } = await import('@/components/DayTransportEditor')
-    const priced = { service_type: 'intercity', label: '', city: 'Luxor', from: 'Cairo', to: 'Luxor', rate_name: null, cost: 90, message: null }
+    const priced = { service_type: 'intercity', label: '', city: 'Luxor', from: 'Cairo', to: 'Luxor', rate_name: null, cost: 90, message: null, shape: 'one_way' as const, included_from_day: null }
     expect(lineMatches({ service_type: 'intercity' }, priced)).toBe(true)
     expect(lineMatches({ service_type: 'half_day' }, priced)).toBe(false)
     expect(lineMatches({ service_type: 'intercity', from: 'Aswan' }, priced)).toBe(false)

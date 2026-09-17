@@ -3746,7 +3746,18 @@
         "validEurRate": "Please enter a valid rate"
       },
       "rateHeader": "Rate ({currency})",
-      "singlePrice": "Price"
+      "singlePrice": "Price",
+      "tripShape": {
+        "label": "Trip shape",
+        "one_way": "One way",
+        "same_day_return": "Same-day return",
+        "overnight_return": "Overnight return (back next day)",
+        "hint": {
+          "one_way": "Drops at the destination.",
+          "same_day_return": "There and back the same day — used when the day sleeps back at its start.",
+          "overnight_return": "Stays the night and drives back the next day — charged once, on the day out; the day back lists the drive as included."
+        }
+      }
     },
     "cruises": {
       "title": "Cruise Rates",
@@ -6802,7 +6813,14 @@
         "intercity_with_sightseeing": "Road transfer with sightseeing",
         "sound_light": "Sound & light transfer",
         "dinner_transfer": "Dinner transfer"
-      }
+      },
+      "tripShape": "Trip shape",
+      "shapes": {
+        "one_way": "One way",
+        "same_day_return": "Same-day return",
+        "overnight_return": "Overnight return"
+      },
+      "returnIncluded": "Road transfer back {from} → {to} — included in the overnight return priced on day {day}."
     },
     "inFlightNight": "In the air (overnight flight) — nothing sold this day",
     "guideLanguageNoRate": "{language} — no guide rate"

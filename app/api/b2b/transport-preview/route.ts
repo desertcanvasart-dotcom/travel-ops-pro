@@ -11,6 +11,8 @@
 // Body: { days: <editor days>, template_id?: string, num_pax?: number,
 //         guide_mode?: 'spot'|'throughout', tour_leader_included?: boolean }
 
+import { planRoadTrips, type TripShape } from '@/lib/pricing/road-trips'
+import { choicesForTier } from '@/lib/pricing/property-choice'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
@@ -21,6 +23,7 @@ import {
   determineTransportNeeds,
   findTransportRate,
   parseItinerary,
+  resolveCruiseStay,
   transportServiceLabel,
 } from '@/lib/auto-pricing-service'
 import { usableRate } from '@/lib/pricing/usable-rate'
@@ -42,6 +45,10 @@ export interface PreviewLine {
   cost: number | null
   /** Why there is no cost. */
   message: string | null
+  /** Road transfers: the trip shape the rate had to be. */
+  shape: TripShape | null
+  /** The drive back of an earlier day's overnight return: listed, not charged. */
+  included_from_day: number | null
 }
 
 export interface PreviewDay {
@@ -82,10 +89,20 @@ export async function POST(request: NextRequest) {
     const itinerary = parseItinerary(rawDays, { packageType })
     const cache = await buildTransportCache(createRateNormalizer(currency))
 
+    // The trip's road plan, as the engine builds it: the day after a cruise
+    // starts from the ship's end port — the ship chosen for this tier, else
+    // the automatic pick (lib/pricing/road-trips).
+    const tier = typeof body?.tier === 'string' && body.tier ? body.tier : 'standard'
+    const firstCruiseDay = itinerary.find(d => d.accommodation_type === 'cruise')
+    const ship = firstCruiseDay
+      ? (await resolveCruiseStay(tier, firstCruiseDay.city, false, null, undefined, choicesForTier(itinerary, tier).cruiseId, itinerary.filter(d => d.accommodation_type === 'cruise').length)).rates
+      : null
+    const roadPlan = planRoadTrips(itinerary, ship?.row ? String((ship.row as Record<string, unknown>).disembark_city ?? '') || null : null)
+
     const days: PreviewDay[] = itinerary.map((day, i) => {
       const previousDay = i > 0 ? itinerary[i - 1] : null
       const nextDay = i < itinerary.length - 1 ? itinerary[i + 1] : null
-      const lines = determineTransportNeeds(day, previousDay, nextDay).map((needs): PreviewLine => {
+      const lines = determineTransportNeeds(day, previousDay, nextDay, { road: roadPlan.get(i) ?? null }).map((needs): PreviewLine => {
         const city = needs.city || day.city
         const from = needs.originCity || previousDay?.city || null
         const to = needs.destinationCity || city
@@ -99,11 +116,21 @@ export async function POST(request: NextRequest) {
           vehicleType: needs.useSpecialVehicle ? needs.specialVehicleType : undefined,
           originCity: from ?? undefined,
           destinationCity: to,
+          tripShape: needs.tripShape,
         })
-        const cost = rate ? usableRate(rate.base_rate_eur) : null
         const label = transportServiceLabel(needs.serviceType)
-        const where = road && from ? `${from} → ${to}` : city
+        if (needs.returnIncludedFromDay) {
+          return {
+            service_type: needs.serviceType, label, city, from, to, rate_name: null, cost: 0,
+            message: null, shape: 'overnight_return', included_from_day: needs.returnIncludedFromDay,
+          }
+        }
+        const cost = rate ? usableRate(rate.base_rate_eur) : null
+        const shapeWord = road ? ({ one_way: 'one-way', same_day_return: 'same-day return', overnight_return: 'overnight return' } as const)[needs.tripShape ?? 'one_way'] : ''
+        const where = road && from ? `${from} → ${to} (${shapeWord})` : city
         return {
+          shape: road ? (needs.tripShape ?? 'one_way') : null,
+          included_from_day: null,
           service_type: needs.serviceType,
           label,
           city,

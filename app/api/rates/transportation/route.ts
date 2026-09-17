@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isRoadTransferType, rateTripShape, sanitizeTripShape } from '@/lib/pricing/road-trips'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
@@ -165,6 +166,8 @@ export async function POST(request: NextRequest) {
       city: body.city || null,
       origin_city: body.origin_city || null,
       destination_city: body.destination_city || null,
+      // Road transfers: the trip's shape (lib/pricing/road-trips); others none.
+      trip_shape: isRoadTransferType(body.service_type) ? (sanitizeTripShape(body.trip_shape) ?? 'one_way') : null,
       duration: body.duration || null,
       area: body.area || null,
       route_name: routeName,
@@ -208,7 +211,7 @@ export async function POST(request: NextRequest) {
     // in sync with transportRateKey() in app/api/cron/data-invariants/route.ts.
     let existingQuery = supabaseAdmin
       .from('transportation_rates')
-      .select('id, service_code')
+      .select('id, service_code, trip_shape')
       .eq('service_type', newRate.service_type)
 
     if (isIntercityType(newRate.service_type)) {
@@ -232,7 +235,10 @@ export async function POST(request: NextRequest) {
     // because .ilike would treat %/_ inside a code as wildcards and over-match.
     const codeKey = String(newRate.service_code ?? '').toLowerCase()
     const existing = (coarseMatches ?? []).filter(
-      (r: any) => String(r.service_code ?? '').toLowerCase() === codeKey
+      (r: any) => String(r.service_code ?? '').toLowerCase() === codeKey &&
+        // One route one way and back overnight are two rates, not a duplicate;
+        // a row with no stored shape reads it from its name, as pricing does.
+        (!newRate.trip_shape || rateTripShape(r) === newRate.trip_shape)
     )
 
     // A create never updates. The natural-key match used to be UPDATED in

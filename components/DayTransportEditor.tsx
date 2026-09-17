@@ -18,6 +18,7 @@ import {
   TRANSPORT_SERVICE_TYPES, isRoadTransfer,
   type TransportLine, type TransportLineType,
 } from '@/lib/pricing/transport-lines'
+import { TRIP_SHAPES, type TripShape } from '@/lib/pricing/road-trips'
 import type { PreviewDay, PreviewLine } from '@/app/api/b2b/transport-preview/route'
 
 type Props = {
@@ -44,9 +45,13 @@ function fromPreview(lines: PreviewLine[], city: string, prevCity: string | null
     if (isRoadTransfer(l.service_type)) {
       if (l.from && l.from !== prevCity) line.from = l.from
       if (l.to && l.to !== city) line.to = l.to
+      // Keep the shape the plan chose, so taking the list over prices the same.
+      if (l.shape && l.shape !== 'one_way') line.shape = l.shape
     }
     return line
   })
+    // The drive back of an earlier overnight return is not a line to own.
+    .filter((_, i) => !lines[i].included_from_day)
 }
 
 /** Whether a preview line describes this editor line: same service, and
@@ -57,6 +62,7 @@ export function lineMatches(line: TransportLine, priced: PreviewLine): boolean {
   if (isRoadTransfer(line.service_type)) {
     if (line.from && line.from !== priced.from) return false
     if (line.to && line.to !== priced.to) return false
+    if (line.shape && line.shape !== priced.shape) return false
   }
   return true
 }
@@ -81,7 +87,7 @@ export default function DayTransportEditor({ preview, loading, failed, value, ci
       if (k !== i) return l
       const merged: TransportLine = { ...l, ...patch }
       // A route belongs only to a road transfer.
-      if (!isRoadTransfer(merged.service_type)) { delete merged.from; delete merged.to }
+      if (!isRoadTransfer(merged.service_type)) { delete merged.from; delete merged.to; delete merged.shape }
       for (const key of ['city', 'from', 'to'] as const) if (!merged[key]) delete merged[key]
       return merged
     })
@@ -91,7 +97,9 @@ export default function DayTransportEditor({ preview, loading, failed, value, ci
   const add = (type: string) => { if (type) onChange([...base(), { service_type: type as TransportLineType }]) }
 
   const rows = base()
-  const shown = preview?.lines ?? []
+  // The drive-back notes are shown, not edited; the rest pair with the rows.
+  const included = (preview?.lines ?? []).filter(l => l.included_from_day)
+  const shown = custom ? (preview?.lines ?? []) : (preview?.lines ?? []).filter(l => !l.included_from_day)
 
   return (
     <div data-testid="day-transport">
@@ -118,6 +126,12 @@ export default function DayTransportEditor({ preview, loading, failed, value, ci
       {canEdit && rows.length === 0 && !preview?.cruise_package && (
         <p className="text-xs text-gray-500 mb-1">{t('none')}</p>
       )}
+
+      {!custom && included.map((l, i) => (
+        <p key={`inc-${i}`} className="text-xs text-gray-500 mb-1" data-testid="transport-return-included">
+          {t('returnIncluded', { from: l.from ?? '', to: l.to ?? '', day: l.included_from_day ?? 0 })}
+        </p>
+      ))}
 
       <div className="space-y-1.5">
         {rows.map((line, i) => {
@@ -156,6 +170,15 @@ export default function DayTransportEditor({ preview, loading, failed, value, ci
                       className="w-28 px-2 py-1 border rounded text-xs"
                       aria-label={t('to')}
                     />
+                    <select
+                      value={line.shape ?? priced?.shape ?? 'one_way'}
+                      onChange={e => change(i, { shape: e.target.value as TripShape })}
+                      className="px-2 py-1 border rounded text-xs bg-white"
+                      aria-label={t('tripShape')}
+                      data-testid="transport-line-shape"
+                    >
+                      {TRIP_SHAPES.map(shape => <option key={shape} value={shape}>{t(`shapes.${shape}`)}</option>)}
+                    </select>
                   </>
                 ) : (
                   <input

@@ -21,10 +21,13 @@ type Loaded = { options: AccommodationOption[]; autoId: string | null }
 // asks the same question.
 const cache = new Map<string, Promise<Loaded>>()
 
-function load(kind: 'hotel' | 'cruise', tier: string, city: string, embark: string | null): Promise<Loaded> {
+function load(kind: 'hotel' | 'cruise', tier: string, city: string, embark: string | null, nights: number | null): Promise<Loaded> {
   const qs = new URLSearchParams({ kind, tier })
   if (kind === 'hotel') qs.set('city', city)
-  else if (embark) qs.set('embark', embark)
+  else {
+    if (embark) qs.set('embark', embark)
+    if (nights) qs.set('nights', String(nights))
+  }
   const key = qs.toString()
   let hit = cache.get(key)
   if (!hit) {
@@ -43,6 +46,8 @@ type Props = {
   city: string
   /** The first cruise day's city — narrows ships by embarkation port. */
   embark?: string | null
+  /** The programme's nights aboard — a sailing that long is the automatic pick. */
+  nights?: number | null
   tier: string
   tierLabel: string
   /** The chosen rate row id; undefined = automatic. */
@@ -53,7 +58,7 @@ type Props = {
   onResolved?: (option: AccommodationOption | null) => void
 }
 
-export default function DayPropertyPicker({ kind, city, embark = null, tier, tierLabel, value, onChange, onResolved }: Props) {
+export default function DayPropertyPicker({ kind, city, embark = null, nights = null, tier, tierLabel, value, onChange, onResolved }: Props) {
   const t = useTranslations('b2bCalculator.property')
   const [data, setData] = useState<Loaded | null>(null)
   const [failed, setFailed] = useState(false)
@@ -67,13 +72,13 @@ export default function DayPropertyPicker({ kind, city, embark = null, tier, tie
     // (Greptile on #453).
     onResolved?.(null)
     if (kind === 'hotel' && !city) return
-    load(kind, tier, city, embark)
+    load(kind, tier, city, embark, nights)
       .then(d => { if (live) setData(d) })
       .catch(() => { if (live) setFailed(true) })
     return () => { live = false }
     // onResolved is a fresh closure each render; the query is what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, city, embark, tier])
+  }, [kind, city, embark, nights, tier])
 
   const options = data?.options ?? []
   const auto = options.find(o => o.id === data?.autoId) ?? null
