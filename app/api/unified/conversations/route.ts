@@ -220,7 +220,9 @@ export async function GET(request: NextRequest) {
             last_name,
             email,
             client_code,
-            phone
+            phone,
+            status,
+            lead_source
           ),
           assigned_agent:team_members!email_conversations_assigned_team_member_id_fkey (
             id,

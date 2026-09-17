@@ -172,6 +172,9 @@ export interface UnifiedConversation {
     email: string
     client_code: string
     phone?: string
+    /** lead | prospect | customer | inactive — a lead is a potential customer. */
+    status?: string
+    lead_source?: string | null
   } | null
   assigned_agent?: {
     id: string

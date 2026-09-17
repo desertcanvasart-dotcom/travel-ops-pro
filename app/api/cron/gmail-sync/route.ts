@@ -7,6 +7,9 @@
 // 2026-09-03 — so nothing could say whether a customer was still waiting for
 // an answer, and a reply sent from Gmail directly never reached the app.
 //
+// After syncing: stored mail from the office's own addresses is repaired, and
+// new travel requests become Leads (lib/email/email-leads).
+//
 // A short window each run (the last 3 days, 50 messages): the manual Sync
 // button still does the 30-day catch-up. One mailbox failing (a revoked
 // token) never stops the next.
@@ -18,6 +21,7 @@ import { withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { syncMailbox } from '@/lib/email/sync-mailbox'
 import { applyOfficeRule, loadOfficeRule } from '@/lib/email/office-addresses-server'
+import { processNewEmailLeads } from '@/lib/email/email-leads'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,8 +55,16 @@ async function getHandler(request: NextRequest) {
     console.error('[gmail-sync] office-address re-classify failed:', e)
   }
 
+  // New travel requests by email become Leads (lib/email/email-leads).
+  let leads: Array<{ conversationId: string; outcome: string }> = []
+  try {
+    leads = await processNewEmailLeads(db)
+  } catch (e) {
+    console.error('[gmail-sync] lead detection failed:', e)
+  }
+
   const failed = results.filter(r => !r.ok)
-  return NextResponse.json({ ok: failed.length === 0, mailboxes: results.length, results, reclassified }, { status: failed.length && failed.length === results.length ? 500 : 200 })
+  return NextResponse.json({ ok: failed.length === 0, mailboxes: results.length, results, reclassified, leads_created: leads.filter(l => l.outcome === 'lead_created').length }, { status: failed.length && failed.length === results.length ? 500 : 200 })
 }
 
 export const GET = withJobRun('gmail-sync', () => createServerClient(), getHandler)
