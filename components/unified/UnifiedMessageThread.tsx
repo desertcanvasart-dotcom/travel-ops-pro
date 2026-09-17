@@ -1,5 +1,6 @@
 'use client'
 
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { newRequestKey, sendGuardedEmail } from '@/lib/email/send-with-guard'
 import { useSendConflictConfirm } from '@/lib/email/use-send-conflict-confirm'
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -250,6 +251,8 @@ export function UnifiedMessageThread({
   // One key per email reply (lib/email/send-with-guard): kept until it is sent.
   const replyKeyRef = useRef<string>(newRequestKey())
   const confirmSendConflict = useSendConflictConfirm()
+  const { confirm: confirmDialog } = useConfirmDialog()
+  const [dismissingLead, setDismissingLead] = useState(false)
   // Portal replies: the message stored fine, but the traveller may not have
   // been told (no address, mail not connected, no live link). The booking
   // page says this out loud; the inbox used to stay silent, which made the
@@ -839,6 +842,28 @@ export function UnifiedMessageThread({
     return name
   }
 
+  // "Not a lead": the email that was made a Lead is not a travel request.
+  const dismissLead = async () => {
+    if (!conversation || dismissingLead) return
+    if (!(await confirmDialog({ title: t('notALead'), message: t('notALeadConfirm'), confirmText: t('notALead'), variant: 'warning' }))) return
+    setDismissingLead(true)
+    try {
+      const res = await fetch('/api/email/leads/dismiss', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: conversation.id }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (res.ok && j.success) {
+        onConversationUpdate?.({ ...conversation, client_id: null, client_name: null, client: null })
+      } else {
+        setSendNotice(j.error || t('notALeadFailed'))
+      }
+    } finally {
+      setDismissingLead(false)
+    }
+  }
+
   const createClientHref = (): string => {
     const params = new URLSearchParams()
     params.set(conversation.channel === 'whatsapp' ? 'phone' : 'email', conversation.contact_info || '')
@@ -876,10 +901,26 @@ export function UnifiedMessageThread({
                 <p className="text-sm font-semibold text-gray-900 truncate">
                   {displayName}
                 </p>
-                {conversation.client_id && (
+                {conversation.client_id && (conversation.client?.status === 'lead' ? (
+                  // A potential customer — made from their email (lib/email/email-leads).
+                  <span className="px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 rounded" data-testid="lead-badge">
+                    {t('lead')}
+                  </span>
+                ) : (
                   <span className="px-1.5 py-0.5 text-[10px] font-medium bg-emerald-100 text-emerald-700 rounded">
                     {t('client')}
                   </span>
+                ))}
+                {conversation.channel === 'email' && conversation.client?.status === 'lead' && conversation.client?.lead_source === 'email' && (
+                  <button
+                    type="button"
+                    onClick={dismissLead}
+                    disabled={dismissingLead}
+                    className="px-1.5 py-0.5 text-[10px] font-medium text-gray-600 border border-gray-200 rounded hover:bg-gray-50 disabled:opacity-50"
+                    data-testid="not-a-lead"
+                  >
+                    {t('notALead')}
+                  </button>
                 )}
               </div>
               <p className="text-xs text-gray-500 truncate">{conversation.contact_info}</p>

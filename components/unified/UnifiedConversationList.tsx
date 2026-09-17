@@ -701,6 +701,11 @@ export function UnifiedConversationList({
                         {displayName}
                       </p>
                       <div className="flex items-center gap-2 flex-shrink-0">
+                        {conv.client?.status === 'lead' && (
+                          <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-amber-50 text-amber-800 border border-amber-200" data-testid="lead-list-badge">
+                            {t('lead')}
+                          </span>
+                        )}
                         {/* A customer still waiting for an answer, and for how long (lib/email/reply-status). */}
                         {conv.awaiting_reply_since && (
                           <span

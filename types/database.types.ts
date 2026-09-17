@@ -4703,6 +4703,8 @@ export interface Database {
           awaiting_reply_since: string | null
           assigned_at: string | null
           last_sync_at: string | null
+          lead_check: string | null
+          lead_checked_at: string | null
           gmail_history_id: string | null
           created_at: string | null
           updated_at: string | null
@@ -4728,6 +4730,8 @@ export interface Database {
           awaiting_reply_since?: string | null
           assigned_at?: string | null
           last_sync_at?: string | null
+          lead_check?: string | null
+          lead_checked_at?: string | null
           gmail_history_id?: string | null
           created_at?: string | null
           updated_at?: string | null
@@ -4753,6 +4757,8 @@ export interface Database {
           awaiting_reply_since?: string | null
           assigned_at?: string | null
           last_sync_at?: string | null
+          lead_check?: string | null
+          lead_checked_at?: string | null
           gmail_history_id?: string | null
           created_at?: string | null
           updated_at?: string | null
@@ -4773,6 +4779,27 @@ export interface Database {
             referencedColumns: ["id"]
           },
         ]
+      }
+      email_lead_dismissals: {
+        Row: {
+          created_at: string
+          dismissed_by: string | null
+          email: string
+          org_id: string
+        }
+        Insert: {
+          created_at?: string
+          dismissed_by?: string | null
+          email: string
+          org_id: string
+        }
+        Update: {
+          created_at?: string
+          dismissed_by?: string | null
+          email?: string
+          org_id?: string
+        }
+        Relationships: []
       }
       email_messages: {
         Row: {

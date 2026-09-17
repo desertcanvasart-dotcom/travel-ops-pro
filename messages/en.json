@@ -894,7 +894,11 @@
     "portalNotifyFailed": "Reply saved, but the notification email failed. The traveller will only see it if they reopen their link.",
     "awaitingReplyOnly": "Awaiting reply",
     "awaitingReply": "Awaiting reply · {time}",
-    "awaitingReplySince": "The customer has been waiting since {when}"
+    "awaitingReplySince": "The customer has been waiting since {when}",
+    "lead": "Lead",
+    "notALead": "Not a lead",
+    "notALeadConfirm": "This email is not someone asking to travel. Remove the lead from Clients? Their next email will not be made a lead again.",
+    "notALeadFailed": "Could not dismiss the lead"
   },
   "pdf": {
     "quote": "Quote",

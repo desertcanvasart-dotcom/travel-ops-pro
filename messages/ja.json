@@ -1321,7 +1321,11 @@
     "portalNotifyFailed": "返信は保存されましたが、通知メールの送信に失敗しました。お客様はリンクを再度開いた場合のみ確認できます。",
     "awaitingReplyOnly": "返信待ち",
     "awaitingReply": "返信待ち · {time}",
-    "awaitingReplySince": "{when} からお客様が返信を待っています"
+    "awaitingReplySince": "{when} からお客様が返信を待っています",
+    "lead": "見込み客",
+    "notALead": "見込み客ではない",
+    "notALeadConfirm": "このメールは旅行のお問い合わせではありません。顧客一覧から見込み客を削除しますか？この送信者の次のメールも見込み客になりません。",
+    "notALeadFailed": "見込み客を解除できませんでした"
   },
   "pdf": {
     "quote": "見積",
