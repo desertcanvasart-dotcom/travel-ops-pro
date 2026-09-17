@@ -6326,7 +6326,6 @@
       "subtotal": "Subtotal",
       "availableAddOns": "Available Add-ons",
       "selectOptionsToCalculate": "Select options above to calculate price",
-      "requestThisTour": "Request This Tour",
       "pricesCalculatedDynamically": "Prices calculated dynamically based on current rates",
       "tourInformation": "Tour Information",
       "code": "Code",
@@ -6351,7 +6350,9 @@
       "southGuide": "Southern guide",
       "docAuthor": "Author (作成者)",
       "docCreated": "Created (作成日)",
-      "seasonBadge": "{season} +{percent}%"
+      "seasonBadge": "{season} +{percent}%",
+      "dayNumber": "Day {day}",
+      "wholeTrip": "Whole trip"
     }
   },
   "b2bQuotes": {
@@ -6437,7 +6438,11 @@
     "noRate": "No rate",
     "continueAnyway": "Continue anyway",
     "pdfIncompleteConfirm": "This quote has {count, plural, one {# service} other {# services}} with no rate ({services}), so the PDF will show a total that leaves them out. Create it anyway?",
-    "convertIncompleteConfirm": "This quote has {count, plural, one {# service} other {# services}} with no rate ({services}). The itinerary will carry a total that leaves them out. Convert anyway?"
+    "convertIncompleteConfirm": "This quote has {count, plural, one {# service} other {# services}} with no rate ({services}). The itinerary will carry a total that leaves them out. Convert anyway?",
+    "dayNumber": "Day {day}",
+    "wholeTrip": "Whole trip",
+    "servicesCount": "{count, plural, one {# service} other {# services}}",
+    "dayGaps": "{count} without a rate"
   },
   "b2bPricingRules": {
     "title": "Transport Packages",

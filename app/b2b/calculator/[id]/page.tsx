@@ -1,11 +1,13 @@
 'use client'
 
+import { DayBandRow, DAY_LINE_EDGE } from '@/components/pricing/DayBand'
+import { groupLinesByDay } from '@/lib/pricing/group-by-day'
 import { todayLocal } from '@/lib/today'
 import React, { useState, useEffect, Fragment } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { isBookableLine, sortByItineraryFlow } from '@/lib/pricing/breakdown-order'
+import { isBookableLine } from '@/lib/pricing/breakdown-order'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { useTierLabel } from '@/hooks/useTierLabel'
 import { useTierOptions } from '@/hooks/useTierOptions'
@@ -857,20 +859,10 @@ export default function TourPriceCalculator() {
   // Group services by day for the cost breakdown, each day in the order it
   // runs (lib/pricing/breakdown-order) — the same rule the engine sorts by, so
   // extras folded in after pricing land in their place too.
-  const groupedServices = result ? (() => {
-    const ordered = sortByItineraryFlow(result.services, s => ({
-      id: s.service_id,
-      category: s.service_category,
-      dayNumber: s.day_number,
-    }))
-    const grouped = new Map<number, typeof result.services>()
-    for (const svc of ordered) {
-      const key = svc.day_number ?? -1
-      if (!grouped.has(key)) grouped.set(key, [])
-      grouped.get(key)!.push(svc)
-    }
-    return [...grouped.entries()].map(([dayNum, services]) => ({ dayNum, services }))
-  })() : []
+  const groupedServices = result
+    ? groupLinesByDay(result.services, s => ({ id: s.service_id, category: s.service_category, dayNumber: s.day_number }))
+        .map(g => ({ dayNum: g.day, services: g.lines }))
+    : []
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -1720,7 +1712,7 @@ export default function TourPriceCalculator() {
                     </tr>
                   </thead>
                   <tbody>
-                    {groupedServices.map(({ dayNum, services: daySvcs }) => {
+                    {groupedServices.map(({ dayNum, services: daySvcs }, groupIndex) => {
                       const dayTotal = daySvcs.reduce((sum, s) => sum + s.line_total, 0)
                       const isExpanded = expandedDays.has(dayNum)
                       // Name the day the way the programme does, so the
@@ -1734,32 +1726,23 @@ export default function TourPriceCalculator() {
 
                       return (
                         <Fragment key={dayNum}>
-                          {/* Day header row */}
-                          <tr
-                            className="bg-gray-100 cursor-pointer hover:bg-gray-200 transition-colors"
-                            onClick={() => toggleDay(dayNum)}
-                          >
-                            <td colSpan={5} className="px-4 py-2 font-medium text-gray-800">
-                              <div className="flex items-center gap-2">
-                                {isExpanded
-                                  ? <ChevronUp className="w-4 h-4 text-gray-500" />
-                                  : <ChevronDown className="w-4 h-4 text-gray-500" />
-                                }
-                                {dayLabel}
-                                <span className="text-xs text-gray-500 font-normal">
-                                  ({daySvcs.length} {daySvcs.length === 1 ? t('service') : t('services')})
-                                </span>
-                                {dayGaps > 0 && (
-                                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                                    {t('dayGaps', { count: dayGaps })}
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className={`px-4 py-2 text-right font-medium ${dayGaps > 0 ? 'text-red-700' : 'text-gray-700'}`}>
-                              {sym}{dayTotal.toFixed(2)}
-                            </td>
-                          </tr>
+                          {/* Where the day starts: a band with its number, name and total */}
+                          <DayBandRow
+                            columns={6}
+                            first={groupIndex === 0}
+                            day={dayNum}
+                            label={dayLabel}
+                            meta={`(${daySvcs.length} ${daySvcs.length === 1 ? t('service') : t('services')})`}
+                            badge={dayGaps > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                                {t('dayGaps', { count: dayGaps })}
+                              </span>
+                            )}
+                            total={`${sym}${dayTotal.toFixed(2)}`}
+                            hasGaps={dayGaps > 0}
+                            expanded={isExpanded}
+                            onToggle={() => toggleDay(dayNum)}
+                          />
                           {/* Individual service rows, in the order the day runs.
                               A line with no rate stays in its place at 0, in red,
                               with what to add — the operator asked to see the gap
@@ -1776,7 +1759,7 @@ export default function TourPriceCalculator() {
                                 : 'hover:bg-gray-50'
                               }`}
                             >
-                              <td className="px-4 py-2 pl-10">
+                              <td className={`px-4 py-2 pl-10 ${DAY_LINE_EDGE}`}>
                                 <div className={state === 'unpriced' ? 'text-red-800 font-medium' : undefined}>{service.service_name}</div>
                                 {service.issue && state !== 'included' && (
                                   <div className={`text-xs mt-0.5 ${state === 'unpriced' ? 'text-red-700' : 'text-amber-800'}`}>{service.issue}</div>

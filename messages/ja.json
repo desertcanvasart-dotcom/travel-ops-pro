@@ -6454,7 +6454,6 @@
       "subtotal": "小計",
       "availableAddOns": "利用可能なアドオン",
       "selectOptionsToCalculate": "上記のオプションを選択して料金を計算",
-      "requestThisTour": "このツアーをリクエスト",
       "pricesCalculatedDynamically": "料金は現在のレートに基づいて動的に計算されます",
       "tourInformation": "ツアー情報",
       "code": "コード",
@@ -6479,7 +6478,9 @@
       "southGuide": "南部ガイド",
       "docAuthor": "作成者",
       "docCreated": "作成日",
-      "seasonBadge": "{season} +{percent}%"
+      "seasonBadge": "{season} +{percent}%",
+      "dayNumber": "{day}日目",
+      "wholeTrip": "旅程全体"
     },
     "views": {
       "grid": "グリッド",
@@ -7022,7 +7023,11 @@
     "noRate": "料金未設定",
     "continueAnyway": "このまま進める",
     "pdfIncompleteConfirm": "この見積りには料金未設定のサービスが{count}件あります（{services}）。PDFの合計にはそれらが含まれません。このまま作成しますか？",
-    "convertIncompleteConfirm": "この見積りには料金未設定のサービスが{count}件あります（{services}）。作成される旅程の合計にはそれらが含まれません。このまま変換しますか？"
+    "convertIncompleteConfirm": "この見積りには料金未設定のサービスが{count}件あります（{services}）。作成される旅程の合計にはそれらが含まれません。このまま変換しますか？",
+    "dayNumber": "{day}日目",
+    "wholeTrip": "旅程全体",
+    "servicesCount": "{count}件",
+    "dayGaps": "料金なし {count}件"
   },
   "b2bPricingRules": {
     "title": "輸送パッケージ",
