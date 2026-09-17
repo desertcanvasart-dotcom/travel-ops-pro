@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { isRoadTransferType, sanitizeTripShape } from '@/lib/pricing/road-trips'
+import { resolveTripShapeWrite } from '@/lib/pricing/road-trips'
 import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
 import { createServerClient } from '@/lib/supabase-server'
 
@@ -70,6 +70,8 @@ export async function POST(request: NextRequest) {
 
     const serviceCode = body.service_code ||
       `${body.city.toUpperCase().replace(/\s+/g, '-')}-${body.service_type.toUpperCase().replace(/_/g, '-')}`
+    const tripShapeWrite = resolveTripShapeWrite({ ...body, service_code: serviceCode })
+    if (!tripShapeWrite.ok) return NextResponse.json({ error: tripShapeWrite.error }, { status: 400 })
 
     const newRate: Record<string, any> = {
       service_code: serviceCode,
@@ -78,7 +80,7 @@ export async function POST(request: NextRequest) {
       origin_city: body.origin_city || null,
       destination_city: body.destination_city || null,
       // Road transfers: the trip's shape (lib/pricing/road-trips); others none.
-      trip_shape: isRoadTransferType(body.service_type) ? (sanitizeTripShape(body.trip_shape) ?? 'one_way') : null,
+      trip_shape: tripShapeWrite.value,
       duration: body.duration || null,
       area: body.area || null,
       includes: body.includes || null,

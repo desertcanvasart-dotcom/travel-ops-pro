@@ -609,12 +609,22 @@ export function determineTransportNeeds(
   }
 
   if (day.transport?.service_type) {
+    const overrideLeg = ctx?.road?.kind === 'leg' ? ctx.road : null
     lines.push({
       serviceType: day.transport.service_type,
       duration: day.transport.duration || 'full_day',
       area: day.transport.area || null,
       useSpecialVehicle: !!day.transport.vehicle_type,
       specialVehicleType: day.transport.vehicle_type as VehicleType,
+      // A pinned road transfer still rides the planned route and shape —
+      // otherwise it looked for a one-way rate on a return (Greptile on #462).
+      ...(isRoadTransferType(day.transport.service_type)
+        ? {
+            originCity: overrideLeg ? overrideLeg.from : previousDay?.city,
+            destinationCity: overrideLeg ? overrideLeg.to : day.city,
+            tripShape: overrideLeg ? overrideLeg.shape : 'one_way',
+          }
+        : {}),
     })
     appendExtras(lines, day)
     return lines

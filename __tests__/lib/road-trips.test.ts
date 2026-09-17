@@ -116,9 +116,29 @@ describe('every surface speaks trip shape', () => {
   it('the rate form, both rate APIs, the rate CSV and the preview carry it', () => {
     expect(readFileSync('app/rates/transportation/transportation-content.tsx', 'utf8')).toContain('data-testid="trip-shape"')
     for (const f of ['app/api/resources/transportation/route.ts', 'app/api/resources/transportation/[id]/route.ts', 'app/api/rates/transportation/route.ts']) {
-      expect(readFileSync(f, 'utf8')).toContain('trip_shape: isRoadTransferType(body.service_type)')
+      expect(readFileSync(f, 'utf8')).toContain('trip_shape: tripShapeWrite.value')
     }
     expect(readFileSync('lib/bulk-rate-service.ts', 'utf8')).toContain("colEnum('trip_shape', 'Trip Shape'")
     expect(readFileSync('app/api/b2b/transport-preview/route.ts', 'utf8')).toContain('planRoadTrips(itinerary')
   })
 })
+
+describe('review fixes (Greptile on #462)', () => {
+  it('a write without a shape keeps the row\'s shape; a bad shape is refused; a new row reads its name', async () => {
+    const { resolveTripShapeWrite } = await import('@/lib/pricing/road-trips')
+    const road = { service_type: 'intercity_with_sightseeing' }
+    expect(resolveTripShapeWrite(road, { trip_shape: 'overnight_return' })).toEqual({ ok: true, value: 'overnight_return' })
+    expect(resolveTripShapeWrite(road, { trip_shape: null, service_code: 'X-SAME-DAY' })).toEqual({ ok: true, value: 'same_day_return' })
+    expect(resolveTripShapeWrite({ ...road, trip_shape: 'return' }, { trip_shape: 'one_way' })).toMatchObject({ ok: false })
+    expect(resolveTripShapeWrite({ ...road, service_code: 'ASWAN-TO-ABU-SIMBEL-NEXT-DAY-RETURN' })).toEqual({ ok: true, value: 'overnight_return' })
+    expect(resolveTripShapeWrite({ service_type: 'city_tour', trip_shape: 'overnight_return' })).toEqual({ ok: true, value: null })
+  })
+
+  it('a day pinning a road transfer with the old override still rides the planned route and shape', async () => {
+    const { determineTransportNeeds } = await import('@/lib/auto-pricing-service')
+    const day = { day: 2, title: 'Abu Simbel', city: 'Abu Simbel', accommodation_type: 'hotel', meals: { breakfast: 'none', lunch: 'none', dinner: 'none' }, attractions: [], services: { airport_arrival: false, airport_departure: false, hotel_checkin: false, hotel_checkout: false, guide_required: false }, transport: { service_type: 'intercity_with_sightseeing' } } as any
+    const [need] = determineTransportNeeds(day, null, null, { road: { kind: 'leg', from: 'Aswan', to: 'Abu Simbel', shape: 'overnight_return' } })
+    expect([need.originCity, need.destinationCity, need.tripShape]).toEqual(['Aswan', 'Abu Simbel', 'overnight_return'])
+  })
+})
+

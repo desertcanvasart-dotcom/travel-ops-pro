@@ -138,3 +138,23 @@ export function planRoadTrips<T extends DayLike>(days: readonly T[], cruiseEndCi
   }
   return plan
 }
+
+/**
+ * The trip_shape a rate write should store. Road types only (others: null).
+ * A value that is sent must be a shape — anything else is refused, never
+ * coerced. Omitted keeps what the row already is (stored, else its name), so
+ * a client that does not know shapes cannot quietly turn an overnight return
+ * into one way (Greptile on #462). A new row with none reads its name.
+ */
+export function resolveTripShapeWrite(
+  body: { service_type?: unknown; trip_shape?: unknown; service_code?: unknown; route_name?: unknown },
+  current?: { trip_shape?: string | null; service_code?: string | null; route_name?: string | null } | null
+): { ok: true; value: TripShape | null } | { ok: false; error: string } {
+  if (!isRoadTransferType(String(body.service_type ?? ''))) return { ok: true, value: null }
+  if (body.trip_shape !== undefined && body.trip_shape !== null && body.trip_shape !== '') {
+    const shape = sanitizeTripShape(body.trip_shape)
+    return shape ? { ok: true, value: shape } : { ok: false, error: `trip_shape must be one of ${TRIP_SHAPES.join(', ')}` }
+  }
+  if (current) return { ok: true, value: rateTripShape(current) }
+  return { ok: true, value: tripShapeFromName(String(body.service_code ?? ''), String(body.route_name ?? '')) }
+}

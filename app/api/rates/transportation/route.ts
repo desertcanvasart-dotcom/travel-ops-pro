@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { isRoadTransferType, rateTripShape, sanitizeTripShape } from '@/lib/pricing/road-trips'
+import { rateTripShape, resolveTripShapeWrite } from '@/lib/pricing/road-trips'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
@@ -159,6 +159,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: vehicleWrite.error }, { status: 400 })
     }
     const vehiclePatch = vehicleWrite.patch ?? { vehicles: [] }
+    const tripShapeWrite = resolveTripShapeWrite({ ...body, service_code: serviceCode, route_name: routeName })
+    if (!tripShapeWrite.ok) return NextResponse.json({ success: false, error: tripShapeWrite.error }, { status: 400 })
 
     const newRate: Record<string, any> = {
       service_code: serviceCode,
@@ -167,7 +169,7 @@ export async function POST(request: NextRequest) {
       origin_city: body.origin_city || null,
       destination_city: body.destination_city || null,
       // Road transfers: the trip's shape (lib/pricing/road-trips); others none.
-      trip_shape: isRoadTransferType(body.service_type) ? (sanitizeTripShape(body.trip_shape) ?? 'one_way') : null,
+      trip_shape: tripShapeWrite.value,
       duration: body.duration || null,
       area: body.area || null,
       route_name: routeName,
