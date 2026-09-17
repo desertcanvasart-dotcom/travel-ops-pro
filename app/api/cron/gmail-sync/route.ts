@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { syncMailbox } from '@/lib/email/sync-mailbox'
+import { applyOfficeRule, loadOfficeRule } from '@/lib/email/office-addresses-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,8 +41,18 @@ async function getHandler(request: NextRequest) {
       results.push({ user_id, ok: false, error: e instanceof Error ? e.message : String(e) })
     }
   }
+  // Mail already stored as a customer writing that is really the office's own
+  // reply (a colleague's address, an address added in Settings) — fixed every
+  // run, so the rule reaches what was synced before it (lib/email/office-addresses).
+  let reclassified: { messages: number; conversations: number } | null = null
+  try {
+    reclassified = await applyOfficeRule(db, await loadOfficeRule(db))
+  } catch (e) {
+    console.error('[gmail-sync] office-address re-classify failed:', e)
+  }
+
   const failed = results.filter(r => !r.ok)
-  return NextResponse.json({ ok: failed.length === 0, mailboxes: results.length, results }, { status: failed.length && failed.length === results.length ? 500 : 200 })
+  return NextResponse.json({ ok: failed.length === 0, mailboxes: results.length, results, reclassified }, { status: failed.length && failed.length === results.length ? 500 : 200 })
 }
 
 export const GET = withJobRun('gmail-sync', () => createServerClient(), getHandler)

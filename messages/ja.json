@@ -8307,5 +8307,15 @@
     "alreadyReplied": "この会話には {when} に返信が送信済みです（開いた後の返信）。それでも送信しますか？",
     "sameReply": "同じ返信が {when} にこの会話へ送信されています。もう一度送信しますか？",
     "sendAnyway": "それでも送信"
+  },
+  "officeAddresses": {
+    "title": "オフィスのメールアドレス",
+    "description": "オフィスが送信に使うアドレスとドメインです。ここからのメールは当社の返信として扱われ、返信待ちのお客様とは見なされません。1行に1つ、アドレスまたはドメインを入力してください。",
+    "automatic": "自動的に含まれるもの: {list}",
+    "placeholder": "reservations@example.com\nexample-office.com",
+    "save": "保存",
+    "saved": "保存しました",
+    "savedFixed": "保存しました — 保存済みメール{messages}件を当社の送信に訂正、{conversations}件の会話を更新",
+    "saveFailed": "保存できませんでした"
   }
 }

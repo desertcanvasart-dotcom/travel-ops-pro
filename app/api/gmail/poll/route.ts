@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isOfficeAddress, officeRule } from '@/lib/email/office-addresses'
+import { loadOfficeRule } from '@/lib/email/office-addresses-server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
@@ -36,6 +38,8 @@ export async function GET(request: NextRequest) {
 
     const { gmail, emailAddress } = auth
     const userEmail = emailAddress?.toLowerCase()
+    const loadedRule = await loadOfficeRule(supabase)
+    const officeRuleForPoll = officeRule(userEmail ? [userEmail] : [], [...loadedRule.addresses, ...loadedRule.domains])
 
     // If no historyId, get the current one
     if (!historyId) {
@@ -158,7 +162,8 @@ export async function GET(request: NextRequest) {
               }
 
               const fromEmail = extractEmail(from)
-              const direction = fromEmail === userEmail ? 'outbound' : 'inbound'
+              // Ours when the sender is the office, not only this mailbox (lib/email/office-addresses).
+              const direction = isOfficeAddress(officeRuleForPoll, fromEmail) ? 'outbound' : 'inbound'
               const clientEmail = direction === 'inbound' ? fromEmail : extractEmail(to)
 
               // Extract body

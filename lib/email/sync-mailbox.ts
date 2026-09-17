@@ -11,6 +11,8 @@
 // Body unchanged from the route except: errors are thrown (the route maps
 // them), and each message's RFC Message-ID is stored for threading replies.
 
+import { isOfficeAddress, officeRule, type OfficeRule } from '@/lib/email/office-addresses'
+import { loadOfficeRule } from '@/lib/email/office-addresses-server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, getUserEmail } from '@/lib/gmail'
 import type { EmailSyncOptions, EmailSyncResult } from '@/types/unified'
@@ -31,11 +33,13 @@ export function extractEmailAddress(fromString: string | undefined | null): stri
   return match ? match[1].toLowerCase() : fromString.toLowerCase()
 }
 
-// Helper to determine direction based on user's email
-function getDirection(from: string | undefined | null, userEmail: string): 'inbound' | 'outbound' {
-  if (!from || !userEmail) return 'inbound' // Default to inbound if we can't determine
-  const fromEmail = extractEmailAddress(from)
-  return fromEmail === userEmail.toLowerCase() ? 'outbound' : 'inbound'
+// Ours when the sender is the office — the connected mailbox, its domain, or
+// an address listed in Settings (lib/email/office-addresses). It was the
+// connected address only, so a reply from a colleague's office address read
+// as the customer writing.
+function getDirection(from: string | undefined | null, rule: OfficeRule): 'inbound' | 'outbound' {
+  if (!from) return 'inbound' // Default to inbound if we can't determine
+  return isOfficeAddress(rule, from) ? 'outbound' : 'inbound'
 }
 
 /** Sync `user_id`'s connected mailbox. Records the run in email_sync_state. */
@@ -65,6 +69,8 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
     }
 
     console.log('[Email Sync] Using email:', userEmail)
+    const loaded = await loadOfficeRule(supabase)
+    const rule = officeRule([userEmail], [...loaded.addresses, ...loaded.domains])
 
     // Update sync state to running
     await supabase
@@ -156,10 +162,10 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
         const subject = getHeader('Subject')
 
         // Determine client email (the external party)
-        const direction = getDirection(from, userEmail)
+        const direction = getDirection(from, rule)
         const clientEmail = direction === 'inbound'
           ? extractEmailAddress(from)
-          : extractEmailAddress(to)
+          : (to.split(',').map(extractEmailAddress).find((addr: string) => addr.includes('@') && !isOfficeAddress(rule, addr)) || extractEmailAddress(to))
 
         // Get last message for snippet
         const lastMessage = messages.reduce((latest, msg) => {
@@ -187,7 +193,7 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
           const operatorWroteHere = messages.some(
             (m: any) => getDirection(
               (m.payload?.headers || []).find((h: any) => h.name?.toLowerCase() === 'from')?.value,
-              userEmail
+              rule
             ) === 'outbound'
           )
           const everyInboundAutomated = messages.every((m: any) => {
@@ -196,7 +202,7 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
               if (h.name && typeof h.value === 'string') hdrs[h.name] = h.value
             }
             const fromValue = hdrs['From'] ?? hdrs['from'] ?? ''
-            if (getDirection(fromValue, userEmail) === 'outbound') return true // judge inbound only
+            if (getDirection(fromValue, rule) === 'outbound') return true // judge inbound only
             return looksAutomated({
               counterpartyEmail: extractEmailAddress(fromValue),
               headers: hdrs,
@@ -271,7 +277,7 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
           const msgCc = getMsgHeader('Cc')
           const msgSubject = getMsgHeader('Subject')
           const msgDate = new Date(parseInt(message.internalDate || '0')).toISOString()
-          const msgDirection = getDirection(msgFrom, userEmail)
+          const msgDirection = getDirection(msgFrom, rule)
 
           // Extract body
           let bodyHtml = ''
