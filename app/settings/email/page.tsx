@@ -1,5 +1,6 @@
 'use client'
 
+import OfficeAddressesCard from '@/components/settings/OfficeAddressesCard'
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/app/contexts/AuthContext'
@@ -263,6 +264,7 @@ function EmailSettingsContent() {
 
           {/* Connection Tab */}
           {activeTab === 'connection' && (
+            <div className="space-y-4">
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
@@ -328,6 +330,9 @@ function EmailSettingsContent() {
                   )}
                 </div>
               </div>
+            </div>
+            {/* The office's own addresses — replies from them are ours (lib/email/office-addresses). */}
+            <OfficeAddressesCard />
             </div>
           )}
 

@@ -8230,6 +8230,7 @@ export interface Database {
           company_address: string | null
           document_contacts: Json
           offices: Json
+          office_email_addresses: string[]
           default_currency: string | null
           rate_currency: string
           default_margin_percent: number | null
@@ -8255,6 +8256,7 @@ export interface Database {
           company_address?: string | null
           document_contacts: Json
           offices: Json
+          office_email_addresses?: string[]
           default_currency?: string | null
           rate_currency?: string
           default_margin_percent?: number | null
@@ -8280,6 +8282,7 @@ export interface Database {
           company_address?: string | null
           document_contacts?: Json
           offices?: Json
+          office_email_addresses?: string[]
           default_currency?: string | null
           rate_currency?: string
           default_margin_percent?: number | null
@@ -13181,6 +13184,10 @@ export interface Database {
     // every select('*') result to {}.
     Views: { [_ in never]: never }
     Functions: {
+      refresh_email_conversation_reply_state: {
+        Args: { p_conversation: string }
+        Returns: undefined
+      }
       assign_conversation: {
         Args: {
           p_action_type?: string

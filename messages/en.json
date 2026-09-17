@@ -7722,5 +7722,15 @@
     "alreadyReplied": "A reply was already sent to this conversation at {when}, after you opened it. Send your reply anyway?",
     "sameReply": "The same reply was sent to this conversation at {when}. Send it again?",
     "sendAnyway": "Send anyway"
+  },
+  "officeAddresses": {
+    "title": "Office addresses",
+    "description": "The addresses and domains your office writes from. Mail from them counts as our reply — never as a customer waiting for an answer. One per line: a full address or a domain.",
+    "automatic": "Already included: {list}",
+    "placeholder": "reservations@example.com\nexample-office.com",
+    "save": "Save",
+    "saved": "Saved",
+    "savedFixed": "Saved — {messages} stored messages were ours, {conversations} conversations updated",
+    "saveFailed": "Could not save"
   }
 }
