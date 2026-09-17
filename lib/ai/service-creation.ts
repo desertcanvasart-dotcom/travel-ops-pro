@@ -2033,9 +2033,12 @@ export async function createLandItineraryServices(
 
     // Bundled cruise transport (added once on first cruise day)
     if (isCruiseDay && !landCruiseTransportAdded) {
+      // A package is sold by the cruise's length in DAYS: nights aboard + 1
+      // (lib/pricing/cruise-package) — the nights alone sold a 4-night
+      // cruise the 4D package.
       const cruiseDaysCount = (itineraryData.days || []).filter(
         (d: any) => d.is_cruise_day || d.accommodation_type === 'cruise'
-      ).length
+      ).length + 1
 
       const landCruiseTransportRules = await fetchCruiseTransportPricingRules()
       const landCruiseTransportRule = findCruiseTransportRule(landCruiseTransportRules, cruiseDaysCount)

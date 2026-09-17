@@ -55,6 +55,7 @@ import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-curr
 import { tripAccommodationCost, type NightRates } from '@/lib/pricing/rooming'
 import { resolveAttractions, buildAliasMap } from '@/lib/pricing/attractions'
 import { PRESET_TIERS, presetTierFor } from '@/lib/vocabulary'
+import { cruiseSailings, packageForDuration, type Sailing } from '@/lib/pricing/cruise-package'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -393,10 +394,13 @@ interface CruiseTransportPackage {
 export interface CruisePackageInfo {
   packageFound: boolean
   packageName: string
+  /** The sailing's length in days: nights aboard + 1 (lib/pricing/cruise-package). */
   durationDays: number
   packageRate: number
   vehicleType: VehicleType
   includes: string | null
+  /** The sailing this package is for. */
+  sailing?: Sailing
 }
 
 // ============================================
@@ -2399,39 +2403,19 @@ export async function fetchCruiseTransportPricingRules(normalizer?: RateNormaliz
 }
 
 /**
- * Find the matching cruise transport package by duration. Matches against the
- * `duration_days` int column (b2b_transport_packages), not a name-parse.
+ * Find the cruise transport package for a cruise of `durationDays` DAYS
+ * (nights aboard + 1 — lib/pricing/cruise-package). Matches the
+ * `duration_days` column EXACTLY: a 4D and a 5D package are different prices,
+ * so a missing length is No rate, never the closest one (operator, 2026-09-17).
  * Name kept as findCruiseTransportRule for call-site compatibility.
  */
 export function findCruiseTransportRule(
   packages: CruiseTransportPackage[],
   durationDays: number
 ): CruiseTransportPackage | null {
-  if (packages.length === 0) {
-    debugLog(`❌ No cruise transport package found for ${durationDays}D`)
-    return null
-  }
-
-  // Exact duration match
-  const exactMatch = packages.find(p => p.duration_days === durationDays)
-  if (exactMatch) {
-    debugLog(`✅ Found cruise transport package: ${exactMatch.package_name} (${durationDays}D)`)
-    return exactMatch
-  }
-
-  // Closest by duration_days (packages with a duration set)
-  const withDuration = packages.filter(p => (p.duration_days ?? 0) > 0)
-  if (withDuration.length > 0) {
-    const sorted = [...withDuration].sort((a, b) =>
-      Math.abs((a.duration_days ?? 0) - durationDays) - Math.abs((b.duration_days ?? 0) - durationDays)
-    )
-    debugLog(`⚠️ Using closest cruise transport package: ${sorted[0].package_name} (${sorted[0].duration_days}D) for ${durationDays}D`)
-    return sorted[0]
-  }
-
-  // No duration on any package — use the first.
-  debugLog(`⚠️ Using first available cruise transport package: ${packages[0].package_name}`)
-  return packages[0]
+  const pkg = packageForDuration(packages, durationDays)
+  debugLog(pkg ? `✅ Found cruise transport package: ${pkg.package_name} (${durationDays}D)` : `❌ No cruise transport package for ${durationDays}D`)
+  return pkg
 }
 
 /**
@@ -2473,39 +2457,41 @@ export function calculateCruisePackageInfo(
   packages: CruiseTransportPackage[],
   numPax: number
 ): CruisePackageInfo | null {
-  // Count cruise days (days marked with is_cruise_day)
-  const cruiseDays = itinerary.filter(day => day.is_cruise_day === true)
+  return cruisePackagesFor(itinerary, packages, numPax)[0] ?? null
+}
 
-  if (cruiseDays.length === 0) {
-    return null
-  }
-
-  debugLog(`🚢 Found ${cruiseDays.length} cruise days in itinerary`)
-
-  // Find the matching cruise transport package (by duration_days)
-  const pkg = findCruiseTransportRule(packages, cruiseDays.length)
-
-  if (!pkg) {
-    return {
-      packageFound: false,
-      packageName: 'No cruise transport package found',
-      durationDays: cruiseDays.length,
-      packageRate: 0,
-      vehicleType: 'Minivan',
-      includes: null
+/** One package per sailing — a programme can sail twice. A package with no
+ *  usable price for the group is not found (No rate), never 0. */
+export function cruisePackagesFor(
+  itinerary: ItineraryDay[],
+  packages: CruiseTransportPackage[],
+  numPax: number
+): CruisePackageInfo[] {
+  return cruiseSailings(itinerary).map(sailing => {
+    const pkg = findCruiseTransportRule(packages, sailing.durationDays)
+    const priced = pkg ? getCruiseTransportRate(pkg, numPax) : null
+    const rate = priced ? usableRate(priced.rate) : null
+    if (!pkg || !priced || rate == null) {
+      return {
+        packageFound: false,
+        packageName: pkg ? pkg.package_name : 'No cruise transport package found',
+        durationDays: sailing.durationDays,
+        packageRate: 0,
+        vehicleType: priced?.vehicleType ?? 'Minivan',
+        includes: null,
+        sailing,
+      }
     }
-  }
-
-  const { vehicleType, rate } = getCruiseTransportRate(pkg, numPax)
-
-  return {
-    packageFound: true,
-    packageName: pkg.package_name,
-    durationDays: cruiseDays.length,
-    packageRate: rate,
-    vehicleType,
-    includes: pkg.includes ?? pkg.notes
-  }
+    return {
+      packageFound: true,
+      packageName: pkg.package_name,
+      durationDays: sailing.durationDays,
+      packageRate: rate,
+      vehicleType: priced.vehicleType,
+      includes: pkg.includes || pkg.notes || null,
+      sailing,
+    }
+  })
 }
 
 // ============================================
@@ -4061,37 +4047,59 @@ export async function calculateDayBasedPricing(
     }
   }
 
-  // Add cruise transport package if applicable (for 2 pax baseline)
+  // The cruise sightseeing transport package: one per sailing, matched by the
+  // sailing's length in DAYS (nights aboard + 1 — lib/pricing/cruise-package).
+  // Its price is listed once, under Whole trip (lib/pricing/group-by-day);
+  // every day it covers lists the day's transport as included in it, so a
+  // cruise day reads "covered", never "forgotten" (operator, 2026-09-17).
   let baseCruisePackageCost = 0
   if (hasCruisePackage) {
-    const cruisePackageInfo = calculateCruisePackageInfo(itinerary, cruiseTransportPricingRules, 2)
-    if (cruisePackageInfo?.packageFound) {
-      baseCruisePackageCost = cruisePackageInfo.packageRate
-      services.push({
-        id: 'cruise-transport-package',
-        dayNumber: cruisePackageDays[0]?.day || 1,
-        serviceType: 'transportation',
-        serviceName: `🚢 ${cruisePackageInfo.packageName}`,
-        quantity: 1,
-        quantityMode: 'fixed',
-        unitCost: cruisePackageInfo.packageRate,
-        lineTotal: cruisePackageInfo.packageRate,
-        rateSource: 'b2b_transport_packages',
-        isPerPax: false,
-        isOptional: false,
-        notes: `${cruisePackageInfo.durationDays}D cruise transport package (${cruisePackageInfo.vehicleType}) - includes: ${cruisePackageInfo.includes || 'car, carriage, felucca, motorboat'}`
-      })
-      debugLog(`🚢 Cruise package cost (2 pax): €${baseCruisePackageCost.toFixed(2)} (${cruisePackageInfo.packageName})`)
-    } else {
-      listUnpriced({ id: 'cruise-transport-package', dayNumber: cruisePackageDays[0]?.day || 1, serviceType: 'transportation', serviceName: `Cruise transport package (${cruisePackageDays.length} days)`, isPerPax: false }, {
-        kind: 'transport',
-        reason: 'missing',
-        dayNumber: cruisePackageDays[0]?.day,
-        lookupAttempted: `b2b_transport_packages cruise (${cruisePackageDays.length}D)`,
-        message: `No cruise transport package for a ${cruisePackageDays.length}D cruise. Add it in Rates → Transport Packages.`,
-      })
-      warnings.push(`No cruise transport package found for ${cruisePackageDays.length}D cruise`)
-    }
+    cruisePackagesFor(itinerary, cruiseTransportPricingRules, 2).forEach((info, k) => {
+      const sailing = info.sailing!
+      const id = k === 0 ? 'cruise-transport-package' : `cruise-transport-package-${k + 1}`
+      const firstDay = sailing.nightDays[0]
+      if (info.packageFound) {
+        baseCruisePackageCost += info.packageRate
+        services.push({
+          id,
+          dayNumber: firstDay,
+          serviceType: 'transportation',
+          serviceName: `🚢 ${info.packageName}`,
+          quantity: 1,
+          quantityMode: 'fixed',
+          unitCost: info.packageRate,
+          lineTotal: info.packageRate,
+          rateSource: 'b2b_transport_packages',
+          isPerPax: false,
+          isOptional: false,
+          notes: `${info.durationDays}D cruise transport package (${sailing.nights} nights aboard, ${info.vehicleType}) - includes: ${info.includes || 'car, carriage, felucca, motorboat'}`
+        })
+        debugLog(`🚢 Cruise package cost (2 pax): €${info.packageRate.toFixed(2)} (${info.packageName})`)
+      } else {
+        const message = `No ${info.durationDays}D cruise transport package (${sailing.nights} nights aboard). Add a ${info.durationDays}-day package in Rates → Transport Packages.`
+        listUnpriced({ id, dayNumber: firstDay, serviceType: 'transportation', serviceName: `Cruise transport package (${info.durationDays}D)`, isPerPax: false }, {
+          kind: 'transport',
+          reason: 'missing',
+          dayNumber: firstDay,
+          lookupAttempted: `b2b_transport_packages cruise (${info.durationDays}D)`,
+          message,
+        })
+        warnings.push(message)
+      }
+      const inPackage = info.packageFound ? info.packageName : `the ${info.durationDays}D cruise transport package`
+      for (const day of sailing.nightDays) {
+        services.push(zeroLine(
+          { id: `day${day}-cruise-transport-included`, dayNumber: day, serviceType: 'transportation', serviceName: 'Sightseeing transport', isPerPax: false },
+          { included: true, issue: `Included in ${inPackage}` }
+        ))
+      }
+      if (sailing.disembarkDay != null) {
+        services.push(zeroLine(
+          { id: `day${sailing.disembarkDay}-cruise-transport-included`, dayNumber: sailing.disembarkDay, serviceType: 'transportation', serviceName: 'Transfer off the ship', isPerPax: false },
+          { included: true, issue: `Included in ${inPackage}` }
+        ))
+      }
+    })
   }
 
   debugLog(`🚗 Base transport cost (2 pax): €${baseTransportCost.toFixed(2)}${hasCruisePackage ? ` + €${baseCruisePackageCost.toFixed(2)} cruise package` : ''}`)
@@ -4124,8 +4132,9 @@ export async function calculateDayBasedPricing(
       total += usableRate(rate?.base_rate_eur) ?? 0
     }
     if (hasCruisePackage) {
-      const cp = calculateCruisePackageInfo(itinerary, cruiseTransportPricingRules, pax)
-      if (cp?.packageFound) total += cp.packageRate
+      for (const cp of cruisePackagesFor(itinerary, cruiseTransportPricingRules, pax)) {
+        if (cp.packageFound) total += cp.packageRate
+      }
     }
     return total
   }

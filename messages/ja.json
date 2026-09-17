@@ -6491,7 +6491,11 @@
       "docCreated": "作成日",
       "seasonBadge": "{season} +{percent}%",
       "dayNumber": "{day}日目",
-      "wholeTrip": "旅程全体"
+      "wholeTrip": "旅程全体",
+      "guideLanguage": "ガイド言語",
+      "noRate": "料金なし",
+      "included": "含む",
+      "priceIncomplete": "料金が未設定のサービスが{count}件あります — この価格は未完成です。内訳をご確認ください。"
     },
     "views": {
       "grid": "グリッド",
@@ -7038,7 +7042,8 @@
     "dayNumber": "{day}日目",
     "wholeTrip": "旅程全体",
     "servicesCount": "{count}件",
-    "dayGaps": "料金なし {count}件"
+    "dayGaps": "料金なし {count}件",
+    "included": "含む"
   },
   "b2bPricingRules": {
     "title": "輸送パッケージ",

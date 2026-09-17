@@ -466,11 +466,14 @@ export default function QuoteDetailPage() {
                           hasGaps={gaps > 0}
                         />
                         {group.lines.map((service: any, idx: number) => (
-                          <tr key={idx} className={`border-b border-gray-100 ${service.unpriced ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
+                          <tr key={idx} className={`border-b border-gray-100 ${service.unpriced ? 'bg-red-50' : service.included ? 'text-gray-400 hover:bg-gray-50' : 'hover:bg-gray-50'}`}>
                             <td className={`px-4 py-2 ${DAY_LINE_EDGE}`}>
                               <span className={service.unpriced ? 'text-red-800 font-medium' : undefined}>{service.service_name || t('serviceColumn')}</span>
                               {service.unpriced && (
                                 <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] font-medium bg-red-600 text-white">{t('noRate')}</span>
+                              )}
+                              {!service.unpriced && service.included && (
+                                <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-500">{service.issue || t('included')}</span>
                               )}
                             </td>
                             <td className="px-4 py-2 text-right">{service.quantity || 1}</td>
