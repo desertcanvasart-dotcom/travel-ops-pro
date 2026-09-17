@@ -457,7 +457,8 @@
     "itemsCount": "{count} items",
     "receivedThisMonth": "Received This Month",
     "spentThisMonth": "Spent This Month",
-    "paymentsCount": "{count} payments"
+    "paymentsCount": "{count} payments",
+    "attnReplyOverdue": "Customer email waiting for a reply · {time}"
   },
   "analytics": {
     "title": "Analytics Dashboard",
@@ -890,7 +891,10 @@
     "portalNotifyNoRecipient": "Reply saved, but no email went out: nobody on this booking has an email address. Add one to notify them.",
     "portalNotifyNoAccount": "Reply saved, but no email went out: mail is not connected. Connect Gmail in Settings → Email.",
     "portalNotifyNoLink": "Reply saved, but no email went out: this booking has no active portal link. Create one to notify them.",
-    "portalNotifyFailed": "Reply saved, but the notification email failed. The traveller will only see it if they reopen their link."
+    "portalNotifyFailed": "Reply saved, but the notification email failed. The traveller will only see it if they reopen their link.",
+    "awaitingReplyOnly": "Awaiting reply",
+    "awaitingReply": "Awaiting reply · {time}",
+    "awaitingReplySince": "The customer has been waiting since {when}"
   },
   "pdf": {
     "quote": "Quote",
@@ -7711,5 +7715,12 @@
     "assistArrivalMeet": "Meet & greet on landing at {airport}",
     "assistDeparture": "Departure assistance at {airport}",
     "assistArrival": "Arrival assistance at {airport}"
+  },
+  "emailSendGuard": {
+    "title": "Already answered?",
+    "alreadyRepliedBy": "{who} already replied to this conversation at {when}, after you opened it. Send your reply anyway?",
+    "alreadyReplied": "A reply was already sent to this conversation at {when}, after you opened it. Send your reply anyway?",
+    "sameReply": "The same reply was sent to this conversation at {when}. Send it again?",
+    "sendAnyway": "Send anyway"
   }
 }

@@ -1,5 +1,6 @@
 'use client'
 
+import { isReplyOverdue, waitingLabel } from '@/lib/email/reply-status'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import {
@@ -24,6 +25,7 @@ interface FilterState {
   status: ConversationStatus | 'all'
   search: string
   hasUnread: boolean
+  awaitingReply: boolean
   unassignedOnly: boolean
 }
 
@@ -279,9 +281,16 @@ export function UnifiedConversationList({
     status: 'all',
     search: '',
     hasUnread: false,
+    awaitingReply: false,
     unassignedOnly: false,
   })
   const [showFilters, setShowFilters] = useState(false)
+  // The dashboard's "customer waiting for an answer" links here with ?awaiting_reply=1.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('awaiting_reply') === '1') {
+      setFilters(f => ({ ...f, awaitingReply: true }))
+    }
+  }, [])
   const [agents, setAgents] = useState<SalesAgent[]>([])
   const [showAgentsModal, setShowAgentsModal] = useState(false)
 
@@ -307,6 +316,7 @@ export function UnifiedConversationList({
       if (filters.status !== 'all') params.set('status', filters.status)
       if (filters.search) params.set('search', filters.search)
       if (filters.hasUnread) params.set('has_unread', 'true')
+      if (filters.awaitingReply) params.set('awaiting_reply', 'true')
       if (filters.unassignedOnly) params.set('unassigned_only', 'true')
       if (clientId) params.set('client_id', clientId)
 
@@ -584,6 +594,16 @@ export function UnifiedConversationList({
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input
                   type="checkbox"
+                  checked={filters.awaitingReply}
+                  onChange={(e) => setFilters(f => ({ ...f, awaitingReply: e.target.checked }))}
+                  className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  data-testid="filter-awaiting-reply"
+                />
+                <span className="font-medium text-gray-700">{t('awaitingReplyOnly')}</span>
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
                   checked={filters.unassignedOnly}
                   onChange={(e) => setFilters(f => ({ ...f, unassignedOnly: e.target.checked }))}
                   className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
@@ -623,10 +643,10 @@ export function UnifiedConversationList({
             <p className="text-xs text-gray-400 mt-1">
               {t('clickToSyncEmails')}
             </p>
-            {(filters.search || filters.channel !== 'all' || filters.hasUnread || filters.unassignedOnly) && (
+            {(filters.search || filters.channel !== 'all' || filters.hasUnread || filters.awaitingReply || filters.unassignedOnly) && (
               <button
                 type="button"
-                onClick={() => setFilters({ channel: 'all', status: 'all', search: '', hasUnread: false, unassignedOnly: false })}
+                onClick={() => setFilters({ channel: 'all', status: 'all', search: '', hasUnread: false, awaitingReply: false, unassignedOnly: false })}
                 className="mt-2 text-xs text-primary-600 hover:underline"
               >
                 {t('clearFilters')}
@@ -681,6 +701,16 @@ export function UnifiedConversationList({
                         {displayName}
                       </p>
                       <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* A customer still waiting for an answer, and for how long (lib/email/reply-status). */}
+                        {conv.awaiting_reply_since && (
+                          <span
+                            className={`px-1.5 py-0.5 text-[10px] font-semibold rounded ${isReplyOverdue(conv.awaiting_reply_since) ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}`}
+                            title={t('awaitingReplySince', { when: new Date(conv.awaiting_reply_since).toLocaleString() })}
+                            data-testid="awaiting-reply-badge"
+                          >
+                            {t('awaitingReply', { time: waitingLabel(conv.awaiting_reply_since) ?? '' })}
+                          </span>
+                        )}
                         {conv.unread_count > 0 && (
                           <span className={`min-w-[20px] h-5 px-1.5 text-[11px] font-bold text-white rounded-full flex items-center justify-center ${
                             conv.channel === 'whatsapp' ? 'bg-[#25D366]' : 'bg-blue-500'

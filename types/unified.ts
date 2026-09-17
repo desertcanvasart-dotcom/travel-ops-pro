@@ -151,6 +151,9 @@ export interface UnifiedConversation {
   // Status
   unread_count: number
   status: ConversationStatus
+  /** Email: the customer's first message after our last reply — null when
+   *  answered (migration 20261019, lib/email/reply-status). */
+  awaiting_reply_since?: string | null
 
   // Assignment
   assigned_team_member_id: string | null

@@ -3,6 +3,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { getCurrentUserId } from '@/lib/auth/current-org'
+import { claimSend, finishSend, replyBodyHash, threadConflict } from '@/lib/email/send-guard'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,7 +18,13 @@ interface Attachment {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId: bodyUserId, to, subject, body, threadId, attachments } = await request.json()
+    const {
+      userId: bodyUserId, to, subject, body, threadId, attachments,
+      // The duplicate guard (lib/email/send-guard): one key per reply the
+      // composer writes, the time of the newest message it was showing, and the
+      // sender's "send anyway" after being told someone already answered.
+      requestKey, seenUpTo, confirmDuplicate,
+    } = await request.json()
 
     // Send as the authenticated session user (a compose from the browser).
     // Only fall back to a body-supplied userId when there is no session — a
@@ -43,27 +50,68 @@ export async function POST(request: NextRequest) {
       throw err
     }
 
+    // Never the same reply twice (operator, 2026-09-17).
+    const key = typeof requestKey === 'string' && requestKey.trim() ? requestKey.trim().slice(0, 200) : null
+    const bodyHash = replyBodyHash(body)
+    if (threadId && !confirmDuplicate) {
+      const conflict = await threadConflict(supabase, {
+        threadId,
+        requestKey: key,
+        seenUpTo: seenUpTo === undefined ? undefined : (seenUpTo || null),
+        bodyHash,
+      })
+      if (conflict) {
+        return NextResponse.json({
+          error: conflict.code === 'ALREADY_REPLIED'
+            ? 'This conversation was already answered after you opened it.'
+            : 'The same reply was sent to this conversation a few minutes ago.',
+          ...conflict,
+        }, { status: 409 })
+      }
+    }
+    if (key) {
+      const claim = await claimSend(supabase, key, { userId, threadId: threadId || null, bodyHash })
+      if (!claim.ok) {
+        if (claim.status === 'sent') {
+          // The same attempt again (retry, double submit): its answer, not a second email.
+          return NextResponse.json({ success: true, duplicate: true, messageId: claim.gmailMessageId, threadId: claim.gmailThreadId })
+        }
+        return NextResponse.json({ error: 'This reply is already being sent.', code: 'IN_PROGRESS' }, { status: 409 })
+      }
+    }
+
+    // Answer the thread's latest message by its Message-ID, so the reply stays
+    // in the customer's conversation in every mail client, not only in Gmail.
+    const threading = threadId ? await replyHeaders(gmail, threadId) : {}
+
     // Build email with or without attachments
     let rawEmail: string
 
     if (attachments && attachments.length > 0) {
-      rawEmail = buildEmailWithAttachments(to, subject, body, attachments)
+      rawEmail = buildEmailWithAttachments(to, subject, body, attachments, threading)
     } else {
-      rawEmail = buildSimpleEmail(to, subject, body)
+      rawEmail = buildSimpleEmail(to, subject, body, threading)
     }
 
     // Send email
-    const response = await gmail.users.messages.send({
-      userId: 'me',
-      requestBody: {
-        raw: rawEmail,
-        threadId,
-      },
-    })
+    let response
+    try {
+      response = await gmail.users.messages.send({
+        userId: 'me',
+        requestBody: {
+          raw: rawEmail,
+          threadId,
+        },
+      })
+    } catch (sendError) {
+      if (key) await finishSend(supabase, key, { ok: false })
+      throw sendError
+    }
 
     // Store sent message in email_messages table for unified view
     const sentMessageId = response.data.id
     const sentThreadId = response.data.threadId
+    if (key) await finishSend(supabase, key, { ok: true, gmailMessageId: sentMessageId ?? null, gmailThreadId: sentThreadId ?? null })
 
     if (sentMessageId && sentThreadId) {
       try {
@@ -127,7 +175,9 @@ export async function POST(request: NextRequest) {
               size: a.data ? Math.round(a.data.length * 0.75) : 0
             })) || [],
             is_read: true,
-            sent_at: new Date().toISOString()
+            sent_at: new Date().toISOString(),
+            // Who answered — shown to a colleague about to answer again.
+            sent_by: userId,
           })
       } catch (storeError) {
         // Log but don't fail - email was still sent
@@ -142,10 +192,35 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function buildSimpleEmail(to: string, subject: string, body: string): string {
+interface ThreadingHeaders { inReplyTo?: string; references?: string }
+
+/** In-Reply-To / References for a reply in `threadId`: its latest message's
+ *  Message-ID. Empty when Gmail cannot say (the reply still threads in Gmail
+ *  by threadId). */
+async function replyHeaders(gmail: Awaited<ReturnType<typeof getAuthenticatedGmail>>['gmail'], threadId: string): Promise<ThreadingHeaders> {
+  try {
+    const thread = await gmail.users.threads.get({ userId: 'me', id: threadId, format: 'metadata', metadataHeaders: ['Message-ID', 'References'] })
+    const last = thread.data.messages?.[thread.data.messages.length - 1]
+    const header = (name: string) => last?.payload?.headers?.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || ''
+    const messageId = header('Message-ID')
+    if (!messageId) return {}
+    const refs = header('References')
+    return { inReplyTo: messageId, references: refs ? `${refs} ${messageId}` : messageId }
+  } catch {
+    return {}
+  }
+}
+
+const threadingLines = (t: ThreadingHeaders): string[] => [
+  ...(t.inReplyTo ? [`In-Reply-To: ${t.inReplyTo}`] : []),
+  ...(t.references ? [`References: ${t.references}`] : []),
+]
+
+function buildSimpleEmail(to: string, subject: string, body: string, threading: ThreadingHeaders = {}): string {
   const emailLines = [
     `To: ${to}`,
     `Subject: ${subject}`,
+    ...threadingLines(threading),
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=utf-8',
     '',
@@ -163,13 +238,15 @@ function buildEmailWithAttachments(
   to: string, 
   subject: string, 
   body: string, 
-  attachments: Attachment[]
+  attachments: Attachment[],
+  threading: ThreadingHeaders = {}
 ): string {
   const boundary = `boundary_${Date.now()}`
   
   const emailParts = [
     `To: ${to}`,
     `Subject: ${subject}`,
+    ...threadingLines(threading),
     'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     '',

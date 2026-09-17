@@ -4691,13 +4691,16 @@ export interface Database {
           client_email: string | null
           subject: string | null
           last_message_snippet: string | null
+          last_outbound_at: string | null
           last_message_at: string | null
           message_count: number | null
           unread_count: number | null
           status: string | null
           is_starred: boolean | null
+          last_inbound_at: string | null
           is_hidden: boolean | null
           assigned_team_member_id: string | null
+          awaiting_reply_since: string | null
           assigned_at: string | null
           last_sync_at: string | null
           gmail_history_id: string | null
@@ -4713,13 +4716,16 @@ export interface Database {
           client_email?: string | null
           subject?: string | null
           last_message_snippet?: string | null
+          last_outbound_at?: string | null
           last_message_at?: string | null
           message_count?: number | null
           unread_count?: number | null
           status?: string | null
           is_starred?: boolean | null
+          last_inbound_at?: string | null
           is_hidden?: boolean | null
           assigned_team_member_id?: string | null
+          awaiting_reply_since?: string | null
           assigned_at?: string | null
           last_sync_at?: string | null
           gmail_history_id?: string | null
@@ -4735,13 +4741,16 @@ export interface Database {
           client_email?: string | null
           subject?: string | null
           last_message_snippet?: string | null
+          last_outbound_at?: string | null
           last_message_at?: string | null
           message_count?: number | null
           unread_count?: number | null
           status?: string | null
           is_starred?: boolean | null
+          last_inbound_at?: string | null
           is_hidden?: boolean | null
           assigned_team_member_id?: string | null
+          awaiting_reply_since?: string | null
           assigned_at?: string | null
           last_sync_at?: string | null
           gmail_history_id?: string | null
@@ -4785,7 +4794,9 @@ export interface Database {
           is_starred: boolean | null
           labels: string[] | null
           sent_at: string
+          sent_by: string | null
           received_at: string | null
+          rfc_message_id: string | null
           created_at: string | null
         }
         Insert: {
@@ -4807,7 +4818,9 @@ export interface Database {
           is_starred?: boolean | null
           labels?: string[] | null
           sent_at: string
+          sent_by?: string | null
           received_at?: string | null
+          rfc_message_id?: string | null
           created_at?: string | null
         }
         Update: {
@@ -4829,7 +4842,9 @@ export interface Database {
           is_starred?: boolean | null
           labels?: string[] | null
           sent_at?: string
+          sent_by?: string | null
           received_at?: string | null
+          rfc_message_id?: string | null
           created_at?: string | null
         }
         Relationships: [
@@ -4869,6 +4884,42 @@ export interface Database {
           is_default?: boolean | null
           created_at?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      email_send_claims: {
+        Row: {
+          body_hash: string | null
+          created_at: string
+          gmail_message_id: string | null
+          gmail_thread_id: string | null
+          request_key: string
+          status: string
+          thread_id: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          body_hash?: string | null
+          created_at?: string
+          gmail_message_id?: string | null
+          gmail_thread_id?: string | null
+          request_key: string
+          status?: string
+          thread_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          body_hash?: string | null
+          created_at?: string
+          gmail_message_id?: string | null
+          gmail_thread_id?: string | null
+          request_key?: string
+          status?: string
+          thread_id?: string | null
+          updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
