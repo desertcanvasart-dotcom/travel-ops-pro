@@ -97,7 +97,11 @@ export async function refreshStartingPrices(
           rateCurrency,
         })
         if (r.success) {
-          perTier.push({ tier, pricePerPerson: r.pricePerPerson, complete: r.complete, gaps: r.holes?.length ?? 0 })
+          // Services without a rate, counted as LINES — as the calculator's
+          // banner counts them: one missing guide rate leaves several days
+          // unpriced but is one hole (Greptile on #461).
+          const unpricedLines = (r.services ?? []).filter(s => s.unpriced).length
+          perTier.push({ tier, pricePerPerson: r.pricePerPerson, complete: r.complete, gaps: unpricedLines || (r.holes?.length ?? 0) })
         }
       }
       const result = pickStartingPrice(perTier)

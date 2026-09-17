@@ -53,6 +53,10 @@ describe('pickStartingPrice', () => {
 })
 
 describe('the price is kept fresh and shown as defined', () => {
+  it('counts services without a rate as unpriced lines, like the calculator banner', () => {
+    expect(readFileSync('lib/tours/starting-price.ts', 'utf8')).toContain('(r.services ?? []).filter(s => s.unpriced).length')
+  })
+
   it('refreshes on save, nightly and from the button — all through the one function', () => {
     expect(readFileSync('app/api/b2b/update-template-itinerary/route.ts', 'utf8')).toContain('refreshStartingPrices(supabaseAdmin, orgId, [template_id])')
     expect(readFileSync('app/api/tours/recalculate-prices/route.ts', 'utf8')).toContain('refreshStartingPrices(supabaseAdmin, orgId')
