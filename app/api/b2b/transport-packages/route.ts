@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
+import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
 import { NextRequest, NextResponse } from 'next/server'
 
 // ============================================
@@ -43,6 +44,14 @@ export async function POST(request: NextRequest) {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
+    // The vehicles, as a transportation rate stores them: vocabulary keys,
+    // the vocabulary's passenger sizes (lib/rates/vehicle-bands-server).
+    const vehicleWrite = await resolveVehicleWrite(body, null)
+    if (!vehicleWrite.ok) return NextResponse.json({ success: false, error: vehicleWrite.error }, { status: 400 })
+    if (!vehicleWrite.patch || vehicleWrite.patch.vehicles.length === 0) {
+      return NextResponse.json({ success: false, error: 'At least one vehicle rate is required' }, { status: 400 })
+    }
+
     const { data, error } = await supabaseAdmin
       .from('b2b_transport_packages')
       .insert({
@@ -54,16 +63,7 @@ export async function POST(request: NextRequest) {
         destination_city: body.destination_city,
         duration_days: body.duration_days || 1,
         ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
-        sedan_rate: body.sedan_rate,
-        sedan_capacity: body.sedan_capacity || 3,
-        minivan_rate: body.minivan_rate,
-        minivan_capacity: body.minivan_capacity || 7,
-        van_rate: body.van_rate,
-        van_capacity: body.van_capacity || 12,
-        minibus_rate: body.minibus_rate,
-        minibus_capacity: body.minibus_capacity || 20,
-        bus_rate: body.bus_rate,
-        bus_capacity: body.bus_capacity || 50,
+        vehicles: vehicleWrite.patch.vehicles,
         description: body.description,
         includes: body.includes,
         notes: body.notes,

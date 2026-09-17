@@ -22,6 +22,7 @@ const SEEDERS = [
   'public.seed_cruise_supplements(uuid)',
   'public.seed_tour_template_vocabulary(uuid)',
   'public.seed_tour_themes(uuid)',
+  'public.seed_guide_modes(uuid)',
 ]
 
 let db: { query(s: string): Promise<{ rows: any[] }>; exec(s: string): Promise<unknown>; close(): Promise<void> }

@@ -1,5 +1,6 @@
 'use client'
 
+import { ENGINE_GUIDE_MODES, rateGuideMode } from '@/lib/guides/guide-mode'
 import { todayLocal } from '@/lib/today'
 import { useEffect, useState, useMemo } from 'react'
 import CityOptions from '@/app/components/CityOptions'
@@ -80,6 +81,8 @@ interface GuideRate {
   guide_type: string
   city?: string
   tour_duration: string
+  /** spot / throughout (lib/guides/guide-mode); absent on rows before 20261018. */
+  guide_mode?: string | null
   base_rate_eur: number
   base_rate_non_eur: number
   rate_currency?: string | null
@@ -107,6 +110,9 @@ export default function GuideRatesContent() {
   // hidden — the pricing engine selects by the two the operator sells).
   const gradeOptions = useVocabOptions('guide_grade', GUIDE_TYPES.map(g => ({ value: g.value, label: t(`guideTypes.${g.value}`) })))
   const durationOptions = useVocabOptions('guide_duration', TOUR_DURATIONS.map(d => ({ value: d.value, label: t(`tourDurations.${d.value}`) })))
+  // Spot / throughout — Settings → Vocabulary → Guide modes (lib/guides/guide-mode).
+  const modeOptions = useVocabOptions('guide_mode', ENGINE_GUIDE_MODES.map(m => ({ value: m, label: t(`guideModes.${m}`) })))
+  const guideModeLabel = useVocabLabel('guide_mode')
   const tCommon = useTranslations('rates.common')
   const searchParams = useSearchParams()
   const initialSupplierId = searchParams.get('supplier_id') || ''
@@ -175,6 +181,7 @@ export default function GuideRatesContent() {
     guide_type: 'egyptologist',
     city: '',
     tour_duration: 'full_day',
+    guide_mode: 'spot',
     base_rate_eur: 0,
     base_rate_non_eur: 0,
     rate_currency: '',
@@ -272,6 +279,7 @@ export default function GuideRatesContent() {
       guide_type: 'egyptologist',
       city: '',
       tour_duration: 'full_day',
+      guide_mode: 'spot',
       base_rate_eur: 0,
       base_rate_non_eur: 0,
       rate_currency: '',
@@ -304,6 +312,7 @@ export default function GuideRatesContent() {
       guide_type: rate.guide_type || 'egyptologist',
       city: rate.city || '',
       tour_duration: rate.tour_duration || 'full_day',
+      guide_mode: rateGuideMode(rate),
       base_rate_eur: rate.base_rate_eur || 0,
       base_rate_non_eur: rate.base_rate_non_eur || 0,
       rate_currency: rate.rate_currency || '',
@@ -827,6 +836,9 @@ export default function GuideRatesContent() {
                       <span className="text-sm text-gray-600">
                         {guideDurationLabel(rate.tour_duration, t(`tourDurations.${rate.tour_duration}`))}
                       </span>
+                      <span className="ml-1 px-1.5 py-0.5 rounded text-[11px] bg-[#647C47]/10 text-[#4a5c35]" data-testid="guide-mode-badge">
+                        {guideModeLabel(rateGuideMode(rate), t(`guideModes.${rateGuideMode(rate)}`))}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span className="text-sm font-bold text-green-600">{formatRateInRowCurrency(rate.base_rate_eur, rate, formatRate)}{rate.rate_currency && <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>}</span>
@@ -889,6 +901,7 @@ export default function GuideRatesContent() {
                   <p><span className="text-gray-400">{t('table.type')}:</span> {guideGradeLabel(rate.guide_type, t(`guideTypes.${rate.guide_type}`))}</p>
                   <p><span className="text-gray-400">{t('table.city')}:</span> {rate.city || '—'}</p>
                   <p><span className="text-gray-400">{t('table.duration')}:</span> {guideDurationLabel(rate.tour_duration, t(`tourDurations.${rate.tour_duration}`))}</p>
+                  <p><span className="text-gray-400">{t('form.guideMode')}:</span> {guideModeLabel(rateGuideMode(rate), t(`guideModes.${rateGuideMode(rate)}`))}</p>
                 </div>
 
                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
@@ -1141,7 +1154,24 @@ export default function GuideRatesContent() {
                   <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">3</span>
                   {t('form.durationRates')}
                 </h3>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.guideMode')}</label>
+                    <select
+                      name="guide_mode"
+                      value={formData.guide_mode}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                      data-testid="guide-mode"
+                    >
+                      {modeOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                      {formData.guide_mode && !modeOptions.some(o => o.value === formData.guide_mode) && (
+                        <option value={formData.guide_mode}>{guideModeLabel(formData.guide_mode, formData.guide_mode)}</option>
+                      )}
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.tourDuration')}</label>
                     <select

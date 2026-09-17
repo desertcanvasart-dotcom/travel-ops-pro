@@ -98,10 +98,14 @@ const VOCAB_PICKERS: Record<string, string[]> = {
   'app/rates/airport-services/page.tsx': ['airport_service_type', 'airport_direction'],
   'app/rates/hotel-services/page.tsx': ['hotel_service_type'],
   'app/rates/cruises/page.tsx': ['cruise_cabin'],
-  'app/rates/guides/guide-rates-content.tsx': ['guide_grade', 'guide_duration'],
+  'app/rates/guides/guide-rates-content.tsx': ['guide_grade', 'guide_duration', 'guide_mode'],
   'app/rates/attractions/attractions-content.tsx': ['attraction_category', 'attraction_fee_type', 'rate_season'],
   'app/rates/hotels/hotels-content.tsx': ['board_basis', 'hotel_property_type'],
-  'app/rates/transportation/transportation-content.tsx': ['transport_service_type', 'vehicle_type'],
+  'app/rates/transportation/transportation-content.tsx': ['transport_service_type'],
+  // 2026-09-17: the vehicle table is shared with transport packages — both
+  // forms render it (guarded in vehicle-sizes-follow-vocabulary.test.ts).
+  'components/rates/VehicleRatesTable.tsx': ['vehicle_type'],
+  'app/b2b/calculator/[id]/page.tsx': ['guide_mode'],
   // Class B — these stored the WORD; the pickers now store the vocabulary key.
   'app/rates/meals/meal-rates-content.tsx': ['meal_type', 'cuisine_type', 'restaurant_type', 'dietary_option'],
   'app/rates/trains/train-rates-content.tsx': ['train_class'],

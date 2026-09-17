@@ -3,6 +3,7 @@
 // structured by grid slot for dropdown population.
 
 import { guideLanguageWord } from '@/lib/guides/guide-language'
+import { rateGuideMode } from '@/lib/guides/guide-mode'
 import { NextRequest, NextResponse } from 'next/server'
 import { seasonsForRow, type RateSeasonEntity } from '@/lib/rates/rate-seasons'
 import { supplementsForRow, supplementField } from '@/lib/rates/supplements'
@@ -88,7 +89,7 @@ export async function GET(request: NextRequest) {
     const vehicleWords = new Map((await vocabularyItemsForCurrentOrg('vehicle_type')).map(i => [i.key, i.label]))
     const vehicleLabel = (key: string) => vehicleWords.get(key) ?? vehicleKeyLabel(key)
 
-    const expandTiers = (r: any, namePrefix: string) =>
+    const expandTiers = (r: any, namePrefix: string, extra: Record<string, unknown> = {}) =>
       vehicleBands(r).map(b => ({
         id: `${r.id}__${b.key}`,
         name: `${vehicleLabel(b.key)} (${b.capacity_min}-${b.capacity_max} pax) — ${namePrefix}`,
@@ -101,6 +102,7 @@ export async function GET(request: NextRequest) {
         service_type: r.service_type,
         origin_city: r.origin_city || r.city,
         destination_city: r.destination_city,
+        ...extra,
       }))
 
     const rates = {
@@ -119,27 +121,22 @@ export async function GET(request: NextRequest) {
             const label = r.route_name || `${r.origin_city || ''} → ${r.destination_city || ''}`.trim() || r.service_code
             return expandTiers(r, label)
           }),
-        // Cruise transport packages (bundled sightseeing vehicle for cruise days)
-        ...(nCruisePkgs || []).map((r: any) => ({
-          id: r.id,
-          name: `${r.package_name} (${r.origin_city}→${r.destination_city}, ${r.duration_days}d)`,
-          rateEur: toNum(r.sedan_rate),
-          rateNonEur: toNum(r.sedan_rate),
-          city: r.origin_city,
-          details: `cruise_package | ${r.description || ''}`,
-          service_type: 'cruise_transport_package',
-          package_type: r.package_type,
-          sedan_rate: toNum(r.sedan_rate),
-          minivan_rate: toNum(r.minivan_rate),
-          van_rate: toNum(r.van_rate),
-          minibus_rate: toNum(r.minibus_rate),
-          bus_rate: toNum(r.bus_rate),
-        })),
+        // Cruise transport packages (bundled sightseeing vehicle for cruise
+        // days): one option per vehicle, sized like every transport rate — it
+        // priced every group at the sedan rate.
+        ...(nCruisePkgs || []).flatMap((r: any) =>
+          expandTiers(r, `${r.package_name} (${r.origin_city}→${r.destination_city}, ${r.duration_days}d)`, {
+            city: r.origin_city,
+            details: `cruise_package | ${r.description || ''}`,
+            service_type: 'cruise_transport_package',
+            package_type: r.package_type,
+          })),
       ],
 
       guide: (nGuides || []).map((r: any) => ({
         id: r.id,
-        name: `${r.guide_language ? guideLanguageWord(r.guide_language) : 'Guide'} (${r.guide_type || 'Egyptologist'})`,
+        // Spot and throughout rates are different prices — the name says which.
+        name: `${r.guide_language ? guideLanguageWord(r.guide_language) : 'Guide'} (${r.guide_type || 'Egyptologist'}${rateGuideMode(r) !== 'spot' ? `, ${rateGuideMode(r)}` : ''})`,
         rateEur: toNum(r.base_rate_eur || r.rate_eur),
         rateNonEur: toNum(r.base_rate_non_eur || r.rate_non_eur || r.base_rate_eur || r.rate_eur),
         city: r.city,

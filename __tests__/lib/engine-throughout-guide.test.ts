@@ -21,10 +21,14 @@ const BASE = {
   language: 'English', marginPercent: 0, numPax: 2, travelDate: '2026-11-03',
 }
 
+// Spot and throughout guiding are priced from their own rates (guide_rates.guide_mode,
+// operator 2026-09-17); the fixture holds both at the same fee.
 const gradedGuideRates = () => [
-  { id: 'g-full', guide_language: 'English', guide_type: 'egyptologist', tour_duration: 'full_day', is_active: true, base_rate_eur: 75, rate_eur: 75 },
-  { id: 'g-meet', guide_language: 'English', guide_type: 'egyptologist', tour_duration: 'meet_greet', is_active: true, base_rate_eur: 25, rate_eur: 25 },
-  { id: 'g-senior', guide_language: 'English', guide_type: 'senior', tour_duration: 'full_day', is_active: true, base_rate_eur: 120, rate_eur: 120 },
+  { id: 'g-full', guide_language: 'English', guide_type: 'egyptologist', tour_duration: 'full_day', guide_mode: 'spot', is_active: true, base_rate_eur: 75, rate_eur: 75 },
+  { id: 'g-senior', guide_language: 'English', guide_type: 'senior', tour_duration: 'full_day', guide_mode: 'spot', is_active: true, base_rate_eur: 120, rate_eur: 120 },
+  { id: 'g-full-t', guide_language: 'English', guide_type: 'egyptologist', tour_duration: 'full_day', guide_mode: 'throughout', is_active: true, base_rate_eur: 75, rate_eur: 75 },
+  { id: 'g-meet', guide_language: 'English', guide_type: 'egyptologist', tour_duration: 'meet_greet', guide_mode: 'throughout', is_active: true, base_rate_eur: 25, rate_eur: 25 },
+  { id: 'g-senior-t', guide_language: 'English', guide_type: 'senior', tour_duration: 'full_day', guide_mode: 'throughout', is_active: true, base_rate_eur: 120, rate_eur: 120 },
 ]
 
 const seasonedHotel = (guideRate: number) => {
@@ -69,6 +73,24 @@ describe('spot mode (the default) is untouched', () => {
 })
 
 describe('throughout mode ("+1")', () => {
+  it('priced from THROUGHOUT rates only — a throughout quote with only spot rates is No rate, never the spot fee', async () => {
+    const t = seasonedHotel(40)
+    t.guide_rates = t.guide_rates.filter((g: any) => g.guide_mode === 'spot')
+    setMockTables(t)
+    const r = await calculateAutoPricing({ ...BASE, guideMode: 'throughout' })
+    expect(line(r, 'day1-guide')).toMatchObject({ unpriced: true, unitCost: 0 })
+    expect(guideHoles(r).some((h: any) => /No throughout English guide rate/.test(h.message))).toBe(true)
+  })
+
+  it('a spot quote never reads a throughout rate', async () => {
+    const t = seasonedHotel(40)
+    t.guide_rates = t.guide_rates.map((g: any) => g.id === 'g-full-t' ? { ...g, base_rate_eur: 999, rate_eur: 999 } : g)
+      .filter((g: any) => g.id !== 'g-full')
+    setMockTables(t)
+    const r = await calculateAutoPricing(BASE)
+    expect(line(r, 'day1-guide')?.unitCost).not.toBe(999)
+  })
+
   it('bills every day — full rate with sightseeing, meet/assist without — and the bed at the period guide_rate', async () => {
     setMockTables(seasonedHotel(40))
     const r = await calculateAutoPricing({ ...BASE, guideMode: 'throughout' })

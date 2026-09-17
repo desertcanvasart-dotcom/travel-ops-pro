@@ -4302,14 +4302,12 @@
       "van": "バン",
       "minibus": "ミニバス",
       "bus": "バス",
-      "useSettingsBand": "設定の定員を使う（{min}–{max}名）",
       "alignBands": "定員を設定に合わせる",
       "alignBandsNone": "すべての料金がすでに設定の定員を使っています。",
       "alignBandsConfirm": "{count}件の料金が「設定 → 用語 → 車両タイプ」と異なる定員を持っています。設定の定員に合わせますか？料金はそのままですが、グループが別の車両に割り当てられ、見積金額が変わる場合があります。",
       "alignBandsDone": "{count}件の料金が設定の定員になりました。",
-      "settingsBandDiffers": "設定では {min}–{max}名",
       "notInVocabulary": "車両タイプ一覧にありません",
-      "vehicleRatesHint": "運行しない車両は料金を空欄にしてください。その車両は見積りに使われず、次に大きい車両が選ばれます。定員はルートごとに設定できます。新しい料金は「設定 → 用語 → 車両タイプ」の定員から始まります。",
+      "vehicleRatesHint": "運行しない車両は料金を空欄にしてください。その車両は見積りに使われず、次に大きい車両が選ばれます。乗車人数は「設定 → 用語 → 車両タイプ」で設定します。",
       "suv": "SUV",
       "fourByFour": "4x4",
       "selectDepartureCity": "出発都市を選択",
@@ -4356,7 +4354,9 @@
           "same_day_return": "同日に往復。出発地に戻って宿泊する日に使われます。",
           "overnight_return": "現地で1泊し翌日に戻る。往路の日に1回だけ計上され、復路の日は含まれる移動として表示されます。"
         }
-      }
+      },
+      "sizeFromVocabulary": "「設定 → 用語 → 車両タイプ」で設定",
+      "paxRange": "{min}〜{max}名"
     },
     "meals": {
       "title": "食事料金",
@@ -4654,7 +4654,8 @@
         "activeBookings": "有効（予約可能）",
         "cancel": "キャンセル",
         "update": "料金を更新",
-        "create": "料金を作成"
+        "create": "料金を作成",
+        "guideMode": "ガイド形態"
       },
       "table": {
         "language": "言語",
@@ -4723,7 +4724,11 @@
       "noLanguages": "言語が未登録です",
       "languagesSaved": "{name}の言語を保存しました",
       "languagesFailed": "言語の保存に失敗しました",
-      "languagesHint": "ガイドレート行がない場合に、料金エンジンが言語でガイドを照合する際に使用します。"
+      "languagesHint": "ガイドレート行がない場合に、料金エンジンが言語でガイドを照合する際に使用します。",
+      "guideModes": {
+        "spot": "スポットガイド",
+        "throughout": "全行程ガイド"
+      }
     },
     "attractions": {
       "title": "観光スポット・入場料金",
@@ -7070,11 +7075,6 @@
     "tier3Default": "第3段階",
     "tier4Default": "第4段階",
     "includes": "含む：",
-    "sedan": "セダン",
-    "minivan": "ミニバン",
-    "van": "バン",
-    "minibus": "ミニバス",
-    "bus": "バス",
     "editPricingRule": "料金ルール編集",
     "addPricingRule": "料金ルール追加",
     "serviceName": "サービス名",
@@ -7139,8 +7139,7 @@
     "failedToDeletePackage": "パッケージの削除に失敗しました",
     "deletePackageConfirm": "輸送パッケージ「{packageName}」を削除しますか？",
     "leaveZeroUnlimited": "無制限の場合は0のまま",
-    "vehicleRatesHint": "運行しない車両は料金を空欄にしてください — その車両は料金計算に使われず、次に大きい車両がそのグループを担当します。定員は自由に設定できます。",
-    "vehicleNotUsed": "未使用（料金なし）"
+    "vehicleRateRequired": "少なくとも1台の車両に料金を入力してください"
   },
   "b2bPartners": {
     "title": "B2Bパートナー",

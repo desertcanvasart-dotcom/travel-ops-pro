@@ -102,7 +102,7 @@ describe('isBookableLine — what travels into a quote', () => {
   })
 
   it('an included meal, a free site and an unmatched sight are breakdown-only', () => {
-    expect(isBookableLine({ included: true, issue: 'Included aboard the cruise' })).toBe(false)
+    expect(isBookableLine({ included: true, issue: 'Included on board' })).toBe(false)
     expect(isBookableLine({ included: true, issue: 'Free entry' })).toBe(false)
     expect(isBookableLine({ issue: 'No entrance fee matched.' })).toBe(false)
   })

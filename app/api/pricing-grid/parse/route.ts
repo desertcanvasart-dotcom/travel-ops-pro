@@ -7,6 +7,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
+import { vehicleBands, vehicleKeyLabel, vehicleRateForPax } from '@/lib/rates/vehicle-bands'
+import { packageForDuration } from '@/lib/pricing/cruise-package'
 import { PACKAGE_TYPE_CONFIGS, type PackageTypeConfig } from '@/lib/package-types'
 import { packageRules } from '@/lib/ai/package-prompt-rules'
 import { createServerClient } from '@/lib/supabase-server'
@@ -95,19 +97,13 @@ async function buildRateCatalog(supabase: any, tier: string, sym: string, runRat
   // Build concise catalog strings for the AI prompt
   const catalog: Record<string, string> = {}
 
-  // Vehicle tiers: expand each service row into options per vehicle type
-  const VEHICLE_TIERS = [
-    { key: 'sedan',   label: 'Sedan',   capMin: 1,  capMax: 2  },
-    { key: 'minivan', label: 'Minivan', capMin: 3,  capMax: 7  },
-    { key: 'van',     label: 'Van',     capMin: 8,  capMax: 12 },
-    { key: 'minibus', label: 'Minibus', capMin: 13, capMax: 20 },
-    { key: 'bus',     label: 'Bus',     capMin: 21, capMax: 45 },
-  ]
-
+  // Vehicle tiers: expand each service row into one option per vehicle it
+  // offers — its `vehicles` list with the vocabulary's sizes
+  // (lib/rates/vehicle-bands). The five per-vehicle columns this read were
+  // dropped by 20261006, so the catalogue had listed no vehicle since.
   const expandCatalogTiers = (r: any, prefix: string) =>
-    VEHICLE_TIERS
-      .filter(t => parseFloat(r[`${t.key}_rate_eur`]) > 0)
-      .map(t => `ID:${r.id}__${t.key} | ${t.label} (${t.capMin}-${t.capMax}pax) | ${prefix} | ${r.origin_city || r.city || 'any'} | ${sym}${r[`${t.key}_rate_eur`]}`)
+    vehicleBands(r)
+      .map(b => `ID:${r.id}__${b.key} | ${vehicleKeyLabel(b.key)} (${b.capacity_min}-${b.capacity_max}pax) | ${prefix} | ${r.origin_city || r.city || 'any'} | ${sym}${b.rate_eur}`)
 
   catalog.vehicle = (transportRates || [])
     .filter((r: any) => r.service_type === 'day_tour')
@@ -162,7 +158,8 @@ async function buildRateCatalog(supabase: any, tier: string, sym: string, runRat
     .join('\n')
 
   catalog.cruise_transport_package = (cruiseTransportPkgs || [])
-    .map((r: any) => `ID:${r.id} | ${r.package_name} | ${r.origin_city}→${r.destination_city} | ${r.duration_days}d | Sedan ${sym}${r.sedan_rate} | Minivan ${sym}${r.minivan_rate} | Van ${sym}${r.van_rate} | Includes: ${r.includes || 'vehicle + guide + boat rides'}`)
+    .flatMap((r: any) => vehicleBands(r).map(b =>
+      `ID:${r.id}__${b.key} | ${r.package_name} | ${r.origin_city}→${r.destination_city} | ${r.duration_days}d | ${vehicleKeyLabel(b.key)} (${b.capacity_min}-${b.capacity_max}pax) ${sym}${b.rate_eur} | Includes: ${r.includes || 'vehicle + guide + boat rides'}`))
     .join('\n')
 
   catalog.flights = (flightRates || [])
@@ -635,14 +632,12 @@ export async function POST(request: NextRequest) {
     // 5. Enrich parsed days with actual rate data (prices, names, etc.)
     const allRatesFlat = buildFlatRateMap(rawRates)
 
-    // Helper: pick the right vehicle tier key for a given pax count
-    const pickTierForPax = (paxNum: number): string => {
-      if (paxNum <= 2) return 'sedan'
-      if (paxNum <= 7) return 'minivan'
-      if (paxNum <= 12) return 'van'
-      if (paxNum <= 20) return 'minibus'
-      return 'bus'
-    }
+    // The option id for a rate row at a group size: the vehicle the row
+    // itself offers for that group, by the vocabulary's sizes — the same rule
+    // as pricing (lib/rates/vehicle-bands). It was a hard-coded sedan…bus
+    // ladder, which names no vehicle an agency using its own list prices.
+    const tieredIdFor = (row: any, paxNum: number): string =>
+      `${row.id}__${vehicleRateForPax(row, paxNum)?.key ?? 'vehicle'}`
 
     // 6. Post-process: fill obvious gaps the AI missed (deterministic rules)
     const totalDays = parsed.days?.length || 0
@@ -750,11 +745,6 @@ export async function POST(request: NextRequest) {
         const dayTourVehicles = rawRates.transportRates?.filter((t: any) => t.service_type === 'day_tour') || []
         const routeIds: string[] = [...(Array.isArray(slots.route) ? slots.route : [])]
         const paxNum = pax || 2
-        // L10: was named `tier` and shadowed the function-parameter `tier`
-        // (the rate tier like 'standard'). Renamed to `vehicleTier` so the
-        // two ideas — rate tier vs vehicle-size key — are no longer
-        // conflated in the same scope.
-        const vehicleTier = pickTierForPax(paxNum)
         const cityLower = day.city?.toLowerCase()?.trim()
         const prevDay = idx > 0 ? parsed.days[idx - 1] : null
         const prevCity = prevDay?.city?.toLowerCase()?.trim() || ''
@@ -799,7 +789,7 @@ export async function POST(request: NextRequest) {
 
         // Helper: push tiered route ID (avoid duplicates)
         const pushRoute = (service: any, label: string) => {
-          const tieredId = `${service.id}__${vehicleTier}`
+          const tieredId = tieredIdFor(service, paxNum)
           if (!routeIds.includes(tieredId)) {
             routeIds.push(tieredId)
             console.log(`Day ${day.dayNumber}: Route added: ${label} → ${service.service_type} ${service.origin_city}→${service.destination_city} (${tieredId})`)
@@ -869,7 +859,7 @@ export async function POST(request: NextRequest) {
             const arrTransfer = routes.find((r: any) =>
               r.service_type === 'airport_transfer' &&
               matchAnyCity(r, cityLower) &&
-              !routeIds.includes(`${r.id}__${vehicleTier}`) // avoid duplicate if same city
+              !routeIds.includes(tieredIdFor(r, paxNum)) // avoid duplicate if same city
             )
             if (arrTransfer) {
               pushRoute(arrTransfer, 'flight arrival airport transfer')
@@ -1132,14 +1122,16 @@ export async function POST(request: NextRequest) {
         if (isCruiseRangeStart) {
           // Cruise embarkation day: ADD the transport package alongside any pre-cruise transfers
           // (e.g., Cairo airport transfer for the flight to the cruise city)
-          const pkg = rawRates.cruiseTransportPkgs?.[0]
+          // The package for this cruise's length in days — a 4D and a 5D
+          // package are different prices; none of that length adds none
+          // (lib/pricing/cruise-package). It took the first package on file.
+          const pkg = packageForDuration(rawRates.cruiseTransportPkgs ?? [], cruiseEndIdx - cruiseStartIdx + 1) as any
 
           // On flight days, also ensure the departure city airport transfer is present
           // The flight-day code above should have added it, but verify it's in slots.route
           if (isFlightDay) {
             const prevDayData = idx > 0 ? parsed.days[idx - 1] : null
             const depCity = (prevDayData?.overnight_city || prevDayData?.city || '').toLowerCase().trim()
-            const paxTier = pickTierForPax(pax || 2)
             const dayCityLower = day.city?.toLowerCase()?.trim()
             if (depCity && depCity !== 'cruise' && depCity !== dayCityLower) {
               const depTransfer = allTransportRoutes.find((r: any) => {
@@ -1148,7 +1140,7 @@ export async function POST(request: NextRequest) {
                 return rc === depCity || rc.includes(depCity) || depCity.includes(rc)
               })
               if (depTransfer) {
-                const tieredId = `${depTransfer.id}__${paxTier}`
+                const tieredId = tieredIdFor(depTransfer, pax || 2)
                 const currentRoutes = Array.isArray(slots.route) ? slots.route : []
                 if (!currentRoutes.includes(tieredId)) {
                   slots.route = [...currentRoutes, tieredId]
@@ -1160,8 +1152,9 @@ export async function POST(request: NextRequest) {
 
           if (pkg) {
             const existingRoutes = Array.isArray(slots.route) ? slots.route : []
-            if (!existingRoutes.includes(pkg.id)) {
-              slots.route = [...existingRoutes, pkg.id]
+            const pkgId = tieredIdFor(pkg, pax || 2)
+            if (!existingRoutes.includes(pkgId)) {
+              slots.route = [...existingRoutes, pkgId]
             }
             console.log(`Day ${day.dayNumber}: AUTO-FILLED cruise transport package → ${pkg.package_name} (covers days ${cruiseStartIdx + 1}-${cruiseEndIdx + 1}), total routes: ${slots.route.length}`)
           } else {
@@ -1243,43 +1236,21 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
     }
   }
 
-  // Expand transport rows into vehicle-tier entries (sedan, minivan, van, minibus, bus)
-  const TIERS = [
-    { key: 'sedan',   label: 'Sedan',   capMin: 1,  capMax: 2  },
-    { key: 'minivan', label: 'Minivan', capMin: 3,  capMax: 7  },
-    { key: 'van',     label: 'Van',     capMin: 8,  capMax: 12 },
-    { key: 'minibus', label: 'Minibus', capMin: 13, capMax: 20 },
-    { key: 'bus',     label: 'Bus',     capMin: 21, capMax: 45 },
-  ]
+  // Expand transport rows — and transport packages — into one entry per
+  // vehicle they offer, with the vocabulary's sizes (lib/rates/vehicle-bands).
+  const addVehicles = (r: any, label: string) => {
+    for (const b of vehicleBands(r)) {
+      map.set(`${r.id}__${b.key}`, {
+        rateId: `${r.id}__${b.key}`,
+        name: `${vehicleKeyLabel(b.key)} (${b.capacity_min}-${b.capacity_max} pax) — ${label}`,
+        rateEur: b.rate_eur,
+        rateNonEur: b.rate_non_eur ?? b.rate_eur,
+      })
+    }
+  }
   for (const r of rawRates.transportRates || []) {
     if (!r.id) continue
-    const routeLabel = r.route_name || r.service_code || `${r.origin_city || r.city || ''}${r.destination_city ? '→' + r.destination_city : ''}`
-    let hasTieredRates = false
-    for (const t of TIERS) {
-      const rate = toNum(r[`${t.key}_rate_eur`])
-      if (rate > 0) {
-        hasTieredRates = true
-        map.set(`${r.id}__${t.key}`, {
-          rateId: `${r.id}__${t.key}`,
-          name: `${t.label} (${t.capMin}-${t.capMax} pax) — ${routeLabel}`,
-          rateEur: rate,
-          rateNonEur: toNum(r[`${t.key}_rate_non_eur`] || r[`${t.key}_rate_eur`]),
-        })
-      }
-    }
-    // Fallback: if no tiered columns exist, use legacy base_rate_eur
-    if (!hasTieredRates && toNum(r.base_rate_eur) > 0) {
-      const fallbackRate = toNum(r.base_rate_eur)
-      for (const t of TIERS) {
-        map.set(`${r.id}__${t.key}`, {
-          rateId: `${r.id}__${t.key}`,
-          name: `${t.label} (${t.capMin}-${t.capMax} pax) — ${routeLabel}`,
-          rateEur: fallbackRate,
-          rateNonEur: toNum(r.base_rate_non_eur || r.base_rate_eur),
-        })
-      }
-      console.log(`Transport "${routeLabel}" (${r.id}): using legacy base_rate_eur=${fallbackRate} (no tiered columns)`)
-    }
+    addVehicles(r, r.route_name || r.service_code || `${r.origin_city || r.city || ''}${r.destination_city ? '→' + r.destination_city : ''}`)
   }
   addAll(rawRates.guideRates, (r: any) => ({
     rateId: r.id, name: `${r.guide_language} ${r.guide_type || 'Guide'}`,
@@ -1321,10 +1292,9 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
   }))
 
   // Cruise transport packages
-  addAll(rawRates.cruiseTransportPkgs, (r: any) => ({
-    rateId: r.id, name: `${r.package_name} (${r.origin_city}→${r.destination_city})`,
-    rateEur: toNum(r.sedan_rate), rateNonEur: toNum(r.sedan_rate),
-  }))
+  for (const r of rawRates.cruiseTransportPkgs || []) {
+    if (r.id) addVehicles(r, `${r.package_name} (${r.origin_city}→${r.destination_city})`)
+  }
   // Flights
   addAll(rawRates.flightRates, (r: any) => ({
     rateId: r.id, name: `${r.airline} ${r.route_from}→${r.route_to} (${r.cabin_class})`,

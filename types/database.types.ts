@@ -1420,6 +1420,7 @@ export interface Database {
           minivan_rate: number | null
           minivan_capacity: number | null
           van_rate: number | null
+          vehicles: Json | null
           van_capacity: number | null
           minibus_rate: number | null
           minibus_capacity: number | null
@@ -1447,6 +1448,7 @@ export interface Database {
           minivan_rate?: number | null
           minivan_capacity?: number | null
           van_rate?: number | null
+          vehicles?: Json | null
           van_capacity?: number | null
           minibus_rate?: number | null
           minibus_capacity?: number | null
@@ -1474,6 +1476,7 @@ export interface Database {
           minivan_rate?: number | null
           minivan_capacity?: number | null
           van_rate?: number | null
+          vehicles?: Json | null
           van_capacity?: number | null
           minibus_rate?: number | null
           minibus_capacity?: number | null
@@ -5481,6 +5484,7 @@ export interface Database {
           id: string
           service_code: string
           guide_language: string
+          guide_mode: string
           guide_type: string
           city: string | null
           tour_duration: string | null
@@ -5500,6 +5504,7 @@ export interface Database {
           id?: string
           service_code: string
           guide_language: string
+          guide_mode?: string
           guide_type: string
           city?: string | null
           tour_duration?: string | null
@@ -5519,6 +5524,7 @@ export interface Database {
           id?: string
           service_code?: string
           guide_language?: string
+          guide_mode?: string
           guide_type?: string
           city?: string | null
           tour_duration?: string | null

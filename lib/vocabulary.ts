@@ -19,7 +19,7 @@ export const VOCABULARY_KINDS = [
   'activity_type', 'activity_duration', 'activity_unit', 'guide_grade',
   'guide_duration', 'guide_language', 'rate_season', 'airline', 'hotel_supplement',
   'airport_direction', 'activity_pricing_type', 'cruise_supplement',
-  'tour_type', 'physical_level', 'tour_audience', 'tour_theme',
+  'tour_type', 'physical_level', 'tour_audience', 'tour_theme', 'guide_mode',
 ] as const
 export type VocabularyKind = (typeof VOCABULARY_KINDS)[number]
 
@@ -308,6 +308,15 @@ export const VOCABULARY_KIND_INFO: Record<VocabularyKind, VocabularyKindInfo> = 
     usedIn: 'Guide rates, pricing engine',
     minItems: 1,
     example: 'Full Day (8h) / Half Day (4h) / Meet & Assist day',
+  },
+  guide_mode: {
+    kind: 'guide_mode',
+    group: 'Guides & tipping',
+    title: 'Guide modes',
+    description: 'How a guide is sold: spot (a city guide on each sightseeing day) or throughout (one guide travels with the group from the first day to the last — his fee every day, bed, meals and seats). Every guide rate says which mode it is for, and a quote is priced from rates of its own mode. Rename or hide them freely; a mode you add is stored on rates but never selected by the engine.',
+    usedIn: 'Guide rates, calculator, Quote Builder, pricing engine',
+    minItems: 1,
+    example: 'Spot guide / Throughout guide',
   },
   guide_language: {
     kind: 'guide_language',
@@ -796,6 +805,7 @@ export const VOCABULARY_COLUMNS: Record<string, VocabularyKind> = {
   guide_type: 'guide_grade',
   tour_duration: 'guide_duration',
   guide_language: 'guide_language',
+  guide_mode: 'guide_mode',
   season: 'rate_season',
   airline: 'airline',
   pricing_type: 'activity_pricing_type',

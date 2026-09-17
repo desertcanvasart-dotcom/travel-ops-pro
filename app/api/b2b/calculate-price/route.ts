@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { vehicleKeyLabel, vehicleRateForPax } from '@/lib/rates/vehicle-bands'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getTieredActivityRate, applyActivityTiers } from '@/lib/rates/activity-tiers'
@@ -247,18 +248,11 @@ async function getTransportPackage(packageType: string, originCity: string, dest
 // rate is one the operator does not run — skipped, the next size up takes the
 // group. Returns null (caller keeps the line's existing cost) rather than ever
 // pricing at 0 when the package has no usable rate at all.
+// Since 20261018 a package holds a `vehicles` list with the vocabulary's
+// sizes — the same pick as a transportation rate (lib/rates/vehicle-bands).
 function selectVehicleFromPackage(pkg: any, numPax: number): { rate: number; vehicle: string } | null {
-  if (numPax <= pkg.sedan_capacity && pkg.sedan_rate) {
-    return { rate: pkg.sedan_rate, vehicle: 'Sedan' }
-  } else if (numPax <= pkg.minivan_capacity && pkg.minivan_rate) {
-    return { rate: pkg.minivan_rate, vehicle: 'Minivan' }
-  } else if (numPax <= pkg.van_capacity && pkg.van_rate) {
-    return { rate: pkg.van_rate, vehicle: 'Van' }
-  } else if (numPax <= pkg.minibus_capacity && pkg.minibus_rate) {
-    return { rate: pkg.minibus_rate, vehicle: 'Minibus' }
-  }
-  const overflow = pkg.bus_rate || pkg.minibus_rate || pkg.van_rate || pkg.minivan_rate || pkg.sedan_rate
-  return overflow ? { rate: overflow, vehicle: 'Bus' } : null
+  const band = vehicleRateForPax(pkg, numPax)
+  return band ? { rate: band.rate_eur, vehicle: vehicleKeyLabel(band.key) } : null
 }
 
 // Select guide from guides table based on language and tier

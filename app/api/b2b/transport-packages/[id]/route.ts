@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { notFoundInOrg } from '@/lib/api/org-scope'
 import { clientMessage } from '@/lib/api-errors'
+import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
 import { NextRequest, NextResponse } from 'next/server'
 
 // ============================================
@@ -25,6 +26,20 @@ export async function PUT(
 
     const body = await request.json()
 
+    // Vehicles merge over the row's own, like a transportation rate's PUT.
+    const { data: currentRow } = await supabaseAdmin
+      .from('b2b_transport_packages')
+      .select('*')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!currentRow) return notFoundInOrg('Transport package')
+    const vehicleWrite = await resolveVehicleWrite(body, currentRow)
+    if (!vehicleWrite.ok) return NextResponse.json({ success: false, error: vehicleWrite.error }, { status: 400 })
+    if (vehicleWrite.patch && vehicleWrite.patch.vehicles.length === 0) {
+      return NextResponse.json({ success: false, error: 'At least one vehicle rate is required' }, { status: 400 })
+    }
+
     const { data, error } = await supabaseAdmin
       .from('b2b_transport_packages')
       .update({
@@ -35,16 +50,7 @@ export async function PUT(
         destination_city: body.destination_city,
         duration_days: body.duration_days,
         ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
-        sedan_rate: body.sedan_rate,
-        sedan_capacity: body.sedan_capacity,
-        minivan_rate: body.minivan_rate,
-        minivan_capacity: body.minivan_capacity,
-        van_rate: body.van_rate,
-        van_capacity: body.van_capacity,
-        minibus_rate: body.minibus_rate,
-        minibus_capacity: body.minibus_capacity,
-        bus_rate: body.bus_rate,
-        bus_capacity: body.bus_capacity,
+        ...(vehicleWrite.patch ?? {}),
         description: body.description,
         includes: body.includes,
         notes: body.notes,
