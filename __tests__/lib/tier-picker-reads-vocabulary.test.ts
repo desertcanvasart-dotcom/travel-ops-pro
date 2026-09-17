@@ -49,7 +49,10 @@ const TIER_ROUTES = [
   'app/api/content-library/[id]/variations/route.ts',
   'app/api/tours/templates/[id]/auto-price/route.ts',
   'app/api/tours/variations/route.ts',
-  'app/api/tours/recalculate-prices/route.ts',
+  // The Refresh prices route, the nightly job and the save-time refresh all
+  // price every tier through this one function (org ladder by id: the nightly
+  // job has no session).
+  'lib/tours/starting-price.ts',
   'app/api/pricing/coverage/route.ts',
 ]
 
@@ -57,7 +60,7 @@ describe('tier routes read the org ladder', () => {
   for (const rel of TIER_ROUTES) {
     it(`${rel} validates or iterates tiers from tierLadderForCurrentOrg, not a frozen list`, () => {
       const src = read(rel)
-      expect(src.includes('tierLadderForCurrentOrg('), `${rel} must read the org ladder`).toBe(true)
+      expect(src.includes('tierLadderForCurrentOrg(') || src.includes('tierLadderForOrg('), `${rel} must read the org ladder`).toBe(true)
       expect(
         /\[\s*'budget',\s*'standard',\s*'deluxe',\s*'luxury'\s*\]/.test(src),
         `${rel} carries a four-entry tier list — an agency-added tier is refused or skipped`

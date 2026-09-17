@@ -6352,6 +6352,18 @@
       "docAuthor": "Author (作成者)",
       "docCreated": "Created (作成日)",
       "seasonBadge": "{season} +{percent}%"
+    },
+    "price": {
+      "notPricedYet": "Not priced yet",
+      "incomplete": "Incomplete · {count, plural, one {# service} other {# services}} without a rate",
+      "basis": "per person · 2 travellers",
+      "updatedToday": "updated today",
+      "updatedYesterday": "updated yesterday",
+      "updatedDaysAgo": "updated {days} days ago",
+      "refresh": "Refresh prices",
+      "refreshing": "Refreshing {done} of {total}…",
+      "refreshHint": "Recalculates every programme's Starting from price: per person, 2 travellers, non-EU passports, cheapest complete tier. Also runs nightly and when a programme's days are saved.",
+      "refreshFailed": "{count, plural, one {# programme} other {# programmes}} could not be priced. Try again, or open them in the calculator."
     }
   },
   "b2bQuotes": {

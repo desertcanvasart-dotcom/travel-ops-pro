@@ -10,9 +10,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { timingSafeEqual } from 'node:crypto'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
-import { getTemplatePriceRange } from '@/lib/auto-pricing-service'
-import { requireRole } from '@/lib/auth/current-org'
-import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
+import { installOrgId, refreshStartingPrices } from '@/lib/tours/starting-price'
+import { getCurrentOrgId, requireRole } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -69,149 +68,37 @@ export async function POST(request: NextRequest) {
     const denied = await authorize(request)
     if (denied) return denied
 
-    // Parse request body for optional template ID
+    // Optional: one template, e.g. { templateId }.
     let templateId: string | null = null
     try {
       const body = await request.json()
       templateId = body.templateId || null
     } catch {
-      // No body provided, recalculate all
+      // No body: every active template.
     }
 
-    console.log('🔄 Starting price recalculation...')
     const startTime = Date.now()
-
-    // Fetch templates to recalculate
-    let query = supabaseAdmin
-      .from('tour_templates')
-      .select('id, template_name, duration_days, uses_day_builder, pricing_mode')
-      .eq('is_active', true)
-
-    if (templateId) {
-      query = query.eq('id', templateId)
-    }
-
-    const { data: templates, error } = await query
-
-    if (error) {
-      console.error('Error fetching templates:', error)
-      return NextResponse.json(
-        { success: false, error: clientMessage(error, 'Internal server error') },
-        { status: 500 }
-      )
-    }
-
-    if (!templates || templates.length === 0) {
-      return NextResponse.json({
-        success: true,
-        message: 'No templates to recalculate',
-        updated: 0
-      })
-    }
-
-    console.log(`📋 Found ${templates.length} templates to process`)
-
-    const results: { id: string; name: string; price: number | null; tier: string | null; error?: string }[] = []
-
-    // The "from" price ranges over the agency's own tiers, not the four presets.
-    const tierLadder = await tierLadderForCurrentOrg()
-
-    // Process templates sequentially to avoid overwhelming the database
-    for (const template of templates) {
-      try {
-        let startingPrice: number | null = null
-        let startingTier: string | null = null
-
-        // Only calculate auto-pricing for templates that use it
-        if (template.uses_day_builder || template.pricing_mode === 'auto') {
-          const priceRange = await getTemplatePriceRange(template.id, true, tierLadder)
-          if (priceRange) {
-            startingPrice = Math.round(priceRange.minPrice)
-            startingTier = priceRange.tier
-          }
-        }
-
-        // Fallback: check variation_pricing table
-        if (startingPrice === null) {
-          const { data: variations } = await supabaseAdmin
-            .from('tour_variations')
-            .select('id')
-            .eq('template_id', template.id)
-            .eq('is_active', true)
-
-          if (variations && variations.length > 0) {
-            const { data: pricing } = await supabaseAdmin
-              .from('variation_pricing')
-              .select('selling_price_per_person, tour_variations!inner(tier)')
-              .in('variation_id', variations.map(v => v.id))
-              .order('selling_price_per_person', { ascending: true })
-              .limit(1)
-
-            if (pricing && pricing.length > 0) {
-              startingPrice = Math.round(pricing[0].selling_price_per_person)
-              startingTier = (pricing[0] as any).tour_variations?.tier || 'standard'
-            }
-          }
-        }
-
-        // No final estimate fallback — deliberately. A duration×150 guess in a
-        // sales catalogue reads as a real price; a template the engine cannot
-        // price caches NULL and its card shows no price until it can.
-
-        // Update the template with cached price
-        const { error: updateError } = await supabaseAdmin
-          .from('tour_templates')
-          .update({
-            cached_starting_price: startingPrice,
-            cached_starting_tier: startingTier,
-            cached_price_updated_at: new Date().toISOString()
-          })
-          .eq('id', template.id)
-
-        if (updateError) {
-          console.error(`❌ Error updating ${template.template_name}:`, updateError)
-          results.push({
-            id: template.id,
-            name: template.template_name,
-            price: null,
-            tier: null,
-            error: clientMessage(updateError, 'Internal server error')
-          })
-        } else {
-          console.log(`✅ Updated ${template.template_name}: €${startingPrice} (${startingTier})`)
-          results.push({
-            id: template.id,
-            name: template.template_name,
-            price: startingPrice,
-            tier: startingTier
-          })
-        }
-      } catch (err: any) {
-        console.error(`❌ Error processing ${template.template_name}:`, err)
-        results.push({
-          id: template.id,
-          name: template.template_name,
-          price: null,
-          tier: null,
-          error: clientMessage(err, 'Internal server error')
-        })
-      }
-    }
-
-    const duration = Date.now() - startTime
-    const successCount = results.filter(r => !r.error).length
-    const errorCount = results.filter(r => r.error).length
-
-    console.log(`🏁 Price recalculation complete in ${duration}ms`)
-    console.log(`   ✅ Success: ${successCount} | ❌ Errors: ${errorCount}`)
+    // The org: the signed-in user's, else (the scheduler) the install's one.
+    const orgId = (await getCurrentOrgId()) ?? (await installOrgId(supabaseAdmin))
+    // Same basis and rule everywhere — lib/tours/starting-price.
+    const results = await refreshStartingPrices(supabaseAdmin, orgId, templateId ? [templateId] : undefined)
+    const errorCount = results.filter(x => x.error).length
 
     return NextResponse.json({
       success: true,
-      message: `Recalculated prices for ${successCount} templates`,
-      duration_ms: duration,
-      updated: successCount,
+      message: `Recalculated prices for ${results.length - errorCount} templates`,
+      duration_ms: Date.now() - startTime,
+      updated: results.length - errorCount,
       errors: errorCount,
-      results
+      results: results.map(x => ({
+        id: x.id,
+        name: x.name,
+        price: x.result?.price ?? null,
+        tier: x.result?.tier ?? null,
+        complete: x.result?.complete ?? null,
+        gaps: x.result?.gaps ?? null,
+        ...(x.error ? { error: clientMessage(new Error(x.error), 'Internal server error') } : {}),
+      })),
     })
 
   } catch (error: any) {

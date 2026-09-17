@@ -6485,6 +6485,18 @@
       "grid": "グリッド",
       "list": "リスト",
       "table": "テーブル"
+    },
+    "price": {
+      "notPricedYet": "未計算",
+      "incomplete": "不完全 · 料金なし {count}件",
+      "basis": "1名あたり · 2名利用",
+      "updatedToday": "本日更新",
+      "updatedYesterday": "昨日更新",
+      "updatedDaysAgo": "{days}日前に更新",
+      "refresh": "料金を更新",
+      "refreshing": "更新中 {done} / {total}…",
+      "refreshHint": "全プログラムの最低料金を再計算します(1名あたり・2名・EU以外の旅券・料金が揃っている最安グレード)。毎晩と日程保存時にも自動で更新されます。",
+      "refreshFailed": "{count}件のプログラムを計算できませんでした。再試行するか、計算機で開いてください。"
     }
   },
   "contacts": {

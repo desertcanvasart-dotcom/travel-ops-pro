@@ -51,6 +51,8 @@ const NOT_ON_THE_SHEET: Record<string, string> = {
   cached_starting_price: 'derived by the pricing engine, not authored',
   cached_starting_tier: 'derived by the pricing engine, not authored',
   cached_price_updated_at: 'derived by the pricing engine, not authored',
+  cached_price_complete: 'derived by the pricing engine, not authored',
+  cached_price_gaps: 'derived by the pricing engine, not authored',
   popularity_score: 'derived from usage, not authored',
 
   pricing_mode: 'per-install pricing behaviour, not tour content',
