@@ -11401,6 +11401,8 @@ export interface Database {
           cached_starting_price: number | null
           cached_starting_tier: string | null
           cached_price_updated_at: string | null
+          cached_price_complete: boolean | null
+          cached_price_gaps: number | null
           hotels: Json
           theme_key: string | null
         }
@@ -11442,6 +11444,8 @@ export interface Database {
           cached_starting_price?: number | null
           cached_starting_tier?: string | null
           cached_price_updated_at?: string | null
+          cached_price_complete?: boolean | null
+          cached_price_gaps?: number | null
           hotels: Json
           theme_key?: string | null
         }
@@ -11483,6 +11487,8 @@ export interface Database {
           cached_starting_price?: number | null
           cached_starting_tier?: string | null
           cached_price_updated_at?: string | null
+          cached_price_complete?: boolean | null
+          cached_price_gaps?: number | null
           hotels?: Json
           theme_key?: string | null
         }

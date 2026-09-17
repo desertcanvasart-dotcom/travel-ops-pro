@@ -40,6 +40,10 @@ interface TourTemplate {
   max_pax: number
   starting_from: number | null
   starting_from_tier: string | null
+  /** false = the cheapest tier still has services with no rate. */
+  starting_from_complete: boolean | null
+  starting_from_gaps: number | null
+  price_updated_at: string | null
   currency: string
   uses_day_builder: boolean
   pricing_mode: string
@@ -47,6 +51,49 @@ interface TourTemplate {
 }
 
 type ViewMode = 'grid' | 'table' | 'list'
+
+/** "today", "yesterday", "3 days ago" — how fresh the cached price is. */
+function updatedAgo(iso: string | null, t: (key: string, values?: Record<string, number>) => string): string | null {
+  if (!iso) return null
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
+  if (Number.isNaN(days)) return null
+  return days <= 0 ? t('price.updatedToday') : days === 1 ? t('price.updatedYesterday') : t('price.updatedDaysAgo', { days })
+}
+
+/**
+ * "Starting from" as the office defined it (operator, 2026-09-17): per person,
+ * 2 travellers, non-EU passports, the cheapest tier whose price is complete —
+ * or the cheapest price MARKED incomplete (lib/tours/starting-price).
+ */
+function StartingPrice({ tour, size, format, tierName, t }: {
+  tour: TourTemplate
+  size: 'card' | 'compact'
+  format: (amount: number) => string
+  tierName: (key: string) => string
+  t: ReturnType<typeof useTranslations>
+}) {
+  if (!tour.starting_from) {
+    return <p className={`${size === 'card' ? 'text-sm' : 'text-xs'} text-gray-400`}>{t('price.notPricedYet')}</p>
+  }
+  const incomplete = tour.starting_from_complete === false
+  const ago = updatedAgo(tour.price_updated_at, t as never)
+  return (
+    <div>
+      <p className={`${size === 'card' ? 'text-xl' : 'text-sm'} font-semibold ${incomplete ? 'text-amber-700' : 'text-[#647C47]'}`}>
+        {format(tour.starting_from)}
+      </p>
+      {incomplete && (
+        <p className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800" data-testid="price-incomplete">
+          {t('price.incomplete', { count: tour.starting_from_gaps ?? 0 })}
+        </p>
+      )}
+      <p className="text-[10px] text-gray-400">
+        {t('price.basis')}{tour.starting_from_tier ? ` · ${tierName(tour.starting_from_tier)}` : ''}
+      </p>
+      {size === 'card' && ago && <p className="text-[10px] text-gray-400">{ago}</p>}
+    </div>
+  )
+}
 
 export default function ToursBrowsePage() {
   const t = useTranslations('tours')
@@ -77,6 +124,32 @@ export default function ToursBrowsePage() {
   useEffect(() => {
     fetchTours()
   }, [])
+
+  // Refresh prices: one programme per request, so a catalogue of dozens never
+  // hits a request timeout, and the operator sees the progress.
+  const [refreshing, setRefreshing] = useState<{ done: number; total: number; failed: number } | null>(null)
+  const refreshPrices = async () => {
+    const ids = tours.map(tour => tour.id)
+    let failed = 0
+    setRefreshing({ done: 0, total: ids.length, failed })
+    for (let i = 0; i < ids.length; i++) {
+      try {
+        const res = await fetch('/api/tours/recalculate-prices', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ templateId: ids[i] }),
+        })
+        const json = await res.json().catch(() => null)
+        if (!res.ok || !json?.success || json.errors > 0) failed++
+      } catch {
+        failed++
+      }
+      setRefreshing({ done: i + 1, total: ids.length, failed })
+    }
+    await fetchTours()
+    setRefreshing(null)
+    if (failed > 0) setError(t('price.refreshFailed', { count: failed }))
+  }
 
   const fetchTours = async () => {
     try {
@@ -213,12 +286,24 @@ export default function ToursBrowsePage() {
             <p className="text-sm text-gray-500">{t('subtitle')}</p>
           </div>
         </div>
-        <Link
-          href="/tours/manage"
-          className="px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] transition-colors font-medium"
-        >
-          {t('manageTours')}
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void refreshPrices()}
+            disabled={Boolean(refreshing) || tours.length === 0}
+            title={t('price.refreshHint')}
+            className="px-4 py-2 text-sm border border-[#647C47] text-[#647C47] rounded-lg hover:bg-[#647C47]/5 transition-colors font-medium disabled:opacity-60"
+            data-testid="refresh-prices"
+          >
+            {refreshing ? t('price.refreshing', { done: refreshing.done, total: refreshing.total }) : t('price.refresh')}
+          </button>
+          <Link
+            href="/tours/manage"
+            className="px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] transition-colors font-medium"
+          >
+            {t('manageTours')}
+          </Link>
+        </div>
       </div>
 
       {/* Stats Row */}
@@ -256,7 +341,7 @@ export default function ToursBrowsePage() {
             <p className="text-2xl font-semibold text-gray-900">{uniqueCategories.length}</p>
           </div>
         )}
-        {tours.some(t => t.starting_from) && (
+        {tours.some(t => t.starting_from && t.starting_from_complete !== false) && (
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">💶</span>
@@ -264,7 +349,7 @@ export default function ToursBrowsePage() {
             </div>
             <p className="text-xs text-gray-500 mb-1">{t('stats.startingFrom')}</p>
             <p className="text-2xl font-semibold text-gray-900">
-              {formatWithConversion(Math.min(...tours.filter(t => t.starting_from).map(t => t.starting_from as number)), 'EUR')}
+              {formatWithConversion(Math.min(...tours.filter(t => t.starting_from && t.starting_from_complete !== false).map(t => t.starting_from as number)), rateCurrency)}
             </p>
           </div>
         )}
@@ -443,12 +528,7 @@ export default function ToursBrowsePage() {
                 <div className="flex items-end justify-between pt-3 border-t border-gray-100">
                   <div>
                     <p className="text-[10px] text-gray-400 uppercase tracking-wide">{t('card.startingFrom')}</p>
-                    <p className="text-xl font-semibold text-[#647C47]">
-                      {tour.starting_from ? formatWithConversion(tour.starting_from, rateCurrency) : 'N/A'}
-                    </p>
-                    <p className="text-[10px] text-gray-400">
-                      {t('card.perPerson')}{tour.starting_from_tier ? ` • ${tour.starting_from_tier}` : ''}
-                    </p>
+                    <StartingPrice tour={tour} size="card" format={a => formatWithConversion(a, rateCurrency)} tierName={k => tierLabel(k, t(`tiers.${k}`))} t={t} />
                   </div>
                   <Link
                       href={`/tours/${tour.id}`}
@@ -534,11 +614,8 @@ export default function ToursBrowsePage() {
                     <p className="font-medium">{tour.min_pax || 1}-{tour.max_pax || 15}</p>
                     <p className="text-[10px] text-gray-400">{t('card.passengers')}</p>
                   </div>
-                  <div className="text-right min-w-[70px]">
-                    <p className="font-semibold text-[#647C47] text-sm">
-                      {tour.starting_from ? formatWithConversion(tour.starting_from, rateCurrency) : 'N/A'}
-                    </p>
-                    <p className="text-[10px] text-gray-400">{t('card.perPerson')}</p>
+                  <div className="text-right min-w-[110px]">
+                    <StartingPrice tour={tour} size="compact" format={a => formatWithConversion(a, rateCurrency)} tierName={k => tierLabel(k, t(`tiers.${k}`))} t={t} />
                   </div>
                 </div>
 
@@ -636,10 +713,7 @@ export default function ToursBrowsePage() {
                       <LanguageIndicator availableLanguages={tour.available_languages || []} size="sm" />
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <p className="font-semibold text-[#647C47] text-sm">
-                        {tour.starting_from ? formatWithConversion(tour.starting_from, rateCurrency) : 'N/A'}
-                      </p>
-                      <p className="text-[10px] text-gray-400">{tour.starting_from_tier || ''}</p>
+                      <StartingPrice tour={tour} size="compact" format={a => formatWithConversion(a, rateCurrency)} tierName={k => tierLabel(k, t(`tiers.${k}`))} t={t} />
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-1">

@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
+import { installOrgId, refreshStartingPrices } from '@/lib/tours/starting-price'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -61,6 +63,17 @@ export async function PATCH(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // The Tours page "Starting from" price follows the saved days. Not awaited:
+    // pricing every tier takes a few seconds and the save must not wait on it.
+    void (async () => {
+      try {
+        const orgId = (await getCurrentOrgId()) ?? (await installOrgId(supabaseAdmin))
+        await refreshStartingPrices(supabaseAdmin, orgId, [template_id])
+      } catch (e) {
+        console.warn('[update-template-itinerary] starting price refresh failed:', e instanceof Error ? e.message : e)
+      }
+    })()
 
     // 2. Update tour_template_versions (English version)
     const { error: versionError } = await supabaseAdmin

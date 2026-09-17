@@ -6,6 +6,8 @@
 // Prices are pre-calculated by /api/tours/recalculate-prices
 // ============================================
 
+import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
@@ -36,6 +38,8 @@ export async function GET(request: NextRequest) {
 
     // Build query for templates
     // Note: cached_starting_price columns are optional - works without migration
+    const rateCurrency = await getOrgRateCurrency(supabaseAdmin, await getCurrentOrgId())
+
     let query = supabaseAdmin
       .from('tour_templates')
       .select(`
@@ -54,6 +58,8 @@ export async function GET(request: NextRequest) {
         cached_starting_price,
         cached_starting_tier,
         cached_price_updated_at,
+        cached_price_complete,
+        cached_price_gaps,
         theme_key,
         tour_categories (
           id,
@@ -174,10 +180,13 @@ export async function GET(request: NextRequest) {
           ? Math.max(...variations.map((v: any) => v.max_pax || 15))
           : 15,
 
-        // Pricing (engine output cached on the template; EUR cost base)
+        // Pricing: per person, 2 travellers, non-EU passports, cheapest
+        // complete tier (lib/tours/starting-price) — in the org's rate currency.
         starting_from: startingFromPrice,
         starting_from_tier: startingFromTier,
-        currency: 'EUR',
+        starting_from_complete: template.cached_price_complete ?? null,
+        starting_from_gaps: template.cached_price_gaps ?? null,
+        currency: rateCurrency,
         price_is_cached: startingFromPrice !== null,
         price_updated_at: template.cached_price_updated_at ?? null,
 
