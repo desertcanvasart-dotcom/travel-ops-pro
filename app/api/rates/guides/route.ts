@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { guideLanguageKey, sameGuideLanguage } from '@/lib/guides/guide-language'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
@@ -22,12 +23,13 @@ export async function GET(request: NextRequest) {
       .order('guide_language')
 
     if (supplierId) query = query.eq('supplier_id', supplierId)
-    if (language) query = query.eq('guide_language', language)
+    // Language is compared by vocabulary key below — rows hold the word or the key.
     if (city) query = query.eq('city', city)
     if (guideType) query = query.eq('guide_type', guideType)
     if (activeOnly) query = query.eq('is_active', true)
 
-    const { data, error } = await query
+    const { data: rows, error } = await query
+    const data = language ? (rows ?? []).filter(r => sameGuideLanguage(r.guide_language, language)) : rows
 
     if (error) {
       console.error('GET guide_rates error:', error)
@@ -57,7 +59,8 @@ export async function POST(request: NextRequest) {
 
     const newRate = {
       service_code: body.service_code || `GD-${Date.now().toString(36).toUpperCase()}`,
-      guide_language: body.guide_language,
+      // The vocabulary KEY (lib/guides/guide-language), whatever the caller sent.
+      guide_language: guideLanguageKey(body.guide_language),
       guide_type: body.guide_type || 'licensed',
       city: body.city || null,
       tour_duration: body.tour_duration || 'full_day',
@@ -76,7 +79,6 @@ export async function POST(request: NextRequest) {
     let existingQuery = supabaseAdmin
       .from('guide_rates')
       .select('*')
-      .eq('guide_language', newRate.guide_language)
       .eq('guide_type', newRate.guide_type)
       .eq('tour_duration', newRate.tour_duration)
     if (newRate.city) {
@@ -89,7 +91,10 @@ export async function POST(request: NextRequest) {
     } else {
       existingQuery = existingQuery.is('supplier_id', null)
     }
-    const { data: existing } = await existingQuery.limit(1)
+    // Same language by KEY: an older row saying "Japanese" is the same rate as
+    // a new one saying "japanese".
+    const { data: sameKey } = await existingQuery
+    const existing = (sameKey ?? []).filter(r => sameGuideLanguage(r.guide_language, newRate.guide_language)).slice(0, 1)
 
     // A create never updates. The natural-key match used to be UPDATED in
     // place — so "Duplicate this rate, change the season, save" rewrote the

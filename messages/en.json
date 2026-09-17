@@ -6799,7 +6799,8 @@
         "dinner_transfer": "Dinner transfer"
       }
     },
-    "inFlightNight": "In the air (overnight flight) — nothing sold this day"
+    "inFlightNight": "In the air (overnight flight) — nothing sold this day",
+    "guideLanguageNoRate": "{language} — no guide rate"
   },
   "bookings": {
     "title": "Bookings",

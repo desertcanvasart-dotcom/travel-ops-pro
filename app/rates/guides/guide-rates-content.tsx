@@ -8,6 +8,8 @@ import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurre
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
+import { BUILT_IN_GUIDE_LANGUAGES, guideLanguageKey } from '@/lib/guides/guide-language'
+import { optionsFromLabels } from '@/lib/vocabulary'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
@@ -40,10 +42,6 @@ import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-total
 
 // Egyptian cities
 
-const LANGUAGES = [
-  'English', 'French', 'German', 'Spanish', 'Italian',
-  'Russian', 'Chinese', 'Japanese', 'Portuguese', 'Dutch', 'Polish'
-]
 
 // The two GRADES — the only guide types the operator sells and the only ones
 // the pricing engine selects by (operator, 2026-09-04: "remove any other
@@ -102,6 +100,9 @@ export default function GuideRatesContent() {
   const guideGradeLabel = useVocabLabel('guide_grade')
   const guideDurationLabel = useVocabLabel('guide_duration')
   const guideLanguageLabel = useVocabLabel('guide_language')
+  // Settings → Vocabulary → Guide languages is the list (lib/guides/guide-language):
+  // a language added, hidden or reordered there reaches this form. Values are keys.
+  const languageOptions = useVocabOptions('guide_language', optionsFromLabels(BUILT_IN_GUIDE_LANGUAGES))
   // Grades and durations list the agency's vocabulary (hidden grades stay
   // hidden — the pricing engine selects by the two the operator sells).
   const gradeOptions = useVocabOptions('guide_grade', GUIDE_TYPES.map(g => ({ value: g.value, label: t(`guideTypes.${g.value}`) })))
@@ -170,7 +171,7 @@ export default function GuideRatesContent() {
 
   const [formData, setFormData] = useState({
     service_code: '',
-    guide_language: 'English',
+    guide_language: 'english',
     guide_type: 'egyptologist',
     city: '',
     tour_duration: 'full_day',
@@ -267,7 +268,7 @@ export default function GuideRatesContent() {
     setEditingRate(null)
     setFormData({
       service_code: generateServiceCode(),
-      guide_language: 'English',
+      guide_language: 'english',
       guide_type: 'egyptologist',
       city: '',
       tour_duration: 'full_day',
@@ -298,7 +299,8 @@ export default function GuideRatesContent() {
     setEditingRate(rate)
     setFormData({
       service_code: rate.service_code || '',
-      guide_language: rate.guide_language || 'English',
+      // A row written before the vocabulary holds the word; the picker speaks keys.
+      guide_language: guideLanguageKey(rate.guide_language || 'english'),
       guide_type: rate.guide_type || 'egyptologist',
       city: rate.city || '',
       tour_duration: rate.tour_duration || 'full_day',
@@ -408,7 +410,7 @@ export default function GuideRatesContent() {
       rate.city?.toLowerCase().includes(searchTerm.toLowerCase())
 
     const matchesCity = selectedCity === '' || rate.city === selectedCity
-    const matchesLanguage = selectedLanguage === '' || rate.guide_language === selectedLanguage
+    const matchesLanguage = selectedLanguage === '' || guideLanguageKey(rate.guide_language) === selectedLanguage
     const matchesGuide = selectedGuide === '' || rate.supplier_id === selectedGuide
     const matchesGuideType = selectedGuideType === '' || rate.guide_type === selectedGuideType
     const matchesActive = showInactive || rate.is_active
@@ -667,8 +669,8 @@ export default function GuideRatesContent() {
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
             <option value="">{t('allLanguages')}</option>
-            {LANGUAGES.map(lang => (
-              <option key={lang} value={lang}>{guideLanguageLabel(lang, lang)}</option>
+            {languageOptions.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
 
@@ -1067,9 +1069,13 @@ export default function GuideRatesContent() {
                       required
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
-                      {LANGUAGES.map(lang => (
-                        <option key={lang} value={lang}>{guideLanguageLabel(lang, lang)}</option>
+                      {languageOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
+                      {/* A language since removed from the vocabulary still shows. */}
+                      {formData.guide_language && !languageOptions.some(o => o.value === formData.guide_language) && (
+                        <option value={formData.guide_language}>{guideLanguageLabel(formData.guide_language, formData.guide_language)}</option>
+                      )}
                     </select>
                   </div>
                   <div>

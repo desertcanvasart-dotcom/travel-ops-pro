@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { guideLanguageKey } from '@/lib/guides/guide-language'
 import { clientMessage } from '@/lib/api-errors'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createActorAdminClient } from '@/lib/supabase-actor'
@@ -42,7 +43,7 @@ export async function PUT(
     const updateData: Record<string, any> = {}
 
     if (body.service_code !== undefined) updateData.service_code = body.service_code
-    if (body.guide_language !== undefined) updateData.guide_language = body.guide_language
+    if (body.guide_language !== undefined) updateData.guide_language = guideLanguageKey(body.guide_language)
     if (body.guide_type !== undefined) updateData.guide_type = body.guide_type
     if (body.city !== undefined) updateData.city = body.city || null
     if (body.tour_duration !== undefined) updateData.tour_duration = body.tour_duration

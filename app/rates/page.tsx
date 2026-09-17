@@ -10,6 +10,7 @@ import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { hotelPpDouble } from '@/lib/rates/hotel-display-rate'
 import { vehicleBands, vehicleKeyLabel, PRESET_VEHICLE_KEYS } from '@/lib/rates/vehicle-bands'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
+import { useVocabLabel } from '@/hooks/useVocabLabel'
 
 // ============================================
 // INTERFACES
@@ -212,6 +213,7 @@ export default function RatesPage() {
   const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
   // The transport table's vehicle columns: the agency's vehicle types
   // (Settings → Vocabulary), the five presets until the vocabulary loads.
+  const guideLanguageLabel = useVocabLabel('guide_language')
   const vehicleOptions = useVocabOptions('vehicle_type', PRESET_VEHICLE_KEYS.map(k => ({ value: k, label: vehicleKeyLabel(k) })))
 
   const [rates, setRates] = useState<RatesData | null>(null)
@@ -921,7 +923,7 @@ export default function RatesPage() {
                 <tbody className="divide-y divide-gray-100">
                   {paginatedRates.guides.map((rate, index) => (
                     <tr key={rate.service_code} className={`${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'} hover:bg-gray-100 transition-colors`}>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{rate.guide_language}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{guideLanguageLabel(rate.guide_language, rate.guide_language ?? '')}</td>
                       <td className="px-4 py-3 text-sm text-gray-700">{rate.guide_type}</td>
                       <td className="px-4 py-3">
                         <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium">
