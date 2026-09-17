@@ -5,6 +5,8 @@
 // File: app/tours/[code]/page.tsx
 // ============================================
 
+import { DayBandBlock } from '@/components/pricing/DayBand'
+import { groupLinesByDay } from '@/lib/pricing/group-by-day'
 import { todayLocal } from '@/lib/today'
 import { useCompanyInfo } from '@/lib/use-company-info'
 import { useEffect, useState, useCallback } from 'react'
@@ -97,6 +99,7 @@ interface PricingResult {
     quantity: number
     unit_cost: number
     line_total: number
+    day_number?: number | null
   }>
   optional_services: Array<{
     service_id: string
@@ -805,16 +808,30 @@ export default function TourDetailPage() {
                 {showBreakdown && pricing.services.length > 0 && (
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
                     <h4 className="text-xs font-semibold text-gray-700 mb-3 uppercase tracking-wide">{t('detail.servicesIncluded')}</h4>
-                    <div className="space-y-2">
-                      {pricing.services.map((service, idx) => (
-                        <div key={idx} className="flex items-center justify-between text-sm">
-                          <span className="flex items-center gap-2 text-gray-600">
-                            <span>{getCategoryIcon(service.service_category)}</span>
-                            <span className="truncate max-w-[180px]">{service.service_name}</span>
-                          </span>
-                          <span className="text-gray-900 font-medium">{formatWithConversion(service.line_total, rateCurrency)}</span>
-                        </div>
-                      ))}
+                    {/* Day by day, with a band where each day starts. */}
+                    <div>
+                      {groupLinesByDay(pricing.services, s => ({ id: s.service_id, category: s.service_category, dayNumber: s.day_number })).map((group, groupIndex) => {
+                        const place = tour.daily_itinerary?.find(d => d.day_number === group.day)?.day_title?.trim()
+                        return (
+                          <DayBandBlock
+                            key={group.day}
+                            first={groupIndex === 0}
+                            day={group.day}
+                            label={group.day > 0 ? (place || t('detail.dayNumber', { day: group.day })) : t('detail.wholeTrip')}
+                            total={formatWithConversion(group.lines.reduce((sum, s) => sum + s.line_total, 0), rateCurrency)}
+                          >
+                            {group.lines.map((service, idx) => (
+                              <div key={idx} className="flex items-center justify-between text-sm">
+                                <span className="flex items-center gap-2 text-gray-600 min-w-0">
+                                  <span>{getCategoryIcon(service.service_category)}</span>
+                                  <span className="truncate max-w-[180px]">{service.service_name}</span>
+                                </span>
+                                <span className="text-gray-900 font-medium">{formatWithConversion(service.line_total, rateCurrency)}</span>
+                              </div>
+                            ))}
+                          </DayBandBlock>
+                        )
+                      })}
                     </div>
                     <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between text-sm font-medium">
                       <span className="text-gray-700">{t('detail.subtotal')}</span>
@@ -843,10 +860,6 @@ export default function TourDetailPage() {
                 <p className="text-sm text-gray-500">{t('detail.selectOptionsToCalculate')}</p>
               </div>
             )}
-
-            <button type="button" className="w-full bg-[#647C47] text-white py-3 rounded-lg hover:bg-[#4a5c35] transition-colors font-medium text-sm">
-              {t('detail.requestThisTour')}
-            </button>
 
             <p className="text-xs text-gray-400 text-center mt-3">
               {t('detail.pricesCalculatedDynamically')}

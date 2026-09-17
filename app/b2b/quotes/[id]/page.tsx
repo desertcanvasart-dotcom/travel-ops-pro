@@ -1,5 +1,8 @@
 'use client'
 
+import { Fragment } from 'react'
+import { DayBandRow, DAY_LINE_EDGE } from '@/components/pricing/DayBand'
+import { groupLinesByDay } from '@/lib/pricing/group-by-day'
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -443,20 +446,41 @@ export default function QuoteDetailPage() {
                     <th className="px-4 py-2 text-right font-medium text-gray-600">{t('totalColumn')}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
-                  {services.map((service: any, idx: number) => (
-                    <tr key={idx} className={service.unpriced ? 'bg-red-50' : 'hover:bg-gray-50'}>
-                      <td className="px-4 py-2">
-                        <span className={service.unpriced ? 'text-red-800 font-medium' : undefined}>{service.service_name || t('serviceColumn')}</span>
-                        {service.unpriced && (
-                          <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] font-medium bg-red-600 text-white">{t('noRate')}</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-right">{service.quantity || 1}</td>
-                      <td className={`px-4 py-2 text-right ${service.unpriced ? 'text-red-700' : ''}`}>{rateSymbol}{(service.unit_cost || 0).toFixed(2)}</td>
-                      <td className={`px-4 py-2 text-right font-medium ${service.unpriced ? 'text-red-700' : ''}`}>{rateSymbol}{(service.line_total || 0).toFixed(2)}</td>
-                    </tr>
-                  ))}
+                <tbody>
+                  {/* Day by day, in the order each day runs, with a band where each day starts. */}
+                  {groupLinesByDay(services as any[], (s: any) => ({ id: s.service_id, category: s.service_category, dayNumber: s.day_number })).map((group, groupIndex) => {
+                    const gaps = group.lines.filter((s: any) => s.unpriced).length
+                    const total = group.lines.reduce((sum: number, s: any) => sum + (Number(s.line_total) || 0), 0)
+                    return (
+                      <Fragment key={group.day}>
+                        <DayBandRow
+                          columns={4}
+                          first={groupIndex === 0}
+                          day={group.day}
+                          label={group.day > 0 ? t('dayNumber', { day: group.day }) : t('wholeTrip')}
+                          meta={t('servicesCount', { count: group.lines.length })}
+                          badge={gaps > 0 && (
+                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">{t('dayGaps', { count: gaps })}</span>
+                          )}
+                          total={`${rateSymbol}${total.toFixed(2)}`}
+                          hasGaps={gaps > 0}
+                        />
+                        {group.lines.map((service: any, idx: number) => (
+                          <tr key={idx} className={`border-b border-gray-100 ${service.unpriced ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
+                            <td className={`px-4 py-2 ${DAY_LINE_EDGE}`}>
+                              <span className={service.unpriced ? 'text-red-800 font-medium' : undefined}>{service.service_name || t('serviceColumn')}</span>
+                              {service.unpriced && (
+                                <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] font-medium bg-red-600 text-white">{t('noRate')}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-2 text-right">{service.quantity || 1}</td>
+                            <td className={`px-4 py-2 text-right ${service.unpriced ? 'text-red-700' : ''}`}>{rateSymbol}{(service.unit_cost || 0).toFixed(2)}</td>
+                            <td className={`px-4 py-2 text-right font-medium ${service.unpriced ? 'text-red-700' : ''}`}>{rateSymbol}{(service.line_total || 0).toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
