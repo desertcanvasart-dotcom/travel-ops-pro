@@ -12059,6 +12059,7 @@ export interface Database {
           duration: string | null
           area: string | null
           route_name: string | null
+          trip_shape: string | null
           includes: string | null
           rate_currency: string | null
           vehicles: Json | null
@@ -12087,6 +12088,7 @@ export interface Database {
           duration?: string | null
           area?: string | null
           route_name?: string | null
+          trip_shape?: string | null
           includes?: string | null
           rate_currency?: string | null
           vehicles?: Json | null
@@ -12115,6 +12117,7 @@ export interface Database {
           duration?: string | null
           area?: string | null
           route_name?: string | null
+          trip_shape?: string | null
           includes?: string | null
           rate_currency?: string | null
           vehicles?: Json | null

@@ -142,10 +142,27 @@ describe('the editor and the engine read the same list', () => {
   it('the engine picks through lib/pricing/property-candidates, not its own query', () => {
     const src = readFileSync('lib/auto-pricing-service.ts', 'utf8')
     expect(src).toContain('hotelCandidates(supabaseAdmin, city, tier)')
-    expect(src).toContain('cruiseCandidates(supabaseAdmin, tier, embarkCity)')
+    expect(src).toContain('cruiseCandidates(supabaseAdmin, tier, embarkCity, nights)')
     expect(src).not.toMatch(/from\('accommodation_rates'\)\s*\.select\('\*'\)\s*\.eq\('tier'/)
     const route = readFileSync('app/api/b2b/accommodation-options/route.ts', 'utf8')
     expect(route).toContain('hotelCandidates(db, city, tier)')
     expect(route).toContain('cruiseCandidates(db, tier')
+  })
+})
+
+describe('the automatic ship prefers a sailing as long as the programme\'s cruise', () => {
+  it('orders by nights first, keeping the starred-then-newest order within', async () => {
+    const { cruiseCandidates } = await import('@/lib/pricing/property-candidates')
+    const rows = [
+      { id: 'farida-3n', tier: 'standard', is_active: true, is_preferred: true, duration_nights: 3, embark_city: 'Aswan', created_at: '2026-09-02' },
+      { id: 'farida-4n', tier: 'standard', is_active: true, is_preferred: true, duration_nights: 4, embark_city: 'Luxor', created_at: '2026-09-01' },
+    ]
+    const t = fullRateTables() as any
+    t.nile_cruises = rows
+    setMockTables(t)
+    const { createClient } = await import('@supabase/supabase-js')
+    const db = createClient('http://localhost', 'k')
+    expect((await cruiseCandidates(db, 'standard', 'Nile Cruise', 4)).map(r => r.id)[0]).toBe('farida-4n')
+    expect((await cruiseCandidates(db, 'standard', 'Nile Cruise', 3)).map(r => r.id)[0]).toBe('farida-3n')
   })
 })

@@ -271,6 +271,8 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('city', 'City', 'text', true),
       col('origin_city', 'Origin City', 'text', false),
       col('destination_city', 'Destination City', 'text', false),
+      // Road transfers: one_way | same_day_return | overnight_return.
+      colEnum('trip_shape', 'Trip Shape', ['one_way', 'same_day_return', 'overnight_return'], false),
       col('route_name', 'Route Name', 'text', false),
       col('duration', 'Duration', 'text', false),
       col('area', 'Area', 'text', false),

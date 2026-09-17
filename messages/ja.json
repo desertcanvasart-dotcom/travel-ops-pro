@@ -4345,7 +4345,18 @@
         "validEurRate": "有効な料金を入力してください"
       },
       "rateHeader": "料金（{currency}）",
-      "singlePrice": "料金"
+      "singlePrice": "料金",
+      "tripShape": {
+        "label": "行程の形",
+        "one_way": "片道",
+        "same_day_return": "日帰り往復",
+        "overnight_return": "1泊往復(翌日戻り)",
+        "hint": {
+          "one_way": "目的地で降車。",
+          "same_day_return": "同日に往復。出発地に戻って宿泊する日に使われます。",
+          "overnight_return": "現地で1泊し翌日に戻る。往路の日に1回だけ計上され、復路の日は含まれる移動として表示されます。"
+        }
+      }
     },
     "meals": {
       "title": "食事料金",
@@ -7387,7 +7398,14 @@
         "intercity_with_sightseeing": "都市間移動(観光付き)",
         "sound_light": "音と光のショー送迎",
         "dinner_transfer": "夕食送迎"
-      }
+      },
+      "tripShape": "行程の形",
+      "shapes": {
+        "one_way": "片道",
+        "same_day_return": "日帰り往復",
+        "overnight_return": "1泊往復"
+      },
+      "returnIncluded": "{from} → {to} の復路 — {day}日目の1泊往復に含まれます。"
     },
     "inFlightNight": "機中泊(夜行便)— この日は手配なし",
     "guideLanguageNoRate": "{language}(ガイド料金なし)"

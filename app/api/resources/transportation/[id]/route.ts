@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { resolveTripShapeWrite } from '@/lib/pricing/road-trips'
 import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
 import { createServerClient } from '@/lib/supabase-server'
 
@@ -67,6 +68,8 @@ export async function PUT(
       return NextResponse.json({ error: 'At least one vehicle rate is required' }, { status: 400 })
     }
     const vehiclePatch = vehicleWrite.patch ?? {}
+    const tripShapeWrite = resolveTripShapeWrite(body, currentRow ?? null)
+    if (!tripShapeWrite.ok) return NextResponse.json({ error: tripShapeWrite.error }, { status: 400 })
 
     // Build non-vehicle update fields
     const updateData: Record<string, any> = {
@@ -75,6 +78,8 @@ export async function PUT(
       city: body.city,
       origin_city: body.origin_city || null,
       destination_city: body.destination_city || null,
+      // Road transfers: the trip's shape (lib/pricing/road-trips); others none.
+      trip_shape: tripShapeWrite.value,
       duration: body.duration || null,
       area: body.area || null,
       includes: body.includes || null,

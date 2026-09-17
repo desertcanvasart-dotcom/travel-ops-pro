@@ -29,7 +29,16 @@ export async function hotelCandidates(db: Db, city: string, tier: string): Promi
   return (data ?? []) as Row[]
 }
 
-export async function cruiseCandidates(db: Db, tier: string, embarkCity?: string | null): Promise<Row[]> {
+export async function cruiseCandidates(db: Db, tier: string, embarkCity?: string | null, nights?: number | null): Promise<Row[]> {
+  // A sailing as long as the programme's cruise comes first (stable, so the
+  // starred-then-newest order holds within): a 4-night programme's automatic
+  // ship used to be the starred 3-night sailing the other way up the Nile,
+  // ending in the wrong port — which now decides where the next day's road
+  // transfer starts (NMS803, 2026-09-17).
+  const byNights = (rows: Row[]): Row[] =>
+    nights && nights > 0
+      ? [...rows.filter(r => Number(r.duration_nights) === nights), ...rows.filter(r => Number(r.duration_nights) !== nights)]
+      : rows
   const base = () => db
     .from('nile_cruises')
     .select('*')
@@ -40,11 +49,11 @@ export async function cruiseCandidates(db: Db, tier: string, embarkCity?: string
   if (embarkCity) {
     const { data, error } = await ordered(base().ilike('embark_city', `%${embarkCity}%`))
     if (error) throw new Error(error.message)
-    if (data && data.length) return data as Row[]
+    if (data && data.length) return byNights(data as Row[])
   }
   const { data, error } = await ordered(base())
   if (error) throw new Error(error.message)
-  return (data ?? []) as Row[]
+  return byNights((data ?? []) as Row[])
 }
 
 /** One row by id, whatever its tier or city — the operator chose it. Null

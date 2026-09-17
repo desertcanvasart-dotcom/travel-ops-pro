@@ -540,7 +540,7 @@ export default function TourPriceCalculator() {
         const res = await fetch('/api/b2b/transport-preview', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ days: editableDays, template_id: templateId, num_pax: numPax, guide_mode: guideMode, tour_leader_included: tourLeaderIncluded }),
+          body: JSON.stringify({ days: editableDays, template_id: templateId, num_pax: numPax, guide_mode: guideMode, tour_leader_included: tourLeaderIncluded, tier: variationTier }),
           signal: controller.signal,
         })
         const json = await res.json()
@@ -554,7 +554,7 @@ export default function TourPriceCalculator() {
       }
     }, 500)
     return () => { clearTimeout(timer); controller.abort() }
-  }, [editableDays, templateId, numPax, guideMode, tourLeaderIncluded])
+  }, [editableDays, templateId, numPax, guideMode, tourLeaderIncluded, variationTier])
 
   const setDaySupplements = (dayIndex: number, keys: string[] | undefined) => {
     setEditableDays(prev => {
@@ -1411,6 +1411,7 @@ export default function TourPriceCalculator() {
                                 kind={day.accommodation_type}
                                 city={hotelCityOf(day)}
                                 embark={editableDays.find(d => d.accommodation_type === 'cruise')?.city ?? null}
+                                nights={editableDays.filter(d => d.accommodation_type === 'cruise').length || null}
                                 tier={variationTier}
                                 tierLabel={tierLabel(variationTier, t(`tiers.${variationTier}`))}
                                 value={chosenForStay(editableDays, index, variationTier)}

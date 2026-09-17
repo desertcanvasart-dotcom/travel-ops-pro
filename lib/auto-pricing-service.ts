@@ -47,6 +47,7 @@ import { periodRatesFor, plainPeriodName as seasonNameOf } from '@/lib/rates/rat
 import { cruiseCandidates, hotelCandidates, propertyById } from '@/lib/pricing/property-candidates'
 import { choicesForTier, sanitizePropertyChoice } from '@/lib/pricing/property-choice'
 import { guideLanguageWord, sameGuideLanguage } from '@/lib/guides/guide-language'
+import { isRoadTransferType, planRoadTrips, rateDeparture, rateTripShape, roadRouteKey, sanitizeTripShape, type RoadPlanEntry, type TripShape } from '@/lib/pricing/road-trips'
 import { durationFor, isRoadTransfer, isSightseeing, sanitizeTransportLines, type TransportLine } from '@/lib/pricing/transport-lines'
 import { getAirportCode, legAssistance, routeAirportCode, sanitizeLegAssist, sanitizeLegPlace, type LegAssist } from '@/lib/pricing/flight-leg'
 import { resolveSupplementsForDate, sanitizeSupplementKeys } from '@/lib/rates/supplements'
@@ -345,6 +346,8 @@ interface TransportRate {
   duration: string | null
   area: string | null
   route_name: string | null
+  /** one_way / same_day_return / overnight_return (lib/pricing/road-trips). */
+  trip_shape?: string | null
   base_rate_eur: number
   base_rate_non_eur: number
   capacity_min: number | null
@@ -556,6 +559,11 @@ export interface TransportNeed {
   // When undefined, the caller uses (previousDay.city, day.city) for intercity.
   originCity?: string
   destinationCity?: string
+  /** Road transfers only: the shape of trip the rate must be (lib/pricing/road-trips). */
+  tripShape?: TripShape
+  /** A drive back already paid inside this earlier day's overnight return:
+   *  listed at 0, never priced. */
+  returnIncludedFromDay?: number
 }
 
 /**
@@ -570,7 +578,12 @@ export interface TransportNeed {
 export function determineTransportNeeds(
   day: ItineraryDay,
   previousDay: ItineraryDay | null,
-  nextDay: ItineraryDay | null
+  nextDay: ItineraryDay | null,
+  /** The trip's road plan for THIS day (lib/pricing/road-trips planRoadTrips).
+   *  Given = the plan decides the day's road transfer: its route and shape,
+   *  or that today's drive back is inside an earlier overnight return. Absent
+   *  = the old one-way rule (callers that plan nothing). */
+  ctx?: { road: RoadPlanEntry | null }
 ): TransportNeed[] {
   // Explicit per-day transport override wins (admin pinned a specific
   // service_type for this day). Returns one line; extras still get added.
@@ -586,18 +599,32 @@ export function determineTransportNeeds(
       useSpecialVehicle: false,
       ...(line.city ? { city: line.city } : {}),
       ...(isRoadTransfer(line.service_type)
-        ? { originCity: line.from || previousDay?.city, destinationCity: line.to || day.city }
+        ? {
+            originCity: line.from || (ctx?.road?.kind === 'leg' ? ctx.road.from : previousDay?.city),
+            destinationCity: line.to || day.city,
+            tripShape: line.shape ?? (ctx?.road?.kind === 'leg' ? ctx.road.shape : 'one_way'),
+          }
         : {}),
     }))
   }
 
   if (day.transport?.service_type) {
+    const overrideLeg = ctx?.road?.kind === 'leg' ? ctx.road : null
     lines.push({
       serviceType: day.transport.service_type,
       duration: day.transport.duration || 'full_day',
       area: day.transport.area || null,
       useSpecialVehicle: !!day.transport.vehicle_type,
       specialVehicleType: day.transport.vehicle_type as VehicleType,
+      // A pinned road transfer still rides the planned route and shape —
+      // otherwise it looked for a one-way rate on a return (Greptile on #462).
+      ...(isRoadTransferType(day.transport.service_type)
+        ? {
+            originCity: overrideLeg ? overrideLeg.from : previousDay?.city,
+            destinationCity: overrideLeg ? overrideLeg.to : day.city,
+            tripShape: overrideLeg ? overrideLeg.shape : 'one_way',
+          }
+        : {}),
     })
     appendExtras(lines, day)
     return lines
@@ -638,6 +665,19 @@ export function determineTransportNeeds(
   // the explicit extras. On a train day it only adds or removes the station
   // transfers; the day's own sightseeing vehicle is unaffected.
   const roadOn = day.road_transfers ?? !isTicketLeg
+  // Today's drive back is inside an earlier day's overnight return: listed so
+  // the day reads whole, never charged twice (operator, 2026-09-17).
+  if (ctx?.road?.kind === 'return_included') {
+    lines.push({
+      serviceType: 'intercity',
+      duration: 'one_way',
+      area: null,
+      useSpecialVehicle: false,
+      originCity: ctx.road.from,
+      destinationCity: ctx.road.to,
+      returnIncludedFromDay: ctx.road.outDay,
+    })
+  }
   if (!roadOn && !isTicketLeg) {
     appendExtras(lines, day)
     return lines
@@ -749,14 +789,20 @@ export function determineTransportNeeds(
   // sightseeing → intercity_with_sightseeing; otherwise one-way intercity.
   // A marked train leg suppresses the road line — its ticket is priced in
   // the ticket-leg step, per person.
-  else if (isCityChange && !isTicketLeg) {
+  else if (ctx ? ctx.road?.kind === 'leg' : (isCityChange && !isTicketLeg)) {
+    // The route and shape come from the trip's road plan: From is where the
+    // party woke up (a ship's end port after a cruise), and a leg that sleeps
+    // back at its start is a same-day return, one that comes back by road
+    // tomorrow an overnight return.
+    const planned = ctx?.road?.kind === 'leg' ? ctx.road : null
     lines.push({
       serviceType: hasAttractions ? 'intercity_with_sightseeing' : 'intercity',
       duration: 'one_way',
       area: null,
       useSpecialVehicle: false,
-      originCity: previousDay?.city,
-      destinationCity: day.city,
+      originCity: planned ? planned.from : previousDay?.city,
+      destinationCity: planned ? planned.to : day.city,
+      tripShape: planned ? planned.shape : 'one_way',
     })
   }
   // Day train with its station transfers asked for: to the station in the
@@ -1582,7 +1628,9 @@ export async function resolveCruiseStay(
   isEurPassport: boolean = true,
   travelDate?: string | null,
   normalizer?: RateNormalizer,
-  chosenId?: string
+  chosenId?: string,
+  /** The programme's nights aboard: a sailing that long is preferred. */
+  nights?: number
 ): Promise<{ rates: CruiseStayRates | null; problem?: ChosenPropertyProblem }> {
   try {
     let raw: HotelOrCruiseRow | null
@@ -1596,7 +1644,7 @@ export async function resolveCruiseStay(
       // The starred ship first, then newest; a port that matches nothing
       // falls back to every ship at the tier — lib/pricing/property-candidates,
       // the same list the day editor offers.
-      raw = (await cruiseCandidates(supabaseAdmin, tier, embarkCity))[0] ?? null
+      raw = (await cruiseCandidates(supabaseAdmin, tier, embarkCity, nights))[0] ?? null
     }
     const cruise = (raw && normalizer
       ? (await normalizer.normalize('nile_cruises', [raw]))?.[0]
@@ -2188,6 +2236,14 @@ export async function buildTransportCache(normalizer?: RateNormalizer): Promise<
       cache.set(intercityKey, rate)
     }
 
+    // Road transfers by ROUTE and SHAPE — the only way they are found
+    // (lib/pricing/road-trips). Departure is `city` (what the form saves) or
+    // `origin_city` when a sheet filled it.
+    if (isRoadTransferType(rate.service_type) && rateDeparture(rate) && rate.destination_city) {
+      const key = roadRouteKey(rate.service_type, rateDeparture(rate), rate.destination_city, rateTripShape(rate))
+      if (!cache.has(key)) cache.set(key, rate)
+    }
+
     // Also cache by service_code for direct lookups
     if (rate.service_code) {
       cache.set(`code:${rate.service_code.toLowerCase()}`, rate)
@@ -2217,12 +2273,31 @@ export function findTransportRate(
     vehicleType?: VehicleType  // Optional override for special vehicles
     originCity?: string
     destinationCity?: string
+    /** Road transfers: the shape the rate must be; absent = one way. */
+    tripShape?: TripShape
   }
 ): TransportRate | null {
   const { serviceType, city, duration, area, pax, vehicleType, originCity, destinationCity } = params
   const cityLower = city.toLowerCase()
 
   let record: TransportRate | undefined
+
+  // A road transfer is found by its route and shape ONLY. The city-only keys
+  // below matched any road transfer leaving (or arriving in) a city — an
+  // Aswan → Luxor day could price Aswan's Hurghada run — or nothing at all,
+  // because they looked in the destination (2026-09-17).
+  if (isRoadTransferType(serviceType)) {
+    if (!originCity || !destinationCity) return null
+    record = cache.get(roadRouteKey(serviceType, originCity, destinationCity, params.tripShape ?? 'one_way'))
+    if (!record) {
+      debugLog(`❌ No road transfer rate: ${serviceType} ${originCity} → ${destinationCity} (${params.tripShape ?? 'one_way'})`)
+      return null
+    }
+    const band = getTransportRateForPax(record, pax)
+    return band
+      ? { ...record, base_rate_eur: band.rateEur, base_rate_non_eur: band.rateNonEur, vehicle_type: vehicleType || band.vehicleType, capacity_min: band.capacityMin, capacity_max: band.capacityMax }
+      : record
+  }
 
   // Priority 1: Exact match (service_type + city + duration + area)
   const exactKey = [serviceType, cityLower, duration, area || ''].join('|')
@@ -2634,7 +2709,7 @@ export async function calculateDayBasedPricing(
     fetchCruiseTransportPricingRules(rateNormalizer),
     // Cruise rates only apply when the itinerary has cruise nights
     cruiseNights > 0
-      ? resolveCruiseStay(tier, firstCruiseDay?.city, isEurPassport, dateForDay(firstCruiseDay?.day), rateNormalizer, propertyChoices.cruiseId)
+      ? resolveCruiseStay(tier, firstCruiseDay?.city, isEurPassport, dateForDay(firstCruiseDay?.day), rateNormalizer, propertyChoices.cruiseId, cruiseNights)
       : Promise.resolve({ rates: null } as Awaited<ReturnType<typeof resolveCruiseStay>>),
     Promise.all(hotelCities.map(city => resolveHotelStay(city, tier, isEurPassport, params.travelDate, rateNormalizer, propertyChoices.hotelByCity.get(city.toLowerCase())))),
     fetchTicketRates(ticketLegs, rateNormalizer),
@@ -3851,6 +3926,9 @@ export async function calculateDayBasedPricing(
   }
 
   const transportInfoByDay: DayTransportInfo[] = []
+  // Road transfers between cities, with the trip shape each needs — the day
+  // after a cruise starts from the ship's disembarkation port.
+  const roadPlan = planRoadTrips(itinerary, cruiseRates?.row ? String((cruiseRates.row as Record<string, unknown>).disembark_city ?? '') || null : null)
 
   for (let i = 0; i < itinerary.length; i++) {
     const day = itinerary[i]
@@ -3863,7 +3941,7 @@ export async function calculateDayBasedPricing(
     // priced normally; the cruise transport package itself is added
     // separately below as a single line item per trip.
     const isCruisePackageDay = day.is_cruise_day === true
-    const needsList = determineTransportNeeds(day, previousDay, nextDay)
+    const needsList = determineTransportNeeds(day, previousDay, nextDay, { road: roadPlan.get(i) ?? null })
 
     if (needsList.length === 0) {
       const label = isCruisePackageDay
@@ -3902,7 +3980,20 @@ export async function calculateDayBasedPricing(
     if (!info.requiresTransport) continue
 
     const { needs } = info
-    
+    const idSuffixEarly = info.legIndex > 0 ? `-${info.legIndex + 1}` : ''
+
+    // The drive back of an earlier overnight return: listed, never charged.
+    if (needs.returnIncludedFromDay) {
+      services.push(zeroLine({
+        id: `day${info.day}-transport${idSuffixEarly}`,
+        dayNumber: info.day,
+        serviceType: 'transportation',
+        serviceName: `Road transfer back — ${needs.originCity} → ${needs.destinationCity}`,
+        isPerPax: false,
+      }, { included: true, issue: `Included in the overnight return priced on day ${needs.returnIncludedFromDay}` }))
+      continue
+    }
+
     // Find transport rate (resolves vehicle tier for 2 pax base)
     const rate = findTransportRate(transportCache, {
       serviceType: needs.serviceType,
@@ -3915,7 +4006,8 @@ export async function calculateDayBasedPricing(
       // departure-side flight leg and for intercity origin→destination), then
       // fall back to the previous-day-by-index heuristic for legacy callers.
       originCity: info.needs.originCity || itinerary[info.day - 2]?.city,
-      destinationCity: info.needs.destinationCity || info.city
+      destinationCity: info.needs.destinationCity || info.city,
+      tripShape: needs.tripShape,
     })
 
     // Disambiguate ID when a day has more than one transport leg (B3 flight days).
@@ -3944,8 +4036,10 @@ export async function calculateDayBasedPricing(
     } else {
       const origin = info.needs.originCity || itinerary[info.day - 2]?.city
       const destination = info.needs.destinationCity || info.city
-      const where = (needs.serviceType === 'intercity' || needs.serviceType === 'intercity_with_sightseeing') && origin && destination && cityKey(origin) !== cityKey(destination)
-        ? `${origin} → ${destination}`
+      const road = isRoadTransferType(needs.serviceType)
+      const shapeWord = road ? ({ one_way: 'one-way', same_day_return: 'same-day return', overnight_return: 'overnight return' } as const)[needs.tripShape ?? 'one_way'] : ''
+      const where = road && origin && destination && cityKey(origin) !== cityKey(destination)
+        ? `${origin} → ${destination}${shapeWord ? ` (${shapeWord})` : ''}`
         : info.city
       listUnpriced({
         id: `day${info.day}-transport${idSuffix}`,
@@ -4024,7 +4118,9 @@ export async function calculateDayBasedPricing(
         vehicleType: needs.useSpecialVehicle ? needs.specialVehicleType : undefined,
         originCity: info.needs.originCity || itinerary[info.day - 2]?.city,
         destinationCity: info.needs.destinationCity || info.city,
+        tripShape: needs.tripShape,
       })
+      if (needs.returnIncludedFromDay) continue
       total += usableRate(rate?.base_rate_eur) ?? 0
     }
     if (hasCruisePackage) {
