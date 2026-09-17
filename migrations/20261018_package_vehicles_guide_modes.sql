@@ -70,6 +70,16 @@ SET vehicles = COALESCE((
 WHERE p.vehicles IS NULL;
 
 -- The vocabulary's band for every vehicle it lists, on the package's own org.
+-- Guarded on org_id existing: the E2E project's b2b_transport_packages predates
+-- the baseline and has no org_id (nor rate_currency) — a fresh install and
+-- production both have it (2026-09-17).
+DO $stamp$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'b2b_transport_packages' AND column_name = 'org_id'
+  ) THEN
+    EXECUTE $q$
 UPDATE public.b2b_transport_packages p
 SET vehicles = (
   SELECT COALESCE(jsonb_agg(stamped.v ORDER BY (stamped.v->>'capacity_max')::int, (stamped.v->>'capacity_min')::int), '[]'::jsonb)
@@ -89,7 +99,11 @@ SET vehicles = (
      AND (ov.meta->>'max_pax')::int >= GREATEST((ov.meta->>'min_pax')::int, 1)
   ) AS stamped
 )
-WHERE jsonb_typeof(p.vehicles) = 'array' AND jsonb_array_length(p.vehicles) > 0;
+WHERE jsonb_typeof(p.vehicles) = 'array' AND jsonb_array_length(p.vehicles) > 0
+    $q$;
+  END IF;
+END
+$stamp$;
 
 -- ---------------------------------------------------------------------------
 -- 3a. Guide rates carry a mode
