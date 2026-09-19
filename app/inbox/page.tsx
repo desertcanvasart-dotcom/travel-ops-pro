@@ -3,6 +3,7 @@
 import { newRequestKey, sendGuardedEmail } from '@/lib/email/send-with-guard'
 import { useSendConflictConfirm } from '@/lib/email/use-send-conflict-confirm'
 import { looksLikeTourUpOrder } from '@/lib/intake/tour-up-order'
+import { stashHandoffText, encodeTextParam } from '@/lib/text-handoff'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
 import { useAuth } from '@/app/contexts/AuthContext'
@@ -559,9 +560,6 @@ ${bodyText}`
     
     const senderEmail = extractEmailAddress(selectedEmail.from)
     const matchedClient = clients.find(c => c.email?.toLowerCase() === senderEmail.toLowerCase())
-    
-    // Use base64 encoding to avoid URL issues with special characters
-    const encodedConversation = btoa(unescape(encodeURIComponent(conversationText)))
 
     // An order from the website's form is a document, not a conversation:
     // it goes to the order intake, which reads it label by label and builds
@@ -576,15 +574,22 @@ ${bodyText}`
         .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
         .replace(/[ \t]+\n/g, '\n')
         .trim()
-      window.location.href = `/intake/order?text=${encodeURIComponent(btoa(unescape(encodeURIComponent(bodyLines))))}`
+      const orderKey = stashHandoffText(bodyLines)
+      window.location.href = orderKey
+        ? `/intake/order?textKey=${orderKey}`
+        : `/intake/order?text=${encodeURIComponent(encodeTextParam(bodyLines))}`
       return
     }
     
-    const params = new URLSearchParams({ 
-      conversation: encodedConversation, 
-      source: 'email',
-      encoded: 'base64'
-    })
+    // The email travels in sessionStorage, not the URL. Base64 of a long
+    // Japanese email overflowed the request line and the browser showed
+    // "HTTP ERROR 431" before anything reached the app — see lib/text-handoff.
+    const conversationKey = stashHandoffText(conversationText)
+    const params = new URLSearchParams(
+      conversationKey
+        ? { conversationKey, source: 'email' }
+        : { conversation: encodeTextParam(conversationText), source: 'email', encoded: 'base64' }
+    )
     
     if (matchedClient) {
       params.set('clientId', matchedClient.id)
@@ -593,10 +598,12 @@ ${bodyText}`
     }
     if (senderEmail) params.set('email', senderEmail)
 
-    // Conversations go to the parser → an UNPRICED draft the operator revises,
-    // then prices in the grid. (Ready-made itineraries are pasted/uploaded
-    // directly into the grid.)
-    window.location.href = `/whatsapp-parser?${params.toString()}`
+    // Straight into the pricing module. An email that is a travel request is
+    // on its way to a quote, and the grid parses the conversation itself — so
+    // the separate parser step in between was a page the operator passed
+    // through on the way to where they were going. (This is the same
+    // destination the unified inbox's own Parse button uses.)
+    window.location.href = `/pricing-grid?${params.toString()}`
   }
   useEffect(() => {
     if (isConnected) {

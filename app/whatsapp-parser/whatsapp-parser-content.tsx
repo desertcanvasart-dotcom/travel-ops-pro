@@ -1,5 +1,7 @@
 'use client'
 
+import { readHandoffText, decodeTextParam } from '@/lib/text-handoff'
+
 export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, useRef, Suspense } from 'react'
@@ -827,6 +829,9 @@ function WhatsAppParserContent() {
 
   const preSelectedClientId = searchParams?.get('clientId')
   const conversationParam = searchParams?.get('conversation')
+  // The text itself is parked in sessionStorage; only this key travels in the
+  // URL. A long email in the query string was an HTTP 431 the app never saw.
+  const conversationKeyParam = searchParams?.get('conversationKey')
   const phoneParam = searchParams?.get('phone')
   const emailParam = searchParams?.get('email')
   // Phase 2 — provenance pointer back to the Copilot thread, set when the
@@ -946,29 +951,29 @@ function WhatsAppParserContent() {
   }, [])
 
   useEffect(() => {
-    if (conversationParam) {
+    if (conversationKeyParam) {
+      const stashed = readHandoffText(conversationKeyParam)
+      if (stashed === null) {
+        // The key outlived its text: this URL was copied into another tab, or
+        // reopened later. Say so — an empty box reads as "it lost my email".
+        setError('That email is no longer available here. Open it in the inbox and press Parse again.')
+        setFromInbox(true)
+        return
+      }
+      const currentEmailParam = new URLSearchParams(window.location.search).get('email')
+      const decoded = currentEmailParam
+        ? `[Sender Email: ${currentEmailParam}]\n\n${stashed}`
+        : stashed
+      setConversation(decoded)
+      setParsedMessages(parseConversation(decoded))
+      setFromInbox(true)
+    } else if (conversationParam) {
+      // Legacy: the text itself in the URL. Kept for links made before the
+      // handover moved to sessionStorage.
       try {
         const isBase64 = new URLSearchParams(window.location.search).get("encoded") === "base64"
         const currentEmailParam = new URLSearchParams(window.location.search).get("email")
-        let decoded: string
-
-        if (isBase64) {
-          // Convert URL-safe base64 back to standard base64
-          let base64 = conversationParam.replace(/-/g, '+').replace(/_/g, '/')
-          // Add padding if needed
-          while (base64.length % 4) {
-            base64 += '='
-          }
-          // Proper Unicode base64 decoding
-          const binaryString = atob(base64)
-          const bytes = new Uint8Array(binaryString.length)
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i)
-          }
-          decoded = new TextDecoder('utf-8').decode(bytes)
-        } else {
-          decoded = decodeURIComponent(conversationParam)
-        }
+        let decoded = isBase64 ? decodeTextParam(conversationParam) : decodeURIComponent(conversationParam)
 
         // If we have sender email from headers, prepend it to the conversation
         // so the AI can see it explicitly
@@ -988,7 +993,7 @@ function WhatsAppParserContent() {
     }
     if (phoneParam) setPhoneNumber(phoneParam)
     if (emailParam) setSenderEmail(emailParam)
-  }, [conversationParam, phoneParam, emailParam])
+  }, [conversationParam, conversationKeyParam, phoneParam, emailParam])
 
   useEffect(() => {
     if (preSelectedClientId && !selectedClientId) {

@@ -1,5 +1,7 @@
 'use client'
 
+import { readHandoffText, decodeTextParam } from '@/lib/text-handoff'
+
 import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
@@ -311,29 +313,35 @@ function PricingGridContent() {
   // Effect 1: Decode URL params and store text for parsing
   useEffect(() => {
     if (hasProcessedParams.current) return
+    // The conversation is parked in sessionStorage and only its key travels in
+    // the URL — a long thread in the query string is an HTTP 431 the app never
+    // sees. `conversation` is the legacy shape, kept for older links.
+    const conversationKeyParam = searchParams?.get('conversationKey')
     const conversationParam = searchParams?.get('conversation')
-    if (!conversationParam) return
+    if (!conversationKeyParam && !conversationParam) return
     hasProcessedParams.current = true
 
-    // Decode conversation (handle both standard and URL-safe base64)
-    const isBase64 = searchParams?.get('encoded') === 'base64'
-    let decodedText = conversationParam
+    let decodedText = ''
 
-    if (isBase64) {
-      try {
-        // Convert URL-safe base64 back to standard base64
-        let base64 = conversationParam.replace(/-/g, '+').replace(/_/g, '/')
-        while (base64.length % 4) base64 += '='
-        // Proper Unicode base64 decoding
-        const binaryString = atob(base64)
-        const bytes = new Uint8Array(binaryString.length)
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i)
+    if (conversationKeyParam) {
+      const stashed = readHandoffText(conversationKeyParam)
+      if (stashed === null) {
+        // The key outlived its text (URL copied to another tab, or reopened
+        // later). Nothing to price; leave the grid as it was.
+        console.warn('Conversation handover expired:', conversationKeyParam)
+        return
+      }
+      decodedText = stashed
+    } else if (conversationParam) {
+      const isBase64 = searchParams?.get('encoded') === 'base64'
+      decodedText = conversationParam
+      if (isBase64) {
+        try {
+          decodedText = decodeTextParam(conversationParam)
+        } catch (e) {
+          console.error('Failed to decode base64 conversation:', e)
+          try { decodedText = decodeURIComponent(conversationParam) } catch { /* use raw */ }
         }
-        decodedText = new TextDecoder('utf-8').decode(bytes)
-      } catch (e) {
-        console.error('Failed to decode base64 conversation:', e)
-        try { decodedText = decodeURIComponent(conversationParam) } catch { /* use raw */ }
       }
     }
 

@@ -1,4 +1,6 @@
 'use client'
+
+import { stashHandoffText, encodeTextParam } from '@/lib/text-handoff'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
 import { useRouter } from 'next/navigation'
@@ -788,16 +790,16 @@ export default function WhatsAppInboxPage() {
   const parseConversation = () => {
     if (!selectedConversation || messages.length === 0) return
     const conversationText = messages.map(m => `${m.direction === 'inbound' ? 'Client' : 'Agent'}: ${m.message_body}`).join('\n')
-    // URL-safe base64 encoding
-    const encoder = new TextEncoder()
-    const bytes = encoder.encode(conversationText)
-    const base64 = btoa(String.fromCharCode(...bytes))
-    // Make it URL-safe: replace + with -, / with _, remove =
-    const encoded = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    // The conversation travels in sessionStorage, not the URL — a long thread
+    // in the query string is an HTTP 431 the app never sees. See
+    // lib/text-handoff. (The old encoder also spread the whole byte array into
+    // one String.fromCharCode call, which throws RangeError on a long thread.)
     const clientName = selectedConversation.client_name || selectedConversation.clients?.full_name || ''
+    const conversationKey = stashHandoffText(conversationText)
     const params = new URLSearchParams({
-      conversation: encoded,
-      encoded: 'base64',
+      ...(conversationKey
+        ? { conversationKey }
+        : { conversation: encodeTextParam(conversationText), encoded: 'base64' }),
       clientId: selectedConversation.client_id || '',
       phone: selectedConversation.phone_number,
     })
