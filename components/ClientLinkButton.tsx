@@ -8,7 +8,8 @@ import {
   Unlink,
   Search,
   Loader2,
-  ExternalLink
+  ExternalLink,
+  Plus
 } from 'lucide-react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -28,11 +29,31 @@ interface EmailLink {
   client: Client
 }
 
+/**
+ * A person's name for a lead created from an email.
+ *
+ * The display name when the mail carries one ("Juanita L Pied"), else the part
+ * of the address before the @ — never the whole address, which reads as a
+ * machine's name in every list the client then appears in. `last_name` falls
+ * back to the first because the clients table requires both.
+ */
+export function nameParts(displayName: string | undefined, address: string): { first: string; last: string } {
+  const clean = (displayName ?? '').replace(/<[^>]*>/g, '').replace(/^["']|["']$/g, '').trim()
+  const source = clean || address.split('@')[0].replace(/[._-]+/g, ' ').trim()
+  const words = source.split(/\s+/).filter(Boolean)
+  if (words.length === 0) return { first: 'Unknown', last: 'Unknown' }
+  if (words.length === 1) return { first: words[0], last: words[0] }
+  return { first: words[0], last: words.slice(1).join(' ') }
+}
+
 interface ClientLinkButtonProps {
   userId: string
   messageId: string
   threadId?: string
   fromEmail?: string
+  /** The sender's display name, so a lead created here is filed under their
+   *  name rather than under their address. */
+  fromName?: string
   toEmails?: string[]
   onLinkChange?: (link: EmailLink | null) => void
   className?: string
@@ -43,6 +64,7 @@ export default function ClientLinkButton({
   messageId,
   threadId,
   fromEmail,
+  fromName,
   toEmails,
   onLinkChange,
   className = ''
@@ -108,6 +130,54 @@ export default function ClientLinkButton({
 
     return () => clearTimeout(timer)
   }, [searchQuery, userId])
+
+  /**
+   * Nobody in the CRM writes to us by accident.
+   *
+   * "No clients found" was the end of the road: the operator had an email from
+   * a real person, searched, found nothing, and the panel simply said so. The
+   * automatic lead pass (lib/email/email-leads) only sees a conversation ONCE
+   * — if it judged the thread not a travel request, or the sync had not run,
+   * there was no way to say "this is a lead" by hand. This is that way.
+   *
+   * It creates the client as a LEAD, not a customer: they have asked for
+   * something, nothing is booked, and a booking is what promotes them
+   * (migration 20261021).
+   */
+  const handleCreateLead = async () => {
+    const address = (searchQuery.includes('@') ? searchQuery : fromEmail) || ''
+    const name = nameParts(fromName, address)
+    setLinking(true)
+    try {
+      const res = await fetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          first_name: name.first,
+          last_name: name.last,
+          email: address || null,
+          status: 'lead',
+          client_source: 'email',
+        }),
+      })
+      const data = await res.json()
+      const created = data?.client ?? data?.data
+      if (!created?.id) {
+        console.error('Could not create the lead:', data?.error)
+        return
+      }
+      // Straight into the link the operator was trying to make.
+      await handleLink({
+        id: created.id,
+        name: `${name.first} ${name.last}`.trim(),
+        email: address,
+      } as Client)
+    } catch (error) {
+      console.error('Error creating lead:', error)
+    } finally {
+      setLinking(false)
+    }
+  }
 
   const handleLink = async (client: Client) => {
     setLinking(true)
@@ -259,8 +329,21 @@ export default function ClientLinkButton({
                   ))}
                 </div>
               ) : searchQuery ? (
-                <div className="py-6 text-center text-sm text-gray-500">
-                  {t('noClientsFound')}
+                <div className="py-5 px-3 text-center">
+                  <p className="text-sm text-gray-500">{t('noClientsFound')}</p>
+                  {/* The dead end that sent the operator away. Somebody who
+                      emails us and is not in the CRM is a lead — say so here,
+                      where they already are. */}
+                  <button
+                    type="button"
+                    onClick={() => void handleCreateLead()}
+                    disabled={linking}
+                    className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    {linking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                    {t('createLead')}
+                  </button>
+                  <p className="mt-1.5 text-[11px] text-gray-400">{t('createLeadHint')}</p>
                 </div>
               ) : (
                 <div className="py-6 text-center text-sm text-gray-500">

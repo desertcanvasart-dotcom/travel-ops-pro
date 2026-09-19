@@ -6687,7 +6687,9 @@
     "searchPlaceholder": "クライアントを検索...",
     "noClientsFound": "クライアントが見つかりません",
     "typeToSearch": "クライアントを検索するには入力してください",
-    "autoMatchByEmail": "メールで自動マッチング"
+    "autoMatchByEmail": "メールで自動マッチング",
+    "createLead": "リードを作成",
+    "createLeadHint": "CRM にリードとして登録し、このメールを紐付けます"
   },
   "clientTimeline": {
     "title": "クライアントタイムライン",
