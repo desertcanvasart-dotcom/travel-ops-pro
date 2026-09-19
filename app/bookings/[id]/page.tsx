@@ -54,6 +54,8 @@ import PortalMessagesPanel from '@/app/components/PortalMessagesPanel'
 import BookingChangeRequests from '@/app/components/BookingChangeRequests'
 import BookingExtrasPanel from '@/app/components/BookingExtrasPanel'
 import InsuranceCard from '@/app/components/InsuranceCard'
+import { useConfirm } from '@/components/ConfirmDialog'
+import { isSupplierBacked } from '@/lib/bookings/supplier-backing'
 
 type TabType = 'overview' | 'suppliers' | 'payments' | 'passengers' | 'notes'
 
@@ -63,6 +65,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
   // The Add Supplier modal offers the agency's supplier types (Settings → Vocabulary), grouped.
   const supplierTypeGroups = supplierTypeGroupsFor(useSupplierTypes().options)
   const tCommon = useTranslations('common')
+  const confirmDialog = useConfirm()
 
   const [booking, setBooking] = useState<BookingWithDetails | null>(null)
   const [loading, setLoading] = useState(true)
@@ -158,14 +161,39 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  const updateBookingStatus = async (newStatus: string) => {
+  // Setting "Suppliers Confirmed" on a booking whose suppliers are not all
+  // confirmed is allowed — staff settle plenty of confirmations by phone — but
+  // it is never silent. The API refuses the first attempt with 409 and the
+  // real counts; saying yes here repeats the request with the acknowledgement,
+  // and the API records who clicked through on the booking.
+  const updateBookingStatus = async (newStatus: string, acknowledged = false) => {
     setUpdating(true)
     try {
       const response = await fetch(`/api/bookings/${resolvedParams.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
+        body: JSON.stringify({
+          status: newStatus,
+          ...(acknowledged ? { status_override_ack: true } : {})
+        })
       })
+
+      if (response.status === 409) {
+        const data = await response.json().catch(() => null)
+        if (data?.code === 'supplier_status_unbacked') {
+          setUpdating(false)
+          const proceed = await confirmDialog(
+            `${data.error} ${t('detail.overrideQuestion')}`,
+            {
+              title: t('detail.overrideTitle'),
+              confirmText: t('detail.overrideConfirm'),
+              variant: 'warning',
+            }
+          )
+          if (proceed) await updateBookingStatus(newStatus, true)
+          return
+        }
+      }
 
       if (response.ok) {
         fetchBooking()
@@ -333,44 +361,87 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
   const statusConfig = statusChip(booking.status, BOOKING_STATUS_CONFIG)
   const paymentStatusConfig = statusChip(booking.payment_status, PAYMENT_STATUS_CONFIG)
 
+  // bookings.status is set BY HAND from the dropdown below; the only automatic
+  // promotion to supplier_confirmed happens when every linked supplier row is
+  // confirmed (app/api/bookings/[id]/suppliers), and that check returns early
+  // when there are no supplier rows at all. So a booking can announce
+  // "Suppliers Confirmed" while nothing has been reserved. Print the real
+  // count beside the control, and say so plainly when the two disagree.
+  const supplierTotal = booking.supplier_summary?.total ?? booking.suppliers?.length ?? 0
+  const supplierConfirmed = booking.supplier_summary?.confirmed ?? 0
+  const statusUnbacked =
+    booking.status === 'supplier_confirmed' && !isSupplierBacked(supplierTotal, supplierConfirmed)
+  // Set by the API when someone clicked through the warning above; cleared as
+  // soon as the status changes or the supplier rows catch up.
+  const statusOverride = booking.status_override
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       {/* Header - Two Row Layout */}
       <div className="bg-white rounded-xl shadow-sm border mb-6 p-4">
         {/* Row 1: Booking Info & Status */}
-        <div className="flex items-center justify-between pb-4 border-b border-gray-100">
-          <div className="flex items-center gap-4">
-            <Link href="/bookings" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 pb-4 border-b border-gray-100">
+          <div className="flex items-center gap-3 min-w-0">
+            <Link href="/bookings" className="p-2 -ml-2 hover:bg-gray-100 rounded-lg transition-colors shrink-0">
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </Link>
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-xl font-semibold text-gray-900">{booking.booking_code}</h1>
-                <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusConfig.bgColor} ${statusConfig.color}`}>
-                  {statusConfig.label}
-                </span>
-              </div>
-              <p className="text-sm text-gray-500">{booking.client_name} - {booking.trip_name}</p>
+            <div className="min-w-0">
+              <h1 className="text-xl font-semibold text-gray-900 truncate">{booking.booking_code}</h1>
+              <p className="text-sm text-gray-500 truncate">{booking.client_name} · {booking.trip_name}</p>
             </div>
           </div>
 
-          {/* Status Dropdown */}
-          <select
-            value={booking.status}
-            onChange={(e) => updateBookingStatus(e.target.value)}
-            disabled={updating}
-            title={t('fields.status')}
-            className="px-4 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47]"
-          >
-            <option value="pending">{t('status.pending')}</option>
-            <option value="supplier_confirmed">{t('status.supplier_confirmed')}</option>
-            <option value="payment_received">{t('status.payment_received')}</option>
-            <option value="ready">{t('status.ready')}</option>
-            <option value="in_progress">{t('status.in_progress')}</option>
-            <option value="completed">{t('status.completed')}</option>
-            <option value="cancelled">{t('status.cancelled')}</option>
-          </select>
+          {/* Status control. The select carries the status colour itself, so the
+              header no longer prints the same two words twice, and `w-auto` is
+              load-bearing: globals.css sets `select { width: 100% }`, which made
+              this control swallow the entire header row. */}
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="text-xs text-gray-500 whitespace-nowrap">
+              {supplierTotal === 0
+                ? t('detail.noSuppliersLinked')
+                : t('detail.suppliersConfirmedCount', { confirmed: supplierConfirmed, total: supplierTotal })}
+            </span>
+            <select
+              value={booking.status}
+              onChange={(e) => updateBookingStatus(e.target.value)}
+              disabled={updating}
+              title={t('fields.status')}
+              aria-label={t('fields.status')}
+              className={`w-auto min-w-[10rem] px-3 py-1.5 text-sm font-medium rounded-lg border border-transparent focus:outline-none focus:ring-2 focus:ring-[#647C47] disabled:opacity-60 ${statusConfig.bgColor} ${statusConfig.color}`}
+            >
+              <option value="pending">{t('status.pending')}</option>
+              <option value="supplier_confirmed">{t('status.supplier_confirmed')}</option>
+              <option value="payment_received">{t('status.payment_received')}</option>
+              <option value="ready">{t('status.ready')}</option>
+              <option value="in_progress">{t('status.in_progress')}</option>
+              <option value="completed">{t('status.completed')}</option>
+              <option value="cancelled">{t('status.cancelled')}</option>
+            </select>
+          </div>
         </div>
+
+        {(statusUnbacked || statusOverride) && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-[1px]" />
+            <span>
+              {statusOverride
+                ? t('detail.statusOverridden', {
+                    who: statusOverride.by_email || t('detail.unknownOperator'),
+                    when: new Date(statusOverride.at).toLocaleDateString(),
+                    confirmed: statusOverride.suppliers?.confirmed ?? 0,
+                    total: statusOverride.suppliers?.total ?? 0,
+                  })
+                : t('detail.statusNotBacked')}{' '}
+              <button
+                type="button"
+                onClick={() => setActiveTab('suppliers')}
+                className="font-medium underline underline-offset-2"
+              >
+                {t('tabs.suppliers')}
+              </button>
+            </span>
+          </div>
+        )}
 
         {/* Row 2: Action Buttons */}
         {booking.itinerary && (

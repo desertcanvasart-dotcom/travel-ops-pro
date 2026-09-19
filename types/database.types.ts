@@ -11,7 +11,7 @@
  *
  * Source: live production schema via PostgREST OpenAPI
  * (see scripts/generate-db-types.mjs for why not `supabase gen types`).
- * Tables: 184
+ * Tables: 186
  */
 
 export type Json =
@@ -1420,7 +1420,6 @@ export interface Database {
           minivan_rate: number | null
           minivan_capacity: number | null
           van_rate: number | null
-          vehicles: Json | null
           van_capacity: number | null
           minibus_rate: number | null
           minibus_capacity: number | null
@@ -1434,6 +1433,7 @@ export interface Database {
           updated_at: string | null
           org_id: string
           rate_currency: string | null
+          vehicles: Json | null
         }
         Insert: {
           id?: string
@@ -1448,7 +1448,6 @@ export interface Database {
           minivan_rate?: number | null
           minivan_capacity?: number | null
           van_rate?: number | null
-          vehicles?: Json | null
           van_capacity?: number | null
           minibus_rate?: number | null
           minibus_capacity?: number | null
@@ -1462,6 +1461,7 @@ export interface Database {
           updated_at?: string | null
           org_id: string
           rate_currency?: string | null
+          vehicles?: Json | null
         }
         Update: {
           id?: string
@@ -1476,7 +1476,6 @@ export interface Database {
           minivan_rate?: number | null
           minivan_capacity?: number | null
           van_rate?: number | null
-          vehicles?: Json | null
           van_capacity?: number | null
           minibus_rate?: number | null
           minibus_capacity?: number | null
@@ -1490,6 +1489,7 @@ export interface Database {
           updated_at?: string | null
           org_id?: string
           rate_currency?: string | null
+          vehicles?: Json | null
         }
         Relationships: [
           {
@@ -2384,6 +2384,7 @@ export interface Database {
           portal_mode: string
           base_total_cost: number | null
           extras_total: number | null
+          status_override: Json | null
         }
         Insert: {
           id?: string
@@ -2429,6 +2430,7 @@ export interface Database {
           portal_mode?: string
           base_total_cost?: number | null
           extras_total?: number | null
+          status_override?: Json | null
         }
         Update: {
           id?: string
@@ -2474,6 +2476,7 @@ export interface Database {
           portal_mode?: string
           base_total_cost?: number | null
           extras_total?: number | null
+          status_override?: Json | null
         }
         Relationships: [
           {
@@ -4691,23 +4694,23 @@ export interface Database {
           client_email: string | null
           subject: string | null
           last_message_snippet: string | null
-          last_outbound_at: string | null
           last_message_at: string | null
           message_count: number | null
           unread_count: number | null
           status: string | null
           is_starred: boolean | null
-          last_inbound_at: string | null
           is_hidden: boolean | null
           assigned_team_member_id: string | null
-          awaiting_reply_since: string | null
           assigned_at: string | null
           last_sync_at: string | null
-          lead_check: string | null
-          lead_checked_at: string | null
           gmail_history_id: string | null
           created_at: string | null
           updated_at: string | null
+          last_inbound_at: string | null
+          last_outbound_at: string | null
+          awaiting_reply_since: string | null
+          lead_checked_at: string | null
+          lead_check: string | null
         }
         Insert: {
           id?: string
@@ -4718,23 +4721,23 @@ export interface Database {
           client_email?: string | null
           subject?: string | null
           last_message_snippet?: string | null
-          last_outbound_at?: string | null
           last_message_at?: string | null
           message_count?: number | null
           unread_count?: number | null
           status?: string | null
           is_starred?: boolean | null
-          last_inbound_at?: string | null
           is_hidden?: boolean | null
           assigned_team_member_id?: string | null
-          awaiting_reply_since?: string | null
           assigned_at?: string | null
           last_sync_at?: string | null
-          lead_check?: string | null
-          lead_checked_at?: string | null
           gmail_history_id?: string | null
           created_at?: string | null
           updated_at?: string | null
+          last_inbound_at?: string | null
+          last_outbound_at?: string | null
+          awaiting_reply_since?: string | null
+          lead_checked_at?: string | null
+          lead_check?: string | null
         }
         Update: {
           id?: string
@@ -4745,23 +4748,23 @@ export interface Database {
           client_email?: string | null
           subject?: string | null
           last_message_snippet?: string | null
-          last_outbound_at?: string | null
           last_message_at?: string | null
           message_count?: number | null
           unread_count?: number | null
           status?: string | null
           is_starred?: boolean | null
-          last_inbound_at?: string | null
           is_hidden?: boolean | null
           assigned_team_member_id?: string | null
-          awaiting_reply_since?: string | null
           assigned_at?: string | null
           last_sync_at?: string | null
-          lead_check?: string | null
-          lead_checked_at?: string | null
           gmail_history_id?: string | null
           created_at?: string | null
           updated_at?: string | null
+          last_inbound_at?: string | null
+          last_outbound_at?: string | null
+          awaiting_reply_since?: string | null
+          lead_checked_at?: string | null
+          lead_check?: string | null
         }
         Relationships: [
           {
@@ -4782,24 +4785,32 @@ export interface Database {
       }
       email_lead_dismissals: {
         Row: {
-          created_at: string
-          dismissed_by: string | null
-          email: string
           org_id: string
+          email: string
+          dismissed_by: string | null
+          created_at: string
         }
         Insert: {
-          created_at?: string
-          dismissed_by?: string | null
-          email: string
           org_id: string
+          email: string
+          dismissed_by?: string | null
+          created_at?: string
         }
         Update: {
-          created_at?: string
-          dismissed_by?: string | null
-          email?: string
           org_id?: string
+          email?: string
+          dismissed_by?: string | null
+          created_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "email_lead_dismissals_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       email_messages: {
         Row: {
@@ -4821,10 +4832,10 @@ export interface Database {
           is_starred: boolean | null
           labels: string[] | null
           sent_at: string
-          sent_by: string | null
           received_at: string | null
-          rfc_message_id: string | null
           created_at: string | null
+          sent_by: string | null
+          rfc_message_id: string | null
         }
         Insert: {
           id?: string
@@ -4845,10 +4856,10 @@ export interface Database {
           is_starred?: boolean | null
           labels?: string[] | null
           sent_at: string
-          sent_by?: string | null
           received_at?: string | null
-          rfc_message_id?: string | null
           created_at?: string | null
+          sent_by?: string | null
+          rfc_message_id?: string | null
         }
         Update: {
           id?: string
@@ -4869,10 +4880,10 @@ export interface Database {
           is_starred?: boolean | null
           labels?: string[] | null
           sent_at?: string
-          sent_by?: string | null
           received_at?: string | null
-          rfc_message_id?: string | null
           created_at?: string | null
+          sent_by?: string | null
+          rfc_message_id?: string | null
         }
         Relationships: [
           {
@@ -4883,6 +4894,42 @@ export interface Database {
             referencedColumns: ["id"]
           },
         ]
+      }
+      email_send_claims: {
+        Row: {
+          request_key: string
+          user_id: string | null
+          thread_id: string | null
+          body_hash: string | null
+          status: string
+          gmail_message_id: string | null
+          gmail_thread_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          request_key: string
+          user_id?: string | null
+          thread_id?: string | null
+          body_hash?: string | null
+          status?: string
+          gmail_message_id?: string | null
+          gmail_thread_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          request_key?: string
+          user_id?: string | null
+          thread_id?: string | null
+          body_hash?: string | null
+          status?: string
+          gmail_message_id?: string | null
+          gmail_thread_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       email_signatures: {
         Row: {
@@ -4911,42 +4958,6 @@ export interface Database {
           is_default?: boolean | null
           created_at?: string | null
           updated_at?: string | null
-        }
-        Relationships: []
-      }
-      email_send_claims: {
-        Row: {
-          body_hash: string | null
-          created_at: string
-          gmail_message_id: string | null
-          gmail_thread_id: string | null
-          request_key: string
-          status: string
-          thread_id: string | null
-          updated_at: string
-          user_id: string | null
-        }
-        Insert: {
-          body_hash?: string | null
-          created_at?: string
-          gmail_message_id?: string | null
-          gmail_thread_id?: string | null
-          request_key: string
-          status?: string
-          thread_id?: string | null
-          updated_at?: string
-          user_id?: string | null
-        }
-        Update: {
-          body_hash?: string | null
-          created_at?: string
-          gmail_message_id?: string | null
-          gmail_thread_id?: string | null
-          request_key?: string
-          status?: string
-          thread_id?: string | null
-          updated_at?: string
-          user_id?: string | null
         }
         Relationships: []
       }
@@ -5562,7 +5573,6 @@ export interface Database {
           id: string
           service_code: string
           guide_language: string
-          guide_mode: string
           guide_type: string
           city: string | null
           tour_duration: string | null
@@ -5577,12 +5587,12 @@ export interface Database {
           updated_at: string | null
           supplier_id: string | null
           rate_currency: string | null
+          guide_mode: string
         }
         Insert: {
           id?: string
           service_code: string
           guide_language: string
-          guide_mode?: string
           guide_type: string
           city?: string | null
           tour_duration?: string | null
@@ -5597,12 +5607,12 @@ export interface Database {
           updated_at?: string | null
           supplier_id?: string | null
           rate_currency?: string | null
+          guide_mode?: string
         }
         Update: {
           id?: string
           service_code?: string
           guide_language?: string
-          guide_mode?: string
           guide_type?: string
           city?: string | null
           tour_duration?: string | null
@@ -5617,6 +5627,7 @@ export interface Database {
           updated_at?: string | null
           supplier_id?: string | null
           rate_currency?: string | null
+          guide_mode?: string
         }
         Relationships: [
           {
@@ -8257,12 +8268,12 @@ export interface Database {
           company_address: string | null
           document_contacts: Json
           offices: Json
-          office_email_addresses: string[]
           default_currency: string | null
           rate_currency: string
           default_margin_percent: number | null
           rate_change_alerts: string
           support_hours: Json | null
+          office_email_addresses: string[]
         }
         Insert: {
           id?: string
@@ -8283,12 +8294,12 @@ export interface Database {
           company_address?: string | null
           document_contacts: Json
           offices: Json
-          office_email_addresses?: string[]
           default_currency?: string | null
           rate_currency?: string
           default_margin_percent?: number | null
           rate_change_alerts?: string
           support_hours?: Json | null
+          office_email_addresses: string[]
         }
         Update: {
           id?: string
@@ -8309,12 +8320,12 @@ export interface Database {
           company_address?: string | null
           document_contacts?: Json
           offices?: Json
-          office_email_addresses?: string[]
           default_currency?: string | null
           rate_currency?: string
           default_margin_percent?: number | null
           rate_change_alerts?: string
           support_hours?: Json | null
+          office_email_addresses?: string[]
         }
         Relationships: []
       }
@@ -10138,12 +10149,12 @@ export interface Database {
           contact_name: string | null
           contact_phone: string | null
           contact_email: string | null
-          name_ja: string | null
-          address: string | null
           notes: string | null
           is_active: boolean
           created_at: string
           updated_at: string
+          name_ja: string | null
+          address: string | null
         }
         Insert: {
           id?: string
@@ -10155,12 +10166,12 @@ export interface Database {
           contact_name?: string | null
           contact_phone?: string | null
           contact_email?: string | null
-          name_ja?: string | null
-          address?: string | null
           notes?: string | null
           is_active?: boolean
           created_at?: string
           updated_at?: string
+          name_ja?: string | null
+          address?: string | null
         }
         Update: {
           id?: string
@@ -10172,12 +10183,12 @@ export interface Database {
           contact_name?: string | null
           contact_phone?: string | null
           contact_email?: string | null
-          name_ja?: string | null
-          address?: string | null
           notes?: string | null
           is_active?: boolean
           created_at?: string
           updated_at?: string
+          name_ja?: string | null
+          address?: string | null
         }
         Relationships: [
           {
@@ -11490,6 +11501,8 @@ export interface Database {
           cached_price_updated_at: string | null
           hotels: Json
           theme_key: string | null
+          cached_price_complete: boolean | null
+          cached_price_gaps: number | null
         }
         Insert: {
           id?: string
@@ -11531,6 +11544,8 @@ export interface Database {
           cached_price_updated_at?: string | null
           hotels: Json
           theme_key?: string | null
+          cached_price_complete?: boolean | null
+          cached_price_gaps?: number | null
         }
         Update: {
           id?: string
@@ -11572,6 +11587,8 @@ export interface Database {
           cached_price_updated_at?: string | null
           hotels?: Json
           theme_key?: string | null
+          cached_price_complete?: boolean | null
+          cached_price_gaps?: number | null
         }
         Relationships: [
           {
@@ -12146,10 +12163,10 @@ export interface Database {
           duration: string | null
           area: string | null
           route_name: string | null
-          trip_shape: string | null
           includes: string | null
           rate_currency: string | null
           vehicles: Json | null
+          trip_shape: string | null
         }
         Insert: {
           id?: string
@@ -12175,10 +12192,10 @@ export interface Database {
           duration?: string | null
           area?: string | null
           route_name?: string | null
-          trip_shape?: string | null
           includes?: string | null
           rate_currency?: string | null
           vehicles?: Json | null
+          trip_shape?: string | null
         }
         Update: {
           id?: string
@@ -12204,10 +12221,10 @@ export interface Database {
           duration?: string | null
           area?: string | null
           route_name?: string | null
-          trip_shape?: string | null
           includes?: string | null
           rate_currency?: string | null
           vehicles?: Json | null
+          trip_shape?: string | null
         }
         Relationships: [
           {
@@ -13211,10 +13228,6 @@ export interface Database {
     // every select('*') result to {}.
     Views: { [_ in never]: never }
     Functions: {
-      refresh_email_conversation_reply_state: {
-        Args: { p_conversation: string }
-        Returns: undefined
-      }
       assign_conversation: {
         Args: {
           p_action_type?: string
@@ -13382,6 +13395,13 @@ export interface Database {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any
       }
+      refresh_email_conversation_reply_state: {
+        Args: {
+          p_conversation?: string
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Returns: any
+      }
       revert_b2c_quote_to_revision: {
         Args: {
           p_quote_id?: string
@@ -13418,6 +13438,13 @@ export interface Database {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any
       }
+      seed_guide_modes: {
+        Args: {
+          p_org?: string
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Returns: any
+      }
       seed_org_vocabulary: {
         Args: {
           p_kind?: string
@@ -13436,6 +13463,13 @@ export interface Database {
       seed_tour_themes: {
         Args: {
           p_org?: string
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Returns: any
+      }
+      tour_theme_base: {
+        Args: {
+          p_code?: string
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any
