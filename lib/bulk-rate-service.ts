@@ -58,6 +58,13 @@ export interface ColumnDef {
   required: boolean
   exportOnly?: boolean         // e.g., id, created_at — included in export but not required for import
   allowedValues?: readonly string[]  // when set, the cell must match (case-insensitive)
+  // An OPEN vocabulary column: the value is a key the agency coined, so it
+  // cannot be enumerated — but it still has to be stored in key shape. The
+  // cell is slugified on import ("Japanese" → "japanese"), which is what the
+  // API write paths already do. Without it a sheet written in words puts a
+  // SECOND spelling of a language the agency already has into the table, and
+  // the two only look like one because the engine compares by key.
+  slugify?: boolean
   // A column the FORM no longer asks for, kept so old files still import and
   // exports still round-trip, but left out of the template so nobody fills in
   // a field the UI cannot show them afterwards.
@@ -117,6 +124,11 @@ export interface ImportPreview {
 
 function col(name: string, label: string, type: ColumnDef['type'], required: boolean, exportOnly = false): ColumnDef {
   return { name, label, type, required, exportOnly }
+}
+
+/** A text column holding an open-vocabulary KEY — slugified on import. */
+function colKey(name: string, label: string, required: boolean): ColumnDef {
+  return { name, label, type: 'text', required, slugify: true }
 }
 
 /**
@@ -292,7 +304,9 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
     uniqueKey: ['service_code'],
     columns: [
       id(), serviceCode(),
-      col('guide_language', 'Language', 'text', true),
+      // A vocabulary key, not a word: "Japanese" and "japanese" are one
+      // language, and a sheet must not be able to create the second spelling.
+      colKey('guide_language', 'Language', true),
       col('guide_type', 'Guide Type', 'text', true),
       col('city', 'City', 'text', false),
       col('tour_duration', 'Tour Duration', 'text', true),
@@ -662,6 +676,9 @@ function parseCell(value: string | undefined | null, colDef: ColumnDef): { parse
         }
         return { parsed: match, error: null }
       }
+      // An open vocabulary: nothing to match against, but the stored shape
+      // is still a key.
+      if (colDef.slugify) return { parsed: slugifyKey(raw), error: null }
       return { parsed: raw, error: null }
     }
   }
