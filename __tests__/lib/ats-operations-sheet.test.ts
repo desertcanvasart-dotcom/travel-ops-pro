@@ -6,6 +6,8 @@ import {
 } from '@/lib/documents/assemble-operations-sheet'
 import { atsOperationsSheet } from '@/lib/documents/templates/ats-operations-sheet'
 import type { OperationsSheetContext } from '@/lib/documents/types'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 // The fixture is the real NEK803-ABCR programme — an 8-day Nile cruise whose
 // first night is the flight out, so the GROUND sheet starts at D2. Meals and
@@ -251,5 +253,41 @@ describe('atsOperationsSheet template', () => {
     // Chromium renders a footer template in its own document: no stylesheet,
     // so the styling has to travel inline with an explicit size.
     expect(footer).toMatch(/font-size:\s*\d/)
+  })
+
+  // ============================================
+  // The Japanese has to travel with the document
+  // ============================================
+  // Operator, 2026-09-19: the whole Itinerary column of ITN-26-009 printed as
+  // tofu boxes. The sheet asked for "Hiragino Sans"/"Yu Gothic"/"Noto Sans JP"
+  // — SYSTEM fonts. Locally that works (macOS has Hiragino); the deploy
+  // container ships no CJK font at all, so Chromium had nothing to draw the
+  // office's day text with. Proven with pdffonts: before the fix the Japanese
+  // runs resolved to HiraginoSans-W3, after it to NotoSansJP-Regular.
+  it('embeds the Japanese font in the document instead of trusting the container', () => {
+    const marker = '@font-face{font-family:MARKER;src:url(data:font/ttf;base64,AAAA)}'
+    const html = atsOperationsSheet.render({ ...build(), font_face_css: marker })
+    expect(html).toContain(marker)
+    // Declared BEFORE the rules that use it, and inside the document's style.
+    expect(html.indexOf(marker)).toBeLessThan(html.indexOf('font-family: "Helvetica Neue"'))
+    expect(html).toMatch(/font-family: "Helvetica Neue", Arial, 'NotoSansJP'/)
+  })
+
+  it('keeps CJK out of the running footer, which the @font-face never reaches', () => {
+    // Chromium renders footerTemplate in its own document — the page's
+    // @font-face does not apply there, so a CJK glyph in this line would tofu
+    // in the container however well the body is served. The note therefore
+    // describes the office's brackets rather than printing them.
+    const footer = atsOperationsSheet.footer!(build())
+    expect(footer).not.toMatch(/[\u3000-\u303f\u3040-\u30ff\u4e00-\u9fff\uff00-\uffef]/)
+  })
+
+  it('the route hands the template a real font, not an empty string', () => {
+    const src = readFileSync(
+      join(process.cwd(), 'app/api/documents/operations-sheet/route.ts'),
+      'utf8'
+    )
+    expect(src).toContain("getJapaneseFontFace")
+    expect(src).toMatch(/font_face_css:\s*await getJapaneseFontFace\(\)/)
   })
 })

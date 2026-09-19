@@ -138,10 +138,14 @@ export const atsOperationsSheet: DocumentTemplate<OperationsSheetContext> = {
    * fit, and the ground team got a second page holding nothing but this
    * line. In the margin it takes no flow space, so it cannot spill.
    */
+  // The note deliberately does NOT quote the office's 【 】 brackets. Chromium
+  // renders a footer template in its own document, which the page's @font-face
+  // never reaches, so any CJK glyph here tofus in the container however well
+  // the body is served. The wording carries the meaning without the glyphs.
   footer(context: OperationsSheetContext): string {
     return `<div style="width:100%;margin:0 10mm;font-family:'Helvetica Neue',Arial,'Hiragino Sans','Yu Gothic','Noto Sans JP',sans-serif;font-size:7pt;color:#444;display:flex;justify-content:space-between;">
       <span>${esc(context.tour_code || '')}</span>
-      <span>Times shown as 【00:00】 are to be confirmed by the office.</span>
+      <span>Bracketed times are to be confirmed by the office.</span>
     </div>`
   },
 
@@ -152,11 +156,17 @@ export const atsOperationsSheet: DocumentTemplate<OperationsSheetContext> = {
 <meta charset="utf-8">
 <title>${esc(context.tour_code || 'Operations sheet')}</title>
 <style>
+  /* The office writes this sheet's day text in Japanese, and the deploy
+     container has no CJK system font — every one of those lines printed as
+     tofu boxes until the font travelled INSIDE the document. Latin-first
+     ordering is deliberate: NotoSansJP covers Latin too, but the English
+     headings were drawn in Helvetica on the sheet this one reproduces. */
+  ${context.font_face_css}
   @page { size: A4 portrait; margin: 10mm; }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: "Helvetica Neue", Arial, "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
+    font-family: "Helvetica Neue", Arial, 'NotoSansJP', "Hiragino Sans", "Yu Gothic", "Noto Sans JP", sans-serif;
     /* Sized so a standard 8-day programme lands on ONE sheet, as theirs does.
        This is a document the ground team works from in the field; a second page
        is a page that gets left behind. */
@@ -316,7 +326,7 @@ export const atsOperationsSheet: DocumentTemplate<OperationsSheetContext> = {
 
   <div class="foot">
     <span>${esc(context.tour_code || '')}</span>
-    <span>Times shown as 【00:00】 are to be confirmed by the office.</span>
+    <span>Bracketed times are to be confirmed by the office.</span>
   </div>
 
 </body>
