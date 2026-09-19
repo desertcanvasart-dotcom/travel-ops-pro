@@ -10,16 +10,34 @@ import type {
 import { isSupplementItem, isSingleSupplementItem, SLOT_DEFINITIONS } from '../types'
 import { priceAcrossPax } from '@/lib/pricing/pax-range'
 import { computeUplift, seasonForDate, type SeasonWindow } from '@/lib/pricing/season-uplift'
+import { dayDate, rateOnDate } from '@/lib/rates/date-window'
 
 // --- Helpers ---
 
-function getRate(item: { rateEur: number; rateNonEur: number }, passport: 'eu' | 'non_eu'): number {
-  return passport === 'eu' ? item.rateEur : item.rateNonEur
+/**
+ * What a picked rate costs ON THE DAY IT IS USED.
+ *
+ * The grid used to read one number per rate — the base columns, which mirror
+ * the FIRST dated period — so a December quote carried the June rate and the
+ * grid and the auto engine disagreed about the same trip. Each day now resolves
+ * its own period, which is what the engine has always done for a hotel night.
+ *
+ * A date NO period covers prices 0, deliberately: there is no default period
+ * (a trip after the contract ends must not take the first one), and 0 is what
+ * the grid already treats as unpriced — the completeness gate turns it into a
+ * blocking issue on a night, and names the periods that DO exist.
+ */
+function getRate(
+  item: { rateEur: number; rateNonEur: number; periods?: { from: string; to: string; rateEur: number; rateNonEur: number; name: string }[] | null },
+  passport: 'eu' | 'non_eu',
+  date: string | null
+): number {
+  return rateOnDate(item, passport, date) ?? 0
 }
 
-function slotTotal(slot: SlotValue, passport: 'eu' | 'non_eu'): number {
+function slotTotal(slot: SlotValue, passport: 'eu' | 'non_eu', date: string | null): number {
   if (slot.customAmount > 0) return slot.customAmount
-  return slot.selectedItems.reduce((sum, item) => sum + getRate(item, passport), 0)
+  return slot.selectedItems.reduce((sum, item) => sum + getRate(item, passport, date), 0)
 }
 
 // --- Per-Day Calculation ---
@@ -40,11 +58,15 @@ export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
   // meals and seats join the GROUP costs — computed purely from what the
   // day's slots already selected, never fetched here.
   const throughout = config.guideMode === 'throughout' && config.withGuide
+  // THE DAY'S OWN DATE. A twelve-day trip can cross a season boundary, so
+  // pricing every day at the trip's start would be the same first-period
+  // mistake in a different place.
+  const on = dayDate(config.startDate, day.dayNumber)
   let groupTotal = 0
   let perPersonTotal = 0
 
   for (const slot of day.slots) {
-    const cost = slotTotal(slot, passport)
+    const cost = slotTotal(slot, passport, on)
 
     if (throughout) {
       if ((slot.slotId === 'accommodation' || slot.slotId === 'cruise') && slot.selectedItems.length > 0) {
@@ -56,7 +78,7 @@ export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
         // One more seat per picked flight, at the guide fare when entered,
         // else the customer fare (a ticket always has a public price).
         groupTotal += slot.selectedItems.reduce(
-          (sum, item) => sum + (item.guideRate != null ? Number(item.guideRate) || 0 : getRate(item, passport)), 0)
+          (sum, item) => sum + (item.guideRate != null ? Number(item.guideRate) || 0 : getRate(item, passport, on)), 0)
       }
       if (slot.slotId === 'meals' && pax <= 3) {
         // Restaurants feed the guide free from 4 paying pax; at 3 or fewer
@@ -73,7 +95,7 @@ export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
         // Only include non-guide tips (driver_tip, etc.)
         const nonGuideTips = slot.selectedItems
           .filter(item => !item.rateId.includes('guide'))
-          .reduce((sum, item) => sum + getRate(item, passport), 0)
+          .reduce((sum, item) => sum + getRate(item, passport, on), 0)
         groupTotal += nonGuideTips
         continue
       }
@@ -87,11 +109,11 @@ export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
         // agency's supplements (`#supp:<key>` — a view, a meal plan), which
         // every traveller pays per night.
         if (slot.selectedItems.length > 0) {
-          const ppDouble = getRate(slot.selectedItems[0], passport)
+          const ppDouble = getRate(slot.selectedItems[0], passport, on)
           const singleSupp = pax === 1
-            ? slot.selectedItems.slice(1).filter(isSingleSupplementItem).reduce((sum, i) => sum + getRate(i, passport), 0)
+            ? slot.selectedItems.slice(1).filter(isSingleSupplementItem).reduce((sum, i) => sum + getRate(i, passport, on), 0)
             : 0
-          const supplements = slot.selectedItems.slice(1).filter(isSupplementItem).reduce((sum, i) => sum + getRate(i, passport), 0)
+          const supplements = slot.selectedItems.slice(1).filter(isSupplementItem).reduce((sum, i) => sum + getRate(i, passport, on), 0)
           perPersonTotal += ppDouble + singleSupp + supplements
         }
       } else {
@@ -249,6 +271,9 @@ function aggregateNonTransport(days: GridDay[], config: GridConfig) {
   let singleSupplement = 0
 
   for (const day of days) {
+    // Each day at its own date, the same rule calculateDay applies — the pax
+    // sheet and the day cards must agree about what a night costs.
+    const on = dayDate(config.startDate, day.dayNumber)
     for (const slot of day.slots) {
       if (slot.slotId === 'route') continue // transport is pax-dependent — handled separately
 
@@ -258,13 +283,13 @@ function aggregateNonTransport(days: GridDay[], config: GridConfig) {
         }
         if (slot.slotId === 'flights') {
           groupFixed += slot.selectedItems.reduce(
-            (sum, item) => sum + (item.guideRate != null ? Number(item.guideRate) || 0 : getRate(item, passport)), 0)
+            (sum, item) => sum + (item.guideRate != null ? Number(item.guideRate) || 0 : getRate(item, passport, on)), 0)
         }
         // Guide meals at the CONFIGURED group size — the sheet keeps this
         // fixed line at every pax count, the same documented approximation
         // the auto engine makes; the quote's own pax is always exact.
         if (slot.slotId === 'meals' && config.pax <= 3) {
-          groupFixed += slotTotal(slot, passport)
+          groupFixed += slotTotal(slot, passport, on)
         }
       }
 
@@ -273,10 +298,10 @@ function aggregateNonTransport(days: GridDay[], config: GridConfig) {
         if (slot.slotId === 'tipping' && !withGuide) {
           groupFixed += slot.selectedItems
             .filter(item => !item.rateId.includes('guide'))
-            .reduce((sum, item) => sum + getRate(item, passport), 0)
+            .reduce((sum, item) => sum + getRate(item, passport, on), 0)
           continue
         }
-        groupFixed += slotTotal(slot, passport)
+        groupFixed += slotTotal(slot, passport, on)
 
       } else if (PP_SLOT_IDS.has(slot.slotId)) {
         if (slot.slotId === 'accommodation') {
@@ -285,17 +310,17 @@ function aggregateNonTransport(days: GridDay[], config: GridConfig) {
             // single-supplement add-on (SlotRow's `${id}_supp`, the solo
             // traveller's extra) and the agency's supplements (`#supp:<key>`),
             // which every traveller pays per night — per person, like the room.
-            perPerson += getRate(slot.selectedItems[0], passport)
+            perPerson += getRate(slot.selectedItems[0], passport, on)
             for (const extra of slot.selectedItems.slice(1)) {
-              if (isSupplementItem(extra)) perPerson += getRate(extra, passport)
-              else if (isSingleSupplementItem(extra)) singleSupplement += getRate(extra, passport)
-              else singleSupplement += getRate(extra, passport) // legacy: anything else under the hotel was the single supp
+              if (isSupplementItem(extra)) perPerson += getRate(extra, passport, on)
+              else if (isSingleSupplementItem(extra)) singleSupplement += getRate(extra, passport, on)
+              else singleSupplement += getRate(extra, passport, on) // legacy: anything else under the hotel was the single supp
             }
           } else if (slot.customAmount > 0) {
             perPerson += slot.customAmount
           }
         } else {
-          perPerson += slotTotal(slot, passport)
+          perPerson += slotTotal(slot, passport, on)
         }
       }
     }

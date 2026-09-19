@@ -285,19 +285,14 @@ describe('gridCompleteness — package-aware requirements (taxonomy review)', ()
 // ============================================
 // THE DATES A PICKED RATE BELONGS TO
 // ============================================
-// The grid prices what the operator picked, on any date — it does not resolve
-// a rate period the way the auto engine does. So the one honest thing it can
-// do is stop the mismatch being invisible: a fare sold in another season, or a
-// hotel priced at its first period while the trip travels in a later one.
-//
-// Silent for a rate with no dates and for a property with one period. An
-// agency that has not entered seasons sees none of this.
-describe('gridCompleteness — a picked rate and the trip’s dates', () => {
-  const pickedFlight = (extras: Record<string, unknown>) => ({
-    slotId: 'flights',
-    selectedItems: [{ rateId: 'fl-sum', name: 'EgyptAir CAI→LXR (economy)', rateEur: 120, rateNonEur: 120, ...extras }],
-    customAmount: 0,
-  })
+// The grid prices each day at the period covering ITS date — the same rule the
+// auto engine applies to a hotel night. So a picked rate whose periods do not
+// reach a day has NO price, and that is not a warning about the number, it is
+// the reason the line is zero.
+describe('gridCompleteness — a picked rate and the day it is used', () => {
+  const P = (name: string, from: string, to: string) => ({ name, from, to, rateEur: 100, rateNonEur: 110 })
+  const LOW = P('Low', '2026-05-01', '2026-09-30')
+  const HIGH = P('High', '2026-10-01', '2027-04-30')
 
   const pickedHotel = (periods: unknown[]) => ({
     slotId: 'accommodation',
@@ -305,81 +300,50 @@ describe('gridCompleteness — a picked rate and the trip’s dates', () => {
     customAmount: 0,
   })
 
-  const LOW = { name: 'Low', from: '2026-05-01', to: '2026-09-30' }
-  const HIGH = { name: 'High', from: '2026-10-01', to: '2027-04-30' }
-
   const dated = (startDate: string | undefined) => cfg({ withGuide: false, startDate } as Partial<GridConfig>)
 
-  it('warns when the picked fare is sold in another season', () => {
-    const r = gridCompleteness(
-      [day(1, [pickedFlight({ validFrom: '2026-06-01', validTo: '2026-09-30' })])],
-      dated('2026-12-04')
-    )
-    const issue = r.issues.find((i) => i.code === 'rate-outside-its-dates')
-    expect(issue?.severity).toBe('warn')
-    expect(issue?.message).toContain('is sold 2026-06-01 – 2026-09-30')
-    expect(issue?.message).toContain('this trip starts 2026-12-04')
+  it('blocks a day no period of the picked rate covers', () => {
+    // Blocking, not a warning: there is no default period, so the line prices
+    // at zero, and a quote with a zero night in it is not a quote.
+    const r = gridCompleteness([day(1, [pickedHotel([LOW])])], dated('2026-12-04'))
+    const issue = r.issues.find((i) => i.code === 'rate-period-uncovered')
+    expect(issue?.severity).toBe('block')
+    expect(r.complete).toBe(false)
   })
 
-  it('a warning never blocks the quote — the grid prices what was picked', () => {
-    const r = gridCompleteness(
-      [day(1, [pickedFlight({ validFrom: '2026-06-01', validTo: '2026-09-30' })])],
-      dated('2026-12-04')
-    )
-    expect(r.issues.some((i) => i.code === 'rate-outside-its-dates' && i.severity === 'block')).toBe(false)
+  it('names the periods that DO exist', () => {
+    // "Add the missing dates" is actionable; "check the rate" is not.
+    const r = gridCompleteness([day(1, [pickedHotel([LOW, HIGH])])], dated('2028-01-01'))
+    const message = r.issues.find((i) => i.code === 'rate-period-uncovered')?.message ?? ''
+    expect(message).toContain('covers 2028-01-01')
+    expect(message).toContain('Low 2026-05-01 – 2026-09-30')
+    expect(message).toContain('High 2026-10-01 – 2027-04-30')
   })
 
-  it('says nothing when the trip travels inside the fare’s window', () => {
-    const r = gridCompleteness(
-      [day(1, [pickedFlight({ validFrom: '2026-06-01', validTo: '2026-09-30' })])],
-      dated('2026-07-14')
-    )
-    expect(r.issues.some((i) => i.code === 'rate-outside-its-dates')).toBe(false)
+  it('says nothing when a period covers the day', () => {
+    const r = gridCompleteness([day(1, [pickedHotel([LOW, HIGH])])], dated('2026-07-14'))
+    expect(r.issues.some((i) => i.code === 'rate-period-uncovered')).toBe(false)
   })
 
-  it('says nothing about a rate that carries no dates', () => {
-    // Most of the catalogue. A rate that has always been used must not start
-    // warning because nobody typed a window.
-    const r = gridCompleteness([day(1, [pickedFlight({})])], dated('2026-12-04'))
-    expect(r.issues.some((i) => i.code === 'rate-outside-its-dates')).toBe(false)
+  it('judges each day by ITS date, not the trip\u2019s start', () => {
+    // Day 4 of a 28 September departure is 1 October — the High period. A grid
+    // that priced every day at the start date would be making the same
+    // first-period mistake in a different place.
+    const days = [day(1, [pickedHotel([LOW])]), day(4, [pickedHotel([LOW])])]
+    const r = gridCompleteness(days, dated('2026-09-28'))
+    const flagged = r.issues.filter((i) => i.code === 'rate-period-uncovered').map((i) => i.dayNumber)
+    expect(flagged).toEqual([4])
+  })
+
+  it('says nothing about a rate that carries no periods', () => {
+    // Undated rates have never had a calendar; their own number stands.
+    const r = gridCompleteness([day(1, [pickedHotel([])])], dated('2026-12-04'))
+    expect(r.issues.some((i) => i.code === 'rate-period-uncovered')).toBe(false)
   })
 
   it('says nothing without a trip date', () => {
-    const r = gridCompleteness(
-      [day(1, [pickedFlight({ validFrom: '2026-06-01', validTo: '2026-09-30' })])],
-      dated(undefined)
-    )
-    expect(r.issues.some((i) => i.code === 'rate-outside-its-dates')).toBe(false)
-  })
-
-  it('names the period the price IS and the one the trip falls in', () => {
-    // "your quote is on the Low rate, your trip is in High" is actionable.
-    // "check the rate" is not.
-    const r = gridCompleteness([day(1, [pickedHotel([LOW, HIGH])])], dated('2026-11-02'))
-    const issue = r.issues.find((i) => i.code === 'rate-period-mismatch')
-    expect(issue?.severity).toBe('warn')
-    expect(issue?.message).toContain('priced at its Low 2026-05-01 – 2026-09-30 rate')
-    expect(issue?.message).toContain('2026-11-02 falls in High 2026-10-01 – 2027-04-30')
-  })
-
-  it('says nothing when the trip falls in the period the price came from', () => {
-    // periods[0] is what the base columns mirror — the shown number is right.
-    const r = gridCompleteness([day(1, [pickedHotel([LOW, HIGH])])], dated('2026-07-14'))
-    expect(r.issues.some((i) => i.code.startsWith('rate-period'))).toBe(false)
-  })
-
-  it('warns separately when NO period covers the trip', () => {
-    // The contract has run out, which is a different problem from being on the
-    // wrong period of a live one.
-    const r = gridCompleteness([day(1, [pickedHotel([LOW, HIGH])])], dated('2028-03-01'))
-    expect(r.issues.some((i) => i.code === 'rate-period-uncovered')).toBe(true)
-    expect(r.issues.some((i) => i.code === 'rate-period-mismatch')).toBe(false)
-  })
-
-  it('says nothing about a property with a single period', () => {
-    // One period IS the base columns. There is nothing to have picked wrongly.
-    const r = gridCompleteness([day(1, [pickedHotel([LOW])])], dated('2026-12-04'))
-    expect(r.issues.some((i) => i.code.startsWith('rate-period'))).toBe(false)
+    const r = gridCompleteness([day(1, [pickedHotel([LOW])])], dated(undefined))
+    expect(r.issues.some((i) => i.code === 'rate-period-uncovered')).toBe(false)
   })
 })
 
@@ -391,11 +355,10 @@ describe('the grid surfaces what the gate found', () => {
   it('every date issue code is prefixed so the banner can find it', () => {
     const src = readFileSync(join(process.cwd(), 'app/pricing-grid/lib/grid-completeness.ts'), 'utf8')
     const dateCodes = [...src.matchAll(/code: '(rate-[a-z-]+)'/g)].map(m => m[1])
-    expect(dateCodes).toEqual([
-      'rate-outside-its-dates',
-      'rate-period-uncovered',
-      'rate-period-mismatch',
-    ])
+    // ONE rule now. The two earlier codes said "this number might be wrong";
+    // the grid resolves the period itself, so the only thing left to report is
+    // a day it cannot price at all.
+    expect(dateCodes).toEqual(['rate-period-uncovered'])
   })
 
   it('the grid page renders them', () => {
@@ -406,18 +369,22 @@ describe('the grid surfaces what the gate found', () => {
 
   it('the rates route sends the dates the grid needs to show them', () => {
     const src = readFileSync(join(process.cwd(), 'app/api/pricing-grid/rates/route.ts'), 'utf8')
-    // Flights: the window on the line, so two seasons are not two identical rows.
-    expect(src).toContain('validFrom: r.rate_valid_from')
-    expect(src).toContain('windowLabel(r.rate_valid_from, r.rate_valid_to)')
-    // Hotels and cruises: every period, so the gate can name the one the trip
-    // falls in rather than only the one the price came from.
-    expect(src.match(/periods: optionPeriods\(/g) ?? []).toHaveLength(2)
+    // Every option carries its periods WITH their prices — hotels, cruises and
+    // flights alike. A flight's single rate_valid_from/to pair is only the
+    // first period's mirror since migration 20261025.
+    expect(src).not.toContain('validFrom: r.rate_valid_from')
+    expect(src).toContain('periods: flightPeriods(r)')
+    // Accommodation, cruise, and the supplements that ride on either.
+    expect(src.match(/periods: periodsFor\(/g) ?? []).toHaveLength(3)
+    expect(src.match(/singleSuppPeriods: periodsFor\(/g) ?? []).toHaveLength(2)
   })
 
   it('a picked rate carries its dates out of the picker', () => {
     const src = readFileSync(join(process.cwd(), 'app/pricing-grid/components/SlotRow.tsx'), 'utf8')
     // Both selection paths — the multi-select toggle and the single select.
-    expect(src.match(/validFrom: opt\.validFrom/g) ?? []).toHaveLength(2)
     expect(src.match(/periods: opt\.periods/g) ?? []).toHaveLength(2)
+    // The derived lines follow the same calendar as the room they ride on.
+    expect(src).toContain('periods: opt.singleSuppPeriods')
+    expect(src).toContain('periods: supp.periods')
   })
 })
