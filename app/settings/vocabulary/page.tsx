@@ -30,8 +30,8 @@ import {
 
 interface Notice { kind: 'success' | 'error'; text: string }
 
-type AddForm = { label: string; label_ja: string; key: string; keyTouched: boolean; behavior: string; min_pax: string; max_pax: string; min_days: string; max_days: string; needs_destination: boolean; code: string; description: string }
-const EMPTY_ADD: AddForm = { label: '', label_ja: '', key: '', keyTouched: false, behavior: 'other', min_pax: '1', max_pax: '4', min_days: '1', max_days: '1', needs_destination: false, code: '', description: '' }
+type AddForm = { label: string; label_ja: string; key: string; keyTouched: boolean; behavior: string; min_pax: string; max_pax: string; min_days: string; max_days: string; needs_destination: boolean; code: string; city: string; country: string; description: string }
+const EMPTY_ADD: AddForm = { label: '', label_ja: '', key: '', keyTouched: false, behavior: 'other', min_pax: '1', max_pax: '4', min_days: '1', max_days: '1', needs_destination: false, code: '', city: '', country: '', description: '' }
 
 const inputCls = 'px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent'
 
@@ -42,7 +42,7 @@ export default function VocabularySettingsPage() {
   const [kind, setKind] = useState<VocabularyKind>('tier')
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<Notice | null>(null)
-  const [editing, setEditing] = useState<{ id: string; label: string; label_ja: string; behavior: string; min_pax: string; max_pax: string; min_days: string; max_days: string; needs_destination: boolean; code: string } | null>(null)
+  const [editing, setEditing] = useState<{ id: string; label: string; label_ja: string; behavior: string; min_pax: string; max_pax: string; min_days: string; max_days: string; needs_destination: boolean; code: string; city: string; country: string } | null>(null)
   const [add, setAdd] = useState<AddForm | null>(null)
 
   // Thirty-five lists in six groups is a wall, so the group nav behaves like
@@ -143,6 +143,7 @@ export default function VocabularySettingsPage() {
     if (kind === 'tour_type') body.meta = { ...item.meta, min_days: Number(editing.min_days), max_days: Number(editing.max_days) }
     if (kind === 'transport_service_type') body.meta = { ...item.meta, needs_destination: editing.needs_destination }
     if (kind === 'airline') body.meta = { ...item.meta, code: editing.code.trim().toUpperCase() }
+    if (kind === 'airport') body.meta = { ...item.meta, iata: editing.code.trim().toUpperCase(), city: editing.city.trim(), country_code: editing.country.trim().toUpperCase() }
     if (await patch(item, body, 'Saved')) setEditing(null)
   }
 
@@ -155,6 +156,7 @@ export default function VocabularySettingsPage() {
     if (kind === 'tour_type') body.meta = { min_days: Number(add.min_days), max_days: Number(add.max_days) }
     if (kind === 'transport_service_type') body.meta = { needs_destination: add.needs_destination }
     if (kind === 'airline') body.meta = { code: add.code.trim().toUpperCase() }
+    if (kind === 'airport') body.meta = { iata: add.code.trim().toUpperCase(), city: add.city.trim(), country_code: add.country.trim().toUpperCase() }
     if (await call('add', () => fetch('/api/vocabulary', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), `"${add.label}" added`)) setAdd(null)
   }
 
@@ -163,7 +165,10 @@ export default function VocabularySettingsPage() {
     min_pax: String(item.meta?.min_pax ?? 1), max_pax: String(item.meta?.max_pax ?? 4),
     min_days: String(item.meta?.min_days ?? 1), max_days: String(item.meta?.max_days ?? 1),
     needs_destination: Boolean(item.meta?.needs_destination),
-    code: typeof item.meta?.code === 'string' ? item.meta.code : '',
+    code: typeof item.meta?.code === 'string' ? item.meta.code
+      : typeof item.meta?.iata === 'string' ? item.meta.iata : '',
+    city: typeof item.meta?.city === 'string' ? item.meta.city : '',
+    country: typeof item.meta?.country_code === 'string' ? item.meta.country_code : '',
   })
 
   return (
@@ -342,6 +347,18 @@ export default function VocabularySettingsPage() {
                             <input value={editing.code} onChange={e => setEditing({ ...editing, code: e.target.value.toUpperCase().slice(0, 3) })} placeholder="IATA" maxLength={3}
                               className={`${inputCls} w-20 font-mono uppercase`} aria-label="IATA code" />
                           )}
+                          {kind === 'airport' && (
+                            <>
+                              <input value={editing.code} onChange={e => setEditing({ ...editing, code: e.target.value.toUpperCase().slice(0, 3) })} placeholder="IATA" maxLength={3}
+                                className={`${inputCls} w-20 font-mono uppercase`} aria-label="IATA code" />
+                              {/* The city is what joins this airport to a trip's
+                                  days: everything but the ticket happens in cities. */}
+                              <input value={editing.city} onChange={e => setEditing({ ...editing, city: e.target.value })} placeholder="City"
+                                className={`${inputCls} w-32`} aria-label="City served" />
+                              <input value={editing.country} onChange={e => setEditing({ ...editing, country: e.target.value.toUpperCase().slice(0, 2) })} placeholder="EG" maxLength={2}
+                                className={`${inputCls} w-16 font-mono uppercase`} aria-label="Country code" />
+                            </>
+                          )}
                           <button type="button" onClick={() => void saveEdit()} disabled={busy !== null || !editing.label.trim()} className="p-1.5 text-green-600 hover:bg-green-50 rounded disabled:opacity-50" title="Save"><Check className="w-4 h-4" /></button>
                           <button type="button" onClick={() => setEditing(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded" title="Cancel"><X className="w-4 h-4" /></button>
                         </div>
@@ -449,6 +466,22 @@ export default function VocabularySettingsPage() {
                         <label className="block text-xs font-medium text-gray-600 mb-1">IATA code</label>
                         <input value={add.code} onChange={e => setAdd({ ...add, code: e.target.value.toUpperCase().slice(0, 3) })} placeholder="MS" maxLength={3} className={`${inputCls} w-24 font-mono uppercase`} />
                       </div>
+                    )}
+                    {kind === 'airport' && (
+                      <>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">IATA code</label>
+                          <input value={add.code} onChange={e => setAdd({ ...add, code: e.target.value.toUpperCase().slice(0, 3) })} placeholder="NRT" maxLength={3} className={`${inputCls} w-24 font-mono uppercase`} />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">City served</label>
+                          <input value={add.city} onChange={e => setAdd({ ...add, city: e.target.value })} placeholder="Tokyo" className={`${inputCls} w-36`} />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Country</label>
+                          <input value={add.country} onChange={e => setAdd({ ...add, country: e.target.value.toUpperCase().slice(0, 2) })} placeholder="JP" maxLength={2} className={`${inputCls} w-20 font-mono uppercase`} />
+                        </div>
+                      </>
                     )}
                     <div className="flex-1 min-w-[160px]">
                       <label className="block text-xs font-medium text-gray-600 mb-1">Note <span className="font-normal text-gray-400">(optional)</span></label>

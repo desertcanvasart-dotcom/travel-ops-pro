@@ -23,6 +23,7 @@
 // migration 20260627_itinerary_days_day_type_components.sql.
 
 import { PACKAGE_TYPE_CONFIGS, type PackageType } from '@/lib/package-types'
+import { dateOnly, withinWindow, windowLabel, periodCovering, periodLabel } from '@/lib/rates/date-window'
 import type {
   GridDay,
   GridConfig,
@@ -152,6 +153,8 @@ export function gridCompleteness(
 ): GridCompleteness {
   const issues: GridIssue[] = []
   const dayList: GridDay[] = Array.isArray(days) ? days : []
+  // The trip's own start date. Every date check below is silent without it.
+  const startDate = dateOnly(config?.startDate)
 
   if (dayList.length === 0) {
     issues.push({ dayNumber: null, severity: 'block', code: 'empty-grid', message: 'The itinerary has no days.' })
@@ -284,6 +287,49 @@ export function gridCompleteness(
             code: 'zero-resolved-selection',
             message: `Day ${dn}: "${s.slotId}" has a selection that priced to 0 — confirm it is intentionally free.`,
           })
+        }
+      }
+
+      // --- The dates the picked rate belongs to ---
+      // The grid prices what the operator picked, on any date. It does not
+      // resolve a rate period the way the auto engine does, so the ONE thing
+      // it can honestly do is stop the mismatch being invisible.
+      //
+      // Silent for a rate with no dates and for a property with a single
+      // period: there is nothing to have picked wrongly. So an agency that has
+      // not entered seasons never sees any of this.
+      for (const item of s.selectedItems ?? []) {
+        if (!withinWindow(startDate, item.validFrom, item.validTo)) {
+          issues.push({
+            dayNumber: dn,
+            severity: 'warn',
+            code: 'rate-outside-its-dates',
+            message: `Day ${dn}: "${item.name}" is sold ${windowLabel(item.validFrom, item.validTo)}, and this trip starts ${startDate}. Pick the fare for the trip's season, or change the date.`,
+          })
+        }
+
+        const periods = item.periods ?? []
+        if (periods.length > 1 && startDate) {
+          // periods[0] is what the shown price IS — the base columns mirror
+          // the first period. Naming the one the trip actually falls in is
+          // the whole point: "your quote is on the June rate" is actionable,
+          // "check the rate" is not.
+          const covering = periodCovering(periods, startDate)
+          if (!covering) {
+            issues.push({
+              dayNumber: dn,
+              severity: 'warn',
+              code: 'rate-period-uncovered',
+              message: `Day ${dn}: "${item.name}" is priced at its ${periodLabel(periods[0])} rate, and no period covers ${startDate}. Check the contract dates in Rates.`,
+            })
+          } else if (covering !== periods[0]) {
+            issues.push({
+              dayNumber: dn,
+              severity: 'warn',
+              code: 'rate-period-mismatch',
+              message: `Day ${dn}: "${item.name}" is priced at its ${periodLabel(periods[0])} rate, but ${startDate} falls in ${periodLabel(covering)}. The grid does not switch periods by date — check this price.`,
+            })
+          }
         }
       }
     }

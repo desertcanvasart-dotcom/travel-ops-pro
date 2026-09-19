@@ -54,6 +54,11 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
           serviceType: opt.service_type,
           pricingClass: opt.pricing_class,
           guideRate: opt.guide_rate,
+          // The dates this rate belongs to, so the gate can notice a trip that
+          // travels outside them. Carried, never enforced.
+          validFrom: opt.validFrom,
+          validTo: opt.validTo,
+          periods: opt.periods,
         }]
       })
     }
@@ -72,6 +77,9 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
       serviceType: opt.service_type,
       pricingClass: opt.pricing_class,
       guideRate: opt.guide_rate,
+      validFrom: opt.validFrom,
+      validTo: opt.validTo,
+      periods: opt.periods,
     }
     const items: SelectedItem[] = [item]
     if (definition.slotId === 'accommodation' && (opt as any).single_supp_eur) {
@@ -263,6 +271,9 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
                         <span className="flex-1 truncate">
                           {opt.name}
                           {opt.city && search ? ` (${opt.city})` : ''}
+                          {/* Two seasons of one fare are two rows with the
+                              same name. The details carry the dates. */}
+                          {opt.details ? <span className="text-gray-400"> — {opt.details}</span> : null}
                         </span>
                         <span className="text-gray-500 whitespace-nowrap">{rateSymbol}{opt[rateKey].toFixed(2)}</span>
                       </label>

@@ -45,6 +45,7 @@ import { usableRate } from '@/lib/pricing/usable-rate'
 import { sortByItineraryFlow } from '@/lib/pricing/breakdown-order'
 import { periodRatesFor, plainPeriodName as seasonNameOf } from '@/lib/rates/rate-seasons'
 import { ticketsValidOn, outOfSeasonMessage, namedOutOfSeasonMessage } from '@/lib/pricing/ticket-validity'
+import { airportsFrom, airportsForCity, cityAirportCode, type Airport } from '@/lib/rates/airports'
 import { cruiseCandidates, hotelCandidates, propertyById } from '@/lib/pricing/property-candidates'
 import { choicesForTier, sanitizePropertyChoice } from '@/lib/pricing/property-choice'
 import { guideLanguageWord, sameGuideLanguage } from '@/lib/guides/guide-language'
@@ -1551,6 +1552,26 @@ export function collectTicketLegs(itinerary: Array<{ day: number; city: string; 
 type TicketRow = Record<string, any>
 export interface TicketRates { flights: TicketRow[]; trains: TicketRow[]; sleepers: TicketRow[] }
 
+/**
+ * The agency's airports.
+ *
+ * A flight fare is priced between AIRPORTS — Tokyo Narita and Tokyo Haneda are
+ * different fares — while a trip's days happen in cities. This list is the
+ * seam: it says which airports serve which city, so a leg between two cities
+ * can find the fares that fly it.
+ *
+ * Read unscoped, like every other catalogue this engine reads (the org_id
+ * authority gate is still deferred — see DEFERRED_GATES.md G1).
+ */
+async function fetchAirports(): Promise<Airport[]> {
+  const { data } = await supabaseAdmin
+    .from('org_vocabularies')
+    .select('key, label, meta, is_active')
+    .eq('kind', 'airport')
+    .order('rank')
+  return airportsFrom((data ?? []) as Array<{ key: string; label: string; meta: Record<string, unknown>; is_active: boolean }>)
+}
+
 /** Active rows of the catalogues the legs need, currency-normalized. */
 async function fetchTicketRates(legs: TicketLeg[], normalizer?: RateNormalizer): Promise<TicketRates> {
   const need = new Set(legs.map(l => l.mode))
@@ -2678,6 +2699,7 @@ export async function calculateDayBasedPricing(
     cruiseStay,
     hotelStays,
     ticketRates,
+    airports,
     guideRate,
     mealRates,
     tippingRates,
@@ -2696,6 +2718,7 @@ export async function calculateDayBasedPricing(
       : Promise.resolve({ rates: null } as Awaited<ReturnType<typeof resolveCruiseStay>>),
     Promise.all(hotelCities.map(city => resolveHotelStay(city, tier, isEurPassport, params.travelDate, rateNormalizer, propertyChoices.hotelByCity.get(city.toLowerCase())))),
     fetchTicketRates(ticketLegs, rateNormalizer),
+    fetchAirports(),
     getGuideRate(language, tier, rateNormalizer, { grade: guideGrade, mode: guideMode }),
     getMealRates(tier, rateNormalizer),
     getItemizedTips(tier, rateNormalizer),
@@ -3063,7 +3086,13 @@ export async function calculateDayBasedPricing(
 
     if (meetOnArrival && !(connectionArrival && flightLeg && !routeAirportCode(flightLeg.from))) {
       // Where the party lands: the connection's origin, else the day's city.
-      const airportCode = connectionArrival && flightLeg ? routeAirportCode(flightLeg.from)! : getAirportCode(day.city)
+      // The agency's own airport list decides the code; getAirportCode's
+      // hardcoded nine Egyptian cities are the fallback for an install that
+      // has not filled the list in yet. A city with TWO airports has no single
+      // code, so cityAirportCode declines rather than picking one.
+      const airportCode = connectionArrival && flightLeg
+        ? routeAirportCode(flightLeg.from)!
+        : (cityAirportCode(airports, day.city) ?? getAirportCode(day.city))
       const found = resolveAirportServiceRate(airportCode, 'arrival')
       const rate = found.rate
       if (rate != null) {
@@ -3096,7 +3125,7 @@ export async function calculateDayBasedPricing(
     }
 
     if (day.services.airport_departure) {
-      const airportCode = getAirportCode(day.city)
+      const airportCode = cityAirportCode(airports, day.city) ?? getAirportCode(day.city)
       const found = resolveAirportServiceRate(airportCode, 'departure')
       const rate = found.rate
       if (rate != null) {
@@ -3563,6 +3592,14 @@ export async function calculateDayBasedPricing(
   // customer fare, and takes a SINGLE cabin on the sleeper.
   let ticketsPerPax = 0
   const money = (v: unknown): number => Number(v) || 0
+  /** "Domestic Flight" / "International Flight" — from the airports, not from
+   *  a word hardcoded when every flight this engine priced was an Egyptian
+   *  one. Unknown country on either end reads as the plain noun. */
+  const flightLabel = (from?: Airport, to?: Airport): string => {
+    if (!from?.countryCode || !to?.countryCode) return 'Flight'
+    return from.countryCode === to.countryCode ? 'Domestic Flight' : 'International Flight'
+  }
+
   const flightFare = (r: Record<string, any>): number =>
     (isEurPassport ? money(r.base_rate_eur) : money(r.base_rate_non_eur) || money(r.base_rate_eur)) +
     (isEurPassport ? money(r.tax_eur) : money(r.tax_non_eur) || money(r.tax_eur))
@@ -3579,8 +3616,18 @@ export async function calculateDayBasedPricing(
     const legDate = dateForDay(leg.day)
 
     if (leg.mode === 'flight') {
+      // A fare is priced between AIRPORTS; a leg runs between CITIES. Tokyo
+      // Narita and Tokyo Haneda are two fares of one city, and the agency's
+      // airport list (Settings → Vocabulary → Airports) is what joins them.
+      // A city with no airport in that list cannot be flown from or to, and
+      // saying so is more use than the old code's answer, which was to treat
+      // every unrecognised city as Cairo.
+      const fromAirports = airportsForCity(airports, leg.from)
+      const toAirports = airportsForCity(airports, leg.to)
+      const fromKeys = new Set(fromAirports.map(a => a.key))
+      const toKeys = new Set(toAirports.map(a => a.key))
       const onRoute = ticketRates.flights.filter(r =>
-        cityKey(r.route_from) === cityKey(leg.from) && cityKey(r.route_to) === cityKey(leg.to) &&
+        fromKeys.has(String(r.route_from)) && toKeys.has(String(r.route_to)) &&
         /econom/i.test(String(r.cabin_class ?? 'economy')))
       const { valid: candidates, expired } = ticketsValidOn(onRoute, legDate)
       const pick = resolveTicketRow(candidates, leg.rateId)
@@ -3589,7 +3636,9 @@ export async function calculateDayBasedPricing(
         ticketsPerPax += fare
         services.push({
           id: `day${leg.day}-ticket-flight`, dayNumber: leg.day, serviceType: 'flight',
-          serviceName: `Domestic Flight ${routeLabel} (${pick.row.airline ?? 'economy'})`,
+          // "Domestic" was hardcoded, so an international leg printed as a
+          // domestic one on the customer's quote. The airports know.
+          serviceName: `${flightLabel(fromAirports[0], toAirports[0])} ${routeLabel} (${pick.row.airline ?? 'economy'})`,
           quantity: 1, quantityMode: 'per_pax', unitCost: fare, lineTotal: fare,
           rateSource: 'flight_rates', isPerPax: true, isOptional: false,
           notes: money(pick.row.tax_eur) > 0 ? 'Fare incl. tax, per person' : 'Per person',
@@ -3610,11 +3659,16 @@ export async function calculateDayBasedPricing(
         // fare. They send the operator to opposite places — one to the
         // contract, one to the calendar — so they are never the same sentence.
         const namedExpired = expired.find(r => String(r.id) === leg.rateId)
-        listUnpriced({ id: `day${leg.day}-ticket-flight`, dayNumber: leg.day, serviceType: 'flight', serviceName: `Domestic Flight ${routeLabel}`, isPerPax: true }, {
+        // A city with no airport is not a route with no fare. The operator
+        // fixes it in Vocabulary, not in Rates, so it cannot be the same line.
+        const cityWithoutAirport = !fromAirports.length ? leg.from : !toAirports.length ? leg.to : null
+        listUnpriced({ id: `day${leg.day}-ticket-flight`, dayNumber: leg.day, serviceType: 'flight', serviceName: `${flightLabel(fromAirports[0], toAirports[0])} ${routeLabel}`, isPerPax: true }, {
           kind: 'transport', reason: pick.ambiguous.length ? 'fuzzy' : 'missing',
           dayNumber: leg.day, city: leg.to,
           lookupAttempted: `flight_rates ${routeLabel} economy${legDate ? ` on ${legDate}` : ''}${leg.rateId ? ` id=${leg.rateId}` : ''}`,
-          message: pick.namedMissing && namedExpired
+          message: cityWithoutAirport
+            ? `${cityWithoutAirport} has no airport in your list, so day ${leg.day}'s flight has nothing to price against. Add it in Settings → Vocabulary → Airports.`
+            : pick.namedMissing && namedExpired
             ? namedOutOfSeasonMessage({ row: namedExpired, noun: 'flight', dayNumber: leg.day, routeLabel, legDate })
             : pick.namedMissing
               ? `The flight picked for day ${leg.day} (${routeLabel}) is no longer in Rates → Flights. Pick it again on the day.`
