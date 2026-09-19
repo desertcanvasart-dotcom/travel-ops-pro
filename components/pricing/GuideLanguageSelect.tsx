@@ -14,7 +14,7 @@ import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
 import { optionsFromLabels } from '@/lib/vocabulary'
-import { BUILT_IN_GUIDE_LANGUAGES, guideLanguageKey } from '@/lib/guides/guide-language'
+import { BUILT_IN_GUIDE_LANGUAGES, guideLanguageKey, guideLanguageWord } from '@/lib/guides/guide-language'
 
 /** The chosen language key ('' until the rates load) and what to offer. */
 export function useGuideLanguageChoice() {
@@ -74,9 +74,19 @@ export default function GuideLanguageSelect({
           {withRate.includes(o.value) ? o.label : t('guideLanguageNoRate', { language: o.label })}
         </option>
       ))}
-      {/* A rate in a language the vocabulary no longer lists still prices. */}
+      {/* A rate in a language the vocabulary does not list still prices —
+          hiding it would make a contract the agency holds unreachable. But it
+          has to SAY where it came from: with no vocabulary entry behind it,
+          this used to render the raw stored key ("portuguese"), which reads
+          like a hardcoded list rather than like the agency's own guide rate
+          (operator, 2026-09-19: "why do we still have hard coded guide
+          language"). The word is title-cased and the line says it is from a
+          rate, so the fix — add it to the list, or retire the rate — is
+          visible from the dropdown. */}
       {withRate.filter(k => !options.some(o => o.value === k)).map(k => (
-        <option key={k} value={k}>{label(k, k)}</option>
+        <option key={k} value={k}>
+          {t('guideLanguageFromRate', { language: label(k, guideLanguageWord(k)) })}
+        </option>
       ))}
     </select>
   )
