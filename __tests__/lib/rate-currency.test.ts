@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { RATE_FIELDS } from '@/lib/rates/rate-seasons'
 import { createRateNormalizer, RATE_MONETARY_COLUMNS } from '@/lib/rates/rate-currency'
 import type { ExchangeRates } from '@/lib/currency-service'
 
@@ -182,6 +185,44 @@ describe('createRateNormalizer', () => {
     expect(seasons[0].rates.suite_eur).toBe(500)
   })
 
+  it('converts flight fares in periods AND the flat fallback — a JPY contract', async () => {
+    // Flights gained dated periods in migration 20261025 and were added to
+    // NEITHER conversion branch, so a fare written in JPY had its columns
+    // converted and the numbers inside its periods handed over raw: 220000 JPY
+    // would have reached the engine as 220000 USD. Same shape as the
+    // 2026-09-12 live regression, where a vehicles list shipped without these
+    // branches sent EGP out as USD.
+    const rows = [{
+      id: 'f1', rate_currency: 'JPY',
+      base_rate_eur: 22000, tax_eur: 1500, base_rate_non_eur: null,
+      seasons: [
+        { name: 'Golden Week', from: '2026-04-29', to: '2026-05-06', rates: { base_rate_eur: 45000, tax_eur: 3000, guide_rate: 30000 } },
+        { name: 'Low', from: '2026-05-07', to: '2026-09-30', rates: { base_rate_eur: 22000, tax_eur: 1500 } },
+      ],
+    }]
+    const [r] = (await usd().normalize('flight_rates', rows))!
+    expect(r.base_rate_eur).toBe(146.67)
+    expect(r.base_rate_non_eur).toBeNull()      // blank stays blank
+    const seasons = r.seasons as Array<{ name: string; rates: Record<string, number> }>
+    expect(seasons[0].rates.base_rate_eur).toBe(300)
+    expect(seasons[0].rates.tax_eur).toBe(20)
+    expect(seasons[0].rates.guide_rate).toBe(200)
+    expect(seasons[0].name).toBe('Golden Week') // period metadata untouched
+    expect(seasons[1].rates.base_rate_eur).toBe(146.67)
+    // stored row untouched
+    expect((rows[0].seasons as Array<{ rates: Record<string, number> }>)[0].rates.base_rate_eur).toBe(45000)
+  })
+
+  it('an unbackable flight row neutralises its periods too', async () => {
+    const noJpy = { base: 'USD', rates: { USD: 1 }, timestamp: 0 } as unknown as ExchangeRates
+    const n = createRateNormalizer('USD', { getRates: async () => noJpy })
+    const rows = [{ id: 'f2', rate_currency: 'JPY', base_rate_eur: 22000, seasons: [{ name: 'Low', rates: { base_rate_eur: 22000 } }] }]
+    const [r] = (await n.normalize('flight_rates', rows))!
+    // A hole, not a 150x price.
+    expect(r.base_rate_eur).toBeNull()
+    expect(r.seasons).toBeNull()
+  })
+
   it('converts a JPY cruise transport package', async () => {
     const rows = [{ id: 'p1', rate_currency: 'JPY', minivan_rate: 15000, bus_rate: 45000, sedan_rate: null }]
     const [r] = (await usd().normalize('b2b_transport_packages', rows))!
@@ -207,5 +248,37 @@ describe('createRateNormalizer', () => {
         expect(c).not.toMatch(/capacity|duration|pax|percent|kg|minutes/)
       }
     }
+  })
+})
+
+describe('every table with dated periods is in the converter', () => {
+  // The rule this file exists to hold, from the 2026-09-12 live regression:
+  // a new money-bearing JSONB needs BOTH conversion branches and a parity test
+  // with rate_currency. flight_rates gained periods in 20261025 and was added
+  // to neither, so this scan is what would have caught it.
+  //
+  // RATE_FIELDS is the list of entities that HAVE periods, so it is the one
+  // that decides. A fourth entity added there fails here until its table is
+  // named in the converter.
+  const TABLE_FOR_ENTITY: Record<string, string> = {
+    accommodation: 'accommodation_rates',
+    cruise: 'nile_cruises',
+    flight: 'flight_rates',
+  }
+
+  const source = readFileSync(join(process.cwd(), 'lib/rates/rate-currency.ts'), 'utf8')
+  const declared = source.match(/const TABLES_WITH_PERIODS[^\n]*\[([^\]]*)\]/)?.[1] ?? ''
+
+  it('knows a table for every entity that has periods', () => {
+    expect(Object.keys(TABLE_FOR_ENTITY).sort()).toEqual(Object.keys(RATE_FIELDS).sort())
+  })
+
+  it.each(Object.entries(TABLE_FOR_ENTITY))('%s → %s is converted and neutralised', (_entity, table) => {
+    expect(declared, `${table} carries rate periods and must be in TABLES_WITH_PERIODS`).toContain(table)
+  })
+
+  it('both branches read the same list, so one cannot be updated without the other', () => {
+    // They were two hand-written conditions, which is how one got missed.
+    expect(source.match(/hasPeriods\(table\)/g) ?? []).toHaveLength(2)
   })
 })

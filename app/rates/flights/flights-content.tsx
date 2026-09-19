@@ -441,8 +441,11 @@ export default function FlightsContent() {
       return
     }
 
-    if (!formData.base_rate_eur || formData.base_rate_eur <= 0) {
-      setError('Please enter a valid EUR rate')
+    // The price lives in the PERIODS now, so that is what has to be there.
+    // Checking base_rate_eur would check a column nothing on this form fills.
+    const pricedPeriods = formData.seasons.filter(s => Number(s.rates?.base_rate_eur) > 0)
+    if (pricedPeriods.length === 0) {
+      setError('Add at least one validity period with a fare — a flight with no dated fare cannot be priced.')
       setSaving(false)
       return
     }
@@ -456,7 +459,9 @@ export default function FlightsContent() {
       const submitData = {
         ...restFormData,
         // One price. A seat costs what a seat costs — the EU/non-EU split is
-        // real only for hotels and cruises (operator, 2026-08-30).
+        // real only for hotels and cruises (operator, 2026-08-30). The form
+        // shows one box per period; both stored columns get that number, so
+        // nothing downstream has to know the split is notional here.
         base_rate_non_eur: formData.base_rate_eur,
         ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency),
         supplier_id: formData.supplier_id || null,
@@ -466,7 +471,14 @@ export default function FlightsContent() {
         duration_minutes: formData.duration_minutes || null,
         baggage_kg: formData.baggage_kg || null,
         season: formData.seasons[0]?.season || null,
-        seasons: formData.seasons,
+        seasons: formData.seasons.map(p => ({
+          ...p,
+          rates: {
+            ...p.rates,
+            base_rate_non_eur: Number(p.rates?.base_rate_eur) || 0,
+            tax_non_eur: Number(p.rates?.tax_eur) || 0,
+          },
+        })),
         notes: formData.notes || null
       }
       
@@ -1234,42 +1246,19 @@ export default function FlightsContent() {
                 </div>
               </div>
 
-              {/* Pricing */}
+              {/* The contract, not the price.
+                  The fare, its tax and the guide's seat used to be typed HERE
+                  as well as in each period — two boxes for one number, and the
+                  save silently kept the period's: legacyColumnMirror writes the
+                  first period over these columns, so whatever was typed up here
+                  was discarded the moment a period existed. A field that takes
+                  a number and throws it away is worse than no field.
+                  What is left is what belongs to the whole contract rather than
+                  to one of its dated blocks. */}
               <div className="space-y-4">
                 <h3 className="text-sm font-medium text-gray-700 border-b pb-2">{t('pricingSection')}</h3>
 
                 <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label htmlFor="base_rate_eur" className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('eurRate')} <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                        id="base_rate_eur"
-                        type="number"
-                        value={formData.base_rate_eur}
-                        onChange={(e) => setFormData(prev => ({ ...prev, base_rate_eur: parseFloat(e.target.value) || 0 }))}
-                        step="0.01"
-                        min="0"
-                        required
-                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                      />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5" title={tCommon('guideFareHint')}>
-                      {tCommon('guideFare')}
-                    </label>
-                    <input
-                        type="number"
-                        value={formData.guide_rate ?? ''}
-                        onChange={(e) => setFormData(prev => ({ ...prev, guide_rate: (e.target.value === '' ? '' : parseFloat(e.target.value)) as unknown as number | null }))}
-                        step="0.01"
-                        min="0"
-                        placeholder="—"
-                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                      />
-                  </div>
-
                   <RateCurrencyField
                     value={formData.rate_currency}
                     onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
