@@ -3884,7 +3884,10 @@
         "cancel": "Cancel",
         "updateRate": "Update Rate",
         "createRate": "Create Rate",
-        "newShip": "+ New ship…"
+        "newShip": "+ New ship…",
+        "sailingDays": "Sailing days",
+        "sailingDaysHint": "(leave empty if it sails any day)",
+        "sailingDaysChosen": "Departs {days}"
       },
       "deleteModal": {
         "title": "Delete Cruise Rate",

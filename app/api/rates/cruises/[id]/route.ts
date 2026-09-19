@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSeasons, legacyColumnMirror, datedPeriodCount, tooManyPeriodsMessage } from '@/lib/rates/rate-seasons'
 import { sanitizeSupplements } from '@/lib/rates/supplements'
+import { sanitizeSailingDays } from '@/lib/rates/cruise-sailing'
 import { createServerClient } from '@/lib/supabase-server'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
@@ -44,6 +45,11 @@ export async function PUT(
     // Only when the body speaks of them, like `seasons` above.
     if ('supplements' in body) {
       updateBody = { ...updateBody, supplements: sanitizeSupplements(body.supplements) }
+    }
+    // The weekdays this sailing departs on. Only when the body speaks of them,
+    // so a patch that leaves them out does not clear a schedule.
+    if ('sailing_days' in body) {
+      updateBody = { ...updateBody, sailing_days: sanitizeSailingDays(body.sailing_days) }
     }
 
     // Re-link the ship when anything identifying it moved (PUT can patch, so

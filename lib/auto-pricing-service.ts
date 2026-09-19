@@ -46,6 +46,7 @@ import { sortByItineraryFlow } from '@/lib/pricing/breakdown-order'
 import { periodRatesFor, plainPeriodName as seasonNameOf } from '@/lib/rates/rate-seasons'
 import { ticketsValidOn, outOfSeasonMessage, namedOutOfSeasonMessage } from '@/lib/pricing/ticket-validity'
 import { airportsFrom, airportsForCity, cityAirportCode, type Airport } from '@/lib/rates/airports'
+import { sailsOn, sailingDaysLabel } from '@/lib/rates/cruise-sailing'
 import { seasonsForRow as flightSeasonsForRow } from '@/lib/rates/rate-seasons'
 import { cruiseCandidates, hotelCandidates, propertyById } from '@/lib/pricing/property-candidates'
 import { choicesForTier, sanitizePropertyChoice } from '@/lib/pricing/property-choice'
@@ -2758,6 +2759,24 @@ export async function calculateDayBasedPricing(
   }
 
   const cruiseRates = cruiseStay.rates
+
+  // A sailing with fixed departure days cannot start on another one. Priced,
+  // not blocked: the numbers are real and the operator may be moving the
+  // itinerary to fit — but a quote nobody can book must not look clean, and
+  // this is the only place that knows the ship's schedule. Silent for a ship
+  // with no fixed day, which is most of them.
+  if (cruiseRates?.row && firstCruiseDay) {
+    const boards = dateForDay(firstCruiseDay.day)
+    const days = (cruiseRates.row as Record<string, unknown>).sailing_days
+    if (!sailsOn(days, boards)) {
+      const ship = String((cruiseRates.row as Record<string, unknown>).ship_name ?? 'The cruise')
+      warnings.push(
+        `${ship} departs ${sailingDaysLabel(days)}, but day ${firstCruiseDay.day} boards on ${boards}. ` +
+        'Move the cruise day, or pick a sailing that leaves then.'
+      )
+    }
+  }
+
   if (cruiseNights > 0 && !cruiseRates) {
     addHole({
       kind: 'cruise',

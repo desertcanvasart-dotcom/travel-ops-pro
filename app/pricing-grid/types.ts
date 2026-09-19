@@ -167,6 +167,9 @@ export interface SelectedItem {
    *  is priced by the one covering its date — a date no period covers has NO
    *  rate, the same rule the auto engine applies to a hotel night. */
   periods?: OptionPeriod[]
+  /** Cruises: the weekdays this sailing departs on. A trip that boards on
+   *  another day is a quote that cannot be booked. */
+  sailingDays?: string[]
 }
 
 export interface SlotValue {
@@ -239,6 +242,8 @@ export interface RateOption {
   /** The same periods for the single supplement (hotels) or single cabin
    *  (cruises), so a derived line prices on the same day's period. */
   singleSuppPeriods?: OptionPeriod[]
+  /** Cruises: the weekdays this sailing departs on. Empty = no fixed day. */
+  sailingDays?: string[]
 }
 
 export interface GridSupplement {

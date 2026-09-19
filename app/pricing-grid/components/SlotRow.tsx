@@ -58,6 +58,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
           // The rate's dated periods, each with its own price. The day is
           // priced by the one covering its date.
           periods: opt.periods,
+          sailingDays: opt.sailingDays,
         }]
       })
     }
@@ -77,6 +78,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
       pricingClass: opt.pricing_class,
       guideRate: opt.guide_rate,
       periods: opt.periods,
+      sailingDays: opt.sailingDays,
     }
     const items: SelectedItem[] = [item]
     if (definition.slotId === 'accommodation' && (opt as any).single_supp_eur) {

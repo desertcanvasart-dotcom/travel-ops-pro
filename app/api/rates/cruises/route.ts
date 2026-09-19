@@ -3,6 +3,7 @@ import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSeasons, legacyColumnMirror, datedPeriodCount, tooManyPeriodsMessage } from '@/lib/rates/rate-seasons'
 import { sanitizeSupplements } from '@/lib/rates/supplements'
+import { sanitizeSailingDays } from '@/lib/rates/cruise-sailing'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createActorAdminClient } from '@/lib/supabase-actor'
@@ -78,6 +79,9 @@ export async function POST(request: NextRequest) {
     const newCruise = {
       ...body,
       seasons: cruiseSeasons,
+      // Known weekday keys only, in week order — the body spreads through, so
+      // this is the one place that decides what a sailing day may be.
+      sailing_days: sanitizeSailingDays(body.sailing_days),
       ...legacyColumnMirror(cruiseSeasons, 'cruise'),
       // The supplements the ship carries; their prices ride in the periods above.
       supplements: sanitizeSupplements(body.supplements),
