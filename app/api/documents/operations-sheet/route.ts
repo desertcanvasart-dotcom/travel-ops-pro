@@ -16,6 +16,7 @@ import { getTemplate } from '@/lib/documents/registry'
 import { renderHtmlToPdf } from '@/lib/documents/render'
 import { assembleOperationsSheet, applyDayLanguageVersions } from '@/lib/documents/assemble-operations-sheet'
 import type { DayLanguageVersion } from '@/lib/documents/assemble-operations-sheet'
+import { ensureEnglishDayVersions } from '@/lib/itineraries/english-day-text'
 import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
 import type { OperationsSheetContext, StaffContact } from '@/lib/documents/types'
 
@@ -88,13 +89,17 @@ export async function GET(request: NextRequest) {
     // the wrong text for Cairo: the ground team was handed a sheet of
     // instructions it cannot read.
     //
-    // Translations already exist as itinerary_day_versions rows, one per
-    // language, created by the itinerary's language tab (Copy & Translate).
-    // This reads the requested one — English by default, because that is who
-    // this document is for — and lets it override the canonical row, the same
-    // precedence /api/itineraries/[id]/days applies. A day with no version in
-    // that language keeps its canonical text rather than being blanked: a line
-    // in the wrong language is still an instruction, and a missing one is not.
+    // Translations live in itinerary_day_versions, one row per day per
+    // language — the same table the itinerary's language tab fills. This reads
+    // the requested one and lets it override the canonical row, the same
+    // precedence /api/itineraries/[id]/days applies.
+    //
+    // English is the default AND is made on the spot when it is missing (see
+    // lib/itineraries/english-day-text). This sheet exists to be the English
+    // copy of the itinerary for the team in Cairo; handed to them in Japanese
+    // it is just the itinerary again, with no job left to do. `?language=ja`
+    // still renders the Japanese version for anyone who wants to check the
+    // sheet against the original, and translates nothing.
     const language = params.get('language') || 'en'
     const dayIds = (days ?? []).map(d => d.id)
     const { data: dayVersions } = dayIds.length > 0
@@ -105,9 +110,22 @@ export async function GET(request: NextRequest) {
           .eq('language', language)
       : { data: [] }
 
-    const translatedDays = applyDayLanguageVersions(
-      days ?? [],
-      (dayVersions ?? []) as DayLanguageVersion[]
+    let versions = (dayVersions ?? []) as DayLanguageVersion[]
+    let englishAttractions = new Map<string, string[]>()
+    if (language === 'en') {
+      const ensured = await ensureEnglishDayVersions(supabase, days ?? [], versions)
+      versions = ensured.versions
+      englishAttractions = ensured.attractions
+      if (ensured.created > 0 || ensured.failed > 0) {
+        console.log(
+          `[ops-sheet] ${itineraryId}: translated ${ensured.created} day(s) to English` +
+            (ensured.failed > 0 ? `, ${ensured.failed} unavailable` : '')
+        )
+      }
+    }
+
+    const translatedDays = applyDayLanguageVersions(days ?? [], versions).map(day =>
+      englishAttractions.has(day.id) ? { ...day, attractions: englishAttractions.get(day.id)! } : day
     )
 
     const guides: StaffContact[] = [
