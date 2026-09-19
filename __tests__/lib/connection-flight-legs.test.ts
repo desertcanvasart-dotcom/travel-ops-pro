@@ -27,8 +27,15 @@ function tables(days: unknown[]) {
   t.tour_templates[0].itinerary = days
   t.tour_templates[0].duration_days = days.length
   t.airport_staff_rates.push({ id: 'air-lxr', airport_code: 'LXR', direction: 'both', rate_eur: 30, is_active: true })
-  t.flight_rates = [{ id: 'fl-cai-lxr', route_from: 'Cairo', route_to: 'Luxor', airline: 'EgyptAir', cabin_class: 'economy', base_rate_eur: 120, base_rate_non_eur: 120, tax_eur: 0, is_active: true }]
+  t.flight_rates = [{ id: 'fl-cai-lxr', route_from: 'cai', route_to: 'lxr', airline: 'EgyptAir', cabin_class: 'economy', base_rate_eur: 120, base_rate_non_eur: 120, tax_eur: 0, is_active: true }]
   t.transportation_rates.push({ ...t.transportation_rates[0], id: 'trn-lxr-airport', service_code: 'LXR-AIRPORT', city: 'Luxor', origin_city: 'Luxor', destination_city: 'Luxor', route_name: 'Luxor Airport Transfer' })
+  // A fare is priced between AIRPORTS; this is what joins them to the leg's
+  // cities. Kom Ombo deliberately has none — the test below flies to it.
+  t.org_vocabularies = [
+    { key: 'cai', label: 'Cairo', meta: { iata: 'CAI', city: 'Cairo', country_code: 'EG' }, is_active: true, kind: 'airport', rank: 1 },
+    { key: 'lxr', label: 'Luxor', meta: { iata: 'LXR', city: 'Luxor', country_code: 'EG' }, is_active: true, kind: 'airport', rank: 2 },
+    { key: 'kom', label: 'Kom Ombo', meta: { iata: 'KMB', city: 'Kom Ombo', country_code: 'EG' }, is_active: true, kind: 'airport', rank: 3 },
+  ]
   return t
 }
 const onDay = (r: any, n: number) => (r.services ?? []).filter((s: any) => s.dayNumber === n)
@@ -107,7 +114,7 @@ describe('review fixes (Greptile on #458)', () => {
     expect(routeAirportCode('nrt')).toBe('NRT')
     expect(routeAirportCode('Nile Cruise')).toBeNull()
     const t = tables([inTheAir, { ...day2, leg_to: 'Kom Ombo' }, last])
-    t.flight_rates.push({ ...t.flight_rates[0], id: 'fl-cai-kom', route_to: 'Kom Ombo' })
+    t.flight_rates.push({ ...t.flight_rates[0], id: 'fl-cai-kom', route_to: 'kom' })
     setMockTables(t)
     const leg = onDay(await calculateAutoPricing(BASE), 2).find((s: any) => s.id === 'day2-airport-leg-to')
     expect(leg).toMatchObject({ unpriced: true })

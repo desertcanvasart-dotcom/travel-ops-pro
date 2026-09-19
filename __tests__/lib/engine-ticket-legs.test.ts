@@ -28,11 +28,21 @@ const day = (n: number, city: string, over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
+/** The agency's airports. A flight fare is priced between AIRPORTS, and this
+ *  is what joins them to a leg's cities — Cairo and Giza share CAI, the way
+ *  the station city alias works for sleepers. */
+const airports = () => [
+  { key: 'cai', label: 'Cairo', meta: { iata: 'CAI', city: 'Cairo', country_code: 'EG' }, is_active: true, kind: 'airport', rank: 1 },
+  { key: 'lxr', label: 'Luxor', meta: { iata: 'LXR', city: 'Luxor', country_code: 'EG' }, is_active: true, kind: 'airport', rank: 2 },
+  { key: 'asw', label: 'Aswan', meta: { iata: 'ASW', city: 'Aswan', country_code: 'EG' }, is_active: true, kind: 'airport', rank: 3 },
+]
+
 /** Rows carry no rate_currency → they are already in the run currency. */
 const tables = (over: Record<string, unknown> = {}) => {
   const t = fullRateTables() as any
+  t.org_vocabularies = airports()
   t.flight_rates = [
-    { id: 'fl-1', route_from: 'Cairo', route_to: 'Luxor', cabin_class: 'economy', airline: 'EgyptAir', base_rate_eur: 100, base_rate_non_eur: 100, tax_eur: 20, tax_non_eur: 20, guide_rate: null, is_active: true },
+    { id: 'fl-1', route_from: 'cai', route_to: 'lxr', cabin_class: 'economy', airline: 'EgyptAir', base_rate_eur: 100, base_rate_non_eur: 100, tax_eur: 20, tax_non_eur: 20, guide_rate: null, is_active: true },
   ]
   t.train_rates = [
     { id: 'tr-1', origin_city: 'Cairo', destination_city: 'Luxor', class_type: 'First Class', operator_name: 'Watania', rate_eur: 75, guide_rate: 30, is_active: true },
@@ -102,6 +112,83 @@ describe('flight legs', () => {
   })
 
   // ============================================
+  // AIRPORTS, NOT CITIES — and not Egypt's
+  // ============================================
+  // A fare is priced between AIRPORTS. The engine used to match a leg to a
+  // flight row by CITY NAME, and lib/pricing/flight-leg knew nine Egyptian
+  // cities and answered 'CAI' for everything else — so an origin abroad could
+  // not be priced and, on an install elsewhere, every airport was Cairo.
+  const withTokyo = () => [
+    ...airports(),
+    { key: 'nrt', label: 'Tokyo Narita', meta: { iata: 'NRT', city: 'Tokyo', country_code: 'JP' }, is_active: true, kind: 'airport', rank: 4 },
+    { key: 'hnd', label: 'Tokyo Haneda', meta: { iata: 'HND', city: 'Tokyo', country_code: 'JP' }, is_active: true, kind: 'airport', rank: 5 },
+  ]
+
+  it('prices the flight the customers actually arrive on, and calls it international', async () => {
+    const t = withDays([
+      day(1, 'Cairo', { transport_type: 'flight', leg_from: 'Tokyo', leg_to: 'Cairo' }),
+      day(2, 'Cairo'),
+    ])
+    t.org_vocabularies = withTokyo().filter((a: any) => a.key !== 'hnd')
+    t.flight_rates = [
+      { id: 'fl-intl', route_from: 'nrt', route_to: 'cai', cabin_class: 'economy', airline: 'EgyptAir', base_rate_eur: 900, base_rate_non_eur: 900, tax_eur: 100, tax_non_eur: 100, is_active: true },
+    ]
+    setMockTables(t)
+    const r = await calculateAutoPricing(BASE)
+    expect(line(r, 'day1-ticket-flight')).toMatchObject({ unitCost: 1000, isPerPax: true })
+    // "Domestic" was hardcoded — an international leg printed as a domestic
+    // one on the customer's own quote.
+    expect(line(r, 'day1-ticket-flight').serviceName).toContain('International Flight')
+    expect(legHoles(r)).toEqual([])
+  })
+
+  it('still calls a flight between two Egyptian airports domestic', async () => {
+    setMockTables(withDays([day(1, 'Cairo'), day(2, 'Luxor', { transport_type: 'flight' })]))
+    const r = await calculateAutoPricing(BASE)
+    expect(line(r, 'day2-ticket-flight').serviceName).toContain('Domestic Flight')
+  })
+
+  it('a city with two airports is the ambiguity the operator already answers', async () => {
+    // Narita and Haneda are two fares of one city. That is the same question
+    // as two airlines on one route, and it gets the same answer: name the one.
+    const t = withDays([
+      day(1, 'Cairo', { transport_type: 'flight', leg_from: 'Tokyo', leg_to: 'Cairo' }),
+      day(2, 'Cairo'),
+    ])
+    t.org_vocabularies = withTokyo()
+    t.flight_rates = [
+      { id: 'fl-nrt', route_from: 'nrt', route_to: 'cai', cabin_class: 'economy', airline: 'EgyptAir', base_rate_eur: 900, base_rate_non_eur: 900, tax_eur: 100, tax_non_eur: 100, is_active: true },
+      { id: 'fl-hnd', route_from: 'hnd', route_to: 'cai', cabin_class: 'economy', airline: 'JAL', base_rate_eur: 1100, base_rate_non_eur: 1100, tax_eur: 100, tax_non_eur: 100, is_active: true },
+    ]
+    setMockTables(t)
+    const ambiguous = await calculateAutoPricing(BASE)
+    expect(line(ambiguous, 'day1-ticket-flight')).toMatchObject({ unpriced: true })
+    expect(legHoles(ambiguous)[0]?.message ?? '').toMatch(/2 flights serve Tokyo → Cairo/)
+
+    t.tour_templates[0].itinerary[0].transport_rate_id = 'fl-hnd'
+    setMockTables(t)
+    const named = await calculateAutoPricing(BASE)
+    expect(line(named, 'day1-ticket-flight')).toMatchObject({ unitCost: 1200 })
+  })
+
+  it('a city with no airport says so, and points at the list that owns it', async () => {
+    // Not "no fare for this route" — the operator fixes this in Vocabulary,
+    // not in Rates, so it cannot be the same sentence.
+    const t = withDays([
+      day(1, 'Cairo', { transport_type: 'flight', leg_from: 'Osaka', leg_to: 'Cairo' }),
+      day(2, 'Cairo'),
+    ])
+    t.flight_rates = []
+    setMockTables(t)
+    const r = await calculateAutoPricing(BASE)
+    expect(line(r, 'day1-ticket-flight')).toMatchObject({ unpriced: true })
+    const message = legHoles(r)[0]?.message ?? ''
+    expect(message).toMatch(/Osaka has no airport in your list/)
+    expect(message).toMatch(/Vocabulary → Airports/)
+    expect(message).not.toMatch(/No economy flight rate/)
+  })
+
+  // ============================================
   // A SEASONAL PAIR — the fare valid on the day it flies
   // ============================================
   // flight_rates has always had rate_valid_from/to, and nothing read them: two
@@ -110,8 +197,8 @@ describe('flight legs', () => {
   // schedule is its own row — own flight number, own times — so the window is
   // what picks between them.
   const seasonalPair = () => [
-    { id: 'fl-sum', route_from: 'Cairo', route_to: 'Luxor', cabin_class: 'economy', airline: 'EgyptAir', base_rate_eur: 100, base_rate_non_eur: 100, tax_eur: 20, tax_non_eur: 20, rate_valid_from: '2026-06-01', rate_valid_to: '2026-09-30', is_active: true },
-    { id: 'fl-win', route_from: 'Cairo', route_to: 'Luxor', cabin_class: 'economy', airline: 'EgyptAir', base_rate_eur: 200, base_rate_non_eur: 200, tax_eur: 30, tax_non_eur: 30, rate_valid_from: '2026-10-01', rate_valid_to: '2027-03-31', is_active: true },
+    { id: 'fl-sum', route_from: 'cai', route_to: 'lxr', cabin_class: 'economy', airline: 'EgyptAir', base_rate_eur: 100, base_rate_non_eur: 100, tax_eur: 20, tax_non_eur: 20, rate_valid_from: '2026-06-01', rate_valid_to: '2026-09-30', is_active: true },
+    { id: 'fl-win', route_from: 'cai', route_to: 'lxr', cabin_class: 'economy', airline: 'EgyptAir', base_rate_eur: 200, base_rate_non_eur: 200, tax_eur: 30, tax_non_eur: 30, rate_valid_from: '2026-10-01', rate_valid_to: '2027-03-31', is_active: true },
   ]
 
   const seasonalDays = () => {
