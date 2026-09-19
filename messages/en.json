@@ -5018,7 +5018,9 @@
       "missingRatesTitle": "This period has no per-person double rate for: {groups}. A trip on these dates will show No rate.",
       "avgDouble": "Avg. PP double (all periods)",
       "baseRate": "Undated rate",
-      "baseRateHint": "No dated periods — every date prices at this rate. Add periods to date it."
+      "baseRateHint": "No dated periods — every date prices at this rate. Add periods to date it.",
+      "guideBlankFare": "Blank = he pays the customer fare. 0 = the airline carries him free.",
+      "guideBlankBed": "Blank = not given, and the bed is flagged as unpriced. 0 = the supplier gives it free."
     },
     "supplements": {
       "title": "Supplements",

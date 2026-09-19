@@ -142,6 +142,17 @@ export default function RateSeasonsEditor({
       rates: storeValue(entity, seasons[index].rates, field, raw === '' ? 0 : Number(raw)),
     })
 
+  /** Clearing the guide box REMOVES the number. It used to store 0, which on
+   *  a flight is a free seat — the engine reads `guide_rate != null`, so an
+   *  absent value means "he pays the customer fare" and a zero means "the
+   *  airline carries him". Those are different contracts. */
+  const updateGuideRate = (index: number, raw: string) => {
+    const rates = { ...seasons[index].rates }
+    if (raw === '') delete rates.guide_rate
+    else rates.guide_rate = Number(raw)
+    update(index, { rates })
+  }
+
   const addPeriod = () => {
     if (atLimit) return
     // A new period starts the day after the last one ends, which is how a
@@ -330,24 +341,35 @@ export default function RateSeasonsEditor({
               </div>
             )}
 
-            {/* The property's special rate for a throughout guide travelling
-                with the group ("+1"). One number — no passport split, the
-                guide is Egyptian either way. Blank prices as a hole. */}
+            {/* The supplier's own rate for a throughout guide travelling with
+                the group ("+1"). One number — no passport split, the guide is
+                local either way.
+
+                BLANK IS NOT ZERO. Leaving it empty means "not given", and what
+                that costs depends on what he is riding: on a flight he pays the
+                customer fare, on a hotel or ship the bed is unpriced and gets
+                flagged. A zero would mean the supplier carries him FREE, which
+                is a thing an operator should have to type on purpose — it used
+                to be what an empty box stored. */}
             <div className="mb-2 last:mb-0">
               <p className="text-xs font-medium text-gray-600 mb-1">{t('throughoutGuide')}</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div>
-                  <label className="block text-[11px] text-gray-500 mb-1">{t('fields.guide_rate')}</label>
+                  <label className="block text-[11px] text-gray-500 mb-1">{fieldLabel('guide_rate')}</label>
                   <input
                     type="number"
                     min={0}
                     step="0.01"
                     disabled={disabled}
-                    value={season.rates.guide_rate ?? 0}
-                    onChange={e => updateRate(index, 'guide_rate', e.target.value)}
+                    placeholder="—"
+                    value={season.rates.guide_rate ?? ''}
+                    onChange={e => updateGuideRate(index, e.target.value)}
                     className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#647C47]"
                   />
                 </div>
+                <p className="col-span-1 sm:col-span-3 self-end text-[11px] text-gray-500 mb-1.5">
+                  {t(entity === 'flight' ? 'guideBlankFare' : 'guideBlankBed')}
+                </p>
               </div>
             </div>
           </div>
