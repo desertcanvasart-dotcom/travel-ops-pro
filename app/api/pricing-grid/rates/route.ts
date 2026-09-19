@@ -7,6 +7,7 @@ import { rateGuideMode } from '@/lib/guides/guide-mode'
 import { NextRequest, NextResponse } from 'next/server'
 import { seasonsForRow, plainPeriodName, type RateSeasonEntity } from '@/lib/rates/rate-seasons'
 import { periodLabel, type OptionPeriod } from '@/lib/rates/date-window'
+import { cruiseSailingLabel, sanitizeSailingDays } from '@/lib/rates/cruise-sailing'
 import { supplementsForRow, supplementField } from '@/lib/rates/supplements'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
@@ -262,7 +263,15 @@ export async function GET(request: NextRequest) {
         name: `${r.ship_name} (${r.duration_nights}N, ${r.cabin_type})`,
         rateEur: toNum(r.rate_double_eur || r.rate_low_double_eur),
         rateNonEur: toNum(r.rate_double_non_eur || r.rate_low_double_non_eur || r.rate_double_eur || r.rate_low_double_eur),
-        details: detailsWithPeriod(`${r.route_name || ''} | ${r.tier || ''} | ${r.cabin_type || 'Standard'}`, periodsFor(r, 'cruise', 'double_eur', 'double_non_eur')),
+        // Direction and LENGTH first: the same ship sells a 3-night Aswan→Luxor
+        // and a 4-night Luxor→Aswan at different prices, and the line used to
+        // show route_name — free text that said "Aswan to Luxor" on both — with
+        // no nights at all, so two different products read identically.
+        details: detailsWithPeriod(
+          [cruiseSailingLabel(r), r.tier || '', r.cabin_type || 'Standard'].filter(Boolean).join(' | '),
+          periodsFor(r, 'cruise', 'double_eur', 'double_non_eur')
+        ),
+        sailingDays: sanitizeSailingDays(r.sailing_days),
         periods: periodsFor(r, 'cruise', 'double_eur', 'double_non_eur'),
         singleSuppPeriods: periodsFor(r, 'cruise', 'single_eur', 'single_non_eur'),
         single_rate_eur: toNum(r.rate_single_eur || r.rate_low_single_eur),

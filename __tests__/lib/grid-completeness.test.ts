@@ -388,3 +388,59 @@ describe('the grid surfaces what the gate found', () => {
     expect(src).toContain('periods: supp.periods')
   })
 })
+
+describe('a cruise that cannot leave on that day', () => {
+  // "Most of my cruises has fixed starting day… if it got chosen for an
+  // itinerary that doesn't match the day it will alarm the user." The price is
+  // right and the booking is impossible, which is the worst shape a defect
+  // takes: nothing looks wrong until somebody tries to confirm it.
+  const pickedCruise = (sailingDays?: string[]) => ({
+    slotId: 'cruise',
+    selectedItems: [{ rateId: 'c1', name: 'Al Farida · Aswan → Luxor · 3 nights', rateEur: 110, rateNonEur: 150, sailingDays }],
+    customAmount: 0,
+  })
+  const dated = (startDate: string) => cfg({ withGuide: false, startDate } as Partial<GridConfig>)
+
+  it('warns, naming the days it does leave and the day this is', () => {
+    // 2026-09-23 is a Wednesday.
+    const r = gridCompleteness([day(1, [pickedCruise(['mon', 'fri'])])], dated('2026-09-23'))
+    const issue = r.issues.find(i => i.code === 'cruise-wrong-sailing-day')
+    expect(issue?.severity).toBe('warn')
+    expect(issue?.message).toContain('departs Mondays and Fridays')
+    expect(issue?.message).toContain('Wednesday')
+  })
+
+  it('does not BLOCK — the numbers are real and the trip may still move', () => {
+    const r = gridCompleteness([day(1, [pickedCruise(['mon', 'fri'])])], dated('2026-09-23'))
+    expect(r.issues.some(i => i.code === 'cruise-wrong-sailing-day' && i.severity === 'block')).toBe(false)
+  })
+
+  it('is silent on a day the ship does leave', () => {
+    // 2026-09-21 is a Monday.
+    const r = gridCompleteness([day(1, [pickedCruise(['mon', 'fri'])])], dated('2026-09-21'))
+    expect(r.issues.some(i => i.code === 'cruise-wrong-sailing-day')).toBe(false)
+  })
+
+  it('is silent for a ship with no fixed day', () => {
+    const r = gridCompleteness([day(1, [pickedCruise([])])], dated('2026-09-23'))
+    expect(r.issues.some(i => i.code === 'cruise-wrong-sailing-day')).toBe(false)
+    const none = gridCompleteness([day(1, [pickedCruise(undefined)])], dated('2026-09-23'))
+    expect(none.issues.some(i => i.code === 'cruise-wrong-sailing-day')).toBe(false)
+  })
+
+  it('judges the day the cruise BOARDS, not the trip start', () => {
+    // Day 3 of a Monday departure is a Wednesday.
+    const r = gridCompleteness(
+      [day(1, [pickedCruise(['mon'])]), day(3, [pickedCruise(['mon'])])],
+      dated('2026-09-21')
+    )
+    const flagged = r.issues.filter(i => i.code === 'cruise-wrong-sailing-day').map(i => i.dayNumber)
+    expect(flagged).toEqual([3])
+  })
+
+  it('only asks it of a cruise slot', () => {
+    const asHotel = { ...pickedCruise(['mon']), slotId: 'accommodation' }
+    const r = gridCompleteness([day(1, [asHotel])], dated('2026-09-23'))
+    expect(r.issues.some(i => i.code === 'cruise-wrong-sailing-day')).toBe(false)
+  })
+})

@@ -24,6 +24,13 @@
 
 import { PACKAGE_TYPE_CONFIGS, type PackageType } from '@/lib/package-types'
 import { dateOnly, dayDate, periodCovering, periodLabel } from '@/lib/rates/date-window'
+import { sailsOn, sailingDaysLabel, dayOfDate, dayName } from '@/lib/rates/cruise-sailing'
+
+/** The weekday a date falls on, spelled out — "Wednesday". */
+const dayFullName = (iso: string): string => {
+  const d = dayOfDate(iso)
+  return d ? dayName(d) : iso
+}
 import type {
   GridDay,
   GridConfig,
@@ -301,6 +308,21 @@ export function gridCompleteness(
       for (const item of s.selectedItems ?? []) {
         const periods = item.periods ?? []
         const on = dayDate(startDate, dn)
+
+        // A sailing that only leaves on set weekdays cannot start on another
+        // one. The price is right, the arithmetic is right, and the booking is
+        // impossible — which is the worst shape a defect takes here, because
+        // nothing looks wrong until somebody tries to confirm it. Silent for a
+        // ship with no fixed day, which is most of them.
+        if (s.slotId === 'cruise' && on && !sailsOn(item.sailingDays, on)) {
+          issues.push({
+            dayNumber: dn,
+            severity: 'warn',
+            code: 'cruise-wrong-sailing-day',
+            message: `Day ${dn}: "${item.name}" departs ${sailingDaysLabel(item.sailingDays)}, and this day is a ${dayFullName(on)} (${on}).`
+              + ' Move the cruise day, or pick a sailing that leaves then.',
+          })
+        }
         if (periods.length > 0 && on && !periodCovering(periods, on)) {
           // BLOCKING, not a warning. There is no default period — a trip after
           // the contract ends must not quietly take the first one — so this

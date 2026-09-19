@@ -4,6 +4,10 @@ import { useEffect, useState } from 'react'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
+import {
+  SAILING_DAYS, dayName, sailingDaysLabel, sanitizeSailingDays, cruiseRouteLabel,
+  type SailingDay,
+} from '@/lib/rates/cruise-sailing'
 import { useTierLabel } from '@/hooks/useTierLabel'
 import { useTierOptions } from '@/hooks/useTierOptions'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
@@ -70,6 +74,7 @@ interface Cruise {
   route_name: string
   embark_city: string
   disembark_city: string
+  sailing_days?: string[] | null
   duration_nights: number
   cabin_type: 'standard' | 'deluxe' | 'suite'
   // Legacy single-rate fields (kept for backward compatibility)
@@ -148,6 +153,8 @@ interface CruiseFormData {
   ship_name: string
   ship_category: 'standard' | 'deluxe' | 'luxury'
   route_name: string
+  /** Weekday keys this sailing departs on; empty = no fixed day. */
+  sailing_days: SailingDay[]
   embark_city: string
   disembark_city: string
   duration_nights: number
@@ -392,6 +399,7 @@ export default function CruisesPage() {
     route_name: '',
     embark_city: 'Luxor',
     disembark_city: 'Aswan',
+    sailing_days: [] as SailingDay[],
     duration_nights: 4,
     cabin_type: 'standard',
     // Legacy rates
@@ -574,6 +582,7 @@ export default function CruisesPage() {
       route_name: cruise.route_name,
       embark_city: cruise.embark_city,
       disembark_city: cruise.disembark_city,
+      sailing_days: sanitizeSailingDays(cruise.sailing_days),
       duration_nights: cruise.duration_nights,
       cabin_type: cruise.cabin_type,
       // Legacy rates
@@ -655,7 +664,10 @@ export default function CruisesPage() {
       ...restFormData,
       ...rateCurrencyPatch(pickedCurrency, editingCruise?.rate_currency),
       cruise_code: formData.cruise_code || generateCode(),
-      route_name: formData.route_name || `${formData.embark_city} to ${formData.disembark_city}`,
+      // DERIVED, always. Free text here is how all four of the agency's rows
+      // came to say "Aswan to Luxor" while half of them embarked in Luxor.
+      route_name: `${formData.embark_city} to ${formData.disembark_city}`,
+      sailing_days: sanitizeSailingDays(formData.sailing_days),
       // Set legacy rates from low season for backward compatibility
       rate_single_eur: formData.rate_low_single_eur || formData.rate_single_eur,
       rate_double_eur: formData.rate_low_double_eur || formData.rate_double_eur,
@@ -940,7 +952,10 @@ export default function CruisesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
-                      {cruise.embark_city} → {cruise.disembark_city}
+                      {cruiseRouteLabel(cruise)}
+                      {sailingDaysLabel(cruise.sailing_days) && (
+                        <span className="block text-[11px] text-gray-400">{sailingDaysLabel(cruise.sailing_days)}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-medium">
@@ -1149,6 +1164,49 @@ export default function CruisesPage() {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
                   />
                 </div>
+              </div>
+
+              {/* The days this sailing actually leaves on.
+                  A ship that departs Aswan on Mondays and Fridays cannot serve
+                  a Wednesday itinerary — and until now nothing in the system
+                  knew that, so the quote was right, the arithmetic was right,
+                  and the booking was impossible. Leaving it EMPTY means no
+                  fixed day, which is the default and checks nothing. */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  {t('form.sailingDays')}
+                  <span className="ml-2 font-normal text-gray-400">{t('form.sailingDaysHint')}</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {SAILING_DAYS.map(day => {
+                    const on = formData.sailing_days.includes(day)
+                    return (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => setFormData(prev => ({
+                          ...prev,
+                          sailing_days: on
+                            ? prev.sailing_days.filter(d => d !== day)
+                            : SAILING_DAYS.filter(d => d === day || prev.sailing_days.includes(d)),
+                        }))}
+                        aria-pressed={on}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                          on
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {dayName(day).slice(0, 3)}
+                      </button>
+                    )
+                  })}
+                </div>
+                {formData.sailing_days.length > 0 && (
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    {t('form.sailingDaysChosen', { days: sailingDaysLabel(formData.sailing_days) })}
+                  </p>
+                )}
               </div>
 
               {/* Section 4: Cabin Type */}

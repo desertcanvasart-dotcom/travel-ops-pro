@@ -7824,6 +7824,7 @@ export interface Database {
           embark_city: string
           disembark_city: string
           duration_nights: number
+          sailing_days: string[]
           cabin_type: string
           rate_single_eur: number
           rate_double_eur: number
@@ -7893,6 +7894,7 @@ export interface Database {
           embark_city: string
           disembark_city: string
           duration_nights: number
+          sailing_days?: string[]
           cabin_type: string
           rate_single_eur: number
           rate_double_eur: number

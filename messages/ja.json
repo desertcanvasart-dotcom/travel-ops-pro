@@ -4990,7 +4990,10 @@
         "cancel": "キャンセル",
         "updateRate": "料金を更新",
         "createRate": "料金を作成",
-        "newShip": "+ 新しい船…"
+        "newShip": "+ 新しい船…",
+        "sailingDays": "出航曜日",
+        "sailingDaysHint": "（毎日出航する場合は空欄）",
+        "sailingDaysChosen": "{days} に出航"
       },
       "deleteModal": {
         "title": "クルーズ料金を削除",
