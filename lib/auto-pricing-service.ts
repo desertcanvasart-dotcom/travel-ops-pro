@@ -44,7 +44,7 @@ import { priceAcrossPax } from '@/lib/pricing/pax-range'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { sortByItineraryFlow } from '@/lib/pricing/breakdown-order'
 import { periodRatesFor, plainPeriodName as seasonNameOf } from '@/lib/rates/rate-seasons'
-import { ticketsValidOn, ticketWindowLabel } from '@/lib/pricing/ticket-validity'
+import { ticketsValidOn, outOfSeasonMessage, namedOutOfSeasonMessage } from '@/lib/pricing/ticket-validity'
 import { cruiseCandidates, hotelCandidates, propertyById } from '@/lib/pricing/property-candidates'
 import { choicesForTier, sanitizePropertyChoice } from '@/lib/pricing/property-choice'
 import { guideLanguageWord, sameGuideLanguage } from '@/lib/guides/guide-language'
@@ -3569,18 +3569,19 @@ export async function calculateDayBasedPricing(
 
   for (const leg of ticketLegs) {
     const routeLabel = `${leg.from} → ${leg.to}`
+    // THE DAY THIS LEG TRAVELS, not the departure date. Day 9 of a trip can sit
+    // the other side of a season boundary from day 1, and every ticket table
+    // (flights, trains, sleepers) carries rate_valid_from/rate_valid_to that
+    // nothing used to read — so a seasonal pair did not price the season, it
+    // made the leg AMBIGUOUS and left it unpriced. A sleeper's date is the
+    // night it boards, which is the leg's own day. See
+    // lib/pricing/ticket-validity.
+    const legDate = dateForDay(leg.day)
 
     if (leg.mode === 'flight') {
       const onRoute = ticketRates.flights.filter(r =>
         cityKey(r.route_from) === cityKey(leg.from) && cityKey(r.route_to) === cityKey(leg.to) &&
         /econom/i.test(String(r.cabin_class ?? 'economy')))
-      // The fare that is valid ON THE DAY THIS LEG FLIES, not the departure
-      // date — a flight on day 9 can sit the other side of a season boundary
-      // from day 1. An airline's seasons are separate ROWS (its own flight
-      // number and times), so the validity window is what picks between them.
-      // Before this the window was never read: a seasonal pair made the leg
-      // ambiguous and left it unpriced. See lib/pricing/ticket-validity.
-      const legDate = dateForDay(leg.day)
       const { valid: candidates, expired } = ticketsValidOn(onRoute, legDate)
       const pick = resolveTicketRow(candidates, leg.rateId)
       if (pick.row) {
@@ -3608,20 +3609,19 @@ export async function calculateDayBasedPricing(
         // A route whose every fare is out of season is NOT a route with no
         // fare. They send the operator to opposite places — one to the
         // contract, one to the calendar — so they are never the same sentence.
-        const outOfSeason = expired.length > 0 && candidates.length === 0
-        const namedOutOfSeason = pick.namedMissing && expired.some(r => String(r.id) === leg.rateId)
+        const namedExpired = expired.find(r => String(r.id) === leg.rateId)
         listUnpriced({ id: `day${leg.day}-ticket-flight`, dayNumber: leg.day, serviceType: 'flight', serviceName: `Domestic Flight ${routeLabel}`, isPerPax: true }, {
           kind: 'transport', reason: pick.ambiguous.length ? 'fuzzy' : 'missing',
           dayNumber: leg.day, city: leg.to,
           lookupAttempted: `flight_rates ${routeLabel} economy${legDate ? ` on ${legDate}` : ''}${leg.rateId ? ` id=${leg.rateId}` : ''}`,
-          message: namedOutOfSeason
-            ? `The flight picked for day ${leg.day} (${routeLabel}) is not sold on ${legDate} — its fare covers ${expired.filter(r => String(r.id) === leg.rateId).map(ticketWindowLabel).find(Boolean) ?? 'other dates'}. Pick the season's flight on the day.`
+          message: pick.namedMissing && namedExpired
+            ? namedOutOfSeasonMessage({ row: namedExpired, noun: 'flight', dayNumber: leg.day, routeLabel, legDate })
             : pick.namedMissing
               ? `The flight picked for day ${leg.day} (${routeLabel}) is no longer in Rates → Flights. Pick it again on the day.`
               : pick.ambiguous.length
                 ? `${pick.ambiguous.length} flights serve ${routeLabel} on ${legDate ?? 'this trip'} (${[...new Set(pick.ambiguous.map(r => r.airline))].join(', ')}). Pick the exact flight on the day.`
-                : outOfSeason
-                  ? `${expired.length === 1 ? 'The fare' : `All ${expired.length} fares`} for ${routeLabel} ${expired.length === 1 ? 'covers' : 'cover'} other dates, not ${legDate}${expired.map(ticketWindowLabel).filter(Boolean).length ? ` (${[...new Set(expired.map(ticketWindowLabel).filter(Boolean))].join(', ')})` : ''}. Add the season's fare in Rates → Flights.`
+                : expired.length > 0
+                  ? outOfSeasonMessage({ rows: expired, routeLabel, legDate, addWhere: 'Rates → Flights' })
                   : `No economy flight rate for ${routeLabel}. Add it in Rates → Flights.`,
         })
       }
@@ -3629,8 +3629,9 @@ export async function calculateDayBasedPricing(
     }
 
     if (leg.mode === 'train') {
-      const candidates = ticketRates.trains.filter(r =>
+      const onRoute = ticketRates.trains.filter(r =>
         cityKey(r.origin_city) === cityKey(leg.from) && cityKey(r.destination_city) === cityKey(leg.to))
+      const { valid: candidates, expired } = ticketsValidOn(onRoute, legDate)
       const pick = resolveTicketRow(candidates, leg.rateId)
       if (pick.row) {
         const fare = money(pick.row.rate_eur)
@@ -3654,15 +3655,20 @@ export async function calculateDayBasedPricing(
           })
         }
       } else {
+        const namedExpired = expired.find(r => String(r.id) === leg.rateId)
         listUnpriced({ id: `day${leg.day}-ticket-train`, dayNumber: leg.day, serviceType: 'transportation', serviceName: `Train ${routeLabel}`, isPerPax: true }, {
           kind: 'transport', reason: pick.ambiguous.length ? 'fuzzy' : 'missing',
           dayNumber: leg.day, city: leg.to,
-          lookupAttempted: `train_rates ${routeLabel}${leg.rateId ? ` id=${leg.rateId}` : ''}`,
-          message: pick.namedMissing
-            ? `The train picked for day ${leg.day} (${routeLabel}) is no longer in Rates → Trains. Pick it again on the day.`
-            : pick.ambiguous.length
-              ? `${pick.ambiguous.length} trains serve ${routeLabel} (${[...new Set(pick.ambiguous.map(r => r.operator_name || r.class_type || r.service_code))].join(', ')}). Pick the exact train on the day.`
-              : `No train rate for ${routeLabel}. Add it in Rates → Trains.`,
+          lookupAttempted: `train_rates ${routeLabel}${legDate ? ` on ${legDate}` : ''}${leg.rateId ? ` id=${leg.rateId}` : ''}`,
+          message: pick.namedMissing && namedExpired
+            ? namedOutOfSeasonMessage({ row: namedExpired, noun: 'train', dayNumber: leg.day, routeLabel, legDate })
+            : pick.namedMissing
+              ? `The train picked for day ${leg.day} (${routeLabel}) is no longer in Rates → Trains. Pick it again on the day.`
+              : pick.ambiguous.length
+                ? `${pick.ambiguous.length} trains serve ${routeLabel} on ${legDate ?? 'this trip'} (${[...new Set(pick.ambiguous.map(r => r.operator_name || r.class_type || r.service_code))].join(', ')}). Pick the exact train on the day.`
+                : expired.length > 0
+                  ? outOfSeasonMessage({ rows: expired, routeLabel, legDate, addWhere: 'Rates → Trains' })
+                  : `No train rate for ${routeLabel}. Add it in Rates → Trains.`,
         })
       }
       continue
@@ -3672,15 +3678,28 @@ export async function calculateDayBasedPricing(
     // sharing route, supplier and validity; the group of two pax shares Half
     // Twins, a solo traveller takes a Single (the rooming rule, via
     // accommodationNights), and the guide sleeps in a Single.
-    const routeRows = ticketRates.sleepers.filter(r =>
+    //
+    // The date is applied to the CABIN ROWS, before they are grouped into
+    // trains. A season's pair is two rows, and grouping first would leave a
+    // summer Half Twin and a winter Single looking like one train with an odd
+    // Single supplement. The night priced is the one it BOARDS, which is this
+    // leg's own day — the traveller buys the bed on the night they get on.
+    const onRoute = ticketRates.sleepers.filter(r =>
       cityKey(r.origin_city) === cityKey(leg.from) && cityKey(r.destination_city) === cityKey(leg.to))
+    const { valid: routeRows, expired } = ticketsValidOn(onRoute, legDate)
+    // validity stays in the key: two SUPPLIERS can sell the same window, and
+    // the same supplier can re-issue a contract mid-season.
     const trainKey = (r: Record<string, any>) => `${r.supplier_id ?? r.operator_name ?? ''}|${r.rate_valid_from ?? ''}`
     let chosenKey: string | null = null
     let namedMissing = false
+    let namedExpired: Record<string, any> | undefined
     if (leg.rateId) {
       const named = routeRows.find(r => String(r.id) === leg.rateId)
       if (named) chosenKey = trainKey(named)
-      else namedMissing = true
+      else {
+        namedMissing = true
+        namedExpired = expired.find(r => String(r.id) === leg.rateId)
+      }
     } else {
       const keys = [...new Set(routeRows.map(trainKey))]
       if (keys.length === 1) chosenKey = keys[0]
@@ -3721,12 +3740,16 @@ export async function calculateDayBasedPricing(
       listUnpriced({ id: `day${leg.day}-ticket-sleeper`, dayNumber: leg.day, serviceType: 'transportation', serviceName: `Sleeping Train ${routeLabel}`, isPerPax: true }, {
         kind: 'transport', reason: chosenKey === null && routeRows.length > 0 && !namedMissing ? 'fuzzy' : 'missing',
         dayNumber: leg.day, city: leg.to,
-        lookupAttempted: `sleeping_train_rates ${routeLabel}${leg.rateId ? ` id=${leg.rateId}` : ''}`,
-        message: namedMissing
-          ? `The sleeping train picked for day ${leg.day} (${routeLabel}) is no longer in Rates → Sleeping Trains. Pick it again on the day.`
-          : chosenKey === null && routeRows.length > 0
-            ? `${[...new Set(routeRows.map(trainKey))].length} sleeping trains serve ${routeLabel} (${trainNames.join(', ')}). Pick the exact train on the day.`
-            : `No Half Twin sleeping-train rate for ${routeLabel}. Add it in Rates → Sleeping Trains.`,
+        lookupAttempted: `sleeping_train_rates ${routeLabel}${legDate ? ` on ${legDate}` : ''}${leg.rateId ? ` id=${leg.rateId}` : ''}`,
+        message: namedExpired
+          ? namedOutOfSeasonMessage({ row: namedExpired, noun: 'sleeping train', dayNumber: leg.day, routeLabel, legDate })
+          : namedMissing
+            ? `The sleeping train picked for day ${leg.day} (${routeLabel}) is no longer in Rates → Sleeping Trains. Pick it again on the day.`
+            : chosenKey === null && routeRows.length > 0
+              ? `${[...new Set(routeRows.map(trainKey))].length} sleeping trains serve ${routeLabel} on ${legDate ?? 'this trip'} (${trainNames.join(', ')}). Pick the exact train on the day.`
+              : routeRows.length === 0 && expired.length > 0
+                ? outOfSeasonMessage({ rows: expired, routeLabel, legDate, addWhere: 'Rates → Sleeping Trains' })
+                : `No Half Twin sleeping-train rate for ${routeLabel}. Add it in Rates → Sleeping Trains.`,
       })
     }
   }

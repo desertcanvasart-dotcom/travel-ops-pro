@@ -97,3 +97,52 @@ export function ticketWindowLabel(row: DatedTicketRow): string | null {
   if (to) return `until ${to}`
   return null
 }
+
+// ── What to tell the operator when the date ruled everything out ──────────
+// Three legs (flight, train, sleeper) reach the same two dead ends, and the
+// sentences have to stay identical in shape or the same situation reads as two
+// different problems depending on which ticket it happened to.
+
+/**
+ * "Nobody sells this route on this date" — as distinct from "nobody sells this
+ * route", which is what the engine used to say for both.
+ *
+ * The two send the operator to opposite places: this one to the calendar, the
+ * other to the contract. Naming the windows that WERE found is most of the
+ * value — it turns "add a fare" into "your fare stops on 30 September".
+ */
+export function outOfSeasonMessage(opts: {
+  rows: DatedTicketRow[]
+  routeLabel: string
+  legDate: string | null
+  /** Where the operator goes to fix it, e.g. 'Rates → Flights'. */
+  addWhere: string
+}): string {
+  const { rows, routeLabel, legDate, addWhere } = opts
+  const windows = [...new Set(rows.map(ticketWindowLabel).filter(Boolean))]
+  const subject = rows.length === 1 ? 'The fare' : `All ${rows.length} fares`
+  const verb = rows.length === 1 ? 'covers' : 'cover'
+  const found = windows.length ? ` (${windows.join(', ')})` : ''
+  return `${subject} for ${routeLabel} ${verb} other dates, not ${legDate}${found}. Add the season's fare in ${addWhere}.`
+}
+
+/**
+ * A stored pick that the date has left behind.
+ *
+ * THE dangerous case: move a sold trip six months and a resolver that honoured
+ * the pick would quietly charge the old season's price. So it is a hole, and
+ * the hole says which window the picked ticket actually covers rather than
+ * implying it was deleted.
+ */
+export function namedOutOfSeasonMessage(opts: {
+  row: DatedTicketRow
+  /** 'flight', 'train', 'sleeping train' — used in both halves of the sentence. */
+  noun: string
+  dayNumber: number
+  routeLabel: string
+  legDate: string | null
+}): string {
+  const { row, noun, dayNumber, routeLabel, legDate } = opts
+  const window = ticketWindowLabel(row) ?? 'other dates'
+  return `The ${noun} picked for day ${dayNumber} (${routeLabel}) is not sold on ${legDate} — its fare covers ${window}. Pick the season's ${noun} on the day.`
+}

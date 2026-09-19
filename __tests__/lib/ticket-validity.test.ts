@@ -12,6 +12,8 @@ import {
   ticketValidOn,
   ticketsValidOn,
   ticketWindowLabel,
+  outOfSeasonMessage,
+  namedOutOfSeasonMessage,
 } from '@/lib/pricing/ticket-validity'
 
 const summer = { id: 's', airline: 'MS', rate_valid_from: '2026-06-01', rate_valid_to: '2026-09-30' }
@@ -110,18 +112,59 @@ describe('ticketWindowLabel', () => {
   })
 })
 
+describe('what the operator is told', () => {
+  // Three legs reach the same two dead ends. The sentences stay identical in
+  // shape, or the same situation reads as two different problems depending on
+  // which kind of ticket it happened to.
+  it('names the windows it DID find, so "add a fare" becomes "your fare stops on 30 September"', () => {
+    expect(outOfSeasonMessage({ rows: [summer], routeLabel: 'Cairo → Luxor', legDate: '2026-05-01', addWhere: 'Rates → Flights' }))
+      .toBe('The fare for Cairo → Luxor covers other dates, not 2026-05-01 (2026-06-01 – 2026-09-30). Add the season\u2019s fare in Rates → Flights.'.replace('\u2019', "'"))
+  })
+
+  it('counts and agrees its verb', () => {
+    const many = outOfSeasonMessage({ rows: [summer, winter], routeLabel: 'Cairo → Luxor', legDate: '2026-05-01', addWhere: 'Rates → Trains' })
+    expect(many).toContain('All 2 fares for Cairo → Luxor cover other dates')
+    expect(many).toContain('2026-06-01 – 2026-09-30, 2026-10-01 – 2027-03-31')
+    expect(many).toContain('Rates → Trains')
+  })
+
+  it('says nothing about windows when the rows carry none', () => {
+    const m = outOfSeasonMessage({ rows: [{}], routeLabel: 'A → B', legDate: '2026-05-01', addWhere: 'Rates → Flights' })
+    expect(m).toContain('covers other dates, not 2026-05-01.')
+  })
+
+  it('a stale pick is told which season it belongs to, not that it was deleted', () => {
+    const m = namedOutOfSeasonMessage({ row: summer, noun: 'sleeping train', dayNumber: 3, routeLabel: 'Giza → Luxor', legDate: '2026-12-04' })
+    expect(m).toContain('The sleeping train picked for day 3 (Giza → Luxor) is not sold on 2026-12-04')
+    expect(m).toContain('its fare covers 2026-06-01 – 2026-09-30')
+    expect(m).not.toMatch(/no longer in Rates/)
+  })
+})
+
 describe('the engine reads the window', () => {
   const src = readFileSync(join(process.cwd(), 'lib/auto-pricing-service.ts'), 'utf8')
 
-  it('filters a flight leg by the date it flies', () => {
-    expect(src).toContain('ticketsValidOn(onRoute, legDate)')
-    // The date of THAT LEG, not the departure — a flight on day 9 can sit the
-    // other side of a season boundary from day 1.
+  it('filters every ticket leg by the date it travels', () => {
+    // Flights, day trains and sleepers all carry rate_valid_from/to, and all
+    // three were unread. One date, one filter, at the top of the leg loop.
+    expect(src.match(/ticketsValidOn\(/g) ?? []).toHaveLength(3)
     expect(src).toMatch(/const legDate = dateForDay\(leg\.day\)/)
   })
 
-  it('tells an out-of-season route apart from a route with no fare', () => {
-    expect(src).toContain('const outOfSeason =')
-    expect(src).toContain('namedOutOfSeason')
+  it('filters a sleeper\u2019s cabin rows BEFORE grouping them into trains', () => {
+    // A season's pair is two rows. Grouping first would leave a summer Half
+    // Twin and a winter Single looking like one train with an odd supplement.
+    const sleeper = src.slice(src.indexOf('Sleeping train. One TRAIN'))
+    expect(sleeper.indexOf('ticketsValidOn(onRoute, legDate)')).toBeLessThan(sleeper.indexOf('const trainKey ='))
+  })
+
+  it('tells an out-of-season route apart from a route with no fare, on all three', () => {
+    // One sentence per dead end, shared — so the same situation does not read
+    // as two different problems depending on the kind of ticket.
+    expect(src.match(/outOfSeasonMessage\(\{/g) ?? []).toHaveLength(3)
+    expect(src.match(/namedOutOfSeasonMessage\(\{/g) ?? []).toHaveLength(3)
+    for (const where of ['Rates → Flights', 'Rates → Trains', 'Rates → Sleeping Trains']) {
+      expect(src).toContain(`addWhere: '${where}'`)
+    }
   })
 })

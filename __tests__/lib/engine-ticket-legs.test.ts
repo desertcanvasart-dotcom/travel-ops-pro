@@ -199,8 +199,52 @@ describe('day-train legs', () => {
     const named = await calculateAutoPricing(BASE)
     expect(line(named, 'day2-ticket-train')).toMatchObject({ unitCost: 90 })
   })
-})
 
+  // ============================================
+  // A SEASONAL PAIR — the fare valid on the day it travels
+  // ============================================
+  // train_rates carries rate_valid_from/to just as flights do, and it was just
+  // as unread: two seasonal rows on one route were two candidates, so the leg
+  // was ambiguous and went unpriced on every date of the year.
+  const seasonalTrains = () => [
+    { id: 'tr-sum', origin_city: 'Cairo', destination_city: 'Luxor', class_type: 'First Class', operator_name: 'Watania', rate_eur: 75, guide_rate: 30, rate_valid_from: '2026-06-01', rate_valid_to: '2026-09-30', is_active: true },
+    { id: 'tr-win', origin_city: 'Cairo', destination_city: 'Luxor', class_type: 'First Class', operator_name: 'Watania', rate_eur: 95, guide_rate: 40, rate_valid_from: '2026-10-01', rate_valid_to: '2027-03-31', is_active: true },
+  ]
+
+  const seasonalTrainDays = (over: Record<string, unknown> = {}) => {
+    const t = withDays([day(1, 'Cairo'), day(2, 'Luxor', { transport_type: 'train', ...over })])
+    t.train_rates = seasonalTrains()
+    return t
+  }
+
+  it('prices each departure at its own season, where it used to be ambiguous', async () => {
+    setMockTables(seasonalTrainDays())
+    const summer = await calculateAutoPricing({ ...BASE, travelDate: '2026-07-14' })
+    expect(line(summer, 'day2-ticket-train')).toMatchObject({ unitCost: 75 })
+    expect(legHoles(summer)).toEqual([])
+
+    setMockTables(seasonalTrainDays())
+    const winter = await calculateAutoPricing({ ...BASE, travelDate: '2026-12-04' })
+    expect(line(winter, 'day2-ticket-train')).toMatchObject({ unitCost: 95 })
+    expect(legHoles(winter)).toEqual([])
+  })
+
+  it('a route whose fares all cover other dates says SO, not "no train rate"', async () => {
+    setMockTables(seasonalTrainDays())
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-05-01' })
+    const message = legHoles(r)[0]?.message ?? ''
+    expect(message).toMatch(/cover other dates, not 2026-05-02/)
+    expect(message).toMatch(/Rates → Trains/)
+    expect(message).not.toMatch(/No train rate for/)
+  })
+
+  it('a pick left behind by a moved departure is a hole, never last season\u2019s fare', async () => {
+    setMockTables(seasonalTrainDays({ transport_rate_id: 'tr-sum' }))
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-12-04' })
+    expect(line(r, 'day2-ticket-train')).toMatchObject({ unpriced: true, unitCost: 0 })
+    expect(legHoles(r)[0]?.message ?? '').toMatch(/is not sold on 2026-12-05/)
+  })
+})
 describe('sleeping-train legs', () => {
   const sleeperDays = [
     day(1, 'Cairo', { transport_type: 'sleeping_train', overnight_kind: 'train' }),
@@ -229,5 +273,81 @@ describe('sleeping-train legs', () => {
     setMockTables(t)
     const r = await calculateAutoPricing(BASE)
     expect(legHoles(r).some((h: any) => /Sleeping Trains/.test(h.message))).toBe(true)
+  })
+
+  // ============================================
+  // TWO SEASONS OF ONE TRAIN — a pair of pairs
+  // ============================================
+  // A sleeping train is a PAIR of cabin rows, grouped by supplier|validity. A
+  // seasonal contract therefore doubles that to four rows and two groups, so
+  // the leg was ambiguous — "2 sleeping trains serve Cairo → Luxor" — on every
+  // date of the year. The date is applied to the cabin ROWS before they are
+  // grouped, so the season's pair is the only one left to group.
+  const seasonalSleepers = () => [
+    { id: 'sl-sum-ht', origin_city: 'Giza', destination_city: 'Luxor', cabin_type: 'Half Twin', operator_name: 'Watania', supplier_id: 'sup-w', rate_oneway_eur: 120, guide_rate: null, rate_valid_from: '2026-06-01', rate_valid_to: '2026-09-30', is_active: true },
+    { id: 'sl-sum-sg', origin_city: 'Giza', destination_city: 'Luxor', cabin_type: 'Single', operator_name: 'Watania', supplier_id: 'sup-w', rate_oneway_eur: 170, guide_rate: 90, rate_valid_from: '2026-06-01', rate_valid_to: '2026-09-30', is_active: true },
+    { id: 'sl-win-ht', origin_city: 'Giza', destination_city: 'Luxor', cabin_type: 'Half Twin', operator_name: 'Watania', supplier_id: 'sup-w', rate_oneway_eur: 150, guide_rate: null, rate_valid_from: '2026-10-01', rate_valid_to: '2027-03-31', is_active: true },
+    { id: 'sl-win-sg', origin_city: 'Giza', destination_city: 'Luxor', cabin_type: 'Single', operator_name: 'Watania', supplier_id: 'sup-w', rate_oneway_eur: 210, guide_rate: 110, rate_valid_from: '2026-10-01', rate_valid_to: '2027-03-31', is_active: true },
+  ]
+
+  const seasonalSleeperDays = (over: Record<string, unknown> = {}) => {
+    const t = withDays([
+      day(1, 'Cairo', { transport_type: 'sleeping_train', overnight_kind: 'train', ...over }),
+      day(2, 'Luxor'),
+    ])
+    t.sleeping_train_rates = seasonalSleepers()
+    return t
+  }
+
+  it('groups the season\u2019s pair, not both seasons\u2019 cabins', async () => {
+    setMockTables(seasonalSleeperDays())
+    const summer = await calculateAutoPricing({ ...BASE, travelDate: '2026-07-14' })
+    expect(line(summer, 'day1-ticket-sleeper')).toMatchObject({ unitCost: 120 })
+    // The Single gap comes from the SAME season — 170 − 120, never 210 − 120.
+    expect((summer.accommodationNights ?? []).some((n: any) => n.ppd === 120 && n.singleSupp === 50)).toBe(true)
+    expect(legHoles(summer)).toEqual([])
+
+    setMockTables(seasonalSleeperDays())
+    const winter = await calculateAutoPricing({ ...BASE, travelDate: '2026-12-04' })
+    expect(line(winter, 'day1-ticket-sleeper')).toMatchObject({ unitCost: 150 })
+    expect((winter.accommodationNights ?? []).some((n: any) => n.ppd === 150 && n.singleSupp === 60)).toBe(true)
+    expect(legHoles(winter)).toEqual([])
+  })
+
+  it('the throughout guide takes the Single of the season he travels in', async () => {
+    setMockTables(seasonalSleeperDays())
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-12-04', guideMode: 'throughout' })
+    expect(line(r, 'day1-guide-ticket')).toMatchObject({ unitCost: 110 })
+  })
+
+  it('prices the night it BOARDS, not the night it arrives', async () => {
+    // Boarding 30 September, arriving 1 October: the bed was bought on the
+    // 30th, so it is the summer fare.
+    setMockTables(seasonalSleeperDays())
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-09-30' })
+    expect(line(r, 'day1-ticket-sleeper')).toMatchObject({ unitCost: 120 })
+  })
+
+  it('a route whose cabins all cover other dates says SO', async () => {
+    setMockTables(seasonalSleeperDays())
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-05-01' })
+    const message = legHoles(r)[0]?.message ?? ''
+    expect(message).toMatch(/cover other dates, not 2026-05-01/)
+    expect(message).toMatch(/Rates → Sleeping Trains/)
+    expect(message).not.toMatch(/No Half Twin sleeping-train rate/)
+  })
+
+  it('a pick left behind by a moved departure is a hole, never last season\u2019s bed', async () => {
+    setMockTables(seasonalSleeperDays({ transport_rate_id: 'sl-sum-ht' }))
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-12-04' })
+    expect(line(r, 'day1-ticket-sleeper')).toMatchObject({ unpriced: true, unitCost: 0 })
+    expect(legHoles(r)[0]?.message ?? '').toMatch(/sleeping train picked for day 1 .* is not sold on 2026-12-04/)
+  })
+
+  it('leaves an open-ended catalogue priced exactly as before', async () => {
+    setMockTables(withDays(sleeperDays))
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-12-04' })
+    expect(line(r, 'day1-ticket-sleeper')).toMatchObject({ unitCost: 120 })
+    expect(legHoles(r)).toEqual([])
   })
 })
