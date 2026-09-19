@@ -18,10 +18,7 @@ export async function GET(
 
     const { data, error } = await supabase
       .from('hotel_staff')
-      .select(`
-        *,
-        hotel:hotel_contacts(id, name, city)
-      `)
+      .select('*')
       .eq('id', id)
       .single()
 
@@ -73,10 +70,7 @@ export async function PUT(
       .from('hotel_staff')
       .update(updateData)
       .eq('id', id)
-      .select(`
-        *,
-        hotel:hotel_contacts(id, name, city)
-      `)
+      .select('*')
       .single()
 
     if (error) {

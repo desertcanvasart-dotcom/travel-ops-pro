@@ -1,20 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { createClient } from '@supabase/supabase-js'
-import { google } from 'googleapis'
-import { refreshAccessToken } from '@/lib/gmail'
+import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { getCurrentUserId } from '@/lib/auth/current-org'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
-)
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,34 +17,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const { data: tokenData, error: tokenError } = await supabase
-      .from('gmail_tokens')
-      .select('*')
-      .eq('user_id', userId)
-      .single()
-
-    if (tokenError || !tokenData) {
-      return NextResponse.json({ error: 'Gmail not connected' }, { status: 401 })
-    }
-
-    const { refresh_token, token_expiry } = tokenData
-    let { access_token } = tokenData
-
-    if (new Date(token_expiry) <= new Date()) {
-      const newTokens = await refreshAccessToken(refresh_token)
-      access_token = newTokens.access_token!
-
-      await supabase
-        .from('gmail_tokens')
-        .update({
-          access_token: newTokens.access_token,
-          token_expiry: new Date(newTokens.expiry_date || Date.now() + 3600000).toISOString(),
-        })
-        .eq('user_id', userId)
-    }
-
-    oauth2Client.setCredentials({ access_token, refresh_token })
-    const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
+    // Tokens are stored ENCRYPTED. This route used to read gmail_tokens itself
+    // and hand the ciphertext straight to Google, which answered invalid_grant
+    // — so every delete, archive, star and mark-read 500'd with "Internal
+    // server error" while the inbox listing (which goes through this helper)
+    // worked fine. getAuthenticatedGmail decrypts at the boundary and handles
+    // the expiry refresh, and is the ONE way this codebase talks to Gmail.
+    const { gmail } = await getAuthenticatedGmail(userId)
 
     const ids = Array.isArray(messageIds) ? messageIds : [messageIds]
 
@@ -182,6 +148,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true })
   } catch (err: any) {
     console.error('Email action error:', err)
+    // A mailbox that needs reconnecting is not a server fault, and telling the
+    // operator "Internal server error" sends them looking in the wrong place.
+    if (err instanceof GmailAuthError) {
+      return NextResponse.json({ error: err.message }, { status: 401 })
+    }
     return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 500 })
   }
 }

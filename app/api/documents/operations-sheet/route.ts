@@ -14,7 +14,8 @@ import { orgAuth } from '@/lib/auth/org-auth'
 import { clientMessage } from '@/lib/api-errors'
 import { getTemplate } from '@/lib/documents/registry'
 import { renderHtmlToPdf } from '@/lib/documents/render'
-import { assembleOperationsSheet } from '@/lib/documents/assemble-operations-sheet'
+import { assembleOperationsSheet, applyDayLanguageVersions } from '@/lib/documents/assemble-operations-sheet'
+import type { DayLanguageVersion } from '@/lib/documents/assemble-operations-sheet'
 import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
 import type { OperationsSheetContext, StaffContact } from '@/lib/documents/types'
 
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
       // ONE static literal. supabase-js parses the select string at the type
       // level, and a concatenated or interpolated one degrades to
       // GenericStringError[] — see the lesson in PR #38.
-      .select('day_number, date, city, title, description, overnight_city, attractions, lunch_included, dinner_included, hotel_included, flight_from, hotel_check_in, hotel_check_out')
+      .select('id, day_number, date, city, title, description, overnight_city, attractions, lunch_included, dinner_included, hotel_included, flight_from, hotel_check_in, hotel_check_out')
       .eq('itinerary_id', itineraryId)
       .order('day_number', { ascending: true })
 
@@ -78,6 +79,37 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // ============================================
+    // The ground team reads this sheet, so it is written in THEIR language
+    // ============================================
+    // The office writes an itinerary in the language it sells in — for the
+    // Tokyo desk that is Japanese, and the canonical itinerary_days rows are
+    // Japanese with it. That is the right text for the customer's 日程表 and
+    // the wrong text for Cairo: the ground team was handed a sheet of
+    // instructions it cannot read.
+    //
+    // Translations already exist as itinerary_day_versions rows, one per
+    // language, created by the itinerary's language tab (Copy & Translate).
+    // This reads the requested one — English by default, because that is who
+    // this document is for — and lets it override the canonical row, the same
+    // precedence /api/itineraries/[id]/days applies. A day with no version in
+    // that language keeps its canonical text rather than being blanked: a line
+    // in the wrong language is still an instruction, and a missing one is not.
+    const language = params.get('language') || 'en'
+    const dayIds = (days ?? []).map(d => d.id)
+    const { data: dayVersions } = dayIds.length > 0
+      ? await supabase
+          .from('itinerary_day_versions')
+          .select('itinerary_day_id, title, description, city, overnight_city')
+          .in('itinerary_day_id', dayIds)
+          .eq('language', language)
+      : { data: [] }
+
+    const translatedDays = applyDayLanguageVersions(
+      days ?? [],
+      (dayVersions ?? []) as DayLanguageVersion[]
+    )
+
     const guides: StaffContact[] = [
       { role: 'CAI. GUIDE', name: params.get('cairo_guide'), mobile: params.get('cairo_mobile') },
       { role: 'UPP. GUIDE', name: params.get('upper_guide'), mobile: params.get('upper_mobile') },
@@ -85,7 +117,7 @@ export async function GET(request: NextRequest) {
 
     const context: OperationsSheetContext = assembleOperationsSheet({
       itinerary,
-      days: days ?? [],
+      days: translatedDays,
       overrides: {
         file_no: params.get('file_no'),
         group_ref: params.get('group_ref'),

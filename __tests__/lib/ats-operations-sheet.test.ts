@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  applyDayLanguageVersions,
   assembleOperationsSheet,
   cityCode,
   type SourceDay,
@@ -289,5 +290,87 @@ describe('atsOperationsSheet template', () => {
     )
     expect(src).toContain("getJapaneseFontFace")
     expect(src).toMatch(/font_face_css:\s*await getJapaneseFontFace\(\)/)
+  })
+})
+
+// ============================================
+// The sheet is written in the GROUND TEAM's language
+// ============================================
+// Operator, 2026-09-19: the sheet came out in Japanese. It is read in Cairo.
+// The canonical itinerary_days rows carry the language the office sold in;
+// itinerary_day_versions carries the translations. The sheet takes the
+// version, English by default.
+describe('applyDayLanguageVersions', () => {
+  const day = (id: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    day_number: 1,
+    date: '2026-12-06',
+    city: 'カイロ',
+    title: 'ナイルクルーズ',
+    description: 'ホテルで朝食',
+    overnight_city: 'ルクソール',
+    ...extra,
+  })
+
+  it('lets the requested language override the canonical text', () => {
+    const [merged] = applyDayLanguageVersions(
+      [day('d1')],
+      [{
+        itinerary_day_id: 'd1',
+        title: 'Nile Cruise',
+        description: 'Breakfast at the hotel',
+        city: 'Cairo',
+        overnight_city: 'Luxor',
+      }]
+    )
+    expect(merged.title).toBe('Nile Cruise')
+    expect(merged.description).toBe('Breakfast at the hotel')
+    expect(merged.city).toBe('Cairo')
+    expect(merged.overnight_city).toBe('Luxor')
+  })
+
+  it('keeps the canonical text for a day with no version', () => {
+    // An instruction in the wrong language is still an instruction. A blank
+    // line is a day the ground team drives into with nothing.
+    const [merged] = applyDayLanguageVersions([day('d1')], [])
+    expect(merged.title).toBe('ナイルクルーズ')
+    expect(merged.description).toBe('ホテルで朝食')
+  })
+
+  it('shows the canonical text through a version field that is empty', () => {
+    const [merged] = applyDayLanguageVersions(
+      [day('d1')],
+      [{
+        itinerary_day_id: 'd1',
+        title: 'Nile Cruise',
+        description: null,
+        city: '',
+        overnight_city: null,
+      }]
+    )
+    expect(merged.title).toBe('Nile Cruise')
+    expect(merged.description).toBe('ホテルで朝食')
+    expect(merged.city).toBe('カイロ')
+  })
+
+  it('matches versions by day, never by position', () => {
+    const merged = applyDayLanguageVersions(
+      [day('d1'), day('d2', { title: 'X' })],
+      [{ itinerary_day_id: 'd2', title: 'Second day', description: null, city: null, overnight_city: null }]
+    )
+    expect(merged[0].title).toBe('ナイルクルーズ')
+    expect(merged[1].title).toBe('Second day')
+  })
+
+  it('the route asks for English by default and reads the version table', () => {
+    const src = readFileSync(
+      join(process.cwd(), 'app/api/documents/operations-sheet/route.ts'),
+      'utf8'
+    )
+    expect(src).toContain('itinerary_day_versions')
+    expect(src).toMatch(/params\.get\('language'\) \|\| 'en'/)
+    expect(src).toContain('applyDayLanguageVersions')
+    // The merged days are what the sheet renders — not the raw rows.
+    expect(src).toMatch(/days:\s*translatedDays/)
   })
 })
