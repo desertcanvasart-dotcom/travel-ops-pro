@@ -129,4 +129,11 @@ export interface OperationsSheetContext {
   // --- programme ---
   days: OperationsSheetDay[]
   hotels: OperationsSheetHotel[]
+
+  /** @font-face CSS for NotoSansJP, embedded into the document's <style>.
+   *  The day text on this sheet is written by the Tokyo office in Japanese,
+   *  and the deploy container ships no CJK system font — without this every
+   *  Japanese line prints as tofu boxes. Empty string is valid (tests,
+   *  preview); the template then falls back to the system stack. */
+  font_face_css: string
 }

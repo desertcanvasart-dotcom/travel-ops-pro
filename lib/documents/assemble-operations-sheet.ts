@@ -61,6 +61,9 @@ export interface AssembleInput {
     departure_flight?: string | null
     guides?: StaffContact[]
     hotels?: OperationsSheetHotel[]
+    /** @font-face CSS for NotoSansJP. Read from disk by the route, never
+     *  here: this function stays pure so a sheet can be asserted as a string. */
+    font_face_css?: string
   }
 }
 
@@ -156,6 +159,7 @@ export function assembleOperationsSheet(input: AssembleInput): OperationsSheetCo
     guides: overrides.guides ?? [],
     days: mappedDays,
     hotels,
+    font_face_css: overrides.font_face_css ?? '',
   }
 }
 

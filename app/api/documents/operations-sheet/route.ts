@@ -15,6 +15,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { getTemplate } from '@/lib/documents/registry'
 import { renderHtmlToPdf } from '@/lib/documents/render'
 import { assembleOperationsSheet } from '@/lib/documents/assemble-operations-sheet'
+import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
 import type { OperationsSheetContext, StaffContact } from '@/lib/documents/types'
 
 const TEMPLATE_SLUG = 'ats-operations-sheet'
@@ -96,6 +97,10 @@ export async function GET(request: NextRequest) {
         arrival_flight: params.get('arrival_flight'),
         departure_flight: params.get('departure_flight'),
         guides,
+        // The day text on this sheet is the office's own Japanese. The deploy
+        // container ships no CJK system font, so the font has to travel inside
+        // the document or every one of those lines prints as tofu boxes.
+        font_face_css: await getJapaneseFontFace(),
       },
     })
 
