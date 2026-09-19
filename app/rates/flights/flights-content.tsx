@@ -3,6 +3,8 @@
 import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import AirportOptions, { useAirports } from '@/app/components/AirportOptions'
+import RateSeasonsEditor from '@/components/rates/RateSeasonsEditor'
+import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
 import { useDestinationCities } from '@/app/components/useDestinationCities'
 import { flightTypeForRoute } from '@/lib/rates/flight-type'
 import { firstInvalidMessage } from '@/lib/form-guard'
@@ -57,6 +59,8 @@ interface FlightRate {
   season: string | null
   rate_currency?: string | null
   rate_valid_from: string
+  /** Dated rate periods — the authority. The columns above mirror the FIRST. */
+  seasons: RateSeason[]
   rate_valid_to: string
   supplier_id: string | null
   supplier_name: string | null
@@ -96,6 +100,8 @@ interface FormData {
   rate_currency: string
   rate_valid_from: string
   rate_valid_to: string
+  /** Dated rate periods — what the form actually edits. */
+  seasons: RateSeason[]
   supplier_id: string
   supplier_name: string
   /** Two-letter IATA code, on the rate row. Prefilled from the airline's
@@ -124,6 +130,7 @@ const initialFormData: FormData = {
   season: '',
   rate_currency: '',
   rate_valid_from: todayLocal(),
+  seasons: [],
   rate_valid_to: '2099-12-31',
   supplier_id: '',
   supplier_name: '',
@@ -383,6 +390,7 @@ export default function FlightsContent() {
       season: rate.season || '',
       rate_currency: rate.rate_currency || '',
       rate_valid_from: rate.rate_valid_from,
+      seasons: seasonsForRow(rate, 'flight'),
       rate_valid_to: rate.rate_valid_to,
       // A rate saved before the airline was a supplier has a name and no
       // link: point it at the carrier of that name, if one is on file now.
@@ -457,7 +465,8 @@ export default function FlightsContent() {
         arrival_time: formData.arrival_time || null,
         duration_minutes: formData.duration_minutes || null,
         baggage_kg: formData.baggage_kg || null,
-        season: formData.season || null,
+        season: formData.seasons[0]?.season || null,
+        seasons: formData.seasons,
         notes: formData.notes || null
       }
       
@@ -1283,51 +1292,20 @@ export default function FlightsContent() {
                 </div>
               </div>
 
-              {/* Validity */}
+              {/* Validity — dated periods, the way a hotel's rate card works.
+                  This was ONE window plus a hardcoded Low/High/Peak dropdown,
+                  so a route sold across four seasons meant four near-identical
+                  rows, and no agency outside Egypt could call a season
+                  "Golden Week". The shared editor takes the season word from
+                  Settings → Vocabulary → Rate seasons. */}
               <div className="space-y-4">
                 <h3 className="text-sm font-medium text-gray-700 border-b pb-2">{t('validitySection')}</h3>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('season')}
-                    </label>
-                    <select
-                      value={formData.season}
-                      onChange={(e) => setFormData(prev => ({ ...prev, season: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    >
-                      <option value="">{t('allYear')}</option>
-                      <option value="high_season">{t('highSeason')}</option>
-                      <option value="low_season">{t('lowSeason')}</option>
-                      <option value="peak">{t('peak')}</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('validFrom')}
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.rate_valid_from}
-                      onChange={(e) => setFormData(prev => ({ ...prev, rate_valid_from: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('validTo')}
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.rate_valid_to}
-                      onChange={(e) => setFormData(prev => ({ ...prev, rate_valid_to: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    />
-                  </div>
-                </div>
+                <RateSeasonsEditor
+                  entity="flight"
+                  seasons={formData.seasons}
+                  currency={rateCurrency}
+                  onChange={(seasons) => setFormData(prev => ({ ...prev, seasons }))}
+                />
               </div>
 
               {/* Additional Info */}

@@ -107,15 +107,20 @@ const RATE_LABELS: Record<string, string> = {
   // The property's special per-night rate for a throughout guide ("+1") —
   // one number, no passport split. Blank prices as a hole, never a free bed.
   guide_rate: 'Guide Bed / Night',
+  // Flights: the fare and its tax, per passport group.
+  base_rate_eur: 'Fare (EU passport)',
+  tax_eur: 'Tax (EU passport)',
+  base_rate_non_eur: 'Fare (non-EU passport)',
+  tax_non_eur: 'Tax (non-EU passport)',
 }
 
 export interface PeriodSheetConfig {
   entity: RateSeasonEntity
-  table: 'accommodation_rates' | 'nile_cruises'
+  table: 'accommodation_rates' | 'nile_cruises' | 'flight_rates'
   /** The column that identifies the rate — the same key the wide CSV upserts on. */
   keyColumn: 'service_code' | 'cruise_code'
   /** Column carrying the human-readable name, for the operator's eye only. */
-  displayColumn: 'property_name' | 'ship_name'
+  displayColumn: 'property_name' | 'ship_name' | 'route_name'
   columns: PeriodColumn[]
 }
 
@@ -138,6 +143,16 @@ export const PERIOD_SHEETS: Record<RateSeasonEntity, PeriodSheetConfig> = {
     columns: [
       ...commonColumns('Cruise Code', 'Ship Name'),
       ...RATE_FIELDS.cruise.map(f => ({ label: RATE_LABELS[f], field: f })),
+    ],
+  },
+  flight: {
+    entity: 'flight',
+    table: 'flight_rates',
+    keyColumn: 'service_code',
+    displayColumn: 'route_name',
+    columns: [
+      ...commonColumns('Service Code', 'Route'),
+      ...RATE_FIELDS.flight.map(f => ({ label: RATE_LABELS[f], field: f })),
     ],
   },
 }

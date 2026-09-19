@@ -5455,6 +5455,7 @@ export interface Database {
           updated_at: string | null
           rate_currency: string | null
           guide_rate: number | null
+          seasons: Json | null
         }
         Insert: {
           id?: string
@@ -5488,6 +5489,7 @@ export interface Database {
           updated_at?: string | null
           rate_currency?: string | null
           guide_rate?: number | null
+          seasons?: Json | null
         }
         Update: {
           id?: string

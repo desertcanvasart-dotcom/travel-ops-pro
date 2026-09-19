@@ -94,6 +94,17 @@ export const RATE_FIELDS = {
     'single_non_eur', 'double_non_eur', 'triple_non_eur', 'suite_non_eur',
     'guide_rate',
   ],
+  // A fare and its tax, per passport group, plus the guide's seat. Flights had
+  // ONE window per row (rate_valid_from/to), so a route sold across four
+  // seasons meant four near-identical rows — same airline, same flight number,
+  // same cabin, retyped — and the operator asked for the hotels' shape
+  // instead: "we need to be able to add more than one period, maybe up to five
+  // or maybe six, like the hotels" (2026-09-19).
+  flight: [
+    'base_rate_eur', 'tax_eur',
+    'base_rate_non_eur', 'tax_non_eur',
+    'guide_rate',
+  ],
 } as const
 
 export type RateSeasonEntity = keyof typeof RATE_FIELDS
@@ -303,15 +314,39 @@ export function seasonsFromCruiseColumns(input: object): RateSeason[] {
   ].filter((s): s is RateSeason => s !== null)
 }
 
+/** The single window a flight row carried before periods existed, read as one
+ *  period so an unedited row keeps pricing exactly as it did. A row with no
+ *  dates at all becomes one open period — which is what "always" meant. */
+export function seasonsFromFlightColumns(input: object): RateSeason[] {
+  const row = asRow(input)
+  const from = typeof row.rate_valid_from === 'string' ? row.rate_valid_from.slice(0, 10) : ''
+  const to = typeof row.rate_valid_to === 'string' ? row.rate_valid_to.slice(0, 10) : ''
+  const rates: Record<string, number> = {}
+  for (const field of RATE_FIELDS.flight) {
+    const value = Number(row[field])
+    if (Number.isFinite(value)) rates[field] = value
+  }
+  if (Object.keys(rates).length === 0) return []
+  return [{
+    name: typeof row.season === 'string' && row.season ? String(row.season) : '',
+    season: typeof row.season === 'string' ? String(row.season) : undefined,
+    // An absent edge is an open end, the same reading the ticket resolver
+    // gave it — never a window that excludes every date.
+    from: ISO_DATE.test(from) ? from : '1900-01-01',
+    to: ISO_DATE.test(to) ? to : '2099-12-31',
+    rates,
+  }]
+}
+
 /** Every period for a rate row: the edited `seasons` list when present,
  *  otherwise derived from the legacy columns. */
 export function seasonsForRow(input: object, entity: RateSeasonEntity): RateSeason[] {
   const row = asRow(input)
   const stored = parseSeasons(row.seasons, entity)
   if (stored?.length) return stored
-  return entity === 'accommodation'
-    ? seasonsFromAccommodationColumns(row)
-    : seasonsFromCruiseColumns(row)
+  if (entity === 'accommodation') return seasonsFromAccommodationColumns(row)
+  if (entity === 'flight') return seasonsFromFlightColumns(row)
+  return seasonsFromCruiseColumns(row)
 }
 
 /** The rates that apply to a rate row on a travel date, or null when no period
@@ -386,6 +421,18 @@ export function legacyColumnMirror(
       pp_double_non_eur: first.rates.pp_double_non_eur,
       single_supp_non_eur: first.rates.single_supp_non_eur,
       triple_red_non_eur: first.rates.triple_red_non_eur,
+    }
+  }
+  if (entity === 'flight') {
+    // The grid, the CSV export and every date-less reader take these.
+    return {
+      rate_valid_from: first.from,
+      rate_valid_to: first.to,
+      base_rate_eur: first.rates.base_rate_eur,
+      tax_eur: first.rates.tax_eur,
+      base_rate_non_eur: first.rates.base_rate_non_eur,
+      tax_non_eur: first.rates.tax_non_eur,
+      guide_rate: first.rates.guide_rate,
     }
   }
   return {

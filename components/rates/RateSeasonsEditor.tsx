@@ -45,6 +45,12 @@ const FIELD_GROUPS: Record<RateSeasonEntity, Array<{ suffix: 'eur' | 'non_eur'; 
     { suffix: 'eur', fields: ['double_eur', 'single_supp_eur', 'triple_red_eur', 'suite_eur'] },
     { suffix: 'non_eur', fields: ['double_non_eur', 'single_supp_non_eur', 'triple_red_non_eur', 'suite_non_eur'] },
   ],
+  // A fare and its tax, per passport group. The guide's seat rides the same
+  // shared field as a hotel's guide bed, so it appears once at the end.
+  flight: [
+    { suffix: 'eur', fields: ['base_rate_eur', 'tax_eur'] },
+    { suffix: 'non_eur', fields: ['base_rate_non_eur', 'tax_non_eur'] },
+  ],
 }
 
 /** Cruise virtual fields → the stored cabin rate they are derived from. */
@@ -118,7 +124,11 @@ export default function RateSeasonsEditor({
   // "PP Dbl" like a hotel's, not the cabin word the column is stored under.
   const fieldLabel = (field: string): string => {
     const base = field.replace(/_non_eur$|_eur$/, '')
-    return t(`fields.${entity === 'cruise' && base === 'double' ? 'pp_double' : base}`)
+    if (entity === 'cruise' && base === 'double') return t('fields.pp_double')
+    // The throughout guide's "+1" is a BED on a hotel or ship and a SEAT on a
+    // flight. Same stored field, and calling a seat a bed reads as a mistake.
+    if (entity === 'flight' && base === 'guide_rate') return t('fields.guide_seat')
+    return t(`fields.${base}`)
   }
 
   const update = (index: number, patch: Partial<RateSeason>) =>

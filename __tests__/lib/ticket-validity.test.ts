@@ -144,10 +144,14 @@ describe('what the operator is told', () => {
 describe('the engine reads the window', () => {
   const src = readFileSync(join(process.cwd(), 'lib/auto-pricing-service.ts'), 'utf8')
 
-  it('filters every ticket leg by the date it travels', () => {
-    // Flights, day trains and sleepers all carry rate_valid_from/to, and all
-    // three were unread. One date, one filter, at the top of the leg loop.
-    expect(src.match(/ticketsValidOn\(/g) ?? []).toHaveLength(3)
+  it('filters trains and sleepers by the date they travel', () => {
+    // Day trains and sleepers still carry ONE window per row, so this single
+    // filter is their whole seasonality. FLIGHTS have outgrown it — a fare now
+    // carries dated PERIODS (migration 20261025) and is priced through
+    // periodRatesFor, the same rule a hotel night uses. When trains get
+    // periods too, this count goes to zero and the file goes with it.
+    expect(src.match(/ticketsValidOn\(/g) ?? []).toHaveLength(2)
+    expect(src).toContain("periodRatesFor(r, 'flight', on)")
     expect(src).toMatch(/const legDate = dateForDay\(leg\.day\)/)
   })
 
@@ -161,6 +165,8 @@ describe('the engine reads the window', () => {
   it('tells an out-of-season route apart from a route with no fare, on all three', () => {
     // One sentence per dead end, shared — so the same situation does not read
     // as two different problems depending on the kind of ticket.
+    // All three legs still SAY the same thing; only how a flight decides it
+    // has changed.
     expect(src.match(/outOfSeasonMessage\(\{/g) ?? []).toHaveLength(3)
     expect(src.match(/namedOutOfSeasonMessage\(\{/g) ?? []).toHaveLength(3)
     for (const where of ['Rates → Flights', 'Rates → Trains', 'Rates → Sleeping Trains']) {

@@ -189,6 +189,78 @@ describe('flight legs', () => {
   })
 
   // ============================================
+  // SEVERAL PERIODS ON ONE FARE — the hotels' shape
+  // ============================================
+  // Operator, 2026-09-19: "it's only one period, which does not serve the
+  // purpose… we need to be able to add more than one period, maybe up to five
+  // or maybe six, like the hotels." A route sold across four seasons used to
+  // mean four near-identical rows — same airline, same flight number, retyped.
+  const periodFare = (from: string, to: string, fare: number, tax: number, season: string) =>
+    ({ name: season, season, from, to, rates: { base_rate_eur: fare, tax_eur: tax, base_rate_non_eur: fare, tax_non_eur: tax } })
+
+  const withPeriods = () => {
+    const t = withDays([day(1, 'Cairo'), day(2, 'Luxor', { transport_type: 'flight' })])
+    t.flight_rates = [{
+      id: 'fl-1', route_from: 'cai', route_to: 'lxr', cabin_class: 'economy', airline: 'EgyptAir',
+      base_rate_eur: 100, base_rate_non_eur: 100, tax_eur: 20, tax_non_eur: 20, is_active: true,
+      seasons: [
+        periodFare('2026-04-01', '2026-06-30', 100, 20, 'low'),
+        periodFare('2026-07-01', '2026-09-30', 150, 25, 'high'),
+        periodFare('2026-12-26', '2027-01-05', 300, 40, 'golden_week'),
+        periodFare('2026-10-01', '2027-03-31', 200, 30, 'winter'),
+      ],
+    }]
+    return t
+  }
+
+  it('prices each period from ONE row, where it used to need four', async () => {
+    for (const [date, expected] of [['2026-05-10', 120], ['2026-08-10', 175], ['2026-11-02', 230]] as const) {
+      setMockTables(withPeriods())
+      const r = await calculateAutoPricing({ ...BASE, travelDate: date })
+      expect(line(r, 'day2-ticket-flight'), `on ${date}`).toMatchObject({ unitCost: expected })
+      expect(legHoles(r)).toEqual([])
+    }
+  })
+
+  it('the SHORTEST window wins where periods overlap', async () => {
+    // Golden Week sits inside the broad winter window. The specific one is
+    // the contract's intent — the same precedence a hotel's Christmas period
+    // has over its winter season.
+    setMockTables(withPeriods())
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-12-30' })
+    expect(line(r, 'day2-ticket-flight')).toMatchObject({ unitCost: 340 })
+  })
+
+  it('a date no period covers is a hole, never the first period\u2019s price', async () => {
+    // There is no default period. A trip after the contract ends used to
+    // price silently at the wrong season.
+    setMockTables(withPeriods())
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-02-01' })
+    expect(line(r, 'day2-ticket-flight')).toMatchObject({ unpriced: true, unitCost: 0 })
+    const message = legHoles(r)[0]?.message ?? ''
+    expect(message).toMatch(/covers? other dates, not 2026-02-02/)
+    // It names every period the fare DOES cover, not just the mirrored first
+    // window — a fare with four periods that shows one reads as a different fare.
+    expect(message).toContain('2026-04-01 – 2026-06-30')
+    expect(message).toContain('2026-12-26 – 2027-01-05')
+  })
+
+  it('the guide\u2019s seat comes from the same period as the fare', async () => {
+    const t = withPeriods()
+    t.flight_rates[0].seasons[1].rates.guide_rate = 90
+    setMockTables(t)
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-08-10', guideMode: 'throughout' })
+    expect(line(r, 'day2-guide-ticket')).toMatchObject({ unitCost: 90 })
+  })
+
+  it('a row with no periods still prices off its own columns', async () => {
+    // Rows from before periods existed, and the CSV importer's wide sheet.
+    setMockTables(withDays([day(1, 'Cairo'), day(2, 'Luxor', { transport_type: 'flight' })]))
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-08-10' })
+    expect(line(r, 'day2-ticket-flight')).toMatchObject({ unitCost: 120 })
+  })
+
+  // ============================================
   // A SEASONAL PAIR — the fare valid on the day it flies
   // ============================================
   // flight_rates has always had rate_valid_from/to, and nothing read them: two

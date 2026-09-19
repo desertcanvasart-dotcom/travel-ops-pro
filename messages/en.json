@@ -4995,7 +4995,10 @@
         "double": "Double",
         "triple": "Triple",
         "suite": "Suite",
-        "guide_rate": "Guide bed / night"
+        "guide_rate": "Guide bed / night",
+        "base_rate": "Fare",
+        "tax": "Tax",
+        "guide_seat": "Guide seat"
       },
       "throughoutGuide": "Throughout guide",
       "eurShort": "EU",
