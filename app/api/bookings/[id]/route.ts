@@ -5,7 +5,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { supplierBacking } from '@/lib/bookings/supplier-backing'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -134,6 +135,79 @@ export async function PUT(
     // If status is being set to cancelled, set cancelled_at
     if (updates.status === 'cancelled' && !updates.cancelled_at) {
       updates.cancelled_at = new Date().toISOString()
+    }
+
+    // ------------------------------------------------------------------
+    // "Suppliers Confirmed" has to mean something
+    // ------------------------------------------------------------------
+    // The status used to be written here with no reference to the booking's
+    // suppliers at all, so a booking could announce that every supplier was
+    // confirmed while its Suppliers tab was empty. The rule is
+    // confirm-and-proceed, not a hard block: the caller gets a 409 naming what
+    // is missing, and a second request carrying status_override_ack goes
+    // through and records who clicked past the warning. Nothing else about the
+    // booking is written on the refused attempt.
+    if (updates.status !== undefined) {
+      if (updates.status === 'supplier_confirmed') {
+        // The 409 below reports this booking's supplier counts, so establish
+        // the caller may see them at all: booking_supplier_status is keyed by
+        // booking_id alone, and only the UPDATE further down is org-scoped.
+        const { data: owned } = await supabaseAdmin
+          .from('bookings')
+          .select('id')
+          .eq('id', id)
+          .eq('org_id', orgId)
+          .maybeSingle()
+        if (!owned) {
+          return NextResponse.json({ success: false, error: 'Booking not found' }, { status: 404 })
+        }
+
+        const { data: supplierRows } = await supabaseAdmin
+          .from('booking_supplier_status')
+          .select('status')
+          .eq('booking_id', id)
+
+        const { total, confirmed, backed } = supplierBacking(supplierRows)
+
+        if (!backed) {
+          if (!body.status_override_ack) {
+            return NextResponse.json({
+              success: false,
+              code: 'supplier_status_unbacked',
+              error: total === 0
+                ? 'This booking has no suppliers linked yet.'
+                : `Only ${confirmed} of ${total} suppliers are confirmed.`,
+              suppliers: { total, confirmed },
+            }, { status: 409 })
+          }
+
+          const userId = await getCurrentUserId()
+          let email: string | null = null
+          if (userId) {
+            const { data: profile } = await supabaseAdmin
+              .from('user_profiles')
+              .select('email')
+              .eq('id', userId)
+              .maybeSingle()
+            email = profile?.email ?? null
+          }
+
+          updates.status_override = {
+            status: 'supplier_confirmed',
+            at: new Date().toISOString(),
+            by: userId,
+            by_email: email,
+            suppliers: { total, confirmed },
+          }
+        } else {
+          // Backed by the supplier rows — no override to remember.
+          updates.status_override = null
+        }
+      } else {
+        // The override note describes the status the booking carries NOW, so
+        // moving off that status drops it.
+        updates.status_override = null
+      }
     }
 
     const { data: booking, error } = await supabaseAdmin

@@ -7498,7 +7498,15 @@
       "clientInfo": "顧客情報",
       "tripDetails": "旅行詳細",
       "paymentSummary": "支払い概要",
-      "supplierConfirmations": "サプライヤー確認状況"
+      "supplierConfirmations": "サプライヤー確認状況",
+      "noSuppliersLinked": "サプライヤー未登録",
+      "suppliersConfirmedCount": "サプライヤー {total} 件中 {confirmed} 件確認済み",
+      "statusNotBacked": "この予約は「サプライヤー確認済み」ですが、ここではすべてのサプライヤーが確認済みになっていません。次で確認してください:",
+      "overrideTitle": "サプライヤーが未確認です",
+      "overrideQuestion": "それでもこの予約を「サプライヤー確認済み」にしますか？担当者名と日付が予約に記録されます。",
+      "overrideConfirm": "このまま設定する",
+      "unknownOperator": "担当者",
+      "statusOverridden": "{when} に {who} が「サプライヤー確認済み」に設定しました（当時サプライヤー {total} 件中 {confirmed} 件確認済み）。次で確認してください:"
     },
     "messages": {
       "noSuppliersYet": "サプライヤーがまだ追加されていません",

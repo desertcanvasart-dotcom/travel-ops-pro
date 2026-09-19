@@ -4,8 +4,9 @@
 // ============================================
 // Everything the options and extras work needs in order to be TRIED rather
 // than merely tested: a programme with options on it, an add-on in the rate
-// catalogue, a trip built from that programme, a confirmed booking, travellers,
-// and a portal link. See docs/plans/extras-and-upgrades.md.
+// catalogue, a trip built from that programme, a booking with its suppliers
+// confirmed, travellers, and a portal link. See
+// docs/plans/extras-and-upgrades.md.
 //
 // It exists because every table in that chain is empty in this database, so the
 // screens render their empty states and nothing can be verified by looking.
@@ -273,6 +274,8 @@ async function main() {
       // vocabulary is pending | supplier_confirmed | payment_received | ready |
       // in_progress | completed | cancelled (types/bookings.ts), and nothing in
       // the database enforces it — the wrong value simply broke the list page.
+      // The supplier rows that make this status true are seeded below; without
+      // them the booking warns about itself in its own header.
       status: 'supplier_confirmed',
       payment_status: 'pending',
       payment_schedule_overridden: false,
@@ -281,6 +284,62 @@ async function main() {
     },
     `${BOOKING_CODE} — confirmed, ${rateCurrency} 3000, deposit 600`
   )
+
+  // ---------- the suppliers behind that status ----------
+  // The booking above says supplier_confirmed, and until this block existed it
+  // said so with an EMPTY Suppliers tab — the demo contradicted itself, and
+  // the header now prints a standing warning when it does (see
+  // lib/bookings/supplier-backing.ts). So the demo reserves what the programme
+  // actually needs and confirms it: four rows, every one 'confirmed', which is
+  // what makes the status honest.
+  const demoSuppliers = [
+    {
+      supplier_type: 'hotel',
+      supplier_name: 'Cairo Demo Hotel',
+      service_description: '2 nights, 1 double room, breakfast included',
+      service_date: START,
+      quoted_cost: 420,
+      confirmation_number: 'DEMO-HTL-4471',
+    },
+    {
+      supplier_type: 'cruise',
+      supplier_name: 'Demo Nile Cruiser',
+      service_description: 'Luxor → Aswan, 2 nights, 1 standard cabin, full board',
+      service_date: '2026-11-05',
+      quoted_cost: 1180,
+      confirmation_number: 'DEMO-CRU-2209',
+    },
+    {
+      supplier_type: 'guide',
+      supplier_name: 'Demo Egyptologist Guide',
+      service_description: 'English-speaking guide, throughout',
+      service_date: START,
+      quoted_cost: 500,
+      confirmation_number: 'DEMO-GDE-0118',
+    },
+    {
+      supplier_type: 'transport',
+      supplier_name: 'Demo Transport Co.',
+      service_description: 'Airport transfers and sightseeing vehicle, 5 days',
+      service_date: START,
+      quoted_cost: 300,
+      confirmation_number: 'DEMO-TRN-7730',
+    },
+  ]
+  for (const sup of demoSuppliers) {
+    await findOrInsert(
+      'booking_supplier_status',
+      `select=id&booking_id=eq.${booking.id}&supplier_name=eq.${encodeURIComponent(sup.supplier_name)}`,
+      {
+        ...sup,
+        booking_id: booking.id,
+        status: 'confirmed',
+        confirmed_at: new Date().toISOString(),
+        confirmed_cost: sup.quoted_cost,
+      },
+      `${sup.supplier_name} — confirmed, ${rateCurrency} ${sup.quoted_cost}`
+    )
+  }
 
   // ---------- travellers ----------
   const travellers = [
@@ -353,10 +412,11 @@ async function cleanup(orgId) {
   const [booking] = await select('bookings', `select=id&booking_code=eq.${BOOKING_CODE}`)
   if (booking) {
     await del('booking_extras', `booking_id=eq.${booking.id}`)
+    await del('booking_supplier_status', `booking_id=eq.${booking.id}`)
     await del('booking_portal_links', `booking_id=eq.${booking.id}`)
     await del('booking_passengers', `booking_id=eq.${booking.id}`)
     await del('bookings', `id=eq.${booking.id}`)
-    console.log(`  - booking ${BOOKING_CODE} (+ passengers, portal links, extras)`)
+    console.log(`  - booking ${BOOKING_CODE} (+ passengers, portal links, extras, suppliers)`)
   }
   const [itin] = await select('itineraries', `select=id&itinerary_code=eq.${ITIN_CODE}`)
   if (itin) {

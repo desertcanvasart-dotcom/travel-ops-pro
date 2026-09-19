@@ -177,7 +177,9 @@ async function checkAndUpdateBookingStatus(bookingId: string) {
     if (booking && booking.status === 'pending') {
       await supabaseAdmin
         .from('bookings')
-        .update({ status: 'supplier_confirmed', updated_at: new Date().toISOString() })
+        // Every linked supplier is confirmed, so this promotion IS backed by
+        // the supplier rows — any earlier operator override is now moot.
+        .update({ status: 'supplier_confirmed', status_override: null, updated_at: new Date().toISOString() })
         .eq('id', bookingId)
     }
   }

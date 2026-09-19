@@ -48,6 +48,14 @@ export type SupplierType =
 // MAIN BOOKING INTERFACE
 // =====================================================
 
+export interface StatusOverride {
+  status: BookingStatus
+  at: string
+  by: string | null
+  by_email: string | null
+  suppliers: { total: number; confirmed: number }
+}
+
 export interface Booking {
   id: string
   booking_code: string
@@ -70,6 +78,11 @@ export interface Booking {
 
   // Status
   status: BookingStatus
+
+  // Set when an operator confirmed a status the booking's supplier rows do not
+  // back (see PUT /api/bookings/[id]); null whenever the two agree. Cleared on
+  // any later status change, so it always describes the CURRENT status.
+  status_override: StatusOverride | null
 
   // Payment
   deposit_amount: number

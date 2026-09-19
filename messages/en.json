@@ -6913,7 +6913,15 @@
       "clientInfo": "Client Information",
       "tripDetails": "Trip Details",
       "paymentSummary": "Payment Summary",
-      "supplierConfirmations": "Supplier Confirmations"
+      "supplierConfirmations": "Supplier Confirmations",
+      "noSuppliersLinked": "No suppliers linked",
+      "suppliersConfirmedCount": "{confirmed} of {total} suppliers confirmed",
+      "statusNotBacked": "This booking is marked \"Suppliers Confirmed\", but its suppliers are not all confirmed here. Check",
+      "overrideTitle": "Suppliers are not confirmed",
+      "overrideQuestion": "Mark this booking as Suppliers Confirmed anyway? Your name and the date will be recorded on the booking.",
+      "overrideConfirm": "Set it anyway",
+      "unknownOperator": "an operator",
+      "statusOverridden": "Set to \"Suppliers Confirmed\" by {who} on {when}, with {confirmed} of {total} suppliers confirmed. Check"
     },
     "messages": {
       "noSuppliersYet": "No suppliers added yet",
