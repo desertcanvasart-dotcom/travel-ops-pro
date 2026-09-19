@@ -44,6 +44,7 @@ import { priceAcrossPax } from '@/lib/pricing/pax-range'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { sortByItineraryFlow } from '@/lib/pricing/breakdown-order'
 import { periodRatesFor, plainPeriodName as seasonNameOf } from '@/lib/rates/rate-seasons'
+import { ticketsValidOn, ticketWindowLabel } from '@/lib/pricing/ticket-validity'
 import { cruiseCandidates, hotelCandidates, propertyById } from '@/lib/pricing/property-candidates'
 import { choicesForTier, sanitizePropertyChoice } from '@/lib/pricing/property-choice'
 import { guideLanguageWord, sameGuideLanguage } from '@/lib/guides/guide-language'
@@ -3570,9 +3571,17 @@ export async function calculateDayBasedPricing(
     const routeLabel = `${leg.from} → ${leg.to}`
 
     if (leg.mode === 'flight') {
-      const candidates = ticketRates.flights.filter(r =>
+      const onRoute = ticketRates.flights.filter(r =>
         cityKey(r.route_from) === cityKey(leg.from) && cityKey(r.route_to) === cityKey(leg.to) &&
         /econom/i.test(String(r.cabin_class ?? 'economy')))
+      // The fare that is valid ON THE DAY THIS LEG FLIES, not the departure
+      // date — a flight on day 9 can sit the other side of a season boundary
+      // from day 1. An airline's seasons are separate ROWS (its own flight
+      // number and times), so the validity window is what picks between them.
+      // Before this the window was never read: a seasonal pair made the leg
+      // ambiguous and left it unpriced. See lib/pricing/ticket-validity.
+      const legDate = dateForDay(leg.day)
+      const { valid: candidates, expired } = ticketsValidOn(onRoute, legDate)
       const pick = resolveTicketRow(candidates, leg.rateId)
       if (pick.row) {
         const fare = flightFare(pick.row)
@@ -3596,15 +3605,24 @@ export async function calculateDayBasedPricing(
           })
         }
       } else {
+        // A route whose every fare is out of season is NOT a route with no
+        // fare. They send the operator to opposite places — one to the
+        // contract, one to the calendar — so they are never the same sentence.
+        const outOfSeason = expired.length > 0 && candidates.length === 0
+        const namedOutOfSeason = pick.namedMissing && expired.some(r => String(r.id) === leg.rateId)
         listUnpriced({ id: `day${leg.day}-ticket-flight`, dayNumber: leg.day, serviceType: 'flight', serviceName: `Domestic Flight ${routeLabel}`, isPerPax: true }, {
           kind: 'transport', reason: pick.ambiguous.length ? 'fuzzy' : 'missing',
           dayNumber: leg.day, city: leg.to,
-          lookupAttempted: `flight_rates ${routeLabel} economy${leg.rateId ? ` id=${leg.rateId}` : ''}`,
-          message: pick.namedMissing
-            ? `The flight picked for day ${leg.day} (${routeLabel}) is no longer in Rates → Flights. Pick it again on the day.`
-            : pick.ambiguous.length
-              ? `${pick.ambiguous.length} flights serve ${routeLabel} (${[...new Set(pick.ambiguous.map(r => r.airline))].join(', ')}). Pick the exact flight on the day.`
-              : `No economy flight rate for ${routeLabel}. Add it in Rates → Flights.`,
+          lookupAttempted: `flight_rates ${routeLabel} economy${legDate ? ` on ${legDate}` : ''}${leg.rateId ? ` id=${leg.rateId}` : ''}`,
+          message: namedOutOfSeason
+            ? `The flight picked for day ${leg.day} (${routeLabel}) is not sold on ${legDate} — its fare covers ${expired.filter(r => String(r.id) === leg.rateId).map(ticketWindowLabel).find(Boolean) ?? 'other dates'}. Pick the season's flight on the day.`
+            : pick.namedMissing
+              ? `The flight picked for day ${leg.day} (${routeLabel}) is no longer in Rates → Flights. Pick it again on the day.`
+              : pick.ambiguous.length
+                ? `${pick.ambiguous.length} flights serve ${routeLabel} on ${legDate ?? 'this trip'} (${[...new Set(pick.ambiguous.map(r => r.airline))].join(', ')}). Pick the exact flight on the day.`
+                : outOfSeason
+                  ? `${expired.length === 1 ? 'The fare' : `All ${expired.length} fares`} for ${routeLabel} ${expired.length === 1 ? 'covers' : 'cover'} other dates, not ${legDate}${expired.map(ticketWindowLabel).filter(Boolean).length ? ` (${[...new Set(expired.map(ticketWindowLabel).filter(Boolean))].join(', ')})` : ''}. Add the season's fare in Rates → Flights.`
+                  : `No economy flight rate for ${routeLabel}. Add it in Rates → Flights.`,
         })
       }
       continue

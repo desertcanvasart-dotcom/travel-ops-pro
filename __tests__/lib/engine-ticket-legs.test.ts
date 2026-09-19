@@ -100,6 +100,80 @@ describe('flight legs', () => {
     expect(line(r, 'day2-ticket-flight')).toMatchObject({ unpriced: true, unitCost: 0, lineTotal: 0 })
     expect(legHoles(r).some((h: any) => /No economy flight rate for Cairo → Aswan/.test(h.message))).toBe(true)
   })
+
+  // ============================================
+  // A SEASONAL PAIR — the fare valid on the day it flies
+  // ============================================
+  // flight_rates has always had rate_valid_from/to, and nothing read them: two
+  // seasonal rows on one route were simply two candidates, so the leg was
+  // AMBIGUOUS and went unpriced on every date of the year. An airline's winter
+  // schedule is its own row — own flight number, own times — so the window is
+  // what picks between them.
+  const seasonalPair = () => [
+    { id: 'fl-sum', route_from: 'Cairo', route_to: 'Luxor', cabin_class: 'economy', airline: 'EgyptAir', base_rate_eur: 100, base_rate_non_eur: 100, tax_eur: 20, tax_non_eur: 20, rate_valid_from: '2026-06-01', rate_valid_to: '2026-09-30', is_active: true },
+    { id: 'fl-win', route_from: 'Cairo', route_to: 'Luxor', cabin_class: 'economy', airline: 'EgyptAir', base_rate_eur: 200, base_rate_non_eur: 200, tax_eur: 30, tax_non_eur: 30, rate_valid_from: '2026-10-01', rate_valid_to: '2027-03-31', is_active: true },
+  ]
+
+  const seasonalDays = () => {
+    const t = withDays([day(1, 'Cairo'), day(2, 'Luxor', { transport_type: 'flight' })])
+    t.flight_rates = seasonalPair()
+    return t
+  }
+
+  it('prices a summer departure at the summer fare', async () => {
+    setMockTables(seasonalDays())
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-07-14' })
+    expect(line(r, 'day2-ticket-flight')).toMatchObject({ unitCost: 120 })
+    expect(legHoles(r)).toEqual([])
+  })
+
+  it('prices a winter departure at the winter fare', async () => {
+    setMockTables(seasonalDays())
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-12-04' })
+    expect(line(r, 'day2-ticket-flight')).toMatchObject({ unitCost: 230 })
+    expect(legHoles(r)).toEqual([])
+  })
+
+  it('uses the date the LEG flies, not the departure date', async () => {
+    // Day 2 of a 30 September departure is 1 October — the winter fare. A trip
+    // priced off its departure alone would charge the summer fare for a flight
+    // that takes off in the winter season.
+    setMockTables(seasonalDays())
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-09-30' })
+    expect(line(r, 'day2-ticket-flight')).toMatchObject({ unitCost: 230 })
+  })
+
+  it('a route whose fares all cover other dates says SO, not "no fare"', async () => {
+    // The two send the operator to opposite places: the contract, or the
+    // calendar. One message for both sends them to the wrong page.
+    setMockTables(seasonalDays())
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-05-01' })
+    expect(line(r, 'day2-ticket-flight')).toMatchObject({ unpriced: true, unitCost: 0 })
+    const message = legHoles(r)[0]?.message ?? ''
+    expect(message).toMatch(/cover other dates, not 2026-05-02/)
+    expect(message).toMatch(/2026-06-01 – 2026-09-30/)
+    expect(message).not.toMatch(/No economy flight rate/)
+  })
+
+  it('a pick left behind by a moved departure is a hole, never last season\u2019s fare', async () => {
+    // The stored pick is the dangerous case: move a sold trip six months and a
+    // resolver that honoured the pick would quietly charge the old fare.
+    const t = withDays([day(1, 'Cairo'), day(2, 'Luxor', { transport_type: 'flight', transport_rate_id: 'fl-sum' })])
+    t.flight_rates = seasonalPair()
+    setMockTables(t)
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-12-04' })
+    expect(line(r, 'day2-ticket-flight')).toMatchObject({ unpriced: true, unitCost: 0 })
+    expect(legHoles(r)[0]?.message ?? '').toMatch(/is not sold on 2026-12-05/)
+  })
+
+  it('leaves an open-ended catalogue priced exactly as before', async () => {
+    // Today's rows are open-ended (the form defaults rate_valid_to to
+    // 2099-12-31), so the filter must be a no-op until real windows exist.
+    setMockTables(withDays([day(1, 'Cairo'), day(2, 'Luxor', { transport_type: 'flight' })]))
+    const r = await calculateAutoPricing({ ...BASE, travelDate: '2026-12-04' })
+    expect(line(r, 'day2-ticket-flight')).toMatchObject({ unitCost: 120 })
+    expect(legHoles(r)).toEqual([])
+  })
 })
 
 describe('day-train legs', () => {
