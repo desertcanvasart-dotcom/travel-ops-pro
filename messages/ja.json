@@ -5835,7 +5835,10 @@
         "double": "ダブル",
         "triple": "トリプル",
         "suite": "スイート",
-        "guide_rate": "ガイド宿泊 / 泊"
+        "guide_rate": "ガイド宿泊 / 泊",
+        "base_rate": "運賃",
+        "tax": "税金",
+        "guide_seat": "ガイド席"
       },
       "throughoutGuide": "スルーガイド",
       "eurShort": "EU",

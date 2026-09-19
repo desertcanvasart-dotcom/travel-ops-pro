@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
+import { sanitizeSeasons, legacyColumnMirror, datedPeriodCount, tooManyPeriodsMessage } from '@/lib/rates/rate-seasons'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { AIRLINE_CODES, knownAirlineCode } from '@/lib/airline-codes'
 
@@ -88,6 +89,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    // A malformed periods payload reads as "no periods" and the row keeps
+    // pricing off its base columns — never a 500 on a rate save. Over the
+    // limit is REFUSED rather than truncated: silently cutting a contract's
+    // last periods off would un-price them.
+    const periodLimit = tooManyPeriodsMessage(datedPeriodCount(body.seasons))
+    if (periodLimit) return NextResponse.json({ success: false, error: periodLimit }, { status: 400 })
+    const flightSeasons = sanitizeSeasons(body.seasons, 'flight')
 
     const _rateCheck = validateRatePayload(body)
     if (!_rateCheck.ok) {
@@ -136,7 +144,10 @@ export async function POST(request: NextRequest) {
       ...(body.guide_rate !== undefined && body.guide_rate !== null && body.guide_rate !== ''
         ? { guide_rate: parseFloat(body.guide_rate) }
         : {}),
-      is_active: body.is_active !== false
+      is_active: body.is_active !== false,
+      // The periods are the authority; the columns above are the FIRST
+      // period's copy, for the date-less readers (the grid, the CSV export).
+      ...(flightSeasons ? { seasons: flightSeasons, ...legacyColumnMirror(flightSeasons, 'flight') } : {}),
     }
 
     // Validate required fields
@@ -206,6 +217,16 @@ export async function PUT(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
+    }
+
+    if ('seasons' in updates) {
+      const periodLimit = tooManyPeriodsMessage(datedPeriodCount(updates.seasons))
+      if (periodLimit) return NextResponse.json({ success: false, error: periodLimit }, { status: 400 })
+      const edited = sanitizeSeasons(updates.seasons, 'flight')
+      updates.seasons = edited
+      // Keep the date-less readers on the FIRST period, the way a hotel save
+      // does. A copy, never a fallback: a date no period covers is a hole.
+      Object.assign(updates, legacyColumnMirror(edited, 'flight'))
     }
 
     // Regenerate route_name if route fields changed

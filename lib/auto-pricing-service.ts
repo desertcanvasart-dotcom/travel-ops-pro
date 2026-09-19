@@ -46,6 +46,7 @@ import { sortByItineraryFlow } from '@/lib/pricing/breakdown-order'
 import { periodRatesFor, plainPeriodName as seasonNameOf } from '@/lib/rates/rate-seasons'
 import { ticketsValidOn, outOfSeasonMessage, namedOutOfSeasonMessage } from '@/lib/pricing/ticket-validity'
 import { airportsFrom, airportsForCity, cityAirportCode, type Airport } from '@/lib/rates/airports'
+import { seasonsForRow as flightSeasonsForRow } from '@/lib/rates/rate-seasons'
 import { cruiseCandidates, hotelCandidates, propertyById } from '@/lib/pricing/property-candidates'
 import { choicesForTier, sanitizePropertyChoice } from '@/lib/pricing/property-choice'
 import { guideLanguageWord, sameGuideLanguage } from '@/lib/guides/guide-language'
@@ -3600,9 +3601,28 @@ export async function calculateDayBasedPricing(
     return from.countryCode === to.countryCode ? 'Domestic Flight' : 'International Flight'
   }
 
-  const flightFare = (r: Record<string, any>): number =>
-    (isEurPassport ? money(r.base_rate_eur) : money(r.base_rate_non_eur) || money(r.base_rate_eur)) +
-    (isEurPassport ? money(r.tax_eur) : money(r.tax_non_eur) || money(r.tax_eur))
+  /**
+   * The fare on a date — from the row's dated PERIODS, the way a hotel night
+   * is priced.
+   *
+   * A flight used to carry one window per row, so a route sold across four
+   * seasons was four near-identical rows. It now carries a list of periods
+   * (migration 20261025), and periodRatesFor applies the same rule every other
+   * dated rate uses: the period covering the date, shortest window winning, and
+   * NO default — a date outside every period has no fare, it does not quietly
+   * take the first one.
+   */
+  const flightRatesOn = (r: Record<string, any>, on: string | null): { rates: Record<string, number> | null; outside: boolean } => {
+    const period = periodRatesFor(r, 'flight', on)
+    // No periods at all: a row from before they existed. Its own columns are
+    // the fare, which is what the engine has always read.
+    if (!period) return { rates: r as Record<string, number>, outside: false }
+    return period.outside ? { rates: null, outside: true } : { rates: period.rates, outside: false }
+  }
+
+  const fareFrom = (rates: Record<string, number>): number =>
+    (isEurPassport ? money(rates.base_rate_eur) : money(rates.base_rate_non_eur) || money(rates.base_rate_eur)) +
+    (isEurPassport ? money(rates.tax_eur) : money(rates.tax_non_eur) || money(rates.tax_eur))
 
   for (const leg of ticketLegs) {
     const routeLabel = `${leg.from} → ${leg.to}`
@@ -3629,10 +3649,24 @@ export async function calculateDayBasedPricing(
       const onRoute = ticketRates.flights.filter(r =>
         fromKeys.has(String(r.route_from)) && toKeys.has(String(r.route_to)) &&
         /econom/i.test(String(r.cabin_class ?? 'economy')))
-      const { valid: candidates, expired } = ticketsValidOn(onRoute, legDate)
+      // A row is a candidate when it HAS a fare on this date. With periods on
+      // the row, two seasons of one flight are one row — so a second candidate
+      // now means a genuinely different flight, which is the right moment to
+      // ask the operator which one.
+      const priced = onRoute.map(r => ({ row: r, ...flightRatesOn(r, legDate) }))
+      const candidates = priced.filter(p => p.rates).map(p => p.row)
+      // For the "covers other dates" message: every PERIOD the ruled-out fares
+      // do cover, not the row's mirrored first window. A fare with four
+      // periods that names only one of them reads as a different fare.
+      const expired = priced.filter(p => p.outside).flatMap(p => {
+        const periods = flightSeasonsForRow(p.row, 'flight')
+        return periods.length
+          ? periods.map(s => ({ ...p.row, rate_valid_from: s.from, rate_valid_to: s.to }))
+          : [p.row]
+      })
       const pick = resolveTicketRow(candidates, leg.rateId)
       if (pick.row) {
-        const fare = flightFare(pick.row)
+        const fare = fareFrom(flightRatesOn(pick.row, legDate).rates!)
         ticketsPerPax += fare
         services.push({
           id: `day${leg.day}-ticket-flight`, dayNumber: leg.day, serviceType: 'flight',
@@ -3644,14 +3678,15 @@ export async function calculateDayBasedPricing(
           notes: money(pick.row.tax_eur) > 0 ? 'Fare incl. tax, per person' : 'Per person',
         })
         if (guideMode === 'throughout') {
-          const gFare = pick.row.guide_rate != null ? money(pick.row.guide_rate) : flightFare(pick.row)
+          const periodRates = flightRatesOn(pick.row, legDate).rates!
+          const gFare = periodRates.guide_rate != null ? money(periodRates.guide_rate) : fareFrom(periodRates)
           fixedCosts += gFare
           services.push({
             id: `day${leg.day}-guide-ticket`, dayNumber: leg.day, serviceType: 'flight',
             serviceName: `Throughout Guide — flight ${routeLabel}`,
             quantity: 1, quantityMode: 'fixed', unitCost: gFare, lineTotal: gFare,
             rateSource: 'flight_rates', isPerPax: false, isOptional: false,
-            notes: pick.row.guide_rate != null ? 'Guide fare' : 'Customer fare (no guide fare entered)',
+            notes: periodRates.guide_rate != null ? 'Guide fare' : 'Customer fare (no guide fare entered)',
           })
         }
       } else {
