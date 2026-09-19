@@ -922,7 +922,7 @@ export default function CruisesPage() {
                   <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.category')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">{t('table.route')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.nights')}</th>
-                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.cabin')}</th>
+                  <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.sailingDays')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.tier')}</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-blue-800">{tPeriods('periodsColumn')}</th>
                   <th className="px-4 py-2 text-center text-xs font-semibold text-blue-800">{t('table.status')}</th>
@@ -953,23 +953,30 @@ export default function CruisesPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-700">
                       {cruiseRouteLabel(cruise)}
-                      {sailingDaysLabel(cruise.sailing_days) && (
-                        <span className="block text-[11px] text-gray-400">{sailingDaysLabel(cruise.sailing_days)}</span>
-                      )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-medium">
                         {cruise.duration_nights}N
                       </span>
                     </td>
+                    {/* The departure days, where the cabin category used to be.
+                        Every row here reads "Standard" — the cabin is already
+                        in the service code's suffix — while the day a sailing
+                        leaves is what decides whether it fits an itinerary at
+                        all (operator, 2026-09-20: "much important for a user
+                        and quick access"). */}
                     <td className="px-4 py-3 text-center">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                        cruise.cabin_type === 'suite' ? 'bg-purple-100 text-purple-800' :
-                        cruise.cabin_type === 'deluxe' ? 'bg-indigo-100 text-indigo-800' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {cruiseCabinLabel(cruise.cabin_type, t(`cabinTypes.${cruise.cabin_type}`))}
-                      </span>
+                      {sanitizeSailingDays(cruise.sailing_days).length > 0 ? (
+                        <span className="inline-flex flex-wrap justify-center gap-1">
+                          {sanitizeSailingDays(cruise.sailing_days).map(d => (
+                            <span key={d} className="px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-[11px] font-medium">
+                              {dayName(d).slice(0, 3)}
+                            </span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">{t('table.anyDay')}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <TierBadge tier={cruise.tier} t={t} />

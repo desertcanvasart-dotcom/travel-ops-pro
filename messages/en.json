@@ -3822,7 +3822,9 @@
         "actions": "Actions",
         "ppDouble": "PP Double",
         "singleSupp": "Single supp.",
-        "tripleRed": "Triple red."
+        "tripleRed": "Triple red.",
+        "sailingDays": "Departs",
+        "anyDay": "Any day"
       },
       "status": {
         "active": "Active",
