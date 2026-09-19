@@ -15,7 +15,7 @@
 // into the places the agency operates — the same rule CityOptions applies.
 
 import { useVocabulary } from '@/hooks/useVocabulary'
-import { airportsFrom, airportLabel, groupByCountry, type Airport } from '@/lib/rates/airports'
+import { airportsFrom, airportLabel, groupByCountry, airportCities, type Airport } from '@/lib/rates/airports'
 
 export function useAirports(): { airports: Airport[]; loading: boolean; labelFor: (key: string | null | undefined) => string } {
   const { items, loading, labelFor } = useVocabulary('airport')
@@ -46,6 +46,35 @@ export default function AirportOptions({ airports, exclude }: {
         <optgroup key={g.countryCode || 'other'} label={g.countryCode || 'Other'}>
           {g.airports.map(a => (
             <option key={a.key} value={a.key}>{airportLabel(a)}</option>
+          ))}
+        </optgroup>
+      ))}
+    </>
+  )
+}
+
+/**
+ * The <option> list for a ticket leg's route.
+ *
+ * A leg names a CITY — the engine resolves it to that city's airports — so the
+ * choices are the cities the agency's airports are in. Add Tokyo Narita to the
+ * vocabulary and Tokyo appears here, which is why this list needs no second
+ * place to be maintained.
+ */
+export function LegCityOptions({ airports, exclude }: { airports: Airport[]; exclude?: string }) {
+  const cities = airportCities(airports).filter(c => c.city !== exclude)
+  const countries = new Set(cities.map(c => c.countryCode))
+
+  if (countries.size <= 1) {
+    return <>{cities.map(c => <option key={c.city} value={c.city}>{c.city}</option>)}</>
+  }
+
+  return (
+    <>
+      {[...countries].sort().map(code => (
+        <optgroup key={code || 'other'} label={code || 'Other'}>
+          {cities.filter(c => c.countryCode === code).map(c => (
+            <option key={c.city} value={c.city}>{c.city}</option>
           ))}
         </optgroup>
       ))}

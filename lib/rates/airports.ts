@@ -117,3 +117,26 @@ export function groupByCountry(airports: Airport[]): Array<{ countryCode: string
     .map(([countryCode, list]) => ({ countryCode, airports: list }))
     .sort((a, b) => a.countryCode.localeCompare(b.countryCode))
 }
+
+/**
+ * The cities a flight can leave from or land in — the ones some airport serves.
+ *
+ * This is what a ticket leg's route may name. A leg stores a CITY (the engine
+ * resolves it to that city's airports), and the cities you can fly between are
+ * exactly the cities your airports are in. So the picker builds itself: add
+ * Tokyo Narita to the vocabulary and Tokyo becomes a place a trip can start.
+ *
+ * Deduplicated, because Narita and Haneda are one Tokyo, and ordered by
+ * country so an origin abroad does not sit mixed into the places the agency
+ * runs tours in.
+ */
+export function airportCities(airports: Airport[]): Array<{ city: string; countryCode: string }> {
+  const seen = new Map<string, { city: string; countryCode: string }>()
+  for (const a of airports) {
+    if (!a.city) continue
+    const k = cityKey(a.city)
+    if (!seen.has(k)) seen.set(k, { city: a.city, countryCode: a.countryCode })
+  }
+  return [...seen.values()].sort((x, y) =>
+    x.countryCode === y.countryCode ? x.city.localeCompare(y.city) : x.countryCode.localeCompare(y.countryCode))
+}

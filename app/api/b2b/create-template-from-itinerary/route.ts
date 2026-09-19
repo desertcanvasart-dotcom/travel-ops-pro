@@ -146,6 +146,16 @@ export async function POST(request: NextRequest) {
         attractions: day.attractions || [],
         overnight_city: day.overnight_city || day.overnight_location || null,
         accommodation_type: accommodationType,
+        // The day's own travel, carried across. Without these the template
+        // forgets that a day flew at all — so a trip built from an itinerary
+        // priced its flights as road transfers, and an international arrival
+        // (whose route CANNOT be inferred, there being no day before it) was
+        // not collected as a leg at all.
+        transport_type: day.transport_type || undefined,
+        transport_rate_id: day.transport_rate_id || undefined,
+        leg_from: day.leg_from || undefined,
+        leg_to: day.leg_to || undefined,
+        leg_assist: day.leg_assist || undefined,
         // Service flags derived from itinerary_services
         services: {
           airport_arrival: airportArrival,
