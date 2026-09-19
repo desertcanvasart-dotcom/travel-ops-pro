@@ -1,3 +1,4 @@
+import type { OptionPeriod } from '@/lib/rates/date-window'
 import type { PackageType } from '@/lib/package-types'
 
 // ============================================
@@ -162,6 +163,12 @@ export interface SelectedItem {
    *  priced PER PERSON PER NIGHT on top of the room. Its rateId is
    *  `<propertyId>#supp:<key>`, so a reloaded save is recognised too. */
   supplementKey?: string
+  /** The dates the picked rate belongs to, carried from RateOption so the
+   *  completeness gate can notice a trip that travels outside them. Carried,
+   *  never enforced: the grid prices what the operator picked. */
+  validFrom?: string | null
+  validTo?: string | null
+  periods?: OptionPeriod[]
 }
 
 export interface SlotValue {
@@ -227,6 +234,15 @@ export interface RateOption {
    *  with its first-period per-person-per-night rate — the same period the
    *  headline rate mirrors (lib/rates/supplements). */
   supplements?: GridSupplement[]
+  /** Flights: the dates this fare is sold on. Two seasons of one route are two
+   *  rows with the same airline and route, so without these the lines render
+   *  identically and picking the wrong one is silent. */
+  validFrom?: string | null
+  validTo?: string | null
+  /** Hotel / cruise: every dated period on the row. periods[0] is the one the
+   *  shown price belongs to — the grid reads the base columns, which mirror
+   *  the first period — and the rest are what it is NOT. */
+  periods?: OptionPeriod[]
 }
 
 export interface GridSupplement {
