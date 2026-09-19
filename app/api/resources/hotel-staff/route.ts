@@ -16,12 +16,15 @@ export async function GET(request: NextRequest) {
     const hotelId = searchParams.get('hotel_id')
     const isActive = searchParams.get('is_active')
 
+    // NO embed. hotel_staff carries no hotel reference at all (see the
+    // hotel_id note below), so `hotel:hotel_contacts(...)` had no foreign key
+    // to travel — and PostgREST rejects the WHOLE query for an unresolvable
+    // embed (PGRST200), not just that column. The endpoint 500'd on every
+    // call, so no hotel staff ever loaded. Callers already read `hotel` with
+    // optional chaining, so its absence is the value they were getting.
     let query = supabase
       .from('hotel_staff')
-      .select(`
-        *,
-        hotel:hotel_contacts(id, name, city)
-      `)
+      .select('*')
       .order('name', { ascending: true })
 
     if (hotelId) {
@@ -87,10 +90,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('hotel_staff')
       .insert([staffData])
-      .select(`
-        *,
-        hotel:hotel_contacts(id, name, city)
-      `)
+      .select('*')
       .single()
 
     if (error) {

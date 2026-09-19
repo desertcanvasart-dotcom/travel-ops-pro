@@ -7,6 +7,26 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// `clients` has no `name` column — it holds first_name / last_name. Selecting
+// `name` made Postgres reject the WHOLE query with 42703 ("column clients.name
+// does not exist"), so every one of this route's branches 500'd: an email could
+// never be linked to a client, and the auto-match by sender address never
+// matched. The columns are read as they exist and the display name the inbox
+// expects is composed here.
+type ClientRow = { first_name?: string | null; last_name?: string | null }
+
+function withDisplayName<T extends ClientRow>(client: T | null | undefined) {
+  if (!client) return client ?? null
+  const name = [client.first_name, client.last_name].filter(Boolean).join(' ').trim()
+  return { ...client, name }
+}
+
+/** The same composition for a client embedded on a link row. */
+function linkWithClientName<T extends { client?: ClientRow | null }>(link: T | null) {
+  if (!link) return link
+  return { ...link, client: withDisplayName(link.client) }
+}
+
 // GET /api/email/links?userId=xxx&emailAddress=xxx
 // Returns linked client for an email address
 export async function GET(request: NextRequest) {
@@ -26,7 +46,7 @@ export async function GET(request: NextRequest) {
         .from('email_client_links')
         .select(`
           *,
-          client:clients(id, name, email, phone, status)
+          client:clients(id, first_name, last_name, email, phone, status)
         `)
         .eq('user_id', userId)
         .eq('message_id', messageId)
@@ -36,7 +56,7 @@ export async function GET(request: NextRequest) {
         throw error
       }
 
-      return NextResponse.json({ link: data || null })
+      return NextResponse.json({ link: linkWithClientName(data) })
     }
 
     // If emailAddress provided, find client by email
@@ -47,7 +67,7 @@ export async function GET(request: NextRequest) {
         // client by email address never returned anything. Ownership on this
         // table is created_by; the lookup is by email, which is what the
         // caller actually asked for.
-        .select('id, name, email, phone, status')
+        .select('id, first_name, last_name, email, phone, status')
         .ilike('email', emailAddress)
         .single()
 
@@ -55,7 +75,7 @@ export async function GET(request: NextRequest) {
         throw error
       }
 
-      return NextResponse.json({ client: client || null })
+      return NextResponse.json({ client: withDisplayName(client) })
     }
 
     return NextResponse.json({ error: 'Provide emailAddress or messageId' }, { status: 400 })
@@ -99,12 +119,12 @@ export async function POST(request: NextRequest) {
         .eq('id', existing.id)
         .select(`
           *,
-          client:clients(id, name, email, phone, status)
+          client:clients(id, first_name, last_name, email, phone, status)
         `)
         .single()
 
       if (error) throw error
-      return NextResponse.json({ link: data, updated: true })
+      return NextResponse.json({ link: linkWithClientName(data), updated: true })
     }
 
     // Create new link
@@ -119,13 +139,13 @@ export async function POST(request: NextRequest) {
       })
       .select(`
         *,
-        client:clients(id, name, email, phone, status)
+        client:clients(id, first_name, last_name, email, phone, status)
       `)
       .single()
 
     if (error) throw error
 
-    return NextResponse.json({ link: data, created: true })
+    return NextResponse.json({ link: linkWithClientName(data), created: true })
 
   } catch (error: any) {
     console.error('Error creating email link:', error)

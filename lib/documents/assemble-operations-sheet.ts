@@ -67,6 +67,49 @@ export interface AssembleInput {
   }
 }
 
+/** One day's text in one language, as stored in itinerary_day_versions. */
+export interface DayLanguageVersion {
+  itinerary_day_id: string
+  title: string | null
+  description: string | null
+  city: string | null
+  overnight_city: string | null
+}
+
+/**
+ * Overlay the ground team's language onto the canonical days.
+ *
+ * The canonical itinerary_days row is written in the language the office SOLD
+ * in — Japanese, for the Tokyo desk. That is the right text for the customer's
+ * 日程表 and the wrong text for Cairo. Translations live in
+ * itinerary_day_versions, one row per day per language, and this applies them
+ * with the same precedence /api/itineraries/[id]/days uses: a version wins
+ * where it has text, the canonical row shows through where it does not.
+ *
+ * A day with no version keeps its canonical text. An instruction in the wrong
+ * language is still an instruction; a blank line on a ground sheet is a day the
+ * team drives into with nothing.
+ */
+export function applyDayLanguageVersions<T extends { id: string } & Partial<SourceDay>>(
+  days: T[],
+  versions: DayLanguageVersion[]
+): T[] {
+  const byDay = new Map<string, DayLanguageVersion>()
+  for (const version of versions) byDay.set(version.itinerary_day_id, version)
+
+  return days.map(day => {
+    const version = byDay.get(day.id)
+    if (!version) return day
+    return {
+      ...day,
+      title: version.title || day.title,
+      description: version.description || day.description,
+      city: version.city || day.city,
+      overnight_city: version.overnight_city || day.overnight_city,
+    }
+  })
+}
+
 /** Short codes the ground team writes for an overnight city. */
 const CITY_CODES: Record<string, string> = {
   cairo: 'CAI',
