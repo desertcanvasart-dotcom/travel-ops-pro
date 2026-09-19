@@ -6,7 +6,7 @@ import { guideLanguageWord } from '@/lib/guides/guide-language'
 import { rateGuideMode } from '@/lib/guides/guide-mode'
 import { NextRequest, NextResponse } from 'next/server'
 import { seasonsForRow, plainPeriodName, type RateSeasonEntity } from '@/lib/rates/rate-seasons'
-import { windowLabel, periodLabel, type OptionPeriod } from '@/lib/rates/date-window'
+import { periodLabel, type OptionPeriod } from '@/lib/rates/date-window'
 import { supplementsForRow, supplementField } from '@/lib/rates/supplements'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
@@ -194,8 +194,9 @@ export async function GET(request: NextRequest) {
         rateEur: toNum(r.pp_double_eur),
         rateNonEur: toNum(r.pp_double_non_eur),
         city: r.city,
-        details: detailsWithPeriod(`${r.tier} | ${r.board_basis || 'BB'}`, optionPeriods(r, 'accommodation')),
-        periods: optionPeriods(r, 'accommodation'),
+        details: detailsWithPeriod(`${r.tier} | ${r.board_basis || 'BB'}`, periodsFor(r, 'accommodation', 'pp_double_eur', 'pp_double_non_eur')),
+        periods: periodsFor(r, 'accommodation', 'pp_double_eur', 'pp_double_non_eur'),
+        singleSuppPeriods: periodsFor(r, 'accommodation', 'single_supp_eur', 'single_supp_non_eur'),
         board_basis: r.board_basis || 'BB',
         single_supp_eur: toNum(r.single_supp_eur),
         single_supp_non_eur: toNum(r.single_supp_non_eur),
@@ -220,13 +221,11 @@ export async function GET(request: NextRequest) {
         rateEur: toNum(r.base_rate_eur) + toNum(r.tax_eur),
         rateNonEur: toNum(r.base_rate_non_eur || r.base_rate_eur) + toNum(r.tax_non_eur || r.tax_eur),
         city: r.route_from,
-        // Two seasons of one fare are two rows with the same airline and route.
-        // Without the window on the line they render identically and picking
-        // the wrong one is silent.
-        details: [`${r.airline} | ${r.flight_number || ''} | ${r.cabin_class}`, r.season || null, windowLabel(r.rate_valid_from, r.rate_valid_to)]
-          .filter(Boolean).join(' | '),
-        validFrom: r.rate_valid_from ?? null,
-        validTo: r.rate_valid_to ?? null,
+        // A fare carries dated PERIODS now (migration 20261025), so the single
+        // rate_valid_from/to pair is only the first period's mirror — naming it
+        // on a fare with four periods reads as a different fare.
+        details: detailsWithPeriod(`${r.airline} | ${r.flight_number || ''} | ${r.cabin_class}`, flightPeriods(r)),
+        periods: flightPeriods(r),
         route_from: r.route_from,
         route_to: r.route_to,
         // Guide fare for the "+1" seat; null = he pays the customer fare.
@@ -263,8 +262,9 @@ export async function GET(request: NextRequest) {
         name: `${r.ship_name} (${r.duration_nights}N, ${r.cabin_type})`,
         rateEur: toNum(r.rate_double_eur || r.rate_low_double_eur),
         rateNonEur: toNum(r.rate_double_non_eur || r.rate_low_double_non_eur || r.rate_double_eur || r.rate_low_double_eur),
-        details: detailsWithPeriod(`${r.route_name || ''} | ${r.tier || ''} | ${r.cabin_type || 'Standard'}`, optionPeriods(r, 'cruise')),
-        periods: optionPeriods(r, 'cruise'),
+        details: detailsWithPeriod(`${r.route_name || ''} | ${r.tier || ''} | ${r.cabin_type || 'Standard'}`, periodsFor(r, 'cruise', 'double_eur', 'double_non_eur')),
+        periods: periodsFor(r, 'cruise', 'double_eur', 'double_non_eur'),
+        singleSuppPeriods: periodsFor(r, 'cruise', 'single_eur', 'single_non_eur'),
         single_rate_eur: toNum(r.rate_single_eur || r.rate_low_single_eur),
         single_rate_non_eur: toNum(r.rate_single_non_eur || r.rate_low_single_non_eur),
         duration_nights: r.duration_nights,
@@ -299,13 +299,38 @@ function toNum(v: any): number {
  * what it is NOT. Sent so the option can say which, and so the completeness
  * gate can notice when the trip's dates fall in another one.
  */
-function optionPeriods(row: Record<string, unknown>, entity: RateSeasonEntity): OptionPeriod[] {
+function optionPeriods(
+  row: Record<string, unknown>,
+  entity: RateSeasonEntity,
+  /** The period's own rate, in the same shape the option's base columns take. */
+  rate: (rates: Record<string, number>) => { rateEur: number; rateNonEur: number }
+): OptionPeriod[] {
   return seasonsForRow(row, entity).map(season => ({
     name: plainPeriodName(season),
     from: season.from,
     to: season.to,
+    ...rate(season.rates ?? {}),
   }))
 }
+
+/** Per-period rates for the derived items a pick carries — a hotel's single
+ *  supplement, a cruise's single cabin, a supplement toggled under either.
+ *  Same dates, different field, so they price on the same day's period. */
+const periodsFor = (
+  row: Record<string, unknown>,
+  entity: RateSeasonEntity,
+  eur: string,
+  nonEur: string
+): OptionPeriod[] =>
+  optionPeriods(row, entity, r => ({ rateEur: toNum(r[eur]), rateNonEur: toNum(r[nonEur]) }))
+
+/** A flight's period rate is the fare PLUS its tax, the same sum the option's
+ *  base columns show. */
+const flightPeriods = (row: Record<string, unknown>): OptionPeriod[] =>
+  optionPeriods(row, 'flight', r => ({
+    rateEur: toNum(r.base_rate_eur) + toNum(r.tax_eur),
+    rateNonEur: (toNum(r.base_rate_non_eur) || toNum(r.base_rate_eur)) + (toNum(r.tax_non_eur) || toNum(r.tax_eur)),
+  }))
 
 /** The period the shown price belongs to, appended to an option's details.
  *  Silent for a row with no periods, or with only one — there is nothing to
@@ -322,5 +347,11 @@ function gridSupplements(row: object, entity: RateSeasonEntity) {
     name: s.name,
     rateEur: toNum(rates[supplementField(s.key, 'eur')]),
     rateNonEur: toNum(rates[supplementField(s.key, 'non_eur')]),
+    // A supplement is priced per night like the room it rides on, so it
+    // follows the same periods — not the first one for the whole trip.
+    periods: periodsFor(
+      row as Record<string, unknown>, entity,
+      supplementField(s.key, 'eur'), supplementField(s.key, 'non_eur')
+    ),
   }))
 }

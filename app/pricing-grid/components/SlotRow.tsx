@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import type { SlotDefinition, SlotValue, RateOption, SelectedItem, PassportType } from '../types'
 import { supplementItemId, isSupplementItem } from '../types'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import type { OptionPeriod } from '@/lib/rates/date-window'
 
 interface SlotRowProps {
   definition: SlotDefinition
@@ -54,10 +55,8 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
           serviceType: opt.service_type,
           pricingClass: opt.pricing_class,
           guideRate: opt.guide_rate,
-          // The dates this rate belongs to, so the gate can notice a trip that
-          // travels outside them. Carried, never enforced.
-          validFrom: opt.validFrom,
-          validTo: opt.validTo,
+          // The rate's dated periods, each with its own price. The day is
+          // priced by the one covering its date.
           periods: opt.periods,
         }]
       })
@@ -77,8 +76,6 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
       serviceType: opt.service_type,
       pricingClass: opt.pricing_class,
       guideRate: opt.guide_rate,
-      validFrom: opt.validFrom,
-      validTo: opt.validTo,
       periods: opt.periods,
     }
     const items: SelectedItem[] = [item]
@@ -88,6 +85,9 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
         name: 'Single Supplement',
         rateEur: (opt as any).single_supp_eur || 0,
         rateNonEur: (opt as any).single_supp_non_eur || 0,
+        // Its own periods, same dates as the room's — a supplement that stayed
+        // on the first period while the room moved would be a different night.
+        periods: opt.singleSuppPeriods,
       })
     }
     onChange({ ...value, selectedItems: items })
@@ -102,7 +102,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
     ? options.find(o => o.id === pickedProperty.rateId) ?? (allOptions || []).find(o => o.id === pickedProperty.rateId)
     : undefined
   const availableSupplements = propertyOption?.supplements ?? []
-  const toggleSupplement = (supp: { key: string; name: string; rateEur: number; rateNonEur: number }) => {
+  const toggleSupplement = (supp: { key: string; name: string; rateEur: number; rateNonEur: number; periods?: OptionPeriod[] }) => {
     if (!pickedProperty) return
     const id = supplementItemId(pickedProperty.rateId, supp.key)
     const on = value.selectedItems.some(i => i.rateId === id)
@@ -110,7 +110,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
       ...value,
       selectedItems: on
         ? value.selectedItems.filter(i => i.rateId !== id)
-        : [...value.selectedItems, { rateId: id, name: `${supp.name} (supplement)`, rateEur: supp.rateEur, rateNonEur: supp.rateNonEur, supplementKey: supp.key }],
+        : [...value.selectedItems, { rateId: id, name: `${supp.name} (supplement)`, rateEur: supp.rateEur, rateNonEur: supp.rateNonEur, supplementKey: supp.key, periods: supp.periods }],
     })
   }
 

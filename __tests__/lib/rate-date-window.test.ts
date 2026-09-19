@@ -14,6 +14,8 @@ import {
   windowLabel,
   periodCovering,
   periodLabel,
+  dayDate,
+  rateOnDate,
 } from '@/lib/rates/date-window'
 
 describe('dateOnly', () => {
@@ -65,9 +67,11 @@ describe('windowLabel', () => {
 })
 
 describe('periodCovering', () => {
-  const winter = { name: 'High 2026/27', from: '2026-10-01', to: '2027-04-30' }
-  const christmas = { name: 'Christmas', from: '2026-12-20', to: '2027-01-05' }
-  const summer = { name: 'Low', from: '2026-05-01', to: '2026-09-30' }
+  const p = (name: string, from: string, to: string, rateEur = 100) =>
+    ({ name, from, to, rateEur, rateNonEur: rateEur + 10 })
+  const winter = p('High 2026/27', '2026-10-01', '2027-04-30', 200)
+  const christmas = p('Christmas', '2026-12-20', '2027-01-05', 300)
+  const summer = p('Low', '2026-05-01', '2026-09-30', 100)
 
   it('finds the period a date falls in', () => {
     expect(periodCovering([summer, winter], '2026-07-15')?.name).toBe('Low')
@@ -90,12 +94,60 @@ describe('periodCovering', () => {
 
 describe('periodLabel', () => {
   it('names the period and its dates', () => {
-    expect(periodLabel({ name: 'Low', from: '2026-05-01', to: '2026-09-30' }))
+    expect(periodLabel({ name: 'Low', from: '2026-05-01', to: '2026-09-30', rateEur: 0, rateNonEur: 0 }))
       .toBe('Low 2026-05-01 – 2026-09-30')
   })
 
   it('falls back to whichever half it has', () => {
-    expect(periodLabel({ name: 'Low', from: '', to: '' })).toBe('Low')
-    expect(periodLabel({ name: '', from: '2026-05-01', to: '2026-09-30' })).toBe('2026-05-01 – 2026-09-30')
+    expect(periodLabel({ name: 'Low', from: '', to: '', rateEur: 0, rateNonEur: 0 })).toBe('Low')
+    expect(periodLabel({ name: '', from: '2026-05-01', to: '2026-09-30', rateEur: 0, rateNonEur: 0 })).toBe('2026-05-01 – 2026-09-30')
+  })
+})
+
+describe('dayDate', () => {
+  it('day 1 is the start date', () => {
+    expect(dayDate('2026-07-14', 1)).toBe('2026-07-14')
+  })
+
+  it('a later day is that many days on', () => {
+    // A twelve-day trip can cross a season boundary, which is the whole reason
+    // the grid cannot price every day at the trip's start.
+    expect(dayDate('2026-09-28', 4)).toBe('2026-10-01')
+  })
+
+  it('is null without a start date', () => {
+    expect(dayDate(null, 3)).toBeNull()
+    expect(dayDate('not a date', 3)).toBeNull()
+  })
+})
+
+describe('rateOnDate', () => {
+  const periods = [
+    { name: 'Low', from: '2026-05-01', to: '2026-09-30', rateEur: 100, rateNonEur: 110 },
+    { name: 'High', from: '2026-10-01', to: '2027-03-31', rateEur: 200, rateNonEur: 220 },
+  ]
+  const item = { rateEur: 100, rateNonEur: 110, periods }
+
+  it('prices the day at the period covering it', () => {
+    expect(rateOnDate(item, 'eu', '2026-07-14')).toBe(100)
+    expect(rateOnDate(item, 'eu', '2026-11-02')).toBe(200)
+    expect(rateOnDate(item, 'non_eu', '2026-11-02')).toBe(220)
+  })
+
+  it('answers null when no period covers the date', () => {
+    // There is no default period. A trip after the contract ends must not
+    // quietly take the first one — which is exactly what the base columns,
+    // mirroring period one, used to do.
+    expect(rateOnDate(item, 'eu', '2027-06-01')).toBeNull()
+  })
+
+  it('leaves an undated rate on its own number', () => {
+    expect(rateOnDate({ rateEur: 42, rateNonEur: 43 }, 'eu', '2026-07-14')).toBe(42)
+    expect(rateOnDate({ rateEur: 42, rateNonEur: 43, periods: [] }, 'eu', '2026-07-14')).toBe(42)
+  })
+
+  it('uses the first period when the quote has no departure yet', () => {
+    // That is the number already on screen — the base columns mirror it.
+    expect(rateOnDate(item, 'eu', null)).toBe(100)
   })
 })

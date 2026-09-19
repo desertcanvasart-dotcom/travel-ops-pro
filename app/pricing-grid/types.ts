@@ -163,11 +163,9 @@ export interface SelectedItem {
    *  priced PER PERSON PER NIGHT on top of the room. Its rateId is
    *  `<propertyId>#supp:<key>`, so a reloaded save is recognised too. */
   supplementKey?: string
-  /** The dates the picked rate belongs to, carried from RateOption so the
-   *  completeness gate can notice a trip that travels outside them. Carried,
-   *  never enforced: the grid prices what the operator picked. */
-  validFrom?: string | null
-  validTo?: string | null
+  /** The dated periods of the picked rate, each with its own price. The day
+   *  is priced by the one covering its date — a date no period covers has NO
+   *  rate, the same rule the auto engine applies to a hotel night. */
   periods?: OptionPeriod[]
 }
 
@@ -234,18 +232,19 @@ export interface RateOption {
    *  with its first-period per-person-per-night rate — the same period the
    *  headline rate mirrors (lib/rates/supplements). */
   supplements?: GridSupplement[]
-  /** Flights: the dates this fare is sold on. Two seasons of one route are two
-   *  rows with the same airline and route, so without these the lines render
-   *  identically and picking the wrong one is silent. */
-  validFrom?: string | null
-  validTo?: string | null
-  /** Hotel / cruise: every dated period on the row. periods[0] is the one the
-   *  shown price belongs to — the grid reads the base columns, which mirror
-   *  the first period — and the rest are what it is NOT. */
+  /** Every dated period on the row, each carrying its OWN rate. A day is
+   *  priced by the period covering that day's date; periods[0] is only what
+   *  the base columns mirror, for a quote with no departure yet. */
   periods?: OptionPeriod[]
+  /** The same periods for the single supplement (hotels) or single cabin
+   *  (cruises), so a derived line prices on the same day's period. */
+  singleSuppPeriods?: OptionPeriod[]
 }
 
 export interface GridSupplement {
+  /** Dated periods for this supplement — it is priced per night like the room
+   *  it rides on, so it follows the same calendar. */
+  periods?: OptionPeriod[]
   key: string
   name: string
   rateEur: number

@@ -57,11 +57,54 @@ export function windowLabel(from: unknown, to: unknown): string | null {
   return null
 }
 
-/** One dated period of a hotel or ship, flattened for the grid. */
+/**
+ * One dated period of a rate, flattened for the grid.
+ *
+ * It carries the PRICE, not just the dates. The grid used to show a single
+ * number per option — the base columns, which mirror the FIRST period — so a
+ * December quote could be carrying the June rate with nothing on screen to say
+ * so. Each period knowing its own rate is what lets a day be priced by its own
+ * date instead.
+ */
 export interface OptionPeriod {
   name: string
   from: string
   to: string
+  rateEur: number
+  rateNonEur: number
+}
+
+/** The date a day of a trip falls on. Day 1 is the start date. */
+export function dayDate(startDate: string | null | undefined, dayNumber: number | null | undefined): string | null {
+  const start = dateOnly(startDate)
+  if (!start) return null
+  const n = Math.max(1, Math.trunc(Number(dayNumber) || 1))
+  const t = Date.parse(`${start}T00:00:00Z`) + (n - 1) * 86400000
+  return new Date(t).toISOString().slice(0, 10)
+}
+
+/**
+ * The rate that applies on a date.
+ *
+ * `null` means no period covers it — which is a real answer, and the reason
+ * there is no default period: a trip after the contract ends must not quietly
+ * take the first period's price. A rate with NO periods at all is a rate that
+ * has never been dated, and its own number stands.
+ */
+export function rateOnDate(
+  item: { rateEur: number; rateNonEur: number; periods?: OptionPeriod[] | null },
+  passport: 'eu' | 'non_eu',
+  date: string | null | undefined
+): number | null {
+  const own = passport === 'eu' ? item.rateEur : item.rateNonEur
+  const periods = item.periods
+  if (!periods?.length) return own
+  // No date in hand — a quote with no departure yet. The first period is what
+  // the base columns mirror, so that is the number already on screen.
+  if (!dateOnly(date)) return passport === 'eu' ? periods[0].rateEur : periods[0].rateNonEur
+  const covering = periodCovering(periods, date)
+  if (!covering) return null
+  return passport === 'eu' ? covering.rateEur : covering.rateNonEur
 }
 
 /**

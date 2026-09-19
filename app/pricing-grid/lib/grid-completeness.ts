@@ -23,7 +23,7 @@
 // migration 20260627_itinerary_days_day_type_components.sql.
 
 import { PACKAGE_TYPE_CONFIGS, type PackageType } from '@/lib/package-types'
-import { dateOnly, withinWindow, windowLabel, periodCovering, periodLabel } from '@/lib/rates/date-window'
+import { dateOnly, dayDate, periodCovering, periodLabel } from '@/lib/rates/date-window'
 import type {
   GridDay,
   GridConfig,
@@ -291,45 +291,30 @@ export function gridCompleteness(
       }
 
       // --- The dates the picked rate belongs to ---
-      // The grid prices what the operator picked, on any date. It does not
-      // resolve a rate period the way the auto engine does, so the ONE thing
-      // it can honestly do is stop the mismatch being invisible.
+      // The grid now prices each day at the period covering ITS date, the same
+      // rule the auto engine applies to a hotel night. So a picked rate whose
+      // periods do not reach this day has NO price — it is not a warning that
+      // the number might be wrong, it is the reason the line is zero.
       //
-      // Silent for a rate with no dates and for a property with a single
-      // period: there is nothing to have picked wrongly. So an agency that has
-      // not entered seasons never sees any of this.
+      // Silent for a rate that carries no periods at all: those have never
+      // been dated, and their own number stands.
       for (const item of s.selectedItems ?? []) {
-        if (!withinWindow(startDate, item.validFrom, item.validTo)) {
+        const periods = item.periods ?? []
+        const on = dayDate(startDate, dn)
+        if (periods.length > 0 && on && !periodCovering(periods, on)) {
+          // BLOCKING, not a warning. There is no default period — a trip after
+          // the contract ends must not quietly take the first one — so this
+          // line prices at zero, and a quote with a zero night in it is not a
+          // quote. The message names the periods that DO exist, because "add
+          // the missing dates" is actionable and "check the rate" is not.
           issues.push({
             dayNumber: dn,
-            severity: 'warn',
-            code: 'rate-outside-its-dates',
-            message: `Day ${dn}: "${item.name}" is sold ${windowLabel(item.validFrom, item.validTo)}, and this trip starts ${startDate}. Pick the fare for the trip's season, or change the date.`,
+            severity: 'block',
+            code: 'rate-period-uncovered',
+            message: `Day ${dn}: no rate period of "${item.name}" covers ${on}`
+              + ` — it is sold ${periods.map(periodLabel).join(', ')}.`
+              + ' Add the period in Rates, or move the trip.',
           })
-        }
-
-        const periods = item.periods ?? []
-        if (periods.length > 1 && startDate) {
-          // periods[0] is what the shown price IS — the base columns mirror
-          // the first period. Naming the one the trip actually falls in is
-          // the whole point: "your quote is on the June rate" is actionable,
-          // "check the rate" is not.
-          const covering = periodCovering(periods, startDate)
-          if (!covering) {
-            issues.push({
-              dayNumber: dn,
-              severity: 'warn',
-              code: 'rate-period-uncovered',
-              message: `Day ${dn}: "${item.name}" is priced at its ${periodLabel(periods[0])} rate, and no period covers ${startDate}. Check the contract dates in Rates.`,
-            })
-          } else if (covering !== periods[0]) {
-            issues.push({
-              dayNumber: dn,
-              severity: 'warn',
-              code: 'rate-period-mismatch',
-              message: `Day ${dn}: "${item.name}" is priced at its ${periodLabel(periods[0])} rate, but ${startDate} falls in ${periodLabel(covering)}. The grid does not switch periods by date — check this price.`,
-            })
-          }
         }
       }
     }
