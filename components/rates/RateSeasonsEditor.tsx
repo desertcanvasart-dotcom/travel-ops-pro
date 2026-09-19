@@ -45,11 +45,14 @@ const FIELD_GROUPS: Record<RateSeasonEntity, Array<{ suffix: 'eur' | 'non_eur'; 
     { suffix: 'eur', fields: ['double_eur', 'single_supp_eur', 'triple_red_eur', 'suite_eur'] },
     { suffix: 'non_eur', fields: ['double_non_eur', 'single_supp_non_eur', 'triple_red_non_eur', 'suite_non_eur'] },
   ],
-  // A fare and its tax, per passport group. The guide's seat rides the same
-  // shared field as a hotel's guide bed, so it appears once at the end.
+  // ONE fare and one tax — no passport split. "A seat costs what a seat
+  // costs; the EU/non-EU split is real only for hotels and cruises"
+  // (operator, 2026-08-30), which is why the flight form has always had a
+  // single price box and copied it to the non-EU column on save. Two boxes
+  // here would be two boxes for one number, and the second would be left at
+  // zero — which prices as free rather than as "same as the other one".
   flight: [
     { suffix: 'eur', fields: ['base_rate_eur', 'tax_eur'] },
-    { suffix: 'non_eur', fields: ['base_rate_non_eur', 'tax_non_eur'] },
   ],
 }
 
@@ -267,9 +270,13 @@ export default function RateSeasonsEditor({
 
             {FIELD_GROUPS[entity].map(group => (
               <div key={group.suffix} className="mb-2 last:mb-0">
-                <p className="text-xs font-medium text-gray-600 mb-1">
-                  {group.suffix === 'eur' ? t('eurPassportHolders') : t('nonEurPassportHolders')}
-                </p>
+                {/* A single-group entity has no passport split to announce —
+                    naming one would invite the question of where the other is. */}
+                {FIELD_GROUPS[entity].length > 1 && (
+                  <p className="text-xs font-medium text-gray-600 mb-1">
+                    {group.suffix === 'eur' ? t('eurPassportHolders') : t('nonEurPassportHolders')}
+                  </p>
+                )}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {group.fields.map(field => (
                     <div key={field}>

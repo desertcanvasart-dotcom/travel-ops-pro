@@ -127,11 +127,25 @@ export function createRateNormalizer(runCurrency: string, deps?: {
     return roundToCurrency(n * factor, run)
   }
 
+  /**
+   * The tables whose money lives in dated PERIODS as well as in columns.
+   *
+   * ONE list, read by both branches below. It was two hand-written conditions,
+   * and flight_rates was added to neither when it gained periods (migration
+   * 20261025) — so a fare written in JPY had its columns converted and the
+   * numbers inside its periods handed over raw, which is the 2026-09-12
+   * regression exactly (a vehicles list shipped without these branches sent
+   * EGP out as USD). A table named here is converted AND neutralised, or the
+   * next one is forgotten the same way.
+   */
+  const TABLES_WITH_PERIODS: readonly RateCurrencyTable[] = ['accommodation_rates', 'nile_cruises', 'flight_rates']
+  const hasPeriods = (table: RateCurrencyTable) => TABLES_WITH_PERIODS.includes(table)
+
   const neutralise = <T extends Record<string, unknown>>(table: RateCurrencyTable, row: T): T => {
     const copy: Record<string, unknown> = { ...row }
     for (const col of RATE_MONETARY_COLUMNS[table]) copy[col] = null
     if (table === 'activity_rates') copy.tiers = null
-    if (table === 'accommodation_rates' || table === 'nile_cruises') copy.seasons = null
+    if (hasPeriods(table)) copy.seasons = null
     if (table === 'transportation_rates' || table === 'b2b_transport_packages') copy.vehicles = null
     misses.push({ table, id: (row.id as string | number | undefined) ?? null, currency: String(row.rate_currency) })
     return copy as T
@@ -142,7 +156,7 @@ export function createRateNormalizer(runCurrency: string, deps?: {
     for (const col of RATE_MONETARY_COLUMNS[table]) {
       if (col in copy) copy[col] = convertValue(copy[col], factor)
     }
-    if ((table === 'accommodation_rates' || table === 'nile_cruises') && Array.isArray(copy.seasons)) {
+    if (hasPeriods(table) && Array.isArray(copy.seasons)) {
       // Every value in a period's rates object is monetary by construction
       // (lib/rates/rate-seasons RATE_FIELDS), so convert them all.
       copy.seasons = copy.seasons.map(season =>
