@@ -8,6 +8,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import type { GridConfig, GridDay, AllRates, SlotValue, GridTotals } from './types'
 import { SLOT_DEFINITIONS } from './types'
 import { calculateGrandTotals, calculateDay, countMissingGuideBeds } from './lib/calculator'
+import { gridCompleteness } from './lib/grid-completeness'
 import type { SeasonWindow } from '@/lib/pricing/season-uplift'
 import { mapServicesToSlots } from './lib/slot-mapping'
 import GridHeader from './components/GridHeader'
@@ -718,6 +719,14 @@ function PricingGridContent() {
         seasonName: null, seasonPercent: 0, seasonUplift: 0,
       }
 
+  // The picked rates whose own dates do not match the trip's. Warnings only:
+  // the grid prices what the operator picked, and the whole point is that the
+  // mismatch stops being invisible. gridCompleteness owns the rules so the
+  // save path and this banner cannot drift apart.
+  const dateIssues = days.length > 0
+    ? gridCompleteness(days, config).issues.filter(i => i.code.startsWith('rate-'))
+    : []
+
   // --- Render ---
   if (loading && !rates) {
     return (
@@ -818,6 +827,19 @@ function PricingGridContent() {
               />
             ))}
           </div>
+
+          {/* The dates a picked rate belongs to. The grid prices what was
+              picked on any date — it does not switch rate periods the way the
+              auto engine does — so the one honest thing it can do is stop the
+              mismatch being invisible. Nothing here fires for an agency that
+              has not entered seasons. */}
+          {dateIssues.length > 0 && (
+            <div className="mb-3 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-800 space-y-1">
+              {dateIssues.map(issue => (
+                <div key={`${issue.code}-${issue.dayNumber}-${issue.message}`}>{issue.message}</div>
+              ))}
+            </div>
+          )}
 
           {/* A throughout quote with nights whose hotel has no guide rate is
               missing the guide's bed — say so, never price it silently at 0. */}
