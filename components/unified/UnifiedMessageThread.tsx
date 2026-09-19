@@ -1,6 +1,7 @@
 'use client'
 
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { stashHandoffText, encodeTextParam } from '@/lib/text-handoff'
 import { newRequestKey, sendGuardedEmail } from '@/lib/email/send-with-guard'
 import { useSendConflictConfirm } from '@/lib/email/use-send-conflict-confirm'
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -739,16 +740,19 @@ export function UnifiedMessageThread({
       return `${sender}: ${content}`
     }).join('\n')
 
-    // Encode conversation as URL-safe base64
-    const encoder = new TextEncoder()
-    const bytes = encoder.encode(formattedConversation)
-    const base64 = btoa(String.fromCharCode(...bytes))
-    const encoded = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-
-    // Build query params
+    // The conversation travels in sessionStorage, not the URL: base64 of a
+    // long thread overflowed the request line and the browser answered
+    // "HTTP ERROR 431" before anything reached the app. (The old encoder here
+    // had a second ceiling of its own — String.fromCharCode(...bytes) spreads
+    // the whole array into one call frame and throws RangeError.)
     const params = new URLSearchParams()
-    params.set('conversation', encoded)
-    params.set('encoded', 'base64')
+    const conversationKey = stashHandoffText(formattedConversation)
+    if (conversationKey) {
+      params.set('conversationKey', conversationKey)
+    } else {
+      params.set('conversation', encodeTextParam(formattedConversation))
+      params.set('encoded', 'base64')
+    }
     params.set('source', conversation.channel)
 
     // Pass client ID if linked

@@ -1,4 +1,6 @@
 'use client'
+
+import { readHandoffText } from '@/lib/text-handoff'
 // ============================================
 // Order intake — the tour-up.jp form, read as a document
 // ============================================
@@ -53,7 +55,15 @@ function OrderIntakeInner() {
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<Preview | null>(null)
 
-  useEffect(() => { const v = decodeParam(params.get('text')); if (v) setText(v) }, [params])
+  // The order form is parked in sessionStorage and only its key travels in
+  // the URL — a full form in the query string is an HTTP 431 the app never
+  // sees. `text` is the legacy shape, kept for older links.
+  useEffect(() => {
+    const stashed = readHandoffText(params.get('textKey'))
+    if (stashed) { setText(stashed); return }
+    const v = decodeParam(params.get('text'))
+    if (v) setText(v)
+  }, [params])
 
   const call = async (dryRun: boolean) => {
     setBusy(true)
