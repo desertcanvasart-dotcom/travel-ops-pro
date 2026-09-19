@@ -2,7 +2,7 @@
 
 import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import CityOptions from '@/app/components/CityOptions'
+import AirportOptions, { useAirports } from '@/app/components/AirportOptions'
 import { useDestinationCities } from '@/app/components/useDestinationCities'
 import { flightTypeForRoute } from '@/lib/rates/flight-type'
 import { firstInvalidMessage } from '@/lib/form-guard'
@@ -173,6 +173,10 @@ export default function FlightsContent() {
   // pre-fill only — once the operator picks a type by hand on this form, a
   // route change stops overwriting it.
   const { destinations } = useDestinationCities()
+  // A fare is priced between AIRPORTS. The form used to offer the cities of
+  // the destinations the agency SELLS, which is why an origin abroad — the
+  // Tokyo its customers fly in from — could not be named at all.
+  const { airports, labelFor: airportLabelFor } = useAirports()
   const typeChosenByHand = useRef(false)
   const cabinClassOptions = useVocabOptions('flight_cabin', CABIN_CLASSES.map(x => ({ value: x.value, label: x.label })))
   const frequencyOptions = useVocabOptions('flight_frequency', FREQUENCIES.map(x => ({ value: x.value, label: x.label })))
@@ -258,8 +262,12 @@ export default function FlightsContent() {
 
   const generateServiceCode = (from: string, to: string, airline: string, cabinClass: string) => {
     if (!from || !to) return ''
-    const fromCode = from.substring(0, 3).toUpperCase()
-    const toCode = to.substring(0, 3).toUpperCase()
+    // The airport's real IATA code. This used to take the first three letters
+    // of a city name, which gave CAI for Cairo by luck and LUX for Luxor,
+    // ABU for Abu Simbel and TOK for Tokyo by no luck at all.
+    const iata = (key: string) => airports.find(a => a.key === key)?.code || key.substring(0, 3).toUpperCase()
+    const fromCode = iata(from)
+    const toCode = iata(to)
     const airlineCode = (airline || '').trim().toUpperCase() || 'XX'
     const classCode = cabinClass.charAt(0).toUpperCase()
     return `FLT-${airlineCode}-${fromCode}-${toCode}-${classCode}`
@@ -275,11 +283,15 @@ export default function FlightsContent() {
         prev.airline_code,
         prev.cabin_class
       )
-      // Pre-fill the flight type from the agency's destinations; never a
-      // guess when neither city is known, never over a hand-picked type.
+      // Pre-fill the flight type from the AIRPORTS' countries — they know,
+      // and the destinations only knew the places the agency sells. Never a
+      // guess when a country is missing, never over a hand-picked type.
       if (!typeChosenByHand.current) {
-        const detected = flightTypeForRoute(updated.route_from, updated.route_to, destinations)
-        if (detected) updated.flight_type = detected as FlightRate['flight_type']
+        const from = airports.find(a => a.key === updated.route_from)
+        const to = airports.find(a => a.key === updated.route_to)
+        if (from?.countryCode && to?.countryCode) {
+          updated.flight_type = (from.countryCode === to.countryCode ? 'domestic' : 'international') as FlightRate['flight_type']
+        }
       }
       return updated
     })
@@ -658,7 +670,7 @@ export default function FlightsContent() {
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
             <option value="">{t('fromAny')}</option>
-            <CityOptions />
+            <AirportOptions airports={airports} />
           </select>
           <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
         </div>
@@ -670,7 +682,7 @@ export default function FlightsContent() {
             className="appearance-none pl-3 pr-8 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
           >
             <option value="">{t('toAny')}</option>
-            <CityOptions />
+            <AirportOptions airports={airports} />
           </select>
           <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
         </div>
@@ -760,9 +772,11 @@ export default function FlightsContent() {
                   <td className="px-3 py-2"><input type="checkbox" aria-label="select row" checked={bulk.has(rate.id)} onChange={() => bulk.toggle(rate.id)} /></td>
                   <td className="px-4 py-2">
                     <div className="flex items-center gap-1.5 text-sm">
-                      <span className="font-medium text-gray-900">{rate.route_from}</span>
+                      {/* The row stores an airport KEY; the agency's own word
+                          for it is what belongs on screen. */}
+                      <span className="font-medium text-gray-900">{airportLabelFor(rate.route_from)}</span>
                       <ArrowRight className="h-3 w-3 text-gray-400" />
-                      <span className="font-medium text-gray-900">{rate.route_to}</span>
+                      <span className="font-medium text-gray-900">{airportLabelFor(rate.route_to)}</span>
                     </div>
                   </td>
                   <td className="px-4 py-2">
@@ -1042,7 +1056,7 @@ export default function FlightsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       <option value="">{t('selectDepartureCity')}</option>
-                      <CityOptions />
+                      <AirportOptions airports={airports} />
                     </select>
                   </div>
 
@@ -1057,7 +1071,7 @@ export default function FlightsContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
                     >
                       <option value="">{t('selectArrivalCity')}</option>
-                      <CityOptions exclude={formData.route_from} />
+                      <AirportOptions airports={airports} exclude={formData.route_from} />
                     </select>
                   </div>
                 </div>

@@ -5,7 +5,8 @@
 import { guideLanguageWord } from '@/lib/guides/guide-language'
 import { rateGuideMode } from '@/lib/guides/guide-mode'
 import { NextRequest, NextResponse } from 'next/server'
-import { seasonsForRow, type RateSeasonEntity } from '@/lib/rates/rate-seasons'
+import { seasonsForRow, plainPeriodName, type RateSeasonEntity } from '@/lib/rates/rate-seasons'
+import { windowLabel, periodLabel, type OptionPeriod } from '@/lib/rates/date-window'
 import { supplementsForRow, supplementField } from '@/lib/rates/supplements'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
@@ -193,7 +194,8 @@ export async function GET(request: NextRequest) {
         rateEur: toNum(r.pp_double_eur),
         rateNonEur: toNum(r.pp_double_non_eur),
         city: r.city,
-        details: `${r.tier} | ${r.board_basis || 'BB'}`,
+        details: detailsWithPeriod(`${r.tier} | ${r.board_basis || 'BB'}`, optionPeriods(r, 'accommodation')),
+        periods: optionPeriods(r, 'accommodation'),
         board_basis: r.board_basis || 'BB',
         single_supp_eur: toNum(r.single_supp_eur),
         single_supp_non_eur: toNum(r.single_supp_non_eur),
@@ -218,7 +220,13 @@ export async function GET(request: NextRequest) {
         rateEur: toNum(r.base_rate_eur) + toNum(r.tax_eur),
         rateNonEur: toNum(r.base_rate_non_eur || r.base_rate_eur) + toNum(r.tax_non_eur || r.tax_eur),
         city: r.route_from,
-        details: `${r.airline} | ${r.flight_number || ''} | ${r.cabin_class}`,
+        // Two seasons of one fare are two rows with the same airline and route.
+        // Without the window on the line they render identically and picking
+        // the wrong one is silent.
+        details: [`${r.airline} | ${r.flight_number || ''} | ${r.cabin_class}`, r.season || null, windowLabel(r.rate_valid_from, r.rate_valid_to)]
+          .filter(Boolean).join(' | '),
+        validFrom: r.rate_valid_from ?? null,
+        validTo: r.rate_valid_to ?? null,
         route_from: r.route_from,
         route_to: r.route_to,
         // Guide fare for the "+1" seat; null = he pays the customer fare.
@@ -255,7 +263,8 @@ export async function GET(request: NextRequest) {
         name: `${r.ship_name} (${r.duration_nights}N, ${r.cabin_type})`,
         rateEur: toNum(r.rate_double_eur || r.rate_low_double_eur),
         rateNonEur: toNum(r.rate_double_non_eur || r.rate_low_double_non_eur || r.rate_double_eur || r.rate_low_double_eur),
-        details: `${r.route_name || ''} | ${r.tier || ''} | ${r.cabin_type || 'Standard'}`,
+        details: detailsWithPeriod(`${r.route_name || ''} | ${r.tier || ''} | ${r.cabin_type || 'Standard'}`, optionPeriods(r, 'cruise')),
+        periods: optionPeriods(r, 'cruise'),
         single_rate_eur: toNum(r.rate_single_eur || r.rate_low_single_eur),
         single_rate_non_eur: toNum(r.rate_single_non_eur || r.rate_low_single_non_eur),
         duration_nights: r.duration_nights,
@@ -282,6 +291,30 @@ function toNum(v: any): number {
  *  prices — the period the headline rate mirrors, since the grid resolves no
  *  travel date per night. Rows already went through the currency normaliser,
  *  so these are in the run currency like everything else on the option. */
+/**
+ * A property's dated periods, flattened for the grid.
+ *
+ * The grid prices from the BASE columns, which mirror the FIRST period — so
+ * periods[0] is the period the number on screen belongs to, and the rest are
+ * what it is NOT. Sent so the option can say which, and so the completeness
+ * gate can notice when the trip's dates fall in another one.
+ */
+function optionPeriods(row: Record<string, unknown>, entity: RateSeasonEntity): OptionPeriod[] {
+  return seasonsForRow(row, entity).map(season => ({
+    name: plainPeriodName(season),
+    from: season.from,
+    to: season.to,
+  }))
+}
+
+/** The period the shown price belongs to, appended to an option's details.
+ *  Silent for a row with no periods, or with only one — there is nothing to
+ *  mistake it for. */
+function detailsWithPeriod(details: string, periods: OptionPeriod[]): string {
+  if (periods.length < 2) return details
+  return `${details} | ${periodLabel(periods[0])}`
+}
+
 function gridSupplements(row: object, entity: RateSeasonEntity) {
   const rates = seasonsForRow(row, entity)[0]?.rates ?? {}
   return supplementsForRow(row).map(s => ({

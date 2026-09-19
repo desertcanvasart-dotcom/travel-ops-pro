@@ -7191,6 +7191,9 @@ export interface Database {
           hotel_check_in: boolean | null
           hotel_check_out: boolean | null
           intercity: string | null
+          leg_from: string | null
+          leg_to: string | null
+          leg_assist: Json | null
         }
         Insert: {
           id?: string
@@ -7220,6 +7223,9 @@ export interface Database {
           hotel_check_in?: boolean | null
           hotel_check_out?: boolean | null
           intercity?: string | null
+          leg_from?: string | null
+          leg_to?: string | null
+          leg_assist?: Json | null
         }
         Update: {
           id?: string
@@ -7249,6 +7255,9 @@ export interface Database {
           hotel_check_in?: boolean | null
           hotel_check_out?: boolean | null
           intercity?: string | null
+          leg_from?: string | null
+          leg_to?: string | null
+          leg_assist?: Json | null
         }
         Relationships: [
           {

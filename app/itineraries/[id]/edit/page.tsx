@@ -52,6 +52,7 @@ import ServiceRatePicker from '@/components/ServiceRatePicker'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { LegCityOptions, useAirports } from '@/app/components/AirportOptions'
 
 const ItineraryMap = dynamic(() => import('@/components/ItineraryMap'), {
   ssr: false,
@@ -102,6 +103,14 @@ interface ItineraryDay {
   transport_type?: 'flight' | 'ground' | null
   skip_arrival_checkin?: boolean
   extras?: TransportExtra[]
+
+  /** The route this day's flight actually flies, when it is not "yesterday's
+   *  city → today's". An international arrival has no previous day to infer
+   *  an origin from, so without these the leg is never collected at all.
+   *  Cities, not airports: the engine resolves a city to its airports. */
+  leg_from?: string | null
+  leg_to?: string | null
+  leg_assist?: { from?: boolean; to?: boolean } | null
 }
 
 interface CabinAllocationItem {
@@ -319,6 +328,9 @@ export default function ItineraryEditorPage() {
   const [calculating, setCalculating] = useState(false)
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [days, setDays] = useState<ItineraryDay[]>([])
+  // The cities a flight can leave from or land in are the cities the agency's
+  // airports are in — so this list needs no second place to be maintained.
+  const { airports } = useAirports()
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
   // Day IDs whose Transport details panel is expanded (B3 rule flags).
   const [expandedTransportPanels, setExpandedTransportPanels] = useState<Set<string>>(new Set())
@@ -415,6 +427,9 @@ export default function ItineraryEditorPage() {
         transport_type: day.transport_type ?? null,
         skip_arrival_checkin: day.skip_arrival_checkin ?? false,
         extras: Array.isArray(day.extras) ? day.extras : [],
+        leg_from: day.leg_from ?? null,
+        leg_to: day.leg_to ?? null,
+        leg_assist: day.leg_assist ?? null,
       }))
 
       setDays(transformedDays)
@@ -881,6 +896,11 @@ export default function ItineraryEditorPage() {
         transport_type: day.transport_type ?? null,
         skip_arrival_checkin: day.skip_arrival_checkin ?? false,
         extras: day.extras ?? [],
+        // Blank means "infer from the days either side", which is what the
+        // engine did before these existed — so an empty field is null, never ''.
+        leg_from: day.transport_type === 'flight' ? (day.leg_from || null) : null,
+        leg_to: day.transport_type === 'flight' ? (day.leg_to || null) : null,
+        leg_assist: day.transport_type === 'flight' ? (day.leg_assist ?? null) : null,
       })
 
       const isRealUUID = (id: string) =>
@@ -1732,6 +1752,71 @@ export default function ItineraryEditorPage() {
                             </label>
                           </div>
                         </div>
+                        {/* The route the flight actually flies.
+                            Blank = the day before → this day, which is right
+                            for a domestic hop and impossible for the flight the
+                            customers ARRIVE on: day 1 has no day before it, so
+                            an international arrival has no origin to infer and
+                            the leg was never priced at all.
+                            Cities, because that is what a leg names — the
+                            engine resolves a city to its airports. The list is
+                            the cities your airports are in, so adding Tokyo
+                            Narita in Vocabulary puts Tokyo here. */}
+                        {day.transport_type === 'flight' && (
+                          <div>
+                            <div className="text-xs text-gray-500 mb-1">
+                              Flight route <span className="font-normal text-gray-400">(leave blank to use the days either side)</span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <select
+                                value={day.leg_from ?? ''}
+                                onChange={e => updateDay(day.id, { leg_from: e.target.value || null })}
+                                aria-label="Flight departs from"
+                                className="px-2 py-1 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                              >
+                                <option value="">From (previous day)</option>
+                                <LegCityOptions airports={airports} exclude={day.leg_to ?? undefined} />
+                              </select>
+                              <span className="text-gray-400 text-xs">→</span>
+                              <select
+                                value={day.leg_to ?? ''}
+                                onChange={e => updateDay(day.id, { leg_to: e.target.value || null })}
+                                aria-label="Flight arrives in"
+                                className="px-2 py-1 text-xs border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47]"
+                              >
+                                <option value="">To (this day&apos;s city)</option>
+                                <LegCityOptions airports={airports} exclude={day.leg_from ?? undefined} />
+                              </select>
+                              {airports.length === 0 && (
+                                <span className="text-xs text-amber-700">
+                                  No airports yet — add them in Settings → Vocabulary → Airports.
+                                </span>
+                              )}
+                            </div>
+                            {/* Whether the party is met at each end. The engine
+                                prices a meet & greet from these. */}
+                            <div className="flex flex-wrap gap-3 mt-1.5 text-xs text-gray-600">
+                              <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={!!day.leg_assist?.from}
+                                  onChange={e => updateDay(day.id, { leg_assist: { ...(day.leg_assist ?? {}), from: e.target.checked } })}
+                                  className="w-3.5 h-3.5 accent-[#647C47]"
+                                />
+                                Assistance at departure airport
+                              </label>
+                              <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={!!day.leg_assist?.to}
+                                  onChange={e => updateDay(day.id, { leg_assist: { ...(day.leg_assist ?? {}), to: e.target.checked } })}
+                                  className="w-3.5 h-3.5 accent-[#647C47]"
+                                />
+                                Assistance at arrival airport
+                              </label>
+                            </div>
+                          </div>
+                        )}
                         {/* Skip arrival check-in — only meaningful on the arrival day. */}
                         {day.day_number === 1 && (
                           <label className="flex items-center gap-2 text-gray-700 cursor-pointer">

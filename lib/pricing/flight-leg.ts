@@ -29,8 +29,18 @@ const AIRPORT_CODES: Record<string, string> = {
   'abu simbel': 'ABS',
 }
 
-/** The airport code for a city. Unknown cities read as Cairo — the engine's
- *  long-standing behaviour, kept for callers that price an unnamed day. */
+/**
+ * The airport code for a city — the FALLBACK, for an install whose airport
+ * vocabulary is not filled in yet.
+ *
+ * This list is nine Egyptian cities, and it used to be the only answer in the
+ * system: an agency anywhere else got 'CAI' for every airport it had, silently.
+ * The real list is now the agency's own (Settings → Vocabulary → Airports,
+ * lib/rates/airports.ts) and callers ask it FIRST. Unknown still reads as Cairo
+ * here rather than throwing, because that is what the callers that reach this
+ * line have always been given — but reaching it now means the list is empty,
+ * not that the world is Egypt.
+ */
 export function getAirportCode(city: string): string {
   return AIRPORT_CODES[String(city ?? '').trim().toLowerCase()] || 'CAI'
 }

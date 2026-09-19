@@ -20,6 +20,7 @@ export const VOCABULARY_KINDS = [
   'guide_duration', 'guide_language', 'rate_season', 'airline', 'hotel_supplement',
   'airport_direction', 'activity_pricing_type', 'cruise_supplement',
   'tour_type', 'physical_level', 'tour_audience', 'tour_theme', 'guide_mode',
+  'airport',
 ] as const
 export type VocabularyKind = (typeof VOCABULARY_KINDS)[number]
 
@@ -335,6 +336,15 @@ export const VOCABULARY_KIND_INFO: Record<VocabularyKind, VocabularyKindInfo> = 
     usedIn: 'Hotel and cruise rate periods; attraction and sleeping-train rate rows; period and rate CSV import',
     minItems: 1,
     example: 'Low Season / High Season / Christmas / New Year',
+  },
+  airport: {
+    kind: 'airport',
+    group: 'Transport & tickets',
+    title: 'Airports',
+    description: 'The airports you price flights between, each with its IATA code and the city it serves. A flight rate names an airport, not a city — so Tokyo Narita and Tokyo Haneda are two fares — while the rest of the system still works in cities. This is also where an airport OUTSIDE the destinations you sell belongs: the origin your customers fly from is not a place you run tours in.',
+    usedIn: 'Flight rates, ticket legs, airport transfers, the pricing engine',
+    minItems: 0,
+    example: 'Cairo (CAI) / Luxor (LXR) / Tokyo Narita (NRT)',
   },
   airline: {
     kind: 'airline',
