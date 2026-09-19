@@ -6840,7 +6840,8 @@
       "returnIncluded": "Road transfer back {from} → {to} — included in the overnight return priced on day {day}."
     },
     "inFlightNight": "In the air (overnight flight) — nothing sold this day",
-    "guideLanguageNoRate": "{language} — no guide rate"
+    "guideLanguageNoRate": "{language} — no guide rate",
+    "guideLanguageFromRate": "{language} — from a guide rate, not in your list"
   },
   "bookings": {
     "title": "Bookings",

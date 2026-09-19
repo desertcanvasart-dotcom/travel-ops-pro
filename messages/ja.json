@@ -7425,7 +7425,8 @@
       "returnIncluded": "{from} → {to} の復路 — {day}日目の1泊往復に含まれます。"
     },
     "inFlightNight": "機中泊(夜行便)— この日は手配なし",
-    "guideLanguageNoRate": "{language}(ガイド料金なし)"
+    "guideLanguageNoRate": "{language}(ガイド料金なし)",
+    "guideLanguageFromRate": "{language}（ガイド料金にあり・一覧には未登録）"
   },
   "bookings": {
     "title": "予約管理",
