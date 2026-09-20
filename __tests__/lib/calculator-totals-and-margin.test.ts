@@ -87,3 +87,38 @@ describe('repricing must not do what calculating does', () => {
     expect(calc).toContain('resetView: true')
   })
 })
+
+describe('the margin is adjusted beside the price it moves', () => {
+  // Operator, 2026-09-20, after the first pass shipped: "it shows only the
+  // percentage without the availability to decrease or increase the percentage
+  // from the place we talked about." The place is the results card — the
+  // question is "what would 28 look like?", which is a question about the four
+  // figures on that row, not about a field a scroll away.
+  const card = page.slice(page.indexOf("The margin is adjusted HERE"), page.indexOf("{t('sellingPrice')}"))
+
+  it('has steppers on the card itself', () => {
+    expect(card).toContain("aria-label={t('marginUp')}")
+    expect(card).toContain("aria-label={t('marginDown')}")
+    expect(card).toContain('{marginPercent}%')
+  })
+
+  it('shows the LIVE percentage, not the priced one', () => {
+    // result.margin_percent is what the amount below was computed at; the
+    // control has to follow the finger, not the last server answer.
+    expect(card).toMatch(/<span[^>]*>\{marginPercent\}%<\/span>/)
+  })
+
+  it('admits the amount is stale while the re-price is in flight', () => {
+    // Otherwise a number belonging to the old percentage sits there looking
+    // like the answer to the new one.
+    expect(card).toContain('marginPercent !== result.margin_percent')
+    expect(card).toContain("t('repricingAt', { percent: marginPercent })")
+    expect(en.repricingAt).toMatch(/\{percent\}%/)
+  })
+
+  it('keeps the control in the form too, for before a price exists', () => {
+    // The card only exists once there is a result to put it on.
+    const form = page.slice(0, page.indexOf('The margin is adjusted HERE'))
+    expect(form).toContain("aria-label={t('marginUp')}")
+  })
+})

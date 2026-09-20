@@ -1650,9 +1650,41 @@ export default function TourPriceCalculator() {
                       {result.tour_leader_included && ` · ${t('plusTourLeader')}`}
                     </p>
                   </div>
+                  {/* The margin is adjusted HERE, beside the price it moves.
+                      It is also in the form on the left, but that is a scroll
+                      away from the figures it changes — and the question being
+                      asked is "what would 28 look like?", which is a question
+                      about THESE four numbers (operator, 2026-09-20). */}
                   <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-xs text-gray-500 mb-1">{t('margin')} ({result.margin_percent}%)</p>
-                    <p className="text-xl font-bold text-green-600">{sym}{result.margin_amount.toFixed(2)}</p>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <p className="text-xs text-gray-500">{t('margin')}</p>
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setMarginPercent(m => Math.max(0, Math.round((m - 1) * 100) / 100))}
+                          disabled={marginPercent <= 0}
+                          aria-label={t('marginDown')}
+                          className="w-5 h-5 leading-none rounded border border-gray-300 text-gray-600 hover:bg-white disabled:opacity-40"
+                        >−</button>
+                        <span className="w-12 text-center text-xs font-semibold tabular-nums text-gray-700">{marginPercent}%</span>
+                        <button
+                          type="button"
+                          onClick={() => setMarginPercent(m => Math.min(100, Math.round((m + 1) * 100) / 100))}
+                          disabled={marginPercent >= 100}
+                          aria-label={t('marginUp')}
+                          className="w-5 h-5 leading-none rounded border border-gray-300 text-gray-600 hover:bg-white disabled:opacity-40"
+                        >+</button>
+                      </div>
+                    </div>
+                    {/* Until the re-price lands, the amount below still belongs
+                        to the OLD percentage — so it says so rather than
+                        sitting there looking like the answer. */}
+                    <p className={`text-xl font-bold text-green-600 ${marginPercent !== result.margin_percent ? 'opacity-40' : ''}`}>
+                      {sym}{result.margin_amount.toFixed(2)}
+                    </p>
+                    {marginPercent !== result.margin_percent && (
+                      <p className="mt-0.5 text-[11px] text-gray-500">{t('repricingAt', { percent: marginPercent })}</p>
+                    )}
                   </div>
                   <div className="bg-[#647C47]/10 rounded-lg p-4">
                     <p className="text-xs text-gray-500 mb-1">{t('sellingPrice')}{result.complete === false && <span className="ml-1 font-semibold text-red-600">· {t('incompleteBadge')}</span>}</p>

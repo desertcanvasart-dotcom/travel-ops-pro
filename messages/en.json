@@ -6855,7 +6855,8 @@
     "marginRepricesHint": "Changing this re-prices the quote",
     "forPax": "for {count} passengers",
     "plusTourLeader": "incl. tour leader",
-    "dividedBy": "across {count} paying"
+    "dividedBy": "across {count} paying",
+    "repricingAt": "repricing at {percent}%…"
   },
   "bookings": {
     "title": "Bookings",
