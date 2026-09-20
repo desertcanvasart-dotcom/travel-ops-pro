@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { seasonsForRow, plainPeriodName, type RateSeasonEntity } from '@/lib/rates/rate-seasons'
 import { periodLabel, type OptionPeriod } from '@/lib/rates/date-window'
 import { cruiseSailingLabel, sanitizeSailingDays } from '@/lib/rates/cruise-sailing'
+import { airportsFrom, flightRouteLabel, cityOfAirportKey } from '@/lib/rates/airports'
 import { supplementsForRow, supplementField } from '@/lib/rates/supplements'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
@@ -37,6 +38,7 @@ export async function GET(request: NextRequest) {
       { data: cruiseRates },
       { data: cruiseTransportPkgs },
       { data: flightRates },
+      { data: airportRows },
     ] = await Promise.all([
       supabase.from('transportation_rates').select('*').eq('is_active', true),
       supabase.from('guide_rates').select('*').eq('is_active', true),
@@ -50,7 +52,11 @@ export async function GET(request: NextRequest) {
       supabase.from('nile_cruises').select('*').eq('is_active', true).eq('tier', tier),
       supabase.from('b2b_transport_packages').select('*').eq('is_active', true),
       supabase.from('flight_rates').select('*').eq('is_active', true),
+      // A fare's route is airport KEYS; every line the operator reads, and the
+      // day-city match, needs them back as places.
+      supabase.from('org_vocabularies').select('key, label, meta, is_active').eq('kind', 'airport').order('rank'),
     ])
+    const airports = airportsFrom((airportRows ?? []) as Array<{ key: string; label: string; meta: Record<string, unknown>; is_active: boolean }>)
 
     // NORMALISE EVERY ROW TO THE ORG RATE CURRENCY before any option is
     // shaped. The engine paths have done this since per-rate-currency
@@ -218,10 +224,13 @@ export async function GET(request: NextRequest) {
 
       flights: (nFlights || []).map((r: any) => ({
         id: r.id,
-        name: `${r.airline} ${r.route_from}→${r.route_to} (${r.cabin_class})`,
+        // The route is AIRPORT KEYS on the row; a person reads places.
+        // "Egypt Air asw→cai" named nothing anybody recognises.
+        name: `${r.airline} ${flightRouteLabel(airports, r)} (${r.cabin_class})`,
         rateEur: toNum(r.base_rate_eur) + toNum(r.tax_eur),
         rateNonEur: toNum(r.base_rate_non_eur || r.base_rate_eur) + toNum(r.tax_non_eur || r.tax_eur),
-        city: r.route_from,
+        // The DAY's city is matched against this, so it has to BE a city.
+        city: cityOfAirportKey(airports, r.route_from),
         // A fare carries dated PERIODS now (migration 20261025), so the single
         // rate_valid_from/to pair is only the first period's mirror — naming it
         // on a fare with four periods reads as a different fare.

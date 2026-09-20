@@ -140,3 +140,46 @@ export function airportCities(airports: Airport[]): Array<{ city: string; countr
   return [...seen.values()].sort((x, y) =>
     x.countryCode === y.countryCode ? x.city.localeCompare(y.city) : x.countryCode.localeCompare(y.countryCode))
 }
+
+// ── A fare's route, read back as places ──────────────────────────────────
+// flight_rates.route_from / route_to hold airport KEYS (migration 20261023).
+// Everything that shows a fare to a person, or matches one against a leg,
+// therefore has to come back through the vocabulary — a row that says `asw`
+// is not a row about a city called "asw".
+//
+// The engine learned this when the keys landed. Three readers did not: the
+// travel-leg picker compared the key to a city name and showed "No rate for
+// this route" on a route that had one; the grid matched its flight options to
+// a day's city the same way; and the grid's option list rendered
+// "Egypt Air asw→cai". Same mistake three times, so the rule lives here once.
+
+/** Does this fare fly between these two CITIES? */
+export function flightRouteMatches(
+  airports: Airport[],
+  row: { route_from?: unknown; route_to?: unknown },
+  fromCity: string | null | undefined,
+  toCity: string | null | undefined
+): boolean {
+  const from = new Set(airportsForCity(airports, fromCity).map(a => a.key))
+  const to = new Set(airportsForCity(airports, toCity).map(a => a.key))
+  if (from.size === 0 || to.size === 0) return false
+  return from.has(String(row.route_from ?? '')) && to.has(String(row.route_to ?? ''))
+}
+
+/** The city an airport key serves, for a reader that thinks in cities. */
+export function cityOfAirportKey(airports: Airport[], key: unknown): string {
+  return airportByKey(airports, String(key ?? ''))?.city ?? ''
+}
+
+/** "Aswan → Cairo" — the fare's route as places, falling back to the stored
+ *  key so a fare whose airport was deleted still names something. */
+export function flightRouteLabel(
+  airports: Airport[],
+  row: { route_from?: unknown; route_to?: unknown }
+): string {
+  const side = (key: unknown) => {
+    const a = airportByKey(airports, String(key ?? ''))
+    return a ? a.city || a.label : String(key ?? '')
+  }
+  return `${side(row.route_from)} → ${side(row.route_to)}`
+}
