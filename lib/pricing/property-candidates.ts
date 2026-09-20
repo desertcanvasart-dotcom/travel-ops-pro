@@ -12,16 +12,25 @@
 // the list, and a port that matches nothing (programme days are usually
 // filed under "Nile Cruise") falls back to every ship at the tier.
 
+import { ANY_TIER } from './property-choice'
+
 type Row = Record<string, unknown>
 // Structural, so the engine's client, a route's client and the test mock all fit.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (table: string) => any }
 
+/** ANY_TIER lists every tier's properties — the day editor offering the
+ *  operator a property to NAME, which then prices whatever tier the quote
+ *  runs at (lib/pricing/property-choice). The engine's own automatic pick
+ *  never passes it: an unnamed stay still takes the tier it was sold at. */
+const atTier = <T>(q: T, tier: string): T =>
+  tier === ANY_TIER ? q : ((q as { eq: (c: string, v: string) => T }).eq('tier', tier))
+
 export async function hotelCandidates(db: Db, city: string, tier: string): Promise<Row[]> {
-  const { data, error } = await db
-    .from('accommodation_rates')
-    .select('*')
-    .eq('tier', tier)
+  const { data, error } = await atTier(
+    db.from('accommodation_rates').select('*'),
+    tier
+  )
     .eq('is_active', true)
     .ilike('city', `%${city}%`)
     .order('created_at', { ascending: false })
@@ -39,10 +48,7 @@ export async function cruiseCandidates(db: Db, tier: string, embarkCity?: string
     nights && nights > 0
       ? [...rows.filter(r => Number(r.duration_nights) === nights), ...rows.filter(r => Number(r.duration_nights) !== nights)]
       : rows
-  const base = () => db
-    .from('nile_cruises')
-    .select('*')
-    .eq('tier', tier)
+  const base = () => atTier(db.from('nile_cruises').select('*'), tier)
     .eq('is_active', true)
   const ordered = (q: ReturnType<typeof base>) =>
     q.order('is_preferred', { ascending: false }).order('created_at', { ascending: false })

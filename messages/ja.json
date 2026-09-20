@@ -7391,7 +7391,14 @@
       "chosenMissingShip": "選択したクルーズ船は無効化または削除されています。別の船を選んでください。",
       "wholeStayHotel": "{city}の全泊でこのホテルを使用します。",
       "wholeStayShip": "乗船中の全泊でこの船を使用します。",
-      "nights": "{count}泊"
+      "nights": "{count}泊",
+      "thisTier": "{tier}",
+      "otherTiers": "他のグレード",
+      "atTier": "{name} — {tier}",
+      "atNoTier": "{name} — グレード未設定",
+      "allTiersLabelHotel": "ホテル（全グレード）",
+      "allTiersLabelShip": "客船（全グレード）",
+      "allTiersHint": "ここで指定した施設は、販売グレードに関わらず必ず使用されます。該当グレードの施設が無い目的地のための設定です。"
     },
     "transport": {
       "label": "交通",

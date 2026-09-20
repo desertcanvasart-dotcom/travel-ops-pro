@@ -7,6 +7,12 @@
 // pricing engine reads them — the first is the one it picks when the day has
 // no choice, so the day editor can show "Automatic: <that hotel>" and offer
 // the rest. Same list as the engine: lib/pricing/property-candidates.
+//
+// `tier=*` (ANY_TIER) lists every tier's properties. The day editor asks for
+// it so the operator can NAME a property the tier would not have picked —
+// priced at its own tier, with a note on the line (chosenRowDifference).
+// There is no "automatic" in that list; the automatic pick is always the
+// tier's own.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'

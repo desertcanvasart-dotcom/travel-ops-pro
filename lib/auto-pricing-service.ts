@@ -1625,20 +1625,43 @@ export type CruiseStayRates = {
   row: HotelOrCruiseRow
   /** The operator chose this ship on the programme days (lib/pricing/property-choice). */
   chosen: boolean
+  /** Set when the property priced is not what this tier or city would have
+   *  picked — the operator named it. The price line says so. */
+  differs?: ChosenPropertyNote
+  /** The tier the named property is actually filed at, for that note. */
+  actualTier?: string | null
 }
 
-/** Why a CHOSEN property could not be used — the engine names it in the
- *  hole instead of quietly pricing another property. */
-export type ChosenPropertyProblem = 'gone' | 'inactive' | 'bad_nights' | 'wrong_tier' | 'wrong_city'
+/** Why a CHOSEN property could not be used AT ALL — the engine names it in
+ *  the hole instead of quietly pricing another property. These are the cases
+ *  where there is no number to be had: the row is gone, switched off, or (a
+ *  ship) has no usable number of nights. */
+export type ChosenPropertyProblem = 'gone' | 'inactive' | 'bad_nights'
 
-/** A chosen row must still fit the stay it prices: the tier being priced and,
- *  for a hotel, the city it sleeps in — the same match the candidate list
- *  uses. A stay whose city was edited after the choice, or a row re-tiered
- *  since, is a hole asking to choose again, never another city's hotel
- *  priced as "chosen" (Greptile on #453). */
-export function chosenRowMismatch(row: Record<string, unknown>, tier: string, city?: string): ChosenPropertyProblem | undefined {
-  if (String(row.tier ?? '') !== tier) return 'wrong_tier'
-  if (city !== undefined && !String(row.city ?? '').toLowerCase().includes(city.trim().toLowerCase())) return 'wrong_city'
+/** A chosen property that IS priced, but is not what the tier or the city
+ *  would have produced on its own. The line says so; the quote still has a
+ *  number. */
+export type ChosenPropertyNote = 'other_tier' | 'other_city'
+
+/** How a chosen row differs from the stay being priced.
+ *
+ * Until 2026-09-20 a difference here was a HOLE: a named hotel at another
+ * tier was thrown away and the night priced nothing. Operator: "some
+ * destinations might not have a certain category so we are obliged to use
+ * different categories depending on what the destination offers" — Abu
+ * Simbel has no luxury hotel, and every ship in the catalogue is standard,
+ * so a luxury programme that names its real properties could not be priced
+ * at all. Naming the property IS the operator's decision; the tier is only
+ * the fallback for stays nobody named. So the difference is reported on the
+ * line and the price stands.
+ *
+ * The original concern (Greptile on #453) was a silent swap — the quote
+ * saying "chosen" while pricing something else. That still cannot happen:
+ * this row is the one that was chosen, and the note names what is unusual
+ * about it. */
+export function chosenRowDifference(row: Record<string, unknown>, tier: string, city?: string): ChosenPropertyNote | undefined {
+  if (String(row.tier ?? '') !== tier) return 'other_tier'
+  if (city !== undefined && !String(row.city ?? '').toLowerCase().includes(city.trim().toLowerCase())) return 'other_city'
   return undefined
 }
 
@@ -1668,11 +1691,12 @@ export async function resolveCruiseStay(
 ): Promise<{ rates: CruiseStayRates | null; problem?: ChosenPropertyProblem }> {
   try {
     let raw: HotelOrCruiseRow | null
+    let note: ChosenPropertyNote | undefined
     if (chosenId) {
       const found = await propertyById(supabaseAdmin, 'nile_cruises', chosenId)
       if (!found.row) return { rates: null, problem: found.inactive ? 'inactive' : 'gone' }
-      const mismatch = chosenRowMismatch(found.row, tier)
-      if (mismatch) return { rates: null, problem: mismatch }
+      // A ship at another tier is still THIS ship: price it and say so.
+      note = chosenRowDifference(found.row, tier)
       raw = found.row
     } else {
       // The starred ship first, then newest; a port that matches nothing
@@ -1712,6 +1736,8 @@ export async function resolveCruiseStay(
         seasonName: resolved.seasonName,
         row: cruise,
         chosen: Boolean(chosenId),
+        differs: note,
+        actualTier: note ? (cruise.tier ?? null) : undefined,
       },
     }
   } catch (err) {
@@ -1744,27 +1770,54 @@ export type HotelStayRates = {
   row: HotelOrCruiseRow
   /** The operator chose this hotel on the programme days. */
   chosen: boolean
+  /** Set when the property priced is not what this tier or city would have
+   *  picked — the operator named it. The price line says so. */
+  differs?: ChosenPropertyNote
+  /** The tier the named property is actually filed at, for that note. */
+  actualTier?: string | null
 }
 
-/** "Chosen · Summer 2026 · EU passport · per person in a double, per night" */
-export function rateSourceNote(src: { chosen: boolean; period: string | null; isEurPassport: boolean; basis: string }): string {
+/** "Chosen · Summer 2026 · EU passport · per person in a double, per night"
+ *
+ * A named property that is not at the tier being priced adds a segment
+ * saying so. It is on the line rather than in a hole because the quote has a
+ * real price: the operator named this property BECAUSE the destination has
+ * nothing at the tier (lib/pricing/property-choice, ANY_TIER). */
+export function rateSourceNote(src: {
+  chosen: boolean
+  period: string | null
+  isEurPassport: boolean
+  basis: string
+  differs?: ChosenPropertyNote
+  actualTier?: string | null
+  tier?: string
+}): string {
+  const difference =
+    src.differs === 'other_tier'
+      ? `${src.actualTier ? `${src.actualTier} property` : 'another tier'}${src.tier ? ` in a ${src.tier} quote` : ''}`
+      : src.differs === 'other_city'
+        ? 'filed under another city'
+        : null
   return [
     src.chosen ? 'Chosen on the day' : 'Automatic pick',
+    difference,
     src.period ? `period "${src.period}"` : 'no dated period (base rate)',
     src.isEurPassport ? 'EU passport' : 'non-EU passport',
     src.basis,
-  ].join(' · ')
+  ].filter(Boolean).join(' · ')
 }
 
 /** The hole message for a chosen hotel or ship that cannot be used. The
- *  engine never swaps in another property for one the operator chose. */
+ *  engine never swaps in another property for one the operator chose.
+ *
+ *  Being at another tier or in another city is NOT in this list any more:
+ *  those are priced with a note on the line (chosenRowDifference). Only a
+ *  property with no number to give reaches here. */
 export function chosenPropertyMessage(kind: 'hotel' | 'cruise', problem: ChosenPropertyProblem, city?: string): string {
   const what = kind === 'hotel' ? `The hotel chosen for ${city ?? 'this stay'}` : 'The ship chosen for this sailing'
   const where = kind === 'hotel' ? 'Rates → Hotels' : 'Rates → Cruises'
   if (problem === 'inactive') return `${what} is switched off in ${where}. Switch it back on, or choose another on the day.`
   if (problem === 'bad_nights') return `${what} has no valid number of nights in ${where}. Fix it, or choose another ship on the day.`
-  if (problem === 'wrong_tier') return `${what} is not at the tier being priced. Choose again on the day for this tier.`
-  if (problem === 'wrong_city') return `${what} is in another city — the stay's city was changed after it was chosen. Choose again on the day.`
   return `${what} is no longer in ${where}. Choose another on the day.`
 }
 
@@ -1792,11 +1845,13 @@ export async function resolveHotelStay(
 ): Promise<{ rates: HotelStayRates | null; problem?: ChosenPropertyProblem }> {
   try {
     let raw: HotelOrCruiseRow | null
+    let note: ChosenPropertyNote | undefined
     if (chosenId) {
       const found = await propertyById(supabaseAdmin, 'accommodation_rates', chosenId)
       if (!found.row) return { rates: null, problem: found.inactive ? 'inactive' : 'gone' }
-      const mismatch = chosenRowMismatch(found.row, tier, city)
-      if (mismatch) return { rates: null, problem: mismatch }
+      // A hotel at another tier, or filed under a neighbouring city, is still
+      // the hotel the operator named: price it and say so on the line.
+      note = chosenRowDifference(found.row, tier, city)
       raw = found.row
     } else {
       // Newest active hotel in the city at the tier — the same list the day
@@ -1826,6 +1881,8 @@ export async function resolveHotelStay(
         seasonName: resolved.seasonName,
         row: hotel,
         chosen: Boolean(chosenId),
+        differs: note,
+        actualTier: note ? (hotel.tier ?? null) : undefined,
       },
     }
   } catch (err) {
@@ -3345,6 +3402,9 @@ export async function calculateDayBasedPricing(
             period: nightly.seasonName,
             isEurPassport,
             basis: 'per person in a double, per night',
+            differs: hotelRate.differs,
+            actualTier: hotelRate.actualTier,
+            tier,
           })
         })
       } else {
@@ -3496,6 +3556,9 @@ export async function calculateDayBasedPricing(
             period: n.seasonName,
             isEurPassport,
             basis: 'per person in a double cabin, per night',
+            differs: cruiseRates.differs,
+            actualTier: cruiseRates.actualTier,
+            tier,
           }),
         })
         return

@@ -6806,7 +6806,14 @@
       "chosenMissingShip": "The ship chosen for this sailing is switched off or no longer on file. Choose another.",
       "wholeStayHotel": "Every night in {city} uses this hotel.",
       "wholeStayShip": "Every night aboard uses this ship.",
-      "nights": "{count, plural, one {# night} other {# nights}}"
+      "nights": "{count, plural, one {# night} other {# nights}}",
+      "thisTier": "{tier}",
+      "otherTiers": "Other tiers",
+      "atTier": "{name} — {tier}",
+      "atNoTier": "{name} — no tier set",
+      "allTiersLabelHotel": "Hotel (all tiers)",
+      "allTiersLabelShip": "Ship (all tiers)",
+      "allTiersHint": "Named here, this property prices at every tier — for a destination that has nothing at the tier being sold."
     },
     "transport": {
       "label": "Transport",

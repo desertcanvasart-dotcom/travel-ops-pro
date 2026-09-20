@@ -9,10 +9,20 @@
 // picks when nothing is chosen — the first of the same list the engine reads
 // (lib/pricing/property-candidates). One choice covers the whole stay: every
 // night in the city, or every night aboard (lib/pricing/property-choice).
+//
+// Since 2026-09-20 the list is NOT limited to the tier being priced. A named
+// property prices whatever its own tier says (lib/auto-pricing-service,
+// chosenRowDifference), because a destination may have nothing at the tier
+// sold — Abu Simbel has no luxury hotel, every ship on file is standard. The
+// tier's own properties are still offered first, and the automatic pick is
+// still the tier's; the rest are grouped under "Other tiers" and labelled
+// with theirs, so choosing one is a visible decision rather than an
+// accident.
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { AlertTriangle, Building2, Ship } from 'lucide-react'
+import { ANY_TIER } from '@/lib/pricing/property-choice'
 import type { AccommodationOption } from '@/app/api/b2b/accommodation-options/route'
 
 type Loaded = { options: AccommodationOption[]; autoId: string | null }
@@ -63,17 +73,29 @@ export default function DayPropertyPicker({ kind, city, embark = null, nights = 
   const [data, setData] = useState<Loaded | null>(null)
   const [failed, setFailed] = useState(false)
 
+  const [others, setOthers] = useState<AccommodationOption[]>([])
+
   useEffect(() => {
     let live = true
     setData(null)
+    setOthers([])
     setFailed(false)
     // Until the new list is in, the property in use is unknown: say so, so
     // the supplements picker never filters by the previous city's hotel
     // (Greptile on #453).
     onResolved?.(null)
     if (kind === 'hotel' && !city) return
-    load(kind, tier, city, embark, nights)
-      .then(d => { if (live) setData(d) })
+    // The tier's list decides the AUTOMATIC pick and stays first. The
+    // all-tiers list only widens what can be named.
+    const mine = tier === ANY_TIER ? Promise.resolve({ options: [], autoId: null }) : load(kind, tier, city, embark, nights)
+    const all = load(kind, ANY_TIER, city, embark, nights)
+    Promise.all([mine, all])
+      .then(([m, a]) => {
+        if (!live) return
+        const ownIds = new Set(m.options.map(o => o.id))
+        setData(tier === ANY_TIER ? a : m)
+        setOthers(tier === ANY_TIER ? [] : a.options.filter(o => !ownIds.has(o.id)))
+      })
       .catch(() => { if (live) setFailed(true) })
     return () => { live = false }
     // onResolved is a fresh closure each render; the query is what matters.
@@ -82,8 +104,10 @@ export default function DayPropertyPicker({ kind, city, embark = null, nights = 
 
   const options = data?.options ?? []
   const auto = options.find(o => o.id === data?.autoId) ?? null
-  const chosen = value ? options.find(o => o.id === value) ?? null : null
-  // A choice not in the list: switched off, deleted, or another tier's row.
+  const everything = [...options, ...others]
+  const chosen = value ? everything.find(o => o.id === value) ?? null : null
+  // A choice in NO list at all: switched off or deleted. Another tier's row
+  // is no longer missing — it is offered below, and the engine prices it.
   const chosenMissing = Boolean(value && data && !chosen)
   const inUse = value ? chosen : auto
 
@@ -93,6 +117,7 @@ export default function DayPropertyPicker({ kind, city, embark = null, nights = 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, inUse?.id])
 
+  const allTiers = tier === ANY_TIER
   const Icon = kind === 'hotel' ? Building2 : Ship
   const describe = (o: AccommodationOption) =>
     kind === 'cruise'
@@ -103,14 +128,16 @@ export default function DayPropertyPicker({ kind, city, embark = null, nights = 
     <div data-testid="day-property">
       <label className="block text-xs font-medium text-gray-600 mb-1">
         <Icon className="w-3 h-3 inline mr-1" />
-        {kind === 'hotel' ? t('hotelLabel', { tier: tierLabel }) : t('shipLabel', { tier: tierLabel })}
+        {allTiers
+          ? (kind === 'hotel' ? t('allTiersLabelHotel') : t('allTiersLabelShip'))
+          : (kind === 'hotel' ? t('hotelLabel', { tier: tierLabel }) : t('shipLabel', { tier: tierLabel }))}
       </label>
 
       {failed ? (
         <p className="text-xs text-red-600">{t('loadFailed')}</p>
       ) : !data ? (
         <p className="text-xs text-gray-400">{t('loading')}</p>
-      ) : options.length === 0 && !value ? (
+      ) : everything.length === 0 && !value ? (
         <p className="text-xs text-red-600 flex items-start gap-1">
           <AlertTriangle className="w-3.5 h-3.5 mt-px shrink-0" />
           {kind === 'hotel' ? t('noHotels', { tier: tierLabel, city }) : t('noShips', { tier: tierLabel })}
@@ -123,17 +150,31 @@ export default function DayPropertyPicker({ kind, city, embark = null, nights = 
         >
           <option value="">{auto ? t('automatic', { name: describe(auto) }) : t('automaticNone')}</option>
           {options.map(o => (
-            <option key={o.id} value={o.id}>{describe(o)}</option>
+            <option key={o.id} value={o.id}>
+              {allTiers
+                ? (o.tier ? t('atTier', { name: describe(o), tier: o.tier }) : t('atNoTier', { name: describe(o) }))
+                : describe(o)}
+            </option>
           ))}
+          {others.length > 0 && (
+            <optgroup label={t('otherTiers')}>
+              {others.map(o => (
+                <option key={o.id} value={o.id}>
+                  {o.tier ? t('atTier', { name: describe(o), tier: o.tier }) : t('atNoTier', { name: describe(o) })}
+                </option>
+              ))}
+            </optgroup>
+          )}
           {chosenMissing && <option value={value}>{t('unavailable')}</option>}
         </select>
       )}
 
       {chosenMissing ? (
         <p className="text-xs text-red-600 mt-1">{kind === 'hotel' ? t('chosenMissingHotel', { city }) : t('chosenMissingShip')}</p>
-      ) : data && options.length > 0 ? (
+      ) : data && everything.length > 0 ? (
         <p className="text-[11px] text-gray-500 mt-1">
           {kind === 'hotel' ? t('wholeStayHotel', { city }) : t('wholeStayShip')}
+          {allTiers ? ` ${t('allTiersHint')}` : ''}
         </p>
       ) : null}
     </div>
