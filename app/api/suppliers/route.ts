@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { buildSupplierInsert } from '@/lib/suppliers/create-payload'
 import { allowedSupplierTypeKeys, supplierTypeKeysMatching, unknownSupplierTypeError, unknownSupplierTypes } from '@/lib/supplier-types'
 import { supplierTypesForCurrentOrg } from '@/lib/vocabulary-server'
+import { uniqueViolationMessage } from '@/lib/db/unique-violation'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -90,7 +91,18 @@ export async function POST(request: NextRequest) {
         )
       }
       if (error.code === '23505') {
-        return NextResponse.json({ error: 'A supplier with these details already exists.' }, { status: 409 })
+        // Name what actually clashed. "These details" sent the operator
+        // looking for a duplicate supplier that did not exist, when the clash
+        // was on the auto-assigned supplier_code — see lib/db/unique-violation.
+        return NextResponse.json(
+          {
+            error: uniqueViolationMessage(error, {
+              subject: 'supplier',
+              visibleFields: Object.keys(built.row),
+            }),
+          },
+          { status: 409 }
+        )
       }
       return NextResponse.json({ error: 'Failed to create supplier' }, { status: 500 })
     }
