@@ -48,6 +48,11 @@ import AttractionPicker from '@/components/AttractionPicker'
 import TravelLegPicker, { storedRoadTransfers } from '@/components/TravelLegPicker'
 import DaySupplementsPicker from '@/components/DaySupplementsPicker'
 import DayPropertyPicker from '@/components/DayPropertyPicker'
+import DayTransportEditor from '@/components/DayTransportEditor'
+import type { TransportLine } from '@/lib/pricing/transport-lines'
+import type { LegAssist } from '@/lib/pricing/flight-leg'
+import type { AccommodationOption } from '@/app/api/b2b/accommodation-options/route'
+import type { PreviewDay } from '@/app/api/b2b/transport-preview/route'
 import { ANY_TIER, applyStayChoice, chosenForStay, type PropertyChoice } from '@/lib/pricing/property-choice'
 
 // ============================================
@@ -124,6 +129,20 @@ interface ItineraryDay {
    *  sells Mena House sells Mena House whether the quote runs standard or
    *  luxury, and Abu Simbel has no luxury hotel to run at all. */
   property_by_tier?: PropertyChoice
+  /** How the day travels, and the leg's own route when "yesterday's city →
+   *  today's" is not the journey. Day 3 of NEK803 FLIES Cairo → Aswan and
+   *  then DRIVES to Abu Simbel: without leg_to the engine reads the flight as
+   *  Cairo → Abu Simbel, for which no fare exists (operator, 2026-09-20). */
+  transport_type?: string
+  transport_rate_id?: string
+  road_transfers?: boolean
+  leg_from?: string
+  leg_to?: string
+  leg_assist?: LegAssist
+  /** The day's own transport list; absent = the rules decide. A flight day
+   *  emits two AIRPORT transfers and nothing else, so the 280km Aswan → Abu
+   *  Simbel drive has to be named here — no rule produces it. */
+  transport_lines?: TransportLine[]
 }
 
 interface Toast {
@@ -451,6 +470,21 @@ const cruiseEmbark = (days: ItineraryDay[]) => days.find(d => d.is_cruise_day)?.
 const cruiseNights = (days: ItineraryDay[]) => days.filter(d => d.is_cruise_day).length || null
 
 function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
+  const { confirmDelete } = useConfirmDialog()
+  /** Which day is open for editing. A day used to be read-only once added,
+   *  so correcting a typo meant deleting it and typing it again — with the
+   *  delete being an unlabelled X that appeared on hover and asked nothing
+   *  (operator, 2026-09-20: "I'm not sure if I clicked the X mark will it
+   *  delete the day or what"). */
+  const [editing, setEditing] = useState<number | null>(null)
+  /** The hotel or ship each stay resolves to, reported by its picker. The
+   *  supplements offered come from THIS property — a hotel with no Nile view
+   *  must not offer one (operator, 2026-09-20: "the supplements should be
+   *  relative to that particular property attached"). */
+  const [propertyInUse, setPropertyInUse] = useState<Record<number, AccommodationOption | null>>({})
+  const [preview, setPreview] = useState<{ days: PreviewDay[]; currency: string } | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewFailed, setPreviewFailed] = useState(false)
   const [dayTitle, setDayTitle] = useState('')
   const [dayDescription, setDayDescription] = useState('')
   const [dayMeals, setDayMeals] = useState<string[]>([])
@@ -487,10 +521,49 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
     setIsCruiseDay(false)
   }
 
-  const removeDay = (index: number) => {
+  // The lines each day will be priced with, from the engine's own steps
+  // (/api/b2b/transport-preview) — the same source the calculator lists, so
+  // the template editor cannot drift into a second copy of the rules.
+  useEffect(() => {
+    if (itinerary.length === 0) { setPreview(null); return }
+    const controller = new AbortController()
+    setPreviewLoading(true)
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/b2b/transport-preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // The days RAW: the route runs parseItinerary over them, which
+          // derives accommodation_type the way pricing will. Handing it a
+          // pre-derived one would put a hotel night on the departure day.
+          // A template has no pax of its own — 2 is only for the costs shown.
+          body: JSON.stringify({ days: itinerary, num_pax: 2 }),
+          signal: controller.signal,
+        })
+        const json = await res.json()
+        if (!json.success) throw new Error(json.error)
+        setPreview({ days: json.days, currency: json.currency })
+        setPreviewFailed(false)
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') setPreviewFailed(true)
+      } finally {
+        if (!controller.signal.aborted) setPreviewLoading(false)
+      }
+    }, 500)
+    return () => { clearTimeout(timer); controller.abort() }
+  }, [itinerary])
+
+  /** Change one day, leaving every other day alone. */
+  const patchDay = (index: number, patch: Partial<ItineraryDay>) =>
+    onChange(itinerary.map((d, i) => (i === index ? { ...d, ...patch } : d)))
+
+  const removeDay = async (index: number) => {
+    const day = itinerary[index]
+    if (!(await confirmDelete(`Day ${day.day}${day.title ? ` — ${day.title}` : ''}`))) return
     const newItinerary = itinerary
       .filter((_, i) => i !== index)
       .map((day, i) => ({ ...day, day: i + 1 })) // Re-number days
+    setEditing(null)
     onChange(newItinerary)
   }
 
@@ -600,22 +673,85 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
                 {day.day}
               </span>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-gray-900">{day.title}</p>
-                  {day.is_cruise_day && (
-                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">🚢 Cruise</span>
-                  )}
-                </div>
-                {day.city && (
-                  <p className="text-xs text-gray-500 mt-0.5">📍 {day.city}</p>
-                )}
-                {day.description && (
-                  <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{day.description}</p>
-                )}
-                {day.meals && day.meals.length > 0 && (
-                  <p className="text-xs text-blue-600 mt-1">
-                    🍽️ {day.meals.join(', ')}
-                  </p>
+                {editing === index ? (
+                  /* The day, editable in place. */
+                  <div className="space-y-2 mb-2">
+                    <input
+                      type="text"
+                      value={day.title}
+                      onChange={(e) => patchDay(index, { title: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent"
+                      placeholder="Day title"
+                      aria-label={`Day ${day.day} title`}
+                    />
+                    <input
+                      type="text"
+                      value={day.city ?? ''}
+                      onChange={(e) => patchDay(index, { city: e.target.value || undefined })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent"
+                      placeholder="City"
+                      aria-label={`Day ${day.day} city`}
+                    />
+                    <textarea
+                      value={day.description}
+                      onChange={(e) => patchDay(index, { description: e.target.value })}
+                      rows={3}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent resize-none"
+                      placeholder="Day description"
+                      aria-label={`Day ${day.day} description`}
+                    />
+                    <div className="flex flex-wrap items-center gap-4">
+                      <span className="text-xs text-gray-500">Meals:</span>
+                      {['Breakfast', 'Lunch', 'Dinner'].map(meal => {
+                        const on = (day.meals ?? []).some(m => m.toLowerCase() === meal.toLowerCase())
+                        return (
+                          <label key={meal} className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              onChange={() => patchDay(index, {
+                                meals: on
+                                  ? (day.meals ?? []).filter(m => m.toLowerCase() !== meal.toLowerCase())
+                                  : [...(day.meals ?? []), meal],
+                              })}
+                              className="w-4 h-4 text-green-600 border-gray-300 rounded"
+                            />
+                            <span className="text-xs text-gray-700">{meal}</span>
+                          </label>
+                        )
+                      })}
+                      <span className="mx-1 text-gray-300">|</span>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(day.is_cruise_day)}
+                          onChange={() => patchDay(index, { is_cruise_day: day.is_cruise_day ? undefined : true })}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded"
+                        />
+                        <span className="text-xs text-blue-700 font-medium">🚢 Cruise Transport Package</span>
+                      </label>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900">{day.title}</p>
+                      {day.is_cruise_day && (
+                        <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded font-medium">🚢 Cruise</span>
+                      )}
+                    </div>
+                    {day.city && (
+                      <p className="text-xs text-gray-500 mt-0.5">📍 {day.city}</p>
+                    )}
+                    {day.description && (
+                      <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">{day.description}</p>
+                    )}
+                    {day.meals && day.meals.length > 0 && (
+                      <p className="text-xs text-blue-600 mt-1">
+                        🍽️ {day.meals.join(', ')}
+                      </p>
+                    )}
+                  </>
                 )}
                 {/* Tickets for the day, picked from the fee table — what the
                     pricing engine charges; the wording stays on the documents. */}
@@ -633,7 +769,9 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
                   <DaySupplementsPicker
                     accommodationType={day.is_cruise_day ? 'cruise' : 'hotel'}
                     value={day.supplements}
-                    onChange={(keys) => onChange(itinerary.map((d, i) => (i === index ? { ...d, supplements: keys } : d)))}
+                    onChange={(keys) => patchDay(index, { supplements: keys })}
+                    carried={propertyInUse[index] ? propertyInUse[index]!.supplements : undefined}
+                    propertyName={propertyInUse[index]?.name}
                   />
                 </div>
                 {/* The actual hotel or ship this product uses. Named here it
@@ -648,6 +786,7 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
                     tier={ANY_TIER}
                     tierLabel=""
                     value={chosenForStay(stayDays(itinerary), index, ANY_TIER)}
+                    onResolved={(option) => setPropertyInUse(prev => (prev[index] === option ? prev : { ...prev, [index]: option }))}
                     onChange={(id) => {
                       const next = applyStayChoice(stayDays(itinerary), index, ANY_TIER, id)
                       onChange(itinerary.map((d, i) => {
@@ -664,24 +803,65 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
                     ticket instead of a road vehicle. */}
                 <div className="mt-2">
                   <TravelLegPicker
-                    mode={(day as { transport_type?: string }).transport_type}
-                    rateId={(day as { transport_rate_id?: string }).transport_rate_id}
-                    road={(day as { road_transfers?: boolean }).road_transfers}
+                    mode={day.transport_type}
+                    rateId={day.transport_rate_id}
+                    road={day.road_transfers}
                     prevCity={itinerary[index - 1]?.city ?? null}
                     city={day.city}
                     nextCity={itinerary[index + 1]?.city ?? null}
-                    onChange={(mode, rateId, road) => onChange(itinerary.map((d, i) => (i === index ? { ...d, transport_type: mode === 'ground' ? undefined : mode, transport_rate_id: rateId, road_transfers: storedRoadTransfers(mode === 'ground' ? undefined : mode, road) } : d)))}
+                    onChange={(mode, rateId, road) => patchDay(index, {
+                      transport_type: mode === 'ground' ? undefined : mode,
+                      transport_rate_id: rateId,
+                      road_transfers: storedRoadTransfers(mode === 'ground' ? undefined : mode, road),
+                    })}
+                    legFrom={day.leg_from}
+                    legTo={day.leg_to}
+                    legAssist={day.leg_assist}
+                    isArrivalDay={index === 0}
+                    onLegChange={(patch) => patchDay(index, patch)}
+                  />
+                </div>
+                {/* The day's transport, listed and changeable like its
+                    attractions. A flight day's rules emit two AIRPORT
+                    transfers and nothing else, so a drive on from the arrival
+                    airport — Aswan → Abu Simbel — exists only if it is named
+                    here (operator, 2026-09-20). */}
+                <div className="mt-2">
+                  <DayTransportEditor
+                    preview={preview?.days[index]}
+                    loading={previewLoading}
+                    failed={previewFailed}
+                    value={day.transport_lines}
+                    city={day.city ?? ''}
+                    prevCity={itinerary[index - 1]?.city ?? null}
+                    format={(amount) => `${preview?.currency ?? ''} ${amount.toFixed(2)}`.trim()}
+                    onChange={(lines) => patchDay(index, { transport_lines: lines })}
                   />
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => removeDay(index)}
-                className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                title="Remove day"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              {/* Both actions are always visible and say what they are. The
+                  remove used to be a bare X that appeared only on hover and
+                  deleted the day on the first click, with no edit beside it —
+                  so the only way to fix a typo was to press the button you
+                  could not be sure about (operator, 2026-09-20). */}
+              <div className="flex flex-col gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setEditing(editing === index ? null : index)}
+                  className={`px-2 py-1 text-xs font-medium rounded border transition-colors ${editing === index ? 'bg-green-600 border-green-600 text-white' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                  aria-label={editing === index ? `Finish editing day ${day.day}` : `Edit day ${day.day}`}
+                >
+                  {editing === index ? 'Done' : 'Edit'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => removeDay(index)}
+                  className="px-2 py-1 text-xs font-medium text-red-600 bg-white border border-gray-300 rounded hover:bg-red-50 hover:border-red-300 transition-colors"
+                  aria-label={`Delete day ${day.day}`}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           ))}
         </div>
