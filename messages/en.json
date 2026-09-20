@@ -6849,7 +6849,13 @@
     },
     "inFlightNight": "In the air (overnight flight) — nothing sold this day",
     "guideLanguageNoRate": "{language} — no guide rate",
-    "guideLanguageFromRate": "{language} — from a guide rate, not in your list"
+    "guideLanguageFromRate": "{language} — from a guide rate, not in your list",
+    "marginUp": "Increase margin",
+    "marginDown": "Decrease margin",
+    "marginRepricesHint": "Changing this re-prices the quote",
+    "forPax": "for {count} passengers",
+    "plusTourLeader": "incl. tour leader",
+    "dividedBy": "across {count} paying"
   },
   "bookings": {
     "title": "Bookings",

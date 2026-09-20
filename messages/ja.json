@@ -7434,7 +7434,13 @@
     },
     "inFlightNight": "機中泊(夜行便)— この日は手配なし",
     "guideLanguageNoRate": "{language}(ガイド料金なし)",
-    "guideLanguageFromRate": "{language}（ガイド料金にあり・一覧には未登録）"
+    "guideLanguageFromRate": "{language}（ガイド料金にあり・一覧には未登録）",
+    "marginUp": "マージンを上げる",
+    "marginDown": "マージンを下げる",
+    "marginRepricesHint": "変更すると再計算されます",
+    "forPax": "{count}名分",
+    "plusTourLeader": "ツアーリーダー込み",
+    "dividedBy": "有償{count}名で割った額"
   },
   "bookings": {
     "title": "予約管理",
