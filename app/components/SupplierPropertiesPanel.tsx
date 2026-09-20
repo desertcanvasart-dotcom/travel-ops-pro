@@ -19,7 +19,10 @@ import {
   type PropertyType,
   type SupplierProperty,
   PROPERTY_CATEGORIES,
+  PROPERTY_CLASS_KIND,
 } from '@/lib/supplier-properties'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
+import { optionsFromLabels } from '@/lib/vocabulary'
 
 const TYPE_ICONS: Record<PropertyType, typeof Ship> = {
   ship: Ship,
@@ -62,6 +65,17 @@ export default function SupplierPropertiesPanel({ supplierId, supplierRoles }: P
   const [properties, setProperties] = useState<SupplierProperty[]>([])
   const [loading, setLoading] = useState(true)
   const [draft, setDraft] = useState<Draft | null>(null)
+  // The class list for the type being edited — Settings → Vocabulary, with the
+  // words the old constant held as the fallback for an install with none.
+  // A hook cannot be called per type, so every type's list is read and the
+  // draft's is picked; three small reads of one cached fetch.
+  const hotelClasses = useVocabOptions(PROPERTY_CLASS_KIND.hotel, optionsFromLabels(PROPERTY_CATEGORIES.hotel))
+  const shipClasses = useVocabOptions(PROPERTY_CLASS_KIND.ship, optionsFromLabels(PROPERTY_CATEGORIES.ship))
+  const trainClasses = useVocabOptions(PROPERTY_CLASS_KIND.train, optionsFromLabels(PROPERTY_CATEGORIES.train))
+  const classOptions =
+    draft?.property_type === 'ship' ? shipClasses
+    : draft?.property_type === 'train' ? trainClasses
+    : hotelClasses
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -217,12 +231,16 @@ export default function SupplierPropertiesPanel({ supplierId, supplierRoles }: P
               <label className="block text-xs font-medium text-gray-600 mb-1">{t('propertyCategory')}</label>
               <select value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })} className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg">
                 <option value="">—</option>
-                {/* A category recorded before the list existed stays selectable. */}
-                {draft.category && !PROPERTY_CATEGORIES[draft.property_type as PropertyType]?.includes(draft.category) && (
+                {/* A class recorded before the list existed stays selectable —
+                    the live data holds "4 Stars" and "5 Stars" beside the
+                    "5★ deluxe" the old hardcoded list offered, and dropping a
+                    value off a page nobody was editing would be worse than
+                    showing a word that is not in the list yet. */}
+                {draft.category && !classOptions.some(o => o.value === draft.category) && (
                   <option value={draft.category}>{draft.category}</option>
                 )}
-                {(PROPERTY_CATEGORIES[draft.property_type as PropertyType] ?? []).map(c => (
-                  <option key={c} value={c}>{c}</option>
+                {classOptions.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
             </div>

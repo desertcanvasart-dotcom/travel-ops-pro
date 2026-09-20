@@ -20,7 +20,7 @@ export const VOCABULARY_KINDS = [
   'guide_duration', 'guide_language', 'rate_season', 'airline', 'hotel_supplement',
   'airport_direction', 'activity_pricing_type', 'cruise_supplement',
   'tour_type', 'physical_level', 'tour_audience', 'tour_theme', 'guide_mode',
-  'airport',
+  'airport', 'hotel_class', 'ship_category',
 ] as const
 export type VocabularyKind = (typeof VOCABULARY_KINDS)[number]
 
@@ -336,6 +336,24 @@ export const VOCABULARY_KIND_INFO: Record<VocabularyKind, VocabularyKindInfo> = 
     usedIn: 'Hotel and cruise rate periods; attraction and sleeping-train rate rows; period and rate CSV import',
     minItems: 1,
     example: 'Low Season / High Season / Christmas / New Year',
+  },
+  hotel_class: {
+    kind: 'hotel_class',
+    group: 'Hotels & cruises',
+    title: 'Hotel classes',
+    description: 'How a hotel is graded on its property card — the star band and the word that goes with it. This is NOT the pricing tier: a 5-star hotel can be sold in any tier, and the tier is what a rate is filed under. Nothing prices from this; it is how the office recognises a property at a glance.',
+    usedIn: 'Supplier properties',
+    minItems: 0,
+    example: '3★ standard / 4★ superior / 5★ luxury',
+  },
+  ship_category: {
+    kind: 'ship_category',
+    group: 'Hotels & cruises',
+    title: 'Ship categories',
+    description: 'How a Nile cruiser is graded on its property card. Same rule as hotel classes: a label the office reads, not the tier a rate is filed under.',
+    usedIn: 'Supplier properties',
+    minItems: 0,
+    example: 'budget / standard / deluxe / luxury',
   },
   airport: {
     kind: 'airport',
