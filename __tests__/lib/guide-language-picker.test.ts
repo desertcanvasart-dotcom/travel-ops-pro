@@ -56,3 +56,72 @@ describe('a language that comes from a rate says so', () => {
     expect(src).toContain("t('guideLanguageFromRate'")
   })
 })
+
+// Operator, 2026-09-20, looking at the GUIDE RATE FORM: "the language already
+// in the vocabulary section only one language which is Japanese ... and here
+// you see English in small letters."
+//
+// Different cause from the calculator above, same symptom. This form OPENED on
+// a hardcoded `guide_language: 'english'`. The vocabulary lists only Japanese,
+// so 'english' fell through to the "a language since removed still shows"
+// escape hatch, which rendered the raw key. Lowercase because no vocabulary
+// entry supplies a word for a language the agency does not have.
+//
+// The cosmetic half is the lesser one: it was the DEFAULT, so a rate saved
+// without touching the dropdown was written in a language this office holds no
+// contract in, and the engine — which matches guide languages by exact key —
+// priced every guide day as No rate.
+describe('the guide rate form never proposes a language of its own', () => {
+  const src = readFileSync(join(process.cwd(), 'app/rates/guides/guide-rates-content.tsx'), 'utf8')
+
+  it('has no hardcoded language anywhere in it', () => {
+    expect(src).not.toMatch(/guide_language:\s*'english'/)
+    expect(src).not.toMatch(/guide_language:\s*'[a-z_]+'/)
+  })
+
+  it('opens a new rate on the vocabulary first language instead', () => {
+    expect(src).toContain("const defaultLanguage = languageOptions[0]?.value ?? ''")
+    expect(src).toContain('guide_language: defaultLanguage,')
+  })
+
+  it('fills a blank choice once the vocabulary loads, without overwriting a pick', () => {
+    expect(src).toContain('prev.guide_language ? prev : { ...prev, guide_language: defaultLanguage }')
+  })
+
+  it('keeps the language of a row being edited, whatever it is', () => {
+    // A rate already written in a retired language must still open on it —
+    // the default only fills a genuinely empty choice.
+    expect(src).toContain('guideLanguageKey(rate.guide_language) || defaultLanguage')
+  })
+
+  it('never renders a stored key raw, in the form or the list', () => {
+    expect(src).not.toMatch(/guideLanguageLabel\((\w+)\.guide_language,\s*\1\.guide_language\)/)
+    expect(src).toContain('guideLanguageWord(rate.guide_language)')
+    expect(src).toContain('guideLanguageWord(formData.guide_language)')
+  })
+})
+
+describe('the languages a guide speaks come from the same list', () => {
+  const src = readFileSync(join(process.cwd(), 'components/rates/GuideLanguagesEditor.tsx'), 'utf8')
+
+  it('no longer keeps its own hardcoded eleven', () => {
+    // This editor sits on the guide rates page and missed the 2026-09-15
+    // vocabulary sweep, so one page offered one language above and eleven
+    // different ones below.
+    expect(src).not.toContain('GUIDE_LANGUAGE_OPTIONS')
+    expect(src).not.toMatch(/'English',\s*'Japanese',\s*'French'/)
+  })
+
+  it('reads Settings → Vocabulary, like every other guide-language picker', () => {
+    expect(src).toContain("useVocabOptions('guide_language'")
+  })
+
+  it('still shows a language already saved that the vocabulary does not list', () => {
+    // Dropping it from the list would silently drop it on the next save.
+    expect(src).toContain('!languageOptions.some(o => o.value === k)')
+  })
+
+  it('compares by key, so a word written before the vocabulary still matches', () => {
+    expect(src).toContain('guideLanguageKey(l) === key')
+  })
+})
