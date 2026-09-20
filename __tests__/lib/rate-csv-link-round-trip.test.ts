@@ -75,7 +75,7 @@ describe('rate CSVs keep the property link', () => {
   it('a cruise re-attaches to its ship by name, with no property_id in the file', async () => {
     const db = propertiesDb([{ id: 'ship-1', name: 'MS Nile Dream', supplier_id: SUPPLIER, property_type: 'ship' }])
     const { headers, preview } = roundTrip('nile_cruises', {
-      cruise_code: 'NC-001', ship_name: 'MS Nile Dream', ship_category: '5-star',
+      cruise_code: 'NC-001', ship_name: 'MS Nile Dream', ship_category: '5-star', cabin_type: 'standard',
       route_name: 'Luxor–Aswan', embark_city: 'Luxor', disembark_city: 'Aswan',
       duration_nights: 4, supplier_id: SUPPLIER, property_id: 'ship-1',
     })
@@ -136,7 +136,7 @@ describe('rate CSVs keep the property link', () => {
   it('a property the install has never seen is created under its supplier, not dropped', async () => {
     const db = propertiesDb([])
     const { preview } = roundTrip('nile_cruises', {
-      cruise_code: 'NC-002', ship_name: 'MS Farah', ship_category: '5-star',
+      cruise_code: 'NC-002', ship_name: 'MS Farah', ship_category: '5-star', cabin_type: 'standard',
       route_name: 'Luxor–Aswan', embark_city: 'Luxor', disembark_city: 'Aswan',
       duration_nights: 4, supplier_id: SUPPLIER,
     })
@@ -152,7 +152,7 @@ describe('rate CSVs keep the property link', () => {
     // A supplier-less rate is legitimate; it just has no property to be under.
     const db = propertiesDb([])
     const { preview } = roundTrip('nile_cruises', {
-      cruise_code: 'NC-003', ship_name: 'Some Ship', ship_category: '5-star',
+      cruise_code: 'NC-003', ship_name: 'Some Ship', ship_category: '5-star', cabin_type: 'standard',
       route_name: 'Luxor–Aswan', embark_city: 'Luxor', disembark_city: 'Aswan',
       duration_nights: 4,
     })
