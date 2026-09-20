@@ -47,6 +47,8 @@ import type { Language } from '@/types/multilingual'
 import AttractionPicker from '@/components/AttractionPicker'
 import TravelLegPicker, { storedRoadTransfers } from '@/components/TravelLegPicker'
 import DaySupplementsPicker from '@/components/DaySupplementsPicker'
+import DayPropertyPicker from '@/components/DayPropertyPicker'
+import { ANY_TIER, applyStayChoice, chosenForStay, type PropertyChoice } from '@/lib/pricing/property-choice'
 
 // ============================================
 // INTERFACES
@@ -116,6 +118,12 @@ interface ItineraryDay {
   /** Supplements the night is sold with (vocabulary keys) — priced per
    *  person per night at the property's rate; included in the price. */
   supplements?: string[]
+  /** The hotel or ship this product actually uses, by tier key — ANY_TIER
+   *  ('*') for "whatever tier is priced". A named property wins over the
+   *  tier's automatic pick (lib/pricing/property-choice). A template that
+   *  sells Mena House sells Mena House whether the quote runs standard or
+   *  luxury, and Abu Simbel has no luxury hotel to run at all. */
+  property_by_tier?: PropertyChoice
 }
 
 interface Toast {
@@ -431,6 +439,17 @@ interface ItineraryEditorProps {
   onChange: (itinerary: ItineraryDay[]) => void
 }
 
+/** The choice model groups a stay by accommodation_type; a template day says
+ *  is_cruise_day. Same derivation the pricing parser makes when it reads the
+ *  template (lib/auto-pricing-service, inferAccommodationType). */
+const stayDays = (days: ItineraryDay[]) =>
+  days.map(d => ({ ...d, accommodation_type: d.is_cruise_day ? 'cruise' : 'hotel' }))
+
+/** The ships offered are narrowed by where the cruise starts and how long it
+ *  is — the same two facts the engine uses for its automatic pick. */
+const cruiseEmbark = (days: ItineraryDay[]) => days.find(d => d.is_cruise_day)?.city ?? null
+const cruiseNights = (days: ItineraryDay[]) => days.filter(d => d.is_cruise_day).length || null
+
 function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
   const [dayTitle, setDayTitle] = useState('')
   const [dayDescription, setDayDescription] = useState('')
@@ -615,6 +634,30 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
                     accommodationType={day.is_cruise_day ? 'cruise' : 'hotel'}
                     value={day.supplements}
                     onChange={(keys) => onChange(itinerary.map((d, i) => (i === index ? { ...d, supplements: keys } : d)))}
+                  />
+                </div>
+                {/* The actual hotel or ship this product uses. Named here it
+                    prices at EVERY tier, at its own tier's rate — the
+                    destination may have nothing at the tier being sold. */}
+                <div className="mt-2">
+                  <DayPropertyPicker
+                    kind={day.is_cruise_day ? 'cruise' : 'hotel'}
+                    city={day.city ?? ''}
+                    embark={cruiseEmbark(itinerary)}
+                    nights={cruiseNights(itinerary)}
+                    tier={ANY_TIER}
+                    tierLabel=""
+                    value={chosenForStay(stayDays(itinerary), index, ANY_TIER)}
+                    onChange={(id) => {
+                      const next = applyStayChoice(stayDays(itinerary), index, ANY_TIER, id)
+                      onChange(itinerary.map((d, i) => {
+                        const choice = next[i]?.property_by_tier
+                        const copy = { ...d } as ItineraryDay
+                        if (choice) copy.property_by_tier = choice as PropertyChoice
+                        else delete copy.property_by_tier
+                        return copy
+                      }))
+                    }}
                   />
                 </div>
                 {/* How the day travels — a marked leg prices a per-person
