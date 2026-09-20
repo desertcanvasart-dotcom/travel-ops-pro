@@ -7440,7 +7440,8 @@
     "marginRepricesHint": "変更すると再計算されます",
     "forPax": "{count}名分",
     "plusTourLeader": "ツアーリーダー込み",
-    "dividedBy": "有償{count}名で割った額"
+    "dividedBy": "有償{count}名で割った額",
+    "repricingAt": "{percent}% で再計算中…"
   },
   "bookings": {
     "title": "予約管理",
