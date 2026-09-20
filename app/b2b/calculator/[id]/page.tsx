@@ -5,7 +5,7 @@ import { isEngineGuideMode } from '@/lib/guides/guide-mode'
 import { DayBandRow, DAY_LINE_EDGE } from '@/components/pricing/DayBand'
 import { groupLinesByDay } from '@/lib/pricing/group-by-day'
 import { todayLocal } from '@/lib/today'
-import React, { useState, useEffect, Fragment } from 'react'
+import React, { useState, useEffect, useRef, Fragment } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -625,17 +625,17 @@ export default function TourPriceCalculator() {
     }
   }
 
-  const calculatePrice = async (optionalIdsOverride?: string[]) => {
-    // Passed explicitly when a checkbox triggers the recalculation: reading it
-    // from state would price the selection as it was BEFORE the click.
-    const optionalIds = optionalIdsOverride ?? selectedOptionals
-    // Auto-save itinerary changes before pricing
-    if (hasUnsavedChanges && templateId) {
-      await saveItineraryChanges()
-    }
+  /**
+   * Price, and nothing else.
+   *
+   * calculatePrice below also saves the itinerary, clears the saved quote and
+   * re-expands every day — right when the operator asks for a price, wrong
+   * when they nudge the margin. Repricing a margin must not save their
+   * itinerary for them, and must not collapse the breakdown they were reading.
+   */
+  const runPricing = async (opts: { optionalIds: string[]; resetView: boolean }) => {
     setLoading(true)
     setError(null)
-    setSavedQuote(null)
     try {
       const res = await fetch('/api/b2b/calculate-price', {
         method: 'POST',
@@ -646,7 +646,7 @@ export default function TourPriceCalculator() {
           travel_date: travelDate,
           is_eur_passport: isEurPassport,
           margin_percent: marginPercent,
-          selected_optional_ids: optionalIds,
+          selected_optional_ids: opts.optionalIds,
           extras: selectedExtraIds,
           tour_leader_included: tourLeaderIncluded,
           guide_grade: guideGrade,
@@ -658,10 +658,12 @@ export default function TourPriceCalculator() {
       const data = await res.json()
       if (data.success) {
         setResult(data.data)
-        // Initialize all days as expanded
-        const dayNumbers = [...new Set<number>((data.data.services || []).map((s: any) => s.day_number ?? -1))]
-        setExpandedDays(new Set([...dayNumbers, -1]))
-        setAllDaysExpanded(true)
+        if (opts.resetView) {
+          // Initialize all days as expanded
+          const dayNumbers = [...new Set<number>((data.data.services || []).map((s: any) => s.day_number ?? -1))]
+          setExpandedDays(new Set([...dayNumbers, -1]))
+          setAllDaysExpanded(true)
+        }
       }
       else setError(data.error || t('failedToCalculate'))
     } catch (err) {
@@ -670,6 +672,39 @@ export default function TourPriceCalculator() {
       setLoading(false)
     }
   }
+
+  const calculatePrice = async (optionalIdsOverride?: string[]) => {
+    // Passed explicitly when a checkbox triggers the recalculation: reading it
+    // from state would price the selection as it was BEFORE the click.
+    const optionalIds = optionalIdsOverride ?? selectedOptionals
+    // Auto-save itinerary changes before pricing
+    if (hasUnsavedChanges && templateId) {
+      await saveItineraryChanges()
+    }
+    setSavedQuote(null)
+    await runPricing({ optionalIds, resetView: true })
+  }
+
+  /**
+   * A margin change re-prices, once the operator has stopped moving it.
+   *
+   * Only after a first price exists — before that there is nothing on screen
+   * to keep in step, and re-pricing an untouched form would be surprising.
+   * Debounced, because holding the stepper would otherwise run the engine
+   * once per click, and each run re-reads the whole rate catalogue.
+   */
+  const pricedMargin = useRef<number | null>(null)
+  useEffect(() => {
+    if (!result) return
+    if (pricedMargin.current === null) { pricedMargin.current = marginPercent; return }
+    if (pricedMargin.current === marginPercent) return
+    const id = setTimeout(() => {
+      pricedMargin.current = marginPercent
+      void runPricing({ optionalIds: selectedOptionals, resetView: false })
+    }, 600)
+    return () => clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marginPercent, result])
 
   const generateRateSheet = async () => {
     // Auto-save itinerary changes before generating rate sheet
@@ -1030,19 +1065,44 @@ export default function TourPriceCalculator() {
                 <GuideLanguageSelect choice={guideLanguageChoice} />
               </div>
 
-              {/* Profit Margin */}
+              {/* Profit Margin — nudged, and the price follows.
+                  The operator's question is "what if it were 28?", and the
+                  answer used to be three clicks and a re-read of the whole
+                  page. Stepping it re-prices ON THE SERVER after a pause, so
+                  every figure on screen still comes from the one engine —
+                  a margin re-derived in the browser would be a second opinion
+                  about a number a customer is quoted. */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <TrendingUp className="w-4 h-4 inline mr-1" />{t('profitMargin')}
                 </label>
-                <input
-                  type="number"
-                  value={marginPercent}
-                  onChange={(e) => setMarginPercent(parseFloat(e.target.value) || 0)}
-                  min="0"
-                  max="100"
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#647C47] outline-none"
-                />
+                <div className="flex items-stretch gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setMarginPercent(m => Math.max(0, Math.round((m - 1) * 100) / 100))}
+                    disabled={marginPercent <= 0}
+                    aria-label={t('marginDown')}
+                    className="px-3 border rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                  >−</button>
+                  <input
+                    type="number"
+                    value={marginPercent}
+                    onChange={(e) => setMarginPercent(parseFloat(e.target.value) || 0)}
+                    min="0"
+                    max="100"
+                    className="flex-1 min-w-0 px-3 py-2 border rounded-lg text-center focus:ring-2 focus:ring-[#647C47] outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMarginPercent(m => Math.min(100, Math.round((m + 1) * 100) / 100))}
+                    disabled={marginPercent >= 100}
+                    aria-label={t('marginUp')}
+                    className="px-3 border rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                  >+</button>
+                </div>
+                {result && (
+                  <p className="mt-1 text-[11px] text-gray-400">{t('marginRepricesHint')}</p>
+                )}
               </div>
 
               {/* Optional extras are chosen ONE BY ONE, in the results panel
@@ -1577,9 +1637,18 @@ export default function TourPriceCalculator() {
                 )}
 
                 <div className="grid grid-cols-4 gap-4">
+                  {/* WHO the total is for, beside the total.
+                      The pax count lives at the top of the form, so reading a
+                      figure here meant scrolling back up to learn what it was
+                      a figure FOR — and a total for two read exactly like a
+                      total for six. */}
                   <div className="bg-gray-50 rounded-lg p-4">
                     <p className="text-xs text-gray-500 mb-1">{t('totalCost')}</p>
                     <p className="text-xl font-bold">{sym}{result.total_cost.toFixed(2)}</p>
+                    <p className="mt-0.5 text-[11px] text-gray-500">
+                      {t('forPax', { count: result.num_pax })}
+                      {result.tour_leader_included && ` · ${t('plusTourLeader')}`}
+                    </p>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-4">
                     <p className="text-xs text-gray-500 mb-1">{t('margin')} ({result.margin_percent}%)</p>
@@ -1592,6 +1661,11 @@ export default function TourPriceCalculator() {
                   <div className="bg-[#647C47]/10 rounded-lg p-4">
                     <p className="text-xs text-gray-500 mb-1">{t('perPerson')}{result.complete === false && <span className="ml-1 font-semibold text-red-600">· {t('incompleteBadge')}</span>}</p>
                     <p className="text-xl font-bold text-[#647C47]">{sym}{result.price_per_person.toFixed(2)}</p>
+                    {/* The divisor is the PAYING pax — a tour leader rides on
+                        the group's cost without paying a share of it. */}
+                    <p className="mt-0.5 text-[11px] text-gray-500">
+                      {t('dividedBy', { count: result.num_paying_pax ?? result.num_pax })}
+                    </p>
                   </div>
                 </div>
 
