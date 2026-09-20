@@ -29,6 +29,8 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Plane, TrainFront, MoonStar, Car } from 'lucide-react'
 import { legAssistance, routeAirportCode, type LegAssist } from '@/lib/pricing/flight-leg'
+import { useAirports } from '@/app/components/AirportOptions'
+import { flightRouteMatches } from '@/lib/rates/airports'
 
 export type TravelLegMode = 'ground' | 'flight' | 'train' | 'sleeping_train'
 
@@ -106,7 +108,10 @@ export default function TravelLegPicker({ mode, rateId, road, prevCity, city, ne
     else next[end] = on
     onLegChange?.({ leg_assist: Object.keys(next).length ? next : undefined })
   }
-  const routeKey = `${currentMode}|${cityKey(from)}|${cityKey(to)}`
+  // The agency's airports — the seam between a leg's cities and a fare's keys.
+  const { airports } = useAirports()
+  const airportKey = airports.map(a => a.key).join('|')
+  const routeKey = `${currentMode}|${cityKey(from)}|${cityKey(to)}|${airportKey}`
 
   useEffect(() => {
     if (currentMode === 'ground' || !from || !to) return
@@ -124,7 +129,11 @@ export default function TravelLegPicker({ mode, rateId, road, prevCity, city, ne
         let options: RowOption[]
         if (currentMode === 'flight') {
           options = all
-            .filter(r => cityKey(r.route_from as string) === cityKey(from) && cityKey(r.route_to as string) === cityKey(to) && /econom/i.test(String(r.cabin_class ?? 'economy')))
+            // A fare's route is AIRPORT KEYS, not city names (migration
+            // 20261023). Comparing the key to the city compared "asw" with
+            // "aswan" and answered "No rate for this route" on a route that
+            // had one.
+            .filter(r => flightRouteMatches(airports, r, from, to) && /econom/i.test(String(r.cabin_class ?? 'economy')))
             .map(r => ({ id: String(r.id), label: `${r.airline ?? 'Flight'} ${r.flight_number ?? ''} — ${num(r.base_rate_eur) + num(r.tax_eur)} ${r.rate_currency ?? ''}`.trim() }))
         } else if (currentMode === 'train') {
           options = all
