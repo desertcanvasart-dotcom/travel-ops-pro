@@ -489,6 +489,13 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('embark_city', 'Embark City', 'text', true),
       col('disembark_city', 'Disembark City', 'text', true),
       col('duration_nights', 'Duration (Nights)', 'number', true),
+      // A cruise rate is ONE CABIN TYPE on one ship — the Add form has always
+      // asked for it and nile_cruises.cabin_type is NOT NULL. The sheet never
+      // carried it, so every NEW cruise failed with the database's own words
+      // ("null value in column cabin_type…"), and adding the column to the
+      // file by hand changed nothing, because an unknown header is ignored.
+      // The agency's own cabin words (Settings → Cruise cabin types).
+      col('cabin_type', 'Cabin Type', 'text', true),
       // No season rate columns: a cruise prices from its dated period list
       // (the `seasons` JSONB), imported from the rate-periods sheet. This
       // sheet carries the ship and the contract around it, not the prices.

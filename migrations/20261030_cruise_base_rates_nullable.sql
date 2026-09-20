@@ -1,0 +1,22 @@
+-- ============================================
+-- A cruise that has no periods yet has no price yet
+-- ============================================
+-- Reported from the live app, 2026-09-20: importing new cruises from the CSV
+-- failed with
+--
+--   null value in column "cabin_type" of relation "nile_cruises"
+--   violates not-null constraint
+--
+-- The sheet now carries Cabin Type (lib/bulk-rate-service.ts). But the same
+-- insert had two more NOT NULL columns waiting behind that one, and Postgres
+-- only ever reports the first: rate_single_eur and rate_double_eur.
+--
+-- Those two are a MIRROR of the first dated period, kept for readers that
+-- have no travel date (legacyColumnMirror). A cruise arrives from the cruise
+-- sheet FIRST and its periods from the periods sheet AFTER — the periods need
+-- the cruise to exist — so at the moment of insert there is nothing to mirror.
+-- NULL is the honest value for "not priced yet". A 0 would be a price.
+--
+-- DROP NOT NULL is idempotent; no data is touched.
+ALTER TABLE public.nile_cruises ALTER COLUMN rate_single_eur DROP NOT NULL;
+ALTER TABLE public.nile_cruises ALTER COLUMN rate_double_eur DROP NOT NULL;
