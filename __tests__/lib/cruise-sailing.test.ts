@@ -11,6 +11,8 @@
 // Aswan on Mondays and Fridays cannot serve a Wednesday itinerary — the price
 // is right, the arithmetic is right, and the booking is impossible.
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   sanitizeSailingDays, sailsOn, sailingDaysLabel, dayOfDate,
   cruiseRouteLabel, nightsLabel, cruiseSailingLabel, SAILING_DAYS,
@@ -95,5 +97,35 @@ describe('sailsOn is silent until the operator says otherwise', () => {
   it('covers the whole week', () => {
     expect(SAILING_DAYS).toHaveLength(7)
     for (const d of SAILING_DAYS) expect(sailsOn([d], '2026-09-21')).toBe(d === 'mon')
+  })
+})
+
+describe('the list shows what decides whether a sailing fits', () => {
+  const page = readFileSync(join(process.cwd(), 'app/rates/cruises/page.tsx'), 'utf8')
+  const en = JSON.parse(readFileSync(join(process.cwd(), 'messages/en.json'), 'utf8'))
+
+  it('gives the column to the departure days, not the cabin', () => {
+    // Every row read "Standard" — the cabin is already in the service code's
+    // suffix — while the day a sailing leaves decides whether it fits an
+    // itinerary at all.
+    expect(page).toContain("{t('table.sailingDays')}")
+    expect(page).not.toContain("{t('table.cabin')}")
+    expect(page).not.toContain('cruiseCabinLabel(cruise.cabin_type')
+  })
+
+  it('says so when a ship has no fixed day', () => {
+    expect(en.rates.cruises.table.anyDay).toBe('Any day')
+    expect(page).toContain("{t('table.anyDay')}")
+  })
+
+  it('does not print the days twice', () => {
+    // They were a sub-line under Route while the column was being added.
+    const routeCell = page.slice(page.indexOf('{cruiseRouteLabel(cruise)}'), page.indexOf('{cruiseRouteLabel(cruise)}') + 200)
+    expect(routeCell).not.toContain('sailingDaysLabel')
+  })
+
+  it('writes a route_name that cannot contradict the direction', () => {
+    // Free text is how all four rows came to say "Aswan to Luxor".
+    expect(page).toMatch(/route_name: `\$\{formData\.embark_city\} to \$\{formData\.disembark_city\}`/)
   })
 })

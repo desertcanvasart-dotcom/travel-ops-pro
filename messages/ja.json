@@ -4928,7 +4928,9 @@
         "actions": "操作",
         "ppDouble": "1人あたり(2名1室)",
         "singleSupp": "シングル追加",
-        "tripleRed": "トリプル割引"
+        "tripleRed": "トリプル割引",
+        "sailingDays": "出航曜日",
+        "anyDay": "毎日"
       },
       "status": {
         "active": "有効",
@@ -5863,7 +5865,8 @@
       "baseRate": "期間なしの料金",
       "baseRateHint": "日付付きの期間がないため、すべての日付がこの料金になります。期間を追加してください。",
       "guideBlankFare": "空欄＝お客様と同額。0＝航空会社が無償で搭乗。",
-      "guideBlankBed": "空欄＝未入力として警告。0＝仕入先が無償で提供。"
+      "guideBlankBed": "空欄＝未入力として警告。0＝仕入先が無償で提供。",
+      "passport": "パスポート"
     },
     "supplements": {
       "title": "サプリメント（追加料金）",

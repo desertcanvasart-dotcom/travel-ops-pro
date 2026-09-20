@@ -139,7 +139,12 @@ export default function RatePeriodLines({ row, entity, format, compact = false }
     const blank = f.double <= 0
     return (
       <div className="flex items-baseline gap-2 whitespace-nowrap">
-        <span className="w-12 text-[11px] font-medium text-gray-500">{suffix === 'eur' ? t('eu') : t('nonEu')}</span>
+        <span
+          className="w-12 text-[11px] font-medium text-gray-500"
+          title={suffix === 'eur' ? t('eurPassportHolders') : t('nonEurPassportHolders')}
+        >
+          {suffix === 'eur' ? t('eu') : t('nonEu')}
+        </span>
         <span className={`w-20 text-right font-semibold ${blank ? 'text-red-600' : 'text-green-700'}`} title={t('dbl')}>
           {blank ? '—' : format(f.double)}
         </span>
@@ -157,7 +162,12 @@ export default function RatePeriodLines({ row, entity, format, compact = false }
     <div className="space-y-2 text-xs" data-testid="rate-period-lines">
       {/* Column key, once per row. */}
       <div className={`flex items-baseline gap-2 ${compact ? '' : 'pl-[12.5rem]'} text-[10px] uppercase tracking-wide text-gray-400 whitespace-nowrap`}>
-        <span className="w-12" />
+        {/* "EU" beside a dollar amount reads as a CURRENCY — the operator
+            asked whether it should be taken away (2026-09-20). It is the
+            traveller's PASSPORT, and the split is real for hotels and cruises.
+            One word here says which, for every row at once, without widening
+            the column the values sit in. */}
+        <span className="w-12">{t('passport')}</span>
         <span className="w-20 text-right">{t('dbl')}</span>
         <span className="w-20 text-right">{t('sgl')}</span>
         <span className="w-20 text-right">{t('tpl')}</span>
