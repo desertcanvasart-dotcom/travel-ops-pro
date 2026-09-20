@@ -9,7 +9,7 @@ import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurre
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
-import { BUILT_IN_GUIDE_LANGUAGES, guideLanguageKey } from '@/lib/guides/guide-language'
+import { BUILT_IN_GUIDE_LANGUAGES, guideLanguageKey, guideLanguageWord } from '@/lib/guides/guide-language'
 import { optionsFromLabels } from '@/lib/vocabulary'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
 import RateAuditLog from '@/app/components/RateAuditLog'
@@ -106,6 +106,11 @@ export default function GuideRatesContent() {
   // Settings → Vocabulary → Guide languages is the list (lib/guides/guide-language):
   // a language added, hidden or reordered there reaches this form. Values are keys.
   const languageOptions = useVocabOptions('guide_language', optionsFromLabels(BUILT_IN_GUIDE_LANGUAGES))
+  // What a NEW rate opens on: the agency's first guide language, in the order
+  // Settings → Vocabulary puts them. An agency that contracts guides in one
+  // language should never have to correct the form, and no form should ever
+  // propose a language its own vocabulary does not list.
+  const defaultLanguage = languageOptions[0]?.value ?? ''
   // Grades and durations list the agency's vocabulary (hidden grades stay
   // hidden — the pricing engine selects by the two the operator sells).
   const gradeOptions = useVocabOptions('guide_grade', GUIDE_TYPES.map(g => ({ value: g.value, label: t(`guideTypes.${g.value}`) })))
@@ -177,7 +182,14 @@ export default function GuideRatesContent() {
 
   const [formData, setFormData] = useState({
     service_code: '',
-    guide_language: 'english',
+    // NOT a hardcoded language. This office holds Japanese guide contracts
+    // only, so a form that opened on 'english' offered a language the
+    // vocabulary does not list, rendered it as the raw key ("english", lower
+    // case, because no vocabulary entry supplies a word), and saved a rate the
+    // engine could never match — every guide day priced as No rate. The
+    // vocabulary's first language fills this in once it loads; see
+    // defaultLanguage below.
+    guide_language: '',
     guide_type: 'egyptologist',
     city: '',
     tour_duration: 'full_day',
@@ -271,11 +283,19 @@ export default function GuideRatesContent() {
     }))
   }
 
+  // The vocabulary loads after the first render, so the blank form adopts the
+  // default the moment the list arrives. Only ever fills an EMPTY choice —
+  // never overwrites a language the operator picked or a row being edited.
+  useEffect(() => {
+    if (!defaultLanguage) return
+    setFormData(prev => (prev.guide_language ? prev : { ...prev, guide_language: defaultLanguage }))
+  }, [defaultLanguage])
+
   const handleAddNew = () => {
     setEditingRate(null)
     setFormData({
       service_code: generateServiceCode(),
-      guide_language: 'english',
+      guide_language: defaultLanguage,
       guide_type: 'egyptologist',
       city: '',
       tour_duration: 'full_day',
@@ -308,7 +328,7 @@ export default function GuideRatesContent() {
     setFormData({
       service_code: rate.service_code || '',
       // A row written before the vocabulary holds the word; the picker speaks keys.
-      guide_language: guideLanguageKey(rate.guide_language || 'english'),
+      guide_language: guideLanguageKey(rate.guide_language) || defaultLanguage,
       guide_type: rate.guide_type || 'egyptologist',
       city: rate.city || '',
       tour_duration: rate.tour_duration || 'full_day',
@@ -811,7 +831,7 @@ export default function GuideRatesContent() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <Globe className="w-4 h-4 text-purple-500" />
-                        <span className="text-sm font-semibold text-gray-900">{guideLanguageLabel(rate.guide_language, rate.guide_language)}</span>
+                        <span className="text-sm font-semibold text-gray-900">{guideLanguageLabel(rate.guide_language, guideLanguageWord(rate.guide_language))}</span>
                       </div>
                       <span className="text-xs text-gray-500">{rate.service_code}</span>
                     </td>
@@ -881,7 +901,7 @@ export default function GuideRatesContent() {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <Globe className="w-5 h-5 text-purple-500" />
-                    <span className="font-semibold text-gray-900">{guideLanguageLabel(rate.guide_language, rate.guide_language)}</span>
+                    <span className="font-semibold text-gray-900">{guideLanguageLabel(rate.guide_language, guideLanguageWord(rate.guide_language))}</span>
                   </div>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
@@ -936,7 +956,7 @@ export default function GuideRatesContent() {
               <div key={rate.id} className="px-4 py-2 flex items-center justify-between hover:bg-gray-50">
                 <div className="flex items-center gap-4">
                   <Globe className="w-4 h-4 text-purple-500" />
-                  <span className="font-medium text-gray-900">{guideLanguageLabel(rate.guide_language, rate.guide_language)}</span>
+                  <span className="font-medium text-gray-900">{guideLanguageLabel(rate.guide_language, guideLanguageWord(rate.guide_language))}</span>
                   <span className="text-sm text-gray-500">{rate.city || '—'}</span>
                   {rate.supplier_id && (
                     <span className="text-sm text-purple-600">{getGuideName(rate.supplier_id)}</span>
@@ -1087,7 +1107,7 @@ export default function GuideRatesContent() {
                       ))}
                       {/* A language since removed from the vocabulary still shows. */}
                       {formData.guide_language && !languageOptions.some(o => o.value === formData.guide_language) && (
-                        <option value={formData.guide_language}>{guideLanguageLabel(formData.guide_language, formData.guide_language)}</option>
+                        <option value={formData.guide_language}>{guideLanguageLabel(formData.guide_language, guideLanguageWord(formData.guide_language))}</option>
                       )}
                     </select>
                   </div>
