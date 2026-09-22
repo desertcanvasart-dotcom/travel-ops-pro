@@ -10910,6 +10910,13 @@ export interface Database {
           external_id: string | null
           externally_managed: boolean
           external_synced_at: string | null
+          fuel_surcharge_pp: number | null
+          flight_class: string | null
+          air_pp: number | null
+          land_pp: number | null
+          total_pp: number | null
+          price_currency: string | null
+          priced_at: string | null
         }
         Insert: {
           id?: string
@@ -10940,6 +10947,13 @@ export interface Database {
           external_id?: string | null
           externally_managed?: boolean
           external_synced_at?: string | null
+          fuel_surcharge_pp?: number | null
+          flight_class?: string | null
+          air_pp?: number | null
+          land_pp?: number | null
+          total_pp?: number | null
+          price_currency?: string | null
+          priced_at?: string | null
         }
         Update: {
           id?: string
@@ -10970,6 +10984,13 @@ export interface Database {
           external_id?: string | null
           externally_managed?: boolean
           external_synced_at?: string | null
+          fuel_surcharge_pp?: number | null
+          flight_class?: string | null
+          air_pp?: number | null
+          land_pp?: number | null
+          total_pp?: number | null
+          price_currency?: string | null
+          priced_at?: string | null
         }
         Relationships: [
           {
