@@ -1619,6 +1619,18 @@ export default function ViewItineraryPage() {
               <FileText className="w-4 h-4" />
               {t('contract')}
             </Link>
+            {/* The printable guest questionnaire with a QR to this booking's
+                online survey (app/api/itineraries/[id]/survey-pdf). */}
+            <a
+              href={`/api/itineraries/${itinerary.id}/survey-pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="h-10 px-4 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium flex items-center gap-2"
+              title="アンケート用紙（QRコード付き）をダウンロード"
+            >
+              <ClipboardList className="w-4 h-4" />
+              Survey (QR)
+            </a>
             <AddExpenseFromItinerary
               itineraryId={itinerary.id}
               itineraryCode={itinerary.itinerary_code}
