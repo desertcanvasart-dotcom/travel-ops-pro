@@ -109,7 +109,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       'max_pax', 'min_pax', 'booked_pax', 'status', 'cutoff_days',
       'is_guaranteed', 'price_per_person', 'currency',
       'assigned_guide_id', 'assigned_vehicle_id',
-      'public_notes', 'internal_notes'
+      'public_notes', 'internal_notes',
+      // Departures grid (migration 20261030): the manual 燃油 surcharge and the
+      // booked air class recorded per departure.
+      'fuel_surcharge_pp', 'flight_class'
     ]
 
     const updateData: Record<string, unknown> = {}
