@@ -21,7 +21,8 @@ import {
   Eye,
   Clock,
   MapPin,
-  Copy
+  Copy,
+  LayoutGrid
 } from 'lucide-react'
 
 // ============================================
@@ -503,6 +504,16 @@ export default function DeparturesPage() {
                           <option value="guaranteed">Guaranteed</option>
                           <option value="cancelled">Cancelled</option>
                         </select>
+                      )}
+
+                      {departure.template_id && (
+                        <Link
+                          href={`/departures/grid/${departure.template_id}`}
+                          className="p-1.5 text-gray-400 hover:text-[#647C47] hover:bg-gray-100 rounded transition-colors"
+                          title="Pricing grid — every departure date priced at its own season"
+                        >
+                          <LayoutGrid className="w-4 h-4" />
+                        </Link>
                       )}
 
                       <button
