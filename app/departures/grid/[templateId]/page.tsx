@@ -13,7 +13,7 @@
 // ============================================
 
 import { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useTierOptions } from '@/hooks/useTierOptions'
@@ -105,6 +105,7 @@ function dateBand(start: string, end: string | null): string {
 
 export default function DeparturesGridPage() {
   const params = useParams()
+  const router = useRouter()
   const templateId = String(params.templateId)
   const t = useTranslations()
   const tierOptions = useTierOptions(key => t(`tiers.${key}`))
@@ -114,6 +115,7 @@ export default function DeparturesGridPage() {
   const [error, setError] = useState<string | null>(null)
   const [grid, setGrid] = useState<GridResponse | null>(null)
   const [template, setTemplate] = useState<TemplateLite | null>(null)
+  const [templates, setTemplates] = useState<TemplateLite[]>([])
 
   // Controls
   const [tier, setTier] = useState('standard')
@@ -121,9 +123,13 @@ export default function DeparturesGridPage() {
   const [isEur, setIsEur] = useState(false) // ATS: JP passports → non-EUR
   const [fxInput, setFxInput] = useState<string>('') // blank = use org/office default
 
-  // Per-row fuel editing
+  // Per-row inline editing (燃油, manual AIR fare, class)
   const [fuelEdits, setFuelEdits] = useState<Record<string, string>>({})
   const [savingFuel, setSavingFuel] = useState<string | null>(null)
+  const [airEdits, setAirEdits] = useState<Record<string, string>>({})
+  const [savingAir, setSavingAir] = useState<string | null>(null)
+  const [classEdits, setClassEdits] = useState<Record<string, string>>({})
+  const [savingClass, setSavingClass] = useState<string | null>(null)
 
   const load = useCallback(
     async (reprice = false) => {
@@ -145,6 +151,8 @@ export default function DeparturesGridPage() {
         if (!json.success) throw new Error(json.error || 'Failed to load grid')
         setGrid(json.data)
         setFuelEdits({})
+        setAirEdits({})
+        setClassEdits({})
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to load grid')
       } finally {
@@ -166,7 +174,9 @@ export default function DeparturesGridPage() {
       .then(r => (r.ok ? r.json() : null))
       .then(j => {
         if (!active || !j?.data) return
-        const found = (j.data as TemplateLite[]).find(x => x.id === templateId)
+        const list = j.data as TemplateLite[]
+        setTemplates(list)
+        const found = list.find(x => x.id === templateId)
         if (found) setTemplate(found)
       })
       .catch(() => {})
@@ -217,6 +227,94 @@ export default function DeparturesGridPage() {
       setError(err instanceof Error ? err.message : 'Failed to save fuel surcharge')
     } finally {
       setSavingFuel(null)
+    }
+  }
+
+  // Save a manual AIR fare. A number overrides the engine's estimate; clearing
+  // it (blank) reverts to the engine figure, which only a reprice knows, so we
+  // reload in that case. LND is untouched either way.
+  const saveAir = async (band: GridBand) => {
+    const raw = airEdits[band.departureId]
+    if (raw === undefined) return
+    const trimmed = raw.trim()
+    const value = trimmed === '' ? null : Number(trimmed)
+    if (value !== null && (!Number.isFinite(value) || value < 0)) {
+      setError('AIR fare must be a non-negative number')
+      return
+    }
+    setSavingAir(band.departureId)
+    setError(null)
+    try {
+      const res = await fetch(`/api/departures/${band.departureId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ air_pp: value }),
+      })
+      const json = await res.json()
+      if (!json.success) throw new Error(json.error || 'Failed to save AIR fare')
+      if (value === null) {
+        // Reverting to the engine estimate needs a fresh price.
+        await load(false)
+        return
+      }
+      setGrid(prev =>
+        prev
+          ? {
+              ...prev,
+              bands: prev.bands.map(b =>
+                b.departureId === band.departureId
+                  ? { ...b, airPp: value, totalPp: value + (b.fuelPp ?? 0) + b.landPp }
+                  : b,
+              ),
+            }
+          : prev,
+      )
+      setAirEdits(prev => {
+        const next = { ...prev }
+        delete next[band.departureId]
+        return next
+      })
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save AIR fare')
+    } finally {
+      setSavingAir(null)
+    }
+  }
+
+  // Save the booked flight class (a recorded label, no price impact).
+  const saveClass = async (band: GridBand) => {
+    const raw = classEdits[band.departureId]
+    if (raw === undefined) return
+    const value = raw.trim() === '' ? null : raw.trim()
+    setSavingClass(band.departureId)
+    setError(null)
+    try {
+      const res = await fetch(`/api/departures/${band.departureId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flight_class: value }),
+      })
+      const json = await res.json()
+      if (!json.success) throw new Error(json.error || 'Failed to save class')
+      setGrid(prev =>
+        prev
+          ? {
+              ...prev,
+              bands: prev.bands.map(b =>
+                b.departureId === band.departureId ? { ...b, flightClass: value } : b,
+              ),
+            }
+          : prev,
+      )
+      setClassEdits(prev => {
+        const next = { ...prev }
+        delete next[band.departureId]
+        return next
+      })
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save class')
+    } finally {
+      setSavingClass(null)
     }
   }
 
@@ -304,6 +402,29 @@ export default function DeparturesGridPage() {
       {/* Controls */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-6">
         <div className="flex flex-wrap items-end gap-4">
+          <label className="flex flex-col gap-1 min-w-[220px]">
+            <span className="text-xs font-medium text-gray-500">Program (tour template)</span>
+            <select
+              value={templateId}
+              onChange={e => {
+                if (e.target.value && e.target.value !== templateId) {
+                  router.push(`/departures/grid/${e.target.value}`)
+                }
+              }}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
+            >
+              {templates.length === 0 && (
+                <option value={templateId}>{template?.template_name || 'This template'}</option>
+              )}
+              {templates.map(tpl => (
+                <option key={tpl.id} value={tpl.id}>
+                  {tpl.template_code ? `${tpl.template_code} — ` : ''}
+                  {tpl.template_name}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium text-gray-500">Tier</span>
             <select
@@ -411,6 +532,10 @@ export default function DeparturesGridPage() {
                 {grid.bands.map(band => {
                   const editing = fuelEdits[band.departureId]
                   const isSaving = savingFuel === band.departureId
+                  const airEditing = airEdits[band.departureId]
+                  const airIsSaving = savingAir === band.departureId
+                  const classEditing = classEdits[band.departureId]
+                  const classIsSaving = savingClass === band.departureId
                   return (
                     <tr key={band.departureId} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
@@ -433,9 +558,47 @@ export default function DeparturesGridPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{band.flightClass || '—'}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-gray-900">
-                        {money(band.airPp, currency)}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={classEditing !== undefined ? classEditing : band.flightClass ?? ''}
+                            placeholder="—"
+                            onChange={e =>
+                              setClassEdits(prev => ({ ...prev, [band.departureId]: e.target.value }))
+                            }
+                            onBlur={() => saveClass(band)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                            }}
+                            className="w-28 px-2 py-1 text-gray-700 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+                          />
+                          {classIsSaving && <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            value={airEditing !== undefined ? airEditing : band.airPp || ''}
+                            placeholder="—"
+                            title="Manual AIR fare — overrides the engine estimate; leave blank to use it"
+                            onChange={e =>
+                              setAirEdits(prev => ({ ...prev, [band.departureId]: e.target.value }))
+                            }
+                            onBlur={() => saveAir(band)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                            }}
+                            className="w-24 px-2 py-1 text-right tabular-nums border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+                          />
+                          {airIsSaving ? (
+                            <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />
+                          ) : (
+                            airEditing !== undefined && <Check className="w-3.5 h-3.5 text-gray-300" />
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -500,8 +663,10 @@ export default function DeparturesGridPage() {
       </div>
 
       <p className="mt-3 text-xs text-gray-400">
-        AIR / LND split and FX are provisional pending operator sign-off. 燃油 is
-        entered by hand; every other figure is priced by the engine per date.
+        AIR, 燃油 and class are entered by hand — AIR defaults to the engine
+        estimate until you type a fare, and overriding it never shifts LND. LND
+        (land) is priced by the engine per date. FX is provisional pending
+        operator sign-off.
       </p>
     </div>
   )
