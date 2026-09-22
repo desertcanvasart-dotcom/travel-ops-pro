@@ -48,8 +48,29 @@ export function tripShapeFromName(...names: Array<string | null | undefined>): T
 }
 
 /** Where a road-transfer RATE departs from. */
-export const rateDeparture = (row: { origin_city?: string | null; city?: string | null }): string =>
-  String(row.origin_city || row.city || '').trim()
+/** The city a rate's NAME says it departs from, when no column holds it — the
+ *  same heuristic as tripShapeFromName. "ASWAN-TO-ABU-SIMBEL-NEXT-DAY-RETURN"
+ *  → "Aswan"; "MARSA-ALAM-TO-ASWAN-OVERNIGHT" → "Marsa Alam". Empty when the
+ *  name has no "…-TO-…" origin. */
+export function departureFromName(...names: Array<string | null | undefined>): string {
+  const text = names.filter(Boolean).join(' ')
+  const m = text.match(/([A-Za-z][A-Za-z-]*?)-TO-/i)
+  if (!m) return ''
+  return m[1]
+    .replace(/-/g, ' ')
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .map(w => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(' ')
+}
+
+/** A road rate's departure city: the column the form saves (`city`), the one a
+ *  sheet fills (`origin_city`), or — when neither is set, which is every row
+ *  today because the form never saved an origin — parsed from the route name,
+ *  so route matching (roadRouteKey) can still find it. */
+export const rateDeparture = (row: { origin_city?: string | null; city?: string | null; service_code?: string | null; route_name?: string | null }): string =>
+  String(row.origin_city || row.city || departureFromName(row.service_code, row.route_name) || '').trim()
 
 /** A rate's shape: the stored one; a row without one (before 20261017, or a
  *  sheet with no Trip Shape column) reads it from its name. */
@@ -71,6 +92,7 @@ type DayLike = {
   accommodation_type?: string
   transport_type?: string
   leg_from?: string
+  leg_to?: string
   in_transit?: boolean
   is_cruise_day?: boolean
 }
@@ -91,6 +113,11 @@ export function morningPlace<T extends DayLike>(days: readonly T[], index: numbe
   const prev = days[index - 1]
   if (!prev || prev.in_transit) return null
   if (prev.accommodation_type === 'cruise') return cruiseEndCity || prev.city || null
+  // Arrived by ticket (train / sleeping train / flight): the morning place is
+  // where the ticket dropped them (leg_to). A night train to Aswan leaves the
+  // party in Aswan — ready for an onward road leg — even though the train day
+  // carries no city of its own.
+  if (isTicket(prev)) return prev.leg_to || prev.overnight_city || prev.city || null
   return prev.overnight_city || prev.city || null
 }
 
@@ -122,8 +149,11 @@ export function planRoadTrips<T extends DayLike>(days: readonly T[], cruiseEndCi
     }
 
     if (isTicket(day)) continue
-    // Waking on a sleeping train: the journey was its ticket.
-    if (prev.transport_type === 'sleeping_train') continue
+    // Waking on a sleeping train: the journey was its ticket, no road — UNLESS
+    // the train dropped the party at a hub (leg_to) and they drive onward to a
+    // different city today (Aswan → Abu Simbel). Without a leg_to, the old rule
+    // holds and the sleeper day is treated as arriving at the destination.
+    if (prev.transport_type === 'sleeping_train' && (!prev.leg_to || same(prev.leg_to, day.city))) continue
     // The ship moving between ports is not a transfer.
     if (day.accommodation_type === 'cruise' && prev.accommodation_type === 'cruise') continue
     const to = day.city

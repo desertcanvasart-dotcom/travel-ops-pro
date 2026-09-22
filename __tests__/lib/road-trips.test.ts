@@ -2,7 +2,7 @@ import { vi, describe, it, expect, beforeAll } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { setMockTables } from '../_mock-supabase'
 import { TEMPLATE_ID, fullRateTables } from '../fixtures/sample-templates'
-import { planRoadTrips, rateTripShape, tripShapeFromName } from '@/lib/pricing/road-trips'
+import { planRoadTrips, rateTripShape, tripShapeFromName, morningPlace, rateDeparture, departureFromName } from '@/lib/pricing/road-trips'
 
 // Operator, 2026-09-17: one road route costs differently one way, there and
 // back the same day, and back the next day — and pricing found road transfers
@@ -36,6 +36,57 @@ describe('the shape a rate name says (meanings confirmed by the operator)', () =
   it('a stored shape wins over the name', () => {
     expect(rateTripShape({ trip_shape: 'one_way', service_code: 'X-OVERNIGHT' })).toBe('one_way')
     expect(rateTripShape({ trip_shape: null, service_code: 'X-OVERNIGHT' })).toBe('overnight_return')
+  })
+})
+
+describe('a road rate whose origin column is empty is still found by its name', () => {
+  it('parses the departure city from the route name', () => {
+    expect(departureFromName('ASWAN-TO-ABU-SIMBEL-NEXT-DAY-RETURN')).toBe('Aswan')
+    expect(departureFromName('MARSA-ALAM-TO-ASWAN-OVERNIGHT')).toBe('Marsa Alam')
+    expect(departureFromName('SOUTH-MARSA-ALAM-ASWAN-ABU-SIMBEL')).toBe('') // no -TO-
+  })
+
+  it('rateDeparture falls back to the name only when both columns are null', () => {
+    // Every transport row today has origin_city null (a form bug), so without
+    // this the overnight Aswan → Abu Simbel rate is never indexed by route.
+    expect(rateDeparture({ origin_city: null, city: null, route_name: 'ASWAN-TO-ABU-SIMBEL-NEXT-DAY-RETURN' })).toBe('Aswan')
+    expect(rateDeparture({ origin_city: 'Luxor', route_name: 'ASWAN-TO-ABU-SIMBEL-NEXT-DAY-RETURN' })).toBe('Luxor')
+    expect(rateDeparture({ city: 'Cairo' })).toBe('Cairo')
+  })
+})
+
+describe('arriving at a hub by overnight train, then driving onward', () => {
+  const d = (day: number, city: string, extra: Record<string, unknown> = {}) => ({ day, city, accommodation_type: 'hotel', ...extra })
+
+  it('morningPlace uses a sleeping train\'s leg_to (Aswan), not its blank city', () => {
+    const days = [
+      d(2, 'Cairo'),
+      { day: 3, city: '', transport_type: 'sleeping_train', leg_from: 'Cairo', leg_to: 'Aswan' },
+      d(4, 'Abu Simbel', { overnight_city: 'Abu Simbel' }),
+    ]
+    expect(morningPlace(days, 2)).toBe('Aswan')
+  })
+
+  it('NMS801: sleeper Cairo→Aswan, then Aswan→Abu Simbel overnight-return, back to catch the Aswan→Luxor train', () => {
+    const plan = planRoadTrips([
+      d(2, 'Cairo'),
+      { day: 3, city: '', transport_type: 'sleeping_train', leg_from: 'Cairo', leg_to: 'Aswan' },
+      d(4, 'Abu Simbel', { overnight_city: 'Abu Simbel' }),
+      { day: 5, city: 'Luxor', transport_type: 'train', leg_from: 'Aswan', leg_to: 'Luxor', overnight_city: 'Luxor' },
+    ])
+    // Day 4 (index 2): the overnight round trip out to Abu Simbel.
+    expect(plan.get(2)).toEqual({ kind: 'leg', from: 'Aswan', to: 'Abu Simbel', shape: 'overnight_return' })
+    // Day 5 (index 3): the drive back to Aswan is inside that return — not charged again.
+    expect(plan.get(3)).toEqual({ kind: 'return_included', outDay: 4, from: 'Abu Simbel', to: 'Aswan' })
+  })
+
+  it('a sleeper with no onward drive (stays at its arrival city) still plans no road', () => {
+    const plan = planRoadTrips([
+      d(2, 'Cairo'),
+      { day: 3, city: '', transport_type: 'sleeping_train', leg_from: 'Cairo', leg_to: 'Aswan' },
+      d(4, 'Aswan', { overnight_city: 'Aswan' }),
+    ])
+    expect(plan.get(2)).toBeUndefined()
   })
 })
 
