@@ -5,8 +5,8 @@ import { isEngineGuideMode } from '@/lib/guides/guide-mode'
 import { DayBandRow, DAY_LINE_EDGE } from '@/components/pricing/DayBand'
 import { groupLinesByDay } from '@/lib/pricing/group-by-day'
 import { todayLocal } from '@/lib/today'
-import React, { useState, useEffect, useRef, Fragment } from 'react'
-import { useParams } from 'next/navigation'
+import React, { useState, useEffect, useRef, Fragment, Suspense } from 'react'
+import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { isBookableLine } from '@/lib/pricing/breakdown-order'
@@ -236,7 +236,7 @@ function AttractionInput({ onAdd, placeholder }: { onAdd: (name: string) => void
   )
 }
 
-export default function TourPriceCalculator() {
+function TourPriceCalculatorInner() {
   const { rateSymbol } = useCurrency()
   const t = useTranslations('b2bCalculator')
   const confirmDialog = useConfirm()
@@ -246,6 +246,10 @@ export default function TourPriceCalculator() {
   const tLeg = useTranslations('travelLeg')
   const params = useParams()
   const variationId = params?.id as string
+  // Pre-fill from a "Create quote" link (e.g. the departures grid): travel_date,
+  // num_pax, passport seed the form once at mount. Read lazily so a later user
+  // edit is never overwritten; absent params keep the normal defaults.
+  const searchParams = useSearchParams()
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -257,9 +261,15 @@ export default function TourPriceCalculator() {
   const [generatingSheet, setGeneratingSheet] = useState(false)
 
   // Form state
-  const [numPax, setNumPax] = useState(2)
-  const [travelDate, setTravelDate] = useState(todayLocal())
-  const [isEurPassport, setIsEurPassport] = useState(true)
+  const [numPax, setNumPax] = useState(() => {
+    const p = Number(searchParams?.get('num_pax'))
+    return Number.isFinite(p) && p > 0 ? Math.floor(p) : 2
+  })
+  const [travelDate, setTravelDate] = useState(() => searchParams?.get('travel_date') || todayLocal())
+  const [isEurPassport, setIsEurPassport] = useState(() => {
+    const p = searchParams?.get('passport')
+    return p ? p === 'eu' : true
+  })
   const [marginPercent, setMarginPercent] = useState(25)
   // WHICH options the customer wants, not merely whether. This used to be one
   // boolean for the whole quote, so a customer who wanted the balloon ride but
@@ -2143,5 +2153,15 @@ export default function TourPriceCalculator() {
         </div>
       )}
     </div>
+  )
+}
+
+// useSearchParams (the "Create quote" pre-fill) needs a Suspense boundary, the
+// same pattern the pricing-grid page uses.
+export default function TourPriceCalculator() {
+  return (
+    <Suspense fallback={<div className="max-w-7xl mx-auto p-6 text-center text-gray-500">Loading...</div>}>
+      <TourPriceCalculatorInner />
+    </Suspense>
   )
 }
