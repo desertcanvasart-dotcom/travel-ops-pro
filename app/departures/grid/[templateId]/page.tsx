@@ -27,7 +27,9 @@ import {
   Plane,
   Check,
   FileText,
+  CalendarPlus,
 } from 'lucide-react'
+import GenerateDeparturesModal from '@/components/departures/GenerateDeparturesModal'
 
 // ============================================
 // TYPES (mirror /api/departures/grid response)
@@ -130,6 +132,8 @@ export default function DeparturesGridPage() {
   const [savingAir, setSavingAir] = useState<string | null>(null)
   const [classEdits, setClassEdits] = useState<Record<string, string>>({})
   const [savingClass, setSavingClass] = useState<string | null>(null)
+  const [showGenerate, setShowGenerate] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const load = useCallback(
     async (reprice = false) => {
@@ -373,6 +377,13 @@ export default function DeparturesGridPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setShowGenerate(true)}
+              className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50"
+            >
+              <CalendarPlus className="w-4 h-4" />
+              Generate dates
+            </button>
+            <button
               onClick={() => load(true)}
               disabled={repricing || loading}
               className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
@@ -396,6 +407,13 @@ export default function DeparturesGridPage() {
         <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
           <AlertTriangle className="w-4 h-4" />
           {error}
+        </div>
+      )}
+
+      {notice && (
+        <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">
+          <Check className="w-4 h-4" />
+          {notice}
         </div>
       )}
 
@@ -506,13 +524,22 @@ export default function DeparturesGridPage() {
           <div className="flex flex-col items-center justify-center h-64 text-gray-500">
             <Calendar className="w-12 h-12 mb-3 text-gray-300" />
             <p className="font-medium">No departures for this template</p>
-            <p className="text-sm">
-              Add departure dates on the{' '}
-              <Link href="/departures" className="text-[#647C47] underline">
-                departures page
+            <p className="text-sm mb-3">Generate a season of dates, or add them individually.</p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowGenerate(true)}
+                className="flex items-center gap-2 px-3 py-2 bg-[#647C47] text-white rounded-lg text-sm hover:bg-[#4f6238]"
+              >
+                <CalendarPlus className="w-4 h-4" />
+                Generate dates
+              </button>
+              <Link
+                href="/departures"
+                className="px-3 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 text-gray-600"
+              >
+                Departures page
               </Link>
-              .
-            </p>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -668,6 +695,25 @@ export default function DeparturesGridPage() {
         (land) is priced by the engine per date. FX is provisional pending
         operator sign-off.
       </p>
+
+      {showGenerate && (
+        <GenerateDeparturesModal
+          templateId={templateId}
+          templateName={template?.template_name || 'this template'}
+          existingDates={grid?.bands.map(b => b.startDate) ?? []}
+          onClose={() => setShowGenerate(false)}
+          onCreated={({ created, skipped }) => {
+            setShowGenerate(false)
+            setNotice(
+              created > 0
+                ? `Created ${created} departure${created === 1 ? '' : 's'}${skipped ? `, ${skipped} already existed` : ''}.`
+                : 'No new departures — all those dates already existed.',
+            )
+            setTimeout(() => setNotice(null), 5000)
+            load(false)
+          }}
+        />
+      )}
     </div>
   )
 }
