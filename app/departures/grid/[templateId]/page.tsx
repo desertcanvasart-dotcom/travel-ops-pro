@@ -26,6 +26,7 @@ import {
   AlertTriangle,
   Plane,
   Check,
+  FileText,
 } from 'lucide-react'
 
 // ============================================
@@ -55,6 +56,9 @@ interface GridResponse {
   target_currency: string
   fx: number
   margin_percent: number
+  /** The template's variation for this tier — the B2B calculator's key. Null
+   *  when the template has no variation at this tier, so "Create quote" is off. */
+  variation_id: string | null
   bands: GridBand[]
 }
 
@@ -400,6 +404,7 @@ export default function DeparturesGridPage() {
                   <th className="text-right font-medium px-4 py-3">燃油 Fuel</th>
                   <th className="text-right font-medium px-4 py-3">LND ランド</th>
                   <th className="text-right font-medium px-4 py-3">合計 Total</th>
+                  <th className="text-right font-medium px-4 py-3">Quote</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -460,6 +465,30 @@ export default function DeparturesGridPage() {
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-900">
                         {money(band.totalPp, currency)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {grid.variation_id ? (
+                          <Link
+                            href={`/b2b/calculator/${grid.variation_id}?travel_date=${band.startDate}&num_pax=${grid.num_pax}&passport=${grid.is_eur_passport ? 'eu' : 'non_eu'}`}
+                            title={
+                              band.incomplete
+                                ? 'Open a quote for this departure (has unpriced services — fill the rates)'
+                                : 'Open a quote for this departure in the calculator'
+                            }
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-[#647C47]/40 text-[#647C47] hover:bg-[#647C47]/10 transition-colors"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            Create quote
+                          </Link>
+                        ) : (
+                          <span
+                            title="No tour variation for this tier — add one in Tour Templates to quote from here"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-gray-300 cursor-not-allowed"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            Create quote
+                          </span>
+                        )}
                       </td>
                     </tr>
                   )

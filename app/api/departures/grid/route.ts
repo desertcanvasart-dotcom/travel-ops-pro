@@ -143,6 +143,22 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // The B2B calculator — the app's quote surface — is keyed by variation, and
+    // a template has one variation per tier. Resolve the variation matching the
+    // grid's tier so each band can open a pre-filled quote. Null when the
+    // template has no variation for this tier; the grid then disables its
+    // "Create quote" action rather than linking nowhere. Scoped via the
+    // org-owned template (tour_variations has no org_id of its own).
+    const { data: variation } = await supabase
+      .from('tour_variations')
+      .select('id')
+      .eq('template_id', templateId)
+      .eq('tier', tier)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle()
+    const variationId = variation?.id ?? null
+
     const rows = departures ?? []
     const bands: GridBand[] = []
 
@@ -204,6 +220,7 @@ export async function GET(request: NextRequest) {
         target_currency: targetCurrency,
         fx,
         margin_percent: marginPercent,
+        variation_id: variationId,
         bands,
       },
     })
