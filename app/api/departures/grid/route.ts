@@ -122,6 +122,9 @@ export async function GET(request: NextRequest) {
     const numPax = parseInt(searchParams.get('num_pax') || '2', 10)
     const isEurPassport = searchParams.get('is_eur') === 'true' // ATS default: JP passports → false
     const language = searchParams.get('language') || 'English'
+    // Guide mode: 'throughout' books one guide for the whole trip, 'spot' a
+    // guide per touring day. Default spot (the common B2B case).
+    const guideMode = searchParams.get('guide_mode') === 'throughout' ? 'throughout' : 'spot'
     const targetCurrency = searchParams.get('target_currency') || DEFAULT_TARGET_CURRENCY
 
     // Org context the engine needs: season premium (orgId), the currency its
@@ -183,6 +186,7 @@ export async function GET(request: NextRequest) {
         travelDate: dep.start_date,
         marginPercent,
         rateCurrency,
+        guideMode,
       })
 
       // Per-person gross for the requested pax basis, in the rate currency —
@@ -229,6 +233,8 @@ export async function GET(request: NextRequest) {
         target_currency: targetCurrency,
         fx,
         margin_percent: marginPercent,
+        language,
+        guide_mode: guideMode,
         variation_id: variationId,
         bands,
       },

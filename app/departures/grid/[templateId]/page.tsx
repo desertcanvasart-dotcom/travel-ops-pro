@@ -17,6 +17,8 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useTierOptions } from '@/hooks/useTierOptions'
+import { useVocabOptions } from '@/hooks/useVocabOptions'
+import GuideLanguageSelect, { useGuideLanguageChoice } from '@/components/pricing/GuideLanguageSelect'
 import {
   Calendar,
   Loader2,
@@ -124,6 +126,14 @@ export default function DeparturesGridPage() {
   const [numPax, setNumPax] = useState(2)
   const [isEur, setIsEur] = useState(false) // ATS: JP passports → non-EUR
   const [fxInput, setFxInput] = useState<string>('') // blank = use org/office default
+  // Guide language auto-selects the first with a rate (Japanese for ATS), so
+  // the grid no longer hard-defaults to English. Mode = spot vs throughout.
+  const guideLang = useGuideLanguageChoice()
+  const [guideMode, setGuideMode] = useState<'spot' | 'throughout'>('spot')
+  const guideModeOptions = useVocabOptions('guide_mode', [
+    { value: 'spot', label: 'Spot (per touring day)' },
+    { value: 'throughout', label: 'Throughout (one guide)' },
+  ])
 
   // Per-row inline editing (燃油, manual AIR fare, class)
   const [fuelEdits, setFuelEdits] = useState<Record<string, string>>({})
@@ -148,6 +158,8 @@ export default function DeparturesGridPage() {
           is_eur: String(isEur),
         })
         if (fxInput.trim() !== '' && Number(fxInput) > 0) qs.set('fx', fxInput.trim())
+        if (guideLang.value) qs.set('language', guideLang.value)
+        qs.set('guide_mode', guideMode)
         if (reprice) qs.set('reprice', '1')
 
         const res = await fetch(`/api/departures/grid?${qs.toString()}`)
@@ -164,7 +176,7 @@ export default function DeparturesGridPage() {
         setRepricing(false)
       }
     },
-    [templateId, tier, numPax, isEur, fxInput],
+    [templateId, tier, numPax, isEur, fxInput, guideLang.value, guideMode],
   )
 
   useEffect(() => {
@@ -478,6 +490,29 @@ export default function DeparturesGridPage() {
             >
               <option value="non_eur">Non-EU</option>
               <option value="eur">EU</option>
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-gray-500">Guide language</span>
+            <GuideLanguageSelect
+              choice={guideLang}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-gray-500">Guide mode</span>
+            <select
+              value={guideMode}
+              onChange={e => setGuideMode(e.target.value === 'throughout' ? 'throughout' : 'spot')}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
+            >
+              {guideModeOptions.map(o => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </select>
           </label>
 
