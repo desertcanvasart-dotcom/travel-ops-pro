@@ -293,7 +293,8 @@
     "accommodation": "Accommodation",
     "transportTickets": "Transport & Tickets",
     "guidesServices": "Guides & Services",
-    "ratesCosts": "Costs"
+    "ratesCosts": "Costs",
+    "guestSurveys": "Guest Surveys"
   },
   "roles": {
     "admin": "Admin",

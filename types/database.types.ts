@@ -25,6 +25,57 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      guest_surveys: {
+        Row: {
+          id: string
+          org_id: string
+          itinerary_id: string | null
+          token: string
+          language: string
+          status: string
+          sent_email: boolean
+          sent_whatsapp: boolean
+          sent_at: string | null
+          submitted_at: string | null
+          trip_snapshot: Json
+          responses: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          itinerary_id?: string | null
+          token: string
+          language?: string
+          status?: string
+          sent_email?: boolean
+          sent_whatsapp?: boolean
+          sent_at?: string | null
+          submitted_at?: string | null
+          trip_snapshot?: Json
+          responses?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          itinerary_id?: string | null
+          token?: string
+          language?: string
+          status?: string
+          sent_email?: boolean
+          sent_whatsapp?: boolean
+          sent_at?: string | null
+          submitted_at?: string | null
+          trip_snapshot?: Json
+          responses?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       accommodation_rates: {
         Row: {
           id: string

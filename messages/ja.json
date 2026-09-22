@@ -293,7 +293,8 @@
     "accommodation": "宿泊",
     "transportTickets": "交通・チケット",
     "guidesServices": "ガイド・サービス",
-    "ratesCosts": "コスト"
+    "ratesCosts": "コスト",
+    "guestSurveys": "アンケート"
   },
   "roles": {
     "admin": "管理者",

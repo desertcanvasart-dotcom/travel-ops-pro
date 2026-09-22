@@ -36,6 +36,9 @@ export const CRON_JOBS: CronJob[] = [
   // The shared inbox: new mail and replies sent from Gmail directly, so
   // "awaiting reply" is current (lib/email/sync-mailbox).
   { name: 'gmail-sync', schedule: '*/10 * * * *', handler: () => import('@/app/api/cron/gmail-sync/route').then(m => m.GET) },
+  // Guest satisfaction survey: on the day a trip ends, send the /survey link by
+  // email + WhatsApp. 09:00 daily.
+  { name: 'survey-invites', schedule: '0 9 * * *', handler: () => import('@/app/api/cron/survey-invites/route').then(m => m.GET) },
 ]
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

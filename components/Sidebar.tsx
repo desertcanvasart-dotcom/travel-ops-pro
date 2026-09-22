@@ -63,7 +63,7 @@ import {
   Building2,
   ScrollText,
   ReceiptText,
-  HandCoins, ClipboardPaste } from 'lucide-react'
+  HandCoins, ClipboardPaste, ClipboardList as ClipboardListIcon } from 'lucide-react'
 import { LanguageSelector } from '@/components/LanguageSelector'
 
 interface SidebarProps {
@@ -153,6 +153,7 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'capacity', href: '/capacity', icon: CalendarDays, roles: ['admin', 'manager'] },
       { labelKey: 'followups', href: '/followups', icon: CheckSquare, roles: ['admin', 'manager', 'agent'] },
       { labelKey: 'documents', href: '/documents', icon: FileText, roles: ['admin', 'manager'] },
+      { labelKey: 'guestSurveys', href: '/surveys', icon: ClipboardListIcon, roles: ['admin', 'manager'] },
     ]
   },
   // The catalogue: tour templates, the ready-made packages, the transport
