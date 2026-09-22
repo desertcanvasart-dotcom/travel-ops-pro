@@ -67,15 +67,21 @@ function allocateBand(args: {
   services: readonly BucketableLine[]
   grossPerPersonTarget: number // engine per-person gross, already in target currency
   fuelPerPerson: number | null
+  /** The office's manual AIR fare, per person, when they typed one. null → use
+   *  the engine's estimate. LND is engine land either way, so a manual fare
+   *  never double-counts against a flight the engine also priced. */
+  airOverride: number | null
   incomplete: boolean
 }): DepartureBand {
   const { air, land } = sumBuckets(args.services)
   const totalCost = air + land
   const airShare = totalCost > 0 ? air / totalCost : 0
-  const airPp = Math.round(args.grossPerPersonTarget * airShare)
-  // Land takes the remainder so AIR + LND == the engine gross exactly (no
-  // rounding drift makes the two columns fail to reconcile with 合計).
-  const landPp = args.grossPerPersonTarget - airPp
+  const engineAirPp = Math.round(args.grossPerPersonTarget * airShare)
+  // Land is always the engine's land portion, so AIR + LND == the engine gross
+  // when AIR is the engine estimate, and a manual AIR only replaces the air
+  // estimate — it does not shift LND.
+  const landPp = args.grossPerPersonTarget - engineAirPp
+  const airPp = args.airOverride != null ? Math.round(args.airOverride) : engineAirPp
   return assembleBand({ airPp, fuelPp: args.fuelPerPerson, landPp, incomplete: args.incomplete })
 }
 
@@ -131,7 +137,7 @@ export async function GET(request: NextRequest) {
     // Bands = this template's departures, org-scoped, in date order.
     const { data: departures, error: depErr } = await supabase
       .from('tour_departures')
-      .select('id, start_date, end_date, flight_class, fuel_surcharge_pp, currency')
+      .select('id, start_date, end_date, flight_class, fuel_surcharge_pp, air_pp, currency')
       .eq('org_id', org_id)
       .eq('template_id', templateId)
       .order('start_date', { ascending: true })
@@ -195,6 +201,9 @@ export async function GET(request: NextRequest) {
         // Fuel is entered in the departure row's currency; the stub assumes the
         // office enters it in the target (JPY). TODO(operator): confirm.
         fuelPerPerson: dep.fuel_surcharge_pp == null ? null : Number(dep.fuel_surcharge_pp),
+        // air_pp doubles as the office's manual AIR fare override (per person,
+        // in the target currency). null → show the engine's estimate.
+        airOverride: dep.air_pp == null ? null : Number(dep.air_pp),
         incomplete: !result.complete,
       })
 
