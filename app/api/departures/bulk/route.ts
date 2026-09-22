@@ -55,11 +55,13 @@ export async function POST(request: NextRequest) {
 
     // The template supplies the name, code and length; end_date is derived so
     // every generated departure spans the tour's own duration.
+    // tour_templates has no org_id column (templates are not org-scoped at the
+    // row level — the single-create route also looks them up by id alone). Org
+    // scoping is on the departures we insert, which carry org_id.
     const { data: template, error: tErr } = await supabase
       .from('tour_templates')
       .select('template_name, template_code, duration_days')
       .eq('id', templateId)
-      .eq('org_id', org_id)
       .maybeSingle()
     if (tErr) {
       return NextResponse.json({ success: false, error: clientMessage(tErr, 'Could not load template') }, { status: 500 })
