@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -34,7 +35,8 @@ interface Season {
   pricing_season_dates: SeasonWindow[]
 }
 
-const todayIso = () => new Date().toISOString().slice(0, 10)
+// Our calendar date (toISOString gave the UTC one — yesterday before 09:00 in Japan).
+const todayIso = () => todayLocal()
 
 /** 15 → "15", 12.5 → "12.5". Trailing zeros are noise on a rate somebody typed. */
 const formatPercent = (value: number) => String(Number(value))

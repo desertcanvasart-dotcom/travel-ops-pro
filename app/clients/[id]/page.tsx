@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useState, useEffect } from 'react'
 import { formatMoney, formatTotals } from '@/lib/currency-totals'
 import { createClient } from '@/lib/supabase'
@@ -258,7 +259,9 @@ export default function ClientProfilePage() {
   }
   
   const pendingFollowups = followups.filter(f => f.status === 'pending')
-  const overdueFollowups = pendingFollowups.filter(f => new Date(f.due_date) < new Date())
+  // due_date is a calendar date: compare it as one, in our timezone. new Date()
+  // of it is UTC midnight, so a follow-up turned overdue at 09:00 in Japan on its due day.
+  const overdueFollowups = pendingFollowups.filter(f => f.due_date.slice(0, 10) < todayLocal())
   
   return (
     <div className="min-h-screen bg-gray-50">
@@ -829,7 +832,7 @@ export default function ClientProfilePage() {
             ) : (
               <div className="space-y-3">
                 {followups.map((followup) => {
-                  const isOverdue = followup.status === 'pending' && new Date(followup.due_date) < new Date()
+                  const isOverdue = followup.status === 'pending' && followup.due_date.slice(0, 10) < todayLocal()
                   return (
                     <div
                       key={followup.id}

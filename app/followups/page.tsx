@@ -9,6 +9,7 @@ import {
   MessageSquare, Users, TrendingUp, Filter, X
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { shiftDateISO, todayLocal } from '@/lib/today'
 
 const supabase = createClient()
 
@@ -95,13 +96,13 @@ export default function FollowupDashboard() {
 
   const snoozeFollowup = async (id: string, days: number) => {
     try {
-      const newDate = new Date()
-      newDate.setDate(newDate.getDate() + days)
 
       const { error } = await supabase
         .from('client_followups')
         .update({
-          due_date: newDate.toISOString().split('T')[0]
+          // Our calendar date + days (toISOString gave the UTC date: a day
+          // early in Japan before 09:00).
+          due_date: shiftDateISO(todayLocal(), days)
         })
         .eq('id', id)
 
@@ -137,23 +138,21 @@ export default function FollowupDashboard() {
   }
 
   const getFilteredFollowups = () => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
-    const weekFromNow = new Date()
-    weekFromNow.setDate(weekFromNow.getDate() + 7)
-    weekFromNow.setHours(23, 59, 59, 999)
+    // Calendar dates compared as YYYY-MM-DD strings in OUR timezone. Parsing
+    // the date column with new Date() gives UTC midnight — 09:00 in Japan — so
+    // a follow-up due today turned "overdue" at 09:00 and dropped out of "this
+    // week"; comparisons mixed that with local midnight and with "now".
+    const today = todayLocal()
+    const weekEnd = shiftDateISO(today, 7)
 
     let filtered = followups.filter(f => {
-      const dueDate = new Date(f.due_date)
-      dueDate.setHours(0, 0, 0, 0)
-
+      const due = f.due_date.slice(0, 10)
       if (filter === 'today') {
-        return dueDate.getTime() === today.getTime()
+        return due === today
       } else if (filter === 'week') {
-        return dueDate >= today && dueDate <= weekFromNow
+        return due >= today && due <= weekEnd
       } else if (filter === 'overdue') {
-        return dueDate < today
+        return due < today
       }
       return true
     })
@@ -171,44 +170,18 @@ export default function FollowupDashboard() {
 
   const filteredFollowups = getFilteredFollowups()
 
+  const todayStr = todayLocal()
+  const weekEndStr = shiftDateISO(todayStr, 7)
   const stats = {
-    today: followups.filter(f => {
-      const dueDate = new Date(f.due_date)
-      const today = new Date()
-      dueDate.setHours(0, 0, 0, 0)
-      today.setHours(0, 0, 0, 0)
-      return dueDate.getTime() === today.getTime()
-    }).length,
-    week: followups.filter(f => {
-      const dueDate = new Date(f.due_date)
-      const today = new Date()
-      const weekFromNow = new Date()
-      weekFromNow.setDate(weekFromNow.getDate() + 7)
-      return dueDate >= today && dueDate <= weekFromNow
-    }).length,
-    overdue: followups.filter(f => {
-      const dueDate = new Date(f.due_date)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      return dueDate < today
-    }).length,
+    today: followups.filter(f => f.due_date.slice(0, 10) === todayStr).length,
+    week: followups.filter(f => f.due_date.slice(0, 10) >= todayStr && f.due_date.slice(0, 10) <= weekEndStr).length,
+    overdue: followups.filter(f => f.due_date.slice(0, 10) < todayStr).length,
     total: followups.length
   }
 
-  const isOverdue = (dateString: string) => {
-    const dueDate = new Date(dateString)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    return dueDate < today
-  }
+  const isOverdue = (dateString: string) => dateString.slice(0, 10) < todayLocal()
 
-  const isToday = (dateString: string) => {
-    const dueDate = new Date(dateString)
-    const today = new Date()
-    dueDate.setHours(0, 0, 0, 0)
-    today.setHours(0, 0, 0, 0)
-    return dueDate.getTime() === today.getTime()
-  }
+  const isToday = (dateString: string) => dateString.slice(0, 10) === todayLocal()
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)

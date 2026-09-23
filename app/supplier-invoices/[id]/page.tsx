@@ -99,7 +99,7 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user?.id }),
       })
-      if (res.ok) fetchInvoice()
+      if (!(await reportFailure(res, 'Approve'))) fetchInvoice()
     } finally {
       setActionLoading(null)
     }
@@ -117,10 +117,19 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ payment_method: method, payment_reference: ref }),
       })
-      if (res.ok) fetchInvoice()
+      if (!(await reportFailure(res, 'Recording the payment'))) fetchInvoice()
     } finally {
       setActionLoading(null)
     }
+  }
+
+  // Every action here used to ignore the response: a refused dispute, match or
+  // delete looked exactly like a successful one (delete even navigated away).
+  const reportFailure = async (res: Response, what: string): Promise<boolean> => {
+    if (res.ok) return false
+    const data = await res.json().catch(() => ({}))
+    alert(`${what} failed: ${data.error || res.statusText || res.status}`)
+    return true
   }
 
   const handleDispute = async () => {
@@ -129,12 +138,12 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
 
     setActionLoading('dispute')
     try {
-      await fetch(`/api/supplier-invoices/${id}/dispute`, {
+      const res = await fetch(`/api/supplier-invoices/${id}/dispute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
       })
-      fetchInvoice()
+      if (!(await reportFailure(res, 'Dispute'))) fetchInvoice()
     } finally {
       setActionLoading(null)
     }
@@ -142,7 +151,8 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
 
   const handleDelete = async () => {
     if (!(await confirmDialog('Delete this supplier invoice?'))) return
-    await fetch(`/api/supplier-invoices/${id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/supplier-invoices/${id}`, { method: 'DELETE' })
+    if (await reportFailure(res, 'Delete')) return
     router.push('/supplier-invoices')
   }
 
@@ -158,19 +168,19 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
         method: 'POST',
         body: formData,
       })
-      if (res.ok) fetchInvoice()
+      if (!(await reportFailure(res, 'Upload'))) fetchInvoice()
     } finally {
       setUploading(false)
     }
   }
 
   const handleRemoveExpense = async (expenseId: string) => {
-    await fetch(`/api/supplier-invoices/${id}/match`, {
+    const res = await fetch(`/api/supplier-invoices/${id}/match`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ expenseId }),
     })
-    fetchInvoice()
+    if (!(await reportFailure(res, 'Removing the expense'))) fetchInvoice()
   }
 
   // Match modal functions
@@ -203,11 +213,13 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
     if (selectedExpenses.size === 0) return
     setActionLoading('match')
     try {
-      await fetch(`/api/supplier-invoices/${id}/match`, {
+      const res = await fetch(`/api/supplier-invoices/${id}/match`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expenseIds: Array.from(selectedExpenses) }),
       })
+      // Keep the modal (and the selection) open on failure so it can be retried.
+      if (await reportFailure(res, 'Matching')) return
       setShowMatchModal(false)
       setSelectedExpenses(new Set())
       fetchInvoice()

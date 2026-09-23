@@ -10,7 +10,7 @@ import GuideLanguageSelect, { useGuideLanguageChoice } from '@/components/pricin
 import { groupLinesByDay } from '@/lib/pricing/group-by-day'
 import { todayLocal } from '@/lib/today'
 import { useCompanyInfo } from '@/lib/use-company-info'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -255,9 +255,16 @@ export default function TourDetailPage() {
     }
   }
 
+  // Each change of pax/date/passport/language fires a new price request, and
+  // they can come back out of order: an older, slower answer used to overwrite
+  // the newer one, so the page showed a price for settings no longer selected.
+  // Only the latest request may write.
+  const priceRequestId = useRef(0)
   const calculatePrice = async () => {
     if (!tour?.variation_id && !tour?.template_id) return
 
+    const requestId = ++priceRequestId.current
+    const isLatest = () => requestId === priceRequestId.current
     setPricingLoading(true)
     setPricingError(null)
 
@@ -279,6 +286,7 @@ export default function TourDetailPage() {
       })
 
       const data = await response.json()
+      if (!isLatest()) return
 
       if (data.success) {
         setPricing(data.data)
@@ -286,10 +294,11 @@ export default function TourDetailPage() {
         setPricingError(data.error || 'Failed to calculate price')
       }
     } catch (err) {
+      if (!isLatest()) return
       setPricingError('Error calculating price')
       console.error(err)
     } finally {
-      setPricingLoading(false)
+      if (isLatest()) setPricingLoading(false)
     }
   }
 

@@ -5,7 +5,7 @@ import { getCurrentUserId } from '@/lib/auth/current-org'
 
 export async function POST(request: NextRequest) {
   try {
-    const { messageIds, action, labelId } = await request.json()
+    const { messageIds, threadIds, action, labelId } = await request.json()
 
     // Derive the user from the session, never a client-supplied userId (IDOR).
     const userId = await getCurrentUserId()
@@ -13,8 +13,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if (!messageIds || !action) {
+    if ((!messageIds && !threadIds) || !action) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    // What each action does to the labels. (permanentDelete is the one action
+    // that is not a label change.)
+    const LABEL_CHANGES: Record<string, { add?: string[]; remove?: string[] } | undefined> = {
+      delete: { add: ['TRASH'], remove: ['INBOX'] }, // move to trash
+      archive: { remove: ['INBOX'] },
+      star: { add: ['STARRED'] },
+      unstar: { remove: ['STARRED'] },
+      markRead: { remove: ['UNREAD'] },
+      markUnread: { add: ['UNREAD'] },
+      move: labelId ? { add: [labelId], remove: ['INBOX'] } : undefined,
+      addLabel: labelId ? { add: [labelId] } : undefined,
+      removeLabel: labelId ? { remove: [labelId] } : undefined,
+    }
+    if (['move', 'addLabel', 'removeLabel'].includes(action) && !labelId) {
+      return NextResponse.json({ error: action === 'move' ? 'Label ID required for move action' : 'Label ID required' }, { status: 400 })
+    }
+    if (action !== 'permanentDelete' && !(action in LABEL_CHANGES)) {
+      return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+    }
+    if (action === 'permanentDelete' && threadIds) {
+      return NextResponse.json({ error: 'Permanent delete takes message ids only' }, { status: 400 })
     }
 
     // Tokens are stored ENCRYPTED. This route used to read gmail_tokens itself
@@ -25,124 +48,36 @@ export async function POST(request: NextRequest) {
     // the expiry refresh, and is the ONE way this codebase talks to Gmail.
     const { gmail } = await getAuthenticatedGmail(userId)
 
-    const ids = Array.isArray(messageIds) ? messageIds : [messageIds]
+    if (action === 'permanentDelete') {
+      // Permanently delete (use with caution)
+      for (const id of Array.isArray(messageIds) ? messageIds : [messageIds]) {
+        await gmail.users.messages.delete({ userId: 'me', id })
+      }
+      return NextResponse.json({ success: true })
+    }
 
-    switch (action) {
-      case 'delete':
-        // Move to trash
-        await gmail.users.messages.batchModify({
+    const change = LABEL_CHANGES[action]!
+    if (threadIds) {
+      // A conversation in the inbox IS a Gmail thread. Its id used to be sent
+      // as a MESSAGE id — Gmail's first message shares the thread's id — so
+      // archive / mark read / mark unread touched only the first message and
+      // every reply stayed unread in the inbox.
+      for (const id of Array.isArray(threadIds) ? threadIds : [threadIds]) {
+        await gmail.users.threads.modify({
           userId: 'me',
-          requestBody: {
-            ids,
-            addLabelIds: ['TRASH'],
-            removeLabelIds: ['INBOX'],
-          },
+          id,
+          requestBody: { addLabelIds: change.add, removeLabelIds: change.remove },
         })
-        break
-
-      case 'archive':
-        // Remove from inbox
-        await gmail.users.messages.batchModify({
-          userId: 'me',
-          requestBody: {
-            ids,
-            removeLabelIds: ['INBOX'],
-          },
-        })
-        break
-
-      case 'star':
-        await gmail.users.messages.batchModify({
-          userId: 'me',
-          requestBody: {
-            ids,
-            addLabelIds: ['STARRED'],
-          },
-        })
-        break
-
-      case 'unstar':
-        await gmail.users.messages.batchModify({
-          userId: 'me',
-          requestBody: {
-            ids,
-            removeLabelIds: ['STARRED'],
-          },
-        })
-        break
-
-      case 'markRead':
-        await gmail.users.messages.batchModify({
-          userId: 'me',
-          requestBody: {
-            ids,
-            removeLabelIds: ['UNREAD'],
-          },
-        })
-        break
-
-      case 'markUnread':
-        await gmail.users.messages.batchModify({
-          userId: 'me',
-          requestBody: {
-            ids,
-            addLabelIds: ['UNREAD'],
-          },
-        })
-        break
-
-      case 'move':
-        if (!labelId) {
-          return NextResponse.json({ error: 'Label ID required for move action' }, { status: 400 })
-        }
-        await gmail.users.messages.batchModify({
-          userId: 'me',
-          requestBody: {
-            ids,
-            addLabelIds: [labelId],
-            removeLabelIds: ['INBOX'],
-          },
-        })
-        break
-
-      case 'addLabel':
-        if (!labelId) {
-          return NextResponse.json({ error: 'Label ID required' }, { status: 400 })
-        }
-        await gmail.users.messages.batchModify({
-          userId: 'me',
-          requestBody: {
-            ids,
-            addLabelIds: [labelId],
-          },
-        })
-        break
-
-      case 'removeLabel':
-        if (!labelId) {
-          return NextResponse.json({ error: 'Label ID required' }, { status: 400 })
-        }
-        await gmail.users.messages.batchModify({
-          userId: 'me',
-          requestBody: {
-            ids,
-            removeLabelIds: [labelId],
-          },
-        })
-        break
-
-      case 'permanentDelete':
-        // Permanently delete (use with caution)
-        for (const id of ids) {
-          await gmail.users.messages.delete({
-            userId: 'me',
-            id,
-          })
-        }
-        break
-
-      default:
-        return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+      }
+    } else {
+      await gmail.users.messages.batchModify({
+        userId: 'me',
+        requestBody: {
+          ids: Array.isArray(messageIds) ? messageIds : [messageIds],
+          addLabelIds: change.add,
+          removeLabelIds: change.remove,
+        },
+      })
     }
 
     return NextResponse.json({ success: true })

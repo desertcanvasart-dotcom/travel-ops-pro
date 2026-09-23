@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { todayFromRequest } from '@/lib/today'
 import { orgAuth } from '@/lib/auth/org-auth'
 
 /**
@@ -10,7 +11,7 @@ import { orgAuth } from '@/lib/auth/org-auth'
  * NOTE: the unread-traveller-message badge is a follow-up (it bridges this
  * app's portal_messages) — this route returns trips + latest checkpoint only.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const auth = await orgAuth()
     if (auth.error || !auth.supabase || !auth.org_id) {
@@ -18,7 +19,7 @@ export async function GET() {
     }
     const { supabase, org_id } = auth
 
-    const today = new Date().toISOString().slice(0, 10)
+    const today = todayFromRequest(request.url)
     const { data: trips, error: tripsErr } = await supabase
       .from('itineraries')
       .select('id, trip_name, client_name, start_date, end_date, status')

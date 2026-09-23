@@ -619,7 +619,8 @@ export function UnifiedMessageThread({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: user.id,
-          messageIds: [conversation.identifier],
+          // The identifier is the Gmail THREAD id — act on the whole thread.
+          threadIds: [conversation.identifier],
           action: 'archive'
         }),
       })
@@ -650,7 +651,8 @@ export function UnifiedMessageThread({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             userId: user.id,
-            messageIds: [conversation.identifier],
+            // The identifier is the Gmail THREAD id — act on the whole thread.
+          threadIds: [conversation.identifier],
             action: 'markRead'
           }),
         })
@@ -676,7 +678,8 @@ export function UnifiedMessageThread({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: user.id,
-          messageIds: [conversation.identifier],
+          // The identifier is the Gmail THREAD id — act on the whole thread.
+          threadIds: [conversation.identifier],
           action: 'markUnread'
         }),
       })

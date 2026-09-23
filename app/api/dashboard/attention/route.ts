@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { shiftDateISO, todayFromRequest } from '@/lib/today'
 import { REPLY_OVERDUE_HOURS, waitingLabel } from '@/lib/email/reply-status'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
@@ -33,7 +34,7 @@ interface AttentionItem {
   href: string
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     // createServerClient() is SERVICE-ROLE and bypasses RLS. Scoping the two
     // bookings queries below is enough for the whole route: every later query
@@ -43,12 +44,13 @@ export async function GET() {
     if (!orgId) return noOrgResponse()
 
     const supabase = createServerClient()
-    const today = new Date().toISOString().slice(0, 10)
-    const horizon = new Date(Date.now() + HORIZON_DAYS * 864e5).toISOString().slice(0, 10)
-    const in7 = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10)
+    // The caller's calendar date, not the UTC server's (see todayFromRequest).
+    const today = todayFromRequest(request.url)
+    const horizon = shiftDateISO(today, HORIZON_DAYS)
+    const in7 = shiftDateISO(today, 7)
     // Balance warnings get a longer runway: chasing a customer payment takes
     // days, so surface at 14 days out ('soon') and escalate at 7/overdue.
-    const in14 = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10)
+    const in14 = shiftDateISO(today, 14)
 
     const BOOKING_COLS = 'id, booking_code, trip_name, client_name, start_date, status, itinerary_id, balance_due, balance_due_date, payment_status'
 
