@@ -79,12 +79,6 @@ export async function GET() {
       if (s.channel in stats.byChannel) stats.byChannel[s.channel as keyof typeof stats.byChannel]++
     })
 
-    // Pending scheduled sends
-    const { count: pendingScheduled } = await supabaseAdmin
-      .from('scheduled_sends')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending')
-
     return NextResponse.json({
       success: true,
       data: {
@@ -92,7 +86,6 @@ export async function GET() {
           totalTemplates: totalTemplates || 0,
           totalSentLast30Days: stats.totalSent,
           successRate: stats.totalSent > 0 ? Math.round((stats.successful / stats.totalSent) * 100) : 0,
-          pendingScheduled: pendingScheduled || 0,
         },
         topTemplates: topTemplates || [],
         channelDistribution: channelCounts,
