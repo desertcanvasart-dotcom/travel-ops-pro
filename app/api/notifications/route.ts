@@ -34,14 +34,17 @@ export async function GET(request: NextRequest) {
       .limit(limit)
     if (unreadOnly) query = query.eq('is_read', false)
 
-    const { data, error } = await query
+    // The bell polls this: the list and the unread count are independent, so
+    // they go out together (was two sequential round trips after the scope).
+    const [{ data, error }, { count: unreadCount }] = await Promise.all([
+      query,
+      supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .or(scope)
+        .eq('is_read', false),
+    ])
     if (error) throw error
-
-    const { count: unreadCount } = await supabase
-      .from('notifications')
-      .select('id', { count: 'exact', head: true })
-      .or(scope)
-      .eq('is_read', false)
 
     return NextResponse.json({ success: true, data, unreadCount: unreadCount || 0 })
   } catch (error) {

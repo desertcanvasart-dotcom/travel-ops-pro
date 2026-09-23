@@ -2,7 +2,7 @@
 import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 
 import { todayLocal } from '@/lib/today'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useTranslations, useLocale } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
@@ -338,6 +338,16 @@ export default function ItineraryEditorPage() {
   
   // Services & Pricing State
   const [services, setServices] = useState<ItineraryService[]>([])
+  // What each service looked like when last loaded or saved, by id. A save
+  // used to UPDATE every service on the trip whether it had changed or not —
+  // 100–200 requests for a two-week trip to fix one typo. Now only services
+  // that differ from their snapshot (or have none) are written.
+  const savedServiceSnapshots = useRef(new Map<string, string>())
+  const serviceSnapshot = (service: ItineraryService) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { isNew, isDeleted, ...rest } = service
+    return JSON.stringify(rest)
+  }
   const [showServicesSection, setShowServicesSection] = useState(true)
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null)
   const [servicesChanged, setServicesChanged] = useState(false)
@@ -385,22 +395,18 @@ export default function ItineraryEditorPage() {
     if (!itineraryId) return
 
     try {
-      // Load itinerary
-      const { data: itin, error: itinError } = await supabase
-        .from('itineraries')
-        .select('*')
-        .eq('id', itineraryId)
-        .single()
+      // The itinerary and its days are independent reads — loaded together
+      // (they used to wait on each other). The services need the day ids.
+      const [
+        { data: itin, error: itinError },
+        { data: daysData, error: daysError },
+      ] = await Promise.all([
+        supabase.from('itineraries').select('*').eq('id', itineraryId).single(),
+        supabase.from('itinerary_days').select('*').eq('itinerary_id', itineraryId).order('day_number'),
+      ])
 
       if (itinError) throw itinError
       setItinerary(itin)
-
-      // Load days
-      const { data: daysData, error: daysError } = await supabase
-        .from('itinerary_days')
-        .select('*')
-        .eq('itinerary_id', itineraryId)
-        .order('day_number')
 
       if (daysError) throw daysError
 
@@ -492,6 +498,7 @@ export default function ItineraryEditorPage() {
             }
           }
 
+          savedServiceSnapshots.current = new Map(servicesWithDayNumber.map(sv => [sv.id, serviceSnapshot(sv)]))
           setServices(servicesWithDayNumber)
         }
       }
@@ -1016,8 +1023,12 @@ export default function ItineraryEditorPage() {
           }
         }
 
-        // Update existing services
-        const toUpdate = services.filter(s => !s.isNew && !s.isDeleted)
+        // Update existing services — only the ones that changed since they were
+        // loaded or last saved. (Services inserted just above got their real id
+        // and have no snapshot yet, so they are written once, as before.)
+        const toUpdate = services.filter(
+          s => !s.isNew && !s.isDeleted && savedServiceSnapshots.current.get(s.id) !== serviceSnapshot(s)
+        )
 
         // For non-English saves, fetch fresh base data from DB to avoid stale state
         const freshBaseData: Record<string, { service_name: string; notes: string }> = {}
@@ -1096,6 +1107,7 @@ export default function ItineraryEditorPage() {
           }
 
           const results = await Promise.all(updates)
+          const anyFailed = results.some(r => r.error)
           for (const r of results) if (r.error) console.error('Error updating service:', r.error)
 
           if (versionInserts.length > 0) {
@@ -1104,7 +1116,13 @@ export default function ItineraryEditorPage() {
               .insert(versionInserts)
             if (versionError) console.error('Error creating service versions:', versionError)
           }
-          console.log(`✅ ${toUpdate.length} service(s) saved (${activeLanguage})`)
+          // Per-language writes are several statements per service; move the
+          // snapshots only when all of them landed, so a partial failure is
+          // simply retried in full by the next save.
+          if (!anyFailed) {
+            for (const service of toUpdate) savedServiceSnapshots.current.set(service.id, serviceSnapshot(service))
+          }
+          console.log(`✅ ${toUpdate.length} changed service(s) saved (${activeLanguage})`)
         } else {
           const results = await Promise.all(
             toUpdate.map(service => {
@@ -1112,8 +1130,13 @@ export default function ItineraryEditorPage() {
               return supabase.from('itinerary_services').update(serviceData).eq('id', service.id)
             })
           )
-          for (const r of results) if (r.error) console.error('Error updating service:', r.error)
-          console.log(`✅ ${toUpdate.length} service(s) updated`)
+          results.forEach((r, i) => {
+            if (r.error) console.error('Error updating service:', r.error)
+            // Only a write that landed moves the snapshot; a failed one is
+            // retried by the next save.
+            else savedServiceSnapshots.current.set(toUpdate[i].id, serviceSnapshot(toUpdate[i]))
+          })
+          console.log(`✅ ${toUpdate.length} changed service(s) updated`)
         }
 
         // Clean up deleted services from state

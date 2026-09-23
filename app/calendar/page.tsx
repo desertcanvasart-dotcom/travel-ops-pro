@@ -176,11 +176,15 @@ export default function CalendarPage() {
     fetchData()
   }, [])
 
+  // Conflicts depend only on the bookings; filters only on bookings + filters.
+  // They shared one effect, so the whole conflict scan re-ran on every search
+  // keystroke.
   useEffect(() => {
-    if (bookings.length > 0) {
-      detectConflicts()
-      applyFilters()
-    }
+    if (bookings.length > 0) detectConflicts()
+  }, [bookings])
+
+  useEffect(() => {
+    if (bookings.length > 0) applyFilters()
   }, [bookings, filters])
 
   useEffect(() => {
@@ -191,11 +195,15 @@ export default function CalendarPage() {
     try {
       // Walk every page — the calendar needs every date-ranged trip, and a
       // one-shot request silently truncates past the API's 1000-row page cap
-      const allBookings = await fetchAllPages<Booking>('/api/itineraries')
+      // The three loads are independent — fetched together, not one by one.
+      const [allBookings, guidesResponse, vehiclesResponse] = await Promise.all([
+        fetchAllPages<Booking>('/api/itineraries'),
+        fetch('/api/guides?is_active=true'),
+        fetch('/api/vehicles?is_active=true'),
+      ])
       const validBookings = allBookings.filter((b: Booking) => b.start_date && b.end_date)
       setBookings(validBookings)
 
-      const guidesResponse = await fetch('/api/guides?is_active=true')
       if (guidesResponse.ok) {
         const guidesData = await guidesResponse.json()
         if (guidesData.success) {
@@ -203,7 +211,6 @@ export default function CalendarPage() {
         }
       }
 
-      const vehiclesResponse = await fetch('/api/vehicles?is_active=true')
       if (vehiclesResponse.ok) {
         const vehiclesData = await vehiclesResponse.json()
         if (vehiclesData.success) {
@@ -218,24 +225,27 @@ export default function CalendarPage() {
   }
 
   const detectConflicts = () => {
-    const conflictIds: string[] = []
+    const conflictIds = new Set<string>()
     const details: ConflictDetail[] = []
 
-    for (let i = 0; i < bookings.length; i++) {
-      for (let j = i + 1; j < bookings.length; j++) {
-        const b1 = bookings[i]
-        const b2 = bookings[j]
+    // Sort by start, then only compare each trip with the ones that start
+    // before it ends: the scan stops at the first later trip that cannot
+    // overlap. Same pairs as the old all-pairs loop (every overlap is still
+    // found), without comparing every trip with every other trip.
+    const sorted = bookings
+      .map(b => ({ b, start: parseISO(b.start_date), end: parseISO(b.end_date) }))
+      .sort((x, y) => x.start.getTime() - y.start.getTime())
 
-        const start1 = parseISO(b1.start_date)
-        const end1 = parseISO(b1.end_date)
-        const start2 = parseISO(b2.start_date)
-        const end2 = parseISO(b2.end_date)
+    for (let i = 0; i < sorted.length; i++) {
+      for (let j = i + 1; j < sorted.length && sorted[j].start <= sorted[i].end; j++) {
+        const { b: b1, start: start1, end: end1 } = sorted[i]
+        const { b: b2, start: start2, end: end2 } = sorted[j]
 
         const overlaps = (start1 <= end2 && end1 >= start2)
 
         if (overlaps) {
-          if (!conflictIds.includes(b1.id)) conflictIds.push(b1.id)
-          if (!conflictIds.includes(b2.id)) conflictIds.push(b2.id)
+          conflictIds.add(b1.id)
+          conflictIds.add(b2.id)
 
           const overlapStart = format(start1 > start2 ? start1 : start2, 'MMM d')
           const overlapEnd = format(end1 < end2 ? end1 : end2, 'MMM d, yyyy')
@@ -280,7 +290,7 @@ export default function CalendarPage() {
       }
     }
 
-    setConflicts(conflictIds)
+    setConflicts([...conflictIds])
     setConflictDetails(details)
   }
 

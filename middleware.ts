@@ -415,8 +415,18 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
   // deactivated user could still GET analytics, accounts-receivable, the
   // accounting chart and so on. is_active is account-level: deactivated here is
   // deactivated everywhere.
-  if (isApiRoute && user && !(await isAccountActive(user.id))) {
-    return NextResponse.json({ error: 'Account inactive' }, { status: 403 })
+  if (isApiRoute && user) {
+    // Start the membership lookup alongside the is_active one: nearly every
+    // API request needs both (the gates below), and they are independent —
+    // awaited one after the other they cost two sequential round trips on every
+    // call. Both are memoised, so the gates below reuse these results.
+    const [active] = await Promise.all([
+      isAccountActive(user.id),
+      isSelfAuthApi ? Promise.resolve(null) : membershipRole(user.id),
+    ])
+    if (!active) {
+      return NextResponse.json({ error: 'Account inactive' }, { status: 403 })
+    }
   }
 
   // A session proves who you are, not that you belong to an agency. Supabase
@@ -475,16 +485,8 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
       request.nextUrl.pathname.startsWith(p.prefix)
     )
     if (matched) {
-      // is_active is account-level and stays on the profile: a deactivated
-      // person is deactivated in every organisation.
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('is_active')
-        .eq('id', user.id)
-        .single()
-      if (profile && profile.is_active === false) {
-        return NextResponse.json({ error: 'Account inactive' }, { status: 403 })
-      }
+      // (is_active was re-queried here; the check above already refused a
+      // deactivated account for every API request, reads included.)
       // The ROLE comes from membership, via roleAllows — same authority as the
       // financial read gate above. This block used to read user_profiles.role
       // and compare it with a plain includes(), which is both of the failures
@@ -519,34 +521,20 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     })
 
     if (matchedRoute) {
-      // is_active is ACCOUNT-level and stays on the profile: a deactivated
-      // person is deactivated in every organisation.
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('is_active')
-        .eq('id', user.id)
-        .single()
+      // is_active is ACCOUNT-level (a deactivated person is deactivated in
+      // every organisation) and the ROLE comes from organization membership —
+      // both through the memoised service-role lookups above, in parallel.
+      // The role is the one IN THE ACTIVE WORKSPACE: this gate used to read an
+      // arbitrary first membership (.limit(1), no order), so someone who is an
+      // admin in one agency and a viewer in another was gated by whichever row
+      // came back — the API gate had been fixed, the page gate had not.
+      const [active, role] = await Promise.all([isAccountActive(user.id), membershipRole(user.id)])
 
-      if (profile && !profile.is_active) {
+      if (!active) {
         return NextResponse.redirect(new URL('/login?error=account_inactive', request.url))
       }
 
-      // The ROLE comes from organization membership — the one role system.
-      // Read with the service client, deliberately: this is the gate itself,
-      // and an RLS surprise here would fail everyone closed into a redirect
-      // loop rather than a 403 anyone can read.
-      const { data: membership } = await createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        { auth: { persistSession: false } }
-      )
-        .from('organization_members')
-        .select('role')
-        .eq('user_id', user.id)
-        .limit(1)
-        .maybeSingle()
-
-      const userRole = (membership as { role?: string } | null)?.role ?? 'viewer'
+      const userRole = role ?? 'viewer'
       const allowedRoles = ROUTE_PERMISSIONS[matchedRoute]
 
       if (!roleAllows(userRole, allowedRoles)) {

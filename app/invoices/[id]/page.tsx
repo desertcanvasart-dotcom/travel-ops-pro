@@ -29,9 +29,9 @@ import {
   MessageCircle,
   Eye
 } from 'lucide-react'
-import { generateInvoicePDF, downloadInvoicePDF } from '@/lib/invoice-pdf-generator'
 import { fetchCompanyInfo } from '@/lib/company-info-client'
-import { generateReceiptPDF, downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
+// The PDF generators (and jsPDF behind them) load when a PDF is made, not
+// with the page.
 import { useConfirm, useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
@@ -297,6 +297,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
     setGeneratingPDF(true)
     try {
+      const { generateInvoicePDF } = await import('@/lib/invoice-pdf-generator')
       const doc = generateInvoicePDF(invoice, await fetchCompanyInfo())
       const blob = doc.output('blob')
       setPdfPreviewBlob(blob)
@@ -338,7 +339,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  const handlePreviewReceipt = (payment: Payment) => {
+  const handlePreviewReceipt = async (payment: Payment) => {
     if (!invoice) return
 
     const receiptNumber = `RCP-${invoice.invoice_number}-${payments.indexOf(payment) + 1}`
@@ -356,6 +357,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
 
     try {
+      const { generateReceiptPDF } = await import('@/lib/receipt-pdf-generator')
       const doc = generateReceiptPDF(receiptData, invoice)
       const blob = doc.output('blob')
       setPdfPreviewBlob(blob)

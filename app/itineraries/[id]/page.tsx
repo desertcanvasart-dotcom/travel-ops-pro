@@ -9,7 +9,10 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2, Languages, ClipboardList, AlertTriangle } from 'lucide-react'
-import { generateItineraryPDF } from '@/lib/pdf-generator'
+// The itinerary PDF generator (and jsPDF behind it) loads on first use, not
+// with the page.
+const generateItineraryPDF = async (...args: Parameters<typeof import('@/lib/pdf-generator').generateItineraryPDF>) =>
+  (await import('@/lib/pdf-generator')).generateItineraryPDF(...args)
 import { useCompanyInfo } from '@/lib/use-company-info'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import GenerateNitteiButton from '@/components/GenerateNitteiButton'

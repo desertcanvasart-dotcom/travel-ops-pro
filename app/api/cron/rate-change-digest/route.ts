@@ -16,7 +16,8 @@ import { withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { createClient } from '@supabase/supabase-js'
 import { groupChanges, describeGroup, type AuditRow } from '@/lib/rate-change-digest'
-import { notifyOrgManagers } from '@/lib/notify-managers'
+import { orgManagerUserIds } from '@/lib/notify-managers'
+import { createNotifications } from '@/lib/notifications'
 
 const JOB = 'rate-change-digest'
 const FIRST_RUN_LOOKBACK_MS = 15 * 60 * 1000
@@ -69,18 +70,38 @@ async function getHandler(request: NextRequest) {
         names.set(p.id, p.full_name?.trim() || p.email || p.id.slice(0, 8))
       }
     }
+    // Every org hears about every change: the rate tables carry no org_id —
+    // they are the whole installation's cost base, and every org prices from
+    // them (org-scoped rates are the deferred multi-org work).
+    //
+    // Each org's managers are looked up ONCE and all of this run's
+    // notifications are created together (in parallel, each still honouring
+    // its recipient's email preference). It used to be a membership query and
+    // then the inserts per org × group, strictly in sequence — a 30-group bulk
+    // import meant 30 membership queries and 30 waits per org.
     const { data: orgs } = await supabase.from('organizations').select('id, rate_change_alerts').neq('rate_change_alerts', 'off')
+    const notices = groups.map(g => ({ g, n: describeGroup(g, g.actorId ? names.get(g.actorId) ?? null : null) }))
     for (const org of (orgs ?? []) as Array<{ id: string; rate_change_alerts: string }>) {
       stats.orgs++
-      for (const g of groups) {
-        const n = describeGroup(g, g.actorId ? names.get(g.actorId) ?? null : null)
-        const r = await notifyOrgManagers(supabase, org.id, {
-          ...n,
-          type: 'rate_changed',
-          excludeUserId: g.actorId,
-          send_email: org.rate_change_alerts === 'in_app_email',
-        })
-        stats.notified += r.created
+      try {
+        const managers = await orgManagerUserIds(supabase, org.id)
+        const rows = notices.flatMap(({ g, n }) =>
+          managers
+            // The person who made the change does not need telling.
+            .filter(user_id => user_id !== g.actorId)
+            .map(user_id => ({
+              user_id,
+              type: 'rate_changed',
+              title: n.title,
+              message: n.message,
+              link: n.link ?? null,
+              send_email: org.rate_change_alerts === 'in_app_email',
+            }))
+        )
+        if (rows.length) stats.notified += (await createNotifications(rows)).created
+      } catch (e) {
+        // One org's failure must not stop the others, or the watermark.
+        console.error(`[rate-change-digest] notifying org ${org.id} failed:`, e)
       }
     }
   }

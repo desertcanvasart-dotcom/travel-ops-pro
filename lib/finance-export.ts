@@ -1,5 +1,6 @@
-import jsPDF from 'jspdf'
-import autoTable from 'jspdf-autotable'
+// jsPDF + autotable (~300 KB) are loaded when someone actually exports a PDF,
+// not with every finance page that offers the button (nine of them imported
+// this module, and so the PDF engine, just to render).
 import { format } from 'date-fns'
 
 // ============================================
@@ -78,7 +79,11 @@ export function exportFinanceCSV(
 // PDF EXPORT
 // ============================================
 
-export function exportFinancePDF(options: PDFExportOptions) {
+export async function exportFinancePDF(options: PDFExportOptions): Promise<void> {
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ])
   const { title, subtitle, summary, data, columns, filename, orientation = 'landscape' } = options
 
   const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' })
