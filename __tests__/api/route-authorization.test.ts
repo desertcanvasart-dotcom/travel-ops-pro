@@ -203,6 +203,18 @@ describe('P2 — deactivated accounts and financial reads', () => {
     expect(source).toMatch(/isApiRoute && user && !\(await isAccountActive/)
   })
 
+  it('the middleware denies ALL API access to a session with no workspace membership (reads included)', () => {
+    // Signup is open by default and many read routes use the service-role
+    // client without scoping, so a stranger's fresh account could GET every
+    // WhatsApp thread. The gate must cover GETs, exempt only self-auth routes,
+    // and run before the route-specific gates.
+    expect(source).toMatch(/isApiRoute && user && !isSelfAuthApi && !\(await membershipRole\(user\.id\)\)/)
+    const gate = source.indexOf('No workspace access')
+    expect(gate).toBeGreaterThan(-1)
+    expect(gate).toBeLessThan(source.indexOf('FINANCIAL_API_PREFIXES.some('))
+    expect(gate).toBeLessThan(source.indexOf('MUTATING_METHODS.has(request.method)'))
+  })
+
   it('accounting is under the financial read gate', () => {
     const block = source.match(/const FINANCIAL_API_PREFIXES = \[([\s\S]*?)\]/)![1]
     expect(block).toContain("'/api/accounting'")
