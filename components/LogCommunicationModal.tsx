@@ -52,7 +52,9 @@ export default function LogCommunicationModal({
         direction: editCommunication.direction || 'outbound',
         subject: editCommunication.subject || '',
         content: editCommunication.content || '',
-        communication_date: commDate.toISOString().split('T')[0],
+        // Local date AND local time: the UTC date with the local time moved a
+        // late-evening JST entry to the previous day on every edit.
+        communication_date: todayLocal(commDate),
         communication_time: commDate.toTimeString().slice(0, 5),
         status: editCommunication.status || 'completed'
       })
@@ -81,8 +83,11 @@ export default function LogCommunicationModal({
         throw new Error(t('enterDetails'))
       }
 
-      // Combine date and time
-      const communicationDateTime = `${formData.communication_date}T${formData.communication_time}:00`
+      // The date and time the user typed are LOCAL. Sent without an offset, the
+      // timestamptz column read them as UTC — 10:00 in Tokyo was saved as
+      // 19:00 JST — and every edit shifted it 9 hours again. new Date() of an
+      // offset-less date-time parses as local; toISOString sends the instant.
+      const communicationDateTime = new Date(`${formData.communication_date}T${formData.communication_time}:00`).toISOString()
 
       if (isEditMode) {
         // Update existing communication

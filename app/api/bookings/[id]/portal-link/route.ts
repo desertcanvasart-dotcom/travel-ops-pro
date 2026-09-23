@@ -111,7 +111,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({
         link: { ...existing, url },
         created: false,
-        ...(delivery ? { emailed: delivery.sent } : {}),
+        ...(delivery ? { emailed: delivery.sent, ...(delivery.error ? { email_error: delivery.error } : {}) } : {}),
       })
     }
 
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         link: { ...link, url },
         created: true,
         travellers_seeded: seeded,
-        ...(delivery ? { emailed: delivery.sent } : {}),
+        ...(delivery ? { emailed: delivery.sent, ...(delivery.error ? { email_error: delivery.error } : {}) } : {}),
       },
       { status: 201 }
     )
