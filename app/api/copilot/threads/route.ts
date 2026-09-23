@@ -25,10 +25,18 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '30')
     const offset = (page - 1) * limit
 
+    // ONE query. The latest inbox message and latest draft of each thread come
+    // back as embedded resources, each ordered and limited to one row PER
+    // THREAD by PostgREST. This used to be 1 + 2 × (page size) queries — 61 for
+    // a page of 30 — and the list is polled every 10 s while it is open.
     let query = supabase
       .from('communication_threads')
-      .select('*', { count: 'exact' })
+      .select('*, latest_inbox:communication_inbox(*), latest_draft:communication_drafts(*)', { count: 'exact' })
       .order('last_message_at', { ascending: false })
+      .order('received_at', { referencedTable: 'latest_inbox', ascending: false })
+      .limit(1, { referencedTable: 'latest_inbox' })
+      .order('created_at', { referencedTable: 'latest_draft', ascending: false })
+      .limit(1, { referencedTable: 'latest_draft' })
       .range(offset, offset + limit - 1)
 
     if (status) query = query.eq('status', status)
@@ -42,33 +50,12 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error
 
-    // For each thread, fetch the latest inbox message and latest draft
-    const threadsWithLatest = await Promise.all(
-      (threads || []).map(async (thread) => {
-        const [inboxResult, draftResult] = await Promise.all([
-          supabase
-            .from('communication_inbox')
-            .select('*')
-            .eq('thread_id', thread.id)
-            .order('received_at', { ascending: false })
-            .limit(1)
-            .single(),
-          supabase
-            .from('communication_drafts')
-            .select('*')
-            .eq('thread_id', thread.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single(),
-        ])
-
-        return {
-          ...thread,
-          latest_inbox: inboxResult.data || null,
-          latest_draft: draftResult.data || null,
-        }
-      })
-    )
+    // Embedded resources arrive as arrays; the callers expect one row or null.
+    const threadsWithLatest = (threads || []).map((thread: Record<string, unknown>) => ({
+      ...thread,
+      latest_inbox: (thread.latest_inbox as unknown[] | null)?.[0] ?? null,
+      latest_draft: (thread.latest_draft as unknown[] | null)?.[0] ?? null,
+    }))
 
     return NextResponse.json({
       success: true,

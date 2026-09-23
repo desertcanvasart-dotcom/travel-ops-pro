@@ -99,13 +99,41 @@ async function resolve(token: string): Promise<{
 
   if (!portalLinkState(link).usable) return null
 
-  const { data: booking } = await supabase
-    .from('bookings')
-    .select(
-      'id, booking_code, trip_name, start_date, end_date, num_adults, num_children, currency, total_cost, balance_due, deposit_amount, deposit_paid, payment_deadline, balance_due_date, itinerary_id, portal_mode'
-    )
-    .eq('id', link!.booking_id)
-    .maybeSingle()
+  // Nine reads used to run strictly one after another on every portal visit.
+  // Only three things actually wait on each other — the link (for its org and
+  // booking), then the booking (for its itinerary and passengers), then the
+  // itinerary (for its days) — so the reads now go out in those four waves.
+  // Everything shown, and the order the documents are listed in, is unchanged.
+  const [{ data: booking }, { data: premiumRows }, { data: guide }, { data: org }] = await Promise.all([
+    supabase
+      .from('bookings')
+      .select(
+        'id, booking_code, trip_name, start_date, end_date, num_adults, num_children, currency, total_cost, balance_due, deposit_amount, deposit_paid, payment_deadline, balance_due_date, itinerary_id, portal_mode'
+      )
+      .eq('id', link!.booking_id)
+      .maybeSingle(),
+    // The 掛金表 for the chooser. Sent to the browser because the premium
+    // depends on the traveller's own age, which is being typed on that screen —
+    // computing it here would mean a round trip per keystroke. These are
+    // published rates, not anybody's private data.
+    supabase
+      .from('insurance_premiums')
+      .select('id, rate_year, max_days, band_label, premium_jpy, max_age, insurance_plans!inner(plan_code)')
+      .eq('org_id', link!.org_id)
+      .order('rate_year', { ascending: false }),
+    // The insurer's own brochure, when the operator has put one there. Storage
+    // keys must be ASCII, so the object has a fixed English name and the title
+    // the customer reads lives below — 「4.2025年版海外保険.pdf」 is not a
+    // filename Supabase will accept.
+    supabase.storage
+      .from('documents')
+      .list(`portal-documents/${link!.org_id}`, { search: 'insurance-guide.pdf' }),
+    supabase
+      .from('organizations')
+      .select('name, primary_color, contact_email, company_phone, logo_url, company_address, tagline, offices')
+      .eq('id', link!.org_id)
+      .maybeSingle(),
+  ])
 
   if (!booking) return null
 
@@ -118,9 +146,22 @@ async function resolve(token: string): Promise<{
     .select('*')
     .eq('booking_id', booking.id)
   if (scopedPassengerId) passengerQuery = passengerQuery.eq('id', scopedPassengerId)
-  const { data: passengers } = await passengerQuery
-    .order('is_lead_passenger', { ascending: false })
-    .order('created_at', { ascending: true })
+
+  const [{ data: passengers }, { data: itin }, { data: invoices }] = await Promise.all([
+    passengerQuery
+      .order('is_lead_passenger', { ascending: false })
+      .order('created_at', { ascending: true }),
+    booking.itinerary_id
+      ? supabase.from('itineraries').select('*').eq('id', booking.itinerary_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    booking.itinerary_id
+      ? supabase
+          .from('invoices')
+          .select('id, invoice_number, invoice_type, issue_date, due_date, total_amount, currency, status')
+          .eq('itinerary_id', booking.itinerary_id)
+          .order('created_at', { ascending: true })
+      : Promise.resolve({ data: null }),
+  ])
 
   // The trip is shown as the office's OWN 日程表, not as a second rendering of
   // itinerary_days. Two layouts of one trip, drawn from two tables, is two
@@ -133,24 +174,15 @@ async function resolve(token: string): Promise<{
   // in the older format — and today most trips have no link, since nothing in
   // the UI sets itineraries.template_id yet. Linking the programme is what
   // upgrades a trip to the real document.
-  let programmeTemplateId: string | null = null
+  const programmeTemplateId: string | null = (itin?.template_id as string | null) ?? null
   let itinerary = null
-  if (booking.itinerary_id) {
-    const { data: itin } = await supabase
-      .from('itineraries')
+  if (itin && !programmeTemplateId) {
+    const { data: days } = await supabase
+      .from('itinerary_days')
       .select('*')
-      .eq('id', booking.itinerary_id)
-      .maybeSingle()
-    programmeTemplateId = (itin?.template_id as string | null) ?? null
-
-    if (itin && !programmeTemplateId) {
-      const { data: days } = await supabase
-        .from('itinerary_days')
-        .select('*')
-        .eq('itinerary_id', booking.itinerary_id)
-        .order('day_number', { ascending: true })
-      itinerary = toClientItinerary(itin, days ?? [])
-    }
+      .eq('itinerary_id', booking.itinerary_id)
+      .order('day_number', { ascending: true })
+    itinerary = toClientItinerary(itin, days ?? [])
   }
 
   // The documents a traveller can actually be handed today.
@@ -169,48 +201,29 @@ async function resolve(token: string): Promise<{
 
   // Then the invoices — deposit before final, oldest first, so the list reads
   // in the order the money is asked for.
-  if (booking.itinerary_id) {
-    const { data: invoices } = await supabase
-      .from('invoices')
-      .select('id, invoice_number, invoice_type, issue_date, due_date, total_amount, currency, status')
-      .eq('itinerary_id', booking.itinerary_id)
-      .order('created_at', { ascending: true })
-
-    for (const inv of invoices ?? []) {
-      // A draft is not something to hand a customer — it has not been sent —
-      // and neither is a cancelled one. An ALLOW-list rather than a deny-list:
-      // a status nobody has thought about yet must not reach the traveller by
-      // default. Invoices are created as 'draft', so this is the common case,
-      // not an edge one.
-      if (!isCustomerFacingInvoice(inv.status)) continue
-      documents.push({
-        key: `invoice:${inv.id}`,
-        title:
-          inv.invoice_type === 'deposit'
-            ? 'お申込金 請求書'
-            : inv.invoice_type === 'final'
-              ? '残金 請求書'
-              : '請求書',
-        note: inv.due_date ? `お支払い期限 ${jpDate(inv.due_date)}` : inv.invoice_number,
-      })
-    }
+  for (const inv of invoices ?? []) {
+    // A draft is not something to hand a customer — it has not been sent —
+    // and neither is a cancelled one. An ALLOW-list rather than a deny-list:
+    // a status nobody has thought about yet must not reach the traveller by
+    // default. Invoices are created as 'draft', so this is the common case,
+    // not an edge one.
+    if (!isCustomerFacingInvoice(inv.status)) continue
+    documents.push({
+      key: `invoice:${inv.id}`,
+      title:
+        inv.invoice_type === 'deposit'
+          ? 'お申込金 請求書'
+          : inv.invoice_type === 'final'
+            ? '残金 請求書'
+            : '請求書',
+      note: inv.due_date ? `お支払い期限 ${jpDate(inv.due_date)}` : inv.invoice_number,
+    })
   }
 
-  // The 掛金表 for the chooser. Sent to the browser because the premium depends
-  // on the traveller's own age, which is being typed on that screen — computing
-  // it here would mean a round trip per keystroke. These are published rates,
-  // not anybody's private data.
-  //
   // The newest rate year the operator has loaded wins. A missing table is not
   // an error: the plan chooser simply shows no prices, which is what the paper
   // form does today.
   let insuranceBands: PremiumBand[] = []
-  const { data: premiumRows } = await supabase
-    .from('insurance_premiums')
-    .select('id, rate_year, max_days, band_label, premium_jpy, max_age, insurance_plans!inner(plan_code)')
-    .eq('org_id', link!.org_id)
-    .order('rate_year', { ascending: false })
-
   if (premiumRows?.length) {
     const newest = Math.max(...premiumRows.map(r => Number(r.rate_year) || 0))
     insuranceBands = premiumRows
@@ -226,17 +239,8 @@ async function resolve(token: string): Promise<{
       .filter(b => b.planCode)
   }
 
-  // The insurer's own brochure, when the operator has put one there. Storage
-  // keys must be ASCII, so the object has a fixed English name and the title
-  // the customer reads lives here — 「4.2025年版海外保険.pdf」 is not a filename
-  // Supabase will accept.
-  //
   // Offered to everyone, not only to those who already said yes: it is what a
   // customer reads in order to DECIDE.
-  const { data: guide } = await supabase.storage
-    .from('documents')
-    .list(`portal-documents/${link!.org_id}`, { search: 'insurance-guide.pdf' })
-
   if (guide?.some(o => o.name === 'insurance-guide.pdf')) {
     documents.push({
       key: 'insurance-guide',
@@ -244,12 +248,6 @@ async function resolve(token: string): Promise<{
       note: '共済金額表・掛金表（PDF）',
     })
   }
-
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('name, primary_color, contact_email, company_phone, logo_url, company_address, tagline, offices')
-    .eq('id', link!.org_id)
-    .maybeSingle()
 
   // "Has the traveller looked?" — an engagement signal, not a ledger, so a
   // failure here must never block the page.

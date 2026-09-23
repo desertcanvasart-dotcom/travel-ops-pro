@@ -206,7 +206,14 @@ describe('P2 — deactivated accounts and financial reads', () => {
     // The old is_active check lived only inside the mutation block, so GETs
     // skipped it. This must run before the route-specific gates.
     expect(source).toMatch(/isAccountActive/)
-    expect(source).toMatch(/isApiRoute && user && !\(await isAccountActive/)
+    // Unconditional for every API request with a user (not inside the
+    // mutation block), fetched alongside the membership lookup, and refusing.
+    const gate = source.slice(source.indexOf('if (isApiRoute && user) {'))
+    expect(gate.length).toBeLessThan(source.length)
+    expect(gate.slice(0, 700)).toMatch(/isAccountActive\(user\.id\)/)
+    expect(gate.slice(0, 900)).toMatch(/if \(!active\) \{\s*return NextResponse\.json\(\{ error: 'Account inactive' \}, \{ status: 403 \}\)/)
+    // …and it runs before the mutation gate.
+    expect(source.indexOf('if (isApiRoute && user) {')).toBeLessThan(source.indexOf('MUTATING_METHODS.has(request.method)'))
   })
 
   it('the middleware denies ALL API access to a session with no workspace membership (reads included)', () => {

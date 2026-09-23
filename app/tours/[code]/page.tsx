@@ -221,7 +221,10 @@ export default function TourDetailPage() {
   useEffect(() => {
     // Wait for the guide language, or the first price asks for English.
     if ((tour?.variation_id || tour?.template_id) && guideLanguage) {
-      calculatePrice()
+      // Debounced: clicking through pax 2 → 3 → 4 fired a full pricing run
+      // per click. Only the settled choice is priced.
+      const t = setTimeout(() => { calculatePrice() }, 300)
+      return () => clearTimeout(t)
     }
   }, [tour?.variation_id, tour?.template_id, selectedPax, travelDate, isEurPassport, guideLanguage])
 
@@ -260,16 +263,23 @@ export default function TourDetailPage() {
   // the newer one, so the page showed a price for settings no longer selected.
   // Only the latest request may write.
   const priceRequestId = useRef(0)
+  const priceAbort = useRef<AbortController | null>(null)
   const calculatePrice = async () => {
     if (!tour?.variation_id && !tour?.template_id) return
 
     const requestId = ++priceRequestId.current
     const isLatest = () => requestId === priceRequestId.current
+    // Cancel the request this one supersedes: its answer would be discarded
+    // anyway, and the server need not finish pricing it.
+    priceAbort.current?.abort()
+    const controller = new AbortController()
+    priceAbort.current = controller
     setPricingLoading(true)
     setPricingError(null)
 
     try {
       const response = await fetch('/api/b2b/calculate-price', {
+        signal: controller.signal,
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

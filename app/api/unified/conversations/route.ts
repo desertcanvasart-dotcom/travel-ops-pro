@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
     const conversations: UnifiedConversation[] = []
 
     // Query WhatsApp conversations
+    const whatsappTask = (async () => {
     if (channel === 'all' || channel === 'whatsapp') {
       let waQuery = supabase
         .from('whatsapp_conversations')
@@ -109,11 +110,13 @@ export async function GET(request: NextRequest) {
         })
       }
     }
+    })()
 
     // Query portal conversations — the traveller writing from their own
     // booking page. Unlike the other two these are keyed on a BOOKING rather
     // than a phone number or an address, so the same person's portal thread and
     // WhatsApp chat stay separate. That is deliberate: one is tied to a trip.
+    const portalTask = (async () => {
     if (channel === 'all' || channel === 'portal') {
       let portalQuery = supabase
         .from('portal_message_threads')
@@ -207,8 +210,10 @@ export async function GET(request: NextRequest) {
         })
       }
     }
+    })()
 
     // Query Email conversations
+    const emailTask = (async () => {
     if (channel === 'all' || channel === 'email') {
       let emailQuery = supabase
         .from('email_conversations')
@@ -284,6 +289,14 @@ export async function GET(request: NextRequest) {
         })
       }
     }
+    })()
+
+    // The three channels are independent reads of different tables, and this
+    // list is polled while the inbox is open: they used to run one after the
+    // other (three sequential round trips per poll). Each task pushes into
+    // `conversations`, which is sorted below, so running them together changes
+    // nothing but the wait.
+    await Promise.all([whatsappTask, portalTask, emailTask])
 
     // Awaiting reply is an email state; the other channels have none.
     if (awaitingReply) {
