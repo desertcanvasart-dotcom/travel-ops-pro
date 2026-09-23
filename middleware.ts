@@ -396,6 +396,20 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     return NextResponse.json({ error: 'Account inactive' }, { status: 403 })
   }
 
+  // A session proves who you are, not that you belong to an agency. Supabase
+  // signup is open by default, so any stranger can mint a confirmed session,
+  // and many read routes use the service-role client and scope nothing
+  // themselves (e.g. /api/whatsapp/conversations returned every thread with
+  // client names and emails). Without this gate a membership-less account
+  // could GET customer PII, rate tables and staff profiles. Routes that
+  // legitimately run before a membership exists (invitation verify/accept,
+  // OAuth callbacks) authenticate themselves and are in apiSelfAuthPrefixes,
+  // so they are exempt; the first user on a fresh install gets a membership
+  // from the signup bootstrap trigger.
+  if (isApiRoute && user && !isSelfAuthApi && !(await membershipRole(user.id))) {
+    return NextResponse.json({ error: 'No workspace access' }, { status: 403 })
+  }
+
   // Role-gate financial API MUTATIONS (the routes use the RLS-bypassing
   // service-role key, so this is the authorization layer for them).
   if (
