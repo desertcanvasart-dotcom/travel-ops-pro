@@ -11,7 +11,8 @@ import { timingSafeEqual } from 'node:crypto'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getTemplatePriceRange } from '@/lib/auto-pricing-service'
-import { requireRole } from '@/lib/auth/current-org'
+import { getCurrentOrgId, requireRole } from '@/lib/auth/current-org'
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
 
 const supabaseAdmin = createClient(
@@ -56,6 +57,12 @@ function secretMatches(presented: string | null): boolean {
   const b = Buffer.from(expected)
   // timingSafeEqual throws on a length mismatch, which would itself leak length.
   return a.length === b.length && timingSafeEqual(a, b)
+}
+
+/** The only organization on this installation, or null when there are several. */
+async function soleOrgId(): Promise<string | null> {
+  const { data } = await supabaseAdmin.from('organizations').select('id').limit(2)
+  return data && data.length === 1 ? data[0].id : null
 }
 
 /** null = allowed; a NextResponse = the refusal to return. */
@@ -116,6 +123,12 @@ export async function POST(request: NextRequest) {
     // The "from" price ranges over the agency's own tiers, not the four presets.
     const tierLadder = await tierLadderForCurrentOrg()
 
+    // Whose rates: tour_templates carry no org_id, so a signed-in run prices for
+    // the caller's org and the scheduler (no session) for the installation's
+    // sole org. Without rateCurrency the engine read every rate as EUR.
+    const orgId = (await getCurrentOrgId()) ?? (await soleOrgId())
+    const pricingOptions = { orgId: orgId ?? undefined, rateCurrency: await getOrgRateCurrency(supabaseAdmin, orgId) }
+
     // Process templates sequentially to avoid overwhelming the database
     for (const template of templates) {
       try {
@@ -124,7 +137,7 @@ export async function POST(request: NextRequest) {
 
         // Only calculate auto-pricing for templates that use it
         if (template.uses_day_builder || template.pricing_mode === 'auto') {
-          const priceRange = await getTemplatePriceRange(template.id, true, tierLadder)
+          const priceRange = await getTemplatePriceRange(template.id, true, tierLadder, pricingOptions)
           if (priceRange) {
             startingPrice = Math.round(priceRange.minPrice)
             startingTier = priceRange.tier
