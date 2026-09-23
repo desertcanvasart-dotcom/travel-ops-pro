@@ -11,7 +11,7 @@
 import { useMemo, useState } from 'react'
 import { X, Loader2, CalendarPlus, Check } from 'lucide-react'
 import { todayLocal } from '@/lib/today'
-import { datesByWeekday, datesByInterval, normaliseDates } from '@/lib/departures/generate-dates'
+import { datesByWeekday, datesByInterval, normaliseDates, addMonthsISO } from '@/lib/departures/generate-dates'
 
 type Mode = 'weekly' | 'interval' | 'pick'
 
@@ -25,11 +25,6 @@ const WEEKDAYS = [
   { n: 6, label: 'Sat' },
 ]
 
-function plusMonths(iso: string, months: number): string {
-  const d = new Date(`${iso}T00:00:00`)
-  d.setMonth(d.getMonth() + months)
-  return d.toISOString().split('T')[0]
-}
 
 interface Props {
   templateId: string
@@ -50,7 +45,7 @@ export default function GenerateDeparturesModal({
   const today = todayLocal()
   const [mode, setMode] = useState<Mode>('weekly')
   const [rangeStart, setRangeStart] = useState(today)
-  const [rangeEnd, setRangeEnd] = useState(plusMonths(today, 3))
+  const [rangeEnd, setRangeEnd] = useState(addMonthsISO(today, 3))
   const [weekdays, setWeekdays] = useState<number[]>([1]) // Monday
   const [stepDays, setStepDays] = useState(7)
   const [picked, setPicked] = useState<string[]>([])

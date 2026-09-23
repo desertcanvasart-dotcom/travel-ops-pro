@@ -56,6 +56,10 @@ export default function GuestSurveyPage() {
           return
         }
         setTrip(json.data.trip ?? {})
+        // Seed the name box with the booking's name so what the guest sees is
+        // exactly what is submitted; they can clear it to answer anonymously
+        // (the questionnaire welcomes unnamed answers).
+        setGuestName(json.data.trip?.client_name ?? '')
         if (json.data.submitted) setSubmitted(true)
       })
       .catch(() => active && setNotFound(true))
@@ -142,7 +146,7 @@ export default function GuestSurveyPage() {
           <label className="block mt-3">
             <span className="text-gray-500 text-xs">お名前（任意）</span>
             <input
-              value={guestName || trip.client_name || ''}
+              value={guestName}
               onChange={e => setGuestName(e.target.value)}
               className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-base"
             />

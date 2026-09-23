@@ -63,3 +63,15 @@ export function normaliseDates(dates: readonly string[]): string[] {
   }
   return [...seen].sort().slice(0, MAX_GENERATED_DATES)
 }
+
+/**
+ * Add whole months to a yyyy-MM-dd date string, timezone-independent. Parsing
+ * the string as local midnight and printing it with toISOString() (UTC) moved
+ * the result a day earlier anywhere east of UTC — in Japan the default range
+ * ended one day short. Doing the arithmetic in UTC end to end avoids that.
+ * Day overflow rolls forward like Date does (Jan 31 + 1 month → Mar 3).
+ */
+export function addMonthsISO(iso: string, months: number): string {
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1 + months, d)).toISOString().slice(0, 10)
+}
