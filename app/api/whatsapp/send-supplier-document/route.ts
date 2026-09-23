@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { uploadOutboundPdf } from '@/lib/storage/outbound-documents'
 import { safeKeySegment } from '@/lib/storage-key'
 import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
@@ -40,29 +41,14 @@ export async function POST(request: NextRequest) {
     // Upload PDF to Supabase Storage so Twilio can access it.
     // documentNumber comes straight off the request body and is checked against
     // nothing — it was the only key here built from arbitrary caller text. The
-    // `documents` bucket is public, so a key of the caller's choosing is a file
+    // `documents` bucket was public, so a key of the caller's choosing was a file
     // of the caller's choosing at a URL of the caller's choosing.
     const fileName = `supplier-documents/${safeKeySegment(documentNumber, 'document')}-${Date.now()}.pdf`
     const pdfBuffer = Buffer.from(pdfBase64, 'base64')
 
-    const { error: uploadError } = await supabase.storage
-      .from('documents')
-      .upload(fileName, pdfBuffer, {
-        contentType: 'application/pdf',
-        upsert: true,
-      })
+    // Private bucket + a signed link that expires — see lib/storage/outbound-documents.
 
-    if (uploadError) {
-      console.error('Upload error:', uploadError)
-      throw new Error(`Failed to upload PDF: ${uploadError.message}`)
-    }
-
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('documents')
-      .getPublicUrl(fileName)
-
-    const pdfUrl = urlData.publicUrl
+    const pdfUrl = await uploadOutboundPdf(supabase, fileName, pdfBuffer)
 
     // Build WhatsApp message
     const businessName = process.env.BUSINESS_NAME || ''

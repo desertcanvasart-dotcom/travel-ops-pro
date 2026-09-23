@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { uploadOutboundPdf } from '@/lib/storage/outbound-documents'
 import { businessIdentity } from '@/lib/org-identity'
 import { safeKeySegment } from '@/lib/storage-key'
 import { clientMessage } from '@/lib/api-errors'
@@ -248,25 +249,10 @@ export async function POST(request: NextRequest) {
     console.log('📤 Uploading PDF to storage...')
     const fileName = `invoices/invoice-${safeKeySegment(invoice.invoice_number, 'invoice')}-${Date.now()}.pdf`
     
-    const { error: uploadError } = await supabase.storage
-      .from('documents')
-      .upload(fileName, pdfBytes, {
-        contentType: 'application/pdf',
-        upsert: true
-      })
-
-    if (uploadError) {
-      console.error('❌ Upload error:', uploadError)
-      throw new Error(`Failed to upload PDF: ${uploadError.message}`)
-    }
-
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('documents')
-      .getPublicUrl(fileName)
-
-    const pdfUrl = urlData.publicUrl
-    console.log('✅ PDF uploaded:', pdfUrl)
+    // Private bucket + a signed link that expires — see lib/storage/outbound-documents.
+    
+    const pdfUrl = await uploadOutboundPdf(supabase, fileName, pdfBytes)
+    console.log('✅ PDF uploaded (private, signed link)')
 
     const businessName = process.env.BUSINESS_NAME || ''
     const businessEmail = process.env.BUSINESS_EMAIL || ''

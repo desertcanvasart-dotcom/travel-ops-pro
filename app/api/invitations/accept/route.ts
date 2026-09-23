@@ -177,7 +177,25 @@ export async function POST(request: NextRequest) {
 
     const email = String(invitation!.email).trim().toLowerCase()
     const existing = await findAuthUserByEmail(email)
-    const decision = decideAcceptAction(existing)
+    let membershipsElsewhere = 0
+    if (existing) {
+      const { count } = await supabase
+        .from('organization_members')
+        .select('user_id', { count: 'exact', head: true })
+        .eq('user_id', existing.id)
+        .neq('org_id', invitation!.org_id)
+      membershipsElsewhere = count ?? 0
+    }
+    const decision = decideAcceptAction(existing, membershipsElsewhere)
+    if (decision.action === 'refuse') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'An account for this email already exists in another workspace. Sign in with it (or reset its password), then ask for the invitation again.',
+        },
+        { status: 409 }
+      )
+    }
 
     let userId: string
     if (decision.action === 'create') {

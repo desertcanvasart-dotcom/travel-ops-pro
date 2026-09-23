@@ -25,6 +25,11 @@ export type AcceptAction =
    *  invitation must never become a password-reset oracle for a live
    *  account. Bind the membership and tell them to sign in as themselves. */
   | { action: 'link'; userId: string }
+  /** An UNCONFIRMED account that already belongs to another workspace. The
+   *  token is visible to the inviting admin (the list, the share-by-hand
+   *  link), so "repairing" it would let that admin set the password on
+   *  someone else's account. Refused: they sign in (or reset) as themselves. */
+  | { action: 'refuse'; userId: string }
 
 export interface ExistingAuthUser {
   id: string
@@ -33,10 +38,15 @@ export interface ExistingAuthUser {
   confirmed_at?: string | null
 }
 
-export function decideAcceptAction(existing: ExistingAuthUser | null | undefined): AcceptAction {
+export function decideAcceptAction(
+  existing: ExistingAuthUser | null | undefined,
+  /** How many workspaces OTHER than the inviting one this account belongs to. */
+  membershipsElsewhere = 0
+): AcceptAction {
   if (!existing) return { action: 'create' }
   const confirmed = Boolean(existing.email_confirmed_at || existing.confirmed_at)
-  return confirmed ? { action: 'link', userId: existing.id } : { action: 'repair', userId: existing.id }
+  if (confirmed) return { action: 'link', userId: existing.id }
+  return membershipsElsewhere > 0 ? { action: 'refuse', userId: existing.id } : { action: 'repair', userId: existing.id }
 }
 
 export type InvitationState =

@@ -300,3 +300,20 @@ describe('routes that act on "me" resolve me from the session', () => {
     expect(code, `${file} should resolve the caller via getCurrentUserId()`).toContain('getCurrentUserId')
   })
 })
+
+// Sweep (medium): WhatsApp/unified/copilot READS and the AI/translate routes
+// were open to viewers — customer PII, and the operator's model keys.
+describe('staff-only API prefixes (reads included)', () => {
+  const block = source.match(/const STAFF_ONLY_API_PREFIXES = \[([\s\S]*?)\n\]/)
+  const prefixes = block ? [...block[1].matchAll(/'([^']+)'/g)].map(m => m[1]) : []
+  it.each(['/api/whatsapp/conversations', '/api/whatsapp/messages', '/api/unified/client/x', '/api/copilot/threads', '/api/copilot/inbox', '/api/ai/suggest-reply', '/api/translate'])(
+    '%s is covered', path => {
+      expect(prefixes.some(p => path.startsWith(p))).toBe(true)
+    })
+  it('the gate is applied to every method, exempts self-auth routes, and requires agent+', () => {
+    expect(source).toMatch(/!isSelfAuthApi &&\s*\n\s*STAFF_ONLY_API_PREFIXES\.some/)
+    const gate = source.slice(source.indexOf('STAFF_ONLY_API_PREFIXES.some'))
+    expect(gate.slice(0, 300)).toContain("['admin', 'manager', 'agent']")
+    expect(roleAllows('viewer', ['admin', 'manager', 'agent'])).toBe(false)
+  })
+})

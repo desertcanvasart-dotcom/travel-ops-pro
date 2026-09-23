@@ -23,6 +23,15 @@ describe('decideAcceptAction', () => {
       .toEqual({ action: 'repair', userId: 'u1' })
   })
 
+  it('an UNCONFIRMED account that belongs to another workspace is refused, not repaired', () => {
+    // The inviting admin can see the token, so repair = setting the password
+    // on someone else's account.
+    expect(decideAcceptAction({ id: 'u4', email_confirmed_at: null }, 1))
+      .toEqual({ action: 'refuse', userId: 'u4' })
+    expect(decideAcceptAction({ id: 'u4', email_confirmed_at: null }, 0))
+      .toEqual({ action: 'repair', userId: 'u4' })
+  })
+
   it('a CONFIRMED account is only linked — an invite is never a password reset', () => {
     expect(decideAcceptAction({ id: 'u2', email_confirmed_at: '2026-08-26T00:00:00Z' }))
       .toEqual({ action: 'link', userId: 'u2' })
