@@ -88,6 +88,11 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   { prefix: '/api/guides', roles: ['admin', 'manager'] },
   { prefix: '/api/cruises', roles: ['admin', 'manager'] },
   { prefix: '/api/exchange-rates', roles: ['admin', 'manager'] },
+  // The older /resources API writes the same rate tables (transportation,
+  // accommodation, activity, meal) plus hotel/airport/restaurant contacts. It
+  // was missing here, so a viewer could POST/PUT/DELETE rates through it.
+  // Reads stay open: the itinerary resource picker (agents) GETs these.
+  { prefix: '/api/resources', roles: ['admin', 'manager'] },
 
   // ---- Org / staff administration ----
   // team_members is the operating roster (who guides a trip, who meets a

@@ -75,9 +75,15 @@ export async function GET(request: NextRequest) {
 // POST - Create new label
 export async function POST(request: NextRequest) {
   try {
-    const { userId, name, backgroundColor, textColor } = await request.json()
+    // The mailbox is the SESSION user's. A userId from the body let any
+    // signed-in user create or delete labels in someone else's Gmail.
+    const userId = await getCurrentUserId()
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const { name, backgroundColor, textColor } = await request.json()
 
-    if (!userId || !name) {
+    if (!name) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
@@ -126,9 +132,15 @@ export async function POST(request: NextRequest) {
 // DELETE - Delete a label
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId, labelId } = await request.json()
+    // The mailbox is the SESSION user's. A userId from the body let any
+    // signed-in user create or delete labels in someone else's Gmail.
+    const userId = await getCurrentUserId()
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const { labelId } = await request.json()
 
-    if (!userId || !labelId) {
+    if (!labelId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
