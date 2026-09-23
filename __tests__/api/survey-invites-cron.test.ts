@@ -28,6 +28,7 @@ function builder(table: string) {
 vi.mock('@/lib/supabase-server', () => ({ createServerClient: () => ({ from: builder }) }))
 vi.mock('@/lib/support/job-runs', () => ({
   withJobRun: (_name: string, _db: unknown, handler: unknown) => handler,
+  jobRunHeaders: () => ({}),
 }))
 vi.mock('@/lib/org-identity', () => ({ businessIdentity: () => ({ name: 'ATS' }) }))
 vi.mock('@/lib/today', () => ({ todayLocal: () => '2026-09-23' }))
@@ -40,12 +41,16 @@ vi.mock('@/lib/email-send', () => ({ sendEmailInternal: (...a: unknown[]) => sen
 vi.mock('@/lib/twilio-whatsapp', () => ({ sendWhatsAppMessage: (...a: unknown[]) => sendWhatsAppMessage(...a) }))
 
 import { GET } from '@/app/api/cron/survey-invites/route'
+import { internalCronToken } from '@/lib/cron/auth'
 
 const trip = (extra: Record<string, unknown>) => ({
   id: 'it1', org_id: 'o1', itinerary_code: 'ITN-1', client_name: '山田', trip_name: 'T',
   start_date: '2026-09-16', end_date: '2026-09-23', status: 'confirmed', ...extra,
 })
-const run = async () => (await (GET as (r: NextRequest) => Promise<Response>)(new NextRequest('http://x/api/cron/survey-invites'))).json()
+// Cron routes fail closed now (lib/cron/auth): call it as the scheduler does.
+const run = async () => (await (GET as (r: NextRequest) => Promise<Response>)(
+  new NextRequest('http://x/api/cron/survey-invites', { headers: { authorization: `Bearer ${internalCronToken()}` } })
+)).json()
 const surveyUpdates = () => updates.filter(u => u.table === 'guest_surveys')
 
 beforeEach(() => {

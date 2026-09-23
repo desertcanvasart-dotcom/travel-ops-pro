@@ -32,6 +32,16 @@ export type JobName = string
 
 export { STALE_AFTER_HOURS }
 
+/** Response headers a cron route sets to describe its run (see withJobRun). */
+export const JOB_OUTCOME_HEADER = 'x-job-outcome'
+export const JOB_DETAIL_HEADER = 'x-job-detail'
+
+/** Headers for a route's response: the outcome and a one-line summary. */
+export function jobRunHeaders(outcome: 'ok' | 'failed', detail: string): Record<string, string> {
+  // Header values must be single-line Latin-1; the summary is short ASCII.
+  return { [JOB_OUTCOME_HEADER]: outcome, [JOB_DETAIL_HEADER]: detail.replace(/[^\x20-\x7e]/g, '?').slice(0, 300) }
+}
+
 /** Rows older than this are removed as each job runs. The table answers "when
  *  did this last run?" and nothing else; a year of history serves no reader. */
 const KEEP_DAYS = 30
@@ -182,8 +192,15 @@ export function withJobRun<A extends unknown[]>(
         await discard()
         return res
       }
-      if (res.ok) await finish('ok')
-      else await finish('failed', `HTTP ${res.status}`)
+      // A route can say more than its status: `x-job-outcome: failed` for a
+      // run that completed but found a problem (data-invariants answers 200
+      // WITH violations — it was being recorded as a clean "ok"), and
+      // `x-job-detail` for a one-line summary ("3 sent, 1 failed"). Without
+      // these every row's detail was null and a finding was invisible here.
+      const reported = res.headers.get(JOB_OUTCOME_HEADER)
+      const detail = res.headers.get(JOB_DETAIL_HEADER)
+      if (!res.ok) await finish('failed', detail ? `HTTP ${res.status}: ${detail}` : `HTTP ${res.status}`)
+      else await finish(reported === 'failed' ? 'failed' : 'ok', detail ?? undefined)
       return res
     } catch (err) {
       await finish('failed', err instanceof Error ? err.message : err)

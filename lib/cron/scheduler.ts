@@ -18,6 +18,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest } from 'next/server'
 import { matchesCron, minuteSlot } from './schedule'
+import { internalCronToken } from './auth'
 
 export interface CronJob {
   name: string
@@ -39,6 +40,14 @@ export const CRON_JOBS: CronJob[] = [
   // Guest satisfaction survey: on the day a trip ends, send the /survey link by
   // email + WhatsApp. 09:00 daily.
   { name: 'survey-invites', schedule: '0 9 * * *', handler: () => import('@/app/api/cron/survey-invites/route').then(m => m.GET) },
+  // These three were run by a pg_cron job inside the production database —
+  // a second, unversioned scheduler holding CRON_SECRET in plaintext. They live
+  // here now; the pg_cron jobs are to be unscheduled. The minutes are offset
+  // from pg_cron's (01:00 / 06:00) so an overlap during the handover cannot
+  // collide; both jobs are idempotent within a day anyway.
+  { name: 'refresh-exchange-rates', schedule: '5 1 * * *', handler: () => import('@/app/api/cron/refresh-exchange-rates/route').then(m => m.GET) },
+  { name: 'send-reminders', schedule: '5 6 * * *', handler: () => import('@/app/api/cron/send-reminders/route').then(m => m.GET) },
+  { name: 'task-reminders', schedule: '10 6 * * *', handler: () => import('@/app/api/cron/task-reminders/route').then(m => m.GET) },
 ]
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -65,8 +74,9 @@ export function dueJobs(jobs: CronJob[], slot: Date): CronJob[] {
 
 async function invoke(job: CronJob): Promise<void> {
   const handler = await job.handler()
-  const headers: Record<string, string> = {}
-  if (process.env.CRON_SECRET) headers.authorization = `Bearer ${process.env.CRON_SECRET}`
+  // The per-process token (lib/cron/auth): in-process jobs run with or without
+  // CRON_SECRET configured, and the secret itself is only for external callers.
+  const headers: Record<string, string> = { authorization: `Bearer ${internalCronToken()}` }
   const base = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
   const res = await handler(new NextRequest(`${base}/api/cron/${job.name}`, { headers }))
   const text = await res.text().catch(() => '')

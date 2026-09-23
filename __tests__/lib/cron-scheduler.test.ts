@@ -4,6 +4,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { matchesCron, minuteSlot } from '@/lib/cron/schedule'
 import { claimSlot, dueJobs, tick, type CronJob } from '@/lib/cron/scheduler'
+import { internalCronToken } from '@/lib/cron/auth'
 
 const at = (s: string) => new Date(s)
 
@@ -57,7 +58,9 @@ describe('claimSlot', () => {
 })
 
 describe('tick', () => {
-  it('runs only due jobs, once, with the bearer secret', async () => {
+  // The scheduler presents its per-process token (lib/cron/auth), not
+  // CRON_SECRET — so in-process jobs run even where no secret is configured.
+  it('runs only due jobs, once, with the internal token', async () => {
     process.env.CRON_SECRET = 's3cret'
     const seen: string[] = []
     const handler = vi.fn(async (req: Request) => { seen.push(req.headers.get('authorization') ?? ''); return new Response('ok') })
@@ -70,6 +73,6 @@ describe('tick', () => {
     expect(await tick(db, at('2026-08-23T10:15:59Z'), jobs)).toEqual([])   // same slot, already claimed
     expect(dueJobs(jobs, at('2026-08-23T02:00:00Z')).map(j => j.name)).toEqual(['quarter', 'nightly']) // 02:00 is a quarter-hour too
     expect(dueJobs(jobs, at('2026-08-23T02:01:00Z')).map(j => j.name)).toEqual([])
-    expect(seen).toEqual(['Bearer s3cret'])
+    expect(seen).toEqual([`Bearer ${internalCronToken()}`])
   })
 })

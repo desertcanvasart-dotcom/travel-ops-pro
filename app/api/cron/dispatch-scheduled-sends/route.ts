@@ -6,11 +6,11 @@
 // template_send_log and the scheduled_sends row is marked sent/failed.
 //
 // This is the dispatcher the sibling app never built — without it, scheduled
-// sends would sit pending forever. Bearer-auth like our other crons; OPEN when
-// CRON_SECRET is unset (matches existing convention).
+// sends would sit pending forever. Auth: lib/cron/auth (fails closed).
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { cronAuthorized } from '@/lib/cron/auth'
 import { businessIdentity } from '@/lib/org-identity'
 import { withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
@@ -19,7 +19,6 @@ import { createClient } from '@supabase/supabase-js'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { sendEmailInternal } from '@/lib/email-send'
 
-const CRON_SECRET = process.env.CRON_SECRET
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -93,8 +92,8 @@ async function run() {
 }
 
 function authed(request: NextRequest): boolean {
-  const authHeader = request.headers.get('authorization')
-  return !(CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`)
+  // Fails closed: see lib/cron/auth.
+  return cronAuthorized(request)
 }
 
 async function getHandler(request: NextRequest) {
