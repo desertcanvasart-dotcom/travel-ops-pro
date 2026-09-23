@@ -205,6 +205,10 @@ export default function UserManagementPage() {
 
       if (response.ok) {
         fetchMembers()
+      } else {
+        // e.g. the owner, another admin, or yourself — the route says why.
+        const data = await response.json().catch(() => ({}))
+        alert(data.error || 'Failed to update role')
       }
     } catch (error) {
       console.error('Error updating role:', error)
@@ -221,6 +225,10 @@ export default function UserManagementPage() {
 
       if (response.ok) {
         fetchMembers()
+      } else {
+        // e.g. the owner, another admin, or yourself — the route says why.
+        const data = await response.json().catch(() => ({}))
+        alert(data.error || 'Failed to update status')
       }
     } catch (error) {
       console.error('Error updating status:', error)

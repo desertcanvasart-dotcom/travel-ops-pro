@@ -59,6 +59,12 @@ describe('API mutation gate — coverage', () => {
     '/api/b2b/pricing-rules/abc',
     '/api/b2b/transport-packages',
     '/api/b2b/transport-packages/abc',
+    // Sweep H10: the older /resources API writes the same rate tables.
+    '/api/resources',
+    '/api/resources/hotels/abc',
+    '/api/resources/transportation/abc',
+    '/api/resources/attractions',
+    '/api/resources/restaurants/abc',
   ])('%s is manager-and-above', path => {
     const roles = rolesFor(path)
     expect(roles, `${path} has no entry in API_MUTATION_PERMISSIONS`).not.toBeNull()

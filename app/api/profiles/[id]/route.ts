@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { INVITABLE_ROLES } from '@/lib/auth/roles'
 import { createClient } from '@supabase/supabase-js'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { getCurrentOrgId, getCurrentUserId, getCurrentUserRole } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,33 +16,38 @@ const PRIVILEGED_FIELDS = ['role', 'is_active'] as const
 // Fields a user may change on their OWN profile.
 const SELF_EDITABLE_FIELDS = ['full_name', 'phone', 'timezone'] as const
 
-// Resolve the authenticated caller (from the session cookie) and their RBAC role.
-// The middleware /api/* gate guarantees a session exists; this re-derives WHO it
-// is and WHAT role, since the routes below use the RLS-bypassing admin client.
-async function getCaller(): Promise<{ id: string; role: string } | null> {
-  const cookieStore = await cookies()
-  const userClient = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) { return cookieStore.get(name)?.value },
-        set() {}, remove() {},
-      },
-    }
-  )
-  const { data: { user } } = await userClient.auth.getUser()
-  if (!user) return null
-  // Authority comes from ORGANIZATION MEMBERSHIP, the one role system.
-  // user_profiles.role is a display mirror and gating on it re-opens the
-  // second authority this codebase just closed.
-  const { data: membership } = await supabase
+// The caller, in the workspace this request is acting in. The old lookup took
+// the caller's FIRST membership (limit 1, no order) and never asked whether the
+// target was in the same workspace — so an admin anywhere could deactivate or
+// delete any account on the installation, the owner's included.
+async function getCaller(): Promise<{ id: string; role: string; orgId: string } | null> {
+  const [id, role, orgId] = await Promise.all([getCurrentUserId(), getCurrentUserRole(), getCurrentOrgId()])
+  if (!id || !role || !orgId) return null
+  return { id, role, orgId }
+}
+
+/** The target's role in the caller's workspace, or null when not a member of it. */
+async function targetRoleIn(orgId: string, userId: string): Promise<string | null> {
+  const { data } = await supabase
     .from('organization_members')
     .select('role')
-    .eq('user_id', user.id)
-    .limit(1)
+    .eq('org_id', orgId)
+    .eq('user_id', userId)
     .maybeSingle()
-  return { id: user.id, role: (membership as { role?: string } | null)?.role || 'viewer' }
+  return (data as { role?: string } | null)?.role ?? null
+}
+
+const isAdminRole = (role: string) => role === 'admin' || role === 'owner'
+
+/**
+ * May the caller change another member's role / active status, or delete them?
+ * Never the owner (ownership is transferred, not edited); an admin only by the
+ * owner, so two admins cannot lock each other out.
+ */
+function mayManage(callerRole: string, targetRole: string): boolean {
+  if (targetRole === 'owner') return false
+  if (targetRole === 'admin') return callerRole === 'owner'
+  return isAdminRole(callerRole)
 }
 
 // GET - Get single profile
@@ -53,6 +57,14 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+
+    const caller = await getCaller()
+    if (!caller) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+    if (caller.id !== id && !(await targetRoleIn(caller.orgId, id))) {
+      return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
+    }
 
     const { data, error } = await supabase
       .from('user_profiles')
@@ -89,13 +101,37 @@ export async function PUT(
     if (!caller) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
-    const isAdmin = caller.role === 'admin' || caller.role === 'owner'
+    const isAdmin = isAdminRole(caller.role)
     const isSelf = caller.id === id
     if (!isAdmin && !isSelf) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
     }
+    // Someone else's profile: they must belong to THIS workspace.
+    const targetRole = isSelf ? caller.role : await targetRoleIn(caller.orgId, id)
+    if (!targetRole) {
+      return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
+    }
 
     const body = await request.json()
+
+    const touchesPrivileged = PRIVILEGED_FIELDS.some(f => body[f] !== undefined)
+    if (isAdmin && touchesPrivileged) {
+      if (isSelf) {
+        // Your own role or active flag: a slip here locks the workspace out.
+        return NextResponse.json(
+          { success: false, error: 'You cannot change your own role or active status' },
+          { status: 403 }
+        )
+      }
+      if (!mayManage(caller.role, targetRole)) {
+        return NextResponse.json(
+          { success: false, error: targetRole === 'owner'
+            ? 'Ownership is transferred, not edited from a profile'
+            : 'Only the owner can change an admin' },
+          { status: 403 }
+        )
+      }
+    }
 
     // Block privilege escalation: only admins may set role / is_active.
     if (!isAdmin && PRIVILEGED_FIELDS.some(f => body[f] !== undefined)) {
@@ -136,26 +172,13 @@ export async function PUT(
           { status: 400 }
         )
       }
-      const { data: target } = await supabase
+      // The membership in THIS workspace (checked above to exist and be manageable).
+      const { error: roleErr } = await supabase
         .from('organization_members')
-        .select('org_id, role')
+        .update({ role: updateData.role })
+        .eq('org_id', caller.orgId)
         .eq('user_id', id)
-        .limit(1)
-        .maybeSingle()
-      if (target?.role === 'owner') {
-        return NextResponse.json(
-          { success: false, error: 'Ownership is transferred, not edited from a profile' },
-          { status: 403 }
-        )
-      }
-      if (target) {
-        const { error: roleErr } = await supabase
-          .from('organization_members')
-          .update({ role: updateData.role })
-          .eq('org_id', target.org_id)
-          .eq('user_id', id)
-        if (roleErr) throw roleErr
-      }
+      if (roleErr) throw roleErr
     }
 
     const { data, error } = await supabase
@@ -193,23 +216,38 @@ export async function DELETE(
     if (!caller) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
-    if (caller.role !== 'admin' && caller.role !== 'owner') {
+    if (!isAdminRole(caller.role)) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
     }
+    if (caller.id === id) {
+      return NextResponse.json({ success: false, error: 'You cannot delete yourself' }, { status: 403 })
+    }
 
-    // First check if the user exists and is not an admin (prevent deleting admins)
-    const { data: profile, error: fetchError } = await supabase
-      .from('user_profiles')
-      .select('role')
-      .eq('id', id)
-      .single()
-
-    if (fetchError) throw fetchError
-
-    if (profile?.role === 'admin') {
+    // The target must be in THIS workspace, and manageable by the caller. This
+    // read the profile MIRROR before, which only refused 'admin' — an owner (or
+    // anyone in another workspace) could be deleted.
+    const targetRole = await targetRoleIn(caller.orgId, id)
+    if (!targetRole) {
+      return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
+    }
+    if (!mayManage(caller.role, targetRole)) {
       return NextResponse.json(
-        { success: false, error: 'Cannot delete admin users' },
+        { success: false, error: targetRole === 'owner' ? 'The owner cannot be deleted' : 'Only the owner can delete an admin' },
         { status: 403 }
+      )
+    }
+
+    // Deleting the account removes the person from EVERY workspace. If they
+    // belong to another one, that is not this workspace's call to make.
+    const { count: otherMemberships } = await supabase
+      .from('organization_members')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('user_id', id)
+      .neq('org_id', caller.orgId)
+    if ((otherMemberships ?? 0) > 0) {
+      return NextResponse.json(
+        { success: false, error: 'This person also belongs to another workspace; deactivate them here instead' },
+        { status: 409 }
       )
     }
 
