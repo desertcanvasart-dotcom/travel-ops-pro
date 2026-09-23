@@ -31,3 +31,24 @@ export function toLocalDateString(date: Date): string {
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
 }
+
+/**
+ * Today as YYYY-MM-DD in a named IANA timezone — safe on the server, where the
+ * host clock is UTC. Falls back to the UTC date for an unknown zone.
+ */
+export function todayInTimeZone(timeZone: string, date: Date = new Date()): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date)
+  } catch {
+    return date.toISOString().slice(0, 10)
+  }
+}
+
+/**
+ * The business's "today" on the server: BUSINESS_TIMEZONE (e.g. Asia/Tokyo),
+ * else UTC — the app does not model an organisation timezone yet, so this is
+ * the one server-side knob. Use it for "is it due today / overdue" decisions.
+ */
+export function businessToday(date: Date = new Date()): string {
+  return todayInTimeZone(process.env.BUSINESS_TIMEZONE || 'UTC', date)
+}

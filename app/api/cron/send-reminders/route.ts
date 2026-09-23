@@ -4,6 +4,9 @@ import { withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
 import { sendEmailInternal } from '@/lib/email-send'
+import { formatMoney } from '@/lib/currency-totals'
+import { businessToday } from '@/lib/today'
+import { daysUntilDue, reminderStage, firstReminderDate, addDaysISO } from '@/lib/invoices/reminder-schedule'
 
 // Verify cron secret for security
 const CRON_SECRET = process.env.CRON_SECRET
@@ -25,13 +28,14 @@ async function sendReminderEmail(params: {
 function generateReminderEmail(invoice: any, reminderType: string): { subject: string; html: string } {
   // The operator's own name, never a literal — this goes to their customer.
   const brand = businessIdentity()
-  const currencySymbol = ({ EUR: '€', USD: '$', GBP: '£' } as Record<string, string>)[invoice.currency] || invoice.currency
-  const balanceDue = `${currencySymbol}${Number(invoice.balance_due).toFixed(2)}`
+  // formatMoney knows each currency's symbol and decimals (¥110,000, not JPY110000.00).
+  const balanceDue = formatMoney(Number(invoice.balance_due), invoice.currency)
   const dueDate = new Date(invoice.due_date).toLocaleDateString('en-GB', { 
     day: 'numeric', month: 'long', year: 'numeric' 
   })
-  const daysOverdue = Math.floor((Date.now() - new Date(invoice.due_date).getTime()) / (1000 * 60 * 60 * 24))
-  
+  // Whole calendar days: due today is 0, not "0 days overdue" (see reminder-schedule).
+  const daysOverdue = -daysUntilDue(invoice.due_date, businessToday())
+
   let subject: string
   let urgencyMessage: string
   let urgencyColor: string
@@ -100,7 +104,7 @@ async function getHandler(request: NextRequest) {
 
   try {
     const supabase = createServerClient()
-    const today = new Date().toISOString().split('T')[0]
+    const today = businessToday()
 
     console.log('🔔 Starting automated reminder processing...')
 
@@ -130,15 +134,19 @@ async function getHandler(request: NextRequest) {
 
     let sent = 0
     let failed = 0
+    let skipped = 0
 
     for (const invoice of invoices) {
-      const daysOverdue = Math.floor((Date.now() - new Date(invoice.due_date).getTime()) / (1000 * 60 * 60 * 24))
-      
-      let reminderType = 'reminder'
-      if (daysOverdue <= -7) reminderType = 'before_due_7'
-      else if (daysOverdue <= 0) reminderType = 'on_due'
-      else if (daysOverdue <= 14) reminderType = 'overdue_14'
-      else reminderType = 'overdue_30'
+      const reminderType = reminderStage(daysUntilDue(invoice.due_date, today))
+      if (!reminderType) {
+        // Too early for any reminder: look at it again 7 days before it falls due.
+        await supabase
+          .from('invoices')
+          .update({ next_reminder_date: firstReminderDate(invoice.due_date) })
+          .eq('id', invoice.id)
+        skipped++
+        continue
+      }
 
       const { subject, html } = generateReminderEmail(invoice, reminderType)
 
@@ -149,15 +157,12 @@ async function getHandler(request: NextRequest) {
       })
 
       if (result.success) {
-        const nextDate = new Date()
-        nextDate.setDate(nextDate.getDate() + 7)
-
         await supabase
           .from('invoices')
           .update({
             last_reminder_sent: new Date().toISOString(),
             reminder_count: (invoice.reminder_count || 0) + 1,
-            next_reminder_date: nextDate.toISOString().split('T')[0]
+            next_reminder_date: addDaysISO(today, 7)
           })
           .eq('id', invoice.id)
 
@@ -190,13 +195,14 @@ async function getHandler(request: NextRequest) {
       }
     }
 
-    console.log(`🔔 Reminder processing complete: ${sent} sent, ${failed} failed`)
+    console.log(`🔔 Reminder processing complete: ${sent} sent, ${failed} failed, ${skipped} not yet due`)
 
     return NextResponse.json({
       success: true,
       message: `Processed ${invoices.length} reminders`,
       sent,
       failed,
+      skipped,
       timestamp: new Date().toISOString()
     })
 

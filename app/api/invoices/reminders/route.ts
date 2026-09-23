@@ -6,6 +6,9 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { lookupServerMessage } from '@/lib/i18n/server-messages'
 import { resolveClientLocalesByEmail, type RecipientLocale } from '@/lib/i18n/recipient-locale'
 import { sendEmailInternal } from '@/lib/email-send'
+import { formatMoney } from '@/lib/currency-totals'
+import { businessToday } from '@/lib/today'
+import { daysUntilDue, reminderStage, firstReminderDate } from '@/lib/invoices/reminder-schedule'
 
 // Email service - adjust based on your setup (Resend, SendGrid, etc.)
 // This example uses a generic sendEmail function - replace with your actual implementation
@@ -40,12 +43,14 @@ function generateReminderEmail(invoice: any, reminderType: string, locale: Recip
     day: 'numeric', month: 'long', year: 'numeric',
   })
 
-  const currencySymbol = ({ EUR: '€', USD: '$', GBP: '£' } as Record<string, string>)[invoice.currency] || invoice.currency
-  const balanceDue = `${currencySymbol}${Number(invoice.balance_due).toFixed(2)}`
-  const totalAmount = `${currencySymbol}${Number(invoice.total_amount).toFixed(2)}`
+  // formatMoney knows each currency's symbol and decimals (¥110,000, not
+  // "JPY110000.00").
+  const balanceDue = formatMoney(Number(invoice.balance_due), invoice.currency)
+  const totalAmount = formatMoney(Number(invoice.total_amount), invoice.currency)
   const dueDate = fmtDate(invoice.due_date)
 
-  const daysOverdue = Math.floor((Date.now() - new Date(invoice.due_date).getTime()) / (1000 * 60 * 60 * 24))
+  // Whole calendar days past due in the business's timezone (0 = due today).
+  const daysOverdue = -daysUntilDue(invoice.due_date, businessToday())
 
   // Validate the stage key against the known set (else fall back to 'default'),
   // then pull localized subject + urgency copy. Color stays in code.
@@ -226,7 +231,7 @@ export async function GET(request: NextRequest) {
     const preview = searchParams.get('preview') === 'true'
 
     // Get invoices that need reminders
-    const today = new Date().toISOString().split('T')[0]
+    const today = businessToday()
 
     const { data: invoices, error } = await supabase
       .from('invoices')
@@ -242,19 +247,14 @@ export async function GET(request: NextRequest) {
     if (error) throw error
 
     // Categorize by reminder type
-    const reminders = (invoices || []).map((invoice: any) => {
-      const dueDate = new Date(invoice.due_date)
-      const daysUntilDue = Math.floor((dueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-      
-      let reminderType: string
-      if (daysUntilDue > 5) reminderType = 'before_due_7'
-      else if (daysUntilDue > 1) reminderType = 'before_due_3'
-      else if (daysUntilDue >= 0) reminderType = 'on_due'
-      else if (daysUntilDue >= -7) reminderType = 'overdue_7'
-      else if (daysUntilDue >= -14) reminderType = 'overdue_14'
-      else reminderType = 'overdue_30'
+    const reminders = (invoices || []).flatMap((invoice: any) => {
+      if (!invoice.due_date) return []
+      const daysUntil = daysUntilDue(invoice.due_date, today)
+      const reminderType = reminderStage(daysUntil)
+      // More than 7 days out: too early for any reminder, so not in the list.
+      if (!reminderType) return []
 
-      return {
+      return [{
         invoice_id: invoice.id,
         invoice_number: invoice.invoice_number,
         client_name: invoice.client_name,
@@ -262,11 +262,11 @@ export async function GET(request: NextRequest) {
         balance_due: invoice.balance_due,
         currency: invoice.currency,
         due_date: invoice.due_date,
-        days_until_due: daysUntilDue,
+        days_until_due: daysUntil,
         reminder_type: reminderType,
         reminder_count: invoice.reminder_count || 0,
         last_reminder_sent: invoice.last_reminder_sent
-      }
+      }]
     })
 
     return NextResponse.json({
@@ -308,7 +308,7 @@ export async function POST(request: NextRequest) {
     if (invoiceIds && invoiceIds.length > 0) {
       query = query.in('id', invoiceIds)
     } else if (sendAll) {
-      const today = new Date().toISOString().split('T')[0]
+      const today = businessToday()
       query = query.or(`next_reminder_date.lte.${today},next_reminder_date.is.null`)
     } else {
       return NextResponse.json(
@@ -366,15 +366,24 @@ export async function POST(request: NextRequest) {
         })
         continue
       }
-      const daysUntilDue = Math.floor((dueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-      
-      let reminderType: string
-      if (daysUntilDue > 5) reminderType = 'before_due_7'
-      else if (daysUntilDue > 1) reminderType = 'before_due_3'
-      else if (daysUntilDue >= 0) reminderType = 'on_due'
-      else if (daysUntilDue >= -7) reminderType = 'overdue_7'
-      else if (daysUntilDue >= -14) reminderType = 'overdue_14'
-      else reminderType = 'overdue_30'
+      const daysUntil = daysUntilDue(invoice.due_date, businessToday())
+      const reminderType = reminderStage(daysUntil)
+      if (!reminderType) {
+        // More than 7 days out: the fixed "あと7日" copy would be false, so no
+        // email yet — schedule the first look for 7 days before it falls due.
+        await supabase
+          .from('invoices')
+          .update({ next_reminder_date: firstReminderDate(invoice.due_date) })
+          .eq('id', invoice.id)
+          .eq('org_id', orgId)
+        results.details.push({
+          invoice_id: invoice.id,
+          invoice_number: invoice.invoice_number,
+          status: 'skipped',
+          reason: `not due for a reminder until ${firstReminderDate(invoice.due_date)}`,
+        })
+        continue
+      }
 
       const recipientLocale: RecipientLocale = localeByEmail.get(invoice.client_email) ?? 'en'
       const { subject, html } = generateReminderEmail(invoice, reminderType, recipientLocale)

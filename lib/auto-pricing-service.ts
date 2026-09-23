@@ -4921,13 +4921,17 @@ export async function getTemplatePriceRange(
   templateId: string,
   isEurPassport: boolean = true,
   /** The agency's tier ladder (tierLadderForCurrentOrg); the presets by default. */
-  tiers: readonly string[] = PRESET_TIERS
+  tiers: readonly string[] = PRESET_TIERS,
+  /** orgId + rateCurrency at least: without rateCurrency every rate is read as
+   *  EUR, so a USD-rated agency's "from" price came out in the wrong money. */
+  options?: Partial<PricingParams>
 ): Promise<{ minPrice: number; maxPrice: number; tier: ServiceTier } | null> {
   const results = await calculateMultiTierPricing(
     templateId,
     [...tiers],
     2,
-    isEurPassport
+    isEurPassport,
+    options
   )
 
   let minPrice = Infinity

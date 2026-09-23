@@ -4,19 +4,23 @@ import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { sendEmailInternal } from '@/lib/email-send'
+import { formatMoney } from '@/lib/currency-totals'
+import { businessToday } from '@/lib/today'
+import { daysUntilDue } from '@/lib/invoices/reminder-schedule'
 
 // Reuse the email generation from the main route
 function generateReminderEmail(invoice: any, reminderType: string): { subject: string; html: string } {
   // The operator's own name, never a literal — this goes to their customer.
   const brand = businessIdentity()
-  const currencySymbol = ({ EUR: '€', USD: '$', GBP: '£' } as Record<string, string>)[invoice.currency] || invoice.currency
-  const balanceDue = `${currencySymbol}${Number(invoice.balance_due).toFixed(2)}`
-  const totalAmount = `${currencySymbol}${Number(invoice.total_amount).toFixed(2)}`
+  // formatMoney knows each currency's symbol and decimals (¥110,000, not JPY110000.00).
+  const balanceDue = formatMoney(Number(invoice.balance_due), invoice.currency)
+  const totalAmount = formatMoney(Number(invoice.total_amount), invoice.currency)
   const dueDate = new Date(invoice.due_date).toLocaleDateString('en-GB', { 
     day: 'numeric', month: 'long', year: 'numeric' 
   })
   
-  const daysOverdue = Math.floor((Date.now() - new Date(invoice.due_date).getTime()) / (1000 * 60 * 60 * 24))
+  // Whole calendar days: due today is 0, not "0 days overdue" (see reminder-schedule).
+  const daysOverdue = -daysUntilDue(invoice.due_date, businessToday())
   
   let subject = `Payment Reminder: Invoice ${invoice.invoice_number}`
   let urgencyMessage = `This is a reminder about your outstanding invoice.`

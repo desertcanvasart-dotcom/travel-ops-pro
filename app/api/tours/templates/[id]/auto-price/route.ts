@@ -18,6 +18,7 @@ import {
 } from '@/lib/auto-pricing-service'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { createServerClient } from '@/lib/supabase-server'
 import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
 
@@ -44,7 +45,11 @@ export async function POST(
       all_tiers = false,
       tiers: requestedTiers = null,
     } = body
-    const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(createServerClient(), await getCurrentOrgId()) })
+    const orgId = (await getCurrentOrgId()) ?? undefined
+    const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(createServerClient(), orgId) })
+    // The currency the rate tables are entered in — NEVER omit it, or every
+    // rate is normalised as EUR (a USD-rated agency's prices came out wrong).
+    const rateCurrency = await getOrgRateCurrency(createServerClient(), orgId)
 
     // Validate tier against the agency's own ladder (Settings → Vocabulary);
     // "all tiers" means all of THOSE, not the four presets.
@@ -67,6 +72,8 @@ export async function POST(
         num_pax,
         is_eur_passport,
         {
+          orgId,
+          rateCurrency,
           numAdults: num_adults || num_pax,
           numChildren: num_children,
           language,
@@ -100,7 +107,8 @@ export async function POST(
 
     // Single tier pricing
     const result = await calculateAutoPricing({
-      orgId: await getCurrentOrgId() ?? undefined,
+      orgId,
+      rateCurrency,
       templateId,
       tier: tier as ServiceTier,
       numPax: num_pax,
@@ -149,8 +157,10 @@ export async function GET(
     const tier = (searchParams.get('tier') || 'standard') as ServiceTier
 
     // Quick pricing with defaults
+    const orgId = (await getCurrentOrgId()) ?? undefined
     const result = await calculateAutoPricing({
-      orgId: await getCurrentOrgId() ?? undefined,
+      orgId,
+      rateCurrency: await getOrgRateCurrency(createServerClient(), orgId),
       templateId,
       tier,
       numPax,
