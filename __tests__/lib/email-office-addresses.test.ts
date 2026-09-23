@@ -49,7 +49,7 @@ describe('wiring', () => {
     expect(sync).toContain('isOfficeAddress(rule, from)')
     expect(sync).not.toMatch(/fromEmail === userEmail/)
     expect(readFileSync('app/api/gmail/poll/route.ts', 'utf8')).toContain('isOfficeAddress(officeRuleForPoll, fromEmail)')
-    expect(readFileSync('app/api/cron/gmail-sync/route.ts', 'utf8')).toContain('applyOfficeRule(db, await loadOfficeRule(db))')
+    expect(readFileSync('app/api/cron/gmail-sync/route.ts', 'utf8')).toContain('applyOfficeRuleWhenDue(db, await loadOfficeRule(db))')
     expect(readFileSync('app/settings/email/page.tsx', 'utf8')).toContain('<OfficeAddressesCard />')
   })
 })
