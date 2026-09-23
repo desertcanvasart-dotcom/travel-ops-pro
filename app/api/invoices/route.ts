@@ -10,6 +10,7 @@ import { syncInvoice } from '@/lib/accounting'
 import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-numbering'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { currencyDecimals, roundToCurrency } from '@/lib/currency-totals'
+import { invoiceTotals } from '@/lib/invoices/totals'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -325,6 +326,16 @@ export async function POST(request: NextRequest) {
       lineItems = [...lineItems, ...additionLines]
     }
 
+    // Subtotal + tax − discount must equal the total (see lib/invoices/totals).
+    const totals = invoiceTotals({
+      invoiceType,
+      totalAmount,
+      taxRate: body.tax_rate,
+      taxAmount: body.tax_amount,
+      discountAmount: body.discount_amount,
+      currency,
+    })
+
     const baseInvoice = {
       org_id: orgId,
       invoice_type: invoiceType,
@@ -339,10 +350,7 @@ export async function POST(request: NextRequest) {
       // rounded deposit back out cannot recover what rounding removed, which is
       // how the PDF came to quote a trip cost 2 yen below the real one.
       full_trip_cost: invoiceType === 'standard' ? null : fullTripCost,
-      subtotal: totalAmount,
-      tax_rate: body.tax_rate || 0,
-      tax_amount: body.tax_amount || 0,
-      discount_amount: body.discount_amount || 0,
+      ...totals,
       total_amount: totalAmount,
       currency,
       amount_paid: 0,

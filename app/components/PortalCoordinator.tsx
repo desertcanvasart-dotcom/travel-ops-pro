@@ -71,12 +71,18 @@ export default function PortalCoordinator({ bookingId }: { bookingId: string }) 
   const sendLink = async (id: string, resend: boolean) => {
     setBusyId(id)
     try {
-      await fetch(`/api/bookings/${bookingId}/portal-link`, {
+      const res = await fetch(`/api/bookings/${bookingId}/portal-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ passenger_id: id, send: true }),
       })
+      const json = await res.json().catch(() => ({}))
       await load()
+      // The link exists either way; say so when the email did not go out, so
+      // the office copies it or fixes the address instead of assuming it was sent.
+      if (!res.ok || json.emailed === false) {
+        alert(`The email was not sent${json.email_error ? `: ${json.email_error}` : ''}. The link is still valid — you can copy it and send it yourself.`)
+      }
     } finally {
       setBusyId(null)
     }

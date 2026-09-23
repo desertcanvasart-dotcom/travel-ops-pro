@@ -3,6 +3,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { createDocumentNumberer } from '@/lib/documents/numberer'
 
 // Map service types to document types
 // null = skip (no document needed)
@@ -83,40 +84,6 @@ const DEFAULT_SUPPLIER_NAMES: Record<string, Record<string, string>> = {
   activity_voucher: { default: 'Entrance Fees' }
 }
 
-// Track offsets per document type during batch generation
-const typeOffsets: Record<string, number> = {}
-
-async function generateDocumentNumber(supabase: any, docType: string): Promise<string> {
-  const prefix = DOC_PREFIXES[docType] || 'SD'
-  const year = new Date().getFullYear()
-  const pattern = `${prefix}-${year}-%`
-  
-  const { data } = await supabase
-    .from('supplier_documents')
-    .select('document_number')
-    .like('document_number', pattern)
-    .order('document_number', { ascending: false })
-    .limit(1)
-  
-  let nextNum = 1
-  if (data && data.length > 0) {
-    const lastNum = data[0].document_number
-    const match = lastNum.match(/-(\d+)$/)
-    if (match) {
-      nextNum = parseInt(match[1], 10) + 1
-    }
-  }
-  
-  // Add offset for batch generation (multiple docs of same type)
-  const offset = typeOffsets[docType] || 0
-  nextNum += offset
-  
-  // Increment offset for next call of same type
-  typeOffsets[docType] = offset + 1
-  
-  return `${prefix}-${year}-${String(nextNum).padStart(4, '0')}`
-}
-
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -124,15 +91,13 @@ export async function POST(
   const supabase = createServerClient()
   const { id: itineraryId } = await params
 
-  // Reset offsets for each request
-  Object.keys(typeOffsets).forEach(key => delete typeOffsets[key])
-
   try {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
     const body = await request.json().catch(() => ({}))
     const { document_types } = body
+    const nextNumber = createDocumentNumberer(supabase, t => DOC_PREFIXES[t] || 'SD')
 
     console.log('📄 Generating documents for itinerary:', itineraryId)
     console.log('📋 Requested types:', document_types || 'ALL')
@@ -354,7 +319,7 @@ export async function POST(
         continue
       }
       
-      const docNumber = await generateDocumentNumber(supabase, group.docType)
+      const docNumber = await nextNumber(group.docType)
       
       const formattedServices = group.services.map(s => ({
         service_type: s.service_type,
@@ -412,7 +377,7 @@ export async function POST(
         continue
       }
       
-      const docNumber = await generateDocumentNumber(supabase, group.docType)
+      const docNumber = await nextNumber(group.docType)
       
       const formattedServices = group.services.map(s => ({
         service_type: s.service_type,
@@ -468,16 +433,27 @@ export async function POST(
     if (documentsToCreate.length > 0) {
       console.log(`💾 Inserting ${documentsToCreate.length} documents...`)
       
-      const { data: createdDocs, error: createError } = await supabase
+      let { data: createdDocs, error: createError } = await supabase
         .from('supplier_documents')
         .insert(documentsToCreate)
         .select()
+      // Another request took one of these numbers between our read and our
+      // insert (the column is UNIQUE): renumber from the new highest and retry.
+      for (let attempt = 0; createError?.code === '23505' && attempt < 3; attempt++) {
+        const renumber = createDocumentNumberer(supabase, t => DOC_PREFIXES[t] || 'SD')
+        for (const doc of documentsToCreate) doc.document_number = await renumber(doc.document_type)
+        ;({ data: createdDocs, error: createError } = await supabase
+          .from('supplier_documents')
+          .insert(documentsToCreate)
+          .select())
+      }
       
       if (createError) {
         console.error('❌ Error creating documents:', createError)
         return NextResponse.json({ error: clientMessage(createError, 'Internal server error') }, { status: 500 })
       }
       
+      createdDocs = createdDocs ?? []
       console.log(`🎉 Successfully created ${createdDocs.length} documents`)
       
       return NextResponse.json({

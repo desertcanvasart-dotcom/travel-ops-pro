@@ -56,27 +56,25 @@ export async function mintOrReusePassengerLink(
   return { token: data.token as string, created: true }
 }
 
-/** Stamp a link as sent and best-effort email it. Never throws — a delivery
- *  failure must not fail the caller; the URL can always be copied. */
+/** Email a link and, ONLY if the email went out, stamp it as sent. Never
+ *  throws — a delivery failure must not fail the caller; the URL can always be
+ *  copied. It used to stamp last_sent_at first and treat sendEmailInternal as
+ *  throwing, but that reports failure by RETURNING { success: false } — so a
+ *  failed email showed "Sent" in the coordinator and nobody re-sent it. */
 export async function markSentAndDeliver(
   admin: Admin,
   opts: { token: string; passengerId: string; orgId: string; url: string }
-): Promise<{ sent: boolean }> {
-  await admin
-    .from('booking_portal_links')
-    .update({ last_sent_at: new Date().toISOString() })
-    .eq('token', opts.token)
-    .eq('org_id', opts.orgId)
-
+): Promise<{ sent: boolean; error?: string }> {
   const { data: pax } = await admin
     .from('booking_passengers')
     .select('email, first_name')
     .eq('id', opts.passengerId)
     .maybeSingle()
-  if (!pax?.email) return { sent: false }
+  if (!pax?.email) return { sent: false, error: 'This traveller has no email address' }
 
+  let result: { success: boolean; error?: string }
   try {
-    await sendEmailInternal({
+    result = await sendEmailInternal({
       to: pax.email,
       subject: 'ご旅行の参加者情報のご登録のお願い',
       html:
@@ -85,9 +83,18 @@ export async function markSentAndDeliver(
         `<p><a href="${opts.url}">${opts.url}</a></p>` +
         `<p>ご本人確認のため、姓と生年月日の入力をお願いいたします。</p>`,
     })
-    return { sent: true }
   } catch (e) {
-    console.error('Portal link email failed (link still valid):', e)
-    return { sent: false }
+    result = { success: false, error: e instanceof Error ? e.message : String(e) }
   }
+  if (!result.success) {
+    console.error('Portal link email failed (link still valid):', result.error)
+    return { sent: false, error: result.error || 'The email could not be sent' }
+  }
+
+  await admin
+    .from('booking_portal_links')
+    .update({ last_sent_at: new Date().toISOString() })
+    .eq('token', opts.token)
+    .eq('org_id', opts.orgId)
+  return { sent: true }
 }
