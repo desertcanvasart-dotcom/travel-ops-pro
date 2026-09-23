@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createNotification } from '@/lib/notifications'
-import { getCurrentUserId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, requireRole } from '@/lib/auth/current-org'
 import { linkedTeamMemberIds, notificationScopeFilter } from '@/lib/notifications-scope'
 
 const supabase = createClient(
@@ -59,9 +59,51 @@ export async function GET(request: NextRequest) {
 // lives there because server code CANNOT reach this route: the /api/* auth gate
 // rejects a session-less server-to-server fetch, so anything calling it from
 // the server silently created nothing (see the note in lib/notifications.ts).
+//
+// Who may send what: this creates an in-app alert AND, by default, an email
+// from the operator's own mailbox — so it was a phishing channel for any
+// session, viewer included (any recipient, any text, any link). Now: agent and
+// above only (the only UI caller is task assignment), a login recipient must be
+// in the caller's workspace, the link must be a path inside this app (the bell
+// navigates to it), and text is capped.
+const MAX_TITLE = 200
+const MAX_MESSAGE = 2000
+
+function inAppLink(link: unknown): string | null | undefined {
+  if (link == null || link === '') return null
+  if (typeof link !== 'string') return undefined
+  return link.startsWith('/') && !link.startsWith('//') && !link.startsWith('/\\') ? link : undefined
+}
+
 export async function POST(request: NextRequest) {
   try {
+    const denied = await requireRole(['admin', 'manager', 'agent'])
+    if (denied) return denied
+
     const body = await request.json()
+
+    const link = inAppLink(body.link)
+    if (link === undefined) {
+      return NextResponse.json({ success: false, error: 'link must be a path inside this app' }, { status: 400 })
+    }
+    if (typeof body.title !== 'string' || body.title.length > MAX_TITLE ||
+        (body.message != null && (typeof body.message !== 'string' || body.message.length > MAX_MESSAGE))) {
+      return NextResponse.json({ success: false, error: 'title or message missing or too long' }, { status: 400 })
+    }
+    if (body.user_id) {
+      const orgId = await getCurrentOrgId()
+      const { data: member } = orgId
+        ? await supabase
+            .from('organization_members')
+            .select('user_id')
+            .eq('org_id', orgId)
+            .eq('user_id', body.user_id)
+            .maybeSingle()
+        : { data: null }
+      if (!member) {
+        return NextResponse.json({ success: false, error: 'Recipient not found' }, { status: 404 })
+      }
+    }
 
     const result = await createNotification({
       user_id: body.user_id ?? null,
@@ -69,7 +111,7 @@ export async function POST(request: NextRequest) {
       type: body.type,
       title: body.title,
       message: body.message,
-      link: body.link ?? null,
+      link,
       related_task_id: body.related_task_id ?? null,
       related_itinerary_id: body.related_itinerary_id ?? null,
       send_email: body.send_email !== false,
