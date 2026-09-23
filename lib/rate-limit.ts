@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { clientIp } from '@/lib/client-ip'
 
 // ============================================
 // RATE LIMITING UTILITY
@@ -147,19 +148,8 @@ export function checkRateLimit(
 // ============================================
 
 export function getClientIdentifier(request: NextRequest): string {
-  // Try to get real IP (behind proxy)
-  const forwardedFor = request.headers.get('x-forwarded-for')
-  if (forwardedFor) {
-    return forwardedFor.split(',')[0].trim()
-  }
-  
-  const realIp = request.headers.get('x-real-ip')
-  if (realIp) {
-    return realIp
-  }
-  
-  // Fallback
-  return 'unknown'
+  // See lib/client-ip.ts for which header is trusted and why.
+  return clientIp(request.headers) ?? 'unknown'
 }
 
 // ============================================

@@ -22,6 +22,19 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { text, texts, targetLanguage, action, context } = body
 
+    // Every character here is a paid model call. `texts` was unbounded, so one
+    // request could translate a book on the operator's key.
+    const MAX_TEXTS = 200
+    const MAX_CHARS = 50_000
+    const sizes = [text, ...(Array.isArray(texts) ? texts : []), context]
+      .map(v => (typeof v === 'string' ? v.length : 0))
+    if ((Array.isArray(texts) && texts.length > MAX_TEXTS) || sizes.reduce((a, n) => a + n, 0) > MAX_CHARS) {
+      return NextResponse.json(
+        { success: false, error: `Too much text to translate at once (max ${MAX_TEXTS} items, ${MAX_CHARS} characters)` },
+        { status: 413 }
+      )
+    }
+
     if (action === 'batchTranslate' && texts && Array.isArray(texts)) {
       if (!targetLanguage) {
         return NextResponse.json(

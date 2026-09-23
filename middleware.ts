@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import { clientIp } from '@/lib/client-ip'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 import { roleAllows } from '@/lib/auth/roles'
@@ -177,6 +178,23 @@ const FINANCIAL_API_PREFIXES = [
   // The accounting integration's chart of accounts and sync status are
   // financial data — manager and above, reads included.
   '/api/accounting',
+]
+
+// Staff-only, READS INCLUDED (agent and above). Customer conversations are
+// PII — WhatsApp threads, the unified inbox, the copilot's drafts — and the AI
+// and translate routes spend the operator's Anthropic/OpenAI keys. Email reads
+// were already locked in-route; these were open to a viewer, who has no screen
+// that uses any of them (a viewer's pages are dashboard, calendar and
+// notifications). Webhooks and OAuth callbacks under these prefixes are
+// self-authenticating and exempt, like every gate below.
+const STAFF_ONLY_API_PREFIXES = [
+  '/api/whatsapp',
+  '/api/unified',
+  '/api/copilot',
+  '/api/email',
+  '/api/gmail',
+  '/api/ai',
+  '/api/translate',
 ]
 
 export async function middleware(request: NextRequest, event: NextFetchEvent) {
@@ -415,6 +433,17 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     return NextResponse.json({ error: 'No workspace access' }, { status: 403 })
   }
 
+  if (
+    isApiRoute &&
+    user &&
+    !isSelfAuthApi &&
+    STAFF_ONLY_API_PREFIXES.some(p => request.nextUrl.pathname.startsWith(p))
+  ) {
+    if (!roleAllows(await membershipRole(user.id), ['admin', 'manager', 'agent'])) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
+
   // Role-gate financial API MUTATIONS (the routes use the RLS-bypassing
   // service-role key, so this is the authorization layer for them).
   if (
@@ -437,9 +466,7 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
         user_email: user.email ?? null,
         method: request.method,
         path: request.nextUrl.pathname,
-        ip:
-          request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
-          request.headers.get('x-real-ip'),
+        ip: clientIp(request.headers),
         user_agent: request.headers.get('user-agent'),
       })
     )

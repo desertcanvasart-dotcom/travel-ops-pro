@@ -19,10 +19,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') // pending, accepted, expired, all
 
+    // Every column but the token: a listing has no use for it, and a token
+    // lying in every admin's browser is a standing way into the account.
+    // The share-by-hand link is returned once, when the invite is created.
     let query = supabase
       .from('user_invitations')
       .select(`
-        *,
+        id, email, role, invited_by, expires_at, accepted_at, created_at, org_id,
         inviter:user_profiles!invited_by(id, full_name, email)
       `)
       .eq('org_id', orgId)
