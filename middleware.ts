@@ -315,7 +315,10 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
   // '/order' is the hosted order form — the tour-up.jp inquiry form served by
   // us. The visitor is a customer with no account; the page only renders a
   // form, and its submit endpoint (/api/public/order-form) defends itself.
-  const publicRoutes = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/invite/accept', '/terms', '/privacy', '/contact', '/docs', '/about', '/integrations', '/share', '/portal', '/order', '/guide', '/staff']
+  // '/survey/' (trailing slash) is the guest questionnaire link: public by
+  // token, like /share and /portal. The trailing slash matters — a bare
+  // '/survey' prefix would also un-gate the staff '/surveys' results page.
+  const publicRoutes = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/invite/accept', '/terms', '/privacy', '/contact', '/docs', '/about', '/integrations', '/share', '/portal', '/order', '/guide', '/staff', '/survey/']
   const isPublicRoute = publicRoutes.some(route => 
     request.nextUrl.pathname === route || 
     (route !== '/' && request.nextUrl.pathname.startsWith(route))
@@ -371,6 +374,9 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     // honeypot, validates every field with hard caps, and answers the
     // customer with received-or-not only — never the operator's numbers.
     '/api/public/order-form',
+    // The guest survey load/submit. The visitor is a customer with no session;
+    // the route is token-gated, rate-limited, and sanitizes every field.
+    '/api/public/survey/',
   ]
   const isSelfAuthApi = apiSelfAuthPrefixes.some(p => request.nextUrl.pathname.startsWith(p))
 
