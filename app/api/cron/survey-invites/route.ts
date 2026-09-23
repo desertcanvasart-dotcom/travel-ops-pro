@@ -10,13 +10,13 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { randomBytes } from 'node:crypto'
 import { withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { sendEmailInternal } from '@/lib/email-send'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { businessIdentity } from '@/lib/org-identity'
 import { todayLocal } from '@/lib/today'
+import { ensureSurvey } from '@/lib/surveys/ensure-survey'
 
 const CRON_SECRET = process.env.CRON_SECRET
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://autoura.net').replace(/\/$/, '')
@@ -65,34 +65,23 @@ async function getHandler(request: NextRequest): Promise<Response> {
       skipped++
       continue
     }
-    // Skip if this itinerary already has a survey (also guarded by the DB index).
-    const { data: existing } = await db.from('guest_surveys').select('id').eq('itinerary_id', it.id).maybeSingle()
-    if (existing) {
+    // Get or create the survey (a sheet printed earlier may already have made
+    // it). Only a survey still 'pending' gets an invite — one already sent, or
+    // already submitted by the guest during the trip, is left alone.
+    let survey
+    try {
+      survey = await ensureSurvey(db, it)
+    } catch {
       skipped++
       continue
     }
-
-    const token = randomBytes(24).toString('base64url')
-    const trip_snapshot = {
-      trip_name: it.trip_name,
-      tour_code: it.itinerary_code,
-      start_date: it.start_date,
-      end_date: it.end_date,
-      client_name: it.client_name,
-    }
-    const { data: inserted, error: insErr } = await db
-      .from('guest_surveys')
-      .insert({ org_id: it.org_id, itinerary_id: it.id, token, language: 'ja', status: 'pending', trip_snapshot })
-      .select('id')
-      .maybeSingle()
-    if (insErr || !inserted) {
-      // Unique-index race (another run created it) — skip quietly.
+    if (survey.status !== 'pending') {
       skipped++
       continue
     }
     created++
 
-    const link = `${APP_URL}/survey/${token}`
+    const link = `${APP_URL}/survey/${survey.token}`
     const msg = invitation(brand.name, it.client_name ?? '', link)
     let sentEmail = false
     let sentWa = false
@@ -113,7 +102,7 @@ async function getHandler(request: NextRequest): Promise<Response> {
     await db
       .from('guest_surveys')
       .update({ status: 'sent', sent_email: sentEmail, sent_whatsapp: sentWa, sent_at: new Date().toISOString() })
-      .eq('id', inserted.id)
+      .eq('id', survey.id)
   }
 
   return NextResponse.json({ success: true, created, email, whatsapp, skipped })
