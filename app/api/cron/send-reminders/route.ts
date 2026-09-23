@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cronAuthorized } from '@/lib/cron/auth'
 import { businessIdentity } from '@/lib/org-identity'
-import { withJobRun } from '@/lib/support/job-runs'
+import { jobRunHeaders, withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
 import { sendEmailInternal } from '@/lib/email-send'
@@ -9,7 +10,6 @@ import { businessToday } from '@/lib/today'
 import { daysUntilDue, reminderStage, firstReminderDate, addDaysISO } from '@/lib/invoices/reminder-schedule'
 
 // Verify cron secret for security
-const CRON_SECRET = process.env.CRON_SECRET
 
 // Email sending function - reused from main route
 async function sendReminderEmail(params: {
@@ -96,9 +96,8 @@ function generateReminderEmail(invoice: any, reminderType: string): { subject: s
 }
 
 async function getHandler(request: NextRequest) {
-  // Verify authorization
-  const authHeader = request.headers.get('authorization')
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+  // Fails closed: see lib/cron/auth.
+  if (!cronAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -204,6 +203,9 @@ async function getHandler(request: NextRequest) {
       failed,
       skipped,
       timestamp: new Date().toISOString()
+    }, {
+      // Every send failing (a lapsed mailbox) is a failed run, not an "ok" one.
+      headers: jobRunHeaders(failed > 0 && sent === 0 ? 'failed' : 'ok', `${sent} sent, ${failed} failed, ${skipped} not yet due`),
     })
 
   } catch (error: any) {

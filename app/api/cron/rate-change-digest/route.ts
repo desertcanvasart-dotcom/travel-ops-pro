@@ -4,6 +4,7 @@
 // Reads rate_audit_log since the last run, groups by actor × table, and
 // tells each org's owners/admins/managers ONCE per group (the actor is not
 // told about their own edit). A bulk import of 79 entrance fees is one
+import { cronAuthorized } from '@/lib/cron/auth'
 // notification, not 79. The org chooses in-app / in-app + e-mail / off on
 // the Company Profile (organizations.rate_change_alerts).
 //
@@ -28,8 +29,8 @@ const supabase = createClient(
 )
 
 async function getHandler(request: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET
-  if (cronSecret && request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+  // Fails closed: see lib/cron/auth.
+  if (!cronAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

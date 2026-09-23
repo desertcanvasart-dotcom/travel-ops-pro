@@ -16,6 +16,7 @@ vi.mock('@/lib/email-send', () => ({
 
 import { GET } from '@/app/api/cron/data-invariants/route'
 import { sendEmailInternal } from '@/lib/email-send'
+import { internalCronToken } from '@/lib/cron/auth'
 
 const mockedEmail = vi.mocked(sendEmailInternal)
 
@@ -51,7 +52,8 @@ function seed(overrides: MockTables = {}) {
 }
 
 async function sweep() {
-  const res = await GET(makeRequest())
+  // Called the way the in-process scheduler calls it (cron routes fail closed).
+  const res = await GET(makeRequest({ authorization: `Bearer ${internalCronToken()}` }))
   return { status: res.status, json: await res.json() }
 }
 
@@ -63,6 +65,11 @@ beforeEach(() => {
 })
 
 describe('data-invariants — auth', () => {
+  it('401s with NO CRON_SECRET configured and no token — fails closed (was: open)', async () => {
+    const res = await GET(makeRequest())
+    expect(res.status).toBe(401)
+  })
+
   it('401s without the bearer token when CRON_SECRET is set', async () => {
     process.env.CRON_SECRET = 'sekrit'
     const res = await GET(makeRequest())

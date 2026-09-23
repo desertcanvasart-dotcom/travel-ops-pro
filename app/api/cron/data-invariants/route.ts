@@ -5,10 +5,7 @@
 // (silently, sometimes months late). This makes the invariants a nightly
 // alarm instead of an annual archaeology project.
 //
-// Bearer-auth like the other crons (CRON_SECRET; open when unset, matching
-// convention). Schedule it nightly on the deploy host, e.g.:
-//   15 3 * * * curl -s -H "Authorization: Bearer $CRON_SECRET" \
-//     https://autoura.net/api/cron/data-invariants
+// Auth: lib/cron/auth (fails closed). Scheduled in-process (lib/cron/scheduler.ts).
 //
 // Volumes are small (single-operator dataset), so checks run in TypeScript
 // over narrow column selections — no SQL RPC/migration required. If a table
@@ -20,8 +17,9 @@
 // ============================================
 
 import { guideLanguageKey } from '@/lib/guides/guide-language'
+import { cronAuthorized } from '@/lib/cron/auth'
 import { NextRequest, NextResponse } from 'next/server'
-import { withJobRun } from '@/lib/support/job-runs'
+import { jobRunHeaders, withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmailInternal } from '@/lib/email-send'
@@ -70,9 +68,8 @@ function findDuplicates(rows: any[], keyFn: (r: any) => string): Map<string, any
 }
 
 async function getHandler(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  // Fails closed: see lib/cron/auth.
+  if (!cronAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -216,7 +213,15 @@ async function getHandler(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok, violations, warnings, scanned, checkedAt: new Date().toISOString() })
+  // The run's result goes into job_runs too: violations make it a FAILED run
+  // (it used to be recorded as "ok" because the route answers 200).
+  const summary = ok
+    ? `clean; ${warnings.length} warning(s)`
+    : `${violations.length} violation(s): ${[...new Set(violations.map(v => v.check))].join(', ')}`
+  return NextResponse.json(
+    { ok, violations, warnings, scanned, checkedAt: new Date().toISOString() },
+    { headers: jobRunHeaders(ok ? 'ok' : 'failed', summary) }
+  )
 }
 
 // Recorded in job_runs so the support bundle can answer "has this job ever run

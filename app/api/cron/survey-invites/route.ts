@@ -10,7 +10,8 @@
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
-import { withJobRun } from '@/lib/support/job-runs'
+import { cronAuthorized } from '@/lib/cron/auth'
+import { jobRunHeaders, withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { sendEmailInternal } from '@/lib/email-send'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
@@ -18,7 +19,6 @@ import { businessIdentity } from '@/lib/org-identity'
 import { todayLocal } from '@/lib/today'
 import { ensureSurvey } from '@/lib/surveys/ensure-survey'
 
-const CRON_SECRET = process.env.CRON_SECRET
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://autoura.net').replace(/\/$/, '')
 /** How many days (today included) an unsent survey keeps being retried. */
 const RETRY_DAYS = 3
@@ -39,8 +39,8 @@ function invitation(brandName: string, guest: string, link: string): { subject: 
 }
 
 async function getHandler(request: NextRequest): Promise<Response> {
-  const authHeader = request.headers.get('authorization')
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+  // Fails closed: see lib/cron/auth.
+  if (!cronAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -126,7 +126,11 @@ async function getHandler(request: NextRequest): Promise<Response> {
     sent++
   }
 
-  return NextResponse.json({ success: true, sent, email, whatsapp, failed, skipped })
+  return NextResponse.json(
+    { success: true, sent, email, whatsapp, failed, skipped },
+    // Every invite failing (no channel working) is a failed run.
+    { headers: jobRunHeaders(failed > 0 && sent === 0 ? 'failed' : 'ok', `${sent} sent (${email} email, ${whatsapp} WhatsApp), ${failed} failed, ${skipped} skipped`) }
+  )
 }
 
 export const GET = withJobRun('survey-invites', () => createServerClient(), getHandler)

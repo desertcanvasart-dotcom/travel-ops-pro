@@ -15,10 +15,10 @@
 // booking's end date precisely so that moving a booking later cannot silently
 // extend how long a passport image is retained.
 //
-// Bearer-auth like the other crons (CRON_SECRET; open when unset, matching
-// convention). Registered in lib/cron/scheduler.ts.
+// Auth: lib/cron/auth (fails closed). Registered in lib/cron/scheduler.ts.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { cronAuthorized } from '@/lib/cron/auth'
 import { withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { createClient } from '@supabase/supabase-js'
@@ -31,9 +31,8 @@ export const dynamic = 'force-dynamic'
 const BATCH = 50
 
 async function getHandler(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  // Fails closed: see lib/cron/auth.
+  if (!cronAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

@@ -18,6 +18,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server'
+import { cronAuthorized } from '@/lib/cron/auth'
 import { withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
@@ -38,10 +39,8 @@ function getSupabaseAdmin(): any {
 }
 
 async function getHandler(request: NextRequest) {
-  // Verify cron secret — same Bearer pattern as the other cron routes.
-  const authHeader = request.headers.get('authorization')
-  const cronSecret = process.env.CRON_SECRET
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  // Fails closed: see lib/cron/auth.
+  if (!cronAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
