@@ -111,7 +111,9 @@ export default function DeparturesGridPage() {
   const params = useParams()
   const router = useRouter()
   const templateId = String(params.templateId)
-  const t = useTranslations()
+  // Tier labels live under b2bCalculator.tiers; the root namespace has no
+  // 'tiers', which rendered the raw key ("tiers.standard") on screen.
+  const t = useTranslations('b2bCalculator')
   const tierOptions = useTierOptions(key => t(`tiers.${key}`))
 
   const [loading, setLoading] = useState(true)

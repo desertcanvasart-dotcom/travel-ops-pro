@@ -20,6 +20,8 @@ import { ensureSurvey } from '@/lib/surveys/ensure-survey'
 
 const CRON_SECRET = process.env.CRON_SECRET
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://autoura.net').replace(/\/$/, '')
+/** How many days (today included) an unsent survey keeps being retried. */
+const RETRY_DAYS = 3
 
 /** The Japanese invitation. The office can reword this in the message-templates
  *  store later; kept here so the job always has a working default. */
@@ -46,18 +48,25 @@ async function getHandler(request: NextRequest): Promise<Response> {
   const today = todayLocal()
   const brand = businessIdentity()
 
-  // Itineraries that end today and represent a real trip (not a draft/cancelled).
+  // Itineraries that ended in the last RETRY_DAYS days (today included) and
+  // represent a real trip. Today's trips get their first invite; a survey from
+  // an earlier day that is still 'pending' is one whose send failed (or that had
+  // no contact yet), so it gets another try instead of being lost.
+  const since = new Date(`${today}T00:00:00Z`)
+  since.setUTCDate(since.getUTCDate() - (RETRY_DAYS - 1))
   const { data: itineraries, error } = await db
     .from('itineraries')
     .select('id, org_id, itinerary_code, client_name, client_email, client_phone, trip_name, start_date, end_date, status')
-    .eq('end_date', today)
+    .gte('end_date', since.toISOString().slice(0, 10))
+    .lte('end_date', today)
   if (error) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 
-  let created = 0
+  let sent = 0
   let email = 0
   let whatsapp = 0
+  let failed = 0
   let skipped = 0
 
   for (const it of itineraries ?? []) {
@@ -79,8 +88,6 @@ async function getHandler(request: NextRequest): Promise<Response> {
       skipped++
       continue
     }
-    created++
-
     const link = `${APP_URL}/survey/${survey.token}`
     const msg = invitation(brand.name, it.client_name ?? '', link)
     let sentEmail = false
@@ -91,21 +98,35 @@ async function getHandler(request: NextRequest): Promise<Response> {
       if (sentEmail) email++
     }
     if (it.client_phone) {
-      try {
-        await sendWhatsAppMessage({ to: it.client_phone, body: msg.text })
-        sentWa = true
-        whatsapp++
-      } catch {
-        /* leave sent_whatsapp false; the email (if any) still went */
-      }
+      // sendWhatsAppMessage catches its own errors and returns { success } —
+      // it never throws, so a try/catch here would count every failure as sent.
+      const r = await sendWhatsAppMessage({ to: it.client_phone, body: msg.text })
+      sentWa = r.success
+      if (sentWa) whatsapp++
     }
-    await db
+
+    // Nothing went out: leave the survey 'pending' so the next run retries it
+    // (within RETRY_DAYS) and the staff view shows it as not sent.
+    if (!sentEmail && !sentWa) {
+      failed++
+      continue
+    }
+
+    const { error: updErr } = await db
       .from('guest_surveys')
       .update({ status: 'sent', sent_email: sentEmail, sent_whatsapp: sentWa, sent_at: new Date().toISOString() })
       .eq('id', survey.id)
+    if (updErr) {
+      // The invite went out but we could not record it; report it rather than
+      // pretend. The next run would resend (still 'pending') — surface it.
+      console.error(`[survey-invites] sent but could not mark survey ${survey.id}: ${updErr.message}`)
+      failed++
+      continue
+    }
+    sent++
   }
 
-  return NextResponse.json({ success: true, created, email, whatsapp, skipped })
+  return NextResponse.json({ success: true, sent, email, whatsapp, failed, skipped })
 }
 
 export const GET = withJobRun('survey-invites', () => createServerClient(), getHandler)

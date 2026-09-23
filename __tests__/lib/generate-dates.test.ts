@@ -5,6 +5,7 @@ import {
   datesByWeekday,
   datesByInterval,
   normaliseDates,
+  addMonthsISO,
   MAX_GENERATED_DATES,
 } from '@/lib/departures/generate-dates'
 
@@ -59,5 +60,25 @@ describe('normaliseDates', () => {
 
   it('drops blanks and invalid entries', () => {
     expect(normaliseDates(['', 'not-a-date', '2027-02-01'])).toEqual(['2027-02-01'])
+  })
+})
+
+describe('addMonthsISO (default range end)', () => {
+  it('adds months without a day shift in Japan', () => {
+    // The old modal parsed local midnight and printed toISOString() (UTC), so
+    // in Asia/Tokyo the default end date came out one day early.
+    const saved = process.env.TZ
+    process.env.TZ = 'Asia/Tokyo'
+    try {
+      expect(addMonthsISO('2026-09-23', 3)).toBe('2026-12-23')
+      expect(addMonthsISO('2026-12-15', 1)).toBe('2027-01-15')
+    } finally {
+      process.env.TZ = saved
+    }
+  })
+
+  it('is the same in UTC and rolls day overflow forward like Date', () => {
+    expect(addMonthsISO('2026-09-23', 3)).toBe('2026-12-23')
+    expect(addMonthsISO('2027-01-31', 1)).toBe('2027-03-03')
   })
 })
