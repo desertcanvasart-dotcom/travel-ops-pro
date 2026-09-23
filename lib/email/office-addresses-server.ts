@@ -67,6 +67,45 @@ export async function applyOfficeRule(db: Db, rule: OfficeRule): Promise<{ messa
   return { messages: ours.length, conversations: touched.size }
 }
 
+// ── The scheduled repair: only when there can be something to repair ──────
+// applyOfficeRule scans stored mail with `from_address ILIKE '%…%'` — no index
+// can serve a leading wildcard, so it reads every inbound message — and the
+// gmail-sync cron ran it every 10 minutes. But mail synced AFTER the rule
+// exists is already stored the right way round (sync-mailbox and the live
+// poller judge direction by the same rule). What the repair reaches is mail
+// stored BEFORE the rule said so, which only happens when the rule changes:
+// an office address added in Settings (that route applies it at once) or a
+// mailbox connected. So the scheduled run repairs when the rule differs from
+// the last one applied in this process — and otherwise at most every
+// REPAIR_EVERY_MS, as a safety net for mail written by any other path.
+// In-process on purpose: a restart simply repairs once more.
+
+const REPAIR_EVERY_MS = 6 * 60 * 60 * 1000
+let lastRepair: { fingerprint: string; at: number } | null = null
+
+const fingerprintOf = (rule: OfficeRule) =>
+  JSON.stringify([[...rule.addresses].sort(), [...rule.domains].sort()])
+
+/** applyOfficeRule when the rule changed since the last repair here, or the
+ *  last repair is older than six hours. Null when it was not due. */
+export async function applyOfficeRuleWhenDue(
+  db: Db,
+  rule: OfficeRule,
+  now: number = Date.now(),
+): Promise<{ messages: number; conversations: number } | null> {
+  const fingerprint = fingerprintOf(rule)
+  if (lastRepair && lastRepair.fingerprint === fingerprint && now - lastRepair.at < REPAIR_EVERY_MS) return null
+  const changed = await applyOfficeRule(db, rule)
+  // Recorded only after it worked: a failed repair is tried again next run.
+  lastRepair = { fingerprint, at: now }
+  return changed
+}
+
+/** Tests only: forget the last repair. */
+export function resetOfficeRuleRepairSchedule(): void {
+  lastRepair = null
+}
+
 /** The first address in the conversation that is not the office's. */
 async function customerAddress(db: Db, conversationId: string, rule: OfficeRule): Promise<string | null> {
   const { data } = await db.from('email_messages')

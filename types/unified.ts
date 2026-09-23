@@ -342,6 +342,10 @@ export interface EmailSyncOptions {
   full_sync?: boolean // If true, sync last 30 days. If false, incremental only
   max_results?: number
   days_back?: number // For initial sync, default 30
+  /** Replay Gmail's history since the last run instead of listing, when a
+   *  usable history id is stored (lib/email/sync-mailbox). The scheduled sync
+   *  sets it; the manual Sync button keeps its date-window catch-up. */
+  use_history?: boolean
 }
 
 export interface EmailSyncResult {
@@ -353,6 +357,12 @@ export interface EmailSyncResult {
    *  to the operator personally (lib/email-scoping.ts). */
   threads_skipped?: number
   history_id: string | null
+  /** How the run found its messages: Gmail's history, or the date-window list. */
+  sync_mode?: 'history' | 'list'
+  /** Messages the run looked at that were already stored — not downloaded. */
+  messages_already_stored?: number
+  /** Messages downloaded from Gmail because they were not stored yet. */
+  messages_fetched?: number
   error?: string
 }
 
