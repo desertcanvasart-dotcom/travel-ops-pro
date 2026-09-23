@@ -107,11 +107,11 @@ describe('the job vocabulary', () => {
     expect([...JOB_NAMES].sort()).toEqual([...routes].sort())
   })
 
-  it('marks which are actually scheduled in-process', () => {
-    // The gap is the finding: a job nothing schedules should be visible as
-    // such, not quietly absent from the report.
-    expect(SCHEDULED_IN_PROCESS.length).toBeLessThan(JOB_NAMES.length)
-    for (const n of SCHEDULED_IN_PROCESS) expect(JOB_NAMES).toContain(n)
+  it('every job is scheduled in-process — none depends on an outside caller', () => {
+    // There used to be a gap (jobs run by pg_cron in the production database,
+    // unversioned). A job that nothing in this repository schedules must never
+    // come back silently: add it to lib/cron/scheduler.ts, or this fails.
+    expect([...SCHEDULED_IN_PROCESS].sort()).toEqual([...JOB_NAMES].sort())
   })
 
   it('the in-process list matches the scheduler registry', () => {

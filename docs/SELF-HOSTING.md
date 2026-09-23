@@ -146,25 +146,26 @@ nothing tells you:
 | `process-agent-memory` | 02:00 | The AI stops learning from past trips |
 | `data-invariants` | 03:15 | Data-integrity checks never run |
 | `purge-traveller-documents` | 03:45 | **Passport scans are kept forever, past their retention window** |
+| `gmail-sync` | every 10 min | The shared inbox stops picking up new mail |
+| `survey-invites` | 09:00 | Guests are never sent the post-trip survey |
+| `refresh-exchange-rates` | 01:05 | Conversions quietly fall back to stale stored rates |
+| `send-reminders` | 06:05 | Invoice payment reminders stop |
+| `task-reminders` | 06:10 | Nobody is reminded of tasks falling due |
 
 That last row is a compliance problem, not an inconvenience.
 
 Jobs claim a slot in `cron_locks` before running, so two app instances behind a
 load balancer will not double-run them. The `/api/cron/*` endpoints can also be
-triggered externally with `CRON_SECRET` if you would rather drive them yourself.
+triggered externally with `CRON_SECRET` if you would rather drive them yourself;
+with no `CRON_SECRET` set they refuse every external call (the in-process
+scheduler does not need it).
 
 **Every run is now recorded in `job_runs`**, so "has this job ever run here?"
-has an answer from inside the app. That matters because the table above is not
-the whole story: **eight cron routes exist and the in-process scheduler
-schedules four.** The other four — `refresh-exchange-rates`, `send-reminders`,
-`task-reminders`, `dispatch-scheduled-sends` — depend on a caller this
-repository does not configure. On the reference deployment
-`refresh-exchange-rates` demonstrably runs, but only because exchange rates
-happen to stamp a timestamp on the data they write; the other three leave no
-trace at all.
-
-On a fresh install, assume nothing outside this repository is calling anything.
-Check `job_runs` after the first day: a job with no rows has never run.
+has an answer from inside the app, including a one-line summary of what each
+run did and whether it found a problem. Every cron route is scheduled
+in-process (until 2026-09 three of them relied on a scheduler outside this
+repository). Check `job_runs` after the first day: a job with no rows has never
+run.
 
 ## Releases
 
