@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { RefreshCw, ChevronDown, ChevronUp, MapPin } from 'lucide-react'
@@ -36,7 +37,7 @@ export default function OpsBoard() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/trip-events/today')
+      const res = await fetch(`/api/trip-events/today?today=${todayLocal()}`)
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || 'Failed to load')
       setTrips(data.trips)

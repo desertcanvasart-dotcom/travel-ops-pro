@@ -564,20 +564,24 @@ export default function WhatsAppInboxPage() {
     }
   }, [])
 
-  // Fetch conversations
+  // Fetch conversations. Only the LATEST request may write the list: a slow
+  // poll that started before the search changed must not overwrite the result.
+  const conversationsRequestId = useRef(0)
   const fetchConversations = useCallback(async (showLoader = true) => {
+    const requestId = ++conversationsRequestId.current
     if (showLoader) setLoading(true)
     try {
-      let url = `/api/whatsapp/conversations?search=${searchQuery}`
+      // URLSearchParams encodes: a search with '&' or '#' used to break the URL.
+      const params = new URLSearchParams({ search: searchQuery })
       if (filterMode === 'mine' && currentAgentId) {
-        url += `&agent_id=${currentAgentId}`
+        params.set('agent_id', currentAgentId)
       } else if (filterMode === 'unassigned') {
-        url += '&unassigned_only=true'
+        params.set('unassigned_only', 'true')
       }
-      const res = await fetch(url)
+      const res = await fetch(`/api/whatsapp/conversations?${params}`)
       if (res.ok) {
         const data = await res.json()
-        setConversations(data.conversations || [])
+        if (requestId === conversationsRequestId.current) setConversations(data.conversations || [])
       }
     } catch (error) {
       console.error('Error fetching conversations:', error)
@@ -590,7 +594,7 @@ export default function WhatsAppInboxPage() {
   const fetchMessages = useCallback(async (conversationId: string, showLoader = true) => {
     if (showLoader) setMessagesLoading(true)
     try {
-      const res = await fetch(`/api/whatsapp/messages?conversation_id=${conversationId}`)
+      const res = await fetch(`/api/whatsapp/messages?conversation_id=${encodeURIComponent(conversationId)}`)
       if (res.ok) {
         const data = await res.json()
         setMessages(data.messages || [])
@@ -853,7 +857,10 @@ export default function WhatsAppInboxPage() {
       if (selectedConversation) fetchMessages(selectedConversation.id, false)
     }, 15000)
     return () => clearInterval(interval)
-  }, [selectedConversation?.id])
+    // The poll must use the CURRENT fetchers: with only the conversation id
+    // here it kept the first render's fetchConversations, so every 15 s the
+    // list reverted to the original search and filter.
+  }, [selectedConversation, fetchConversations, fetchMessages])
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString)

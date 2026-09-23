@@ -52,3 +52,28 @@ export function todayInTimeZone(timeZone: string, date: Date = new Date()): stri
 export function businessToday(date: Date = new Date()): string {
   return todayInTimeZone(process.env.BUSINESS_TIMEZONE || 'UTC', date)
 }
+
+/**
+ * "Today" for a request: the caller's own calendar date when the browser sends
+ * it (`?today=YYYY-MM-DD`), else the business timezone's. One server timezone
+ * cannot be right for everyone — the ops board is read in Cairo, the dashboard
+ * and tasks in Tokyo — and the server clock is UTC, so a UTC "today" showed
+ * yesterday's trips until 03:00 in Cairo and put tasks a day behind until 09:00
+ * in Japan. Only a date within a day of the server's is accepted: a real
+ * timezone is never further away than that.
+ */
+export function todayFromRequest(url: string | URL, date: Date = new Date()): string {
+  const sent = new URL(url).searchParams.get('today')
+  if (sent && /^\d{4}-\d{2}-\d{2}$/.test(sent)) {
+    const diffDays = Math.abs(Date.parse(`${sent}T12:00:00Z`) - date.getTime()) / 86_400_000
+    if (diffDays <= 1.5) return sent
+  }
+  return businessToday(date)
+}
+
+/** A YYYY-MM-DD date moved by whole days (calendar arithmetic, no time zone). */
+export function shiftDateISO(iso: string, days: number): string {
+  const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}

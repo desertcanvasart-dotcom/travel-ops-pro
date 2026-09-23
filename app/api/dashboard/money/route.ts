@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { todayFromRequest } from '@/lib/today'
 import { excludeDemoLinked, loadDemoItineraryIds, type DemoLookupClient } from '@/lib/demo-data'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
@@ -19,14 +20,15 @@ const add = (t: CurrencyTotals, currency: string | null | undefined, amount: num
   t[c] = (t[c] || 0) + Number(amount || 0)
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = createServerClient()
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
-    const today = new Date().toISOString().slice(0, 10)
-    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+    // The caller's calendar date, not the UTC server's (see todayFromRequest).
+    const today = todayFromRequest(request.url)
+    const monthStart = `${today.slice(0, 7)}-01`
 
     // Seeded fixtures carry real money on real rows (lib/demo-data.ts). The
     // portal demo alone is ¥1,099,897 across two invoices, one marked paid with

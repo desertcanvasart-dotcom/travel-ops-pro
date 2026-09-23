@@ -1,5 +1,6 @@
 'use client'
 
+import { todayLocal } from '@/lib/today'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
@@ -102,7 +103,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!canViewFinancials) return
     let alive = true
-    fetch('/api/dashboard/money')
+    fetch(`/api/dashboard/money?today=${todayLocal()}`)
       .then(res => (res.ok ? res.json() : null))
       .then(body => { if (alive && body?.data) setMoney(body.data) })
       .catch(() => {})
@@ -125,7 +126,7 @@ export default function DashboardPage() {
       // every number here is calculated, none are hardcoded strings.
       const [summaryRes, attentionRes] = await Promise.all([
         fetch('/api/dashboard/summary'),
-        fetch('/api/dashboard/attention'),
+        fetch(`/api/dashboard/attention?today=${todayLocal()}`),
       ])
       const summary = summaryRes.ok ? (await summaryRes.json()).data : null
       const attentionData = attentionRes.ok ? (await attentionRes.json()).data : null

@@ -173,21 +173,26 @@ export default function UserManagementPage() {
   }
 
   const resendInvitation = async (invitation: Invitation) => {
-    // Re-send by creating a new invitation with same details
+    // One server call: the new invitation is created first and the old one is
+    // retired only once it exists. Deleting first (unchecked) could leave the
+    // person with no invitation at all.
     try {
-      // First cancel the old one
-      await fetch(`/api/invitations?id=${invitation.id}`, { method: 'DELETE' })
-      
-      // Then create new
-      await fetch('/api/invitations', {
+      const response = await fetch('/api/invitations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: invitation.email,
           role: invitation.role,
-          invited_by: profile?.id
+          invited_by: profile?.id,
+          resend_of: invitation.id,
         })
       })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || data.success === false) {
+        alert(data.error || 'Failed to resend the invitation')
+      } else if (data.emailWarning) {
+        alert(data.emailWarning)
+      }
 
       fetchInvitations()
     } catch (error) {

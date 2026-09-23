@@ -64,6 +64,10 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { role = 'agent', invited_by } = body
+    // Resend = a fresh invitation that REPLACES this one. The old one is removed
+    // only after the new one exists: the page used to delete first and then
+    // POST, unchecked, so a failed POST left the person with no invitation.
+    const resendOf = typeof body.resend_of === 'string' ? body.resend_of : null
     // Normalised ONCE, and used for every check below and the insert. The
     // accept route trims and lowercases the stored address, so an invitation
     // for " Person@example.com " resolved to the same account as one for
@@ -139,7 +143,7 @@ export async function POST(request: NextRequest) {
       .gt('expires_at', new Date().toISOString())
       .single()
 
-    if (existingInvitation) {
+    if (existingInvitation && (existingInvitation as { id: string }).id !== resendOf) {
       return NextResponse.json(
         { success: false, error: 'Pending invitation already exists for this email' },
         { status: 400 }
@@ -169,6 +173,17 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) throw error
+
+    if (resendOf) {
+      // The replacement exists; now retire the invitation it replaces (still
+      // pending, and in this workspace only).
+      await supabase
+        .from('user_invitations')
+        .delete()
+        .eq('id', resendOf)
+        .eq('org_id', orgId)
+        .is('accepted_at', null)
+    }
 
     // Send invitation email
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://autoura.net'

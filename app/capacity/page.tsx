@@ -15,6 +15,7 @@
 // date, and clicking twelve days individually is how a page like this goes
 // unused.
 
+import { todayLocal } from '@/lib/today'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Loader2, Save, X, CalendarDays } from 'lucide-react'
 
@@ -286,7 +287,7 @@ export default function CapacityPage() {
               const row = rows[date]
               const status = (row?.status ?? 'available') as Status
               const isSelected = selected.includes(date)
-              const isToday = date === iso(new Date())
+              const isToday = date === todayLocal() // our date, not the UTC one iso() gives
               const slotsLeft = row ? Math.max(0, (row.max_groups ?? 0) - (row.booked_groups ?? 0)) : null
 
               return (

@@ -190,6 +190,8 @@ export default function TasksPage() {
       if (dueDateFilter) params.append('dueDate', dueDateFilter)
       if (departmentFilter) params.append('departmentId', departmentFilter)
       params.append('includeArchived', showArchived ? 'true' : 'false')
+      // Our calendar date: the server's clock is UTC (see todayFromRequest).
+      params.append('today', todayLocal())
 
       const response = await fetch(`/api/tasks?${params}`, { signal: controller.signal })
       if (response.ok) {

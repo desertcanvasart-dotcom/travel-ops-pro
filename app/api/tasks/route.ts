@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { shiftDateISO, todayFromRequest } from '@/lib/today'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 
@@ -52,18 +53,15 @@ export async function GET(request: NextRequest) {
 
     // Due date filters
     if (dueDate) {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const todayStr = today.toISOString().split('T')[0]
+      // The caller's calendar date, not the UTC server's (see todayFromRequest).
+      const todayStr = todayFromRequest(request.url)
 
       if (dueDate === 'overdue') {
         query = query.lt('due_date', todayStr).neq('status', 'done')
       } else if (dueDate === 'today') {
         query = query.eq('due_date', todayStr)
       } else if (dueDate === 'week') {
-        const weekEnd = new Date(today)
-        weekEnd.setDate(weekEnd.getDate() + 7)
-        const weekEndStr = weekEnd.toISOString().split('T')[0]
+        const weekEndStr = shiftDateISO(todayStr, 7)
         query = query.gte('due_date', todayStr).lte('due_date', weekEndStr)
       } else if (dueDate === 'upcoming') {
         query = query.gte('due_date', todayStr)
@@ -82,7 +80,7 @@ export async function GET(request: NextRequest) {
       .from('tasks')
       .select('id, status, priority, due_date, archived')
 
-    const today = new Date().toISOString().split('T')[0]
+    const today = todayFromRequest(request.url)
     const nonArchivedTasks = (allTasks || []).filter(t => !t.archived)
     const archivedCount = (allTasks || []).filter(t => t.archived).length
 
