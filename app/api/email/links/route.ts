@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, getCurrentUserId } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,18 +28,26 @@ function linkWithClientName<T extends { client?: ClientRow | null }>(link: T | n
   return { ...link, client: withDisplayName(link.client) }
 }
 
-// GET /api/email/links?userId=xxx&emailAddress=xxx
+// Links belong to the SESSION user and clients to the caller's workspace. Every
+// handler used to take userId from the query or body — so anyone signed in
+// could read, relink or delete a colleague's email links — and the client
+// lookups ran on this service-role client with no org filter.
+async function caller(): Promise<{ userId: string; orgId: string } | null> {
+  const [userId, orgId] = await Promise.all([getCurrentUserId(), getCurrentOrgId()])
+  return userId && orgId ? { userId, orgId } : null
+}
+const unauthorized = () => NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+// GET /api/email/links?emailAddress=xxx | ?messageId=xxx
 // Returns linked client for an email address
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
+    const me = await caller()
+    if (!me) return unauthorized()
+    const { userId, orgId } = me
     const emailAddress = searchParams.get('emailAddress')
     const messageId = searchParams.get('messageId')
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
-    }
 
     // If messageId provided, get link for specific email
     if (messageId) {
@@ -68,6 +77,7 @@ export async function GET(request: NextRequest) {
         // table is created_by; the lookup is by email, which is what the
         // caller actually asked for.
         .select('id, first_name, last_name, email, phone, status')
+        .eq('org_id', orgId)
         .ilike('email', emailAddress)
         .single()
 
@@ -91,13 +101,26 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, messageId, clientId, emailAddress, threadId } = body
+    const me = await caller()
+    if (!me) return unauthorized()
+    const { userId, orgId } = me
+    const { messageId, clientId, emailAddress, threadId } = body
 
-    if (!userId || !messageId || !clientId) {
+    if (!messageId || !clientId) {
       return NextResponse.json(
-        { error: 'Missing required fields: userId, messageId, clientId' },
+        { error: 'Missing required fields: messageId, clientId' },
         { status: 400 }
       )
+    }
+    // Only a client of THIS workspace can be linked.
+    const { data: ownClient } = await supabase
+      .from('clients')
+      .select('id')
+      .eq('id', clientId)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!ownClient) {
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 })
     }
 
     // Check if link already exists
@@ -158,9 +181,12 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, messageId, linkId } = body
+    const me = await caller()
+    if (!me) return unauthorized()
+    const { userId } = me
+    const { messageId, linkId } = body
 
-    if (!userId || (!messageId && !linkId)) {
+    if (!messageId && !linkId) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -195,9 +221,12 @@ export async function DELETE(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, emails } = body // emails: Array<{ messageId, threadId, fromEmail, toEmails }>
+    const me = await caller()
+    if (!me) return unauthorized()
+    const { userId, orgId } = me
+    const { emails } = body // emails: Array<{ messageId, threadId, fromEmail, toEmails }>
 
-    if (!userId || !emails || !Array.isArray(emails)) {
+    if (!emails || !Array.isArray(emails)) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -208,8 +237,10 @@ export async function PUT(request: NextRequest) {
     const { data: clients, error: clientError } = await supabase
       .from('clients')
       // Same missing column as above; the email->client map is built from
-      // every client the caller can see (RLS already scopes it).
+      // this workspace's clients (this is the service-role client — RLS does
+      // not scope it, the org filter does).
       .select('id, email')
+      .eq('org_id', orgId)
 
     if (clientError) throw clientError
 

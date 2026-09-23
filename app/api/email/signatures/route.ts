@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentUserId } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function GET(request: NextRequest) {
-  const userId = request.nextUrl.searchParams.get('userId')
-  
-  if (!userId) {
-    return NextResponse.json({ error: 'User ID required' }, { status: 400 })
-  }
+// Signatures belong to the SESSION user. Every handler used to take userId
+// from the query or body, so anyone signed in could read, add or rewrite a
+// colleague's signature — HTML appended to that colleague's outgoing mail
+// (a fake "pay here" link, say). A userId still sent by the client is ignored.
+const unauthorized = () => NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function GET(_request: NextRequest) {
+  const userId = await getCurrentUserId()
+  if (!userId) return unauthorized()
 
   const { data, error } = await supabase
     .from('email_signatures')
@@ -28,9 +33,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const { userId, name, content, isDefault } = await request.json()
+  const userId = await getCurrentUserId()
+  if (!userId) return unauthorized()
+  const { name, content, isDefault } = await request.json()
 
-  if (!userId || !name || !content) {
+  if (!name || !content) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
@@ -61,9 +68,11 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const { id, userId, name, content, isDefault } = await request.json()
+  const userId = await getCurrentUserId()
+  if (!userId) return unauthorized()
+  const { id, name, content, isDefault } = await request.json()
 
-  if (!id || !userId) {
+  if (!id) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
@@ -96,9 +105,11 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const { id, userId } = await request.json()
+  const userId = await getCurrentUserId()
+  if (!userId) return unauthorized()
+  const { id } = await request.json()
 
-  if (!id || !userId) {
+  if (!id) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
