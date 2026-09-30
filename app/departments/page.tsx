@@ -13,7 +13,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Building2, Loader2, Check, Plus, Trash2 } from 'lucide-react'
 import { SERVICE_TYPE_ROUTING } from '@/lib/departments'
-import { useConfirm } from '@/components/ConfirmDialog'
 
 interface Department {
   id: string
@@ -27,7 +26,6 @@ const KNOWN_TYPES = Object.keys(SERVICE_TYPE_ROUTING)
 
 export default function DepartmentsPage() {
   const t = useTranslations('departments')
-  const confirmDialog = useConfirm()
   const [departments, setDepartments] = useState<Department[]>([])
   // WHO is in each department, not just how many — the count alone sent the
   // operator to the Team Members page to answer "which two?", so the names
@@ -53,6 +51,12 @@ export default function DepartmentsPage() {
   // and routing matches whatever the table owns — the known chips are just
   // the types the app generates today.
   const [customDraft, setCustomDraft] = useState<Record<string, string>>({})
+  // The card whose delete panel is open, and where its members and tasks go
+  // ('none' = no department). Delete used to refuse anything with members or
+  // task history, so a department that had ever been used could never go.
+  const [deleting, setDeleting] = useState<{ id: string; moveTo: string } | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [info, setInfo] = useState<string | null>(null)
 
   /** Same shape the server's sanitizer produces, plus friendly space/dash→_. */
   const normalizeCustomType = (s: string) =>
@@ -124,16 +128,30 @@ export default function DepartmentsPage() {
     }
   }
 
-  const remove = async (dept: Department) => {
-    if (!(await confirmDialog(t('deleteConfirm', { name: dept.name })))) return
+  const remove = async (dept: Department, moveTo: string) => {
+    setDeleteBusy(true)
     setError(null)
+    setInfo(null)
     try {
-      const res = await fetch(`/api/departments/${dept.id}`, { method: 'DELETE' })
+      const res = await fetch(
+        `/api/departments/${dept.id}?reassign_to=${encodeURIComponent(moveTo)}`,
+        { method: 'DELETE' }
+      )
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setDepartments(prev => prev.filter(d => d.id !== dept.id))
+      setDeleting(null)
+      setInfo(t('deletedNotice', {
+        name: dept.name,
+        members: data.moved?.members ?? 0,
+        tasks: data.moved?.tasks ?? 0,
+      }))
+      // Reload rather than patch: the target now holds the moved members and
+      // may have taken over service types.
+      await load()
     } catch (err: any) {
       setError(err.message || 'Failed to delete')
+    } finally {
+      setDeleteBusy(false)
     }
   }
 
@@ -224,6 +242,9 @@ export default function DepartmentsPage() {
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>
+      )}
+      {info && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">{info}</div>
       )}
 
       <div className="space-y-4">
@@ -345,22 +366,66 @@ export default function DepartmentsPage() {
                   {savingId === dept.id ? <Loader2 className="w-4 h-4 animate-spin" /> : savedId === dept.id ? <Check className="w-4 h-4" /> : null}
                   {savedId === dept.id ? t('saved') : t('save')}
                 </button>
-                {/* Delete is always visible; a department with members shows
-                    WHY it cannot be deleted instead of hiding the option (the
-                    server re-checks members AND tasks regardless). */}
-                {(members[dept.id]?.length ?? 0) === 0 ? (
-                  <button
-                    onClick={() => remove(dept)}
-                    className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" /> {t('delete')}
-                  </button>
-                ) : (
-                  <span className="flex items-center gap-1 text-xs text-gray-400" title={t('deleteBlockedHint', { count: members[dept.id].length })}>
-                    <Trash2 className="w-3.5 h-3.5" /> {t('deleteBlocked', { count: members[dept.id].length })}
-                  </span>
-                )}
+                <button
+                  onClick={() => {
+                    setDeleting(deleting?.id === dept.id ? null : { id: dept.id, moveTo: 'none' })
+                    setInfo(null)
+                  }}
+                  className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> {t('delete')}
+                </button>
               </div>
+              {deleting?.id === dept.id && (() => {
+                const memberCount = members[dept.id]?.length ?? 0
+                // Server truth, not the unsaved edits: the delete moves what
+                // is stored, and only an active department's types route work.
+                const saved = savedTypes[dept.id]
+                const ownedTypes = saved?.is_active ? saved.service_types : []
+                const targets = departments.filter(d => d.id !== dept.id && savedTypes[d.id]?.is_active)
+                return (
+                  <div className="mt-4 p-4 rounded-lg border border-red-200 bg-red-50/50 space-y-3">
+                    <p className="text-sm font-medium text-gray-900">{t('deleteTitle', { name: dept.name })}</p>
+                    <label className="flex flex-wrap items-center gap-2 text-xs text-gray-700">
+                      {t('deleteMoveTo', { count: memberCount })}
+                      <select
+                        className="px-2 py-1 border border-gray-300 rounded text-xs bg-white"
+                        value={deleting.moveTo}
+                        onChange={e => setDeleting({ id: dept.id, moveTo: e.target.value })}
+                      >
+                        <option value="none">{t('deleteMoveNone')}</option>
+                        {targets.map(d => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    {ownedTypes.length > 0 && (
+                      <p className="text-xs text-amber-800">
+                        {deleting.moveTo === 'none'
+                          ? t('deleteTypesUnrouted', { types: ownedTypes.join(', ') })
+                          : t('deleteTypesMove', { types: ownedTypes.join(', ') })}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => remove(dept, deleting.moveTo)}
+                        disabled={deleteBusy}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium hover:bg-red-700 disabled:opacity-50"
+                      >
+                        {deleteBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                        {t('deleteConfirmButton')}
+                      </button>
+                      <button
+                        onClick={() => setDeleting(null)}
+                        disabled={deleteBusy}
+                        className="px-3 py-1.5 text-xs text-gray-600 hover:text-gray-900"
+                      >
+                        {t('cancel')}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           )
         })}

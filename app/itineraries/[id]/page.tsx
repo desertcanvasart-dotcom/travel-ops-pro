@@ -39,6 +39,21 @@ const ItineraryMap = dynamic(() => import('@/components/ItineraryMap'), {
   loading: () => <div className="h-12 bg-gray-100 rounded-xl animate-pulse" />,
 })
 
+/** The dry-run answer from /api/itineraries/[id]/generate-tasks. */
+interface TaskPreview {
+  tasks: Array<{
+    action: 'create' | 'update' | 'reopen' | 'unchanged'
+    service_type: string
+    label: string
+    service_count: number
+    department: { id: string; name: string }
+    due_date: string | null
+  }>
+  skipped: Array<{ service_type: string; label: string; service_count: number }>
+  orphaned: Array<{ service_type: string; label: string; reason: 'excluded' | 'removed' }>
+  other_tasks: number
+}
+
 interface Itinerary {
   id: string
   itinerary_code: string
@@ -215,9 +230,10 @@ export default function ViewItineraryPage() {
   const [generatingTasks, setGeneratingTasks] = useState(false)
   const [taskResult, setTaskResult] = useState<string | null>(null)
   const [showTaskDialog, setShowTaskDialog] = useState(false)
-  const [taskDepartments, setTaskDepartments] = useState<{ id: string; name: string; service_types: string[] }[]>([])
   const [taskTeamMembers, setTaskTeamMembers] = useState<{ id: string; name: string; department_id: string | null }[]>([])
   const [taskAssignments, setTaskAssignments] = useState<Record<string, string>>({})
+  // What generating would do, from a dry run — shown before anything is written.
+  const [taskPreview, setTaskPreview] = useState<TaskPreview | null>(null)
 
   // Cost Mode State
   const [costMode, setCostMode] = useState<'auto' | 'manual'>('auto')
@@ -372,59 +388,52 @@ export default function ViewItineraryPage() {
   }
 
   // Task generation handlers
+  //
+  // One task per service category, built from the services (no AI). The
+  // dialog opens on a dry run, so the operator sees which tasks will be
+  // created, updated or reopened — and which categories are skipped because
+  // no active department handles them — before anything is written.
   const handleOpenTaskDialog = async () => {
     if (!itinerary) return
-
-    // Fetch departments and team members
+    setGeneratingTasks(true)
     try {
-      const [deptRes, memberRes] = await Promise.all([
-        fetch('/api/departments'),
+      const [previewRes, memberRes] = await Promise.all([
+        fetch(`/api/itineraries/${itinerary.id}/generate-tasks?today=${todayLocal()}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dry_run: true }),
+        }),
         fetch('/api/team-members?active=true'),
       ])
-      const deptData = await deptRes.json()
-      const memberData = await memberRes.json()
-
-      const depts = (deptData.data || []).filter((d: any) => d.name !== 'Accounting')
-      const members = (memberData.data || []).map((m: any) => ({
+      const preview = await previewRes.json()
+      if (!preview.success) {
+        await dialog.alert(tCommon('error'), preview.error || t('failedToGenerateTasks'), 'warning')
+        return
+      }
+      const memberData = await memberRes.json().catch(() => null)
+      const members = (memberData?.data || []).map((m: any) => ({
         id: m.id,
         name: m.name,
         department_id: m.department_id,
       }))
 
-      setTaskDepartments(depts)
-      setTaskTeamMembers(members)
-
-      // Pre-select first member per department
+      // Pre-select the first member of each department that receives a task.
       const defaults: Record<string, string> = {}
-      for (const dept of depts) {
-        const deptMembers = members.filter((m: any) => m.department_id === dept.id)
-        if (deptMembers.length > 0) {
-          defaults[dept.id] = deptMembers[0].id
-        }
+      for (const task of preview.tasks as TaskPreview['tasks']) {
+        const first = members.find((m: any) => m.department_id === task.department.id)
+        if (first && !defaults[task.department.id]) defaults[task.department.id] = first.id
       }
+
+      setTaskTeamMembers(members)
       setTaskAssignments(defaults)
+      setTaskPreview(preview)
+      setShowTaskDialog(true)
     } catch (error) {
-      console.error('Error fetching departments/members:', error)
+      console.error('Error previewing tasks:', error)
+      await dialog.alert(tCommon('error'), t('failedToGenerateTasks'), 'warning')
+    } finally {
+      setGeneratingTasks(false)
     }
-
-    // Check for existing tasks
-    const { data: existingTasks } = await supabase
-      .from('tasks')
-      .select('id')
-      .eq('linked_type', 'itinerary')
-      .eq('linked_id', itinerary.id)
-
-    if (existingTasks && existingTasks.length > 0) {
-      const confirmed = await dialog.confirm({
-        title: t('tasksAlreadyExistTitle'),
-        message: t('tasksAlreadyExist', { count: existingTasks.length }),
-        confirmText: t('generateNewTasks'),
-        variant: 'warning',
-      })
-      if (!confirmed) return
-    }
-
-    setShowTaskDialog(true)
   }
 
   const handleGenerateTasks = async () => {
@@ -433,7 +442,7 @@ export default function ViewItineraryPage() {
     setGeneratingTasks(true)
 
     try {
-      const response = await fetch(`/api/itineraries/${itinerary.id}/generate-tasks`, {
+      const response = await fetch(`/api/itineraries/${itinerary.id}/generate-tasks?today=${todayLocal()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assignments: taskAssignments }),
@@ -441,7 +450,7 @@ export default function ViewItineraryPage() {
       const result = await response.json()
 
       if (result.success) {
-        setTaskResult(t('tasksGenerated', { count: result.count }))
+        setTaskResult(t('tasksSynced', result.counts))
         setTimeout(() => setTaskResult(null), 8000)
       } else {
         await dialog.alert(tCommon('error'), result.error || t('failedToGenerateTasks'), 'warning')
@@ -1746,7 +1755,7 @@ export default function ViewItineraryPage() {
         {/* Task Assignment Dialog */}
         {showTaskDialog && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="bg-white rounded-lg shadow-xl max-w-lg w-full">
               <div className="flex items-center justify-between p-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold text-gray-900">{t('assignTasks')}</h2>
                 <button
@@ -1757,32 +1766,85 @@ export default function ViewItineraryPage() {
                 </button>
               </div>
 
-              <div className="p-4 space-y-4">
-                <p className="text-sm text-gray-500">{t('assignTasksDescription')}</p>
-
-                {taskDepartments.map(dept => {
-                  const deptMembers = taskTeamMembers.filter(m => m.department_id === dept.id)
+              <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+                {taskPreview && (() => {
+                  const actionStyle: Record<string, string> = {
+                    create: 'bg-green-50 text-green-700 border-green-200',
+                    update: 'bg-blue-50 text-blue-700 border-blue-200',
+                    reopen: 'bg-amber-50 text-amber-800 border-amber-200',
+                    unchanged: 'bg-gray-50 text-gray-500 border-gray-200',
+                  }
+                  // Departments receiving a task, each listed once for assignment.
+                  const receiving = [...new Map(taskPreview.tasks.map(tk => [tk.department.id, tk.department])).values()]
                   return (
-                    <div key={dept.id} className="flex items-center gap-3">
-                      <label className="text-sm font-medium text-gray-700 w-28 shrink-0">
-                        {dept.name}
-                      </label>
-                      <select
-                        value={taskAssignments[dept.id] || ''}
-                        onChange={(e) => setTaskAssignments(prev => ({ ...prev, [dept.id]: e.target.value }))}
-                        className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                      >
-                        <option value="">{t('unassigned')}</option>
-                        {deptMembers.map(m => (
-                          <option key={m.id} value={m.id}>{m.name}</option>
-                        ))}
-                        {deptMembers.length === 0 && (
-                          <option disabled>{t('noMembersInDept')}</option>
+                    <>
+                      <div>
+                        <p className="text-xs font-medium text-gray-600 mb-2">{t('taskPreviewTitle')}</p>
+                        {taskPreview.tasks.length === 0 ? (
+                          <p className="text-sm text-gray-500">{t('taskPreviewEmpty')}</p>
+                        ) : (
+                          <ul className="space-y-1.5">
+                            {taskPreview.tasks.map(tk => (
+                              <li key={tk.service_type} className="flex items-center gap-2 text-sm">
+                                <span className={`px-2 py-0.5 rounded border text-[11px] font-medium shrink-0 ${actionStyle[tk.action]}`}>
+                                  {t(`taskAction_${tk.action}`)}
+                                </span>
+                                <span className="font-medium text-gray-900">{tk.label}</span>
+                                <span className="text-gray-400 text-xs">{t('taskServiceCount', { count: tk.service_count })}</span>
+                                <span className="ml-auto text-xs text-gray-500 shrink-0">{tk.department.name}</span>
+                              </li>
+                            ))}
+                          </ul>
                         )}
-                      </select>
-                    </div>
+                      </div>
+
+                      {taskPreview.skipped.length > 0 && (
+                        <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded p-2">
+                          {t('taskSkipped', {
+                            list: taskPreview.skipped.map(sk => `${sk.label} (${sk.service_count})`).join(', '),
+                          })}
+                        </p>
+                      )}
+                      {taskPreview.orphaned.length > 0 && (
+                        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+                          {t('taskOrphaned', { list: taskPreview.orphaned.map(o => o.label).join(', ') })}
+                        </p>
+                      )}
+                      {taskPreview.other_tasks > 0 && (
+                        <p className="text-xs text-gray-500">{t('taskOtherTasks', { count: taskPreview.other_tasks })}</p>
+                      )}
+
+                      {receiving.length > 0 && (
+                        <div className="space-y-3 pt-2 border-t border-gray-100">
+                          <p className="text-sm text-gray-500">{t('assignTasksDescription')}</p>
+                          {receiving.map(dept => {
+                            const deptMembers = taskTeamMembers.filter(m => m.department_id === dept.id)
+                            return (
+                              <div key={dept.id} className="flex items-center gap-3">
+                                <label className="text-sm font-medium text-gray-700 w-28 shrink-0">
+                                  {dept.name}
+                                </label>
+                                <select
+                                  value={taskAssignments[dept.id] || ''}
+                                  onChange={(e) => setTaskAssignments(prev => ({ ...prev, [dept.id]: e.target.value }))}
+                                  className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                                >
+                                  <option value="">{t('unassigned')}</option>
+                                  {deptMembers.map(m => (
+                                    <option key={m.id} value={m.id}>{m.name}</option>
+                                  ))}
+                                  {deptMembers.length === 0 && (
+                                    <option disabled>{t('noMembersInDept')}</option>
+                                  )}
+                                </select>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </>
                   )
-                })}
+                })()}
               </div>
 
               <div className="flex gap-3 p-4 border-t border-gray-200">
@@ -1796,7 +1858,8 @@ export default function ViewItineraryPage() {
                 <button
                   type="button"
                   onClick={handleGenerateTasks}
-                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2"
+                  disabled={!taskPreview?.tasks.some(tk => tk.action !== 'unchanged')}
+                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ClipboardList className="w-4 h-4" />
                   {t('generate')}

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireRole } from '@/lib/auth/current-org'
-import { findServiceTypeConflict, sanitizeServiceTypes } from '@/lib/department-admin'
+import { deleteDepartment, findServiceTypeConflict, sanitizeServiceTypes } from '@/lib/department-admin'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,9 +9,9 @@ const supabaseAdmin = createClient(
 )
 
 // PUT — rename, redescribe, re-route service types, activate/deactivate.
-// DELETE — only for a department NOTHING references: zero team members and
-// zero tasks, checked server-side. Anything with history retires
-// (is_active=false) instead, so past work keeps pointing at a real name.
+// DELETE — removes the department. One that members or tasks still point at
+// needs ?reassign_to=<department id | none>: they move there first, so past
+// work keeps pointing at a real department (see deleteDepartment).
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const forbidden = await requireRole(['admin'])
@@ -71,25 +71,34 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     if (forbidden) return forbidden
 
     const { id } = await params
+    // Where the department's members and tasks go: another department's id,
+    // or 'none' to leave them without one. Omitted, a referenced department
+    // is still refused — nothing is reassigned without the caller saying so.
+    const reassign = request.nextUrl.searchParams.get('reassign_to')
 
-    const [{ count: memberCount }, { count: taskCount }] = await Promise.all([
-      supabaseAdmin.from('team_members').select('id', { count: 'exact', head: true }).eq('department_id', id),
-      supabaseAdmin.from('tasks').select('id', { count: 'exact', head: true }).eq('department_id', id),
-    ])
-
-    if ((memberCount ?? 0) > 0 || (taskCount ?? 0) > 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Department is referenced (${memberCount ?? 0} members, ${taskCount ?? 0} tasks) — deactivate it instead`,
-        },
-        { status: 409 }
-      )
+    if (!reassign) {
+      const [{ count: memberCount }, { count: taskCount }] = await Promise.all([
+        supabaseAdmin.from('team_members').select('id', { count: 'exact', head: true }).eq('department_id', id),
+        supabaseAdmin.from('tasks').select('id', { count: 'exact', head: true }).eq('department_id', id),
+      ])
+      if ((memberCount ?? 0) > 0 || (taskCount ?? 0) > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Department is referenced (${memberCount ?? 0} members, ${taskCount ?? 0} tasks) — choose where they move (reassign_to)`,
+            members: memberCount ?? 0,
+            tasks: taskCount ?? 0,
+          },
+          { status: 409 }
+        )
+      }
     }
 
-    const { error } = await supabaseAdmin.from('departments').delete().eq('id', id)
-    if (error) throw error
-    return NextResponse.json({ success: true })
+    const result = await deleteDepartment(supabaseAdmin, id, reassign && reassign !== 'none' ? reassign : null)
+    if (!result.ok) {
+      return NextResponse.json({ success: false, error: result.error }, { status: result.status })
+    }
+    return NextResponse.json({ success: true, moved: result.moved, unrouted: result.unrouted })
   } catch (error) {
     console.error('Error in department DELETE:', error)
     return NextResponse.json({ success: false, error: 'Failed to delete department' }, { status: 500 })

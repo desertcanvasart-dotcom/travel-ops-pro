@@ -103,6 +103,94 @@ them, which is what public signup should do.
 membership. Run `npm run doctor` with `DATABASE_URL` set: "the install has an
 owner" is a check, and it names the fix.
 
+### Keeping it running (systemd)
+
+`npm start` stops when the terminal closes and does not come back after a crash
+or a reboot. On a Linux server, run it as a service instead:
+`deploy/autoura.service` starts the app on boot, restarts it within seconds if
+it dies, and logs to the journal. It assumes the checkout lives in
+`/opt/autoura/app` and runs as a user `autoura` whose home is `/opt/autoura` —
+edit the paths in the file if yours differ.
+
+```bash
+# once, as root
+useradd --system --home-dir /opt/autoura --create-home --shell /usr/sbin/nologin autoura
+# (clone into /opt/autoura/app, then as the autoura user: npm ci, fill .env.local, npm run build)
+cd /opt/autoura/app && npx puppeteer browsers install chrome --install-deps   # Chrome's system libraries, for PDFs
+cp /opt/autoura/app/deploy/autoura.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now autoura
+```
+
+Run `npm ci` **as the `autoura` user**: Puppeteer downloads the Chrome it
+renders PDFs with into that user's `~/.cache/puppeteer`, and the service only
+looks there.
+
+| | |
+|---|---|
+| Status | `systemctl status autoura` |
+| Logs (live) | `journalctl -u autoura -f` |
+| Restart after an upgrade | `systemctl restart autoura` |
+| Is it up? | `curl -s http://127.0.0.1:3000/api/version` |
+
+For an **external uptime monitor**, point it at `https://<your domain>/api/version`
+— public, no login, answers whenever the app is up. A monitor that can send a
+header can use `/api/health/deep` with `Authorization: Bearer $CRON_SECRET`
+instead, which also checks the database and the scheduler (see "When something
+looks wrong"). `/api/health/system` needs a signed-in admin and is **not** usable
+by a monitor.
+
+The service listens on `127.0.0.1:3000` only; Nginx (next section) serves the
+public ports and HTTPS. It sets
+`CRON_IN_PROCESS=true` itself, so the scheduled jobs run even if `.env.local`
+forgets it. To let a deploy account restart the app without full root, a
+sudoers line is enough:
+
+```
+deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart autoura, /usr/bin/systemctl status autoura
+```
+
+### Nginx and HTTPS
+
+`deploy/nginx-autoura.conf` puts Nginx in front of the service: HTTPS on 443
+with a Let's Encrypt certificate, port 80 redirected to it, and requests for any
+other hostname dropped. Replace `autoura.example.com` with your hostname (the
+host in `NEXT_PUBLIC_APP_URL`).
+
+```bash
+# as root
+apt install nginx certbot
+HOST=autoura.example.com        # your hostname
+
+# 1. The certificate. certbot briefly takes port 80 itself; the hooks stop and
+#    restart Nginx around it, and are remembered for every automatic renewal.
+certbot certonly --standalone -d "$HOST" \
+  --pre-hook "systemctl stop nginx" --post-hook "systemctl start nginx"
+
+# 2. The site. Ubuntu's default site must go: both claim to be the default
+#    server on port 80, and nginx -t refuses two.
+sed "s/autoura.example.com/$HOST/g" /opt/autoura/app/deploy/nginx-autoura.conf > /etc/nginx/sites-available/autoura
+ln -s /etc/nginx/sites-available/autoura /etc/nginx/sites-enabled/autoura
+rm -f /etc/nginx/sites-enabled/default
+nginx -t && systemctl reload nginx
+
+# 3. Prove renewal works now rather than in 90 days.
+certbot renew --dry-run
+```
+
+Things the file does on purpose:
+
+- **It overwrites `X-Real-IP`** with the connecting address. Rate limits and the
+  audit trail trust that header (`lib/client-ip.ts`), so it must never be
+  passed through from the client. If you later put Cloudflare or another proxy
+  in front of Nginx, switch to Nginx's `realip` module, or every visitor will
+  appear to be the proxy.
+- **Uploads up to 55 MB** — the AI file parser accepts 50 MB in total.
+- **Three-minute timeouts** — AI file parsing may take 120 seconds; Nginx's
+  default of 60 would cut it off with a 504.
+- **No security headers, gzip or caching rules.** The app already sends all of
+  them; repeating them in Nginx would send each header twice.
+
 ## Licence
 
 Every installation is licensed to one company. Autoura issues a `LICENSE_KEY`
@@ -204,7 +292,7 @@ git fetch --tags && git checkout <new tag>
 npm ci
 DATABASE_URL='postgresql://...' npm run migrate -- --dry-run   # read this
 DATABASE_URL='postgresql://...' npm run migrate
-npm run build && restart
+npm run build && sudo systemctl restart autoura   # or however you run it
 ```
 
 The `--dry-run` step lists exactly which files are about to run. It is your last
