@@ -15,9 +15,11 @@ interface SlotRowProps {
   passport: PassportType
   onChange: (value: SlotValue) => void
   hidden?: boolean
+  /** Offered on daily items (water): copy this selection to every day. */
+  onApplyToAllDays?: () => void
 }
 
-export default function SlotRow({ definition, value, options, allOptions, passport, onChange, hidden }: SlotRowProps) {
+export default function SlotRow({ definition, value, options, allOptions, passport, onChange, hidden, onApplyToAllDays }: SlotRowProps) {
   const { rateSymbol } = useCurrency()
   const [search, setSearch] = useState('')
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
@@ -65,8 +67,11 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
   }
 
   const selectSingle = (opt: RateOption | null) => {
+    // A choice made in the row replaces any leftover custom amount — the
+    // calculator prefers a custom amount, so one left behind would make the
+    // row's choice count for nothing.
     if (!opt) {
-      onChange({ ...value, selectedItems: [] })
+      onChange({ ...value, selectedItems: [], customAmount: 0 })
       return
     }
     const item: SelectedItem = {
@@ -92,7 +97,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
         periods: opt.singleSuppPeriods,
       })
     }
-    onChange({ ...value, selectedItems: items })
+    onChange({ ...value, selectedItems: items, customAmount: 0 })
   }
 
   // The agency's supplements on a hotel / cruise pick (Settings → Vocabulary,
@@ -152,6 +157,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
               : options
             return (
               <>
+              <div className="flex items-center gap-2">
               <select
                 value={selected?.rateId || ''}
                 onChange={(e) => {
@@ -172,6 +178,17 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
                   </option>
                 ))}
               </select>
+              {onApplyToAllDays && selected && (
+                <button
+                  type="button"
+                  onClick={onApplyToAllDays}
+                  className="shrink-0 text-[11px] text-blue-600 hover:text-blue-800 hover:underline whitespace-nowrap"
+                  title="Put this on every day of the trip"
+                >
+                  Apply to all days
+                </button>
+              )}
+              </div>
               {/* The property's supplements — the agency's own list, each a
                   per-person-per-night extra on top of the room. */}
               {availableSupplements.length > 0 && (
