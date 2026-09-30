@@ -35,8 +35,8 @@
 //
 // Service rows only exist for what pricing produced: no hotel rate, no hotel
 // row; the AI writer never writes a flight row at all. So the days are read
-// too (dayNeeds): a hotel night, cruise night, flight, guide, entrance tickets
-// or meal the day calls for, with no service row covering it, still becomes a
+// too (dayNeeds): a hotel night, cruise night, flight, guide or entrance
+// tickets the day calls for, with no service row covering it, still becomes a
 // checklist row — flagged "not priced yet" — instead of silently missing.
 
 import { resolveDepartment, type DepartmentRow } from '@/lib/departments'
@@ -274,9 +274,6 @@ export function serviceItems(category: string, services: ServiceForTasks[]): Pla
 /** Label suffix on rows read from the day; part of the row's key. */
 export const NOT_PRICED = '(not priced yet)'
 
-const BOARD_WITH_LUNCH = /full[\s-]*board|all[\s-]*inclusive|\b(fb|ai)\b/i
-const BOARD_WITH_DINNER = /half[\s-]*board|full[\s-]*board|all[\s-]*inclusive|\b(hb|fb|ai)\b/i
-
 /**
  * Needs the days state that no service row covers, as unpriced services.
  *
@@ -285,20 +282,23 @@ const BOARD_WITH_DINNER = /half[\s-]*board|full[\s-]*board|all[\s-]*inclusive|\b
  *     unless the day is a departure or says no hotel/overnight — the same rule
  *     as the itinerary editor's night count (hotel included + overnight city);
  *   - a flight where the day says it flies;
- *   - a guide, lunch or entrance tickets only on a sightseeing day, because
- *     guide_required and lunch_included DEFAULT TO TRUE on every day;
- *   - no lunch/dinner on a cruise day (meals are aboard) or where the night's
- *     hotel board already includes it.
+ *   - a guide only on a sightseeing day (guide_required DEFAULTS TO TRUE on
+ *     every day) — the pricing grid's own completeness rule;
+ *   - entrance tickets where the day lists attractions.
+ *
+ * MEALS ARE NOT READ. lunch_included defaults to true and the pricing grid
+ * never writes it, so every grid tour day "includes lunch"; and a converted
+ * quote drops meals the hotel or cruise board includes, so a missing meal
+ * row usually means "covered", not "forgotten". Meal rows come only from
+ * priced services.
  */
 export function dayNeeds(days: DayForTasks[], services: ServiceForTasks[]): ServiceForTasks[] {
   if (days.length === 0) return []
   const lastDay = Math.max(...days.map(d => d.day_number))
   const sorted = [...days].sort((a, b) => a.day_number - b.day_number)
 
-  const onDay = (n: number) => services.filter(s => s.day_number === n)
-  const has = (n: number, category: string) => onDay(n).some(s => taskCategoryOf(s) === category)
-  const boardText = (n: number) =>
-    onDay(n).filter(s => taskCategoryOf(s) === 'accommodation').map(s => `${s.service_name} ${s.notes ?? ''}`).join(' ')
+  const has = (n: number, category: string) =>
+    services.some(s => s.day_number === n && taskCategoryOf(s) === category)
 
   const needs: ServiceForTasks[] = []
   const need = (d: DayForTasks, type: string, name: string, city: string | null = d.city) =>
@@ -335,12 +335,6 @@ export function dayNeeds(days: DayForTasks[], services: ServiceForTasks[]): Serv
     const sites = (d.attractions ?? []).map(a => a.trim()).filter(Boolean)
     if (sites.length > 0 && !has(d.day_number, 'entrance')) need(d, 'entrance', `Entrance tickets: ${sites.join(', ')}`)
 
-    // Meals — never aboard a cruise, never what the hotel board includes.
-    if (!cruise && !has(d.day_number, 'meal')) {
-      const board = boardText(d.day_number)
-      if (sightseeing && d.lunch_included === true && !BOARD_WITH_LUNCH.test(board)) need(d, 'meal', 'Lunch')
-      if (d.dinner_included === true && !BOARD_WITH_DINNER.test(board)) need(d, 'meal', 'Dinner')
-    }
   })
   return needs
 }

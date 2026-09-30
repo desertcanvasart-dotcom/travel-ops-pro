@@ -279,13 +279,12 @@ const day = (n: number, extra: Partial<DayForTasks> = {}): DayForTasks => ({
 const leave = (n: number) => day(n, { day_type: 'departure', has_sightseeing: false })
 
 describe('what the days need that no service covers', () => {
-  it('a day with nothing priced gets its night, guide, lunch and sites; the last day gets no night', () => {
+  it('a day with nothing priced gets its night, guide and sites; the last day gets no night', () => {
     const needs = dayNeeds([day(1, { attractions: ['Giza Pyramids', 'Sphinx'] }), day(2, { day_type: 'departure', has_sightseeing: false })], [])
     expect(needs.map(n => [n.day_number, n.service_type, n.service_name])).toEqual([
       [1, 'accommodation', 'Hotel night (not priced yet)'],
       [1, 'guide', 'Guide (not priced yet)'],
       [1, 'entrance', 'Entrance tickets: Giza Pyramids, Sphinx (not priced yet)'],
-      [1, 'meal', 'Lunch (not priced yet)'],
     ])
     expect(needs.every(n => n.unpriced)).toBe(true)
   })
@@ -293,17 +292,17 @@ describe('what the days need that no service covers', () => {
   it('nothing is added where a priced service already covers the need', () => {
     const priced = [
       svc(1, 'accommodation', 'Mena House'), svc(1, 'guide', 'Egyptologist'),
-      svc(1, 'entrance', 'Giza Plateau'), svc(1, 'meal', 'Lunch at Khufu’s'),
+      svc(1, 'entrance', 'Giza Plateau'),
     ]
     expect(dayNeeds([day(1, { attractions: ['Giza Pyramids'] }), leave(2)], priced)).toEqual([])
   })
 
-  it('arrival, transfer and free days get no guide or lunch — those flags default to true on every day', () => {
+  it('arrival, transfer and free days get no guide — guide_required defaults to true on every day', () => {
     const needs = dayNeeds([day(1, { day_type: 'arrival', has_sightseeing: false }), leave(2)], [svc(1, 'accommodation', 'Mena House')])
     expect(needs).toEqual([])
   })
 
-  it('a cruise day needs a cruise night, and no meals (they are aboard)', () => {
+  it('a cruise day needs a cruise night', () => {
     const needs = dayNeeds([day(1, { is_cruise_day: true, city: 'Aswan', overnight_city: 'Aswan', dinner_included: true }), leave(2)], [])
     expect(needs.map(n => [n.service_type, n.service_name, n.city])).toEqual([
       ['cruise', 'Nile cruise night (not priced yet)', 'Aswan'],
@@ -314,16 +313,13 @@ describe('what the days need that no service covers', () => {
   it('a flight day with no flight service gets a flight row, routed from the previous city', () => {
     const needs = dayNeeds(
       [day(1, { city: 'Cairo' }), day(2, { city: 'Aswan', transport_type: 'flight', has_sightseeing: false }), leave(3)],
-      [svc(1, 'accommodation', 'Mena House'), svc(1, 'guide', 'G'), svc(1, 'meal', 'L'), svc(2, 'accommodation', 'Old Cataract')]
+      [svc(1, 'accommodation', 'Mena House'), svc(1, 'guide', 'G'), svc(2, 'accommodation', 'Old Cataract')]
     )
     expect(needs.map(n => n.service_name)).toEqual(['Flight Cairo → Aswan (not priced yet)'])
   })
 
-  it('lunch or dinner the hotel board already includes is not a gap', () => {
-    const needs = dayNeeds(
-      [day(1, { dinner_included: true, lunch_included: false }), leave(2)],
-      [svc(1, 'accommodation', 'Oberoi Sahl Hasheesh - Full Board'), svc(1, 'guide', 'G')]
-    )
+  it('meals are never read from the day — lunch defaults to true and the grid never sets it', () => {
+    const needs = dayNeeds([day(1, { lunch_included: true, dinner_included: true }), leave(2)], [svc(1, 'accommodation', 'H'), svc(1, 'guide', 'G')])
     expect(needs).toEqual([])
   })
 
