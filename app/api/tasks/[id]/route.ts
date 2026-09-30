@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { completeChecklist, type ChecklistItem } from '@/lib/tasks/itinerary-tasks'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -62,6 +63,30 @@ export async function PUT(
     // Status change with completed_at tracking
     if (body.status !== undefined) {
       updateData.status = body.status
+      // A generated task's status follows its checklist, so completing it
+      // ticks every row — otherwise it reads "Done, 0 of 2 booked" and the
+      // next tick or regenerate moves it back to To Do.
+      if (body.status === 'done') {
+        const { data: current, error: readError } = await supabaseAdmin
+          .from('tasks')
+          .select('checklist')
+          .eq('id', id)
+          .maybeSingle()
+        if (readError) throw readError
+        if (Array.isArray(current?.checklist)) {
+          const done = completeChecklist(current.checklist as ChecklistItem[], updateData.updated_at)
+          if (!done.ok) {
+            return NextResponse.json(
+              {
+                error: `${done.toCancel} booking${done.toCancel === 1 ? '' : 's'} left the itinerary and must be cancelled first — open the task and mark ${done.toCancel === 1 ? 'it' : 'them'} Cancelled.`,
+                to_cancel: done.toCancel,
+              },
+              { status: 409 }
+            )
+          }
+          updateData.checklist = done.items
+        }
+      }
       if (body.status === 'done') {
         updateData.completed_at = new Date().toISOString()
       } else {

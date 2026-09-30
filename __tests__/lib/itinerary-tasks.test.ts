@@ -6,7 +6,10 @@ import {
   applyChecklistChange,
   statusFromChecklist,
   checklistProgress,
+  completeChecklist,
+  dayNeeds,
   taskCategoryOf,
+  type DayForTasks,
   type ServiceForTasks,
   type ExistingGeneratedTask,
   type ChecklistItem,
@@ -262,5 +265,115 @@ describe('ticking rows', () => {
     expect(r[0].is_new).toBe(true)
     const after = applyChecklistChange(r, { key: r[0].key, booked: true }, 'x')!
     expect(after[0].is_new).toBeUndefined()
+  })
+})
+
+const day = (n: number, extra: Partial<DayForTasks> = {}): DayForTasks => ({
+  day_number: n, date: `2026-12-${String(9 + n).padStart(2, '0')}`, city: 'Cairo', overnight_city: 'Cairo',
+  day_type: 'tour', is_cruise_day: false, hotel_included: true, overnight: null, transport_type: null,
+  intercity: null, flight_from: null, guide_required: true, has_sightseeing: true,
+  lunch_included: true, dinner_included: false, attractions: [], ...extra,
+})
+
+/** A departure day: no night, no sightseeing. */
+const leave = (n: number) => day(n, { day_type: 'departure', has_sightseeing: false })
+
+describe('what the days need that no service covers', () => {
+  it('a day with nothing priced gets its night, guide, lunch and sites; the last day gets no night', () => {
+    const needs = dayNeeds([day(1, { attractions: ['Giza Pyramids', 'Sphinx'] }), day(2, { day_type: 'departure', has_sightseeing: false })], [])
+    expect(needs.map(n => [n.day_number, n.service_type, n.service_name])).toEqual([
+      [1, 'accommodation', 'Hotel night (not priced yet)'],
+      [1, 'guide', 'Guide (not priced yet)'],
+      [1, 'entrance', 'Entrance tickets: Giza Pyramids, Sphinx (not priced yet)'],
+      [1, 'meal', 'Lunch (not priced yet)'],
+    ])
+    expect(needs.every(n => n.unpriced)).toBe(true)
+  })
+
+  it('nothing is added where a priced service already covers the need', () => {
+    const priced = [
+      svc(1, 'accommodation', 'Mena House'), svc(1, 'guide', 'Egyptologist'),
+      svc(1, 'entrance', 'Giza Plateau'), svc(1, 'meal', 'Lunch at Khufu’s'),
+    ]
+    expect(dayNeeds([day(1, { attractions: ['Giza Pyramids'] }), leave(2)], priced)).toEqual([])
+  })
+
+  it('arrival, transfer and free days get no guide or lunch — those flags default to true on every day', () => {
+    const needs = dayNeeds([day(1, { day_type: 'arrival', has_sightseeing: false }), leave(2)], [svc(1, 'accommodation', 'Mena House')])
+    expect(needs).toEqual([])
+  })
+
+  it('a cruise day needs a cruise night, and no meals (they are aboard)', () => {
+    const needs = dayNeeds([day(1, { is_cruise_day: true, city: 'Aswan', overnight_city: 'Aswan', dinner_included: true }), leave(2)], [])
+    expect(needs.map(n => [n.service_type, n.service_name, n.city])).toEqual([
+      ['cruise', 'Nile cruise night (not priced yet)', 'Aswan'],
+      ['guide', 'Guide (not priced yet)', 'Aswan'],
+    ])
+  })
+
+  it('a flight day with no flight service gets a flight row, routed from the previous city', () => {
+    const needs = dayNeeds(
+      [day(1, { city: 'Cairo' }), day(2, { city: 'Aswan', transport_type: 'flight', has_sightseeing: false }), leave(3)],
+      [svc(1, 'accommodation', 'Mena House'), svc(1, 'guide', 'G'), svc(1, 'meal', 'L'), svc(2, 'accommodation', 'Old Cataract')]
+    )
+    expect(needs.map(n => n.service_name)).toEqual(['Flight Cairo → Aswan (not priced yet)'])
+  })
+
+  it('lunch or dinner the hotel board already includes is not a gap', () => {
+    const needs = dayNeeds(
+      [day(1, { dinner_included: true, lunch_included: false }), leave(2)],
+      [svc(1, 'accommodation', 'Oberoi Sahl Hasheesh - Full Board'), svc(1, 'guide', 'G')]
+    )
+    expect(needs).toEqual([])
+  })
+
+  it('unpriced nights in a row collapse into one checklist row, flagged unpriced, in the Accommodation task', () => {
+    const plan = planItineraryTasks({
+      itinerary, services: [], departments, today: '2026-10-01',
+      days: [day(1, { has_sightseeing: false }), day(2, { has_sightseeing: false }), day(3)],
+    })
+    const acc = plan.tasks.find(t => t.service_type === 'accommodation')!
+    expect(acc.items).toHaveLength(1)
+    expect(acc.items[0]).toMatchObject({ day_from: 1, day_to: 2, nights: 2, unpriced: true, name: 'Hotel night (not priced yet)' })
+    expect(acc.unpriced_count).toBe(1)
+  })
+
+  it('a booked "not priced" row keeps its tick when pricing later fills it in — it is not a cancellation', () => {
+    const days = [day(1, { has_sightseeing: false }), day(2)]
+    const first = planItineraryTasks({ itinerary, services: [], days, departments, today: '2026-10-01' })
+    const created = planSync(first, []).actions.find(a => a.task.service_type === 'accommodation')!
+    if (created.kind !== 'create') throw new Error('expected create')
+    let rows = applyChecklistChange(created.checklist, { key: created.checklist[0].key, booked: true }, 't1')!
+    rows = applyChecklistChange(rows, { key: rows[0].key, confirmation: 'MH-1' }, 't1')!
+    const existing: ExistingGeneratedTask[] = [{
+      id: 't', service_type: 'accommodation', status: 'done', archived: false, assigned_to: null,
+      generation_snapshot: created.task.snapshot, checklist: rows,
+    }]
+
+    const priced = planItineraryTasks({ itinerary, services: [svc(1, 'accommodation', 'Mena House')], days, departments, today: '2026-10-01' })
+    const after = planSync(priced, existing).actions[0]
+    if (after.kind !== 'update') throw new Error(`expected update, got ${after.kind}`)
+    expect(after.checklist).toHaveLength(1)
+    expect(after.checklist[0]).toMatchObject({ name: 'Mena House', booked: true, confirmation: 'MH-1' })
+    expect(after.checklist[0].is_new).toBeUndefined()
+    expect(after.status).toBe('done')
+  })
+})
+
+describe('Complete on a checklist task', () => {
+  it('ticks every row', () => {
+    const rows = mergeChecklist({ previous: [], planned: plan().tasks[0].items, isRegenerate: true })
+    const done = completeChecklist(rows, 'now')
+    if (!done.ok) throw new Error('expected ok')
+    expect(done.items.every(r => r.booked && r.booked_at === 'now' && !r.is_new)).toBe(true)
+    expect(statusFromChecklist(done.items, 'todo')).toBe('done')
+  })
+
+  it('is refused while a booking still has to be cancelled', () => {
+    const rows: ChecklistItem[] = [
+      ...mergeChecklist({ previous: [], planned: plan().tasks[0].items.slice(0, 1), isRegenerate: false }),
+      { ...plan().tasks[0].items[1], booked: true, confirmation: null, booked_at: 'x', removed: true },
+    ]
+    expect(completeChecklist(rows, 'now')).toEqual({ ok: false, toCancel: 1 })
   })
 })

@@ -49,7 +49,9 @@ export async function POST(
 
     const { data: days, error: daysError } = await supabaseAdmin
       .from('itinerary_days')
-      .select('id, day_number, date, city, overnight_city')
+      // Everything a day says it needs — hotel night, flight, guide, sites,
+      // meals — so a need with no priced service still becomes a row.
+      .select('id, day_number, date, city, overnight_city, day_type, is_cruise_day, hotel_included, overnight, transport_type, intercity, flight_from, guide_required, has_sightseeing, lunch_included, dinner_included, attractions')
       .eq('itinerary_id', itineraryId)
       .order('day_number')
 
@@ -78,14 +80,11 @@ export async function POST(
     if (servicesRes.error) {
       return NextResponse.json({ success: false, error: 'Failed to fetch services' }, { status: 500 })
     }
-    if (!servicesRes.data?.length) {
-      return NextResponse.json({ success: false, error: 'No services found for this itinerary. Generate pricing first.' }, { status: 400 })
-    }
     if (departmentsRes.error) throw departmentsRes.error
     if (existingRes.error) throw existingRes.error
 
     const dayById = new Map(days.map(d => [d.id, d]))
-    const services: ServiceForTasks[] = servicesRes.data.map(s => {
+    const services: ServiceForTasks[] = (servicesRes.data ?? []).map(s => {
       const day = dayById.get(s.itinerary_day_id)!
       return {
         day_number: day.day_number,
@@ -104,9 +103,14 @@ export async function POST(
     const plan = planItineraryTasks({
       itinerary,
       services,
+      days,
       departments: departmentsRes.data ?? [],
       today,
     })
+
+    if (plan.tasks.length === 0 && plan.skipped.length === 0) {
+      return NextResponse.json({ success: false, error: 'Nothing on this itinerary needs a task yet — add its services or day details first.' }, { status: 400 })
+    }
 
     const existing = existingRes.data ?? []
     const generated = existing.filter(t => t.service_type) as ExistingGeneratedTask[]
@@ -124,6 +128,7 @@ export async function POST(
           // Rows a regenerate adds unticked — what "Update" / "Reopen" means here.
           new_rows: a.kind === 'unchanged' ? 0 : a.checklist.filter(r => r.is_new && !r.booked).length,
           to_cancel: a.kind === 'unchanged' ? 0 : a.checklist.filter(r => r.removed).length,
+          unpriced_rows: a.task.unpriced_count,
           service_type: a.task.service_type,
           label: a.task.label,
           service_count: a.task.service_count,

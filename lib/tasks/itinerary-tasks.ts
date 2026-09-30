@@ -30,6 +30,14 @@
 // The task's status follows its rows, so a finished task that gains a new row
 // is reopened, and one whose rows are all still booked stays done.
 // Tasks created by hand (no service_type) are never touched.
+//
+// WHAT THE DAYS SAY, NOT ONLY WHAT WAS PRICED
+//
+// Service rows only exist for what pricing produced: no hotel rate, no hotel
+// row; the AI writer never writes a flight row at all. So the days are read
+// too (dayNeeds): a hotel night, cruise night, flight, guide, entrance tickets
+// or meal the day calls for, with no service row covering it, still becomes a
+// checklist row — flagged "not priced yet" — instead of silently missing.
 
 import { resolveDepartment, type DepartmentRow } from '@/lib/departments'
 import { normalizeServiceType } from '@/lib/service-types'
@@ -59,6 +67,30 @@ export interface ServiceForTasks {
   quantity: number | null
   supplier_name: string | null
   notes: string | null
+  /** A need read from the day (dayNeeds), with no priced service behind it. */
+  unpriced?: boolean
+}
+
+/** The day fields that say what a day needs (itinerary_days). */
+export interface DayForTasks {
+  day_number: number
+  date: string | null
+  city: string | null
+  overnight_city: string | null
+  day_type: string | null
+  is_cruise_day: boolean | null
+  hotel_included: boolean | null
+  overnight: boolean | null
+  transport_type: string | null
+  intercity: string | null
+  flight_from: string | null
+  leg_from?: string | null
+  leg_to?: string | null
+  guide_required: boolean | null
+  has_sightseeing: boolean | null
+  lunch_included: boolean | null
+  dinner_included: boolean | null
+  attractions: string[] | null
 }
 
 interface CategoryRule {
@@ -134,6 +166,8 @@ export interface PlannedItem {
   nights: number | null
   supplier: string | null
   notes: string | null
+  /** Read from the day, not priced — no service line behind it yet. */
+  unpriced?: boolean
 }
 
 /** A row as stored on the task: the generated fields plus its booking state. */
@@ -180,6 +214,7 @@ export function serviceItems(category: string, services: ServiceForTasks[]): Pla
     .map(x => x.s)
 
   const sameItem = (a: ServiceForTasks, b: ServiceForTasks) =>
+    !!a.unpriced === !!b.unpriced &&
     a.service_name === b.service_name &&
     (a.supplier_name ?? '') === (b.supplier_name ?? '') &&
     (a.quantity ?? 1) === (b.quantity ?? 1) &&
@@ -227,8 +262,87 @@ export function serviceItems(category: string, services: ServiceForTasks[]): Pla
       nights: isBed ? days : null,
       supplier: first.supplier_name || null,
       notes,
+      ...(first.unpriced ? { unpriced: true } : {}),
     }
   })
+}
+
+// ============================================
+// DAY NEEDS — what the days call for that no service row covers
+// ============================================
+
+/** Label suffix on rows read from the day; part of the row's key. */
+export const NOT_PRICED = '(not priced yet)'
+
+const BOARD_WITH_LUNCH = /full[\s-]*board|all[\s-]*inclusive|\b(fb|ai)\b/i
+const BOARD_WITH_DINNER = /half[\s-]*board|full[\s-]*board|all[\s-]*inclusive|\b(hb|fb|ai)\b/i
+
+/**
+ * Needs the days state that no service row covers, as unpriced services.
+ *
+ * Deliberately conservative — a false row is noise someone must tick:
+ *   - a night (hotel, or cruise on a cruise day) on every day but the last,
+ *     unless the day is a departure or says no hotel/overnight — the same rule
+ *     as the itinerary editor's night count (hotel included + overnight city);
+ *   - a flight where the day says it flies;
+ *   - a guide, lunch or entrance tickets only on a sightseeing day, because
+ *     guide_required and lunch_included DEFAULT TO TRUE on every day;
+ *   - no lunch/dinner on a cruise day (meals are aboard) or where the night's
+ *     hotel board already includes it.
+ */
+export function dayNeeds(days: DayForTasks[], services: ServiceForTasks[]): ServiceForTasks[] {
+  if (days.length === 0) return []
+  const lastDay = Math.max(...days.map(d => d.day_number))
+  const sorted = [...days].sort((a, b) => a.day_number - b.day_number)
+
+  const onDay = (n: number) => services.filter(s => s.day_number === n)
+  const has = (n: number, category: string) => onDay(n).some(s => taskCategoryOf(s) === category)
+  const boardText = (n: number) =>
+    onDay(n).filter(s => taskCategoryOf(s) === 'accommodation').map(s => `${s.service_name} ${s.notes ?? ''}`).join(' ')
+
+  const needs: ServiceForTasks[] = []
+  const need = (d: DayForTasks, type: string, name: string, city: string | null = d.city) =>
+    needs.push({
+      day_number: d.day_number, date: d.date, city, overnight_city: d.overnight_city,
+      service_type: type, service_name: `${name} ${NOT_PRICED}`, quantity: 1,
+      supplier_name: null, notes: null, unpriced: true,
+    })
+
+  sorted.forEach((d, i) => {
+    const prev = i > 0 ? sorted[i - 1] : null
+    const cruise = d.is_cruise_day === true || d.day_type === 'cruise'
+    const sightseeing = d.has_sightseeing ?? ((d.attractions?.length ?? 0) > 0 || d.day_type === 'tour')
+
+    // The night.
+    const sleepsHere = d.day_number < lastDay && d.day_type !== 'departure' &&
+      d.overnight !== false && (cruise || (d.hotel_included !== false && !!(d.overnight_city || d.city)))
+    if (sleepsHere && !has(d.day_number, 'accommodation')) {
+      if (cruise) need(d, 'cruise', 'Nile cruise night', d.overnight_city || d.city)
+      else need(d, 'accommodation', 'Hotel night', d.overnight_city || d.city)
+    }
+
+    // The flight.
+    // (A leg alone is not a flight — road legs have one too.)
+    const flies = d.transport_type === 'flight' || d.intercity === 'flight' || !!d.flight_from
+    if (flies && !has(d.day_number, 'flight')) {
+      const from = d.leg_from || d.flight_from || prev?.city || null
+      const to = d.leg_to || d.city || null
+      need(d, 'flight', from && to && from !== to ? `Flight ${from} → ${to}` : 'Flight')
+    }
+
+    // Sightseeing days: guide and entrance tickets.
+    if (sightseeing && d.guide_required === true && !has(d.day_number, 'guide')) need(d, 'guide', 'Guide')
+    const sites = (d.attractions ?? []).map(a => a.trim()).filter(Boolean)
+    if (sites.length > 0 && !has(d.day_number, 'entrance')) need(d, 'entrance', `Entrance tickets: ${sites.join(', ')}`)
+
+    // Meals — never aboard a cruise, never what the hotel board includes.
+    if (!cruise && !has(d.day_number, 'meal')) {
+      const board = boardText(d.day_number)
+      if (sightseeing && d.lunch_included === true && !BOARD_WITH_LUNCH.test(board)) need(d, 'meal', 'Lunch')
+      if (d.dinner_included === true && !BOARD_WITH_DINNER.test(board)) need(d, 'meal', 'Dinner')
+    }
+  })
+  return needs
 }
 
 export function taskDescription(snapshot: GenerationSnapshot): string {
@@ -250,6 +364,8 @@ export interface PlannedTask {
   priority: TaskPriority
   department: { id: string; name: string }
   service_count: number
+  /** Rows read from the days with no priced service behind them. */
+  unpriced_count: number
 }
 
 export interface SkippedCategory {
@@ -274,8 +390,11 @@ export function planItineraryTasks(input: {
   services: ServiceForTasks[]
   departments: DepartmentRow[]
   today: string
+  /** The itinerary's days; their needs no service covers become unpriced rows. */
+  days?: DayForTasks[]
 }): TaskPlan {
-  const { itinerary, services, departments, today } = input
+  const { itinerary, departments, today } = input
+  const services = [...input.services, ...dayNeeds(input.days ?? [], input.services)]
 
   const byCategory = new Map<string, ServiceForTasks[]>()
   for (const s of services) {
@@ -328,6 +447,7 @@ export function planItineraryTasks(input: {
       priority: rule.priority,
       department: { id: dept.id, name: dept.name },
       service_count: list.length,
+      unpriced_count: items.filter(i => i.unpriced).length,
     })
   }
 
@@ -378,6 +498,23 @@ export function mergeChecklist(input: {
     return { ...p, booked: false, confirmation: null, booked_at: null, ...(isRegenerate ? { is_new: true } : {}) }
   })
 
+  // A booked "not priced yet" row that pricing has since filled in is the SAME
+  // booking: its tick and confirmation move to the priced row that now covers
+  // that day, rather than flagging the booking for cancellation.
+  const claimed = new Set<number>()
+  for (const prev of previous) {
+    if (plannedKeys.has(prev.key) || !prev.booked || !prev.unpriced) continue
+    const index = rows.findIndex((r, i) =>
+      !claimed.has(i) && !before.has(r.key) && !r.unpriced &&
+      r.day_from <= prev.day_from && prev.day_from <= r.day_to)
+    if (index < 0) continue
+    claimed.add(index)
+    const { is_new: _drop, ...row } = rows[index]
+    void _drop
+    rows[index] = { ...row, booked: true, confirmation: prev.confirmation, booked_at: prev.booked_at }
+    plannedKeys.add(prev.key) // handled — not a cancellation
+  }
+
   // Booked rows that left the itinerary stay until the cancellation is done.
   for (const prev of previous) {
     if (plannedKeys.has(prev.key) || !prev.booked) continue
@@ -391,6 +528,8 @@ export interface ChecklistProgress {
   booked: number
   toCancel: number
   newRows: number
+  /** Unbooked rows read from the days, with no priced service yet. */
+  unpriced: number
   complete: boolean
 }
 
@@ -403,6 +542,7 @@ export function checklistProgress(items: ChecklistItem[]): ChecklistProgress {
     booked,
     toCancel,
     newRows: active.filter(i => i.is_new && !i.booked).length,
+    unpriced: active.filter(i => i.unpriced && !i.booked).length,
     complete: active.length > 0 && booked === active.length && toCancel === 0,
   }
 }
@@ -415,6 +555,29 @@ export function statusFromChecklist(items: ChecklistItem[], current: string | nu
   if (current === 'done') return started ? 'in_progress' : 'todo'
   if ((current ?? 'todo') === 'todo' && started) return 'in_progress'
   return current ?? 'todo'
+}
+
+/**
+ * "Complete" on a checklist task: tick every row, so the status and the rows
+ * can never disagree. (Setting only the status used to leave "Done, 0 of 2
+ * booked" — and the next tick or regenerate moved it back to To Do.) Refused
+ * while a booking still has to be cancelled: completing must not quietly
+ * treat a live booking as dealt with.
+ */
+export function completeChecklist(items: ChecklistItem[], now: string):
+  | { ok: true; items: ChecklistItem[] }
+  | { ok: false; toCancel: number } {
+  const toCancel = items.filter(i => i.removed).length
+  if (toCancel > 0) return { ok: false, toCancel }
+  return {
+    ok: true,
+    items: items.map(i => {
+      if (i.booked) return i
+      const { is_new: _drop, ...row } = i
+      void _drop
+      return { ...row, booked: true, booked_at: now }
+    }),
+  }
 }
 
 export type ChecklistChange =

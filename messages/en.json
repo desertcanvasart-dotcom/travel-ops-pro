@@ -1433,7 +1433,8 @@
       "taskOtherTasks": "{count, plural, one {# other task} other {# other tasks}} on this itinerary (created by hand or by the old generator) will not be touched.",
       "tasksSynced": "Tasks: {created} created, {updated} updated, {reopened} reopened, {unchanged} unchanged",
       "taskNewRows": "+{count} new",
-      "taskToCancel": "{count} to cancel"
+      "taskToCancel": "{count} to cancel",
+      "taskUnpricedRows": "{count} not priced yet"
     },
     "editAction": "Edit",
     "share": {
@@ -7404,7 +7405,11 @@
     "checklistCancelled": "Cancelled",
     "checklistComplete": "Every service is booked — this task is done.",
     "checklistGeneratedNote": "The rows come from the itinerary. To change them, edit the itinerary and press Tasks there again — ticks and confirmation numbers are kept.",
-    "checklistSaveFailed": "Could not save — try again"
+    "checklistSaveFailed": "Could not save — try again",
+    "checklistUnpriced": "Not priced",
+    "checklistUnpricedCount": "{count} not priced",
+    "checklistUnpricedHint": "The itinerary's day calls for this, but no priced service covers it yet. Book it here, or add it to the itinerary's pricing.",
+    "statusChangeFailed": "Could not change the status"
   },
   "resourceSummary": {
     "noResourcesAssigned": "No Resources Assigned",

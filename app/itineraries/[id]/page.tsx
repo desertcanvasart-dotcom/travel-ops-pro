@@ -45,6 +45,7 @@ interface TaskPreview {
     action: 'create' | 'update' | 'reopen' | 'unchanged'
     new_rows: number
     to_cancel: number
+    unpriced_rows: number
     service_type: string
     label: string
     service_count: number
@@ -1795,6 +1796,9 @@ export default function ViewItineraryPage() {
                                 <span className="text-gray-400 text-xs">{t('taskServiceCount', { count: tk.service_count })}</span>
                                 {tk.action !== 'create' && tk.new_rows > 0 && (
                                   <span className="text-xs text-blue-700">{t('taskNewRows', { count: tk.new_rows })}</span>
+                                )}
+                                {tk.unpriced_rows > 0 && (
+                                  <span className="text-xs text-amber-700">{t('taskUnpricedRows', { count: tk.unpriced_rows })}</span>
                                 )}
                                 {tk.to_cancel > 0 && (
                                   <span className="text-xs text-red-700">{t('taskToCancel', { count: tk.to_cancel })}</span>
