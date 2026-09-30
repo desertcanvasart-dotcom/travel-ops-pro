@@ -45,6 +45,9 @@ export function ChecklistSummary({ items }: { items: ChecklistItem[] }) {
         {p.newRows > 0 && (
           <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">{t('checklistNewCount', { count: p.newRows })}</span>
         )}
+        {p.unpriced > 0 && (
+          <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">{t('checklistUnpricedCount', { count: p.unpriced })}</span>
+        )}
         {p.toCancel > 0 && (
           <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200 whitespace-nowrap">{t('checklistToCancel', { count: p.toCancel })}</span>
         )}
@@ -208,6 +211,14 @@ export function TaskChecklist<T extends TaskWithChecklist>({
                           {row.quantity !== 1 && <span className="text-xs text-gray-500">×{row.quantity}</span>}
                           {row.nights != null && (
                             <span className="text-xs text-gray-500">· {t('checklistNights', { count: row.nights })}</span>
+                          )}
+                          {row.unpriced && (
+                            <span
+                              className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-50 text-amber-800 border border-amber-200"
+                              title={t('checklistUnpricedHint')}
+                            >
+                              {t('checklistUnpriced')}
+                            </span>
                           )}
                           {row.is_new && !row.booked && (
                             <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-50 text-blue-700 border border-blue-200">{t('checklistNew')}</span>

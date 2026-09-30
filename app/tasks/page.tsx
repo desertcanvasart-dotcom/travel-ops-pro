@@ -371,6 +371,10 @@ export default function TasksPage() {
       })
       if (response.ok) {
         fetchTasks()
+      } else {
+        // e.g. completing a checklist task that still has a booking to cancel.
+        const data = await response.json().catch(() => null)
+        await dialog.alert(t('statusChangeFailed'), data?.error || t('statusChangeFailed'), 'warning')
       }
     } catch (error) {
       console.error('Error updating task status:', error)

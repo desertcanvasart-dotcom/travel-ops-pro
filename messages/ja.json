@@ -1860,7 +1860,8 @@
       "taskOtherTasks": "この旅程のその他のタスク{count}件（手動作成または旧生成機能によるもの）は変更しません。",
       "tasksSynced": "タスク：新規{created}件、更新{updated}件、再開{reopened}件、変更なし{unchanged}件",
       "taskNewRows": "新規+{count}件",
-      "taskToCancel": "要キャンセル{count}件"
+      "taskToCancel": "要キャンセル{count}件",
+      "taskUnpricedRows": "未見積{count}件"
     },
     "editAction": "編集",
     "share": {
@@ -7989,7 +7990,11 @@
     "checklistCancelled": "キャンセル済み",
     "checklistComplete": "すべてのサービスが手配済みです — このタスクは完了です。",
     "checklistGeneratedNote": "各行は旅程から作成されます。変更するには旅程を編集し、旅程画面で再度「タスク」を押してください。チェックと予約番号は保持されます。",
-    "checklistSaveFailed": "保存できませんでした — もう一度お試しください"
+    "checklistSaveFailed": "保存できませんでした — もう一度お試しください",
+    "checklistUnpriced": "未見積",
+    "checklistUnpricedCount": "未見積{count}件",
+    "checklistUnpricedHint": "旅程の日程上は必要ですが、見積済みのサービスがまだありません。ここで手配するか、旅程の見積に追加してください。",
+    "statusChangeFailed": "ステータスを変更できませんでした"
   },
   "resourceSummary": {
     "noResourcesAssigned": "リソース未割り当て",
