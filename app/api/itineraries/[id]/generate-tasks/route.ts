@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import {
   planItineraryTasks,
   planSync,
-  changeNote,
   type ExistingGeneratedTask,
+  type TaskAction,
   type ServiceForTasks,
 } from '@/lib/tasks/itinerary-tasks'
 import { createNotifications } from '@/lib/notifications'
@@ -69,7 +69,7 @@ export async function POST(
         .eq('is_active', true),
       supabaseAdmin
         .from('tasks')
-        .select('id, service_type, status, archived, assigned_to, generation_snapshot')
+        .select('id, service_type, status, archived, assigned_to, generation_snapshot, checklist')
         .eq('linked_type', 'itinerary')
         .eq('linked_id', itineraryId)
         .order('created_at'),
@@ -121,6 +121,9 @@ export async function POST(
         dry_run: true,
         tasks: sync.actions.map(a => ({
           action: a.kind,
+          // Rows a regenerate adds unticked — what "Update" / "Reopen" means here.
+          new_rows: a.kind === 'unchanged' ? 0 : a.checklist.filter(r => r.is_new && !r.booked).length,
+          to_cancel: a.kind === 'unchanged' ? 0 : a.checklist.filter(r => r.removed).length,
           service_type: a.task.service_type,
           label: a.task.label,
           service_count: a.task.service_count,
@@ -139,17 +142,18 @@ export async function POST(
       current || assignments[deptId] || null
 
     // Creates — one insert.
-    const creates = sync.actions.filter(a => a.kind === 'create')
+    const creates = sync.actions.filter((a): a is Extract<TaskAction, { kind: 'create' }> => a.kind === 'create')
     let created: Array<{ id: string; assigned_to: string | null }> = []
     if (creates.length > 0) {
       const { data, error } = await supabaseAdmin
         .from('tasks')
-        .insert(creates.map(({ task }) => ({
+        .insert(creates.map(({ task, checklist }) => ({
           title: task.title,
           description: task.description,
           due_date: task.due_date,
           priority: task.priority,
           status: 'todo',
+          checklist,
           assigned_to: assigneeFor(task.department.id),
           department_id: task.department.id,
           linked_type: 'itinerary',
@@ -168,8 +172,10 @@ export async function POST(
       created = data ?? []
     }
 
-    // Updates and reopens — one row each; status and assignee are kept, and
-    // an empty assignee is filled from the dialog.
+    // Updates and reopens — one row each. The rows carry their ticks over
+    // (mergeChecklist) and the status follows them. What a person set on the
+    // task — priority, department, assignee — is theirs and stays; the due
+    // date moves only when the trip itself changed.
     const currentById = new Map(generated.map(t => [t.id, t]))
     const reopened: Array<{ id: string; assigned_to: string | null }> = []
     let updatedCount = 0
@@ -181,22 +187,17 @@ export async function POST(
       const fields: Record<string, unknown> = {
         title: task.title,
         description: task.description,
-        due_date: task.due_date,
-        priority: task.priority,
-        department_id: task.department.id,
-        assigned_to: assignedTo,
+        checklist: action.checklist,
         generation_snapshot: task.snapshot,
+        assigned_to: assignedTo,
+        status: action.status,
         updated_at: now,
       }
-      if (action.kind === 'reopen') {
-        Object.assign(fields, {
-          description: `${changeNote(action, today)}\n\n${task.description}`,
-          status: 'todo',
-          completed_at: null,
-          archived: false,
-          archived_at: null,
-        })
-      }
+      if (action.tripChanged) fields.due_date = task.due_date
+      if (action.status === 'done' && current.status !== 'done') fields.completed_at = now
+      if (action.status !== 'done') fields.completed_at = null
+      if (action.kind === 'reopen') Object.assign(fields, { archived: false, archived_at: null })
+
       const { error } = await supabaseAdmin.from('tasks').update(fields).eq('id', action.id)
       if (error) throw error
       if (action.kind === 'reopen') reopened.push({ id: action.id, assigned_to: assignedTo })

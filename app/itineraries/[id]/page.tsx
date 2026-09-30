@@ -43,6 +43,8 @@ const ItineraryMap = dynamic(() => import('@/components/ItineraryMap'), {
 interface TaskPreview {
   tasks: Array<{
     action: 'create' | 'update' | 'reopen' | 'unchanged'
+    new_rows: number
+    to_cancel: number
     service_type: string
     label: string
     service_count: number
@@ -1791,6 +1793,12 @@ export default function ViewItineraryPage() {
                                 </span>
                                 <span className="font-medium text-gray-900">{tk.label}</span>
                                 <span className="text-gray-400 text-xs">{t('taskServiceCount', { count: tk.service_count })}</span>
+                                {tk.action !== 'create' && tk.new_rows > 0 && (
+                                  <span className="text-xs text-blue-700">{t('taskNewRows', { count: tk.new_rows })}</span>
+                                )}
+                                {tk.to_cancel > 0 && (
+                                  <span className="text-xs text-red-700">{t('taskToCancel', { count: tk.to_cancel })}</span>
+                                )}
                                 <span className="ml-auto text-xs text-gray-500 shrink-0">{tk.department.name}</span>
                               </li>
                             ))}

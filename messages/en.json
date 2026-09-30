@@ -1431,7 +1431,9 @@
       "taskSkipped": "Not created — no active department handles: {list}",
       "taskOrphaned": "Earlier tasks no longer match anything to generate (left as they are): {list}",
       "taskOtherTasks": "{count, plural, one {# other task} other {# other tasks}} on this itinerary (created by hand or by the old generator) will not be touched.",
-      "tasksSynced": "Tasks: {created} created, {updated} updated, {reopened} reopened, {unchanged} unchanged"
+      "tasksSynced": "Tasks: {created} created, {updated} updated, {reopened} reopened, {unchanged} unchanged",
+      "taskNewRows": "+{count} new",
+      "taskToCancel": "{count} to cancel"
     },
     "editAction": "Edit",
     "share": {
@@ -7384,7 +7386,25 @@
     "notesPlaceholder": "Additional notes...",
     "department": "Department",
     "noDepartment": "No Department",
-    "allDepartments": "All Departments"
+    "allDepartments": "All Departments",
+    "checklistBookedOf": "{booked} of {total} booked",
+    "checklistNewCount": "{count} new",
+    "checklistToCancel": "{count} to cancel",
+    "checklistColBooked": "Booked",
+    "checklistColDay": "Day",
+    "checklistColDate": "Date",
+    "checklistColCity": "City",
+    "checklistColService": "Service",
+    "checklistColSupplier": "Supplier",
+    "checklistColConfirmation": "Confirmation",
+    "checklistConfirmationPlaceholder": "Conf. no.",
+    "checklistNights": "{count, plural, one {# night} other {# nights}}",
+    "checklistNew": "New",
+    "checklistRemoved": "No longer in the itinerary — cancel this booking",
+    "checklistCancelled": "Cancelled",
+    "checklistComplete": "Every service is booked — this task is done.",
+    "checklistGeneratedNote": "The rows come from the itinerary. To change them, edit the itinerary and press Tasks there again — ticks and confirmation numbers are kept.",
+    "checklistSaveFailed": "Could not save — try again"
   },
   "resourceSummary": {
     "noResourcesAssigned": "No Resources Assigned",

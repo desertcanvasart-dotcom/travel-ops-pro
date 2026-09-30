@@ -1858,7 +1858,9 @@
       "taskSkipped": "有効な担当部署がないため作成しません：{list}",
       "taskOrphaned": "以前のタスクのうち、生成対象に該当しなくなったもの（そのまま残します）：{list}",
       "taskOtherTasks": "この旅程のその他のタスク{count}件（手動作成または旧生成機能によるもの）は変更しません。",
-      "tasksSynced": "タスク：新規{created}件、更新{updated}件、再開{reopened}件、変更なし{unchanged}件"
+      "tasksSynced": "タスク：新規{created}件、更新{updated}件、再開{reopened}件、変更なし{unchanged}件",
+      "taskNewRows": "新規+{count}件",
+      "taskToCancel": "要キャンセル{count}件"
     },
     "editAction": "編集",
     "share": {
@@ -7969,7 +7971,25 @@
     "notesPlaceholder": "追加のメモ...",
     "department": "部門",
     "noDepartment": "部門なし",
-    "allDepartments": "すべての部門"
+    "allDepartments": "すべての部門",
+    "checklistBookedOf": "{total}件中{booked}件手配済み",
+    "checklistNewCount": "新規{count}件",
+    "checklistToCancel": "要キャンセル{count}件",
+    "checklistColBooked": "手配済み",
+    "checklistColDay": "日目",
+    "checklistColDate": "日付",
+    "checklistColCity": "都市",
+    "checklistColService": "サービス",
+    "checklistColSupplier": "仕入先",
+    "checklistColConfirmation": "予約番号",
+    "checklistConfirmationPlaceholder": "予約番号",
+    "checklistNights": "{count}泊",
+    "checklistNew": "新規",
+    "checklistRemoved": "旅程から削除されました — この予約をキャンセルしてください",
+    "checklistCancelled": "キャンセル済み",
+    "checklistComplete": "すべてのサービスが手配済みです — このタスクは完了です。",
+    "checklistGeneratedNote": "各行は旅程から作成されます。変更するには旅程を編集し、旅程画面で再度「タスク」を押してください。チェックと予約番号は保持されます。",
+    "checklistSaveFailed": "保存できませんでした — もう一度お試しください"
   },
   "resourceSummary": {
     "noResourcesAssigned": "リソース未割り当て",
