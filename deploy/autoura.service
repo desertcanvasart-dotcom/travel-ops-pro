@@ -1,0 +1,73 @@
+# /etc/systemd/system/autoura.service
+#
+# Runs Autoura (Next.js) as a service on a self-hosted Linux server: starts on
+# boot, restarts itself after a crash, and logs to the journal. Install steps
+# are in docs/SELF-HOSTING.md → "Keeping it running (systemd)".
+#
+# Assumed layout — change the paths below if yours differs:
+#   /opt/autoura/app         the checkout (npm ci + npm run build done here)
+#   /opt/autoura/app/.env.local   configuration, read by Next at start
+#   user "autoura"           owns /opt/autoura; its home IS /opt/autoura, so
+#                            Puppeteer's Chrome (downloaded by `npm ci` into
+#                            ~/.cache/puppeteer) sits inside the writable tree
+
+[Unit]
+Description=Autoura (Next.js)
+Documentation=file:///opt/autoura/app/docs/SELF-HOSTING.md
+After=network-online.target
+Wants=network-online.target
+# Crash-looping (e.g. a bad .env.local) gives up after 10 starts in 5 minutes
+# instead of spinning forever; `systemctl reset-failed autoura` re-arms it.
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=autoura
+Group=autoura
+WorkingDirectory=/opt/autoura/app
+
+# `node …/next start` rather than `npm start`: npm would sit in between and
+# swallow the stop signal, so a stop or restart would wait for the timeout.
+# Bound to localhost — only Nginx (reverse proxy, TLS) is exposed on 80/443.
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000
+
+Environment=NODE_ENV=production
+# The scheduled jobs (Gmail sync, rate digest, data checks, passport-scan
+# purge, surveys …) only run when this is set off Railway. Without it nothing
+# fails — the jobs just never happen. Set here as well as in .env.local so
+# this service file alone guarantees it.
+Environment=CRON_IN_PROCESS=true
+# The job schedules are written in UTC (lib/cron/scheduler.ts), as on Railway.
+Environment=TZ=UTC
+
+Restart=always
+RestartSec=5
+# Give in-flight requests and PDF renders time to finish on stop/restart.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Leave headroom for SSH and Nginx on a 4 GB machine: if the app (or a
+# Chromium PDF render it started) runs away, it is killed and restarted
+# rather than taking the whole server down.
+MemoryMax=3G
+
+# Hardening. The app can write only inside /opt/autoura (build cache,
+# Puppeteer's Chrome profile goes to the private /tmp).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/autoura
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=autoura
+
+[Install]
+WantedBy=multi-user.target
