@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
+import { cleanPricingBasisFields } from '@/lib/pricing/pricing-basis'
 import { createServerClient } from '@/lib/supabase-server'
 
 export async function GET() {
@@ -33,7 +34,12 @@ export async function POST(request: NextRequest) {
 
     // An unpicked supplier arrives from the form as '' and the column is a
     // uuid, which would fail the insert. Absent is null, not empty.
-    const payload = { ...body, supplier_id: body.supplier_id || null }
+    // Per group / per person / per unit (migration 20261104).
+    const basis = cleanPricingBasisFields(body)
+    if (!basis.ok) {
+      return NextResponse.json({ success: false, error: basis.error }, { status: 400 })
+    }
+    const payload = { ...body, supplier_id: body.supplier_id || null, ...basis.fields }
 
     // Check for existing rate with same natural key
     let existingQuery = supabase

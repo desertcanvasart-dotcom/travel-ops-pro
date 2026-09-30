@@ -12,6 +12,7 @@ import { currencySymbol } from '@/lib/currency-totals'
 import { gridCompleteness } from './lib/grid-completeness'
 import type { SeasonWindow } from '@/lib/pricing/season-uplift'
 import { mapServicesToSlots } from './lib/slot-mapping'
+import { attachPricingBasis } from './lib/attach-basis'
 import GridHeader from './components/GridHeader'
 import ClientInfoBar from './components/ClientInfoBar'
 import InputPanel from './components/InputPanel'
@@ -202,7 +203,12 @@ function PricingGridContent() {
       setLoading(true)
       const res = await fetch(`/api/pricing-grid/rates?tier=${tier}`)
       const data = await res.json()
-      if (data.success) setRates(data.data)
+      if (data.success) {
+        setRates(data.data)
+        // A draft restored from this browser: items take their rate's
+        // pricing basis (per group / person / unit — attach-basis.ts).
+        setDays(prev => attachPricingBasis(prev, data.data).days)
+      }
     } catch (err) {
       console.error('Failed to fetch rates:', err)
     } finally {
@@ -515,7 +521,7 @@ function PricingGridContent() {
             }
           }),
         }))
-        setDays(parsedDays)
+        setDays(rates ? attachPricingBasis(parsedDays, rates).days : parsedDays)
         // Show indicator if itinerary was AI-generated (not parsed from detailed text)
         if (data.generationMode === 'generated') {
           setSaveMessage('✨ AI-suggested itinerary based on inquiry — review and adjust as needed')
@@ -615,7 +621,7 @@ function PricingGridContent() {
             intercity: dayData.intercity ?? undefined,
           }
         })
-        setDays(loadedDays)
+        setDays(rates ? attachPricingBasis(loadedDays, rates).days : loadedDays)
         setSaveMessage(`Loaded ${itn.itinerary_code}`)
       }
     } catch (err) {

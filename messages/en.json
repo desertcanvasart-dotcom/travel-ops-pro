@@ -3405,7 +3405,15 @@
       "rateCurrencyHint": "The currency this supplier's contract is written in. Leave on the default unless the contract says otherwise — pricing converts automatically.",
       "duplicate": "Duplicate",
       "guideFare": "Guide fare (throughout guide)",
-      "guideFareHint": "Blank = the guide pays the customer rate; 0 = rides free."
+      "guideFareHint": "Blank = the guide pays the customer rate; 0 = rides free.",
+      "pricingFlat": "Per group",
+      "pricingPerPerson": "Per person",
+      "pricingPerUnit": "Per unit",
+      "pricingPerUnitOf": "Per unit of {count}",
+      "pricingFlatHint": "One price for the whole group, whatever its size",
+      "pricingPerPersonHint": "The rate × the number of travellers",
+      "pricingPerUnitHint": "The rate × the units the group needs (e.g. per room of 2)",
+      "peoplePerUnit": "people per unit"
     },
     "meals": {
       "title": "Meal Rates",

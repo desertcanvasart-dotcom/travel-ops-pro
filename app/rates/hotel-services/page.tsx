@@ -7,6 +7,8 @@ import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import PricingBasisField, { usePricingBasisLabel } from '@/components/rates/PricingBasisField'
+import { toPricingBasis, type PricingBasis } from '@/lib/pricing/pricing-basis'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
 import { Copy, ConciergeBell, Plus, Search, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
@@ -44,6 +46,9 @@ interface HotelStaffRate {
   description: string | null
   notes: string | null
   is_active: boolean
+  /** Per group (flat) / per person / per unit — migration 20261104. */
+  pricing_type?: string | null
+  max_capacity?: number | null
 }
 
 interface Toast { 
@@ -183,6 +188,7 @@ export default function HotelServicesPage() {
   // The picker lists the agency's vocabulary; the built-in list stands in until it loads.
   const serviceOptions = useVocabOptions('hotel_service_type', SERVICE_TYPES.map(s => ({ value: s, label: t(`serviceTypes.${s}`) })))
   const tCommon = useTranslations('rates.common')
+  const pricingLabel = usePricingBasisLabel()
   const dialog = useConfirmDialog()
   const { formatWithConversion, rateCurrency } = useCurrency()
   const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
@@ -212,7 +218,9 @@ export default function HotelServicesPage() {
     description: '',
     notes: '',
     supplier_id: '',
-    is_active: true
+    is_active: true,
+    pricing_type: 'flat' as PricingBasis,
+    max_capacity: '' as number | ''
   })
 
   const showToast = (type: 'success' | 'error', message: string) => {
@@ -273,7 +281,9 @@ export default function HotelServicesPage() {
       description: '',
       notes: '',
       supplier_id: '',
-      is_active: true
+      is_active: true,
+      pricing_type: 'flat' as PricingBasis,
+      max_capacity: '' as number | ''
     })
     setShowModal(true)
   }
@@ -302,7 +312,9 @@ export default function HotelServicesPage() {
       description: rate.description || '',
       notes: rate.notes || '',
       supplier_id: rate.supplier_id || '',
-      is_active: rate.is_active
+      is_active: rate.is_active,
+      pricing_type: toPricingBasis(rate.pricing_type) ?? 'flat',
+      max_capacity: rate.max_capacity ?? ''
     })
     setShowModal(true)
   }
@@ -599,6 +611,9 @@ export default function HotelServicesPage() {
                       ) : (
                         <>
                           {formatRateInRowCurrency(rate.rate_eur, rate, formatRate)}
+                          <span className="block text-[11px] font-normal text-gray-500">
+                            {pricingLabel(toPricingBasis(rate.pricing_type), rate.max_capacity)}
+                          </span>
                           {rate.rate_currency && (
                             <span className="ml-1 px-1 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold align-middle">{rate.rate_currency}</span>
                           )}
@@ -749,6 +764,12 @@ export default function HotelServicesPage() {
                 value={formData.rate_currency}
                 onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-600"
+              />
+              <PricingBasisField
+                basis={formData.pricing_type}
+                capacity={formData.max_capacity}
+                onChange={next => setFormData(prev => ({ ...prev, ...next }))}
+                focusRing="focus:ring-rose-600"
               />
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.description')}</label>

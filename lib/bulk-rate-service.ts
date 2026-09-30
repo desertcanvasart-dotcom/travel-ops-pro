@@ -450,6 +450,9 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('service_type', 'Service Type', 'text', true),
       col('direction', 'Direction', 'text', true),
       col('rate_eur', 'Rate (EU passport)', 'number', true),
+      // flat (per group, the default) / per_person / per_unit — migration 20261104.
+      col('pricing_type', 'Pricing Type', 'text', false),
+      col('max_capacity', 'People per Unit', 'number', false),
       col('description', 'Description', 'text', false),
       rateCurrency(),
       supplierId(),
@@ -466,6 +469,9 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('service_type', 'Service Type', 'text', true),
       col('hotel_category', 'Hotel Category', 'text', true),
       col('rate_eur', 'Rate (EU passport)', 'number', true),
+      // flat (per group, the default) / per_person / per_unit — migration 20261104.
+      col('pricing_type', 'Pricing Type', 'text', false),
+      col('max_capacity', 'People per Unit', 'number', false),
       col('description', 'Description', 'text', false),
       rateCurrency(),
       supplierId(),
@@ -695,6 +701,9 @@ function parseCell(value: string | undefined | null, colDef: ColumnDef): { parse
  * Validate parsed CSV data against a table config.
  * Returns an ImportPreview with validation results.
  */
+/** Rate tables whose pricing_type is one of flat / per_person / per_unit. */
+const STAFF_RATE_TABLES = new Set(['airport_staff_rates', 'hotel_staff_rates'])
+
 export function validateImportData(
   rows: Record<string, string>[],
   config: RateTableConfig
@@ -725,6 +734,13 @@ export function validateImportData(
         errors.push({ row: rowNum, column: colDef.name, message: error })
         rowValid = false
       } else if (parsed !== null) {
+        // Airport / hotel assistance: the pricing basis (migration 20261104).
+        if (colDef.name === 'pricing_type' && STAFF_RATE_TABLES.has(config.tableName)
+          && !['flat', 'per_person', 'per_unit'].includes(String(parsed))) {
+          errors.push({ row: rowNum, column: colDef.name, message: `"${parsed}" is not a pricing type — use flat (per group), per_person or per_unit (blank = flat)` })
+          rowValid = false
+          continue
+        }
         parsedRow[colDef.name] = parsed
       }
     }

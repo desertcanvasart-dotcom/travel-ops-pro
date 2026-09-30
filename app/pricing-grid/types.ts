@@ -1,3 +1,4 @@
+import type { PricingBasis } from '@/lib/pricing/pricing-basis'
 import type { OptionPeriod } from '@/lib/rates/date-window'
 import type { PackageType } from '@/lib/package-types'
 
@@ -170,6 +171,12 @@ export interface SelectedItem {
   /** Cruises: the weekdays this sailing departs on. A trip that boards on
    *  another day is a quote that cannot be booked. */
   sailingDays?: string[]
+  /** How the rate applies to the group — per group (flat), per person or per
+   *  unit (lib/pricing/pricing-basis.ts). Set on airport / hotel services and
+   *  activities (boat rides, experiences); absent = the slot's own bucket. */
+  pricingBasis?: PricingBasis
+  /** per_unit only: people per unit. */
+  unitCapacity?: number | null
 }
 
 export interface SlotValue {
@@ -244,6 +251,10 @@ export interface RateOption {
   singleSuppPeriods?: OptionPeriod[]
   /** Cruises: the weekdays this sailing departs on. Empty = no fixed day. */
   sailingDays?: string[]
+  /** The rate's pricing basis and, for per_unit, people per unit
+   *  (airport / hotel services, activities). */
+  pricing_basis?: PricingBasis
+  unit_capacity?: number | null
 }
 
 export interface GridSupplement {

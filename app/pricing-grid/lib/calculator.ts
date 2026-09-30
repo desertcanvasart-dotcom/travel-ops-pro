@@ -3,6 +3,8 @@
 // No conditionals about day type. Just math.
 // ============================================
 
+import { BASIS_SLOTS, itemCost, itemBasis } from './item-basis'
+import { unitsFor } from '@/lib/pricing/pricing-basis'
 import type {
   GridDay, GridConfig, SlotValue, SelectedItem, RateOption,
   DayCalc, GridTotals, PaxRangeResult,
@@ -85,6 +87,17 @@ export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
         // his plate is one more portion at the same rates.
         groupTotal += cost
       }
+    }
+
+    // Airport / hotel services and activities: each item by its own rate's
+    // basis — per group, per person or per unit (item-basis.ts).
+    if (BASIS_SLOTS.has(slot.slotId) && !(slot.customAmount > 0)) {
+      for (const item of slot.selectedItems) {
+        const part = itemCost(slot.slotId, item, getRate(item, passport, on), pax)
+        groupTotal += part.group
+        perPersonTotal += part.perPerson
+      }
+      continue
     }
 
     if (GROUP_SLOT_IDS.has(slot.slotId)) {
@@ -293,6 +306,19 @@ function aggregateNonTransport(days: GridDay[], config: GridConfig) {
         }
       }
 
+      // Items priced by their own basis: per group → fixed, per person →
+      // per person; per unit depends on the group size, so unitCostsForPax
+      // adds it at each count.
+      if (BASIS_SLOTS.has(slot.slotId) && !(slot.customAmount > 0)) {
+        for (const item of slot.selectedItems) {
+          const basis = itemBasis(slot.slotId, item)
+          const rate = getRate(item, passport, on)
+          if (basis === 'per_person') perPerson += rate
+          else if (basis === 'flat') groupFixed += rate
+        }
+        continue
+      }
+
       if (GROUP_SLOT_IDS.has(slot.slotId)) {
         if (slot.slotId === 'guide' && !withGuide) continue
         if (slot.slotId === 'tipping' && !withGuide) {
@@ -327,6 +353,22 @@ function aggregateNonTransport(days: GridDay[], config: GridConfig) {
   }
 
   return { groupFixed, perPerson, singleSupplement }
+}
+
+/** Per-unit items (a room of 2, a boat of 6) at a given pax count. */
+function unitCostsForPax(days: GridDay[], config: GridConfig, pax: number): number {
+  let total = 0
+  for (const day of days) {
+    const on = dayDate(config.startDate, day.dayNumber)
+    for (const slot of day.slots) {
+      if (!BASIS_SLOTS.has(slot.slotId) || slot.customAmount > 0) continue
+      for (const item of slot.selectedItems) {
+        if (itemBasis(slot.slotId, item) !== 'per_unit') continue
+        total += getRate(item, config.passport, on) * unitsFor(pax, item.unitCapacity)
+      }
+    }
+  }
+  return total
 }
 
 /** Whole-tour transport cost at a given pax count (vehicle re-selected per pax). */
@@ -377,10 +419,11 @@ export function calculatePaxRange(
     marginPercent: safeMargin,
     // The throughout guide is one more body in the vehicle — the same
     // pax+1 sizing the auto engine and the tour-leader variant use.
+    // Transport and per-unit items are the costs that step with group size.
     transportAt: (pax) => transportForPax(
       days, config,
       pax + (config.guideMode === 'throughout' && config.withGuide ? 1 : 0),
-      tierIndex),
+      tierIndex) + unitCostsForPax(days, config, pax),
     tourLeaderCost: perPerson + singleSupplement,
     paxFrom: opts?.paxFrom,
     paxTo: opts?.paxTo,

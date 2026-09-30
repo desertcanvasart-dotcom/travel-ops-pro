@@ -4077,7 +4077,15 @@
       "rateCurrencyHint": "サプライヤー契約書に記載されている通貨です。契約書に別段の記載がない限り既定のままにしてください。価格計算は自動的に換算されます。",
       "duplicate": "複製",
       "guideFare": "ガイド運賃（スルーガイド）",
-      "guideFareHint": "空欄＝お客様と同運賃、0＝無料。"
+      "guideFareHint": "空欄＝お客様と同運賃、0＝無料。",
+      "pricingFlat": "グループ単位",
+      "pricingPerPerson": "1名あたり",
+      "pricingPerUnit": "ユニット単位",
+      "pricingPerUnitOf": "{count}名ごとのユニット単位",
+      "pricingFlatHint": "人数に関係なくグループ全体で1回の料金",
+      "pricingPerPersonHint": "料金 × 旅行者数",
+      "pricingPerUnitHint": "料金 × グループに必要なユニット数（例：2名1室ごと）",
+      "peoplePerUnit": "名/ユニット"
     },
     "hub": {
       "title": "料金管理",
