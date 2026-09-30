@@ -10423,6 +10423,8 @@ export interface Database {
           archived: boolean
           archived_at: string | null
           department_id: string | null
+          generation_snapshot: Json | null
+          service_type: string | null
         }
         Insert: {
           id?: string
@@ -10441,6 +10443,8 @@ export interface Database {
           archived?: boolean
           archived_at?: string | null
           department_id?: string | null
+          generation_snapshot?: Json | null
+          service_type?: string | null
         }
         Update: {
           id?: string
@@ -10459,6 +10463,8 @@ export interface Database {
           archived?: boolean
           archived_at?: string | null
           department_id?: string | null
+          generation_snapshot?: Json | null
+          service_type?: string | null
         }
         Relationships: [
           {
