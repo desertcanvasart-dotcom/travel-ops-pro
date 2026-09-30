@@ -7,7 +7,8 @@ import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import type { GridConfig, GridDay, AllRates, SlotValue, GridTotals } from './types'
 import { SLOT_DEFINITIONS } from './types'
-import { calculateGrandTotals, calculateDay, countMissingGuideBeds } from './lib/calculator'
+import { calculateGrandTotals, calculateDay, countMissingGuideBeds, convertAmount } from './lib/calculator'
+import { currencySymbol } from '@/lib/currency-totals'
 import { gridCompleteness } from './lib/grid-completeness'
 import type { SeasonWindow } from '@/lib/pricing/season-uplift'
 import { mapServicesToSlots } from './lib/slot-mapping'
@@ -400,6 +401,24 @@ function PricingGridContent() {
 
   const expandAll = () => setDays(prev => prev.map(d => ({ ...d, isExpanded: true })))
   const collapseAll = () => setDays(prev => prev.map(d => ({ ...d, isExpanded: false })))
+
+  // Jump to a day from the day bar: open it and bring it into view.
+  const jumpToDay = (dayId: string) => {
+    setDays(prev => prev.map(d => d.id === dayId ? { ...d, isExpanded: true } : d))
+    requestAnimationFrame(() =>
+      document.getElementById(`grid-day-${dayId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
+
+  // Copy one service to every day (offered on Water, a daily item).
+  const applySlotToAllDays = (slotId: string, value: SlotValue) => {
+    const copy = (): SlotValue => ({ ...value, slotId, selectedItems: value.selectedItems.map(i => ({ ...i })) })
+    setDays(prev => prev.map(d => ({
+      ...d,
+      slots: d.slots.some(s => s.slotId === slotId)
+        ? d.slots.map(s => (s.slotId === slotId ? copy() : s))
+        : [...d.slots, copy()],
+    })))
+  }
 
   const updateDay = (dayId: string, partial: Partial<GridDay>) => {
     setDays(prev => prev.map(d => d.id === dayId ? { ...d, ...partial } : d))
@@ -811,8 +830,36 @@ function PricingGridContent() {
             </div>
           </div>
 
+          {/* Day bar: every day at a glance, one click to jump to it */}
+          <div className="sticky top-0 z-20 -mx-1 mb-2 px-1 py-1.5 bg-gray-50/95 backdrop-blur border-b border-gray-200">
+            <div className="flex gap-1.5 overflow-x-auto">
+              {days.map(day => {
+                const perPerson = calculateDay(day, config).dailyPerPerson
+                return (
+                  <button
+                    key={day.id}
+                    type="button"
+                    onClick={() => jumpToDay(day.id)}
+                    className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 text-[11px] rounded-full border transition-colors ${
+                      day.isExpanded
+                        ? 'bg-[#556B2F] text-white border-[#556B2F]'
+                        : 'bg-white text-gray-700 border-gray-200 hover:border-[#556B2F]'
+                    }`}
+                    title={day.title || `Day ${day.dayNumber}`}
+                  >
+                    <span className="font-semibold">Day {day.dayNumber}</span>
+                    {day.city && <span className="opacity-80">{day.city}</span>}
+                    <span className="tabular-nums opacity-80">
+                      {currencySymbol(config.currency)}{convertAmount(perPerson, config.exchangeRate).toFixed(0)}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           {/* Day Cards */}
-          <div className="space-y-2">
+          <div className="space-y-3">
             {days.map(day => (
               <DayRow
                 key={day.id}
@@ -824,6 +871,7 @@ function PricingGridContent() {
                 onUpdateSlot={(slotId, value) => updateSlot(day.id, slotId, value)}
                 onUpdateDay={(partial) => updateDay(day.id, partial)}
                 onRemoveDay={() => removeDay(day.id)}
+                onApplyToAllDays={applySlotToAllDays}
               />
             ))}
           </div>
