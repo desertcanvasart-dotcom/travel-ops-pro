@@ -1,3 +1,4 @@
+import { BASIS_SLOTS, itemCost } from '@/app/pricing-grid/lib/item-basis'
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { randomBytes } from 'crypto'
@@ -106,7 +107,8 @@ export async function POST(request: NextRequest) {
         let line = 0
         for (const item of (slot.selectedItems || [])) {
           const rate = passport === 'eu' ? Number(item.rateEur) || 0 : Number(item.rateNonEur) || 0
-          line += isGroup ? rate : rate * paxN
+          // Airport / hotel services and activities: by the item's own basis.
+          line += BASIS_SLOTS.has(slot.slotId) ? itemCost(slot.slotId, item, rate, paxN).lineTotal : isGroup ? rate : rate * paxN
         }
         return dsum + line
       }, 0)
@@ -353,11 +355,14 @@ export async function POST(request: NextRequest) {
         // Selected items — rateId-keyed; supplier_id from batched lookup
         for (const item of (slot.selectedItems || [])) {
           const rate = passport === 'eu' ? item.rateEur : item.rateNonEur
-          const supplierCost = isGroup ? rate : rate * (config.pax || 1)
+          // Airport / hotel services and activities: quantity and total by the
+          // item's own basis (per group / per person / per unit).
+          const byBasis = BASIS_SLOTS.has(slot.slotId) ? itemCost(slot.slotId, item, Number(rate) || 0, config.pax || 1) : null
+          const supplierCost = byBasis ? byBasis.lineTotal : isGroup ? rate : rate * (config.pax || 1)
           pushService(dayNumber, {
             service_type: serviceType,
             service_name: item.name,
-            quantity: isGroup ? 1 : (config.pax || 1),
+            quantity: byBasis ? byBasis.quantity : isGroup ? 1 : (config.pax || 1),
             rate_eur: item.rateEur,
             rate_non_eur: item.rateNonEur,
             total_cost: supplierCost,

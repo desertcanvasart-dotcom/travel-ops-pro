@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { sanitizeRateUpdate } from '@/lib/rates/update-payload'
+import { cleanPricingBasisFields } from '@/lib/pricing/pricing-basis'
 
 export async function PUT(
   request: NextRequest,
@@ -23,9 +24,15 @@ export async function PUT(
       )
     }
 
+    // Per group / per person / per unit (migration 20261104).
+    const basis = cleanPricingBasisFields(body)
+    if (!basis.ok) {
+      return NextResponse.json({ success: false, error: basis.error }, { status: 400 })
+    }
+
     const { data, error } = await supabase
       .from('airport_staff_rates')
-      .update(clean.payload)
+      .update({ ...clean.payload, ...basis.fields })
       .eq('id', id)
       .select()
       .single()

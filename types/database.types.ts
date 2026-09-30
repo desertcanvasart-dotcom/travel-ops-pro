@@ -896,6 +896,8 @@ export interface Database {
           description: string | null
           supplier_id: string | null
           rate_currency: string | null
+          pricing_type: string
+          max_capacity: number | null
         }
         Insert: {
           id?: string
@@ -915,6 +917,8 @@ export interface Database {
           description?: string | null
           supplier_id?: string | null
           rate_currency?: string | null
+          pricing_type?: string
+          max_capacity?: number | null
         }
         Update: {
           id?: string
@@ -934,6 +938,8 @@ export interface Database {
           description?: string | null
           supplier_id?: string | null
           rate_currency?: string | null
+          pricing_type?: string
+          max_capacity?: number | null
         }
         Relationships: [
           {
@@ -6149,6 +6155,8 @@ export interface Database {
           destination: string | null
           supplier_id: string | null
           rate_currency: string | null
+          pricing_type: string
+          max_capacity: number | null
         }
         Insert: {
           id?: string
@@ -6166,6 +6174,8 @@ export interface Database {
           destination?: string | null
           supplier_id?: string | null
           rate_currency?: string | null
+          pricing_type?: string
+          max_capacity?: number | null
         }
         Update: {
           id?: string
@@ -6183,6 +6193,8 @@ export interface Database {
           destination?: string | null
           supplier_id?: string | null
           rate_currency?: string | null
+          pricing_type?: string
+          max_capacity?: number | null
         }
         Relationships: [
           {

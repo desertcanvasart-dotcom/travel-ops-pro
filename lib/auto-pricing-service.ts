@@ -25,6 +25,7 @@
 // - New: calculateDayBasedPricing() returns full pricing table
 // ============================================
 
+import { priceByBasis, toPricingBasis, unitsFor, type PricingBasis } from '@/lib/pricing/pricing-basis'
 import { createClient } from '@supabase/supabase-js'
 import { PACKAGE_TYPE_CONFIGS } from '@/lib/package-types'
 import { roundToCurrency } from '@/lib/currency-totals'
@@ -2864,17 +2865,23 @@ export async function calculateDayBasedPricing(
   // `rowExists` separates "nobody has entered this service" from "the row is
   // there with a blank or zero price". Both block a definite price, but only
   // the first is fixed by ADDING a rate — see PricingHole.reason.
+  // How a found row applies to the group (migration 20261104): per group
+  // (flat, the default), per person, or per unit of max_capacity people.
+  const basisOf = (row: any): { basis: PricingBasis; capacity: number | null } => ({
+    basis: toPricingBasis(row?.pricing_type) ?? 'flat',
+    capacity: typeof row?.max_capacity === 'number' && row.max_capacity > 0 ? row.max_capacity : null,
+  })
   const resolveAirportServiceRate = (
     airportCode: string,
     direction: 'arrival' | 'departure'
-  ): { rate: number | null; rowExists: boolean } => {
+  ): { rate: number | null; rowExists: boolean; basis: PricingBasis; capacity: number | null } => {
     const row = airportStaffRows.find(
       (r: any) =>
         r.airport_code === airportCode &&
         (r.direction === direction || r.direction === 'both')
     )
-    if (!row) return { rate: null, rowExists: false }
-    return { rate: usableRate(row.rate_eur), rowExists: true }
+    if (!row) return { rate: null, rowExists: false, basis: 'flat', capacity: null }
+    return { rate: usableRate(row.rate_eur), rowExists: true, ...basisOf(row) }
   }
   // Hotel assistance is modelled in the rate table as ONE full-service row
   // per category (an assistant who handles both ends of the stay), but the
@@ -2890,7 +2897,7 @@ export async function calculateDayBasedPricing(
   // covers a check-out day for offices that filed it that way.
   const resolveHotelServiceRate = (
     serviceType: 'checkin_assist' | 'checkout_assist' | 'porter' | 'full_service'
-  ): { rate: number | null; rowExists: boolean; via: 'dedicated' | 'porter' | 'full_service' } => {
+  ): { rate: number | null; rowExists: boolean; via: 'dedicated' | 'porter' | 'full_service'; basis: PricingBasis; capacity: number | null } => {
     const category = getTierCategory(tier)
     const matches = (type: string) =>
       hotelStaffRows.find(
@@ -2899,16 +2906,16 @@ export async function calculateDayBasedPricing(
           (r.hotel_category === category || r.hotel_category === 'all')
       )
     const dedicated = matches(serviceType)
-    if (dedicated) return { rate: usableRate(dedicated.rate_eur), rowExists: true, via: 'dedicated' }
+    if (dedicated) return { rate: usableRate(dedicated.rate_eur), rowExists: true, via: 'dedicated', ...basisOf(dedicated) }
     if (serviceType === 'checkout_assist') {
       const porter = matches('porter')
-      if (porter) return { rate: usableRate(porter.rate_eur), rowExists: true, via: 'porter' }
+      if (porter) return { rate: usableRate(porter.rate_eur), rowExists: true, via: 'porter', ...basisOf(porter) }
     }
     if (serviceType !== 'full_service') {
       const full = matches('full_service')
-      if (full) return { rate: usableRate(full.rate_eur), rowExists: true, via: 'full_service' }
+      if (full) return { rate: usableRate(full.rate_eur), rowExists: true, via: 'full_service', ...basisOf(full) }
     }
-    return { rate: null, rowExists: false, via: 'dedicated' }
+    return { rate: null, rowExists: false, via: 'dedicated', basis: 'flat', capacity: null }
   }
 
   // Throughout mode ("+1"): the guide is with the group every day, so the
@@ -2995,6 +3002,31 @@ export async function calculateDayBasedPricing(
   // ============================================
 
   let fixedCosts = 0
+  // Airport / hotel assistance (migration 20261104): per-person rates scale
+  // with the group like an entrance fee; per-unit rates step with the group
+  // size (added to the pax table beside transport); per group stays fixed.
+  let staffPerPax = 0
+  const staffUnitLines: Array<{ rate: number; capacity: number | null }> = []
+  /** The services list is shown for a 2-pax reference, like the rest of it. */
+  const STAFF_REFERENCE_PAX = 2
+  const priceStaff = (found: { rate: number | null; basis: PricingBasis; capacity: number | null }) => {
+    const rate = found.rate ?? 0
+    const line = priceByBasis(rate, found.basis, STAFF_REFERENCE_PAX, found.capacity)
+    if (found.basis === 'per_person') staffPerPax += rate
+    else if (found.basis === 'per_unit') staffUnitLines.push({ rate, capacity: found.capacity })
+    else fixedCosts += rate
+    return {
+      quantity: 1,
+      quantityMode: line.isPerPax ? ('per_pax' as const) : ('fixed' as const),
+      unitCost: rate,
+      // A per-pax line stores the per-PERSON figure; a fixed line its total.
+      lineTotal: line.isPerPax ? rate : line.lineTotal,
+      isPerPax: line.isPerPax,
+      ...(found.basis === 'per_unit'
+        ? { notes: `per unit${found.capacity ? ` of ${found.capacity}` : ''} — ${unitsFor(STAFF_REFERENCE_PAX, found.capacity)} unit(s) at ${STAFF_REFERENCE_PAX} pax` }
+        : {}),
+    }
+  }
 
   for (let i = 0; i < itinerary.length; i++) {
     const day = itinerary[i]
@@ -3131,11 +3163,11 @@ export async function calculateDayBasedPricing(
       }
       const found = resolveAirportServiceRate(code, direction)
       if (found.rate != null) {
-        fixedCosts += found.rate
+        const priced = priceStaff(found)
         services.push({
           id, dayNumber: day.day, serviceType: 'airport_service', serviceName: name(code),
-          quantity: 1, quantityMode: 'fixed', unitCost: found.rate, lineTotal: found.rate,
-          rateSource: 'airport_staff_rates', isPerPax: false, isOptional: false,
+          ...priced,
+          rateSource: 'airport_staff_rates', isOptional: false,
         })
       } else {
         listUnpriced({ id, dayNumber: day.day, serviceType: 'airport_service', serviceName: name(code), isPerPax: false }, {
@@ -3173,18 +3205,14 @@ export async function calculateDayBasedPricing(
       const found = resolveAirportServiceRate(airportCode, 'arrival')
       const rate = found.rate
       if (rate != null) {
-        fixedCosts += rate
+        const priced = priceStaff(found)
         services.push({
           id: `day${day.day}-airport-arrival`,
           dayNumber: day.day,
           serviceType: 'airport_service',
           serviceName: `Airport Meet & Greet (${airportCode})`,
-          quantity: 1,
-          quantityMode: 'fixed',
-          unitCost: rate,
-          lineTotal: rate,
+          ...priced,
           rateSource: 'airport_staff_rates',
-          isPerPax: false,
           isOptional: false
         })
       } else {
@@ -3206,18 +3234,14 @@ export async function calculateDayBasedPricing(
       const found = resolveAirportServiceRate(airportCode, 'departure')
       const rate = found.rate
       if (rate != null) {
-        fixedCosts += rate
+        const priced = priceStaff(found)
         services.push({
           id: `day${day.day}-airport-departure`,
           dayNumber: day.day,
           serviceType: 'airport_service',
           serviceName: `Airport Departure Assist (${airportCode})`,
-          quantity: 1,
-          quantityMode: 'fixed',
-          unitCost: rate,
-          lineTotal: rate,
+          ...priced,
           rateSource: 'airport_staff_rates',
-          isPerPax: false,
           isOptional: false
         })
       } else {
@@ -3247,18 +3271,14 @@ export async function calculateDayBasedPricing(
       const found = resolveHotelServiceRate('checkin_assist')
       const rate = found.rate
       if (rate != null) {
-        fixedCosts += rate
+        const priced = priceStaff(found)
         services.push({
           id: `day${day.day}-hotel-checkin`,
           dayNumber: day.day,
           serviceType: 'hotel_service',
           serviceName: found.via === 'full_service' ? 'Hotel Assistance — check-in (full service)' : 'Hotel Check-in Assistance',
-          quantity: 1,
-          quantityMode: 'fixed',
-          unitCost: rate,
-          lineTotal: rate,
+          ...priced,
           rateSource: 'hotel_staff_rates',
-          isPerPax: false,
           isOptional: false
         })
       } else {
@@ -3279,7 +3299,7 @@ export async function calculateDayBasedPricing(
       const found = resolveHotelServiceRate('checkout_assist')
       const rate = found.rate
       if (rate != null) {
-        fixedCosts += rate
+        const priced = priceStaff(found)
         services.push({
           id: `day${day.day}-hotel-checkout`,
           dayNumber: day.day,
@@ -3288,12 +3308,8 @@ export async function calculateDayBasedPricing(
             found.via === 'full_service' ? 'Hotel Assistance — check-out (full service)'
             : found.via === 'porter' ? 'Hotel Check-out & Porter'
             : 'Hotel Check-out Assistance',
-          quantity: 1,
-          quantityMode: 'fixed',
-          unitCost: rate,
-          lineTotal: rate,
+          ...priced,
           rateSource: 'hotel_staff_rates',
-          isPerPax: false,
           isOptional: false
         })
       } else {
@@ -3321,13 +3337,10 @@ export async function calculateDayBasedPricing(
       const serviceName = event === 'embark' ? 'Cruise Embarkation Assistance' : 'Cruise Disembarkation Assistance'
       const line = { id: `day${day.day}-cruise-${event}`, dayNumber: day.day, serviceType: 'hotel_service', serviceName, isPerPax: false }
       if (found.rate != null) {
-        fixedCosts += found.rate
+        const priced = priceStaff(found)
         services.push({
           ...line,
-          quantity: 1,
-          quantityMode: 'fixed',
-          unitCost: found.rate,
-          lineTotal: found.rate,
+          ...priced,
           rateSource: 'hotel_staff_rates',
           isOptional: false,
           notes: event === 'embark' ? 'Priced at the hotel check-in assistance rate' : 'Priced at the hotel check-out assistance rate',
@@ -4101,7 +4114,7 @@ export async function calculateDayBasedPricing(
   // Accommodation is NOT in the per-person line any more: it goes through
   // the rooming rule per party size (accommodationAt below). Everything
   // else still scales linearly with pax.
-  const perPaxCosts = entranceFeesPerPax + externalMealsPerPax + waterPerPax + ticketsPerPax + supplementsPerPax
+  const perPaxCosts = entranceFeesPerPax + externalMealsPerPax + waterPerPax + ticketsPerPax + supplementsPerPax + staffPerPax
   const accommodationAt = (pax: number) => tripAccommodationCost(pax, accommodationNights)
 
   debugLog(`📊 Fixed costs: €${fixedCosts.toFixed(2)} | Per-pax costs: €${perPaxCosts.toFixed(2)}`)
@@ -4323,6 +4336,10 @@ export async function calculateDayBasedPricing(
   // re-selected by group size via findTransportRate) + cruise package. Missing
   // rates were already flagged as holes in the base loop above; they add nothing
   // here. This is the one non-linear term; the leader variant calls it at pax+1.
+  /** Per-unit airport / hotel assistance at a group size (migration 20261104). */
+  const staffUnitsAt = (pax: number): number =>
+    staffUnitLines.reduce((sum, l) => sum + l.rate * unitsFor(pax, l.capacity), 0)
+
   const transportAtPax = (pax: number): number => {
     let total = 0
     for (const info of transportInfoByDay) {
@@ -4364,9 +4381,12 @@ export async function calculateDayBasedPricing(
     // A throughout guide is one more body in the vehicle: size transport at
     // pax+1, the same treatment the tour-leader variant already gets inside
     // priceAcrossPax (both riding = both counted).
-    transportAt: guideMode === 'throughout' ? (pax: number) => transportAtPax(pax + 1) : transportAtPax,
+    // Per-unit assistance (a room of 2) steps with the group like transport.
+    transportAt: guideMode === 'throughout'
+      ? (pax: number) => transportAtPax(pax + 1) + staffUnitsAt(pax)
+      : (pax: number) => transportAtPax(pax) + staffUnitsAt(pax),
     // The leader rides the ticket legs at customer fare, like everything else he consumes.
-    tourLeaderCost: accommodationPPD + singleSupplement + entranceFeesPerPax + externalMealsPerPax + waterPerPax + ticketsPerPax,
+    tourLeaderCost: accommodationPPD + singleSupplement + entranceFeesPerPax + externalMealsPerPax + waterPerPax + ticketsPerPax + staffPerPax,
     accommodationAt,
     paxFrom: PAX_COUNTS[0],
     paxTo: PAX_COUNTS[PAX_COUNTS.length - 1],

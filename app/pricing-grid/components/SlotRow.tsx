@@ -61,6 +61,8 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
           // priced by the one covering its date.
           periods: opt.periods,
           sailingDays: opt.sailingDays,
+      ...(opt.pricing_basis ? { pricingBasis: opt.pricing_basis, unitCapacity: opt.unit_capacity ?? null } : {}),
+          ...(opt.pricing_basis ? { pricingBasis: opt.pricing_basis, unitCapacity: opt.unit_capacity ?? null } : {}),
         }]
       })
     }
@@ -237,6 +239,10 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
                   >
                     {item.name.length > 30 ? item.name.substring(0, 30) + '...' : item.name}
                     {' '}{rateSymbol}{item[rateKey].toFixed(2)}
+                    {item.pricingBasis === 'per_person' && <span className="opacity-70">/person</span>}
+                    {item.pricingBasis === 'per_unit' && (
+                      <span className="opacity-70">/unit{item.unitCapacity ? ` of ${item.unitCapacity}` : ''}</span>
+                    )}
                     <span className="font-bold ml-0.5 text-[10px]">×</span>
                   </span>
                 ))}
