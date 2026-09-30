@@ -140,8 +140,8 @@ instead, which also checks the database and the scheduler (see "When something
 looks wrong"). `/api/health/system` needs a signed-in admin and is **not** usable
 by a monitor.
 
-The service listens on `127.0.0.1:3000` only; put Nginx (or another reverse
-proxy) in front of it for the public ports and TLS. It sets
+The service listens on `127.0.0.1:3000` only; Nginx (next section) serves the
+public ports and HTTPS. It sets
 `CRON_IN_PROCESS=true` itself, so the scheduled jobs run even if `.env.local`
 forgets it. To let a deploy account restart the app without full root, a
 sudoers line is enough:
@@ -149,6 +149,47 @@ sudoers line is enough:
 ```
 deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart autoura, /usr/bin/systemctl status autoura
 ```
+
+### Nginx and HTTPS
+
+`deploy/nginx-autoura.conf` puts Nginx in front of the service: HTTPS on 443
+with a Let's Encrypt certificate, port 80 redirected to it, and requests for any
+other hostname dropped. Replace `autoura.example.com` with your hostname (the
+host in `NEXT_PUBLIC_APP_URL`).
+
+```bash
+# as root
+apt install nginx certbot
+HOST=autoura.example.com        # your hostname
+
+# 1. The certificate. certbot briefly takes port 80 itself; the hooks stop and
+#    restart Nginx around it, and are remembered for every automatic renewal.
+certbot certonly --standalone -d "$HOST" \
+  --pre-hook "systemctl stop nginx" --post-hook "systemctl start nginx"
+
+# 2. The site. Ubuntu's default site must go: both claim to be the default
+#    server on port 80, and nginx -t refuses two.
+sed "s/autoura.example.com/$HOST/g" /opt/autoura/app/deploy/nginx-autoura.conf > /etc/nginx/sites-available/autoura
+ln -s /etc/nginx/sites-available/autoura /etc/nginx/sites-enabled/autoura
+rm -f /etc/nginx/sites-enabled/default
+nginx -t && systemctl reload nginx
+
+# 3. Prove renewal works now rather than in 90 days.
+certbot renew --dry-run
+```
+
+Things the file does on purpose:
+
+- **It overwrites `X-Real-IP`** with the connecting address. Rate limits and the
+  audit trail trust that header (`lib/client-ip.ts`), so it must never be
+  passed through from the client. If you later put Cloudflare or another proxy
+  in front of Nginx, switch to Nginx's `realip` module, or every visitor will
+  appear to be the proxy.
+- **Uploads up to 55 MB** — the AI file parser accepts 50 MB in total.
+- **Three-minute timeouts** — AI file parsing may take 120 seconds; Nginx's
+  default of 60 would cut it off with a 504.
+- **No security headers, gzip or caching rules.** The app already sends all of
+  them; repeating them in Nginx would send each header twice.
 
 ## Licence
 
