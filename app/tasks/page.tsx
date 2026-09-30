@@ -4,6 +4,8 @@ import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { useConfirmDialog, useConfirm } from '@/components/ConfirmDialog'
+import { TaskChecklist, ChecklistSummary } from '@/components/tasks/TaskChecklist'
+import type { ChecklistItem, GenerationSnapshot } from '@/lib/tasks/itinerary-tasks'
 import Link from 'next/link'
 import { 
   Search,
@@ -90,6 +92,10 @@ interface Task {
   archived_at?: string
   assigned_member?: TeamMember
   linked_name?: string
+  // Generated operations tasks: one row per service, ticked as booked
+  // (lib/tasks/itinerary-tasks.ts). Null on tasks made by hand.
+  checklist?: ChecklistItem[] | null
+  generation_snapshot?: GenerationSnapshot | null
 }
 
 interface Summary {
@@ -950,7 +956,9 @@ export default function TasksPage() {
                             </div>
                           </div>
 
-                          {task.description && (
+                          {task.checklist ? (
+                            <div className="mb-2"><ChecklistSummary items={task.checklist} /></div>
+                          ) : task.description && (
                             <p className="text-xs text-gray-500 mb-2 line-clamp-2">{task.description}</p>
                           )}
 
@@ -1132,7 +1140,9 @@ export default function TasksPage() {
                             {task.archived && <Archive className="h-3 w-3 text-gray-400" />}
                             <span className="text-sm font-medium text-gray-900">{task.title}</span>
                           </div>
-                          {task.description && (
+                          {task.checklist ? (
+                            <div className="mt-1 max-w-xs"><ChecklistSummary items={task.checklist} /></div>
+                          ) : task.description && (
                             <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{task.description}</p>
                           )}
                         </td>
@@ -1340,7 +1350,9 @@ export default function TasksPage() {
                             {task.title}
                           </h4>
                         </div>
-                        {task.description && (
+                        {task.checklist ? (
+                          <div className="mt-1 max-w-sm"><ChecklistSummary items={task.checklist} /></div>
+                        ) : task.description && (
                           <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{task.description}</p>
                         )}
                       </div>
@@ -1538,7 +1550,7 @@ export default function TasksPage() {
       {/* Add/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+          <div className={`bg-white rounded-lg shadow-xl w-full max-h-[90vh] overflow-y-auto ${editingTask?.checklist ? 'max-w-4xl' : 'max-w-lg'}`}>
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">
                 {editingTask ? t('editTask') : t('addTask')}
@@ -1552,6 +1564,24 @@ export default function TasksPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-4 space-y-4">
+              {editingTask?.checklist ? (
+                // A generated task: its title and rows come from the itinerary
+                // (regenerating rewrites them), so they are not free text. The
+                // rows are ticked here and saved as they change.
+                <div className="space-y-3">
+                  <h3 className="text-base font-semibold text-gray-900">{editingTask.title}</h3>
+                  <TaskChecklist
+                    task={{ ...editingTask, checklist: editingTask.checklist }}
+                    onUpdated={updated => {
+                      setEditingTask(updated)
+                      setTasks(prev => prev.map(x => (x.id === updated.id ? { ...x, ...updated } : x)))
+                      // Status may have moved with the rows — refresh the counts.
+                      fetchTasks()
+                    }}
+                  />
+                </div>
+              ) : (
+                <>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {t('titleLabel')} <span className="text-red-500">*</span>
@@ -1576,6 +1606,8 @@ export default function TasksPage() {
                   placeholder={t('taskDescriptionPlaceholder')}
                 />
               </div>
+                </>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>

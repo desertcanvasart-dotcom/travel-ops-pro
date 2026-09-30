@@ -10414,6 +10414,7 @@ export interface Database {
           priority: string | null
           status: string | null
           assigned_to: string | null
+          checklist: Json | null
           linked_type: string | null
           linked_id: string | null
           notes: string | null
@@ -10434,6 +10435,7 @@ export interface Database {
           priority?: string | null
           status?: string | null
           assigned_to?: string | null
+          checklist?: Json | null
           linked_type?: string | null
           linked_id?: string | null
           notes?: string | null
@@ -10454,6 +10456,7 @@ export interface Database {
           priority?: string | null
           status?: string | null
           assigned_to?: string | null
+          checklist?: Json | null
           linked_type?: string | null
           linked_id?: string | null
           notes?: string | null

@@ -2,10 +2,14 @@ import { describe, it, expect } from 'vitest'
 import {
   planItineraryTasks,
   planSync,
-  changeNote,
+  mergeChecklist,
+  applyChecklistChange,
+  statusFromChecklist,
+  checklistProgress,
   taskCategoryOf,
   type ServiceForTasks,
   type ExistingGeneratedTask,
+  type ChecklistItem,
 } from '@/lib/tasks/itinerary-tasks'
 
 const itinerary = {
@@ -60,7 +64,7 @@ describe('grouping into one task per category', () => {
     expect(acc.service_count).toBe(5)
     expect(acc.department).toEqual({ id: 'res', name: 'Reservation' })
     // Two Mena House nights collapse into one line; the sleeper is a night too.
-    expect(acc.snapshot.lines).toEqual([
+    expect(acc.items.map(i => i.key)).toEqual([
       'Days 1–2 · 2026-12-10 → 2026-12-11 · Cairo — Mena House (2 nights) · Supplier: Marriott',
       'Day 3 · 2026-12-12 · Cairo — Sleeping Train Giza–Aswan (Half Twin) (1 night)',
       'Days 4–5 · 2026-12-13 → 2026-12-14 · Aswan — MS Nile Goddess (2 nights)',
@@ -88,59 +92,175 @@ describe('grouping into one task per category', () => {
   })
 })
 
-describe('regenerating syncs instead of duplicating', () => {
-  const existingFrom = (p = plan(), over: Partial<ExistingGeneratedTask> = {}): ExistingGeneratedTask[] =>
-    p.tasks.map((t, i) => ({
-      id: `task-${i}`, service_type: t.service_type, status: 'todo', archived: false,
-      assigned_to: 'm1', generation_snapshot: t.snapshot, ...over,
-    }))
+describe('checklist rows', () => {
+  it('each row carries the fields the table shows', () => {
+    const acc = plan().tasks[0]
+    expect(acc.items[0]).toMatchObject({
+      day_from: 1, day_to: 2, date_from: '2026-12-10', date_to: '2026-12-11',
+      city: 'Cairo', name: 'Mena House', quantity: 1, nights: 2, supplier: 'Marriott', notes: null,
+    })
+    // Only accommodation rows count nights.
+    expect(plan().tasks.find(t => t.service_type === 'transportation')!.items[0].nights).toBeNull()
+    // The title stays short — the rows carry the detail.
+    expect(acc.title).toBe('Accommodation — ITN-1 · Smith')
+  })
+})
 
-  it('creates everything the first time', () => {
-    expect(planSync(plan(), []).actions.every(a => a.kind === 'create')).toBe(true)
+// A task as the route would store it after creating it.
+const stored = (p = plan()): ExistingGeneratedTask[] =>
+  planSync(p, []).actions.map((a, i) => {
+    if (a.kind !== 'create') throw new Error('expected create')
+    return {
+      id: `task-${i}`, service_type: a.task.service_type, status: 'todo', archived: false,
+      assigned_to: 'm1', generation_snapshot: a.task.snapshot, checklist: a.checklist,
+    }
+  })
+
+const tick = (tasks: ExistingGeneratedTask[], type: string, which: 'all' | number) =>
+  tasks.map(t => {
+    if (t.service_type !== type) return t
+    let rows = t.checklist!
+    rows.forEach((r, i) => {
+      if (which === 'all' || which === i) rows = applyChecklistChange(rows, { key: r.key, booked: true }, '2026-10-01T00:00:00Z')!
+    })
+    return { ...t, checklist: rows, status: statusFromChecklist(rows, t.status) }
+  })
+
+describe('regenerating syncs instead of duplicating', () => {
+  it('creates every task unticked the first time, none marked new', () => {
+    const actions = planSync(plan(), []).actions
+    expect(actions.every(a => a.kind === 'create')).toBe(true)
+    for (const a of actions) {
+      if (a.kind !== 'create') continue
+      expect(a.checklist.every(r => !r.booked && !r.is_new)).toBe(true)
+    }
   })
 
   it('an unchanged itinerary changes nothing', () => {
-    const sync = planSync(plan(), existingFrom())
+    const sync = planSync(plan(), stored())
     expect(sync.actions.every(a => a.kind === 'unchanged')).toBe(true)
     expect(sync.orphaned).toEqual([])
   })
 
-  it('an open task whose services changed is updated in place', () => {
-    const before = existingFrom()
-    const after = plan(departments, [...services, svc(6, 'meal', 'Dinner cruise')])
-    const meal = planSync(after, before).actions.find(a => a.task.service_type === 'meal')!
-    expect(meal.kind).toBe('update')
-  })
+  it('unchanged rows keep their tick and confirmation; a new row arrives unticked and flagged new', () => {
+    let tasks = tick(stored(), 'meal', 'all')
+    tasks = tasks.map(t => t.service_type !== 'meal' ? t : {
+      ...t, checklist: applyChecklistChange(t.checklist!, { key: t.checklist![0].key, confirmation: 'KH-123' }, 'x')!,
+    })
+    expect(tasks.find(t => t.service_type === 'meal')!.status).toBe('done')
 
-  it('a finished task whose services changed is reopened with exactly what changed', () => {
-    const before = existingFrom(plan(), { status: 'done' })
-    const changed = services
-      .filter(s => !(s.service_type === 'meal'))
-      .concat(svc(6, 'meal', 'Dinner cruise'))
-    const sync = planSync(plan(departments, changed), before)
-    const meal = sync.actions.find(a => a.task.service_type === 'meal')!
+    const changed = plan(departments, [...services, svc(6, 'meal', 'Dinner cruise')])
+    const meal = planSync(changed, tasks).actions.find(a => a.task.service_type === 'meal')!
+    // A finished task that gained a row is reopened.
     expect(meal.kind).toBe('reopen')
     if (meal.kind !== 'reopen') return
-    expect(meal.added).toEqual(['Day 6 · 2026-12-15 · Cairo — Dinner cruise'])
-    expect(meal.removed).toEqual(['Day 2 · 2026-12-11 · Cairo — Lunch at Khufu’s'])
-    const note = changeNote(meal, '2026-10-01')
-    expect(note).toContain('Changed after completion (2026-10-01)')
-    expect(note).toContain('+ Added: Day 6')
-    expect(note).toContain('− Removed: Day 2')
-    // Finished tasks that did not change stay finished.
-    expect(sync.actions.filter(a => a.kind === 'reopen')).toHaveLength(1)
+    expect(meal.status).toBe('in_progress')
+    expect(meal.checklist.map(r => [r.name, r.booked, r.confirmation, !!r.is_new])).toEqual([
+      ['Lunch at Khufu’s', true, 'KH-123', false],
+      ['Dinner cruise', false, null, true],
+    ])
+  })
+
+  it('a booked row that leaves the itinerary stays, flagged for cancellation, until marked cancelled', () => {
+    const tasks = tick(stored(), 'accommodation', 'all')
+    const withoutSleeper = services.filter(s => !s.service_name.startsWith('Sleeping Train'))
+    const acc = planSync(plan(departments, withoutSleeper), tasks).actions.find(a => a.task.service_type === 'accommodation')!
+    expect(acc.kind).toBe('reopen')
+    if (acc.kind !== 'reopen') return
+    const removed = acc.checklist.filter(r => r.removed)
+    expect(removed.map(r => r.name)).toEqual(['Sleeping Train Giza–Aswan (Half Twin)'])
+    expect(checklistProgress(acc.checklist)).toMatchObject({ total: 2, booked: 2, toCancel: 1, complete: false })
+
+    const after = applyChecklistChange(acc.checklist, { key: removed[0].key, cancelled: true }, 'x')!
+    expect(checklistProgress(after).complete).toBe(true)
+    expect(statusFromChecklist(after, acc.status)).toBe('done')
+  })
+
+  it('an UNbooked row that leaves the itinerary simply disappears', () => {
+    const withoutSleeper = services.filter(s => !s.service_name.startsWith('Sleeping Train'))
+    const acc = planSync(plan(departments, withoutSleeper), stored()).actions.find(a => a.task.service_type === 'accommodation')!
+    if (acc.kind === 'unchanged' || acc.kind === 'create') throw new Error('expected update')
+    expect(acc.kind).toBe('update')
+    expect(acc.checklist.some(r => r.removed)).toBe(false)
+    expect(acc.checklist).toHaveLength(2)
+  })
+
+  it('a done task stays done when its rows did not change but the header did', () => {
+    const tasks = tick(stored(), 'guide', 'all')
+    const renamed = planItineraryTasks({
+      itinerary: { ...itinerary, num_adults: 3 }, services, departments, today: '2026-10-01',
+    })
+    const guide = planSync(renamed, tasks).actions.find(a => a.task.service_type === 'guide')!
+    expect(guide.kind).toBe('update')
+    if (guide.kind !== 'update') return
+    expect(guide.status).toBe('done')
+    expect(guide.tripChanged).toBe(true)
+  })
+
+  it('converts a task generated before checklists: a done one counts its old rows as booked', () => {
+    const p = plan()
+    const legacy: ExistingGeneratedTask[] = p.tasks.map((t, i) => ({
+      id: `old-${i}`, service_type: t.service_type, status: t.service_type === 'meal' ? 'done' : 'todo',
+      archived: false, assigned_to: null, generation_snapshot: t.snapshot, checklist: null,
+    }))
+    const actions = planSync(p, legacy).actions
+    // Unchanged snapshots are still rewritten once, to gain their checklist.
+    expect(actions.every(a => a.kind === 'update')).toBe(true)
+    const meal = actions.find(a => a.task.service_type === 'meal')!
+    const guide = actions.find(a => a.task.service_type === 'guide')!
+    if (meal.kind !== 'update' || guide.kind !== 'update') throw new Error('expected update')
+    expect(meal.checklist.every(r => r.booked && !r.is_new)).toBe(true)
+    expect(meal.status).toBe('done')
+    expect(guide.checklist.every(r => !r.booked && !r.is_new)).toBe(true)
   })
 
   it('reports tasks whose category is gone or now excluded, without touching them', () => {
-    const before = existingFrom()
     const sync = planSync(
       plan(departments.filter(d => d.id !== 'exe'), services.filter(s => s.service_type !== 'meal')),
-      before
+      stored()
     )
     expect(sync.orphaned.map(o => [o.service_type, o.reason])).toEqual([
       ['guide', 'excluded'],
       ['meal', 'removed'],
       ['entrance', 'excluded'],
     ])
+  })
+})
+
+describe('ticking rows', () => {
+  const rows = (): ChecklistItem[] => mergeChecklist({ previous: [], planned: plan().tasks[0].items, isRegenerate: false })
+
+  it('status follows the rows', () => {
+    let r = rows()
+    expect(statusFromChecklist(r, 'todo')).toBe('todo')
+    r = applyChecklistChange(r, { key: r[0].key, booked: true }, 't1')!
+    expect(r[0]).toMatchObject({ booked: true, booked_at: 't1' })
+    expect(statusFromChecklist(r, 'todo')).toBe('in_progress')
+    for (const row of r) r = applyChecklistChange(r, { key: row.key, booked: true }, 't2')!
+    expect(statusFromChecklist(r, 'in_progress')).toBe('done')
+    r = applyChecklistChange(r, { key: r[1].key, booked: false }, 't3')!
+    expect(r[1]).toMatchObject({ booked: false, booked_at: null })
+    expect(statusFromChecklist(r, 'done')).toBe('in_progress')
+  })
+
+  it('confirmation numbers are trimmed and blank clears them', () => {
+    let r = rows()
+    r = applyChecklistChange(r, { key: r[0].key, confirmation: '  ABC-1  ' }, 'x')!
+    expect(r[0].confirmation).toBe('ABC-1')
+    r = applyChecklistChange(r, { key: r[0].key, confirmation: '   ' }, 'x')!
+    expect(r[0].confirmation).toBeNull()
+  })
+
+  it('refuses a row that does not exist, and "cancelled" on a row that was not removed', () => {
+    const r = rows()
+    expect(applyChecklistChange(r, { key: 'nope', booked: true }, 'x')).toBeNull()
+    expect(applyChecklistChange(r, { key: r[0].key, cancelled: true }, 'x')).toBeNull()
+  })
+
+  it('ticking a new row clears its "new" flag', () => {
+    const r = mergeChecklist({ previous: [], planned: plan().tasks[0].items, isRegenerate: true })
+    expect(r[0].is_new).toBe(true)
+    const after = applyChecklistChange(r, { key: r[0].key, booked: true }, 'x')!
+    expect(after[0].is_new).toBeUndefined()
   })
 })

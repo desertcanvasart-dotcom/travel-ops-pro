@@ -4,7 +4,11 @@
 // Each itinerary gets at most ONE generated task per category: all its hotels
 // (plus Nile cruises and sleeper trains — every night's bed) in one
 // Accommodation task, every transfer in one Transportation task, every meal in
-// one Meals task, and so on. Each task lists its services line by line.
+// one Meals task, and so on.
+//
+// Each task carries a CHECKLIST (tasks.checklist): one row per service, which
+// staff tick as booked and give a confirmation number. The task is done when
+// every row is ticked and nothing is waiting to be cancelled.
 //
 // WHY NOT THE AI ANY MORE
 //
@@ -16,15 +20,15 @@
 //
 // REGENERATING SYNCS, IT DOES NOT DUPLICATE
 //
-// A generated task carries its category (tasks.service_type) and a snapshot of
-// what it listed (tasks.generation_snapshot). Generating again compares the
-// itinerary against those snapshots:
-//   - no task yet for a category            → create it
-//   - open task, services unchanged         → leave it alone
-//   - open task, services changed           → update its list in place
-//   - finished task, services unchanged     → leave it alone
-//   - finished task, services changed       → reopen it with a note saying
-//                                             exactly what was added/removed
+// A row's identity is its KEY — the service line as text (day, date, city,
+// service, quantity, supplier, notes). Generating again compares keys:
+//   - a row whose key is unchanged keeps its tick and confirmation number;
+//   - a new or changed row arrives unticked and flagged "new";
+//   - a row that left the itinerary is dropped — unless it was already
+//     booked, in which case it stays, flagged "removed", until someone marks
+//     the booking cancelled. A booking is never silently forgotten.
+// The task's status follows its rows, so a finished task that gains a new row
+// is reopened, and one whose rows are all still booked stays done.
 // Tasks created by hand (no service_type) are never touched.
 
 import { resolveDepartment, type DepartmentRow } from '@/lib/departments'
@@ -111,34 +115,43 @@ function categoryRule(category: string) {
   return TASK_CATEGORIES[category] ?? DEFAULT_RULE
 }
 
-/** What a generated task listed when it was last written — compared on regenerate. */
+// ============================================
+// CHECKLIST ROWS
+// ============================================
+
+/** One service (or a run of identical consecutive days) as generated. */
+export interface PlannedItem {
+  /** Identity across regenerations: the service line as text. */
+  key: string
+  day_from: number
+  day_to: number
+  date_from: string | null
+  date_to: string | null
+  city: string | null
+  name: string
+  quantity: number
+  /** Accommodation rows only: how many nights the row covers. */
+  nights: number | null
+  supplier: string | null
+  notes: string | null
+}
+
+/** A row as stored on the task: the generated fields plus its booking state. */
+export interface ChecklistItem extends PlannedItem {
+  booked: boolean
+  confirmation: string | null
+  booked_at: string | null
+  /** Appeared when the itinerary changed after the task was first made. */
+  is_new?: boolean
+  /** Left the itinerary after it was booked — the booking must be cancelled. */
+  removed?: boolean
+}
+
+/** What a generated task listed when last written — compared on regenerate. */
 export interface GenerationSnapshot {
   header: string
+  /** The rows' keys, in order. */
   lines: string[]
-}
-
-export interface PlannedTask {
-  service_type: string
-  label: string
-  title: string
-  description: string
-  snapshot: GenerationSnapshot
-  due_date: string | null
-  priority: TaskPriority
-  department: { id: string; name: string }
-  service_count: number
-}
-
-export interface SkippedCategory {
-  service_type: string
-  label: string
-  service_count: number
-  reason: 'no_active_department'
-}
-
-export interface TaskPlan {
-  tasks: PlannedTask[]
-  skipped: SkippedCategory[]
 }
 
 function paxText(it: ItineraryForTasks): string {
@@ -157,10 +170,10 @@ function headerOf(it: ItineraryForTasks): string {
 }
 
 /**
- * One line per service, in day order. Identical services on consecutive days
- * (the same hotel four nights running) collapse into one line with a day range.
+ * One row per service, in day order. Identical services on consecutive days
+ * (the same hotel four nights running) collapse into one row with a day range.
  */
-export function serviceLines(category: string, services: ServiceForTasks[]): string[] {
+export function serviceItems(category: string, services: ServiceForTasks[]): PlannedItem[] {
   const sorted = services
     .map((s, i) => ({ s, i }))
     .sort((a, b) => a.s.day_number - b.s.day_number || a.i - b.i)
@@ -185,23 +198,70 @@ export function serviceLines(category: string, services: ServiceForTasks[]): str
 
   const isBed = category === 'accommodation'
   return runs.map(({ first, last, days }) => {
-    const dayText = days > 1 ? `Days ${first.day_number}–${last.day_number}` : `Day ${first.day_number}`
-    const dateText = days > 1 && first.date && last.date ? `${first.date} → ${last.date}` : first.date
     // Where the guests SLEEP is what a hotel booking needs; otherwise the city
     // the service happens in.
-    const place = isBed ? first.overnight_city || first.city : first.city
+    const city = (isBed ? first.overnight_city || first.city : first.city) || null
+    const quantity = first.quantity ?? 1
+    const notes = first.notes ? first.notes.replace(/\s+/g, ' ').trim() : null
+
+    // The key is the row as text — also what the task's plain-text
+    // description lists, so it reads naturally anywhere it is shown.
+    const dayText = days > 1 ? `Days ${first.day_number}–${last.day_number}` : `Day ${first.day_number}`
+    const dateText = days > 1 && first.date && last.date ? `${first.date} → ${last.date}` : first.date
     let item = first.service_name
-    if ((first.quantity ?? 1) !== 1) item += ` ×${first.quantity}`
+    if (quantity !== 1) item += ` ×${quantity}`
     if (isBed) item += ` (${days} night${days === 1 ? '' : 's'})`
-    let line = `${[dayText, dateText, place].filter(Boolean).join(' · ')} — ${item}`
-    if (first.supplier_name) line += ` · Supplier: ${first.supplier_name}`
-    if (first.notes) line += ` · Notes: ${first.notes.replace(/\s+/g, ' ').trim()}`
-    return line
+    let key = `${[dayText, dateText, city].filter(Boolean).join(' · ')} — ${item}`
+    if (first.supplier_name) key += ` · Supplier: ${first.supplier_name}`
+    if (notes) key += ` · Notes: ${notes}`
+
+    return {
+      key,
+      day_from: first.day_number,
+      day_to: last.day_number,
+      date_from: first.date,
+      date_to: last.date,
+      city,
+      name: first.service_name,
+      quantity,
+      nights: isBed ? days : null,
+      supplier: first.supplier_name || null,
+      notes,
+    }
   })
 }
 
 export function taskDescription(snapshot: GenerationSnapshot): string {
   return `${snapshot.header}\n\n${snapshot.lines.join('\n')}`
+}
+
+// ============================================
+// PLAN — which tasks the itinerary needs
+// ============================================
+
+export interface PlannedTask {
+  service_type: string
+  label: string
+  title: string
+  description: string
+  items: PlannedItem[]
+  snapshot: GenerationSnapshot
+  due_date: string | null
+  priority: TaskPriority
+  department: { id: string; name: string }
+  service_count: number
+}
+
+export interface SkippedCategory {
+  service_type: string
+  label: string
+  service_count: number
+  reason: 'no_active_department'
+}
+
+export interface TaskPlan {
+  tasks: PlannedTask[]
+  skipped: SkippedCategory[]
 }
 
 /**
@@ -247,7 +307,8 @@ export function planItineraryTasks(input: {
     }
 
     const rule = categoryRule(category)
-    const snapshot: GenerationSnapshot = { header, lines: serviceLines(category, list) }
+    const items = serviceItems(category, list)
+    const snapshot: GenerationSnapshot = { header, lines: items.map(i => i.key) }
     let due: string | null = null
     if (itinerary.start_date) {
       due = shiftDateISO(itinerary.start_date, -rule.leadDays)
@@ -255,21 +316,132 @@ export function planItineraryTasks(input: {
       if (due < today) due = today
     }
 
-    const count = list.length
     tasks.push({
       service_type: category,
       label,
-      title: `${label} — ${[itinerary.itinerary_code, itinerary.client_name].filter(Boolean).join(' · ')}${itinerary.start_date ? ` · ${itinerary.start_date}` : ''} (${count} service${count === 1 ? '' : 's'})`.slice(0, 500),
+      // Short: the rows, dates and progress are shown by the checklist.
+      title: `${label} — ${[itinerary.itinerary_code, itinerary.client_name].filter(Boolean).join(' · ')}`.slice(0, 500),
       description: taskDescription(snapshot),
+      items,
       snapshot,
       due_date: due,
       priority: rule.priority,
       department: { id: dept.id, name: dept.name },
-      service_count: count,
+      service_count: list.length,
     })
   }
 
   return { tasks, skipped }
+}
+
+// ============================================
+// CHECKLIST STATE — merging on regenerate, ticking, and the task's status
+// ============================================
+
+/**
+ * Carry each row's booking state over to the newly generated rows.
+ *
+ * `previous` is the task's stored checklist, or null for a task generated
+ * before checklists existed; then `legacyLines` (its snapshot) stands in, and
+ * a task that was already done counts every one of its old rows as booked.
+ * `isRegenerate` marks genuinely new rows as new — not on first creation.
+ */
+export function mergeChecklist(input: {
+  previous: ChecklistItem[] | null
+  legacyLines?: string[] | null
+  legacyDone?: boolean
+  planned: PlannedItem[]
+  isRegenerate: boolean
+}): ChecklistItem[] {
+  const { planned, isRegenerate } = input
+  const previous: ChecklistItem[] = input.previous
+    ?? (input.legacyLines ?? []).map(key => ({
+      key, day_from: 0, day_to: 0, date_from: null, date_to: null, city: null,
+      name: key, quantity: 1, nights: null, supplier: null, notes: null,
+      booked: !!input.legacyDone, confirmation: null, booked_at: null,
+    }))
+
+  const before = new Map(previous.map(p => [p.key, p]))
+  const plannedKeys = new Set(planned.map(p => p.key))
+
+  const rows: ChecklistItem[] = planned.map(p => {
+    const prev = before.get(p.key)
+    if (prev) {
+      return {
+        ...p,
+        booked: prev.booked,
+        confirmation: prev.confirmation,
+        booked_at: prev.booked_at,
+        ...(prev.is_new && !prev.booked ? { is_new: true } : {}),
+      }
+    }
+    return { ...p, booked: false, confirmation: null, booked_at: null, ...(isRegenerate ? { is_new: true } : {}) }
+  })
+
+  // Booked rows that left the itinerary stay until the cancellation is done.
+  for (const prev of previous) {
+    if (plannedKeys.has(prev.key) || !prev.booked) continue
+    rows.push({ ...prev, removed: true, is_new: undefined })
+  }
+  return rows
+}
+
+export interface ChecklistProgress {
+  total: number
+  booked: number
+  toCancel: number
+  newRows: number
+  complete: boolean
+}
+
+export function checklistProgress(items: ChecklistItem[]): ChecklistProgress {
+  const active = items.filter(i => !i.removed)
+  const booked = active.filter(i => i.booked).length
+  const toCancel = items.filter(i => i.removed).length
+  return {
+    total: active.length,
+    booked,
+    toCancel,
+    newRows: active.filter(i => i.is_new && !i.booked).length,
+    complete: active.length > 0 && booked === active.length && toCancel === 0,
+  }
+}
+
+/** The task status its checklist implies, starting from the current one. */
+export function statusFromChecklist(items: ChecklistItem[], current: string | null): string {
+  const p = checklistProgress(items)
+  if (p.complete) return 'done'
+  const started = p.booked > 0 || p.toCancel > 0
+  if (current === 'done') return started ? 'in_progress' : 'todo'
+  if ((current ?? 'todo') === 'todo' && started) return 'in_progress'
+  return current ?? 'todo'
+}
+
+export type ChecklistChange =
+  | { key: string; booked: boolean }
+  | { key: string; confirmation: string | null }
+  /** A removed row's booking has been cancelled: drop the row. */
+  | { key: string; cancelled: true }
+
+/** Apply one change a user made. Returns null when the row does not exist. */
+export function applyChecklistChange(items: ChecklistItem[], change: ChecklistChange, now: string): ChecklistItem[] | null {
+  const index = items.findIndex(i => i.key === change.key)
+  if (index < 0) return null
+  const row = items[index]
+  if ('cancelled' in change) {
+    if (!row.removed) return null
+    return items.filter((_, i) => i !== index)
+  }
+  const next = { ...row }
+  if ('booked' in change) {
+    next.booked = change.booked
+    next.booked_at = change.booked ? now : null
+    if (change.booked) delete next.is_new
+  } else {
+    const c = (change.confirmation ?? '').trim().slice(0, 100)
+    next.confirmation = c || null
+  }
+  return items.map((it, i) => (i === index ? next : it))
 }
 
 // ============================================
@@ -283,12 +455,12 @@ export interface ExistingGeneratedTask {
   archived: boolean | null
   assigned_to: string | null
   generation_snapshot: GenerationSnapshot | null
+  checklist: ChecklistItem[] | null
 }
 
 export type TaskAction =
-  | { kind: 'create'; task: PlannedTask }
-  | { kind: 'update'; id: string; task: PlannedTask }
-  | { kind: 'reopen'; id: string; task: PlannedTask; added: string[]; removed: string[]; tripChanged: boolean }
+  | { kind: 'create'; task: PlannedTask; checklist: ChecklistItem[]; status: string }
+  | { kind: 'update' | 'reopen'; id: string; task: PlannedTask; checklist: ChecklistItem[]; status: string; tripChanged: boolean }
   | { kind: 'unchanged'; id: string; task: PlannedTask }
 
 export interface OrphanedTask {
@@ -321,17 +493,28 @@ export function planSync(plan: TaskPlan, existing: ExistingGeneratedTask[]): Syn
 
   const actions: TaskAction[] = plan.tasks.map(task => {
     const current = byType.get(task.service_type)
-    if (!current) return { kind: 'create', task }
-    if (sameSnapshot(current.generation_snapshot, task.snapshot)) return { kind: 'unchanged', id: current.id, task }
-    if (!isFinished(current)) return { kind: 'update', id: current.id, task }
-    const before = new Set(current.generation_snapshot?.lines ?? [])
-    const after = new Set(task.snapshot.lines)
+    if (!current) {
+      const checklist = mergeChecklist({ previous: [], planned: task.items, isRegenerate: false })
+      return { kind: 'create', task, checklist, status: 'todo' }
+    }
+    // Unchanged — unless it predates checklists, then it is converted once.
+    if (current.checklist && sameSnapshot(current.generation_snapshot, task.snapshot)) {
+      return { kind: 'unchanged', id: current.id, task }
+    }
+    const checklist = mergeChecklist({
+      previous: current.checklist,
+      legacyLines: current.generation_snapshot?.lines ?? null,
+      legacyDone: isFinished(current),
+      planned: task.items,
+      isRegenerate: true,
+    })
+    const status = statusFromChecklist(checklist, current.status)
     return {
-      kind: 'reopen',
+      kind: isFinished(current) && status !== 'done' ? 'reopen' : 'update',
       id: current.id,
       task,
-      added: task.snapshot.lines.filter(l => !before.has(l)),
-      removed: (current.generation_snapshot?.lines ?? []).filter(l => !after.has(l)),
+      checklist,
+      status,
       tripChanged: (current.generation_snapshot?.header ?? '') !== task.snapshot.header,
     }
   })
@@ -345,13 +528,4 @@ export function planSync(plan: TaskPlan, existing: ExistingGeneratedTask[]): Syn
   }
 
   return { actions, orphaned }
-}
-
-/** The note a reopened task leads with, so its owner sees only what is new. */
-export function changeNote(action: Extract<TaskAction, { kind: 'reopen' }>, today: string): string {
-  const lines = [`⚠ Changed after completion (${today}):`]
-  for (const l of action.added) lines.push(`+ Added: ${l}`)
-  for (const l of action.removed) lines.push(`− Removed: ${l}`)
-  if (action.tripChanged) lines.push('• Trip details changed (dates or travellers) — check the header below.')
-  return lines.join('\n')
 }
