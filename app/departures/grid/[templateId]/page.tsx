@@ -154,7 +154,7 @@ function NumCell({
   saving,
   title,
   emphasis = false,
-  width = 'w-[92px]',
+  width = '!w-[84px]',
 }: {
   value: number | null
   placeholder?: string
@@ -192,14 +192,16 @@ function NumCell({
             ;(e.target as HTMLInputElement).blur()
           }
         }}
-        className={`${width} h-7 px-1.5 text-right tabular-nums text-sm bg-transparent rounded border border-transparent hover:border-gray-200 focus:border-[#647C47] focus:bg-white focus:outline-none placeholder:text-gray-400 ${emphasis ? 'font-semibold text-gray-900' : 'text-gray-700'}`}
+        // `!` on purpose: globals.css styles every input[type="text"] (full
+        // width, border, white) with more specificity than one utility class.
+        className={`${width} !h-7 !px-1.5 !text-right tabular-nums !text-sm !bg-transparent !rounded !border !border-transparent hover:!border-gray-200 focus:!border-[#647C47] focus:!bg-white focus:!shadow-none focus:outline-none placeholder:text-gray-400 ${emphasis ? 'font-semibold !text-gray-900' : '!text-gray-700'}`}
       />
       {saving && <Loader2 className="absolute -right-4 w-3 h-3 text-gray-400 animate-spin" />}
     </div>
   )
 }
 
-const VISIBLE_CLASSES_KEY = 'departures-grid-classes'
+const CLASS_VIEW_KEY = 'departures-grid-class-view'
 
 // ============================================
 // PAGE
@@ -236,30 +238,26 @@ export default function DeparturesGridPage() {
     { value: 'throughout', label: 'Throughout (one guide)' },
   ])
 
-  // Which classes are shown — every one by default; remembered per browser.
-  const [visible, setVisible] = useState<FlightClass[]>([...FLIGHT_CLASSES])
+  // Which class the table shows — one at a time keeps it narrow; "All
+  // classes" puts them side by side. Remembered per browser.
+  const [classView, setClassView] = useState<FlightClass | 'all'>('economy')
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(VISIBLE_CLASSES_KEY) || 'null')
-      if (Array.isArray(saved)) {
-        const valid = FLIGHT_CLASSES.filter(c => saved.includes(c))
-        if (valid.length) setVisible(valid)
-      }
+      const saved = localStorage.getItem(CLASS_VIEW_KEY)
+      if (saved === 'all' || (FLIGHT_CLASSES as readonly string[]).includes(saved ?? '')) setClassView(saved as FlightClass | 'all')
     } catch {
-      /* storage unavailable — show every class */
+      /* storage unavailable — economy */
     }
   }, [])
-  const toggleClass = (c: FlightClass) =>
-    setVisible(prev => {
-      const next = prev.includes(c) ? prev.filter(x => x !== c) : FLIGHT_CLASSES.filter(x => x === c || prev.includes(x))
-      if (next.length === 0) return prev
-      try {
-        localStorage.setItem(VISIBLE_CLASSES_KEY, JSON.stringify(next))
-      } catch {
-        /* not remembered — fine */
-      }
-      return next
-    })
+  const chooseClassView = (v: FlightClass | 'all') => {
+    setClassView(v)
+    try {
+      localStorage.setItem(CLASS_VIEW_KEY, v)
+    } catch {
+      /* not remembered — fine */
+    }
+  }
+  const visible: readonly FlightClass[] = classView === 'all' ? FLIGHT_CLASSES : [classView]
 
   // Per-cell saving and row actions
   const [savingCell, setSavingCell] = useState<string | null>(null)
@@ -406,7 +404,8 @@ export default function DeparturesGridPage() {
     const cur = grid.target_currency
     const header = [
       'Departure', 'Status', 'Booked', 'Seats', `Fuel 燃油 (${cur})`, `LND (${cur})`,
-      ...visible.flatMap(c => [`${FLIGHT_CLASS_LABELS[c]} AIR`, `${FLIGHT_CLASS_LABELS[c]} Total`, `${FLIGHT_CLASS_LABELS[c]} Website`]),
+      // Every class, whatever the table shows — the export is the full sheet.
+      ...FLIGHT_CLASSES.flatMap(c => [`${FLIGHT_CLASS_LABELS[c]} AIR`, `${FLIGHT_CLASS_LABELS[c]} Total`, `${FLIGHT_CLASS_LABELS[c]} Website`]),
       'Complete',
     ]
     const n = (v: number | null) => (v == null ? '' : Math.round(v))
@@ -417,7 +416,7 @@ export default function DeparturesGridPage() {
       b.maxPax,
       n(b.fuelPp),
       n(b.landPp),
-      ...visible.flatMap(c => [n(b.classes[c].airPp), n(b.classes[c].totalPp), n(b.classes[c].websitePp)]),
+      ...FLIGHT_CLASSES.flatMap(c => [n(b.classes[c].airPp), n(b.classes[c].totalPp), n(b.classes[c].websitePp)]),
       b.incomplete ? 'INCOMPLETE' : 'yes',
     ])
     const csv = [header, ...rows]
@@ -434,8 +433,10 @@ export default function DeparturesGridPage() {
 
   const currency = grid?.target_currency || 'JPY'
   const anyIncomplete = grid?.bands.some(b => b.incomplete) ?? false
-  const control = 'h-8 px-2 border border-gray-200 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#647C47]'
-  const th = 'px-2 py-2 font-medium text-[11px] uppercase tracking-wide text-gray-500 bg-gray-50'
+  // `!` on purpose: globals.css gives inputs and selects full width, padding
+  // and a border with more specificity than a utility class.
+  const control = '!h-8 !py-0 !px-2 !border !border-gray-200 !rounded-md !text-sm !bg-white focus:outline-none focus:!ring-2 focus:!ring-[#647C47]'
+  const th = 'px-2 py-2 font-medium text-[11px] uppercase tracking-wide text-gray-500 bg-gray-50 whitespace-nowrap'
   const groupEdge = 'border-l border-gray-200'
 
   return (
@@ -503,7 +504,7 @@ export default function DeparturesGridPage() {
           onChange={e => {
             if (e.target.value && e.target.value !== templateId) router.push(`/departures/grid/${e.target.value}`)
           }}
-          className={`${control} max-w-[280px]`}
+          className={`${control} !w-auto max-w-[280px]`}
           title="Programme"
         >
           {templates.length === 0 && <option value={templateId}>{template?.template_name || 'This template'}</option>}
@@ -516,7 +517,7 @@ export default function DeparturesGridPage() {
         </select>
         <label className="flex items-center gap-1.5 text-gray-500">
           Tier
-          <select value={tier} onChange={e => setTier(e.target.value)} className={control}>
+          <select value={tier} onChange={e => setTier(e.target.value)} className={`${control} !w-auto`}>
             {tierOptions.map(o => (
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
@@ -529,23 +530,23 @@ export default function DeparturesGridPage() {
             min={1}
             value={numPax}
             onChange={e => setNumPax(Math.max(1, parseInt(e.target.value || '1', 10)))}
-            className={`${control} w-14`}
+            className={`${control} !w-14`}
           />
         </label>
         <label className="flex items-center gap-1.5 text-gray-500">
           Passport
-          <select value={isEur ? 'eur' : 'non_eur'} onChange={e => setIsEur(e.target.value === 'eur')} className={control}>
+          <select value={isEur ? 'eur' : 'non_eur'} onChange={e => setIsEur(e.target.value === 'eur')} className={`${control} !w-auto`}>
             <option value="non_eur">Non-EU</option>
             <option value="eur">EU</option>
           </select>
         </label>
         <label className="flex items-center gap-1.5 text-gray-500">
           Guide
-          <GuideLanguageSelect choice={guideLang} className={control} />
+          <GuideLanguageSelect choice={guideLang} className={`${control} !w-auto`} />
           <select
             value={guideMode}
             onChange={e => setGuideMode(e.target.value === 'throughout' ? 'throughout' : 'spot')}
-            className={control}
+            className={`${control} !w-auto`}
           >
             {guideModeOptions.map(o => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -562,7 +563,7 @@ export default function DeparturesGridPage() {
             value={fxInput}
             onChange={e => setFxInput(e.target.value)}
             onBlur={() => load(false)}
-            className={`${control} w-20`}
+            className={`${control} !w-20`}
           />
           {grid ? grid.target_currency : ''}
         </label>
@@ -573,24 +574,22 @@ export default function DeparturesGridPage() {
         )}
       </div>
 
-      {/* Which classes to show */}
+      {/* Which class the table shows */}
       <div className="flex flex-wrap items-center gap-2 mb-3 text-sm">
-        <span className="text-gray-500">Classes:</span>
-        {FLIGHT_CLASSES.map(c => {
-          const on = visible.includes(c)
-          return (
-            <button
-              key={c}
-              onClick={() => toggleClass(c)}
-              className={`h-7 px-3 rounded-full border text-xs font-medium transition-colors ${
-                on ? 'bg-[#647C47] border-[#647C47] text-white' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
-              }`}
-            >
-              {FLIGHT_CLASS_LABELS[c]}
-            </button>
-          )
-        })}
-        <span className="ml-auto text-xs text-gray-400">Website = total rounded up to end in 999, unless typed</span>
+        <label className="flex items-center gap-1.5 text-gray-500">
+          Class
+          <select
+            value={classView}
+            onChange={e => chooseClassView(e.target.value as FlightClass | 'all')}
+            className={`${control} !w-auto font-medium !text-gray-900`}
+          >
+            {FLIGHT_CLASSES.map(c => (
+              <option key={c} value={c}>{FLIGHT_CLASS_LABELS[c]}</option>
+            ))}
+            <option value="all">All classes</option>
+          </select>
+        </label>
+        <span className="ml-auto text-xs text-gray-400">Website = total rounded up to end in 999, unless typed · CSV includes every class</span>
       </div>
 
       {anyIncomplete && (
@@ -601,8 +600,8 @@ export default function DeparturesGridPage() {
         </div>
       )}
 
-      {/* Grid */}
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
+      {/* Grid — as wide as its columns (one class is narrow), scrolling sideways when wider */}
+      <div className={`bg-white border border-gray-200 rounded-lg shadow-sm ${grid && grid.bands.length > 0 && !loading ? 'w-fit max-w-full' : ''}`}>
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 text-[#647C47] animate-spin" />
@@ -622,7 +621,7 @@ export default function DeparturesGridPage() {
           </div>
         ) : (
           <div className="overflow-auto max-h-[calc(100vh-280px)] rounded-lg">
-            <table className="w-full text-sm border-separate border-spacing-0">
+            <table className="w-max text-sm border-separate border-spacing-0">
               <thead className="sticky top-0 z-20">
                 <tr>
                   <th rowSpan={2} className={`${th} text-left sticky left-0 z-30 border-b border-gray-200`}>Departure</th>
@@ -669,7 +668,7 @@ export default function DeparturesGridPage() {
                         </span>
                         <NumCell
                           value={band.maxPax}
-                          width="w-10"
+                          width="!w-10"
                           saving={cell('max_pax')}
                           onSave={v => saveColumn(band, 'max_pax', v)}
                         />
@@ -679,7 +678,7 @@ export default function DeparturesGridPage() {
                           value={band.status}
                           disabled={cell('status')}
                           onChange={e => saveStatus(band, e.target.value as DepartureStatus)}
-                          className={`h-7 px-1.5 text-xs rounded border border-transparent hover:border-gray-200 bg-transparent focus:outline-none focus:border-[#647C47] ${STATUS_OPTIONS.find(o => o.value === band.status)?.color ?? ''}`}
+                          className={`!w-auto !h-7 !py-0 !pl-1.5 !pr-6 !text-xs !rounded !border !border-transparent hover:!border-gray-200 !bg-transparent focus:outline-none focus:!border-[#647C47] focus:!shadow-none ${STATUS_OPTIONS.find(o => o.value === band.status)?.color ?? ''}`}
                         >
                           {STATUS_OPTIONS.map(o => (
                             <option key={o.value} value={o.value}>{o.label}</option>
