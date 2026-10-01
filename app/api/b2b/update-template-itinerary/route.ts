@@ -1,6 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
+import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
+import { refreshTemplateCachedPrice } from '@/lib/tours/cached-price'
 
 // ============================================
 // B2B: Update Template Itinerary JSONB
@@ -43,7 +47,7 @@ export async function PATCH(request: NextRequest) {
     )]
 
     // 1. Update tour_templates
-    const { error: templateError } = await supabaseAdmin
+    const { data: savedTemplate, error: templateError } = await supabaseAdmin
       .from('tour_templates')
       .update({
         itinerary,
@@ -53,6 +57,8 @@ export async function PATCH(request: NextRequest) {
         updated_at: new Date().toISOString()
       })
       .eq('id', template_id)
+      .select('id, uses_day_builder, pricing_mode')
+      .maybeSingle()
 
     if (templateError) {
       console.error('[update-template-itinerary] Template update failed:', templateError)
@@ -72,6 +78,25 @@ export async function PATCH(request: NextRequest) {
     if (versionError) {
       // Non-fatal: log warning but don't fail the request
       console.warn('[update-template-itinerary] Version update warning:', versionError.message)
+    }
+
+    // The catalogue's "from" price is a cache of the engine's price for this
+    // itinerary. Refresh it now the itinerary changed, after the response so
+    // the save does not wait on a full multi-tier pricing run. The org context
+    // is read here, while the request is still in scope.
+    if (savedTemplate) {
+      const orgId = await getCurrentOrgId()
+      const ctx = {
+        tierLadder: await tierLadderForCurrentOrg(),
+        pricingOptions: { orgId: orgId ?? undefined, rateCurrency: await getOrgRateCurrency(supabaseAdmin, orgId) },
+      }
+      after(async () => {
+        try {
+          await refreshTemplateCachedPrice(supabaseAdmin, savedTemplate, ctx)
+        } catch (err) {
+          console.error('[update-template-itinerary] Cached price refresh failed:', err)
+        }
+      })
     }
 
     return NextResponse.json({

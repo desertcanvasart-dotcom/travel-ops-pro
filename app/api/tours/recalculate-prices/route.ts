@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { timingSafeEqual } from 'node:crypto'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
-import { getTemplatePriceRange } from '@/lib/auto-pricing-service'
+import { refreshTemplateCachedPrice } from '@/lib/tours/cached-price'
 import { getCurrentOrgId, requireRole } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
@@ -132,73 +132,9 @@ export async function POST(request: NextRequest) {
     // Process templates sequentially to avoid overwhelming the database
     for (const template of templates) {
       try {
-        let startingPrice: number | null = null
-        let startingTier: string | null = null
-
-        // Only calculate auto-pricing for templates that use it
-        if (template.uses_day_builder || template.pricing_mode === 'auto') {
-          const priceRange = await getTemplatePriceRange(template.id, true, tierLadder, pricingOptions)
-          if (priceRange) {
-            startingPrice = Math.round(priceRange.minPrice)
-            startingTier = priceRange.tier
-          }
-        }
-
-        // Fallback: check variation_pricing table
-        if (startingPrice === null) {
-          const { data: variations } = await supabaseAdmin
-            .from('tour_variations')
-            .select('id')
-            .eq('template_id', template.id)
-            .eq('is_active', true)
-
-          if (variations && variations.length > 0) {
-            const { data: pricing } = await supabaseAdmin
-              .from('variation_pricing')
-              .select('selling_price_per_person, tour_variations!inner(tier)')
-              .in('variation_id', variations.map(v => v.id))
-              .order('selling_price_per_person', { ascending: true })
-              .limit(1)
-
-            if (pricing && pricing.length > 0) {
-              startingPrice = Math.round(pricing[0].selling_price_per_person)
-              startingTier = (pricing[0] as any).tour_variations?.tier || 'standard'
-            }
-          }
-        }
-
-        // No final estimate fallback — deliberately. A duration×150 guess in a
-        // sales catalogue reads as a real price; a template the engine cannot
-        // price caches NULL and its card shows no price until it can.
-
-        // Update the template with cached price
-        const { error: updateError } = await supabaseAdmin
-          .from('tour_templates')
-          .update({
-            cached_starting_price: startingPrice,
-            cached_starting_tier: startingTier,
-            cached_price_updated_at: new Date().toISOString()
-          })
-          .eq('id', template.id)
-
-        if (updateError) {
-          console.error(`❌ Error updating ${template.template_name}:`, updateError)
-          results.push({
-            id: template.id,
-            name: template.template_name,
-            price: null,
-            tier: null,
-            error: clientMessage(updateError, 'Internal server error')
-          })
-        } else {
-          console.log(`✅ Updated ${template.template_name}: €${startingPrice} (${startingTier})`)
-          results.push({
-            id: template.id,
-            name: template.template_name,
-            price: startingPrice,
-            tier: startingTier
-          })
-        }
+        const { price, tier } = await refreshTemplateCachedPrice(supabaseAdmin, template, { tierLadder, pricingOptions })
+        console.log(`✅ Updated ${template.template_name}: ${price} (${tier})`)
+        results.push({ id: template.id, name: template.template_name, price, tier })
       } catch (err: any) {
         console.error(`❌ Error processing ${template.template_name}:`, err)
         results.push({

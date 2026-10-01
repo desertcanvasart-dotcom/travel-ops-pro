@@ -28,6 +28,9 @@ export interface DayAttractions {
   day: number
   attractions?: string[] | null
   attraction_ids?: string[] | null
+  /** The operator picked this day's tickets by hand: the ids are the whole
+   *  list, even when there are none, and the wording is never guessed at. */
+  tickets_set_by_hand?: boolean | null
 }
 
 export interface ResolvedTicket {
@@ -121,6 +124,7 @@ export function resolveAttractions(
 
   const curated = new Set<number>()
   for (const d of days) {
+    if (d.tickets_set_by_hand === true) curated.add(d.day)
     for (const id of d.attraction_ids ?? []) {
       const row = byId.get(id)
       if (row) { take(row, d.day); curated.add(d.day) }

@@ -43,7 +43,28 @@ export interface EditableDay {
   transport_rate_id?: string
   road_transfers?: boolean
   services: EditableDayServices
+  /** Service flags the operator ticked or unticked by hand (markServiceSetByHand). */
+  services_set_by_hand?: string[]
+  /** The ticket picker was used: attraction_ids is the day's whole list. */
+  tickets_set_by_hand?: boolean
+  /** The free-text sights were edited: an empty list means none. */
+  attractions_set_by_hand?: boolean
   [key: string]: unknown
+}
+
+/**
+ * Record that the operator set one of the day's service flags by hand.
+ *
+ * The engine forces airport arrival and hotel check-in onto the first day and
+ * departure and check-out onto the last (lib/auto-pricing-service parseItinerary,
+ * lib/ai/day-rules-engine applyB2BDayRules). Without this mark an untick on
+ * those days was saved and then re-ticked by the rule at pricing time, so the
+ * operator saw the line come back and read it as "it does not save"
+ * (operator, 2026-10-01). A flag listed here is never overridden.
+ */
+export function markServiceSetByHand<D extends { services_set_by_hand?: string[] }>(day: D, key: string): D {
+  const keys = day.services_set_by_hand ?? []
+  return keys.includes(key) ? day : { ...day, services_set_by_hand: [...keys, key] }
 }
 
 export function toEditableDay(raw: unknown, index: number): EditableDay {

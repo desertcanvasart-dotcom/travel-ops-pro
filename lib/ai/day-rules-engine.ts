@@ -303,12 +303,20 @@ export function applyB2BDayRules(days: any[], packageType?: string): any[] {
       return corrected
     }
 
+    // A flag the operator ticked or unticked by hand in the day editor is
+    // final — the forced flags below only fill in the ones they did not set.
+    const setByHand = new Set<string>(Array.isArray(day.services_set_by_hand) ? day.services_set_by_hand.map(String) : [])
+    const forced = (flags: Record<string, boolean>) =>
+      Object.fromEntries(Object.entries(flags).filter(([key]) => !setByHand.has(key)))
+
     // First day: force arrival flags — where the package sells them.
     if (isFirstDay && totalDays > 1) {
       corrected.services = {
         ...corrected.services,
-        ...(pkgIncludes.airportTransfers ? { airport_arrival: true } : {}),
-        ...(pkgIncludes.accommodation ? { hotel_checkin: true } : {}),
+        ...forced({
+          ...(pkgIncludes.airportTransfers ? { airport_arrival: true } : {}),
+          ...(pkgIncludes.accommodation ? { hotel_checkin: true } : {}),
+        }),
       }
     }
 
@@ -316,8 +324,10 @@ export function applyB2BDayRules(days: any[], packageType?: string): any[] {
     if (isLastDay && totalDays > 1) {
       corrected.services = {
         ...corrected.services,
-        ...(pkgIncludes.airportTransfers ? { airport_departure: true } : {}),
-        ...(pkgIncludes.accommodation ? { hotel_checkout: true } : {}),
+        ...forced({
+          ...(pkgIncludes.airportTransfers ? { airport_departure: true } : {}),
+          ...(pkgIncludes.accommodation ? { hotel_checkout: true } : {}),
+        }),
       }
     }
 
@@ -335,7 +345,7 @@ export function applyB2BDayRules(days: any[], packageType?: string): any[] {
       corrected.attractions = []
       corrected.services = {
         ...corrected.services,
-        guide_required: false,
+        ...forced({ guide_required: false }),
       }
     }
 

@@ -73,6 +73,10 @@ export default function ToursBrowsePage() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [deleteTarget, setDeleteTarget] = useState<TourTemplate | null>(null)
   const [deleting, setDeleting] = useState(false)
+  // The "from" prices are a cache the engine fills (/api/tours/recalculate-
+  // prices). Nothing ran it, so every card read N/A — this runs it on demand.
+  const [refreshingPrices, setRefreshingPrices] = useState(false)
+  const [refreshNotice, setRefreshNotice] = useState<string | null>(null)
 
   useEffect(() => {
     fetchTours()
@@ -104,6 +108,25 @@ export default function ToursBrowsePage() {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const refreshPrices = async () => {
+    setRefreshingPrices(true)
+    setRefreshNotice(null)
+    try {
+      const response = await fetch('/api/tours/recalculate-prices', { method: 'POST' })
+      const data = await response.json().catch(() => null)
+      if (!response.ok || !data?.success) {
+        setRefreshNotice(data?.error || t('pricesRefreshFailed'))
+        return
+      }
+      setRefreshNotice(t('pricesRefreshed', { count: data.updated ?? 0 }))
+      await fetchTours()
+    } catch {
+      setRefreshNotice(t('pricesRefreshFailed'))
+    } finally {
+      setRefreshingPrices(false)
     }
   }
 
@@ -213,13 +236,25 @@ export default function ToursBrowsePage() {
             <p className="text-sm text-gray-500">{t('subtitle')}</p>
           </div>
         </div>
-        <Link
-          href="/tours/manage"
-          className="px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] transition-colors font-medium"
-        >
-          {t('manageTours')}
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={refreshPrices}
+            disabled={refreshingPrices}
+            className="px-4 py-2 text-sm border border-[#647C47] text-[#647C47] rounded-lg hover:bg-[#e8ede3] transition-colors font-medium disabled:opacity-50"
+          >
+            {refreshingPrices ? t('refreshingPrices') : t('refreshPrices')}
+          </button>
+          <Link
+            href="/tours/manage"
+            className="px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] transition-colors font-medium"
+          >
+            {t('manageTours')}
+          </Link>
+        </div>
       </div>
+      {refreshNotice && (
+        <p className="-mt-4 mb-4 text-sm text-gray-600 text-right">{refreshNotice}</p>
+      )}
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
