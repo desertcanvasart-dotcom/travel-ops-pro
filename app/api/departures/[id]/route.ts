@@ -113,7 +113,10 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       // Departures grid (migration 20261030): the manual 燃油 surcharge, the
       // booked air class, and the manual AIR fare override (air_pp) recorded
       // per departure.
-      'fuel_surcharge_pp', 'flight_class', 'air_pp'
+      'fuel_surcharge_pp', 'flight_class', 'air_pp',
+      // Per-class AIR fares and typed website rates (migration 20261105).
+      'air_business_pp', 'air_oneway_business_pp',
+      'web_price_economy', 'web_price_business', 'web_price_oneway_business'
     ]
 
     const updateData: Record<string, unknown> = {}
@@ -195,6 +198,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     )
   }
 }
+
+/**
+ * PATCH /api/departures/[id] — the same partial update as PUT. The departures
+ * grid has always saved its cells (燃油, AIR, …) with PATCH, which this route
+ * did not export, so those saves failed with 405 and nothing was stored.
+ */
+export const PATCH = PUT
 
 /**
  * DELETE /api/departures/[id]
