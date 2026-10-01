@@ -48,6 +48,12 @@ interface GridBand extends DepartureBand {
   endDate: string | null
   flightClass: string | null
   currency: string
+  /** The date's own bookability — the grid is where a programme's dates are
+   *  run, not only priced (seats sold, open/guaranteed/cancelled). */
+  status: string
+  maxPax: number
+  minPax: number
+  bookedPax: number
   /** The engine's unpriced-hole kinds for this date, so the UI can say why a
    *  band is incomplete rather than showing a flat total. */
   holes: string[]
@@ -140,7 +146,7 @@ export async function GET(request: NextRequest) {
     // Bands = this template's departures, org-scoped, in date order.
     const { data: departures, error: depErr } = await supabase
       .from('tour_departures')
-      .select('id, start_date, end_date, flight_class, fuel_surcharge_pp, air_pp, currency')
+      .select('id, start_date, end_date, flight_class, fuel_surcharge_pp, air_pp, currency, status, max_pax, min_pax, booked_pax')
       .eq('org_id', org_id)
       .eq('template_id', templateId)
       .order('start_date', { ascending: true })
@@ -218,6 +224,10 @@ export async function GET(request: NextRequest) {
         endDate: dep.end_date ?? null,
         flightClass: dep.flight_class ?? null,
         currency: targetCurrency,
+        status: dep.status ?? 'open',
+        maxPax: Number(dep.max_pax ?? 0),
+        minPax: Number(dep.min_pax ?? 0),
+        bookedPax: Number(dep.booked_pax ?? 0),
         holes: (result.holes ?? []).map(h => h.kind),
       })
     }

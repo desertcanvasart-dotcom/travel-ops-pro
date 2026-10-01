@@ -30,7 +30,9 @@ import {
   Check,
   FileText,
   CalendarPlus,
+  Trash2,
 } from 'lucide-react'
+import { useConfirm } from '@/components/ConfirmDialog'
 import GenerateDeparturesModal from '@/components/departures/GenerateDeparturesModal'
 
 // ============================================
@@ -42,6 +44,10 @@ interface GridBand {
   startDate: string
   endDate: string | null
   flightClass: string | null
+  status: DepartureStatus
+  maxPax: number
+  minPax: number
+  bookedPax: number
   airPp: number
   fuelPp: number | null
   landPp: number
@@ -50,6 +56,17 @@ interface GridBand {
   currency: string
   holes: string[]
 }
+
+type DepartureStatus = 'draft' | 'open' | 'limited' | 'full' | 'guaranteed' | 'cancelled'
+
+const STATUS_OPTIONS: { value: DepartureStatus; label: string; color: string }[] = [
+  { value: 'draft', label: 'Draft', color: 'text-gray-600' },
+  { value: 'open', label: 'Open', color: 'text-green-700' },
+  { value: 'limited', label: 'Limited', color: 'text-yellow-700' },
+  { value: 'full', label: 'Full', color: 'text-red-700' },
+  { value: 'guaranteed', label: 'Guaranteed', color: 'text-blue-700' },
+  { value: 'cancelled', label: 'Cancelled', color: 'text-gray-400' },
+]
 
 interface GridResponse {
   template_id: string
@@ -115,6 +132,7 @@ export default function DeparturesGridPage() {
   // 'tiers', which rendered the raw key ("tiers.standard") on screen.
   const t = useTranslations('b2bCalculator')
   const tierOptions = useTierOptions(key => t(`tiers.${key}`))
+  const confirmDialog = useConfirm()
 
   const [loading, setLoading] = useState(true)
   const [repricing, setRepricing] = useState(false)
@@ -145,6 +163,16 @@ export default function DeparturesGridPage() {
   const [classEdits, setClassEdits] = useState<Record<string, string>>({})
   const [savingClass, setSavingClass] = useState<string | null>(null)
   const [showGenerate, setShowGenerate] = useState(false)
+  // Seats and status per date: this page is where a programme's dates are
+  // run, not only priced (the departures list shows one row per programme).
+  const [seatEdits, setSeatEdits] = useState<Record<string, string>>({})
+  const [savingRow, setSavingRow] = useState<string | null>(null)
+  const [deletingRow, setDeletingRow] = useState<string | null>(null)
+
+  // "+ Add dates" on the departures list lands here with ?generate=1.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('generate') === '1') setShowGenerate(true)
+  }, [])
   const [notice, setNotice] = useState<string | null>(null)
 
   const load = useCallback(
@@ -336,11 +364,87 @@ export default function DeparturesGridPage() {
     }
   }
 
+  // One date's status or seat count. PUT, like the departures list always used.
+  const updateDeparture = async (band: GridBand, patch: { status?: DepartureStatus; max_pax?: number }) => {
+    setSavingRow(band.departureId)
+    setError(null)
+    try {
+      const res = await fetch(`/api/departures/${band.departureId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      const json = await res.json()
+      if (!json.success) throw new Error(json.error || 'Failed to update departure')
+      setGrid(prev =>
+        prev
+          ? {
+              ...prev,
+              bands: prev.bands.map(b =>
+                b.departureId === band.departureId
+                  ? {
+                      ...b,
+                      ...(patch.status ? { status: patch.status } : {}),
+                      ...(patch.max_pax != null ? { maxPax: patch.max_pax } : {}),
+                    }
+                  : b,
+              ),
+            }
+          : prev,
+      )
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update departure')
+    } finally {
+      setSavingRow(null)
+    }
+  }
+
+  const saveSeats = async (band: GridBand) => {
+    const raw = seatEdits[band.departureId]
+    if (raw === undefined) return
+    const value = parseInt(raw, 10)
+    setSeatEdits(prev => {
+      const next = { ...prev }
+      delete next[band.departureId]
+      return next
+    })
+    if (!Number.isFinite(value) || value < 1) {
+      setError('Seats must be at least 1')
+      return
+    }
+    if (value < band.bookedPax) {
+      setError(`This date already has ${band.bookedPax} booked — seats cannot go below that`)
+      return
+    }
+    if (value !== band.maxPax) await updateDeparture(band, { max_pax: value })
+  }
+
+  const deleteDeparture = async (band: GridBand) => {
+    const label = dateBand(band.startDate, band.endDate)
+    const warning = band.bookedPax > 0 ? ` It has ${band.bookedPax} booked.` : ''
+    if (!(await confirmDialog(`Delete the ${label} departure?${warning}`))) return
+    setDeletingRow(band.departureId)
+    setError(null)
+    try {
+      const res = await fetch(`/api/departures/${band.departureId}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!json.success) throw new Error(json.error || 'Failed to delete departure')
+      setGrid(prev => (prev ? { ...prev, bands: prev.bands.filter(b => b.departureId !== band.departureId) } : prev))
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to delete departure')
+    } finally {
+      setDeletingRow(null)
+    }
+  }
+
   const exportCsv = () => {
     if (!grid) return
-    const header = ['Departure', 'Class', `AIR (${grid.target_currency})`, `Fuel 燃油`, `LND`, `Total 合計`, 'Complete']
+    const header = ['Departure', 'Status', 'Booked', 'Seats', 'Class', `AIR (${grid.target_currency})`, `Fuel 燃油`, `LND`, `Total 合計`, 'Complete']
     const rows = grid.bands.map(b => [
       dateBand(b.startDate, b.endDate),
+      b.status,
+      b.bookedPax,
+      b.maxPax,
       b.flightClass ?? '',
       Math.round(b.airPp),
       b.fuelPp == null ? '' : Math.round(b.fuelPp),
@@ -584,12 +688,15 @@ export default function DeparturesGridPage() {
               <thead>
                 <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
                   <th className="text-left font-medium px-4 py-3">Departure</th>
+                  <th className="text-left font-medium px-4 py-3">Seats</th>
+                  <th className="text-left font-medium px-4 py-3">Status</th>
                   <th className="text-left font-medium px-4 py-3">Class</th>
                   <th className="text-right font-medium px-4 py-3">AIR 航空</th>
                   <th className="text-right font-medium px-4 py-3">燃油 Fuel</th>
                   <th className="text-right font-medium px-4 py-3">LND ランド</th>
                   <th className="text-right font-medium px-4 py-3">合計 Total</th>
                   <th className="text-right font-medium px-4 py-3">Quote</th>
+                  <th className="px-2 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -601,7 +708,7 @@ export default function DeparturesGridPage() {
                   const classEditing = classEdits[band.departureId]
                   const classIsSaving = savingClass === band.departureId
                   return (
-                    <tr key={band.departureId} className="hover:bg-gray-50">
+                    <tr key={band.departureId} className={`hover:bg-gray-50 ${band.status === 'cancelled' ? 'opacity-50' : ''}`}>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-gray-900">
@@ -620,6 +727,38 @@ export default function DeparturesGridPage() {
                               incomplete
                             </span>
                           )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1 tabular-nums text-gray-700" title="Booked / seats — seats are editable">
+                          <span className={band.bookedPax >= band.maxPax ? 'text-red-600 font-medium' : ''}>{band.bookedPax}</span>
+                          <span className="text-gray-400">/</span>
+                          <input
+                            type="number"
+                            min={Math.max(1, band.bookedPax)}
+                            value={seatEdits[band.departureId] ?? String(band.maxPax)}
+                            onChange={e => setSeatEdits(prev => ({ ...prev, [band.departureId]: e.target.value }))}
+                            onBlur={() => saveSeats(band)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                            }}
+                            className="w-14 px-1.5 py-1 text-right border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+                          />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <select
+                            value={band.status}
+                            disabled={savingRow === band.departureId}
+                            onChange={e => updateDeparture(band, { status: e.target.value as DepartureStatus })}
+                            className={`px-2 py-1 text-xs border border-gray-200 rounded bg-white focus:outline-none focus:ring-2 focus:ring-[#647C47] ${STATUS_OPTIONS.find(o => o.value === band.status)?.color ?? ''}`}
+                          >
+                            {STATUS_OPTIONS.map(o => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                          {savingRow === band.departureId && <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />}
                         </div>
                       </td>
                       <td className="px-4 py-3">
@@ -716,6 +855,16 @@ export default function DeparturesGridPage() {
                             Create quote
                           </span>
                         )}
+                      </td>
+                      <td className="px-2 py-3 text-right">
+                        <button
+                          onClick={() => deleteDeparture(band)}
+                          disabled={deletingRow === band.departureId}
+                          title="Delete this departure date"
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                        >
+                          {deletingRow === band.departureId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        </button>
                       </td>
                     </tr>
                   )

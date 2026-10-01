@@ -4,6 +4,7 @@ import { todayLocal } from '@/lib/today'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useConfirm } from '@/components/ConfirmDialog'
+import { buildProgrammeGroups, shortDate, summarise } from '@/lib/departures/programme-groups'
 import {
   Calendar,
   Plus,
@@ -311,14 +312,32 @@ export default function DeparturesPage() {
   }
 
   // ============================================
-  // FILTER DEPARTURES
+  // GROUP BY PROGRAMME
   // ============================================
+  // One row per programme, not one per date: a season of weekly dates per
+  // programme made this a list of hundreds (operator, 2026-10-01). A
+  // programme's dates — price, seats, status — are run on its grid page
+  // (/departures/grid/[templateId]). Departures with no template (a custom
+  // tour name) have no grid, so their dates open in place under their row.
 
-  const filteredDepartures = departures.filter(dep => {
-    if (!searchQuery) return true
-    return dep.tour_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-           dep.tour_code?.toLowerCase().includes(searchQuery.toLowerCase())
-  })
+  const q = searchQuery.trim().toLowerCase()
+  const matches = (...texts: (string | null | undefined)[]) =>
+    !q || texts.some(t => (t ?? '').toLowerCase().includes(q))
+
+  const groups = buildProgrammeGroups(templates, departures)
+    // A specific status filter asks about departures, so a programme with
+    // none matching has nothing to show; Upcoming / All list every programme.
+    .filter(g => g.departures.length > 0 || statusFilter === 'upcoming' || statusFilter === 'all')
+    .filter(g => matches(g.name, g.code))
+
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const toggleExpanded = (key: string) =>
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
 
   // ============================================
   // RENDER
@@ -401,143 +420,161 @@ export default function DeparturesPage() {
         </div>
       </div>
 
-      {/* Departures List */}
+      {/* Programmes */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 text-[#647C47] animate-spin" />
           </div>
-        ) : filteredDepartures.length === 0 ? (
+        ) : groups.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-gray-500">
             <Calendar className="w-12 h-12 mb-3 text-gray-300" />
-            <p className="font-medium">No departures found</p>
-            <p className="text-sm">Create a new departure to get started</p>
+            <p className="font-medium">No programmes found</p>
+            <p className="text-sm">{q ? 'Try another search' : 'Create a programme in Tours, or a custom departure'}</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {filteredDepartures.map((departure) => {
-              const statusConfig = STATUS_CONFIG[departure.status]
-              const availableSpots = departure.max_pax - departure.booked_pax
-              const occupancyPercent = Math.round((departure.booked_pax / departure.max_pax) * 100)
-
+            {groups.map(group => {
+              const sum = summarise(group.departures)
+              const isOpen = expanded.has(group.key)
               return (
-                <div
-                  key={departure.id}
-                  className="p-4 hover:bg-gray-50 transition-colors"
-                >
+                <div key={group.key} className="p-4 hover:bg-gray-50/60 transition-colors">
                   <div className="flex items-start justify-between gap-4">
-                    {/* Tour Info */}
+                    {/* Programme */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-medium text-gray-900 truncate">
-                          {departure.tour_name}
-                        </h3>
-                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${statusConfig.color}`}>
-                          {statusConfig.label}
-                        </span>
+                        <h3 className="font-medium text-gray-900 truncate">{group.name}</h3>
+                        {!group.templateId && (
+                          <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-600">Custom</span>
+                        )}
                       </div>
-
-                      <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3.5 h-3.5" />
-                          {new Date(departure.start_date + 'T12:00:00').toLocaleDateString('en-US', {
-                            weekday: 'short',
-                            month: 'short',
-                            day: 'numeric'
-                          })}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5" />
-                          {departure.duration_days} days
-                        </span>
-                        {departure.tour_code && (
-                          <span className="text-gray-400">
-                            {departure.tour_code}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-500">
+                        {group.code && <span className="text-gray-400">{group.code}</span>}
+                        {group.durationDays > 0 && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5" />
+                            {group.durationDays} days
                           </span>
                         )}
+                        {sum.count > 0 ? (
+                          <>
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3.5 h-3.5" />
+                              {sum.count} {statusFilter === 'upcoming' ? 'upcoming ' : ''}
+                              {sum.count === 1 ? 'departure' : 'departures'}
+                            </span>
+                            {sum.next && <span>next <span className="text-gray-700 font-medium">{shortDate(sum.next)}</span></span>}
+                            {sum.last && sum.last !== sum.next && <span>through {shortDate(sum.last)}</span>}
+                          </>
+                        ) : (
+                          <span className="italic">No departures yet</span>
+                        )}
                       </div>
-                    </div>
-
-                    {/* Capacity */}
-                    <div className="text-right">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Users className="w-4 h-4 text-gray-400" />
-                        <span className="font-medium text-gray-900">
-                          {departure.booked_pax}/{departure.max_pax}
-                        </span>
-                        <span className="text-sm text-gray-500">
-                          ({availableSpots} left)
-                        </span>
-                      </div>
-
-                      {/* Progress bar */}
-                      <div className="w-32 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full transition-all ${
-                            occupancyPercent >= 100 ? 'bg-red-500' :
-                            occupancyPercent >= 80 ? 'bg-yellow-500' :
-                            'bg-green-500'
-                          }`}
-                          style={{ width: `${Math.min(occupancyPercent, 100)}%` }}
-                        />
-                      </div>
-
-                      {departure.price_per_person && (
-                        <p className="text-sm font-medium text-gray-700 mt-1">
-                          {departure.currency} {departure.price_per_person}/person
-                        </p>
+                      {sum.count > 0 && (sum.guaranteed > 0 || sum.full > 0 || sum.cancelled > 0) && (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          {sum.guaranteed > 0 && <span className={`px-2 py-0.5 text-xs rounded-full ${STATUS_CONFIG.guaranteed.color}`}>{sum.guaranteed} guaranteed</span>}
+                          {sum.full > 0 && <span className={`px-2 py-0.5 text-xs rounded-full ${STATUS_CONFIG.full.color}`}>{sum.full} full</span>}
+                          {sum.cancelled > 0 && <span className="px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-500">{sum.cancelled} cancelled</span>}
+                        </div>
                       )}
                     </div>
+
+                    {/* Seats across the programme's dates */}
+                    {sum.count > 0 && (
+                      <div className="text-right shrink-0">
+                        <div className="flex items-center justify-end gap-2 mb-1">
+                          <Users className="w-4 h-4 text-gray-400" />
+                          <span className="font-medium text-gray-900">{sum.booked}/{sum.seats}</span>
+                          <span className="text-sm text-gray-500">booked</span>
+                        </div>
+                        <div className="w-32 h-1.5 bg-gray-200 rounded-full overflow-hidden ml-auto">
+                          <div
+                            className="h-full bg-green-500"
+                            style={{ width: `${sum.seats ? Math.min(100, Math.round((sum.booked / sum.seats) * 100)) : 0}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
 
                     {/* Actions */}
-                    <div className="flex items-center gap-1">
-                      {departure.status !== 'cancelled' && departure.status !== 'full' && (
-                        <select
-                          value={departure.status}
-                          onChange={(e) => updateStatus(departure.id, e.target.value)}
-                          className="px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] bg-white"
+                    <div className="flex items-center gap-2 shrink-0">
+                      {group.templateId ? (
+                        <>
+                          {sum.count > 0 && (
+                            <Link
+                              href={`/departures/grid/${group.templateId}`}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] transition-colors"
+                              title="Every date of this programme: price, seats and status"
+                            >
+                              <LayoutGrid className="w-4 h-4" />
+                              Dates &amp; prices
+                            </Link>
+                          )}
+                          <Link
+                            href={`/departures/grid/${group.templateId}?generate=1`}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                          >
+                            <Plus className="w-4 h-4" />
+                            Add dates
+                          </Link>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => toggleExpanded(group.key)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                         >
-                          <option value="draft">Draft</option>
-                          <option value="open">Open</option>
-                          <option value="limited">Limited</option>
-                          <option value="full">Full</option>
-                          <option value="guaranteed">Guaranteed</option>
-                          <option value="cancelled">Cancelled</option>
-                        </select>
+                          <ChevronRight className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                          {isOpen ? 'Hide dates' : 'Show dates'}
+                        </button>
                       )}
-
-                      {departure.template_id && (
-                        <Link
-                          href={`/departures/grid/${departure.template_id}`}
-                          className="p-1.5 text-gray-400 hover:text-[#647C47] hover:bg-gray-100 rounded transition-colors"
-                          title="Pricing grid — every departure date priced at its own season"
-                        >
-                          <LayoutGrid className="w-4 h-4" />
-                        </Link>
-                      )}
-
-                      <button
-                        onClick={() => handleClone(departure)}
-                        className="p-1.5 text-gray-400 hover:text-[#647C47] hover:bg-gray-100 rounded transition-colors"
-                        title="Clone — same tour, pick a new date"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
-
-                      <button
-                        onClick={() => handleDelete(departure.id)}
-                        disabled={deletingId === departure.id}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                        title="Delete"
-                      >
-                        {deletingId === departure.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-4 h-4" />
-                        )}
-                      </button>
                     </div>
                   </div>
+
+                  {/* A custom tour has no grid — its dates are managed here. */}
+                  {!group.templateId && isOpen && (
+                    <div className="mt-3 ml-4 border-l-2 border-gray-100 pl-4 divide-y divide-gray-100">
+                      {group.departures.map(departure => (
+                        <div key={departure.id} className="flex items-center justify-between gap-4 py-2 text-sm">
+                          <div className="flex items-center gap-3">
+                            <span className="text-gray-900">{shortDate(departure.start_date)}</span>
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_CONFIG[departure.status].color}`}>
+                              {STATUS_CONFIG[departure.status].label}
+                            </span>
+                            <span className="text-gray-500">{departure.booked_pax}/{departure.max_pax} booked</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <select
+                              value={departure.status}
+                              onChange={(e) => updateStatus(departure.id, e.target.value)}
+                              className="px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] bg-white"
+                            >
+                              <option value="draft">Draft</option>
+                              <option value="open">Open</option>
+                              <option value="limited">Limited</option>
+                              <option value="full">Full</option>
+                              <option value="guaranteed">Guaranteed</option>
+                              <option value="cancelled">Cancelled</option>
+                            </select>
+                            <button
+                              onClick={() => handleClone(departure)}
+                              className="p-1.5 text-gray-400 hover:text-[#647C47] hover:bg-gray-100 rounded transition-colors"
+                              title="Clone — same tour, pick a new date"
+                            >
+                              <Copy className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(departure.id)}
+                              disabled={deletingId === departure.id}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Delete"
+                            >
+                              {deletingId === departure.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )
             })}
