@@ -1,102 +1,86 @@
 // ============================================
-// Departures grid — AIR / 燃油 / LND / 合計 buckets
+// Departures grid — AIR / 燃油 / LND / 合計 per flight class
 // ============================================
-// The office prices a departure sheet by hand: for each departure date band it
-// records AIR (round-trip air, per person), 燃油 (a fuel surcharge computed
-// outside the system, one number), and LND (everything else on the ground),
-// and adds them to a 合計 gross web rate. See handover/feature-specs/6.
+// The office prices a departure sheet by hand: for each departure date it
+// records AIR (the international fare from Japan, per person), 燃油 (a fuel
+// surcharge computed outside the system, one number), and LND (everything on
+// the ground), and adds them to a 合計 gross. See handover/feature-specs/6.
 //
-// This module owns the ONE split rule the grid and any export share, kept pure
-// so it can be unit-tested without the engine or the database — the same
-// discipline as breakdown-order.ts.
+// The split (operator, 2026-10-01):
+//   LND  = the engine's whole per-person gross for the date — every line it
+//          prices, DOMESTIC FLIGHTS INCLUDED. They used to be carved out into
+//          AIR; the office keeps them in land.
+//   AIR  = the international fare, typed per date and per class. The engine
+//          does not price it, so there is no estimate: no fare, no total.
+//   燃油  = one manual number per date, the same whatever the class.
 //
-// The split rule (confirmed against the engine's output):
-//   AIR  = priced lines the engine emits as serviceType 'flight' — the air
-//          tickets, domestic and international alike. A guide who flies with
-//          the party is a 'guide' line, not 'flight', so it correctly stays in
-//          LND. (Operator: domestic air belongs in AIR, not LND.)
-//   LND  = every other priced line.
-//   燃油  = never comes from the engine; it is the manual per-person number.
-//
-// WHAT THIS MODULE DELIBERATELY DOES NOT DO — the seam the API owns:
-//   It does not reconstruct per-person, post-margin money from the engine's
-//   lines. A line's lineTotal is the GROUP cost, and isPerPax:false lines
-//   (guide, vehicle) do not scale with pax; margin is applied to the trip
-//   total, not per line. Splitting the engine's already-correct per-person
-//   gross into an AIR share and an LND share is an allocation decision made
-//   where the full PaxPricingResult is in hand (the API route). This module
-//   takes amounts that are ALREADY per person and in the target currency and
-//   only classifies, sums, adds fuel, and totals. Feed it group costs and you
-//   get a group-cost bucketing back — never mix the two.
+// Three classes are sold side by side (economy, business, and business one
+// way), each with its own total and the website rate published for it: the
+// total rounded UP to end in 999 (¥417,651 → ¥417,999), unless the operator
+// typed their own. Pure, so the grid and the CSV cannot drift apart.
 
-/** The minimal shape of an engine line this module needs to classify it.
- *  PricedService (auto-pricing-service.ts) is assignable to it. */
-export interface BucketableLine {
-  serviceType: string
-  /** Any per-line amount ALREADY reduced to the basis you want out (per person
-   *  and in the target currency for a sellable band; or raw group cost if you
-   *  are only inspecting composition — but never blend the two in one call). */
-  amount: number
+export const FLIGHT_CLASSES = ['economy', 'business', 'oneway_business'] as const
+export type FlightClass = (typeof FLIGHT_CLASSES)[number]
+
+export const FLIGHT_CLASS_LABELS: Record<FlightClass, string> = {
+  economy: 'Economy',
+  business: 'Business',
+  oneway_business: 'One-way business',
 }
 
-export type Bucket = 'air' | 'land'
-
-/** The one classification rule. Air tickets only; everything else is land. */
-export function bucketOf(line: Pick<BucketableLine, 'serviceType'>): Bucket {
-  return (line.serviceType ?? '').toLowerCase() === 'flight' ? 'air' : 'land'
+/** The tour_departures column holding each class's AIR fare. air_pp predates
+ *  the classes and is the economy fare. */
+export const AIR_COLUMN: Record<FlightClass, 'air_pp' | 'air_business_pp' | 'air_oneway_business_pp'> = {
+  economy: 'air_pp',
+  business: 'air_business_pp',
+  oneway_business: 'air_oneway_business_pp',
 }
 
-export function isAirLine(line: Pick<BucketableLine, 'serviceType'>): boolean {
-  return bucketOf(line) === 'air'
+/** The tour_departures column holding each class's typed website rate. */
+export const WEB_COLUMN: Record<FlightClass, 'web_price_economy' | 'web_price_business' | 'web_price_oneway_business'> = {
+  economy: 'web_price_economy',
+  business: 'web_price_business',
+  oneway_business: 'web_price_oneway_business',
 }
 
-/** Sum the supplied `amount` of each line into its bucket. Amounts are taken
- *  as-is: this module does not convert currency or apply margin — the caller
- *  passes amounts already on the basis it wants summed. */
-export function sumBuckets(lines: readonly BucketableLine[]): { air: number; land: number } {
-  let air = 0
-  let land = 0
-  for (const line of lines) {
-    const amt = Number(line.amount) || 0
-    if (bucketOf(line) === 'air') air += amt
-    else land += amt
-  }
-  return { air, land }
+/** Round UP to the next amount ending in 999: 417,651 → 417,999; 417,999
+ *  stays; 418,000 → 418,999. The office's rule for published prices. */
+export function websiteRate(total: number): number {
+  const n = Math.ceil(Number(total) || 0)
+  if (n <= 0) return 0
+  return Math.ceil((n + 1) / 1000) * 1000 - 1
 }
 
-/** One row of the grid, per person, in the target currency. */
-export interface DepartureBand {
-  /** Round-trip air, per person. */
-  airPp: number
-  /** Fuel surcharge, per person. Null = not yet entered by the operator. */
-  fuelPp: number | null
-  /** Land total, per person. */
+export interface ClassColumn {
+  /** AIR fare typed for this class; null = not sold / not entered yet. */
+  airPp: number | null
+  /** AIR + 燃油 + LND; null while there is no AIR fare. */
+  totalPp: number | null
+  /** The rounded website rate the total suggests; null with no total. */
+  websiteSuggested: number | null
+  /** What is published: the typed rate, else the suggestion. */
+  websitePp: number | null
+  /** True when the operator typed the website rate. */
+  websiteTyped: boolean
+}
+
+/** One class's columns for a date, all per person in the target currency. */
+export function classColumn(parts: {
   landPp: number
-  /** Gross = AIR + 燃油 + LND, per person. */
-  totalPp: number
-  /** True when the engine reported unpriced holes for this date, so totalPp is
-   *  not a complete price and must be shown as incomplete, not flat. */
-  incomplete: boolean
-}
-
-/** Assemble a band from already-per-person, already-converted parts. `fuelPp`
- *  null (operator has not entered it) is carried through as null and treated as
- *  0 for the total, so the row still sums without pretending fuel is priced. */
-export function assembleBand(parts: {
-  airPp: number
   fuelPp: number | null
-  landPp: number
-  incomplete?: boolean
-}): DepartureBand {
-  const airPp = Number(parts.airPp) || 0
-  const landPp = Number(parts.landPp) || 0
-  const fuelPp = parts.fuelPp == null ? null : Number(parts.fuelPp) || 0
+  airPp: number | null
+  websiteTyped: number | null
+}): ClassColumn {
+  const airPp = parts.airPp == null ? null : Number(parts.airPp)
+  const totalPp = airPp == null ? null : airPp + (Number(parts.fuelPp) || 0) + (Number(parts.landPp) || 0)
+  const websiteSuggested = totalPp == null ? null : websiteRate(totalPp)
+  const typed = parts.websiteTyped == null ? null : Number(parts.websiteTyped)
   return {
     airPp,
-    fuelPp,
-    landPp,
-    totalPp: airPp + (fuelPp ?? 0) + landPp,
-    incomplete: Boolean(parts.incomplete),
+    totalPp,
+    websiteSuggested,
+    websitePp: typed ?? websiteSuggested,
+    websiteTyped: typed != null,
   }
 }
 

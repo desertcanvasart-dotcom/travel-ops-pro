@@ -4,12 +4,13 @@
 // Departures grid page
 // /departures/grid/[templateId]
 //
-// The office's hand-priced departure sheet, but every date band priced at its
-// own date through the engine: AIR / 燃油 / LND / 合計 per person. The engine
-// knows hotel/cruise rate periods and ticket seasons, so a July band and a
-// January band that the hand sheet prints at the same land figure come out
-// correctly different. Fuel (燃油) is the one manual number — editable in place.
-// See handover/feature-specs/6-departures-grid-spec.md.
+// The office's hand-priced departure sheet, every date priced at its own date
+// through the engine. Per date: seats and status (this is where a programme's
+// dates are run), 燃油 and LND, then the three flight classes sold side by side
+// — economy, business, business one way — each with its typed AIR fare, its
+// 合計 and the website rate published for it (rounded up to end in 999 unless
+// typed). See lib/pricing/departure-buckets and
+// handover/feature-specs/6-departures-grid-spec.md.
 // ============================================
 
 import { useState, useEffect, useCallback } from 'react'
@@ -19,43 +20,22 @@ import { useTranslations } from 'next-intl'
 import { useTierOptions } from '@/hooks/useTierOptions'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
 import GuideLanguageSelect, { useGuideLanguageChoice } from '@/components/pricing/GuideLanguageSelect'
-import {
-  Calendar,
-  Loader2,
-  ArrowLeft,
-  RefreshCw,
-  Download,
-  AlertTriangle,
-  Plane,
-  Check,
-  FileText,
-  CalendarPlus,
-  Trash2,
-} from 'lucide-react'
-import { useConfirm } from '@/components/ConfirmDialog'
+import { Calendar, Loader2, ArrowLeft, RefreshCw, Download, AlertTriangle, Plane, Check, CalendarPlus, Trash2 } from 'lucide-react'
 import GenerateDeparturesModal from '@/components/departures/GenerateDeparturesModal'
+import { useConfirm } from '@/components/ConfirmDialog'
+import {
+  AIR_COLUMN,
+  FLIGHT_CLASSES,
+  FLIGHT_CLASS_LABELS,
+  WEB_COLUMN,
+  classColumn,
+  type ClassColumn,
+  type FlightClass,
+} from '@/lib/pricing/departure-buckets'
 
 // ============================================
 // TYPES (mirror /api/departures/grid response)
 // ============================================
-
-interface GridBand {
-  departureId: string
-  startDate: string
-  endDate: string | null
-  flightClass: string | null
-  status: DepartureStatus
-  maxPax: number
-  minPax: number
-  bookedPax: number
-  airPp: number
-  fuelPp: number | null
-  landPp: number
-  totalPp: number
-  incomplete: boolean
-  currency: string
-  holes: string[]
-}
 
 type DepartureStatus = 'draft' | 'open' | 'limited' | 'full' | 'guaranteed' | 'cancelled'
 
@@ -68,6 +48,22 @@ const STATUS_OPTIONS: { value: DepartureStatus; label: string; color: string }[]
   { value: 'cancelled', label: 'Cancelled', color: 'text-gray-400' },
 ]
 
+interface GridBand {
+  departureId: string
+  startDate: string
+  endDate: string | null
+  currency: string
+  status: DepartureStatus
+  maxPax: number
+  minPax: number
+  bookedPax: number
+  fuelPp: number | null
+  landPp: number
+  classes: Record<FlightClass, ClassColumn>
+  incomplete: boolean
+  holes: string[]
+}
+
 interface GridResponse {
   template_id: string
   tier: string
@@ -77,9 +73,6 @@ interface GridResponse {
   target_currency: string
   fx: number
   margin_percent: number
-  /** The template's variation for this tier — the B2B calculator's key. Null
-   *  when the template has no variation at this tier, so "Create quote" is off. */
-  variation_id: string | null
   bands: GridBand[]
 }
 
@@ -88,6 +81,13 @@ interface TemplateLite {
   template_name: string
   template_code: string
 }
+
+/** A typed column on tour_departures the grid writes. */
+type EditableColumn =
+  | 'fuel_surcharge_pp'
+  | 'max_pax'
+  | (typeof AIR_COLUMN)[FlightClass]
+  | (typeof WEB_COLUMN)[FlightClass]
 
 // ============================================
 // HELPERS
@@ -109,6 +109,8 @@ function money(amount: number | null, currency: string): string {
   }
 }
 
+const plain = (n: number | null) => (n == null ? '' : Math.round(n).toLocaleString('en-US'))
+
 function dateBand(start: string, end: string | null): string {
   const fmt = (d: string) =>
     new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -119,6 +121,85 @@ function dateBand(start: string, end: string | null): string {
   })
   return end && end !== start ? `${startLabel} – ${fmt(end)}` : startLabel
 }
+
+/** Recompute a band's class columns after a typed value changed locally. */
+function withClasses(band: GridBand, patch: Partial<Record<EditableColumn, number | null>>): GridBand {
+  const fuelPp = 'fuel_surcharge_pp' in patch ? (patch.fuel_surcharge_pp ?? null) : band.fuelPp
+  const classes = Object.fromEntries(
+    FLIGHT_CLASSES.map(c => {
+      const prev = band.classes[c]
+      const airPp = AIR_COLUMN[c] in patch ? (patch[AIR_COLUMN[c]] ?? null) : prev.airPp
+      const websiteTyped = WEB_COLUMN[c] in patch ? (patch[WEB_COLUMN[c]] ?? null) : prev.websiteTyped ? prev.websitePp : null
+      return [c, classColumn({ landPp: band.landPp, fuelPp, airPp, websiteTyped })]
+    }),
+  ) as Record<FlightClass, ClassColumn>
+  return {
+    ...band,
+    fuelPp,
+    classes,
+    maxPax: 'max_pax' in patch && patch.max_pax != null ? patch.max_pax : band.maxPax,
+  }
+}
+
+// ============================================
+// A compact number cell
+// ============================================
+// Reads as plain text (with thousands separators) until clicked; saves on
+// Enter or leaving the cell, Escape puts the old value back. Blank = no value.
+
+function NumCell({
+  value,
+  placeholder,
+  onSave,
+  saving,
+  title,
+  emphasis = false,
+  width = 'w-[92px]',
+}: {
+  value: number | null
+  placeholder?: string
+  onSave: (next: number | null) => void
+  saving?: boolean
+  title?: string
+  emphasis?: boolean
+  width?: string
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const commit = () => {
+    if (draft === null) return
+    const cleaned = draft.replace(/[^0-9.]/g, '')
+    setDraft(null)
+    const next = cleaned === '' ? null : Number(cleaned)
+    if (next !== null && (!Number.isFinite(next) || next < 0)) return
+    if (next === value) return
+    onSave(next)
+  }
+  return (
+    <div className="relative inline-flex items-center">
+      <input
+        type="text"
+        inputMode="numeric"
+        title={title}
+        value={draft ?? plain(value)}
+        placeholder={placeholder}
+        onFocus={() => setDraft(value == null ? '' : String(Math.round(value)))}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          if (e.key === 'Escape') {
+            setDraft(null)
+            ;(e.target as HTMLInputElement).blur()
+          }
+        }}
+        className={`${width} h-7 px-1.5 text-right tabular-nums text-sm bg-transparent rounded border border-transparent hover:border-gray-200 focus:border-[#647C47] focus:bg-white focus:outline-none placeholder:text-gray-400 ${emphasis ? 'font-semibold text-gray-900' : 'text-gray-700'}`}
+      />
+      {saving && <Loader2 className="absolute -right-4 w-3 h-3 text-gray-400 animate-spin" />}
+    </div>
+  )
+}
+
+const VISIBLE_CLASSES_KEY = 'departures-grid-classes'
 
 // ============================================
 // PAGE
@@ -155,25 +236,41 @@ export default function DeparturesGridPage() {
     { value: 'throughout', label: 'Throughout (one guide)' },
   ])
 
-  // Per-row inline editing (燃油, manual AIR fare, class)
-  const [fuelEdits, setFuelEdits] = useState<Record<string, string>>({})
-  const [savingFuel, setSavingFuel] = useState<string | null>(null)
-  const [airEdits, setAirEdits] = useState<Record<string, string>>({})
-  const [savingAir, setSavingAir] = useState<string | null>(null)
-  const [classEdits, setClassEdits] = useState<Record<string, string>>({})
-  const [savingClass, setSavingClass] = useState<string | null>(null)
-  const [showGenerate, setShowGenerate] = useState(false)
-  // Seats and status per date: this page is where a programme's dates are
-  // run, not only priced (the departures list shows one row per programme).
-  const [seatEdits, setSeatEdits] = useState<Record<string, string>>({})
-  const [savingRow, setSavingRow] = useState<string | null>(null)
+  // Which classes are shown — every one by default; remembered per browser.
+  const [visible, setVisible] = useState<FlightClass[]>([...FLIGHT_CLASSES])
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(VISIBLE_CLASSES_KEY) || 'null')
+      if (Array.isArray(saved)) {
+        const valid = FLIGHT_CLASSES.filter(c => saved.includes(c))
+        if (valid.length) setVisible(valid)
+      }
+    } catch {
+      /* storage unavailable — show every class */
+    }
+  }, [])
+  const toggleClass = (c: FlightClass) =>
+    setVisible(prev => {
+      const next = prev.includes(c) ? prev.filter(x => x !== c) : FLIGHT_CLASSES.filter(x => x === c || prev.includes(x))
+      if (next.length === 0) return prev
+      try {
+        localStorage.setItem(VISIBLE_CLASSES_KEY, JSON.stringify(next))
+      } catch {
+        /* not remembered — fine */
+      }
+      return next
+    })
+
+  // Per-cell saving and row actions
+  const [savingCell, setSavingCell] = useState<string | null>(null)
   const [deletingRow, setDeletingRow] = useState<string | null>(null)
+  const [showGenerate, setShowGenerate] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
 
   // "+ Add dates" on the departures list lands here with ?generate=1.
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('generate') === '1') setShowGenerate(true)
   }, [])
-  const [notice, setNotice] = useState<string | null>(null)
 
   const load = useCallback(
     async (reprice = false) => {
@@ -196,9 +293,6 @@ export default function DeparturesGridPage() {
         const json = await res.json()
         if (!json.success) throw new Error(json.error || 'Failed to load grid')
         setGrid(json.data)
-        setFuelEdits({})
-        setAirEdits({})
-        setClassEdits({})
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to load grid')
       } finally {
@@ -231,192 +325,62 @@ export default function DeparturesGridPage() {
     }
   }, [templateId])
 
-  // Save an edited 燃油 cell, then reflect it locally without a full reprice —
-  // AIR and LND did not change, only the fuel add-on and the 合計.
-  const saveFuel = async (band: GridBand) => {
-    const raw = fuelEdits[band.departureId]
-    if (raw === undefined) return
-    const trimmed = raw.trim()
-    const value = trimmed === '' ? null : Number(trimmed)
-    if (value !== null && (!Number.isFinite(value) || value < 0)) {
-      setError('Fuel surcharge must be a non-negative number')
-      return
-    }
-    setSavingFuel(band.departureId)
-    setError(null)
-    try {
-      const res = await fetch(`/api/departures/${band.departureId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fuel_surcharge_pp: value }),
-      })
-      const json = await res.json()
-      if (!json.success) throw new Error(json.error || 'Failed to save fuel surcharge')
-      setGrid(prev =>
-        prev
-          ? {
-              ...prev,
-              bands: prev.bands.map(b =>
-                b.departureId === band.departureId
-                  ? { ...b, fuelPp: value, totalPp: b.airPp + (value ?? 0) + b.landPp }
-                  : b,
-              ),
-            }
-          : prev,
-      )
-      setFuelEdits(prev => {
-        const next = { ...prev }
-        delete next[band.departureId]
-        return next
-      })
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to save fuel surcharge')
-    } finally {
-      setSavingFuel(null)
-    }
-  }
-
-  // Save a manual AIR fare. A number overrides the engine's estimate; clearing
-  // it (blank) reverts to the engine figure, which only a reprice knows, so we
-  // reload in that case. LND is untouched either way.
-  const saveAir = async (band: GridBand) => {
-    const raw = airEdits[band.departureId]
-    if (raw === undefined) return
-    const trimmed = raw.trim()
-    const value = trimmed === '' ? null : Number(trimmed)
-    if (value !== null && (!Number.isFinite(value) || value < 0)) {
-      setError('AIR fare must be a non-negative number')
-      return
-    }
-    setSavingAir(band.departureId)
-    setError(null)
-    try {
-      const res = await fetch(`/api/departures/${band.departureId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ air_pp: value }),
-      })
-      const json = await res.json()
-      if (!json.success) throw new Error(json.error || 'Failed to save AIR fare')
-      if (value === null) {
-        // Reverting to the engine estimate needs a fresh price.
-        await load(false)
+  /** Save one typed column for one date, then update the row locally — AIR,
+   *  fuel and the website rate never change LND, so no reprice is needed. */
+  const saveColumn = async (band: GridBand, column: EditableColumn, value: number | null) => {
+    if (column === 'max_pax') {
+      if (value == null || value < 1) {
+        setError('Seats must be at least 1')
         return
       }
-      setGrid(prev =>
-        prev
-          ? {
-              ...prev,
-              bands: prev.bands.map(b =>
-                b.departureId === band.departureId
-                  ? { ...b, airPp: value, totalPp: value + (b.fuelPp ?? 0) + b.landPp }
-                  : b,
-              ),
-            }
-          : prev,
-      )
-      setAirEdits(prev => {
-        const next = { ...prev }
-        delete next[band.departureId]
-        return next
-      })
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to save AIR fare')
-    } finally {
-      setSavingAir(null)
+      if (value < band.bookedPax) {
+        setError(`This date already has ${band.bookedPax} booked — seats cannot go below that`)
+        return
+      }
     }
-  }
-
-  // Save the booked flight class (a recorded label, no price impact).
-  const saveClass = async (band: GridBand) => {
-    const raw = classEdits[band.departureId]
-    if (raw === undefined) return
-    const value = raw.trim() === '' ? null : raw.trim()
-    setSavingClass(band.departureId)
-    setError(null)
-    try {
-      const res = await fetch(`/api/departures/${band.departureId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ flight_class: value }),
-      })
-      const json = await res.json()
-      if (!json.success) throw new Error(json.error || 'Failed to save class')
-      setGrid(prev =>
-        prev
-          ? {
-              ...prev,
-              bands: prev.bands.map(b =>
-                b.departureId === band.departureId ? { ...b, flightClass: value } : b,
-              ),
-            }
-          : prev,
-      )
-      setClassEdits(prev => {
-        const next = { ...prev }
-        delete next[band.departureId]
-        return next
-      })
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to save class')
-    } finally {
-      setSavingClass(null)
-    }
-  }
-
-  // One date's status or seat count. PUT, like the departures list always used.
-  const updateDeparture = async (band: GridBand, patch: { status?: DepartureStatus; max_pax?: number }) => {
-    setSavingRow(band.departureId)
+    const cellKey = `${band.departureId}:${column}`
+    setSavingCell(cellKey)
     setError(null)
     try {
       const res = await fetch(`/api/departures/${band.departureId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(patch),
+        body: JSON.stringify({ [column]: value }),
       })
       const json = await res.json()
-      if (!json.success) throw new Error(json.error || 'Failed to update departure')
+      if (!json.success) throw new Error(json.error || 'Failed to save')
       setGrid(prev =>
         prev
-          ? {
-              ...prev,
-              bands: prev.bands.map(b =>
-                b.departureId === band.departureId
-                  ? {
-                      ...b,
-                      ...(patch.status ? { status: patch.status } : {}),
-                      ...(patch.max_pax != null ? { maxPax: patch.max_pax } : {}),
-                    }
-                  : b,
-              ),
-            }
+          ? { ...prev, bands: prev.bands.map(b => (b.departureId === band.departureId ? withClasses(b, { [column]: value }) : b)) }
           : prev,
       )
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to update departure')
+      setError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
-      setSavingRow(null)
+      setSavingCell(null)
     }
   }
 
-  const saveSeats = async (band: GridBand) => {
-    const raw = seatEdits[band.departureId]
-    if (raw === undefined) return
-    const value = parseInt(raw, 10)
-    setSeatEdits(prev => {
-      const next = { ...prev }
-      delete next[band.departureId]
-      return next
-    })
-    if (!Number.isFinite(value) || value < 1) {
-      setError('Seats must be at least 1')
-      return
+  const saveStatus = async (band: GridBand, status: DepartureStatus) => {
+    const cellKey = `${band.departureId}:status`
+    setSavingCell(cellKey)
+    setError(null)
+    try {
+      const res = await fetch(`/api/departures/${band.departureId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+      const json = await res.json()
+      if (!json.success) throw new Error(json.error || 'Failed to update status')
+      setGrid(prev =>
+        prev ? { ...prev, bands: prev.bands.map(b => (b.departureId === band.departureId ? { ...b, status } : b)) } : prev,
+      )
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update status')
+    } finally {
+      setSavingCell(null)
     }
-    if (value < band.bookedPax) {
-      setError(`This date already has ${band.bookedPax} booked — seats cannot go below that`)
-      return
-    }
-    if (value !== band.maxPax) await updateDeparture(band, { max_pax: value })
   }
 
   const deleteDeparture = async (band: GridBand) => {
@@ -439,17 +403,21 @@ export default function DeparturesGridPage() {
 
   const exportCsv = () => {
     if (!grid) return
-    const header = ['Departure', 'Status', 'Booked', 'Seats', 'Class', `AIR (${grid.target_currency})`, `Fuel 燃油`, `LND`, `Total 合計`, 'Complete']
+    const cur = grid.target_currency
+    const header = [
+      'Departure', 'Status', 'Booked', 'Seats', `Fuel 燃油 (${cur})`, `LND (${cur})`,
+      ...visible.flatMap(c => [`${FLIGHT_CLASS_LABELS[c]} AIR`, `${FLIGHT_CLASS_LABELS[c]} Total`, `${FLIGHT_CLASS_LABELS[c]} Website`]),
+      'Complete',
+    ]
+    const n = (v: number | null) => (v == null ? '' : Math.round(v))
     const rows = grid.bands.map(b => [
       dateBand(b.startDate, b.endDate),
       b.status,
       b.bookedPax,
       b.maxPax,
-      b.flightClass ?? '',
-      Math.round(b.airPp),
-      b.fuelPp == null ? '' : Math.round(b.fuelPp),
-      Math.round(b.landPp),
-      Math.round(b.totalPp),
+      n(b.fuelPp),
+      n(b.landPp),
+      ...visible.flatMap(c => [n(b.classes[c].airPp), n(b.classes[c].totalPp), n(b.classes[c].websitePp)]),
       b.incomplete ? 'INCOMPLETE' : 'yes',
     ])
     const csv = [header, ...rows]
@@ -466,45 +434,39 @@ export default function DeparturesGridPage() {
 
   const currency = grid?.target_currency || 'JPY'
   const anyIncomplete = grid?.bands.some(b => b.incomplete) ?? false
+  const control = 'h-8 px-2 border border-gray-200 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#647C47]'
+  const th = 'px-2 py-2 font-medium text-[11px] uppercase tracking-wide text-gray-500 bg-gray-50'
+  const groupEdge = 'border-l border-gray-200'
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="px-6 py-6 max-w-[1600px] mx-auto">
       {/* Header */}
-      <div className="mb-6">
-        <Link
-          href="/departures"
-          className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-[#647C47] mb-3"
-        >
+      <div className="mb-4">
+        <Link href="/departures" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-[#647C47] mb-2">
           <ArrowLeft className="w-4 h-4" />
           Departures
         </Link>
         <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#647C47]/10 rounded-lg flex items-center justify-center">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 bg-[#647C47]/10 rounded-lg flex items-center justify-center shrink-0">
               <Plane className="w-5 h-5 text-[#647C47]" />
             </div>
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900">
-                {template?.template_name || 'Departures grid'}
-              </h1>
-              <p className="text-sm text-gray-500">
-                Each date priced at its own season · per person
-                {grid ? ` · gross in ${grid.target_currency}` : ''}
+            <div className="min-w-0">
+              <h1 className="text-lg font-semibold text-gray-900 truncate">{template?.template_name || 'Departures grid'}</h1>
+              <p className="text-xs text-gray-500">
+                Each date priced at its own season · per person{grid ? ` · gross in ${grid.target_currency}` : ''}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowGenerate(true)}
-              className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50"
-            >
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={() => setShowGenerate(true)} className="flex items-center gap-1.5 h-8 px-3 border border-gray-200 rounded-md text-sm hover:bg-gray-50">
               <CalendarPlus className="w-4 h-4" />
               Generate dates
             </button>
             <button
               onClick={() => load(true)}
               disabled={repricing || loading}
-              className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
+              className="flex items-center gap-1.5 h-8 px-3 border border-gray-200 rounded-md text-sm hover:bg-gray-50 disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${repricing ? 'animate-spin' : ''}`} />
               Reprice all
@@ -512,7 +474,7 @@ export default function DeparturesGridPage() {
             <button
               onClick={exportCsv}
               disabled={!grid || grid.bands.length === 0}
-              className="flex items-center gap-2 px-3 py-2 bg-[#647C47] text-white rounded-lg text-sm hover:bg-[#4f6238] disabled:opacity-50"
+              className="flex items-center gap-1.5 h-8 px-3 bg-[#647C47] text-white rounded-md text-sm hover:bg-[#4f6238] disabled:opacity-50"
             >
               <Download className="w-4 h-4" />
               Export CSV
@@ -522,141 +484,125 @@ export default function DeparturesGridPage() {
       </div>
 
       {error && (
-        <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+        <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
           <AlertTriangle className="w-4 h-4" />
           {error}
         </div>
       )}
-
       {notice && (
-        <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">
+        <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">
           <Check className="w-4 h-4" />
           {notice}
         </div>
       )}
 
-      {/* Controls */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-6">
-        <div className="flex flex-wrap items-end gap-4">
-          <label className="flex flex-col gap-1 min-w-[220px]">
-            <span className="text-xs font-medium text-gray-500">Program (tour template)</span>
-            <select
-              value={templateId}
-              onChange={e => {
-                if (e.target.value && e.target.value !== templateId) {
-                  router.push(`/departures/grid/${e.target.value}`)
-                }
-              }}
-              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
-            >
-              {templates.length === 0 && (
-                <option value={templateId}>{template?.template_name || 'This template'}</option>
-              )}
-              {templates.map(tpl => (
-                <option key={tpl.id} value={tpl.id}>
-                  {tpl.template_code ? `${tpl.template_code} — ` : ''}
-                  {tpl.template_name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-gray-500">Tier</span>
-            <select
-              value={tier}
-              onChange={e => setTier(e.target.value)}
-              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
-            >
-              {tierOptions.map(o => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-gray-500">Pax</span>
-            <input
-              type="number"
-              min={1}
-              value={numPax}
-              onChange={e => setNumPax(Math.max(1, parseInt(e.target.value || '1', 10)))}
-              className="w-20 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-gray-500">Passport</span>
-            <select
-              value={isEur ? 'eur' : 'non_eur'}
-              onChange={e => setIsEur(e.target.value === 'eur')}
-              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
-            >
-              <option value="non_eur">Non-EU</option>
-              <option value="eur">EU</option>
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-gray-500">Guide language</span>
-            <GuideLanguageSelect
-              choice={guideLang}
-              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-gray-500">Guide mode</span>
-            <select
-              value={guideMode}
-              onChange={e => setGuideMode(e.target.value === 'throughout' ? 'throughout' : 'spot')}
-              className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
-            >
-              {guideModeOptions.map(o => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-gray-500">
-              FX {grid ? `(1 ${grid.rate_currency} → ${grid.target_currency})` : ''}
-            </span>
-            <input
-              type="number"
-              min={0}
-              step="0.01"
-              placeholder={grid ? String(grid.fx) : 'default'}
-              value={fxInput}
-              onChange={e => setFxInput(e.target.value)}
-              onBlur={() => load(false)}
-              className="w-28 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-            />
-          </label>
-
-          {grid && (
-            <div className="ml-auto text-xs text-gray-400 self-end">
-              margin {grid.margin_percent}% · rates in {grid.rate_currency}
-            </div>
-          )}
-        </div>
+      {/* Settings — one slim row */}
+      <div className="bg-white border border-gray-200 rounded-lg px-3 py-2 mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        <select
+          value={templateId}
+          onChange={e => {
+            if (e.target.value && e.target.value !== templateId) router.push(`/departures/grid/${e.target.value}`)
+          }}
+          className={`${control} max-w-[280px]`}
+          title="Programme"
+        >
+          {templates.length === 0 && <option value={templateId}>{template?.template_name || 'This template'}</option>}
+          {templates.map(tpl => (
+            <option key={tpl.id} value={tpl.id}>
+              {tpl.template_code ? `${tpl.template_code} — ` : ''}
+              {tpl.template_name}
+            </option>
+          ))}
+        </select>
+        <label className="flex items-center gap-1.5 text-gray-500">
+          Tier
+          <select value={tier} onChange={e => setTier(e.target.value)} className={control}>
+            {tierOptions.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-gray-500">
+          Pax
+          <input
+            type="number"
+            min={1}
+            value={numPax}
+            onChange={e => setNumPax(Math.max(1, parseInt(e.target.value || '1', 10)))}
+            className={`${control} w-14`}
+          />
+        </label>
+        <label className="flex items-center gap-1.5 text-gray-500">
+          Passport
+          <select value={isEur ? 'eur' : 'non_eur'} onChange={e => setIsEur(e.target.value === 'eur')} className={control}>
+            <option value="non_eur">Non-EU</option>
+            <option value="eur">EU</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-gray-500">
+          Guide
+          <GuideLanguageSelect choice={guideLang} className={control} />
+          <select
+            value={guideMode}
+            onChange={e => setGuideMode(e.target.value === 'throughout' ? 'throughout' : 'spot')}
+            className={control}
+          >
+            {guideModeOptions.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-gray-500">
+          FX{grid ? ` 1 ${grid.rate_currency} =` : ''}
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            placeholder={grid ? String(grid.fx) : 'default'}
+            value={fxInput}
+            onChange={e => setFxInput(e.target.value)}
+            onBlur={() => load(false)}
+            className={`${control} w-20`}
+          />
+          {grid ? grid.target_currency : ''}
+        </label>
+        {grid && (
+          <span className="ml-auto text-xs text-gray-400">
+            margin {grid.margin_percent}% · rates in {grid.rate_currency}
+          </span>
+        )}
       </div>
 
-      {/* Incomplete banner */}
+      {/* Which classes to show */}
+      <div className="flex flex-wrap items-center gap-2 mb-3 text-sm">
+        <span className="text-gray-500">Classes:</span>
+        {FLIGHT_CLASSES.map(c => {
+          const on = visible.includes(c)
+          return (
+            <button
+              key={c}
+              onClick={() => toggleClass(c)}
+              className={`h-7 px-3 rounded-full border text-xs font-medium transition-colors ${
+                on ? 'bg-[#647C47] border-[#647C47] text-white' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              {FLIGHT_CLASS_LABELS[c]}
+            </button>
+          )
+        })}
+        <span className="ml-auto text-xs text-gray-400">Website = total rounded up to end in 999, unless typed</span>
+      </div>
+
       {anyIncomplete && (
-        <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-sm">
+        <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-sm">
           <AlertTriangle className="w-4 h-4 shrink-0" />
-          Some dates have unpriced services (rate holes) — their totals are not
-          complete prices. Fill the missing rates, then reprice.
+          Some dates have unpriced services (rate holes) — their totals are not complete prices. Fill the missing rates, then
+          reprice.
         </div>
       )}
 
       {/* Grid */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 text-[#647C47] animate-spin" />
@@ -664,64 +610,52 @@ export default function DeparturesGridPage() {
         ) : !grid || grid.bands.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-gray-500">
             <Calendar className="w-12 h-12 mb-3 text-gray-300" />
-            <p className="font-medium">No departures for this template</p>
-            <p className="text-sm mb-3">Generate a season of dates, or add them individually.</p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowGenerate(true)}
-                className="flex items-center gap-2 px-3 py-2 bg-[#647C47] text-white rounded-lg text-sm hover:bg-[#4f6238]"
-              >
-                <CalendarPlus className="w-4 h-4" />
-                Generate dates
-              </button>
-              <Link
-                href="/departures"
-                className="px-3 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 text-gray-600"
-              >
-                Departures page
-              </Link>
-            </div>
+            <p className="font-medium">No departures for this programme</p>
+            <p className="text-sm mb-3">Generate a season of dates to price them.</p>
+            <button
+              onClick={() => setShowGenerate(true)}
+              className="flex items-center gap-2 h-8 px-3 bg-[#647C47] text-white rounded-md text-sm hover:bg-[#4f6238]"
+            >
+              <CalendarPlus className="w-4 h-4" />
+              Generate dates
+            </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
-                  <th className="text-left font-medium px-4 py-3">Departure</th>
-                  <th className="text-left font-medium px-4 py-3">Seats</th>
-                  <th className="text-left font-medium px-4 py-3">Status</th>
-                  <th className="text-left font-medium px-4 py-3">Class</th>
-                  <th className="text-right font-medium px-4 py-3">AIR 航空</th>
-                  <th className="text-right font-medium px-4 py-3">燃油 Fuel</th>
-                  <th className="text-right font-medium px-4 py-3">LND ランド</th>
-                  <th className="text-right font-medium px-4 py-3">合計 Total</th>
-                  <th className="text-right font-medium px-4 py-3">Quote</th>
-                  <th className="px-2 py-3" />
+          <div className="overflow-auto max-h-[calc(100vh-280px)] rounded-lg">
+            <table className="w-full text-sm border-separate border-spacing-0">
+              <thead className="sticky top-0 z-20">
+                <tr>
+                  <th rowSpan={2} className={`${th} text-left sticky left-0 z-30 border-b border-gray-200`}>Departure</th>
+                  <th rowSpan={2} className={`${th} text-right border-b border-gray-200`}>Seats</th>
+                  <th rowSpan={2} className={`${th} text-left border-b border-gray-200`}>Status</th>
+                  <th rowSpan={2} className={`${th} text-right border-b border-gray-200 ${groupEdge}`}>燃油 Fuel</th>
+                  <th rowSpan={2} className={`${th} text-right border-b border-gray-200`}>LND ランド</th>
+                  {visible.map(c => (
+                    <th key={c} colSpan={3} className={`${th} text-center text-gray-700 ${groupEdge} border-b border-gray-100`}>
+                      {FLIGHT_CLASS_LABELS[c]}
+                    </th>
+                  ))}
+                  <th rowSpan={2} className={`${th} border-b border-gray-200`} />
+                </tr>
+                <tr>
+                  {visible.map(c => (
+                    <FragmentHeads key={c} th={th} edge={groupEdge} />
+                  ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody>
                 {grid.bands.map(band => {
-                  const editing = fuelEdits[band.departureId]
-                  const isSaving = savingFuel === band.departureId
-                  const airEditing = airEdits[band.departureId]
-                  const airIsSaving = savingAir === band.departureId
-                  const classEditing = classEdits[band.departureId]
-                  const classIsSaving = savingClass === band.departureId
+                  const cell = (col: string) => savingCell === `${band.departureId}:${col}`
+                  const td = 'px-2 py-1 border-b border-gray-100'
                   return (
-                    <tr key={band.departureId} className={`hover:bg-gray-50 ${band.status === 'cancelled' ? 'opacity-50' : ''}`}>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900">
-                            {dateBand(band.startDate, band.endDate)}
-                          </span>
+                    <tr key={band.departureId} className={`group hover:bg-gray-50 ${band.status === 'cancelled' ? 'opacity-50' : ''}`}>
+                      <td className={`${td} sticky left-0 z-10 bg-white group-hover:bg-gray-50 whitespace-nowrap`}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium text-gray-900">{dateBand(band.startDate, band.endDate)}</span>
                           {band.incomplete && (
                             <span
-                              title={
-                                band.holes.length
-                                  ? `Unpriced: ${band.holes.join(', ')}`
-                                  : 'Incomplete price'
-                              }
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-medium rounded bg-amber-100 text-amber-700"
+                              title={band.holes.length ? `Unpriced: ${band.holes.join(', ')}` : 'Incomplete price'}
+                              className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[10px] font-medium rounded bg-amber-100 text-amber-700"
                             >
                               <AlertTriangle className="w-3 h-3" />
                               incomplete
@@ -729,139 +663,63 @@ export default function DeparturesGridPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1 tabular-nums text-gray-700" title="Booked / seats — seats are editable">
-                          <span className={band.bookedPax >= band.maxPax ? 'text-red-600 font-medium' : ''}>{band.bookedPax}</span>
-                          <span className="text-gray-400">/</span>
-                          <input
-                            type="number"
-                            min={Math.max(1, band.bookedPax)}
-                            value={seatEdits[band.departureId] ?? String(band.maxPax)}
-                            onChange={e => setSeatEdits(prev => ({ ...prev, [band.departureId]: e.target.value }))}
-                            onBlur={() => saveSeats(band)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                            }}
-                            className="w-14 px-1.5 py-1 text-right border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+                      <td className={`${td} text-right whitespace-nowrap`} title="Booked / seats — seats are editable">
+                        <span className={`tabular-nums ${band.bookedPax >= band.maxPax ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                          {band.bookedPax} /
+                        </span>
+                        <NumCell
+                          value={band.maxPax}
+                          width="w-10"
+                          saving={cell('max_pax')}
+                          onSave={v => saveColumn(band, 'max_pax', v)}
+                        />
+                      </td>
+                      <td className={td}>
+                        <select
+                          value={band.status}
+                          disabled={cell('status')}
+                          onChange={e => saveStatus(band, e.target.value as DepartureStatus)}
+                          className={`h-7 px-1.5 text-xs rounded border border-transparent hover:border-gray-200 bg-transparent focus:outline-none focus:border-[#647C47] ${STATUS_OPTIONS.find(o => o.value === band.status)?.color ?? ''}`}
+                        >
+                          {STATUS_OPTIONS.map(o => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className={`${td} text-right ${groupEdge}`}>
+                        <NumCell
+                          value={band.fuelPp}
+                          placeholder="—"
+                          title="燃油 — one amount per person, whatever the class"
+                          saving={cell('fuel_surcharge_pp')}
+                          onSave={v => saveColumn(band, 'fuel_surcharge_pp', v)}
+                        />
+                      </td>
+                      <td className={`${td} text-right tabular-nums text-gray-700 pr-3`} title="Engine-priced land, domestic flights included">
+                        {plain(band.landPp)}
+                      </td>
+                      {visible.map(c => {
+                        const col = band.classes[c]
+                        return (
+                          <ClassCells
+                            key={c}
+                            td={td}
+                            edge={groupEdge}
+                            col={col}
+                            currency={currency}
+                            savingAir={cell(AIR_COLUMN[c])}
+                            savingWeb={cell(WEB_COLUMN[c])}
+                            onAir={v => saveColumn(band, AIR_COLUMN[c], v)}
+                            onWeb={v => saveColumn(band, WEB_COLUMN[c], v)}
                           />
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          <select
-                            value={band.status}
-                            disabled={savingRow === band.departureId}
-                            onChange={e => updateDeparture(band, { status: e.target.value as DepartureStatus })}
-                            className={`px-2 py-1 text-xs border border-gray-200 rounded bg-white focus:outline-none focus:ring-2 focus:ring-[#647C47] ${STATUS_OPTIONS.find(o => o.value === band.status)?.color ?? ''}`}
-                          >
-                            {STATUS_OPTIONS.map(o => (
-                              <option key={o.value} value={o.value}>{o.label}</option>
-                            ))}
-                          </select>
-                          {savingRow === band.departureId && <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          <input
-                            type="text"
-                            value={classEditing !== undefined ? classEditing : band.flightClass ?? ''}
-                            placeholder="—"
-                            onChange={e =>
-                              setClassEdits(prev => ({ ...prev, [band.departureId]: e.target.value }))
-                            }
-                            onBlur={() => saveClass(band)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                            }}
-                            className="w-28 px-2 py-1 text-gray-700 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-                          />
-                          {classIsSaving && <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <input
-                            type="number"
-                            min={0}
-                            value={airEditing !== undefined ? airEditing : band.airPp || ''}
-                            placeholder="—"
-                            title="Manual AIR fare — overrides the engine estimate; leave blank to use it"
-                            onChange={e =>
-                              setAirEdits(prev => ({ ...prev, [band.departureId]: e.target.value }))
-                            }
-                            onBlur={() => saveAir(band)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                            }}
-                            className="w-24 px-2 py-1 text-right tabular-nums border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-                          />
-                          {airIsSaving ? (
-                            <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />
-                          ) : (
-                            airEditing !== undefined && <Check className="w-3.5 h-3.5 text-gray-300" />
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <input
-                            type="number"
-                            min={0}
-                            value={editing !== undefined ? editing : band.fuelPp ?? ''}
-                            placeholder="—"
-                            onChange={e =>
-                              setFuelEdits(prev => ({ ...prev, [band.departureId]: e.target.value }))
-                            }
-                            onBlur={() => saveFuel(band)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                            }}
-                            className="w-24 px-2 py-1 text-right tabular-nums border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-                          />
-                          {isSaving ? (
-                            <Loader2 className="w-3.5 h-3.5 text-gray-400 animate-spin" />
-                          ) : (
-                            editing !== undefined && <Check className="w-3.5 h-3.5 text-gray-300" />
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-gray-900">
-                        {money(band.landPp, currency)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums font-semibold text-gray-900">
-                        {money(band.totalPp, currency)}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {grid.variation_id ? (
-                          <Link
-                            href={`/b2b/calculator/${grid.variation_id}?travel_date=${band.startDate}&num_pax=${grid.num_pax}&passport=${grid.is_eur_passport ? 'eu' : 'non_eu'}`}
-                            title={
-                              band.incomplete
-                                ? 'Open a quote for this departure (has unpriced services — fill the rates)'
-                                : 'Open a quote for this departure in the calculator'
-                            }
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-[#647C47]/40 text-[#647C47] hover:bg-[#647C47]/10 transition-colors"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            Create quote
-                          </Link>
-                        ) : (
-                          <span
-                            title="No tour variation for this tier — add one in Tour Templates to quote from here"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-gray-300 cursor-not-allowed"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            Create quote
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-2 py-3 text-right">
+                        )
+                      })}
+                      <td className={`${td} text-right`}>
                         <button
                           onClick={() => deleteDeparture(band)}
                           disabled={deletingRow === band.departureId}
                           title="Delete this departure date"
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                          className="p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
                         >
                           {deletingRow === band.departureId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                         </button>
@@ -875,10 +733,10 @@ export default function DeparturesGridPage() {
         )}
       </div>
 
-      <p className="mt-3 text-xs text-gray-400">
-        AIR, 燃油 and class are entered by hand — AIR defaults to the engine
-        estimate until you type a fare, and overriding it never shifts LND. LND
-        (land) is priced by the engine per date. FX is provisional pending
+      <p className="mt-2 text-xs text-gray-400">
+        AIR is the international fare, typed per class — leave it blank where a class is not sold. LND is priced by the
+        engine per date and includes domestic flights. 燃油 is one amount for every class. Website is the total rounded up
+        to end in 999 (grey); type over it to publish your own (black), clear it to go back. FX is provisional pending
         operator sign-off.
       </p>
 
@@ -901,5 +759,66 @@ export default function DeparturesGridPage() {
         />
       )}
     </div>
+  )
+}
+
+/** The AIR / Total / Website sub-headings under one class. */
+function FragmentHeads({ th, edge }: { th: string; edge: string }) {
+  return (
+    <>
+      <th className={`${th} text-right ${edge} border-b border-gray-200`}>AIR</th>
+      <th className={`${th} text-right border-b border-gray-200`}>合計 Total</th>
+      <th className={`${th} text-right border-b border-gray-200`}>Website</th>
+    </>
+  )
+}
+
+/** One class's three cells for a date. */
+function ClassCells({
+  td,
+  edge,
+  col,
+  currency,
+  savingAir,
+  savingWeb,
+  onAir,
+  onWeb,
+}: {
+  td: string
+  edge: string
+  col: ClassColumn
+  currency: string
+  savingAir: boolean
+  savingWeb: boolean
+  onAir: (v: number | null) => void
+  onWeb: (v: number | null) => void
+}) {
+  return (
+    <>
+      <td className={`${td} text-right ${edge}`}>
+        <NumCell value={col.airPp} placeholder="—" title="International AIR fare, per person" saving={savingAir} onSave={onAir} />
+      </td>
+      <td className={`${td} text-right tabular-nums font-medium text-gray-900 pr-3 whitespace-nowrap`}>
+        {col.totalPp == null ? <span className="text-gray-300">—</span> : money(col.totalPp, currency)}
+      </td>
+      <td className={`${td} text-right`}>
+        {col.totalPp == null && !col.websiteTyped ? (
+          <span className="pr-1.5 text-gray-300">—</span>
+        ) : (
+          <NumCell
+            value={col.websiteTyped ? col.websitePp : null}
+            placeholder={col.websiteSuggested != null ? col.websiteSuggested.toLocaleString('en-US') : '—'}
+            title={
+              col.websiteTyped
+                ? `Typed website rate — clear it to go back to ${col.websiteSuggested?.toLocaleString('en-US') ?? 'the suggestion'}`
+                : 'Suggested: the total rounded up to end in 999 — type to publish your own'
+            }
+            emphasis={col.websiteTyped}
+            saving={savingWeb}
+            onSave={onWeb}
+          />
+        )}
+      </td>
+    </>
   )
 }

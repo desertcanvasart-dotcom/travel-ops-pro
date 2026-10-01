@@ -8,11 +8,11 @@
 // sheet uses one flat land figure across every date; this prices each band for
 // real. See handover/feature-specs/6-departures-grid-spec.md.
 //
-// STUB SCOPE: computes bands live from the engine and returns them. Two
-// decisions are deliberately provisional and isolated so they are one edit to
-// finalise once the operator signs off (both marked TODO below):
-//   1. The AIR/LND allocation of the per-person GROSS (see allocateBand).
-//   2. The FX source and rate (see resolveFx).
+// The split (operator, 2026-10-01): LND is the engine's whole per-person gross,
+// domestic flights included; AIR is the international fare the office types
+// per class (economy, business, one-way business); 燃油 is one typed number.
+// Each class gets its own total and website rate (lib/pricing/departure-buckets).
+// Still provisional: the FX source and rate (see resolveFx).
 // Not yet wired: reading/writing the tour_departures cache columns
 // (air_pp/land_pp/priced_at) from migration 20261030 — this stub always
 // prices live. `?reprice=1` is accepted but currently a no-op distinction.
@@ -26,11 +26,13 @@ import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-mar
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { createServerClient } from '@/lib/supabase-server'
 import {
-  sumBuckets,
-  assembleBand,
+  AIR_COLUMN,
+  FLIGHT_CLASSES,
+  WEB_COLUMN,
+  classColumn,
   convertAtRate,
-  type BucketableLine,
-  type DepartureBand,
+  type ClassColumn,
+  type FlightClass,
 } from '@/lib/pricing/departure-buckets'
 
 // TODO(operator): confirm the office rate. The office prices internally at
@@ -42,11 +44,10 @@ const DEFAULT_OFFICE_FX_JPY_PER_USD = 160
 // for ATS). Until price_currency is a setting, the grid targets JPY.
 const DEFAULT_TARGET_CURRENCY = 'JPY'
 
-interface GridBand extends DepartureBand {
+interface GridBand {
   departureId: string
   startDate: string
   endDate: string | null
-  flightClass: string | null
   currency: string
   /** The date's own bookability — the grid is where a programme's dates are
    *  run, not only priced (seats sold, open/guaranteed/cancelled). */
@@ -54,41 +55,18 @@ interface GridBand extends DepartureBand {
   maxPax: number
   minPax: number
   bookedPax: number
+  /** 燃油, per person — one number whatever the class. Null = not entered. */
+  fuelPp: number | null
+  /** The engine's whole per-person gross for the date, domestic flights
+   *  included (lib/pricing/departure-buckets). */
+  landPp: number
+  /** AIR / total / website rate for each class sold side by side. */
+  classes: Record<FlightClass, ClassColumn>
+  /** True when the engine reported unpriced holes for this date. */
+  incomplete: boolean
   /** The engine's unpriced-hole kinds for this date, so the UI can say why a
    *  band is incomplete rather than showing a flat total. */
   holes: string[]
-}
-
-/**
- * PROVISIONAL allocation (TODO(operator/design)): the engine returns ONE
- * per-person gross for the trip, not an AIR figure and an LND figure. This
- * splits that gross in proportion to each bucket's share of GROUP cost — a
- * line's lineTotal is group cost, and the ratio is currency-agnostic, so this
- * is the same whether costs are in USD or JPY. It is a transparent first rule,
- * not necessarily how the office wants air carved out (e.g. they may want the
- * real ticket price in AIR and the remainder in LND). Keep it here, one place,
- * so finalising it is one function.
- */
-function allocateBand(args: {
-  services: readonly BucketableLine[]
-  grossPerPersonTarget: number // engine per-person gross, already in target currency
-  fuelPerPerson: number | null
-  /** The office's manual AIR fare, per person, when they typed one. null → use
-   *  the engine's estimate. LND is engine land either way, so a manual fare
-   *  never double-counts against a flight the engine also priced. */
-  airOverride: number | null
-  incomplete: boolean
-}): DepartureBand {
-  const { air, land } = sumBuckets(args.services)
-  const totalCost = air + land
-  const airShare = totalCost > 0 ? air / totalCost : 0
-  const engineAirPp = Math.round(args.grossPerPersonTarget * airShare)
-  // Land is always the engine's land portion, so AIR + LND == the engine gross
-  // when AIR is the engine estimate, and a manual AIR only replaces the air
-  // estimate — it does not shift LND.
-  const landPp = args.grossPerPersonTarget - engineAirPp
-  const airPp = args.airOverride != null ? Math.round(args.airOverride) : engineAirPp
-  return assembleBand({ airPp, fuelPp: args.fuelPerPerson, landPp, incomplete: args.incomplete })
 }
 
 /** TODO(operator): make FX a setting. For now: `fx` query param, else the
@@ -146,7 +124,7 @@ export async function GET(request: NextRequest) {
     // Bands = this template's departures, org-scoped, in date order.
     const { data: departures, error: depErr } = await supabase
       .from('tour_departures')
-      .select('id, start_date, end_date, flight_class, fuel_surcharge_pp, air_pp, currency, status, max_pax, min_pax, booked_pax')
+      .select('id, start_date, end_date, fuel_surcharge_pp, air_pp, air_business_pp, air_oneway_business_pp, web_price_economy, web_price_business, web_price_oneway_business, currency, status, max_pax, min_pax, booked_pax')
       .eq('org_id', org_id)
       .eq('template_id', templateId)
       .order('start_date', { ascending: true })
@@ -157,22 +135,6 @@ export async function GET(request: NextRequest) {
         { status: 500 },
       )
     }
-
-    // The B2B calculator — the app's quote surface — is keyed by variation, and
-    // a template has one variation per tier. Resolve the variation matching the
-    // grid's tier so each band can open a pre-filled quote. Null when the
-    // template has no variation for this tier; the grid then disables its
-    // "Create quote" action rather than linking nowhere. Scoped via the
-    // org-owned template (tour_variations has no org_id of its own).
-    const { data: variation } = await supabase
-      .from('tour_variations')
-      .select('id')
-      .eq('template_id', templateId)
-      .eq('tier', tier)
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle()
-    const variationId = variation?.id ?? null
 
     const rows = departures ?? []
     const bands: GridBand[] = []
@@ -195,39 +157,39 @@ export async function GET(request: NextRequest) {
         guideMode,
       })
 
-      // Per-person gross for the requested pax basis, in the rate currency —
+      // Per-person gross for the requested pax basis, in the target currency —
       // calculateAutoPricing was passed numPax, so pricePerPerson is already
-      // for that basis.
-      const grossPerPersonTarget = convertAtRate(result.pricePerPerson ?? 0, fx)
-
-      const lines: BucketableLine[] = (result.services ?? []).map(s => ({
-        serviceType: s.serviceType,
-        amount: s.lineTotal, // GROUP cost — used only for the AIR/LND ratio
-      }))
-
-      const band = allocateBand({
-        services: lines,
-        grossPerPersonTarget,
-        // Fuel is entered in the departure row's currency; the stub assumes the
-        // office enters it in the target (JPY). TODO(operator): confirm.
-        fuelPerPerson: dep.fuel_surcharge_pp == null ? null : Number(dep.fuel_surcharge_pp),
-        // air_pp doubles as the office's manual AIR fare override (per person,
-        // in the target currency). null → show the engine's estimate.
-        airOverride: dep.air_pp == null ? null : Number(dep.air_pp),
-        incomplete: !result.complete,
-      })
+      // for that basis. All of it is LND: the engine prices the ground
+      // arrangements and domestic flights, never the international fare.
+      const landPp = convertAtRate(result.pricePerPerson ?? 0, fx)
+      // Fuel and the AIR fares are typed in the target currency (JPY).
+      const fuelPp = dep.fuel_surcharge_pp == null ? null : Number(dep.fuel_surcharge_pp)
+      const num = (v: unknown) => (v == null ? null : Number(v))
+      const classes = Object.fromEntries(
+        FLIGHT_CLASSES.map(c => [
+          c,
+          classColumn({
+            landPp,
+            fuelPp,
+            airPp: num(dep[AIR_COLUMN[c]]),
+            websiteTyped: num(dep[WEB_COLUMN[c]]),
+          }),
+        ]),
+      ) as Record<FlightClass, ClassColumn>
 
       bands.push({
-        ...band,
         departureId: dep.id,
         startDate: dep.start_date,
         endDate: dep.end_date ?? null,
-        flightClass: dep.flight_class ?? null,
         currency: targetCurrency,
         status: dep.status ?? 'open',
         maxPax: Number(dep.max_pax ?? 0),
         minPax: Number(dep.min_pax ?? 0),
         bookedPax: Number(dep.booked_pax ?? 0),
+        fuelPp,
+        landPp,
+        classes,
+        incomplete: !result.complete,
         holes: (result.holes ?? []).map(h => h.kind),
       })
     }
@@ -245,7 +207,6 @@ export async function GET(request: NextRequest) {
         margin_percent: marginPercent,
         language,
         guide_mode: guideMode,
-        variation_id: variationId,
         bands,
       },
     })

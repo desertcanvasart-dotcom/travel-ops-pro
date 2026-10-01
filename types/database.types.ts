@@ -10985,6 +10985,11 @@ export interface Database {
           fuel_surcharge_pp: number | null
           flight_class: string | null
           air_pp: number | null
+          air_business_pp: number | null
+          air_oneway_business_pp: number | null
+          web_price_economy: number | null
+          web_price_business: number | null
+          web_price_oneway_business: number | null
           land_pp: number | null
           total_pp: number | null
           price_currency: string | null
@@ -11022,6 +11027,11 @@ export interface Database {
           fuel_surcharge_pp?: number | null
           flight_class?: string | null
           air_pp?: number | null
+          air_business_pp?: number | null
+          air_oneway_business_pp?: number | null
+          web_price_economy?: number | null
+          web_price_business?: number | null
+          web_price_oneway_business?: number | null
           land_pp?: number | null
           total_pp?: number | null
           price_currency?: string | null
@@ -11059,6 +11069,11 @@ export interface Database {
           fuel_surcharge_pp?: number | null
           flight_class?: string | null
           air_pp?: number | null
+          air_business_pp?: number | null
+          air_oneway_business_pp?: number | null
+          web_price_economy?: number | null
+          web_price_business?: number | null
+          web_price_oneway_business?: number | null
           land_pp?: number | null
           total_pp?: number | null
           price_currency?: string | null

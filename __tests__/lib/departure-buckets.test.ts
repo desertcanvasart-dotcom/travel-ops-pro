@@ -1,80 +1,55 @@
-// The departures grid splits each date band into AIR / 燃油 / LND / 合計
-// (handover/feature-specs/6). These pin the one split rule and the assembly so
-// the grid and any export cannot drift apart.
+// The departures grid: LND is the engine's whole gross (domestic flights
+// included), AIR is the international fare typed per class, and each class
+// publishes a website rate ending in 999 (operator, 2026-10-01).
 import { describe, it, expect } from 'vitest'
-import {
-  bucketOf,
-  isAirLine,
-  sumBuckets,
-  assembleBand,
-  convertAtRate,
-  type BucketableLine,
-} from '@/lib/pricing/departure-buckets'
+import { classColumn, convertAtRate, websiteRate } from '@/lib/pricing/departure-buckets'
 
-const line = (serviceType: string, amount: number): BucketableLine => ({ serviceType, amount })
-
-describe('the split rule: air tickets are AIR, everything else is LND', () => {
-  it('classifies a flight line as air', () => {
-    expect(bucketOf({ serviceType: 'flight' })).toBe('air')
-    expect(isAirLine({ serviceType: 'flight' })).toBe(true)
+describe('websiteRate rounds UP to end in 999', () => {
+  it('rounds up within the thousand', () => {
+    expect(websiteRate(417_651)).toBe(417_999)
+    expect(websiteRate(417_000)).toBe(417_999)
   })
 
-  it('is case-insensitive on serviceType', () => {
-    expect(bucketOf({ serviceType: 'FLIGHT' })).toBe('air')
+  it('keeps a price already ending in 999, and moves on from a round thousand', () => {
+    expect(websiteRate(417_999)).toBe(417_999)
+    expect(websiteRate(418_000)).toBe(418_999)
   })
 
-  it('keeps a guide who flies with the party in LND, not AIR', () => {
-    // The engine emits "Throughout Guide — flight …" as serviceType 'guide'.
-    expect(bucketOf({ serviceType: 'guide' })).toBe('land')
-    expect(isAirLine({ serviceType: 'guide' })).toBe(false)
+  it('never rounds down, even by a fraction', () => {
+    expect(websiteRate(417_999.4)).toBe(418_999)
   })
 
-  it('puts hotels, cruise, entrance, tips, ground transport in LND', () => {
-    for (const t of ['accommodation', 'cruise', 'entrance', 'tips', 'transportation', 'meal', 'airport_service']) {
-      expect(bucketOf({ serviceType: t })).toBe('land')
-    }
-  })
-
-  it('treats a missing serviceType as land', () => {
-    expect(bucketOf({ serviceType: '' })).toBe('land')
+  it('is zero-safe', () => {
+    expect(websiteRate(0)).toBe(0)
   })
 })
 
-describe('summing lines into buckets', () => {
-  it('adds each line into its own bucket', () => {
-    const lines = [
-      line('flight', 300),        // domestic air → AIR
-      line('flight', 700),        // international air → AIR
-      line('guide', 120),         // guide-on-flight → LND
-      line('accommodation', 400),
-      line('cruise', 500),
-      line('entrance', 40),
-    ]
-    expect(sumBuckets(lines)).toEqual({ air: 1000, land: 1060 })
+describe('classColumn', () => {
+  it('totals AIR + 燃油 + LND and suggests the website rate', () => {
+    expect(classColumn({ landPp: 388_603, fuelPp: 20_000, airPp: 180_000, websiteTyped: null })).toEqual({
+      airPp: 180_000,
+      totalPp: 588_603,
+      websiteSuggested: 588_999,
+      websitePp: 588_999,
+      websiteTyped: false,
+    })
   })
 
-  it('is empty-safe and coerces non-numbers to 0', () => {
-    expect(sumBuckets([])).toEqual({ air: 0, land: 0 })
-    expect(sumBuckets([{ serviceType: 'flight', amount: NaN }])).toEqual({ air: 0, land: 0 })
-  })
-})
-
-describe('assembling a band (per person, target currency)', () => {
-  it('totals AIR + 燃油 + LND', () => {
-    const band = assembleBand({ airPp: 1000, fuelPp: 150, landPp: 2000 })
-    expect(band.totalPp).toBe(3150)
-    expect(band.incomplete).toBe(false)
+  it('has no total and no website rate until the class has a fare', () => {
+    expect(classColumn({ landPp: 388_603, fuelPp: 20_000, airPp: null, websiteTyped: null })).toMatchObject({
+      totalPp: null,
+      websiteSuggested: null,
+      websitePp: null,
+    })
   })
 
-  it('carries un-entered fuel through as null but still totals AIR + LND', () => {
-    const band = assembleBand({ airPp: 1000, fuelPp: null, landPp: 2000 })
-    expect(band.fuelPp).toBeNull()
-    expect(band.totalPp).toBe(3000)
+  it('totals without fuel while it is not entered', () => {
+    expect(classColumn({ landPp: 100_000, fuelPp: null, airPp: 50_000, websiteTyped: null }).totalPp).toBe(150_000)
   })
 
-  it('marks a band incomplete when the engine reported holes', () => {
-    const band = assembleBand({ airPp: 1000, fuelPp: 150, landPp: 0, incomplete: true })
-    expect(band.incomplete).toBe(true)
+  it('publishes a typed website rate over the suggestion', () => {
+    const c = classColumn({ landPp: 388_603, fuelPp: 0, airPp: 100_000, websiteTyped: 489_000 })
+    expect(c).toMatchObject({ websiteSuggested: 488_999, websitePp: 489_000, websiteTyped: true })
   })
 })
 
