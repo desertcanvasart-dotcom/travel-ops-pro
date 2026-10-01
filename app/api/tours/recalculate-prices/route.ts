@@ -10,9 +10,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { timingSafeEqual } from 'node:crypto'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
-import { refreshTemplateCachedPrice } from '@/lib/tours/cached-price'
+import { loadCachedPriceSettings, refreshTemplateCachedPrice } from '@/lib/tours/cached-price'
 import { getCurrentOrgId, requireRole } from '@/lib/auth/current-org'
-import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
 
 const supabaseAdmin = createClient(
@@ -127,7 +126,8 @@ export async function POST(request: NextRequest) {
     // the caller's org and the scheduler (no session) for the installation's
     // sole org. Without rateCurrency the engine read every rate as EUR.
     const orgId = (await getCurrentOrgId()) ?? (await soleOrgId())
-    const pricingOptions = { orgId: orgId ?? undefined, rateCurrency: await getOrgRateCurrency(supabaseAdmin, orgId) }
+    // ...and at its own settings: guide language, default margin (lib/tours/cached-price).
+    const pricingOptions = await loadCachedPriceSettings(supabaseAdmin, orgId)
 
     // Process templates sequentially to avoid overwhelming the database
     for (const template of templates) {

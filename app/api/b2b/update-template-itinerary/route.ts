@@ -2,9 +2,8 @@ import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse, after } from 'next/server'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
-import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
-import { refreshTemplateCachedPrice } from '@/lib/tours/cached-price'
+import { loadCachedPriceSettings, refreshTemplateCachedPrice } from '@/lib/tours/cached-price'
 
 // ============================================
 // B2B: Update Template Itinerary JSONB
@@ -88,7 +87,7 @@ export async function PATCH(request: NextRequest) {
       const orgId = await getCurrentOrgId()
       const ctx = {
         tierLadder: await tierLadderForCurrentOrg(),
-        pricingOptions: { orgId: orgId ?? undefined, rateCurrency: await getOrgRateCurrency(supabaseAdmin, orgId) },
+        pricingOptions: await loadCachedPriceSettings(supabaseAdmin, orgId),
       }
       after(async () => {
         try {
