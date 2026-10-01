@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { timingSafeEqual } from 'node:crypto'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
-import { loadCachedPriceSettings, refreshTemplateCachedPrice } from '@/lib/tours/cached-price'
+import { loadCachedPriceSettings, refreshTemplateCachedPrice, type NoPriceReason } from '@/lib/tours/cached-price'
 import { getCurrentOrgId, requireRole } from '@/lib/auth/current-org'
 import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
 
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`📋 Found ${templates.length} templates to process`)
 
-    const results: { id: string; name: string; price: number | null; tier: string | null; error?: string }[] = []
+    const results: { id: string; name: string; price: number | null; tier: string | null; error?: string; no_price?: NoPriceReason }[] = []
 
     // The "from" price ranges over the agency's own tiers, not the four presets.
     const tierLadder = await tierLadderForCurrentOrg()
@@ -132,9 +132,11 @@ export async function POST(request: NextRequest) {
     // Process templates sequentially to avoid overwhelming the database
     for (const template of templates) {
       try {
-        const { price, tier } = await refreshTemplateCachedPrice(supabaseAdmin, template, { tierLadder, pricingOptions })
+        const { price, tier, noPrice } = await refreshTemplateCachedPrice(supabaseAdmin, template, { tierLadder, pricingOptions })
         console.log(`✅ Updated ${template.template_name}: ${price} (${tier})`)
-        results.push({ id: template.id, name: template.template_name, price, tier })
+        // Why a tour has no price — the rates its closest tier lacks — so the
+        // catalogue can say what to add instead of a bare N/A.
+        results.push({ id: template.id, name: template.template_name, price, tier, ...(noPrice ? { no_price: noPrice } : {}) })
       } catch (err: any) {
         console.error(`❌ Error processing ${template.template_name}:`, err)
         results.push({
@@ -159,6 +161,7 @@ export async function POST(request: NextRequest) {
       message: `Recalculated prices for ${successCount} templates`,
       duration_ms: duration,
       updated: successCount,
+      priced: results.filter(r => r.price !== null).length,
       errors: errorCount,
       results
     })

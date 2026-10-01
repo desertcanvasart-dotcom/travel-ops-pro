@@ -48,6 +48,27 @@ interface TourTemplate {
 
 type ViewMode = 'grid' | 'table' | 'list'
 
+interface MissingRateRow { kind: string; reason: 'missing' | 'fuzzy' | 'unpriced'; day?: number; city?: string; lookup: string }
+interface RefreshRow {
+  id: string
+  name: string
+  price: number | null
+  error?: string
+  no_price?: { tier: string | null; missing: MissingRateRow[]; failed?: string[] }
+}
+interface NoPriceRow { id: string; name: string; tier: string | null; missing: MissingRateRow[]; failed: string[] }
+
+/** Under an N/A: how many rates the tour lacks, from the last refresh. */
+function MissingBadge({ row }: { row: NoPriceRow | undefined }) {
+  const t = useTranslations('tours')
+  if (!row) return null
+  return (
+    <span className="block text-[10px] font-normal text-amber-700">
+      {row.failed.length > 0 ? t('notPriceable') : t('ratesMissing', { count: row.missing.length })}
+    </span>
+  )
+}
+
 export default function ToursBrowsePage() {
   const t = useTranslations('tours')
   const tierLabel = useTierLabel()
@@ -77,6 +98,12 @@ export default function ToursBrowsePage() {
   // prices). Nothing ran it, so every card read N/A — this runs it on demand.
   const [refreshingPrices, setRefreshingPrices] = useState(false)
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null)
+  // Why each tour has no price, from the last refresh: the rates its closest
+  // tier lacks (lib/tours/cached-price, closestTierReason). Not stored — a
+  // refresh is how the office asks.
+  const [noPriceReport, setNoPriceReport] = useState<NoPriceRow[]>([])
+  const [showReport, setShowReport] = useState(true)
+  const noPriceById = new Map(noPriceReport.map(r => [r.id, r]))
 
   useEffect(() => {
     fetchTours()
@@ -114,6 +141,7 @@ export default function ToursBrowsePage() {
   const refreshPrices = async () => {
     setRefreshingPrices(true)
     setRefreshNotice(null)
+    setNoPriceReport([])
     try {
       const response = await fetch('/api/tours/recalculate-prices', { method: 'POST' })
       const data = await response.json().catch(() => null)
@@ -121,7 +149,16 @@ export default function ToursBrowsePage() {
         setRefreshNotice(data?.error || t('pricesRefreshFailed'))
         return
       }
-      setRefreshNotice(t('pricesRefreshed', { count: data.updated ?? 0 }))
+      const rows: RefreshRow[] = data.results ?? []
+      setRefreshNotice(t('pricesRefreshedOf', { priced: data.priced ?? rows.filter(r => r.price !== null).length, total: rows.length }))
+      setNoPriceReport(rows.filter(r => r.price === null).map(r => ({
+        id: r.id,
+        name: r.name,
+        tier: r.no_price?.tier ?? null,
+        missing: r.no_price?.missing ?? [],
+        failed: r.error ? [r.error] : (r.no_price?.failed ?? []),
+      })))
+      setShowReport(true)
       await fetchTours()
     } catch {
       setRefreshNotice(t('pricesRefreshFailed'))
@@ -254,6 +291,46 @@ export default function ToursBrowsePage() {
       </div>
       {refreshNotice && (
         <p className="-mt-4 mb-4 text-sm text-gray-600 text-right">{refreshNotice}</p>
+      )}
+
+      {/* Tours the refresh could not price, and the rates each one lacks. */}
+      {noPriceReport.length > 0 && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg">
+          <button
+            onClick={() => setShowReport(v => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left"
+          >
+            <span className="text-sm font-medium text-amber-900">{t('noPriceTitle', { count: noPriceReport.length })}</span>
+            <span className="text-xs text-amber-700">{showReport ? t('hide') : t('show')}</span>
+          </button>
+          {showReport && (
+            <ul className="px-4 pb-4 space-y-3 max-h-[480px] overflow-y-auto">
+              {noPriceReport.map(row => (
+                <li key={row.id} className="text-sm">
+                  <Link href={`/tours/${row.id}`} className="font-medium text-gray-900 hover:underline">{row.name}</Link>
+                  {row.failed.length > 0 ? (
+                    <p className="text-xs text-red-700 mt-0.5">{t('couldNotPrice')} {row.failed.join(' · ')}</p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-gray-600 mt-0.5">
+                        {t('missingAtTier', { count: row.missing.length, tier: row.tier ? tierLabel(row.tier, row.tier) : '—' })}
+                      </p>
+                      <ul className="mt-1 ml-4 list-disc text-xs text-gray-700 space-y-0.5">
+                        {row.missing.map((m, i) => (
+                          <li key={i}>
+                            {m.day != null && <span className="text-gray-500">{t('dayN', { n: m.day })} · </span>}
+                            {m.lookup}
+                            <span className="text-gray-400"> ({t(`holeReason.${m.reason}`)})</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {/* Stats Row */}
@@ -479,7 +556,7 @@ export default function ToursBrowsePage() {
                   <div>
                     <p className="text-[10px] text-gray-400 uppercase tracking-wide">{t('card.startingFrom')}</p>
                     <p className="text-xl font-semibold text-[#647C47]">
-                      {tour.starting_from ? formatWithConversion(tour.starting_from, rateCurrency) : 'N/A'}
+                      {tour.starting_from ? formatWithConversion(tour.starting_from, rateCurrency) : 'N/A'}{!tour.starting_from && <MissingBadge row={noPriceById.get(tour.id)} />}
                     </p>
                     <p className="text-[10px] text-gray-400">
                       {t('card.perPerson')}{tour.starting_from_tier ? ` • ${tour.starting_from_tier}` : ''}
@@ -571,7 +648,7 @@ export default function ToursBrowsePage() {
                   </div>
                   <div className="text-right min-w-[70px]">
                     <p className="font-semibold text-[#647C47] text-sm">
-                      {tour.starting_from ? formatWithConversion(tour.starting_from, rateCurrency) : 'N/A'}
+                      {tour.starting_from ? formatWithConversion(tour.starting_from, rateCurrency) : 'N/A'}{!tour.starting_from && <MissingBadge row={noPriceById.get(tour.id)} />}
                     </p>
                     <p className="text-[10px] text-gray-400">{t('card.perPerson')}</p>
                   </div>
@@ -672,7 +749,7 @@ export default function ToursBrowsePage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <p className="font-semibold text-[#647C47] text-sm">
-                        {tour.starting_from ? formatWithConversion(tour.starting_from, rateCurrency) : 'N/A'}
+                        {tour.starting_from ? formatWithConversion(tour.starting_from, rateCurrency) : 'N/A'}{!tour.starting_from && <MissingBadge row={noPriceById.get(tour.id)} />}
                       </p>
                       <p className="text-[10px] text-gray-400">{tour.starting_from_tier || ''}</p>
                     </td>

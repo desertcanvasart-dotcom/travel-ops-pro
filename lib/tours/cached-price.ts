@@ -40,6 +40,32 @@ export interface CachedPriceResult {
   tier: string | null
 }
 
+/** One rate the engine could not find — what the operator has to add. */
+export interface MissingRate {
+  kind: string
+  reason: 'missing' | 'fuzzy' | 'unpriced'
+  day?: number
+  city?: string
+  /** What the engine looked for, in words. */
+  lookup: string
+}
+
+/**
+ * Why a template has no "from" price: the tier closest to complete (fewest
+ * holes; the ladder order breaks a tie, so standard first) and what it lacks.
+ * `failed` when no tier could be priced at all (the engine's warnings).
+ */
+export interface NoPriceReason {
+  tier: string | null
+  missing: MissingRate[]
+  failed?: string[]
+}
+
+export interface RefreshResult extends CachedPriceResult {
+  /** Set only when price is null and the engine was asked. */
+  noPrice?: NoPriceReason
+}
+
 export interface CachedPriceContext {
   /** The agency's tier ladder (tierLadderForCurrentOrg). */
   tierLadder: readonly string[]
@@ -95,6 +121,30 @@ export function cheapestCompleteTier(results: Map<string, Pick<PricingResult, 's
   return best.price === null ? best : { price: Math.round(best.price), tier: best.tier }
 }
 
+type TierResult = Pick<PricingResult, 'success' | 'complete' | 'pricePerPerson' | 'holes' | 'warnings'>
+
+/** Why no tier is complete — see NoPriceReason. */
+export function closestTierReason(results: Map<string, TierResult>): NoPriceReason {
+  let best: { tier: string; holes: TierResult['holes'] } | null = null
+  const failed: string[] = []
+  for (const [tier, r] of results) {
+    if (!r.success) { failed.push(...(r.warnings ?? []).map(w => `${tier}: ${w}`)); continue }
+    const holes = r.holes ?? []
+    if (!best || holes.length < best.holes.length) best = { tier, holes }
+  }
+  if (!best) return { tier: null, missing: [], failed: failed.length ? failed : ['The engine could not price any tier'] }
+  // One line per distinct lookup: the same missing guide on six days is one rate to add.
+  const seen = new Set<string>()
+  const missing: MissingRate[] = []
+  for (const h of best.holes) {
+    const key = `${h.kind}|${h.reason}|${h.lookupAttempted}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    missing.push({ kind: h.kind, reason: h.reason, day: h.dayNumber, city: h.city, lookup: h.lookupAttempted })
+  }
+  return { tier: best.tier, missing }
+}
+
 /**
  * Price one template and write its cached "from" price. A template the engine
  * cannot price completely caches NULL — the card shows no price rather than a
@@ -104,14 +154,18 @@ export async function refreshTemplateCachedPrice(
   db: SupabaseClient,
   template: { id: string; uses_day_builder?: boolean | null; pricing_mode?: string | null },
   ctx: CachedPriceContext
-): Promise<CachedPriceResult> {
+): Promise<RefreshResult> {
   let price: number | null = null
   let tier: string | null = null
+  let noPrice: NoPriceReason | undefined
 
   // Only templates that use auto-pricing are priced by the engine.
   if (template.uses_day_builder || template.pricing_mode === 'auto') {
     const results = await calculateMultiTierPricing(template.id, [...ctx.tierLadder], CATALOGUE_PAX, true, ctx.pricingOptions)
     ;({ price, tier } = cheapestCompleteTier(results))
+    if (price === null) noPrice = closestTierReason(results)
+  } else {
+    noPrice = { tier: null, missing: [], failed: [`Pricing mode is "${template.pricing_mode ?? 'manual'}", not auto`] }
   }
 
   // Fallback: the variation_pricing table.
@@ -148,5 +202,6 @@ export async function refreshTemplateCachedPrice(
     .eq('id', template.id)
   if (error) throw error
 
-  return { price, tier }
+  // An authored variation price stands in — then there is nothing to report.
+  return price === null ? { price, tier, noPrice } : { price, tier }
 }
