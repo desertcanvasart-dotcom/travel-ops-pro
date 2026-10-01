@@ -142,6 +142,38 @@ describe('flight legs', () => {
     expect(legHoles(r)).toEqual([])
   })
 
+  // The departures grid types the international fare as AIR per class; with
+  // skipInternationalFlights the engine leaves it out of land entirely
+  // (operator, 2026-10-01) — priced once, and never a hole.
+  it('skipInternationalFlights leaves the Tokyo flight out — no fare, no hole — and still prices domestic', async () => {
+    const t = withDays([
+      day(1, 'Cairo', { transport_type: 'flight', leg_from: 'Tokyo', leg_to: 'Cairo' }),
+      day(2, 'Luxor', { transport_type: 'flight' }),
+    ])
+    t.org_vocabularies = withTokyo()
+    t.flight_rates = [
+      ...t.flight_rates,
+      { id: 'fl-intl', route_from: 'nrt', route_to: 'cai', cabin_class: 'economy', airline: 'EgyptAir', base_rate_eur: 900, base_rate_non_eur: 900, tax_eur: 100, tax_non_eur: 100, is_active: true },
+    ]
+    setMockTables(t)
+    const skipped = await calculateAutoPricing({ ...BASE, skipInternationalFlights: true })
+    expect(line(skipped, 'day1-ticket-flight')).toBeUndefined()
+    expect(line(skipped, 'day2-ticket-flight')).toMatchObject({ unitCost: 120 })
+    expect(legHoles(skipped)).toEqual([])
+
+    // Without the flag (a single quote) the international fare is priced as before.
+    setMockTables(t)
+    const priced = await calculateAutoPricing(BASE)
+    expect(line(priced, 'day1-ticket-flight')).toBeDefined()
+  })
+
+  it('skipInternationalFlights never drops a flight it cannot place — a city with no airport stays a hole', async () => {
+    const t = withDays([day(1, 'Cairo'), day(2, 'Siwa', { transport_type: 'flight' })])
+    setMockTables(t)
+    const r = await calculateAutoPricing({ ...BASE, skipInternationalFlights: true })
+    expect(line(r, 'day2-ticket-flight')).toMatchObject({ unpriced: true })
+  })
+
   it('still calls a flight between two Egyptian airports domestic', async () => {
     setMockTables(withDays([day(1, 'Cairo'), day(2, 'Luxor', { transport_type: 'flight' })]))
     const r = await calculateAutoPricing(BASE)

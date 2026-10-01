@@ -734,7 +734,8 @@ export default function DeparturesGridPage() {
 
       <p className="mt-2 text-xs text-gray-400">
         AIR is the international fare, typed per class — leave it blank where a class is not sold. LND is priced by the
-        engine per date and includes domestic flights. 燃油 is one amount for every class. Website is the total rounded up
+        engine per date and includes domestic flights; international flights (e.g. Tokyo → Cairo) are left out of
+        LND — they are the AIR you type. 燃油 is one amount for every class. Website is the total rounded up
         to end in 999 (grey); type over it to publish your own (black), clear it to go back. FX is provisional pending
         operator sign-off.
       </p>

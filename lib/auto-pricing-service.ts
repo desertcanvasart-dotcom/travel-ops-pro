@@ -46,7 +46,7 @@ import { usableRate } from '@/lib/pricing/usable-rate'
 import { sortByItineraryFlow } from '@/lib/pricing/breakdown-order'
 import { periodRatesFor, plainPeriodName as seasonNameOf } from '@/lib/rates/rate-seasons'
 import { ticketsValidOn, outOfSeasonMessage, namedOutOfSeasonMessage } from '@/lib/pricing/ticket-validity'
-import { airportsFrom, airportsForCity, cityAirportCode, type Airport } from '@/lib/rates/airports'
+import { airportsFrom, airportsForCity, cityAirportCode, isInternationalFlight, type Airport } from '@/lib/rates/airports'
 import { sailsOn, sailingDaysLabel } from '@/lib/rates/cruise-sailing'
 import { seasonsForRow as flightSeasonsForRow } from '@/lib/rates/rate-seasons'
 import { cruiseCandidates, hotelCandidates, propertyById } from '@/lib/pricing/property-candidates'
@@ -264,6 +264,8 @@ export interface DayPricingParams {
    *  pay for the guide's meals; 4+ eat him free). Never sizes anything else —
    *  the pax sheet below stays the authority on per-pax math. */
   numPax?: number
+  /** See PricingParams.skipInternationalFlights. */
+  skipInternationalFlights?: boolean
 }
 
 // Single pax calculation result
@@ -3757,6 +3759,10 @@ export async function calculateDayBasedPricing(
       // every unrecognised city as Cairo.
       const fromAirports = airportsForCity(airports, leg.from)
       const toAirports = airportsForCity(airports, leg.to)
+      // The departures grid prices the international fare as its own AIR
+      // column; here it would be charged a second time (see
+      // DayPricingParams.skipInternationalFlights).
+      if (params.skipInternationalFlights && isInternationalFlight(fromAirports, toAirports)) continue
       const fromKeys = new Set(fromAirports.map(a => a.key))
       const toKeys = new Set(toAirports.map(a => a.key))
       const onRoute = ticketRates.flights.filter(r =>
@@ -4578,6 +4584,13 @@ export interface PricingParams {
    *  in the vehicle sizing. Distinct from tourLeaderIncluded, which prices a
    *  leader at full customer rates. */
   guideMode?: 'spot' | 'throughout'
+  /** Leave international flights (airports in different countries, e.g.
+   *  Tokyo → Cairo) out of the price entirely — no fare, no hole. The
+   *  departures grid sets it: there the international fare is the AIR the
+   *  office types per class, so pricing it here too would charge it twice,
+   *  and a missing fare would mark every date incomplete (operator,
+   *  2026-10-01). Domestic flights are priced as always. */
+  skipInternationalFlights?: boolean
 }
 
 // ============================================
@@ -4779,7 +4792,8 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
     // Same trap, same fix: guide options must survive the wrapper.
     guideGrade: params.guideGrade,
     guideMode: params.guideMode,
-    numPax: params.numPax
+    numPax: params.numPax,
+    skipInternationalFlights: params.skipInternationalFlights,
   })
 
   if (!dayResult.success) {
@@ -5224,7 +5238,8 @@ export async function calculatePricingWithPassengerBreakdown(
     // Same trap, same fix: guide options must survive the wrapper.
     guideGrade: params.guideGrade,
     guideMode: params.guideMode,
-    numPax: params.numPax
+    numPax: params.numPax,
+    skipInternationalFlights: params.skipInternationalFlights,
   })
 
   if (!dayResult.success) {

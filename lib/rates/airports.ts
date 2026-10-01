@@ -183,3 +183,18 @@ export function flightRouteLabel(
   }
   return `${side(row.route_from)} → ${side(row.route_to)}`
 }
+
+/**
+ * Whether a flight between two cities crosses a border: every airport at one
+ * end is in a different country from every airport at the other (Tokyo, JP →
+ * Cairo, EG). False when either end has no airport in the list or no country
+ * code — "we cannot tell" is never treated as international.
+ */
+export function isInternationalFlight(fromAirports: Airport[], toAirports: Airport[]): boolean {
+  if (fromAirports.length === 0 || toAirports.length === 0) return false
+  const from = new Set(fromAirports.map(a => a.countryCode))
+  const to = new Set(toAirports.map(a => a.countryCode))
+  if (from.has('') || to.has('')) return false
+  for (const c of from) if (to.has(c)) return false
+  return true
+}

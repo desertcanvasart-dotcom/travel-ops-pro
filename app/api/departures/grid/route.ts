@@ -155,6 +155,9 @@ export async function GET(request: NextRequest) {
         marginPercent,
         rateCurrency,
         guideMode,
+        // The international fare is the AIR column, typed per class; the
+        // engine must not charge it again inside LND.
+        skipInternationalFlights: true,
       })
 
       // Per-person gross for the requested pax basis, in the target currency —

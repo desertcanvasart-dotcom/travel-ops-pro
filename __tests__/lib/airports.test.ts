@@ -9,6 +9,7 @@
 // country got Cairo for all of its airports, silently.
 import { describe, it, expect } from 'vitest'
 import {
+  isInternationalFlight,
   airportsFrom,
   airportsForCity,
   airportByKey,
@@ -112,5 +113,22 @@ describe('groupByCountry', () => {
     const groups = groupByCountry(airportsFrom([NRT, CAI, LXR]))
     expect(groups.map(g => g.countryCode)).toEqual(['EG', 'JP'])
     expect(groups[1].airports.map(a => a.key)).toEqual(['nrt'])
+  })
+})
+
+describe('isInternationalFlight', () => {
+  const ap = (city: string, countryCode: string) => ({ key: city.toLowerCase(), label: city, code: '', city, countryCode })
+
+  it('is international when the two ends are in different countries', () => {
+    expect(isInternationalFlight([ap('Tokyo', 'JP'), ap('Tokyo', 'JP')], [ap('Cairo', 'EG')])).toBe(true)
+  })
+
+  it('is domestic within one country', () => {
+    expect(isInternationalFlight([ap('Cairo', 'EG')], [ap('Luxor', 'EG')])).toBe(false)
+  })
+
+  it('never guesses: no airport, or no country code, is not international', () => {
+    expect(isInternationalFlight([], [ap('Cairo', 'EG')])).toBe(false)
+    expect(isInternationalFlight([ap('Tokyo', '')], [ap('Cairo', 'EG')])).toBe(false)
   })
 })
