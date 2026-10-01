@@ -20,7 +20,7 @@ import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { currencySymbol } from '@/lib/currency-totals'
 import AttractionPicker from '@/components/AttractionPicker'
 import TravelLegPicker, { storedRoadTransfers } from '@/components/TravelLegPicker'
-import { toEditableDay } from '@/lib/itineraries/editable-day'
+import { markServiceSetByHand, toEditableDay } from '@/lib/itineraries/editable-day'
 import DaySupplementsPicker from '@/components/DaySupplementsPicker'
 import DayPropertyPicker from '@/components/DayPropertyPicker'
 import DayTransportEditor from '@/components/DayTransportEditor'
@@ -177,6 +177,10 @@ interface TemplateItineraryDay {
   attractions: string[]
   /** entrance_fees ids — the tickets the engine prices; wording above is for the documents. */
   attraction_ids?: string[]
+  /** Set by the editor: what the operator chose by hand (lib/itineraries/editable-day). */
+  services_set_by_hand?: string[]
+  tickets_set_by_hand?: boolean
+  attractions_set_by_hand?: boolean
   /** How the day travels: 'ground' (default) | 'flight' | 'train' | 'sleeping_train'. */
   transport_type?: string
   /** The exact ticket row when several serve the route (operator picks THE train). */
@@ -426,10 +430,10 @@ function TourPriceCalculatorInner() {
   const updateDayService = (dayIndex: number, serviceField: string, value: boolean) => {
     setEditableDays(prev => {
       const updated = [...prev]
-      updated[dayIndex] = {
+      updated[dayIndex] = markServiceSetByHand({
         ...updated[dayIndex],
         services: { ...updated[dayIndex].services, [serviceField]: value }
-      }
+      }, serviceField)
       return updated
     })
     setHasUnsavedChanges(true)
@@ -453,7 +457,7 @@ function TourPriceCalculatorInner() {
     setEditableDays(prev => {
       const updated = [...prev]
       const attractions = [...(updated[dayIndex].attractions || []), attraction.trim()]
-      updated[dayIndex] = { ...updated[dayIndex], attractions }
+      updated[dayIndex] = { ...updated[dayIndex], attractions, attractions_set_by_hand: true }
       return updated
     })
     setHasUnsavedChanges(true)
@@ -570,7 +574,9 @@ function TourPriceCalculatorInner() {
   const setAttractionIds = (dayIndex: number, ids: string[]) => {
     setEditableDays(prev => {
       const updated = [...prev]
-      updated[dayIndex] = { ...updated[dayIndex], attraction_ids: ids }
+      // The picker's list is the day's whole list from now on — unticking the
+      // last ticket must not let the engine re-read tickets from the wording.
+      updated[dayIndex] = { ...updated[dayIndex], attraction_ids: ids, tickets_set_by_hand: true }
       return updated
     })
     setHasUnsavedChanges(true)
@@ -581,7 +587,7 @@ function TourPriceCalculatorInner() {
       const updated = [...prev]
       const attractions = [...(updated[dayIndex].attractions || [])]
       attractions.splice(attrIndex, 1)
-      updated[dayIndex] = { ...updated[dayIndex], attractions }
+      updated[dayIndex] = { ...updated[dayIndex], attractions, attractions_set_by_hand: true }
       return updated
     })
     setHasUnsavedChanges(true)

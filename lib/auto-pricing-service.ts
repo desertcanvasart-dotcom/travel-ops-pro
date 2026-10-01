@@ -147,6 +147,11 @@ export interface ItineraryDay {
   /** entrance_fees ids picked from the fee table — exact tickets for the
    *  day; the wording above is then documentation only (lib/pricing/attractions). */
   attraction_ids?: string[]
+  /** The operator picked this day's tickets by hand: attraction_ids is the
+   *  whole list, even when empty — the wording is not priced. */
+  tickets_set_by_hand?: boolean
+  /** Service flags the operator set by hand — never overridden by a rule. */
+  services_set_by_hand?: string[]
   services: {
     airport_arrival: boolean
     airport_departure: boolean
@@ -974,23 +979,33 @@ export function parseItinerary(itineraryData: any, opts?: {
       guide_required: hasAttractions
     }
 
+    // What the operator ticked or unticked by hand in the day editor
+    // (lib/itineraries/editable-day, markSetByHand). Those flags are final:
+    // the rules below used to re-tick them, so unticking day 1's airport
+    // arrival changed nothing and the editor looked like it did not save
+    // (operator, 2026-10-01).
+    const setByHand = new Set<string>(Array.isArray(day.services_set_by_hand) ? day.services_set_by_hand.map(String) : [])
+    const unlessSetByHand = (flags: Record<string, boolean>) =>
+      Object.fromEntries(Object.entries(flags).filter(([key]) => !setByHand.has(key)))
+
     // RULE ENFORCEMENT: ensure arrival/departure flags on first/last days of
     // a multi-day tour — when the package sells those services at all.
     const services = {
       ...baseServices,
-      ...(isFirstDay && itineraryData.length > 1 ? {
+      ...(isFirstDay && itineraryData.length > 1 ? unlessSetByHand({
         ...(pkgIncludes.airportTransfers ? { airport_arrival: true } : {}),
         ...(pkgIncludes.accommodation ? { hotel_checkin: true } : {}),
-      } : {}),
-      ...(isLastDay && itineraryData.length > 1 ? {
+      }) : {}),
+      ...(isLastDay && itineraryData.length > 1 ? unlessSetByHand({
         ...(pkgIncludes.airportTransfers ? { airport_departure: true } : {}),
         ...(pkgIncludes.accommodation ? { hotel_checkout: true } : {}),
-      } : {}),
+      }) : {}),
     }
 
-    // Extract attractions from title if not provided
+    // Extract attractions from title if not provided — unless the operator
+    // edited the day's sights, in which case an empty list means none.
     let attractions = day.attractions || []
-    if (attractions.length === 0 && day.title) {
+    if (attractions.length === 0 && day.title && day.attractions_set_by_hand !== true) {
       attractions = extractAttractionsFromTitle(day.title)
     }
 
@@ -1008,7 +1023,7 @@ export function parseItinerary(itineraryData: any, opts?: {
 
     if (isLikelyTransferOnly) {
       attractions = []
-      services.guide_required = false
+      if (!setByHand.has('guide_required')) services.guide_required = false
     }
 
     // Where the party sleeps. The programme's overnight_kind is the office's
@@ -1049,7 +1064,10 @@ export function parseItinerary(itineraryData: any, opts?: {
       meals,
       attractions,
       attraction_ids: Array.isArray(day.attraction_ids) ? day.attraction_ids.filter(Boolean).map(String) : undefined,
+      tickets_set_by_hand: day.tickets_set_by_hand === true || undefined,
       services,
+      // Carried for applyB2BDayRules, which forces the same first/last-day flags.
+      services_set_by_hand: setByHand.size > 0 ? [...setByHand] : undefined,
       // Parse transport overrides if present
       transport: day.transport || undefined,
       transport_type: sleepingAboard ? 'sleeping_train' : (day.transport_type || undefined),

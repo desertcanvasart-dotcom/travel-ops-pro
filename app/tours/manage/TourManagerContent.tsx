@@ -120,6 +120,8 @@ interface ItineraryDay {
   attractions?: string[]
   /** entrance_fees ids — the tickets the pricing engine charges for the day. */
   attraction_ids?: string[]
+  /** The ticket picker was used: attraction_ids is the day's whole list. */
+  tickets_set_by_hand?: boolean
   /** Supplements the night is sold with (vocabulary keys) — priced per
    *  person per night at the property's rate; included in the price. */
   supplements?: string[]
@@ -759,7 +761,7 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
                   <AttractionPicker
                     city={day.city}
                     selectedIds={day.attraction_ids ?? []}
-                    onChange={(ids) => onChange(itinerary.map((d, i) => (i === index ? { ...d, attraction_ids: ids } : d)))}
+                    onChange={(ids) => onChange(itinerary.map((d, i) => (i === index ? { ...d, attraction_ids: ids, tickets_set_by_hand: true } : d)))}
                     compact
                   />
                 </div>
