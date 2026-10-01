@@ -9,7 +9,7 @@ vi.mock('@supabase/supabase-js', async () => {
   return { createClient: () => mock.createMockClient() }
 })
 
-import { cheapestCompleteTier, pickGuideLanguage } from '@/lib/tours/cached-price'
+import { cheapestCompleteTier, closestTierReason, pickGuideLanguage } from '@/lib/tours/cached-price'
 
 beforeAll(() => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://localhost')
@@ -45,5 +45,25 @@ describe('pickGuideLanguage', () => {
 
   it('is undefined with no guide rates — the engine default stands', () => {
     expect(pickGuideLanguage(['english'], [])).toBeUndefined()
+  })
+})
+
+describe('closestTierReason', () => {
+  const hole = (lookup: string, dayNumber = 1) => ({ kind: 'guide', reason: 'missing' as const, dayNumber, tier: 'x', lookupAttempted: lookup })
+  const res = (holes: ReturnType<typeof hole>[], success = true, warnings: string[] = []) =>
+    ({ success, complete: holes.length === 0, pricePerPerson: 100, holes, warnings }) as any
+
+  it('names the tier with the fewest holes, standard first on a tie, one line per lookup', () => {
+    const r = closestTierReason(new Map([
+      ['standard', res([hole('Japanese guide, Luxor', 2), hole('Japanese guide, Luxor', 3)])],
+      ['deluxe', res([hole('Deluxe hotel, Cairo'), hole('Deluxe hotel, Luxor')])],
+    ]))
+    expect(r.tier).toBe('standard')
+    expect(r.missing).toEqual([{ kind: 'guide', reason: 'missing', day: 2, city: undefined, lookup: 'Japanese guide, Luxor' }])
+  })
+
+  it('reports the engine warnings when no tier could be priced', () => {
+    const r = closestTierReason(new Map([['standard', res([], false, ['Template not found'])]]))
+    expect(r).toEqual({ tier: null, missing: [], failed: ['standard: Template not found'] })
   })
 })
