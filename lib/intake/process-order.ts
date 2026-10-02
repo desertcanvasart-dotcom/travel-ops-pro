@@ -1,25 +1,29 @@
 // ============================================
 // A parsed order → the client, the variation, ONE draft quote
 // ============================================
-// The write half of the order intake, shared by the two doors an order can
+// The write half of the order intake, shared by every door an order can
 // come through: the operator's paste page (/intake/order → the authed
-// /api/intake/order-form route) and the customer's own hosted form
-// (/order → the public /api/public/order-form route). One implementation so
-// both doors create exactly the same rows; only what each door tells its
-// caller differs (the operator sees the priced preview, the customer never
-// sees cost or margin — that sanitisation lives in the public route).
+// /api/intake/order-form route), the customer's own hosted form
+// (/order → the public /api/public/order-form route), and the website's
+// order emails, taken from the synced inbox by the scheduled Gmail sync
+// (lib/intake/web-order-intake.ts). One implementation so every door creates
+// exactly the same rows; only what each door tells its caller differs (the
+// operator sees the priced preview, the customer never sees cost or margin —
+// that sanitisation lives in the public route).
 //
 // dryRun answers what WOULD happen and writes nothing. Otherwise: the
 // client (if new), a standard variation for the programme (if it has none —
-// a quote row must point at one), and the quote. The itinerary, booking and
-// documents follow from the quote's own Convert button, unchanged.
+// a quote row must point at one), the quote, and — when the office runs the
+// programme as a departure on that date — a pending seat hold on it. The
+// itinerary, booking and documents follow from the quote's own Convert
+// button, unchanged.
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isBookableLine } from '@/lib/pricing/breakdown-order'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { calculateAutoPricing, calculatePricingWithPassengerBreakdown } from '@/lib/auto-pricing-service'
 import { roomingAdjustment } from '@/lib/pricing/rooming'
-import { matchTemplateCode, type TourUpOrder } from '@/lib/intake/tour-up-order'
+import { matchProgramme, type TourUpOrder } from '@/lib/intake/tour-up-order'
 import { clientMessage } from '@/lib/api-errors'
 
 /** The order, written down for the quote's notes — everything the 日程表,
@@ -36,9 +40,13 @@ export function orderNotes(o: TourUpOrder): string {
     return `${label}: ${bits.join(' / ')}`
   }
   const lines = [
-    `【${o.inquiryType || '申込み'}】 ${o.tourCode} ${o.tourTitle}`.trim(),
-    `出発日: ${o.departureDate1}${o.departureDate2 ? `（第2希望 ${o.departureDate2}）` : ''}${o.departureAirport ? ` 出発地 ${o.departureAirport}` : ''}`,
-    `参加人数: 大人 ${o.adults} 子供 ${o.children}`,
+    `【${o.inquiryType || '申込み'}】 ${o.productKind === 'optional' ? '[オプショナルツアー] ' : ''}${o.tourCode} ${o.tourTitle}`.trim(),
+    o.websiteUrl ? `ウェブページ: ${o.websiteUrl}` : null,
+    `${o.productKind === 'optional' ? '利用日' : '出発日'}: ${o.departureDate1}${o.departureDate2 ? `（第2希望 ${o.departureDate2}）` : ''}${o.departureAirport ? ` 出発地 ${o.departureAirport}` : ''}`,
+    `参加人数: 大人 ${o.adults} 子供 ${o.children}${o.infants ? ` 幼児 ${o.infants}` : ''}`,
+    // What the website told the customer — theirs, to check against ours.
+    o.websiteSubtotalJpy ? `ウェブ表示の小計: ¥${o.websiteSubtotalJpy.toLocaleString('en-US')}` : null,
+    o.priceNotes ? `料金備考: ${o.priceNotes}` : null,
     person(o.lead, '代表者'),
     ...o.companions.map((c, i) => person(c, `同行者${i + 1}`)),
     `連絡: ${o.email}${o.phone ? ` / ${o.phone}` : ''}${o.contactMethod ? ` (${o.contactMethod === 'phone' ? '電話希望' : 'メール希望'})` : ''}`,
@@ -52,7 +60,8 @@ export interface ProcessOrderResult {
   /** HTTP status the door should answer with (200, 422, 500). */
   status: number
   /** The full body the OPERATOR door returns as-is. Carries success, dryRun,
-   *  order, template, client, pricing, and after a write clientCreated + quote.
+   *  order, template (+ matchedBy), client, pricing, departure, and after a
+   *  write clientCreated + quote + departureBooking.
    *  The public door must NOT return this to the customer — it picks out what
    *  is safe (see /api/public/order-form). */
   body: Record<string, unknown> & {
@@ -60,6 +69,7 @@ export interface ProcessOrderResult {
     error?: string
     quote?: { id: string; quote_number: string }
     clientCreated?: boolean
+    departureBooking?: { id: string; departure_id: string } | null
   }
 }
 
@@ -69,21 +79,30 @@ export async function processTourUpOrder(
 ): Promise<ProcessOrderResult> {
   const { orgId, userId, order, dryRun } = opts
 
-  // The programme the code names.
+  // The programme: the website page it was ordered from, else the code.
   const { data: templates } = await supabase
     .from('tour_templates')
-    .select('id, template_code, template_name, duration_days, tour_type')
+    .select('id, template_code, template_name, duration_days, tour_type, website_url')
     .eq('is_active', true)
-  const template = matchTemplateCode(order.tourCode, (templates ?? []) as { id: string; template_code: string; template_name: string; duration_days: number; tour_type: string | null }[])
+  type Tpl = { id: string; template_code: string; template_name: string; duration_days: number; tour_type: string | null; website_url?: string | null }
+  const { template: matched, matchedBy } = matchProgramme(order, (templates ?? []) as Tpl[])
+  const template = matched ? { id: matched.id, template_code: matched.template_code, template_name: matched.template_name, duration_days: matched.duration_days, tour_type: matched.tour_type } : null
 
-  // The client, by the email the customer typed.
-  const { data: existingClient } = await supabase
-    .from('clients')
-    .select('id, first_name, last_name')
-    .eq('org_id', orgId)
-    .ilike('email', order.email)
-    .limit(1)
-    .maybeSingle()
+  // The client, by the email the customer typed (none typed: none found —
+  // an empty pattern would match every client stored without an email).
+  const { data: existingClient } = order.email
+    ? await supabase
+      .from('clients')
+      .select('id, first_name, last_name')
+      .eq('org_id', orgId)
+      .ilike('email', order.email)
+      .limit(1)
+      .maybeSingle()
+    : { data: null }
+
+  // The programme's departure on that date, if the office runs it as one
+  // (the departures grid): the order holds seats on it.
+  const departure = template ? await findDeparture(supabase, orgId, template.id, order.departureDate1) : null
   const clientPreview = existingClient
     ? { id: existingClient.id, name: `${existingClient.last_name ?? ''} ${existingClient.first_name ?? ''}`.trim() }
     : null
@@ -102,8 +121,8 @@ export async function processTourUpOrder(
       marginPercent, mealPlan: 'lunch_only' as const,
       includeAccommodation: (template.duration_days || 1) > 1, tourLeaderIncluded: false,
     }
-    priced = order.children > 0
-      ? await calculatePricingWithPassengerBreakdown({ ...base, passengers: { numAdults: order.adults, numChildren: order.children, numInfants: 0 } })
+    priced = order.children > 0 || (order.infants ?? 0) > 0
+      ? await calculatePricingWithPassengerBreakdown({ ...base, passengers: { numAdults: order.adults, numChildren: order.children, numInfants: order.infants ?? 0 } })
       : await calculateAutoPricing(base)
     if (priced.success) {
       pricing = {
@@ -117,7 +136,7 @@ export async function processTourUpOrder(
     }
   }
 
-  const preview = { success: true, dryRun, order, template, client: clientPreview, pricing }
+  const preview = { success: true, dryRun, order, template, matchedBy, client: clientPreview, pricing, departure }
   if (dryRun) return { status: 200, body: preview }
   if (!template) {
     return { status: 422, body: { ...preview, success: false, error: `No programme matches tour code ${order.tourCode}. Add it under Tour Templates (or give the template this code) and read the order again.` } }
@@ -235,5 +254,39 @@ export async function processTourUpOrder(
     return { status: 500, body: { ...preview, success: false, error: clientMessage(qErr, 'Could not create the quote') } }
   }
 
-  return { status: 200, body: { ...preview, client: { id: clientId, name: clientName }, clientCreated, quote: quote as { id: string; quote_number: string } } }
+  // 4. Seats held on the date's departure, pending until the office confirms.
+  // Never fails the order: the quote is the record, the hold a convenience.
+  let departureBooking: { id: string; departure_id: string } | null = null
+  if (departure) {
+    const { data: hold, error: holdErr } = await supabase.from('departure_bookings').insert({
+      org_id: orgId,
+      departure_id: departure.id,
+      client_id: clientId,
+      client_name: clientName,
+      pax: numPax,
+      status: 'pending',
+      notes: `ウェブ注文 ${quote.quote_number}${order.infants ? `（幼児 ${order.infants}名 別）` : ''}`,
+    }).select('id, departure_id').single()
+    if (holdErr) console.error('[intake] departure hold failed:', holdErr)
+    else departureBooking = hold as { id: string; departure_id: string }
+  }
+
+  return { status: 200, body: { ...preview, client: { id: clientId, name: clientName }, clientCreated, quote: quote as { id: string; quote_number: string }, departureBooking } }
+}
+
+/** The programme's departure starting on the date — not cancelled; the
+ *  first if the office loaded more than one. */
+async function findDeparture(
+  supabase: SupabaseClient, orgId: string, templateId: string, date: string,
+): Promise<{ id: string; start_date: string; status: string; max_pax: number; booked_pax: number } | null> {
+  const { data } = await supabase
+    .from('tour_departures')
+    .select('id, start_date, status, max_pax, booked_pax')
+    .eq('org_id', orgId)
+    .eq('template_id', templateId)
+    .eq('start_date', date)
+    .neq('status', 'cancelled')
+    .order('created_at', { ascending: true })
+    .limit(1)
+  return ((data ?? [])[0] as { id: string; start_date: string; status: string; max_pax: number; booked_pax: number } | undefined) ?? null
 }

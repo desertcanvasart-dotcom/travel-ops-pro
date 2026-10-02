@@ -4,16 +4,17 @@ import { readHandoffText } from '@/lib/text-handoff'
 // ============================================
 // Order intake — the tour-up.jp form, read as a document
 // ============================================
-// Until the office mailbox is connected, the order email is pasted here;
-// once it is, the inbox sends a recognised order straight to this page.
-// The page shows what was read (programme, dates, party, traveller, price
-// and any holes) and writes ONE draft quote plus the client on confirm.
-// Nothing is written on preview.
+// Website order emails are taken in by themselves after each mailbox sync
+// (lib/intake/web-order-intake.ts); the list at the bottom says what each
+// became. One the intake could not finish opens here (?intake=<id>) to be
+// finished by hand; an email can also be pasted. The page shows what was
+// read (programme, dates, party, traveller, price and any holes) and writes
+// ONE draft quote plus the client on confirm. Nothing is written on preview.
 import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
-import { ClipboardPaste, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { ClipboardPaste, Loader2, CheckCircle2, AlertTriangle, Globe, Inbox } from 'lucide-react'
 
 interface Preview {
   success: boolean
@@ -21,15 +22,34 @@ interface Preview {
   order?: {
     tourCode: string; tourTitle: string; departureDate1: string; departureDate2?: string; departureAirport?: string
     adults: number; children: number; email: string; phone?: string
+    productKind?: 'tour' | 'optional'; websiteUrl?: string; infants?: number; websiteSubtotalJpy?: number; priceNotes?: string
     lead: { lastNameRomaji: string; firstNameRomaji: string; lastNameKanji?: string; firstNameKanji?: string; birthDate?: string; gender?: string }
     companions: { lastNameRomaji: string; firstNameRomaji: string; birthDate?: string }[]
     requests?: string
   }
   template?: { id: string; template_code: string; template_name: string; duration_days: number } | null
+  matchedBy?: 'website' | 'code' | null
+  departure?: { id: string; start_date: string; status: string; max_pax: number; booked_pax: number } | null
+  departureBooking?: { id: string; departure_id: string } | null
   client?: { id: string; name: string } | null
   pricing?: { total_cost: number; selling_price: number; price_per_person: number; currency: string; margin_percent: number; holes: { kind: string; message: string }[]; warnings: string[]; complete: boolean } | null
   quote?: { id: string; quote_number: string } | null
   clientCreated?: boolean
+}
+
+interface WebOrder {
+  id: string
+  received_at: string | null
+  subject: string | null
+  outcome: 'quote_created' | 'needs_attention' | 'duplicate'
+  reason: string | null
+  tour_code: string | null
+  travel_date: string | null
+  customer_email: string | null
+  customer_name: string | null
+  resolved_at: string | null
+  quote?: { id: string; quote_number: string; status: string } | null
+  client?: { id: string; first_name: string | null; last_name: string | null } | null
 }
 
 function decodeParam(v: string | null): string {
@@ -54,11 +74,30 @@ function OrderIntakeInner() {
   const [preview, setPreview] = useState<Preview | null>(null)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<Preview | null>(null)
+  // The website order being finished by hand (?intake=<id>), if any.
+  const [intake, setIntake] = useState<{ id: string; received_at: string | null; reason: string | null } | null>(null)
+  const [webOrders, setWebOrders] = useState<WebOrder[] | null>(null)
+
+  const loadWebOrders = () => {
+    fetch('/api/intake/web-orders').then(r => r.json()).then(j => setWebOrders(j.success ? j.intakes : [])).catch(() => setWebOrders([]))
+  }
+  useEffect(loadWebOrders, [])
 
   // The order form is parked in sessionStorage and only its key travels in
   // the URL — a full form in the query string is an HTTP 431 the app never
-  // sees. `text` is the legacy shape, kept for older links.
+  // sees. `text` is the legacy shape, kept for older links. `intake` is a
+  // website order the scheduled intake could not finish: its email is loaded.
   useEffect(() => {
+    const intakeId = params.get('intake')
+    if (intakeId) {
+      fetch(`/api/intake/web-orders/${encodeURIComponent(intakeId)}`).then(r => r.json()).then(j => {
+        if (j.success && j.intake) {
+          setText(j.intake.order_text ?? '')
+          setIntake({ id: j.intake.id, received_at: j.intake.received_at, reason: j.intake.reason })
+        }
+      }).catch(() => {})
+      return
+    }
     const stashed = readHandoffText(params.get('textKey'))
     if (stashed) { setText(stashed); return }
     const v = decodeParam(params.get('text'))
@@ -68,12 +107,19 @@ function OrderIntakeInner() {
   const call = async (dryRun: boolean) => {
     setBusy(true)
     try {
-      const res = await fetch('/api/intake/order-form', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, dryRun }) })
+      const res = await fetch('/api/intake/order-form', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, dryRun, intakeId: intake?.id }) })
       const j: Preview = await res.json()
-      if (dryRun) setPreview(j); else { setDone(j); setPreview(null) }
+      if (dryRun) setPreview(j); else { setDone(j); setPreview(null); if (j.success) { setIntake(null); loadWebOrders() } }
     } catch (e) {
       setPreview({ success: false, error: e instanceof Error ? e.message : String(e) })
     } finally { setBusy(false) }
+  }
+
+  const dismiss = async (id: string) => {
+    if (!window.confirm(t('dismissConfirm'))) return
+    await fetch(`/api/intake/web-orders/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'dismiss' }) })
+    if (intake?.id === id) { setIntake(null); setText(''); setPreview(null) }
+    loadWebOrders()
   }
 
   const fmt = (n: number, cur: string) => `${cur} ${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
@@ -85,6 +131,13 @@ function OrderIntakeInner() {
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><ClipboardPaste className="w-6 h-6 text-[#647C47]" />{t('title')}</h1>
         <p className="text-sm text-gray-500 mt-1">{t('subtitle')}</p>
       </div>
+
+      {intake && !done && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-3 text-sm flex items-start justify-between gap-3">
+          <p className="flex items-start gap-2"><AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />{t('fromWebsiteOrder', { date: intake.received_at ? new Date(intake.received_at).toLocaleString() : '—', reason: intake.reason ?? '' })}</p>
+          <button type="button" onClick={() => dismiss(intake.id)} className="text-xs underline shrink-0">{t('dismiss')}</button>
+        </div>
+      )}
 
       {!done && (
         <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
@@ -114,10 +167,12 @@ function OrderIntakeInner() {
             <section>
               <h2 className="font-semibold text-gray-900 mb-2">{t('programme')}</h2>
               <dl className="space-y-1">
-                <div className="flex gap-2"><dt className="text-gray-500 w-32">{t('tourCode')}</dt><dd className="font-mono">{o.tourCode}</dd></div>
-                <div className="flex gap-2"><dt className="text-gray-500 w-32">{t('matched')}</dt><dd>{preview.template ? <span className="text-green-700">{preview.template.template_code} · {preview.template.template_name}</span> : <span className="text-red-700 font-medium">{t('noMatch')}</span>}</dd></div>
-                <div className="flex gap-2"><dt className="text-gray-500 w-32">{t('departure')}</dt><dd>{o.departureDate1}{o.departureDate2 ? ` (${t('or')} ${o.departureDate2})` : ''}{o.departureAirport ? ` · ${o.departureAirport}` : ''}</dd></div>
-                <div className="flex gap-2"><dt className="text-gray-500 w-32">{t('party')}</dt><dd>{t('partyValue', { adults: o.adults, children: o.children })}</dd></div>
+                <div className="flex gap-2"><dt className="text-gray-500 w-32">{t('tourCode')}</dt><dd className="font-mono">{o.tourCode}{o.productKind === 'optional' && <span className="ml-2 font-sans text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">{t('optionalTour')}</span>}</dd></div>
+                {o.websiteUrl && <div className="flex gap-2"><dt className="text-gray-500 w-32">{t('websitePage')}</dt><dd className="break-all"><a href={o.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-[#647C47] underline">{o.websiteUrl}</a></dd></div>}
+                <div className="flex gap-2"><dt className="text-gray-500 w-32">{t('matched')}</dt><dd>{preview.template ? <span className="text-green-700">{preview.template.template_code} · {preview.template.template_name}{preview.matchedBy && <span className="text-gray-500"> ({t(preview.matchedBy === 'website' ? 'matchedByWebsite' : 'matchedByCode')})</span>}</span> : <span className="text-red-700 font-medium">{t('noMatch')}</span>}</dd></div>
+                <div className="flex gap-2"><dt className="text-gray-500 w-32">{t(o.productKind === 'optional' ? 'useDate' : 'departure')}</dt><dd>{o.departureDate1}{o.departureDate2 ? ` (${t('or')} ${o.departureDate2})` : ''}{o.departureAirport ? ` · ${o.departureAirport}` : ''}</dd></div>
+                <div className="flex gap-2"><dt className="text-gray-500 w-32">{t('party')}</dt><dd>{o.infants ? t('partyInfants', { adults: o.adults, children: o.children, infants: o.infants }) : t('partyValue', { adults: o.adults, children: o.children })}</dd></div>
+                {preview.template && <div className="flex gap-2"><dt className="text-gray-500 w-32" /><dd className={preview.departure ? 'text-green-700' : 'text-gray-500'}>{t(preview.departure ? 'departureFound' : 'departureNone')}</dd></div>}
               </dl>
             </section>
             <section>
@@ -136,11 +191,13 @@ function OrderIntakeInner() {
           {preview.pricing && (
             <section className="border-t border-gray-200 pt-4">
               <h2 className="font-semibold text-gray-900 mb-2">{t('price')}</h2>
-              <div className="grid grid-cols-3 gap-3">
+              <div className={`grid gap-3 ${o.websiteSubtotalJpy ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-3'}`}>
+                {o.websiteSubtotalJpy ? <div className="bg-blue-50 rounded-lg p-3"><p className="text-xs text-gray-500 flex items-center gap-1"><Globe className="w-3 h-3" />{t('websiteSubtotal')}</p><p className="font-semibold">JPY {o.websiteSubtotalJpy.toLocaleString()}</p></div> : null}
                 <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500">{t('cost')}</p><p className="font-semibold">{fmt(preview.pricing.total_cost, preview.pricing.currency)}</p></div>
                 <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500">{t('selling', { margin: preview.pricing.margin_percent })}</p><p className="font-semibold">{fmt(preview.pricing.selling_price, preview.pricing.currency)}</p></div>
                 <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500">{t('perPerson')}</p><p className="font-semibold">{fmt(preview.pricing.price_per_person, preview.pricing.currency)}</p></div>
               </div>
+              {o.priceNotes && <div className="mt-3 bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500 mb-1">{t('priceNotes')}</p><p className="whitespace-pre-wrap text-xs">{o.priceNotes}</p></div>}
               {preview.pricing.holes.length > 0 && (
                 <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-900">
                   <p className="font-medium flex items-center gap-1"><AlertTriangle className="w-4 h-4" />{t('holes', { count: preview.pricing.holes.length })}</p>
@@ -164,6 +221,7 @@ function OrderIntakeInner() {
             <>
               <p className="font-medium flex items-center gap-2"><CheckCircle2 className="w-5 h-5" />{t('created', { quote: done.quote.quote_number })}</p>
               <p className="mt-1">{done.clientCreated ? t('clientCreated') : t('clientLinked')}</p>
+              {done.departureBooking && <p className="mt-1">{t('departureHeld')}</p>}
               <div className="mt-3 flex gap-2">
                 <Link href={`/b2b/quotes/${done.quote.id}`} className="px-4 py-2 bg-[#647C47] text-white rounded-lg font-medium">{t('openQuote')}</Link>
                 <button type="button" onClick={() => { setDone(null); setText(''); }} className="px-4 py-2 border border-gray-300 rounded-lg">{t('another')}</button>
@@ -172,6 +230,61 @@ function OrderIntakeInner() {
           ) : <p>{done.error ?? t('failed')}</p>}
         </div>
       )}
+
+      <section className="bg-white rounded-lg border border-gray-200 p-4">
+        <h2 className="font-semibold text-gray-900 flex items-center gap-2"><Inbox className="w-5 h-5 text-[#647C47]" />{t('webOrders')}</h2>
+        <p className="text-xs text-gray-500 mt-1 mb-3">{t('webOrdersHint')}</p>
+        {webOrders === null ? <Loader2 className="w-4 h-4 animate-spin text-gray-400" /> : webOrders.length === 0 ? (
+          <p className="text-sm text-gray-500">{t('webOrdersEmpty')}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid="web-orders">
+              <thead>
+                <tr className="text-left text-xs text-gray-500 border-b border-gray-200">
+                  <th className="py-2 pr-3 font-medium">{t('received')}</th>
+                  <th className="py-2 pr-3 font-medium">{t('tourCode')}</th>
+                  <th className="py-2 pr-3 font-medium">{t('departure')}</th>
+                  <th className="py-2 pr-3 font-medium">{t('customer')}</th>
+                  <th className="py-2 pr-3 font-medium">{t('result')}</th>
+                  <th className="py-2 font-medium" />
+                </tr>
+              </thead>
+              <tbody>
+                {webOrders.map(w => {
+                  const open = w.outcome === 'needs_attention' && !w.resolved_at
+                  return (
+                    <tr key={w.id} className="border-b border-gray-100 align-top">
+                      <td className="py-2 pr-3 whitespace-nowrap text-gray-600">{w.received_at ? new Date(w.received_at).toLocaleString() : '—'}</td>
+                      <td className="py-2 pr-3 font-mono">{w.tour_code ?? '—'}</td>
+                      <td className="py-2 pr-3 whitespace-nowrap">{w.travel_date ?? '—'}</td>
+                      <td className="py-2 pr-3">
+                        {w.client ? <Link href={`/clients/${w.client.id}`} className="text-[#647C47] underline">{w.customer_name ?? `${w.client.last_name ?? ''} ${w.client.first_name ?? ''}`}</Link> : (w.customer_name ?? '—')}
+                        {w.customer_email && <div className="text-xs text-gray-500">{w.customer_email}</div>}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${open ? 'bg-amber-100 text-amber-800' : w.outcome === 'needs_attention' ? 'bg-gray-100 text-gray-600' : w.outcome === 'duplicate' ? 'bg-gray-100 text-gray-700' : 'bg-green-100 text-green-800'}`}>
+                          {w.outcome === 'needs_attention' && w.resolved_at ? t('dismissed') : t(`outcome_${w.outcome}`)}
+                        </span>
+                        {open && w.reason && <div className="text-xs text-gray-500 mt-1 max-w-xs">{w.reason}</div>}
+                      </td>
+                      <td className="py-2 whitespace-nowrap text-right">
+                        {w.quote ? (
+                          <Link href={`/b2b/quotes/${w.quote.id}`} className="text-[#647C47] underline">{w.quote.quote_number}</Link>
+                        ) : open ? (
+                          <span className="flex gap-3 justify-end">
+                            <Link href={`/intake/order?intake=${w.id}`} className="text-[#647C47] underline">{t('finish')}</Link>
+                            <button type="button" onClick={() => dismiss(w.id)} className="text-gray-500 underline">{t('dismiss')}</button>
+                          </span>
+                        ) : null}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   )
 }

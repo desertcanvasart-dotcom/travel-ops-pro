@@ -15,6 +15,11 @@
 // value", full- or half-width colons and digits, 年/月/日 dates, repeated
 // email confirmation field — and of a companion block per traveller.
 // Pure; the route matches the programme and writes.
+//
+// The website's own notification email — 【T-UP】…, "●label：value" lines,
+// the travellers in ●代表者 / ●同行者N blocks, package and optional tours —
+// is read by lib/intake/tup-mail.ts; parseTourUpOrder hands it over.
+import { looksLikeTupMail, parseTupMail, websitePageKey } from '@/lib/intake/tup-mail'
 
 export interface OrderPerson {
   /** Romanised, as on the passport. */
@@ -47,6 +52,18 @@ export interface TourUpOrder {
   address?: string
   requests?: string
   companions: OrderPerson[]
+  // ---- read from the website's own T-UP notification email (lib/intake/tup-mail.ts) ----
+  /** 'optional' for an optional tour (オプショナルツアー, a day on the ground
+   *  the customer adds); 'tour' for a programme. Absent = 'tour'. */
+  productKind?: 'tour' | 'optional'
+  /** The tour's page on the website (https://tour.ats-hj.com/opt_detail.php?id=67). */
+  websiteUrl?: string
+  /** 幼児 — infants, not counted in adults or children. */
+  infants?: number
+  /** 小計 — what the website showed the customer, in yen. Theirs, not ours. */
+  websiteSubtotalJpy?: number
+  /** 料金備考 — the website's price notes (single supplement, peak season …). */
+  priceNotes?: string
 }
 
 const Z2H: Record<string, string> = {}
@@ -62,9 +79,12 @@ export function normalizeJa(text: string): string {
     .replace(/[ \t]+/g, ' ')
 }
 
-/** Does this text look like the tour-up.jp order form? Cheap, for routing. */
+/** Does this text look like the tour-up.jp order form — the website's T-UP
+ *  notification (package or optional tour) or the canonical document? Cheap,
+ *  for routing. */
 export function looksLikeTourUpOrder(text: string): boolean {
   const t = normalizeJa(text)
+  if (looksLikeTupMail(t)) return true
   return /ツアーコード/.test(t) && /(希望出発日|出発日)/.test(t) && /(参加人数|大人)/.test(t)
 }
 
@@ -123,7 +143,7 @@ export function parseJaDate(s: string | undefined): string | undefined {
   return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 }
 
-function twoNames(value: string | undefined, a: RegExp, b: RegExp): [string, string] | undefined {
+export function twoNames(value: string | undefined, a: RegExp, b: RegExp): [string, string] | undefined {
   if (!value) return undefined
   const v = value.replace(/[:：]/g, ' ')
   const last = v.match(a)?.[1]?.trim()
@@ -135,7 +155,7 @@ function twoNames(value: string | undefined, a: RegExp, b: RegExp): [string, str
   return [v.trim(), '']
 }
 
-function parseGender(v: string | undefined): 'male' | 'female' | undefined {
+export function parseGender(v: string | undefined): 'male' | 'female' | undefined {
   if (!v) return undefined
   if (/女|female|F\b/i.test(v)) return 'female'
   if (/男|male|M\b/i.test(v)) return 'male'
@@ -145,6 +165,8 @@ function parseGender(v: string | undefined): 'male' | 'female' | undefined {
 /** Parse the order email. Null when the text is not this form. */
 export function parseTourUpOrder(raw: string): TourUpOrder | null {
   const text = normalizeJa(raw)
+  // The website's own notification (●label：value) has its own reader.
+  if (looksLikeTupMail(text)) return parseTupMail(text)
   if (!looksLikeTourUpOrder(text)) return null
 
   const tourCode = (after(text, LABELS.tourCode) ?? '').replace(/\s+/g, '').toUpperCase()
@@ -289,4 +311,20 @@ export function matchTemplateCode<T extends { template_code: string }>(code: str
   if (!stem) return null
   const byStem = templates.filter(t => norm(t.template_code).split('-')[0] === stem)
   return byStem.length === 1 ? byStem[0] : null
+}
+
+/** The programme an order names: the website page it was ordered from (the
+ *  programme's website_url) when exactly one programme has that page, else
+ *  the tour code (matchTemplateCode). Never a guess. */
+export function matchProgramme<T extends { template_code: string; website_url?: string | null }>(
+  order: Pick<TourUpOrder, 'tourCode' | 'websiteUrl'>,
+  templates: T[],
+): { template: T | null; matchedBy: 'website' | 'code' | null } {
+  const page = websitePageKey(order.websiteUrl)
+  if (page) {
+    const byPage = templates.filter(t => websitePageKey(t.website_url) === page)
+    if (byPage.length === 1) return { template: byPage[0], matchedBy: 'website' }
+  }
+  const byCode = matchTemplateCode(order.tourCode, templates)
+  return { template: byCode, matchedBy: byCode ? 'code' : null }
 }

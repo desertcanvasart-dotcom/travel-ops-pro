@@ -9,7 +9,9 @@
 //
 // Each new email conversation is judged ONCE, after the scheduled Gmail sync
 // stores it:
-//   - skipped without asking the AI when the other side is already a client,
+//   - skipped without asking the AI when the message is the website's order
+//     notification (the order intake handles it: lib/intake/web-order-intake),
+//     or the other side is already a client,
 //     supplier or partner, is the office itself (lib/email/office-addresses),
 //     or was marked "Not a lead" before
 //   - otherwise the AI reads the customer's first message and says whether it
@@ -25,6 +27,8 @@ import { MODEL_PARSER } from '@/lib/ai/models'
 import { loadKnownContactEmails } from '@/lib/email-scoping'
 import { bareAddress, isOfficeAddress, type OfficeRule } from '@/lib/email/office-addresses'
 import { loadOfficeRule } from '@/lib/email/office-addresses-server'
+import { looksLikeTourUpOrder } from '@/lib/intake/tour-up-order'
+import { emailOrderText } from '@/lib/intake/tup-mail'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from(table: string): any }
@@ -115,7 +119,7 @@ export function leadNotes(x: LeadExtraction, subject: string, receivedAt: string
   ].filter(Boolean).join('\n')
 }
 
-type Outcome = 'lead_created' | 'not_a_request' | 'known_contact' | 'office' | 'dismissed' | 'error'
+type Outcome = 'lead_created' | 'not_a_request' | 'known_contact' | 'office' | 'dismissed' | 'web_order' | 'error'
 
 /**
  * Judge every new email conversation not judged yet. Returns what happened to
@@ -154,6 +158,10 @@ export async function processNewEmailLeads(
       const msg = (firstIn ?? [])[0] as { from_address: string; subject: string | null; body_text: string | null; body_html: string | null; snippet: string | null; sent_at: string } | undefined
       // The office wrote first and nobody has asked for anything: not a request.
       if (!msg) { await mark('office'); continue }
+
+      // The website's order notification: the order intake made the client
+      // and the quote (lib/intake/web-order-intake.ts) — not a lead to judge.
+      if (looksLikeTourUpOrder(emailOrderText(msg.body_text, msg.body_html))) { await mark('web_order'); continue }
 
       const sender = bareAddress(msg.from_address)
       if (isOfficeAddress(rule, sender)) { await mark('office'); continue }
@@ -205,7 +213,7 @@ export async function processNewEmailLeads(
 }
 
 /** The organisation a connected mailbox belongs to (its user's membership). */
-async function orgForMailbox(db: Db, userId: string | null): Promise<string | null> {
+export async function orgForMailbox(db: Db, userId: string | null): Promise<string | null> {
   if (userId) {
     const { data } = await db.from('organization_members').select('org_id').eq('user_id', userId).order('created_at', { ascending: true }).limit(1).maybeSingle()
     if (data?.org_id) return data.org_id as string

@@ -13,6 +13,7 @@ vi.mock('@/lib/email/office-addresses-server', () => ({
   applyOfficeRuleWhenDue: (...a: unknown[]) => applyOfficeRuleWhenDue(...a),
 }))
 vi.mock('@/lib/email/email-leads', () => ({ processNewEmailLeads: async () => [] }))
+vi.mock('@/lib/intake/web-order-intake', () => ({ processNewWebOrders: async () => [] }))
 vi.mock('@/lib/supabase-server', () => {
   const q: any = {
     select: () => q, not: () => q, insert: () => q, update: () => q, delete: () => q, eq: () => q, lt: () => q,

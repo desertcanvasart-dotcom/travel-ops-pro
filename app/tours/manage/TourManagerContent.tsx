@@ -96,6 +96,7 @@ interface TourTemplate {
   best_for?: string[]
   physical_level?: string
   image_url?: string
+  website_url?: string | null
   is_featured: boolean
   is_active: boolean
   created_at: string
@@ -1196,6 +1197,7 @@ export default function TourManagerContent() {
     pickup_required: true,
     meals_included: [] as string[],
     image_url: '',
+    website_url: '',
     is_featured: false,
     is_active: true,
     uses_day_builder: true,
@@ -1491,6 +1493,7 @@ export default function TourManagerContent() {
       pickup_required: true,
       meals_included: [],
       image_url: '',
+      website_url: '',
       is_featured: false,
       is_active: true,
       uses_day_builder: true,
@@ -1532,6 +1535,7 @@ export default function TourManagerContent() {
       pickup_required: true,
       meals_included: [],
       image_url: template.image_url || '',
+      website_url: template.website_url || '',
       is_featured: template.is_featured,
       is_active: template.is_active,
       uses_day_builder: template.uses_day_builder ?? true,
@@ -2423,6 +2427,20 @@ export default function TourManagerContent() {
                         </label>
                       ))}
                     </div>
+                  </div>
+
+                  {/* The programme's page on the agency website — how a website order finds it */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Website page</label>
+                    <input
+                      type="url"
+                      name="website_url"
+                      value={formData.website_url}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg font-mono"
+                      placeholder="https://www.example.com/opt_detail.php?id=67"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">The page customers order this programme from. Website order emails carry it, so the order finds this programme even when the website&apos;s tour code differs.</p>
                   </div>
 
                   {/* Descriptions */}

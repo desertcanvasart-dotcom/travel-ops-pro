@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { leadNotes, nameFromSender, processNewEmailLeads, type LeadExtraction } from '@/lib/email/email-leads'
+import { OPTIONAL_TOUR_MAIL } from '../fixtures/tup-mails'
 
 // Operator, 2026-09-17: a travel request by email is a Lead (a potential
 // customer), made automatically from new email.
@@ -86,6 +87,16 @@ describe('a travel request by email becomes a Lead', () => {
       ['spam', 'not_a_request'], ['office', 'office'], ['supplier', 'known_contact'], ['dismissed', 'dismissed'],
     ])
     expect(asked).toBe(1)
+    expect(db.tables.clients).toEqual([])
+  })
+
+  it("the website's order notification is not a lead: the order intake made the client; the AI is not asked", async () => {
+    let asked = 0
+    const db = inbox([{ id: 'tup', from: 'noreply@example.com' }])
+    db.tables.email_messages[0].body_text = OPTIONAL_TOUR_MAIL
+    const out = await processNewEmailLeads(db, { extract: async () => { asked++; return request } })
+    expect(out).toEqual([{ conversationId: 'tup', outcome: 'web_order', clientId: undefined }])
+    expect(asked).toBe(0)
     expect(db.tables.clients).toEqual([])
   })
 

@@ -9,7 +9,9 @@
 // (lib/intake/tour-up-order.ts). The writes — and the customer's own door,
 // /api/public/order-form — live in lib/intake/process-order.ts.
 //
-// dryRun answers what WOULD happen and writes nothing.
+// dryRun answers what WOULD happen and writes nothing. `intakeId` names the
+// website order (web_order_intakes) this finishes by hand: its quote is
+// recorded there and it leaves the "needs attention" list.
 import { NextRequest, NextResponse } from 'next/server'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
@@ -20,7 +22,7 @@ const supabase = createActorAdminClient()
 
 export async function POST(request: NextRequest) {
   try {
-    const { text, dryRun = false } = await request.json()
+    const { text, dryRun = false, intakeId } = await request.json()
     if (!text || typeof text !== 'string') {
       return NextResponse.json({ success: false, error: 'text is required' }, { status: 400 })
     }
@@ -31,12 +33,26 @@ export async function POST(request: NextRequest) {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
+    const userId = await getCurrentUserId()
     const result = await processTourUpOrder(supabase, {
       orgId,
-      userId: await getCurrentUserId(),
+      userId,
       order,
       dryRun: dryRun === true,
     })
+    const quote = result.body.quote
+    if (!dryRun && quote && typeof intakeId === 'string' && intakeId) {
+      const { error } = await supabase.from('web_order_intakes').update({
+        outcome: 'quote_created',
+        reason: null,
+        quote_id: quote.id,
+        client_id: (result.body.client as { id?: string } | null | undefined)?.id ?? null,
+        departure_booking_id: result.body.departureBooking?.id ?? null,
+        resolved_at: new Date().toISOString(),
+        resolved_by: userId,
+      }).eq('org_id', orgId).eq('id', intakeId)
+      if (error) console.error('[intake/order-form] intake not updated:', error)
+    }
     return NextResponse.json(result.body, { status: result.status })
   } catch (err) {
     console.error('[intake/order-form]', err)

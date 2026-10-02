@@ -4893,6 +4893,7 @@ export interface Database {
           created_at: string | null
           sent_by: string | null
           rfc_message_id: string | null
+          order_checked_at: string | null
         }
         Insert: {
           id?: string
@@ -4917,6 +4918,7 @@ export interface Database {
           created_at?: string | null
           sent_by?: string | null
           rfc_message_id?: string | null
+          order_checked_at?: string | null
         }
         Update: {
           id?: string
@@ -4941,6 +4943,7 @@ export interface Database {
           created_at?: string | null
           sent_by?: string | null
           rfc_message_id?: string | null
+          order_checked_at?: string | null
         }
         Relationships: [
           {
@@ -11624,6 +11627,7 @@ export interface Database {
           theme_key: string | null
           cached_price_complete: boolean | null
           cached_price_gaps: number | null
+          website_url: string | null
         }
         Insert: {
           id?: string
@@ -11667,6 +11671,7 @@ export interface Database {
           theme_key?: string | null
           cached_price_complete?: boolean | null
           cached_price_gaps?: number | null
+          website_url?: string | null
         }
         Update: {
           id?: string
@@ -11710,6 +11715,7 @@ export interface Database {
           theme_key?: string | null
           cached_price_complete?: boolean | null
           cached_price_gaps?: number | null
+          website_url?: string | null
         }
         Relationships: [
           {
@@ -13138,6 +13144,118 @@ export interface Database {
           city?: string | null
         }
         Relationships: []
+      }
+      web_order_intakes: {
+        Row: {
+          id: string
+          org_id: string
+          email_message_id: string | null
+          conversation_id: string | null
+          received_at: string | null
+          subject: string | null
+          outcome: string
+          reason: string | null
+          tour_code: string | null
+          travel_date: string | null
+          customer_email: string | null
+          customer_name: string | null
+          order_text: string
+          order_data: Json | null
+          client_id: string | null
+          quote_id: string | null
+          departure_booking_id: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          email_message_id?: string | null
+          conversation_id?: string | null
+          received_at?: string | null
+          subject?: string | null
+          outcome: string
+          reason?: string | null
+          tour_code?: string | null
+          travel_date?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          order_text: string
+          order_data?: Json | null
+          client_id?: string | null
+          quote_id?: string | null
+          departure_booking_id?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          email_message_id?: string | null
+          conversation_id?: string | null
+          received_at?: string | null
+          subject?: string | null
+          outcome?: string
+          reason?: string | null
+          tour_code?: string | null
+          travel_date?: string | null
+          customer_email?: string | null
+          customer_name?: string | null
+          order_text?: string
+          order_data?: Json | null
+          client_id?: string | null
+          quote_id?: string | null
+          departure_booking_id?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "web_order_intakes_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "web_order_intakes_email_message_id_fkey"
+            columns: ["email_message_id"]
+            isOneToOne: true
+            referencedRelation: "email_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "web_order_intakes_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "email_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "web_order_intakes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "web_order_intakes_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "tour_quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "web_order_intakes_departure_booking_id_fkey"
+            columns: ["departure_booking_id"]
+            isOneToOne: false
+            referencedRelation: "departure_bookings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       whatsapp_conversations: {
         Row: {

@@ -126,6 +126,7 @@ export async function PUT(
     if (body.accommodation_nights !== undefined) updateData.accommodation_nights = body.accommodation_nights
     if (body.meals_included !== undefined) updateData.meals_included = body.meals_included
     if (body.image_url !== undefined) updateData.image_url = body.image_url
+    if (body.website_url !== undefined) updateData.website_url = typeof body.website_url === 'string' && body.website_url.trim() ? body.website_url.trim() : null
     if (body.gallery_urls !== undefined) updateData.gallery_urls = body.gallery_urls
     if (body.is_featured !== undefined) updateData.is_featured = body.is_featured
     if (body.is_active !== undefined) updateData.is_active = body.is_active

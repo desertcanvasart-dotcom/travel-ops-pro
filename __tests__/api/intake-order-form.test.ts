@@ -32,6 +32,7 @@ vi.mock('@/lib/auto-pricing-service', () => ({
 }))
 
 import { POST } from '@/app/api/intake/order-form/route'
+import { PACKAGE_TOUR_MAIL } from '../fixtures/tup-mails'
 import { calculateAutoPricing } from '@/lib/auto-pricing-service'
 
 const ORDER = `問合せ種別：申込み
@@ -136,6 +137,22 @@ describe('POST /api/intake/order-form', () => {
     expect(real.status).toBe(422)
     expect(await rows('tour_quotes')).toEqual([])
     expect(await rows('clients')).toEqual([])
+  })
+
+  it("the website's T-UP email reads; finishing a website order by hand records the quote on it", async () => {
+    setMockTables({
+      tour_templates: [{ id: 'tpl-803', template_code: 'NEK803-CR-ABS', template_name: 'NEK803', duration_days: 8, is_active: true }],
+      tour_variations: [], clients: [], tour_quotes: [], tour_departures: [], departure_bookings: [],
+      web_order_intakes: [{ id: 'wo-1', org_id: 'org-1', outcome: 'needs_attention', reason: 'No programme matches tour code NEK803-ABCR' }],
+    })
+    const dry = await post({ text: PACKAGE_TOUR_MAIL, dryRun: true })
+    expect(dry.json).toMatchObject({ matchedBy: 'code', departure: null })
+    expect(dry.json.order).toMatchObject({ productKind: 'tour', websiteSubtotalJpy: 1250000, children: 1 })
+    expect((await rows('web_order_intakes'))[0].outcome).toBe('needs_attention')
+
+    const { status, json } = await post({ text: PACKAGE_TOUR_MAIL, intakeId: 'wo-1' })
+    expect(status).toBe(200)
+    expect((await rows('web_order_intakes'))[0]).toMatchObject({ outcome: 'quote_created', quote_id: json.quote.id, client_id: json.client.id, resolved_by: 'user-1' })
   })
 
   it('text that is not the form is refused', async () => {
