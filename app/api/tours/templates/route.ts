@@ -169,6 +169,9 @@ export async function POST(request: NextRequest) {
       accommodation_nights: body.accommodation_nights || null,
       meals_included: body.meals_included || [],
       image_url: body.image_url || null,
+      // The programme's page on the agency website: website orders name it
+      // (lib/intake/tour-up-order matchProgramme).
+      website_url: typeof body.website_url === 'string' && body.website_url.trim() ? body.website_url.trim() : null,
       gallery_urls: body.gallery_urls || [],
       is_featured: body.is_featured || false,
       is_active: body.is_active !== false,

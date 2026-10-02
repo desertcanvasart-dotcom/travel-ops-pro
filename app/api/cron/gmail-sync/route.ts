@@ -7,8 +7,10 @@
 // 2026-09-03 — so nothing could say whether a customer was still waiting for
 // an answer, and a reply sent from Gmail directly never reached the app.
 //
-// After syncing: stored mail from the office's own addresses is repaired, and
-// new travel requests become Leads (lib/email/email-leads).
+// After syncing: stored mail from the office's own addresses is repaired,
+// the website's order emails become quotes (lib/intake/web-order-intake), and
+// new travel requests become Leads (lib/email/email-leads). Orders run first:
+// the lead detector then knows those conversations are the website's.
 //
 // Each run replays Gmail's history since the last one and downloads only
 // mail not stored yet (lib/email/sync-mailbox); without a usable history id it
@@ -25,6 +27,7 @@ import { createServerClient } from '@/lib/supabase-server'
 import { syncMailbox } from '@/lib/email/sync-mailbox'
 import { applyOfficeRuleWhenDue, loadOfficeRule } from '@/lib/email/office-addresses-server'
 import { processNewEmailLeads } from '@/lib/email/email-leads'
+import { processNewWebOrders, type WebOrderResult } from '@/lib/intake/web-order-intake'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,6 +68,14 @@ async function getHandler(request: NextRequest) {
     console.error('[gmail-sync] office-address re-classify failed:', e)
   }
 
+  // The website's order emails become quotes (lib/intake/web-order-intake).
+  let orders: WebOrderResult[] = []
+  try {
+    orders = await processNewWebOrders(db)
+  } catch (e) {
+    console.error('[gmail-sync] web order intake failed:', e)
+  }
+
   // New travel requests by email become Leads (lib/email/email-leads).
   let leads: Array<{ conversationId: string; outcome: string }> = []
   try {
@@ -75,6 +86,8 @@ async function getHandler(request: NextRequest) {
 
   const failed = results.filter(r => !r.ok)
   const leadsCreated = leads.filter(l => l.outcome === 'lead_created').length
+  const ordersQuoted = orders.filter(o => o.outcome === 'quote_created').length
+  const ordersNeedingAttention = orders.filter(o => o.outcome === 'needs_attention').length
   // One line for job_runs: how much was downloaded vs already stored says at a
   // glance whether the incremental sync is working.
   const sum = (k: 'messages_fetched' | 'messages_already_stored' | 'messages_created') =>
@@ -82,9 +95,13 @@ async function getHandler(request: NextRequest) {
   const modes = [...new Set(results.filter(r => r.sync_mode).map(r => r.sync_mode))].join('+') || 'none'
   const summary = `${results.length} mailbox(es), ${failed.length} failed (${modes}): fetched ${sum('messages_fetched')} new, `
     + `${sum('messages_already_stored')} already stored, ${sum('messages_created')} stored; `
-    + `office repair ${reclassified ? `${reclassified.messages} msg(s)` : 'not due'}; ${leadsCreated} lead(s)`
+    + `office repair ${reclassified ? `${reclassified.messages} msg(s)` : 'not due'}; `
+    + `web orders ${ordersQuoted} quoted, ${ordersNeedingAttention} need attention; ${leadsCreated} lead(s)`
   return NextResponse.json(
-    { ok: failed.length === 0, mailboxes: results.length, results, reclassified, leads_created: leadsCreated },
+    {
+      ok: failed.length === 0, mailboxes: results.length, results, reclassified, leads_created: leadsCreated,
+      web_orders: { quoted: ordersQuoted, needs_attention: ordersNeedingAttention, total: orders.length },
+    },
     {
       status: failed.length && failed.length === results.length ? 500 : 200,
       headers: jobRunHeaders(failed.length ? 'failed' : 'ok', summary),

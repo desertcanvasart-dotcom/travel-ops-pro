@@ -46,6 +46,7 @@ export const TEMPLATE_CSV_COLUMNS: TemplateCsvColumn[] = [
   { name: 'short_description', label: 'Short Description' },
   { name: 'long_description', label: 'Long Description' },
   { name: 'image_url', label: 'Image URL' },
+  { name: 'website_url', label: 'Website Page' },
   { name: 'pickup_required', label: 'Pickup Required', kind: 'bool' },
   { name: 'is_featured', label: 'Featured', kind: 'bool' },
   { name: 'is_active', label: 'Active', kind: 'bool' },
@@ -117,6 +118,7 @@ export function sampleTemplateCsv(): string {
     short_description: 'A classic full-day tour of Cairo’s headline sights.',
     long_description: 'Pyramids of Giza, the Sphinx, and the Egyptian Museum, with lunch.',
     image_url: '',
+    website_url: '',
     pickup_required: true,
     is_featured: false,
     is_active: true,
@@ -144,6 +146,8 @@ export interface TemplateCsvRecord {
   short_description?: string
   long_description?: string
   image_url?: string
+  /** The programme's page on the agency website (website orders name it). */
+  website_url?: string
   pickup_required?: boolean
   is_featured?: boolean
   is_active?: boolean

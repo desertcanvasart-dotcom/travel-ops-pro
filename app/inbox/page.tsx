@@ -3,6 +3,7 @@
 import { newRequestKey, sendGuardedEmail } from '@/lib/email/send-with-guard'
 import { useSendConflictConfirm } from '@/lib/email/use-send-conflict-confirm'
 import { looksLikeTourUpOrder } from '@/lib/intake/tour-up-order'
+import { emailOrderText } from '@/lib/intake/tup-mail'
 import { stashHandoffText, encodeTextParam } from '@/lib/text-handoff'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
@@ -536,7 +537,7 @@ export default function InboxPage() {
     const match = fromString.match(/<(.+)>/)
     return match ? match[1] : fromString
   }
-  const handleParseEmail = () => {
+  const handleParseEmail = async () => {
     if (!selectedEmail) return
     
     const senderName = extractName(selectedEmail.from)
@@ -563,17 +564,20 @@ ${bodyText}`
 
     // An order from the website's form is a document, not a conversation:
     // it goes to the order intake, which reads it label by label and builds
-    // the quote from the ready-made programme it names.
-    if (looksLikeTourUpOrder(bodyText)) {
-      // Line breaks are the form's structure — keep them for the intake.
-      const bodyLines = selectedEmail.body
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/(p|div|tr|li|h\d)>/gi, '\n')
-        .replace(/<[^>]*>/g, '')
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-        .replace(/[ \t]+\n/g, '\n')
-        .trim()
+    // the quote from the ready-made programme it names. Line breaks are the
+    // form's structure (the T-UP notification is "●label：value" per line),
+    // so it is recognised and handed over with them kept.
+    const bodyLines = emailOrderText(null, selectedEmail.body).trim()
+    if (looksLikeTourUpOrder(bodyLines)) {
+      // Taken in already by the scheduled intake: open what it became.
+      try {
+        const r = await fetch(`/api/intake/web-orders?messageId=${encodeURIComponent(selectedEmail.id)}`)
+        const j = await r.json()
+        if (j.success && j.intake) {
+          window.location.href = j.intake.quote ? `/b2b/quotes/${j.intake.quote.id}` : `/intake/order?intake=${j.intake.id}`
+          return
+        }
+      } catch { /* not taken in yet: read it here */ }
       const orderKey = stashHandoffText(bodyLines)
       window.location.href = orderKey
         ? `/intake/order?textKey=${orderKey}`
