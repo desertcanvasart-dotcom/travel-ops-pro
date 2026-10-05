@@ -2974,7 +2974,13 @@
       "toll": "Toll Fees",
       "parking": "Parking",
       "fuel": "Fuel",
-      "other": "Other"
+      "other": "Other",
+      "cruise": "Nile Cruise",
+      "flights": "Flights",
+      "activity": "Activities & Tours",
+      "office": "Office Expenses",
+      "marketing": "Marketing",
+      "software": "Software/Subscriptions"
     },
     "supplierTypes": {
       "guide": "Tour Guide",
@@ -2994,6 +3000,22 @@
       "credit_card": "Credit Card",
       "wise": "Wise",
       "company_card": "Company Card"
+    },
+    "picker": {
+      "location": "Location",
+      "allLocations": "All locations",
+      "supplier": "Supplier",
+      "select": "Select {role}",
+      "loading": "Loading…",
+      "notInList": "Not in the list — type a name",
+      "namePlaceholder": "{role} name",
+      "paidTo": "Paid to",
+      "paidToPlaceholder": "e.g., Ahmed Mohamed",
+      "none": "No {role} suppliers yet.",
+      "noneIn": "No {role} suppliers in {city} yet.",
+      "showAll": "Show all locations",
+      "addOne": "Add one in Suppliers",
+      "loadFailed": "Couldn't load suppliers — type the name instead."
     }
   },
   "communicationLog": {

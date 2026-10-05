@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { setMockTables, createMockClient } from '../_mock-supabase'
 
 // Confirming an itinerary (PUT status: 'confirmed') auto-creates its booking.
@@ -28,6 +28,11 @@ const ITINERARY = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // The fixture departs 2026-12-05; from 2026-10-06 the 60-day balance date
+  // falls before the deposit date and the whole amount comes due at once.
+  // Pin "today" to when these expectations were written.
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-09-02T09:00:00Z'))
   setMockTables({
     itineraries: [structuredClone(ITINERARY)],
     organizations: [{ id: 'org-1', deposit_percent: null, deposit_due_days: null, balance_due_days_before_departure: null }],
@@ -39,6 +44,8 @@ async function put(body: Record<string, unknown>) {
   const res = await PUT({ json: async () => body } as any, { params: Promise.resolve({ id: 'itin-1' }) })
   return { status: res.status, json: await res.json() }
 }
+
+afterEach(() => { vi.useRealTimers() })
 
 describe('PUT /api/itineraries/[id] status → confirmed', () => {
   it('auto-creates the booking with the operator’s payment schedule', async () => {

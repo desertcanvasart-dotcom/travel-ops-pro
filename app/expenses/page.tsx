@@ -35,6 +35,7 @@ import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
+import ExpenseSupplierPicker from '@/components/expenses/ExpenseSupplierPicker'
 
 interface Expense {
   id: string
@@ -73,6 +74,7 @@ interface FormData {
   amount: number
   currency: string
   expense_date: string
+  supplier_id: string | null
   supplier_name: string
   supplier_type: string
   receipt_url: string
@@ -91,6 +93,7 @@ const initialFormData: FormData = {
   amount: 0,
   currency: 'EUR',
   expense_date: todayLocal(),
+  supplier_id: null,
   supplier_name: '',
   supplier_type: '',
   receipt_url: '',
@@ -112,6 +115,9 @@ const CATEGORIES = [
   { value: 'airport_staff', label: 'Airport Assistant', icon: '✈️' },
   { value: 'hotel_staff', label: 'Hotel Assistant', icon: '🛎️' },
   { value: 'ground_handler', label: 'Ground Handler', icon: '🧳' },
+  { value: 'cruise', label: 'Nile Cruise', icon: '🚢' },
+  { value: 'flights', label: 'Flights', icon: '🛫' },
+  { value: 'activity', label: 'Activities & Tours', icon: '🎈' },
   { value: 'tipping', label: 'Tipping', icon: '💵' },
   { value: 'permits', label: 'Permits/Permissions', icon: '📋' },
   { value: 'toll', label: 'Toll Fees', icon: '🛣️' },
@@ -159,6 +165,7 @@ export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [itineraries, setItineraries] = useState<Itinerary[]>([])
   const [loading, setLoading] = useState(true)
+  const [supplierCity, setSupplierCity] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -221,11 +228,13 @@ export default function ExpensesPage() {
   const openAddModal = () => {
     setEditingExpense(null)
     setFormData(initialFormData)
+    setSupplierCity('')
     setIsModalOpen(true)
   }
 
   const openEditModal = (expense: Expense) => {
     setEditingExpense(expense)
+    setSupplierCity('')
     setFormData({
       itinerary_id: expense.itinerary_id || '',
       category: expense.category,
@@ -233,6 +242,7 @@ export default function ExpensesPage() {
       amount: expense.amount,
       currency: expense.currency,
       expense_date: expense.expense_date,
+      supplier_id: expense.supplier_id || null,
       supplier_name: expense.supplier_name || '',
       supplier_type: expense.supplier_type || '',
       receipt_url: expense.receipt_url || '',
@@ -1014,7 +1024,7 @@ export default function ExpensesPage() {
                   </label>
                   <select
                     value={formData.category}
-                    onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value, supplier_id: null, supplier_name: '', supplier_type: '' }))}
                     required
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
                   >
@@ -1092,32 +1102,15 @@ export default function ExpensesPage() {
                 </div>
               </div>
 
-              {/* Supplier Info */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">Supplier Name</label>
-                  <input
-                    type="text"
-                    value={formData.supplier_name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, supplier_name: e.target.value }))}
-                    placeholder="e.g., Ahmed Mohamed"
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">Supplier Type</label>
-                  <select
-                    value={formData.supplier_type}
-                    onChange={(e) => setFormData(prev => ({ ...prev, supplier_type: e.target.value }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
-                  >
-                    <option value="">Select Type</option>
-                    {SUPPLIER_TYPES.map(type => (
-                      <option key={type.value} value={type.value}>{type.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+              {/* Supplier: location, then one of the suppliers for this category */}
+              <ExpenseSupplierPicker
+                key={editingExpense?.id ?? 'new'}
+                category={formData.category}
+                city={supplierCity}
+                onCityChange={setSupplierCity}
+                value={{ supplier_id: formData.supplier_id, supplier_name: formData.supplier_name, supplier_type: formData.supplier_type }}
+                onChange={v => setFormData(prev => ({ ...prev, ...v }))}
+              />
 
               {/* Status */}
               <div>

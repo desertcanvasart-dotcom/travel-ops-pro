@@ -88,6 +88,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // A picked supplier must exist (the picker sends its id; a stale or
+    // forged one would otherwise land as a dangling reference or 500).
+    if (body.supplier_id) {
+      const { data: supplier } = await supabaseAdmin
+        .from('suppliers')
+        .select('id')
+        .eq('id', body.supplier_id)
+        .maybeSingle()
+      if (!supplier) {
+        return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
+      }
+    }
+
     // M15: year-scoped, sequence-first generator with a year-scoped MAX
     // fallback (instead of the racy COUNT(*) + 1). Paired with the UNIQUE
     // constraint added by 20260624_unique_document_numbers.sql, the insert

@@ -174,6 +174,9 @@ export interface BookingSupplierStatus {
   quoted_cost: number | null
   confirmed_cost: number | null
 
+  /** The expense recorded when this supplier was confirmed (lib/bookings/supplier-expense). */
+  expense?: { id: string; expense_number: string; status: string; amount: number; currency: string } | null
+
   // Timestamps
   created_at: string
   updated_at: string

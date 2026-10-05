@@ -59,6 +59,16 @@ import { isSupplierBacked } from '@/lib/bookings/supplier-backing'
 
 type TabType = 'overview' | 'suppliers' | 'payments' | 'passengers' | 'notes'
 
+// The EXPENSE's state (what is owed to a confirmed supplier), not the
+// supplier's: a fresh expense still has to be approved, then paid.
+const EXPENSE_STATE: Record<string, { label: string; style: string }> = {
+  pending: { label: 'To approve', style: 'bg-amber-50 text-amber-800 ring-1 ring-amber-200' },
+  approved: { label: 'To pay', style: 'bg-blue-50 text-blue-800 ring-1 ring-blue-200' },
+  paid: { label: 'Paid', style: 'bg-green-50 text-green-800 ring-1 ring-green-200' },
+  rejected: { label: 'Rejected', style: 'bg-gray-100 text-gray-500 ring-1 ring-gray-200' },
+  cancelled: { label: 'Cancelled', style: 'bg-gray-100 text-gray-500 ring-1 ring-gray-200' },
+}
+
 export default function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const t = useTranslations('bookings')
@@ -705,6 +715,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Conf #</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" title="What is owed to this supplier, recorded when the supplier is confirmed">Expense</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                     </tr>
                   </thead>
@@ -730,6 +741,16 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600 font-mono">
                             {supplier.confirmation_number || '-'}
+                          </td>
+                          <td className="px-4 py-3 text-xs whitespace-nowrap">
+                            {supplier.expense ? (
+                              <Link href={`/expenses/${supplier.expense.id}`} title="Open the expense" className="inline-flex items-center gap-2 group">
+                                <span className="font-medium text-gray-900 group-hover:underline">{supplier.expense.expense_number}</span>
+                                <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${EXPENSE_STATE[supplier.expense.status]?.style ?? 'bg-gray-100 text-gray-700'}`}>
+                                  {EXPENSE_STATE[supplier.expense.status]?.label ?? supplier.expense.status}
+                                </span>
+                              </Link>
+                            ) : <span className="text-gray-300">—</span>}
                           </td>
                           <td className="px-4 py-3">
                             {supplier.status !== 'confirmed' && (

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { setMockTables, createMockClient } from '../_mock-supabase'
@@ -31,6 +31,11 @@ const ITINERARY = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // The fixture departs 2026-12-05; from 2026-10-06 the 60-day balance date
+  // falls before the deposit date and the whole amount comes due at once.
+  // Pin "today" to when these expectations were written.
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-09-02T09:00:00Z'))
   setMockTables({
     itineraries: [structuredClone(ITINERARY)],
     organizations: [{ id: 'org-1', deposit_percent: null, deposit_due_days: null, balance_due_days_before_departure: null }],
@@ -45,6 +50,8 @@ async function post(body: Record<string, unknown>) {
   const res = await POST({ json: async () => body } as any)
   return { status: res.status, json: await res.json() }
 }
+
+afterEach(() => { vi.useRealTimers() })
 
 describe('POST /api/bookings from an itinerary', () => {
   it('writes the org payment schedule, not the itinerary’s stale deposit', async () => {

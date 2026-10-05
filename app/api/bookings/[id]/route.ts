@@ -51,6 +51,20 @@ export async function GET(
       .eq('booking_id', id)
       .order('service_date', { ascending: true })
 
+    // Each supplier row's expense — made when it was confirmed
+    // (lib/bookings/supplier-expense) — for the Suppliers tab's link.
+    const supplierIds = (suppliers || []).map(r => r.id as string)
+    const expenseByRow = new Map<string, unknown>()
+    if (supplierIds.length) {
+      const { data: rowExpenses, error: expErr } = await supabaseAdmin
+        .from('expenses')
+        .select('id, expense_number, status, amount, currency, booking_supplier_status_id')
+        .eq('org_id', orgId)
+        .in('booking_supplier_status_id', supplierIds)
+      if (expErr) console.error('Error fetching supplier expenses:', expErr.message)
+      for (const e of rowExpenses || []) expenseByRow.set(e.booking_supplier_status_id as string, e)
+    }
+
     // Fetch payments
     const { data: payments } = await supabaseAdmin
       .from('booking_payments')
@@ -73,7 +87,7 @@ export async function GET(
       success: true,
       data: {
         ...booking,
-        suppliers: suppliers || [],
+        suppliers: (suppliers || []).map(r => ({ ...r, expense: expenseByRow.get(r.id as string) ?? null })),
         payments: payments || [],
         assigned_guide: assignedGuide,
         supplier_summary: {

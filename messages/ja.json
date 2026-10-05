@@ -657,7 +657,13 @@
       "toll": "通行料",
       "parking": "駐車場",
       "fuel": "燃料",
-      "other": "その他"
+      "other": "その他",
+      "cruise": "ナイルクルーズ",
+      "flights": "航空券",
+      "activity": "アクティビティ・ツアー",
+      "office": "事務経費",
+      "marketing": "マーケティング",
+      "software": "ソフトウェア/サブスクリプション"
     },
     "supplierTypes": {
       "guide": "ツアーガイド",
@@ -677,6 +683,22 @@
       "credit_card": "クレジットカード",
       "wise": "Wise",
       "company_card": "法人カード"
+    },
+    "picker": {
+      "location": "場所",
+      "allLocations": "すべての場所",
+      "supplier": "サプライヤー",
+      "select": "{role}を選択",
+      "loading": "読み込み中…",
+      "notInList": "一覧にない — 名前を入力",
+      "namePlaceholder": "{role}名",
+      "paidTo": "支払先",
+      "paidToPlaceholder": "例：田中太郎",
+      "none": "{role}のサプライヤーはまだありません。",
+      "noneIn": "{city}の{role}のサプライヤーはまだありません。",
+      "showAll": "すべての場所を表示",
+      "addOne": "サプライヤーで追加",
+      "loadFailed": "サプライヤーを読み込めませんでした — 名前を入力してください。"
     }
   },
   "communicationLog": {
