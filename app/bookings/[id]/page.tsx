@@ -59,6 +59,17 @@ import { isSupplierBacked } from '@/lib/bookings/supplier-backing'
 
 type TabType = 'overview' | 'suppliers' | 'payments' | 'passengers' | 'notes'
 
+// The booking supplier statuses, in chase order; cancelled reads as
+// "Not needed" — the row leaves the confirmed count.
+const SUPPLIER_STATUS_OPTIONS: { value: SupplierConfirmationStatus; label: string }[] = [
+  { value: 'pending', label: 'Pending' },
+  { value: 'requested', label: 'Requested' },
+  { value: 'confirmed', label: 'Confirmed' },
+  { value: 'waitlist', label: 'Waitlist' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'cancelled', label: 'Not needed' },
+]
+
 // The EXPENSE's state (what is owed to a confirmed supplier), not the
 // supplier's: a fresh expense still has to be approved, then paid.
 const EXPENSE_STATE: Record<string, { label: string; style: string }> = {
@@ -81,6 +92,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<TabType>('overview')
   const [updating, setUpdating] = useState(false)
+  const [savingSupplierId, setSavingSupplierId] = useState<string | null>(null)
 
   // Every invoice raised for this booking's trip, with the payments recorded
   // against them. A trip normally has two — a deposit and a final — so showing
@@ -148,26 +160,31 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  const updateSupplierStatus = async (supplierId: string, status: SupplierConfirmationStatus, confirmationNumber?: string) => {
-    setUpdating(true)
+  // One supplier row at a time: status, confirmation number, confirmed
+  // cost. The row (and its expense, recorded when it is confirmed) comes
+  // back with the booking.
+  const updateSupplierRow = async (
+    supplierId: string,
+    patch: { status?: SupplierConfirmationStatus; confirmation_number?: string | null; confirmed_cost?: number | null },
+  ) => {
+    setSavingSupplierId(supplierId)
     try {
       const response = await fetch(`/api/bookings/${resolvedParams.id}/suppliers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: supplierId,
-          status,
-          confirmation_number: confirmationNumber
-        })
+        body: JSON.stringify({ id: supplierId, ...patch }),
       })
-
-      if (response.ok) {
-        fetchBooking()
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok || data.success === false) {
+        alert(data.error || 'Could not update the supplier')
+        return
       }
+      if (data.expense_error) alert(data.expense_error)
+      fetchBooking()
     } catch (error) {
       console.error('Error updating supplier:', error)
     } finally {
-      setUpdating(false)
+      setSavingSupplierId(null)
     }
   }
 
@@ -713,10 +730,10 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Cost</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Conf #</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" title="What is owed to this supplier, recorded when the supplier is confirmed">Expense</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -734,13 +751,54 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                           <td className="px-4 py-3 text-sm text-gray-600">
                             {supplier.service_date ? formatDate(supplier.service_date) : '-'}
                           </td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${supplierStatusConfig.bgColor} ${supplierStatusConfig.color}`}>
-                              {supplierStatusConfig.label}
-                            </span>
+                          <td className="px-4 py-3 text-right whitespace-nowrap">
+                            {/* The cost the supplier confirmed (defaults to the quote); it is what the expense records. */}
+                            <input
+                              key={`${supplier.id}:${supplier.confirmed_cost ?? ''}`}
+                              aria-label={`Confirmed cost for ${supplier.supplier_name}`}
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              defaultValue={supplier.confirmed_cost ?? supplier.quoted_cost ?? ''}
+                              disabled={savingSupplierId === supplier.id}
+                              onBlur={e => {
+                                const raw = e.target.value.trim()
+                                const v = raw === '' ? null : Math.round(Number(raw) * 100) / 100
+                                if (v !== null && !Number.isFinite(v)) return
+                                const current = supplier.confirmed_cost ?? supplier.quoted_cost ?? null
+                                if (v !== (current === null ? null : Number(current))) updateSupplierRow(supplier.id, { confirmed_cost: v })
+                              }}
+                              className="w-24 px-2 py-1 text-xs text-right border border-gray-200 rounded-md"
+                            />
+                            {supplier.confirmed_cost != null && supplier.quoted_cost != null && Number(supplier.confirmed_cost) !== Number(supplier.quoted_cost) && (
+                              <div className="text-[10px] text-gray-400">quoted {Number(supplier.quoted_cost).toFixed(2)}</div>
+                            )}
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-600 font-mono">
-                            {supplier.confirmation_number || '-'}
+                          <td className="px-4 py-3">
+                            {/* Any status, either way — "Not needed" takes the row out of the count. */}
+                            <select
+                              aria-label={`Status of ${supplier.supplier_name}`}
+                              value={supplier.status}
+                              disabled={savingSupplierId === supplier.id}
+                              onChange={e => updateSupplierRow(supplier.id, { status: e.target.value as SupplierConfirmationStatus })}
+                              className={`w-32 px-2 py-1 rounded-md text-xs font-medium border-0 ${supplierStatusConfig?.bgColor ?? ''} ${supplierStatusConfig?.color ?? ''}`}
+                            >
+                              {SUPPLIER_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                          </td>
+                          <td className="px-4 py-3">
+                            <input
+                              key={`${supplier.id}:conf:${supplier.confirmation_number ?? ''}`}
+                              aria-label={`Confirmation number for ${supplier.supplier_name}`}
+                              defaultValue={supplier.confirmation_number ?? ''}
+                              disabled={savingSupplierId === supplier.id}
+                              onBlur={e => {
+                                const v = e.target.value.trim()
+                                if (v !== (supplier.confirmation_number ?? '')) updateSupplierRow(supplier.id, { confirmation_number: v || null })
+                              }}
+                              placeholder="—"
+                              className="w-32 px-2 py-1 text-xs font-mono border border-gray-200 rounded-md"
+                            />
                           </td>
                           <td className="px-4 py-3 text-xs whitespace-nowrap">
                             {supplier.expense ? (
@@ -751,21 +809,6 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                                 </span>
                               </Link>
                             ) : <span className="text-gray-300">—</span>}
-                          </td>
-                          <td className="px-4 py-3">
-                            {supplier.status !== 'confirmed' && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const confNum = prompt('Enter confirmation number (optional):')
-                                  updateSupplierStatus(supplier.id, 'confirmed', confNum || undefined)
-                                }}
-                                disabled={updating}
-                                className="text-xs px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 disabled:opacity-50"
-                              >
-                                {t('actions.markSupplierConfirmed')}
-                              </button>
-                            )}
                           </td>
                         </tr>
                       )

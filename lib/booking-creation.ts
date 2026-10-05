@@ -1,3 +1,4 @@
+import { supplierLinesFromServices, type ServiceForSupplier } from '@/lib/bookings/supplier-lines'
 import {
   DEFAULT_PAYMENT_RULE,
   computePaymentSchedule,
@@ -143,19 +144,21 @@ export async function populateSuppliersFromItinerary(
   if (svcError) return { inserted: 0, error: svcError.message }
   if (!services || services.length === 0) return { inserted: 0 }
 
-  const dayById = new Map<string, { id: string; date: string | null }>(
-    days.map((d: { id: string; date: string | null }) => [d.id, d])
+  const dayById = new Map<string, { id: string; date: string | null; day_number: number | null }>(
+    days.map((d: { id: string; date: string | null; day_number: number | null }) => [d.id, d])
   )
 
-  const rows = services.map((service: Record<string, unknown>) => ({
-    booking_id: bookingId,
-    supplier_type: service.service_type || 'other',
-    supplier_name: service.service_name || service.supplier_name || 'Unknown',
-    service_description: service.notes,
-    service_date: dayById.get(service.itinerary_day_id as string)?.date,
-    quoted_cost: service.total_cost,
-    status: 'pending',
-  }))
+  // One row per supplier per day, without the lines nobody confirms (water,
+  // tips…) — lib/bookings/supplier-lines, shared with sync-suppliers.
+  const lines = supplierLinesFromServices(
+    services.map((service: Record<string, unknown>) => {
+      const day = dayById.get(service.itinerary_day_id as string)
+      return { ...service, day_number: day?.day_number ?? null, day_date: day?.date ?? null } as ServiceForSupplier
+    }),
+    null,
+  )
+  if (lines.length === 0) return { inserted: 0 }
+  const rows = lines.map(l => ({ ...l, booking_id: bookingId, status: 'pending' }))
 
   const { error: insertError } = await supabase.from('booking_supplier_status').insert(rows)
   if (insertError) return { inserted: 0, error: insertError.message }

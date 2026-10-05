@@ -26,7 +26,9 @@ export interface SupplierBacking {
 export function supplierBacking(
   rows: { status: string | null }[] | null | undefined
 ): SupplierBacking {
-  const list = rows ?? []
+  // A row marked cancelled is "not needed" (a ticket bought at the gate): it
+  // leaves the count rather than blocking it.
+  const list = (rows ?? []).filter(r => r.status !== 'cancelled')
   const total = list.length
   const confirmed = list.filter(r => r.status === 'confirmed').length
   return { total, confirmed, backed: isSupplierBacked(total, confirmed) }

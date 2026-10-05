@@ -53,6 +53,7 @@ export function expenseCategoryForSupplierType(type: string | null | undefined):
   const map: Record<string, string> = {
     hotel: 'hotel', guide: 'guide', transport: 'transportation', restaurant: 'meal',
     activity: 'activity', entrance: 'entrance', cruise: 'cruise', flight: 'flights',
+    airport_service: 'airport_staff', hotel_service: 'hotel_staff',
   }
   return map[(type ?? '').toLowerCase()] ?? 'other'
 }
@@ -61,6 +62,7 @@ export function expenseCategoryForSupplierType(type: string | null | undefined):
 export function supplierTypeKeyForSupplierType(type: string | null | undefined): string {
   const map: Record<string, string> = {
     flight: 'air_carrier', entrance: 'attraction', activity: 'activity_provider',
+    airport_service: 'airport_assistant', hotel_service: 'hotel_assistant',
   }
   const t = (type ?? '').toLowerCase()
   return map[t] ?? (t || 'other')
