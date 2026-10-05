@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { syncSupplierExpense } from '@/lib/bookings/supplier-expense'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -36,6 +37,21 @@ export async function POST(
 
     if (bookingError || !booking) {
       return NextResponse.json({ success: false, error: 'Booking not found' }, { status: 404 })
+    }
+
+    // Rows confirmed before confirmation made expenses (lib/bookings/
+    // supplier-expense) catch up here: each confirmed row without an
+    // expense gets one. Idempotent.
+    const { data: confirmedRows } = await supabaseAdmin
+      .from('booking_supplier_status')
+      .select('id')
+      .eq('booking_id', bookingId)
+      .eq('status', 'confirmed')
+    let expensesAdded = 0
+    for (const r of confirmedRows || []) {
+      const res = await syncSupplierExpense(supabaseAdmin, orgId, r.id as string)
+      if (res.ok && res.action === 'create') expensesAdded++
+      else if (!res.ok) console.error('[sync-suppliers] expense for', r.id, res.error)
     }
 
     if (!booking.itinerary_id) {
@@ -208,8 +224,9 @@ export async function POST(
     if (supplierStatuses.length === 0) {
       return NextResponse.json({
         success: true,
-        message: 'All services already synced or no valid services found',
-        data: { added: 0 }
+        message: 'All services already synced or no valid services found'
+          + (expensesAdded ? `; recorded ${expensesAdded} expense${expensesAdded === 1 ? '' : 's'} for confirmed suppliers` : ''),
+        data: { added: 0, expenses_added: expensesAdded }
       })
     }
 
@@ -228,9 +245,11 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: `Successfully synced ${inserted?.length || 0} suppliers from itinerary`,
+      message: `Successfully synced ${inserted?.length || 0} suppliers from itinerary`
+        + (expensesAdded ? `; recorded ${expensesAdded} expense${expensesAdded === 1 ? '' : 's'} for confirmed suppliers` : ''),
       data: {
         added: inserted?.length || 0,
+        expenses_added: expensesAdded,
         suppliers: inserted
       }
     })
