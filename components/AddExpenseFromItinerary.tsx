@@ -6,6 +6,8 @@ import { X, Receipt, AlertCircle, CheckCircle } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
+import ExpenseSupplierPicker from '@/components/expenses/ExpenseSupplierPicker'
+import { TRIP_EXPENSE_CATEGORIES } from '@/lib/expense-categories'
 
 interface AddExpenseFromItineraryProps {
   itineraryId: string
@@ -20,6 +22,7 @@ interface FormData {
   amount: number
   currency: string
   expense_date: string
+  supplier_id: string | null
   supplier_name: string
   supplier_type: string
   receipt_url: string
@@ -27,29 +30,6 @@ interface FormData {
   payment_method: string
   notes: string
 }
-
-const CATEGORY_KEYS = [
-  { value: 'guide', icon: '👨‍🏫' },
-  { value: 'driver', icon: '🚗' },
-  { value: 'hotel', icon: '🏨' },
-  { value: 'transportation', icon: '🚐' },
-  { value: 'entrance', icon: '🎫' },
-  { value: 'meal', icon: '🍽️' },
-  { value: 'airport_staff', icon: '✈️' },
-  { value: 'hotel_staff', icon: '🛎️' },
-  { value: 'ground_handler', icon: '🧳' },
-  { value: 'tipping', icon: '💵' },
-  { value: 'permits', icon: '📋' },
-  { value: 'toll', icon: '🛣️' },
-  { value: 'parking', icon: '🅿️' },
-  { value: 'fuel', icon: '⛽' },
-  { value: 'other', icon: '📦' }
-] as const
-
-const SUPPLIER_TYPE_KEYS = [
-  'guide', 'driver', 'hotel', 'restaurant', 'transport', 'local_operator',
-  'airport_staff', 'hotel_staff', 'ground_handler', 'government', 'other'
-] as const
 
 const PAYMENT_METHOD_KEYS = [
   'cash', 'bank_transfer', 'credit_card', 'wise', 'company_card'
@@ -65,6 +45,7 @@ export default function AddExpenseFromItinerary({
   const tCommon = useTranslations('common')
   const [isOpen, setIsOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [city, setCity] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [formData, setFormData] = useState<FormData>({
@@ -73,6 +54,7 @@ export default function AddExpenseFromItinerary({
     amount: 0,
     currency: 'EUR',
     expense_date: todayLocal(),
+    supplier_id: null,
     supplier_name: '',
     supplier_type: '',
     receipt_url: '',
@@ -88,6 +70,7 @@ export default function AddExpenseFromItinerary({
       amount: 0,
       currency: 'EUR',
       expense_date: todayLocal(),
+      supplier_id: null,
       supplier_name: '',
       supplier_type: '',
       receipt_url: '',
@@ -206,13 +189,14 @@ export default function AddExpenseFromItinerary({
                   </label>
                   <select
                     value={formData.category}
-                    onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                    // A new category lists other suppliers: the one picked for the old one goes.
+                    onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value, supplier_id: null, supplier_name: '', supplier_type: '' }))}
                     required
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
                     title={t('category')}
                   >
                     <option value="">{t('selectCategory')}</option>
-                    {CATEGORY_KEYS.map(cat => (
+                    {TRIP_EXPENSE_CATEGORIES.map(cat => (
                       <option key={cat.value} value={cat.value}>{cat.icon} {t(`categories.${cat.value}`)}</option>
                     ))}
                   </select>
@@ -271,33 +255,14 @@ export default function AddExpenseFromItinerary({
                 />
               </div>
 
-              {/* Supplier */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('supplierName')}</label>
-                  <input
-                    type="text"
-                    value={formData.supplier_name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, supplier_name: e.target.value }))}
-                    placeholder={t('supplierNamePlaceholder')}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1.5">{t('supplierType')}</label>
-                  <select
-                    value={formData.supplier_type}
-                    onChange={(e) => setFormData(prev => ({ ...prev, supplier_type: e.target.value }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
-                    title={t('supplierType')}
-                  >
-                    <option value="">{t('selectType')}</option>
-                    {SUPPLIER_TYPE_KEYS.map(type => (
-                      <option key={type} value={type}>{t(`supplierTypes.${type}`)}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+              {/* Supplier: location, then one of the suppliers for this category */}
+              <ExpenseSupplierPicker
+                category={formData.category}
+                city={city}
+                onCityChange={setCity}
+                value={{ supplier_id: formData.supplier_id, supplier_name: formData.supplier_name, supplier_type: formData.supplier_type }}
+                onChange={v => setFormData(prev => ({ ...prev, ...v }))}
+              />
 
               {/* Payment Method */}
               <div>
