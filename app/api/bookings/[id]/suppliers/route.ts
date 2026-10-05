@@ -7,6 +7,9 @@ import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { syncSupplierExpense } from '@/lib/bookings/supplier-expense'
+import { supplierBacking } from '@/lib/bookings/supplier-backing'
+
+const SUPPLIER_STATUSES = ['pending', 'requested', 'confirmed', 'waitlist', 'rejected', 'cancelled']
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -102,7 +105,14 @@ export async function POST(
       const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
 
       // Update status and confirmation details
-      if (body.status !== undefined) updates.status = body.status
+      if (body.status !== undefined) {
+        if (!SUPPLIER_STATUSES.includes(body.status)) {
+          return NextResponse.json({ success: false, error: `status must be one of: ${SUPPLIER_STATUSES.join(', ')}` }, { status: 400 })
+        }
+        updates.status = body.status
+        // Leaving 'confirmed' clears the stamp.
+        if (body.status !== 'confirmed') updates.confirmed_at = null
+      }
       if (body.confirmation_number !== undefined) updates.confirmation_number = body.confirmation_number
       if (body.confirmation_notes !== undefined) updates.confirmation_notes = body.confirmation_notes
       if (body.confirmed_cost !== undefined) {
@@ -192,11 +202,9 @@ async function checkAndUpdateBookingStatus(bookingId: string) {
     .select('status')
     .eq('booking_id', bookingId)
 
-  if (!suppliers || suppliers.length === 0) return
-
-  const allConfirmed = suppliers.every(s => s.status === 'confirmed')
-
-  if (allConfirmed) {
+  // Every row still needed is confirmed (cancelled = not needed); none at
+  // all is not backing — lib/bookings/supplier-backing.
+  if (supplierBacking(suppliers).backed) {
     // Get current booking status
     const { data: booking } = await supabaseAdmin
       .from('bookings')

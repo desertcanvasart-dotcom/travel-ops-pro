@@ -90,8 +90,10 @@ export async function GET(
         suppliers: (suppliers || []).map(r => ({ ...r, expense: expenseByRow.get(r.id as string) ?? null })),
         payments: payments || [],
         assigned_guide: assignedGuide,
+        // Rows marked cancelled ("not needed") are out of the count — the
+        // same rule as lib/bookings/supplier-backing.
         supplier_summary: {
-          total: suppliers?.length || 0,
+          total: suppliers?.filter(s => s.status !== 'cancelled').length || 0,
           confirmed: suppliers?.filter(s => s.status === 'confirmed').length || 0,
           pending: suppliers?.filter(s => s.status === 'pending').length || 0,
         },

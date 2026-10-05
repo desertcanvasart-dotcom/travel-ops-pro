@@ -7,6 +7,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { syncSupplierExpense } from '@/lib/bookings/supplier-expense'
+import { supplierLinesFromServices, supplierKey } from '@/lib/bookings/supplier-lines'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -141,85 +142,22 @@ export async function POST(
       .select('supplier_id, supplier_name, supplier_type, service_date')
       .eq('booking_id', bookingId)
 
-    // Dedup key rule (id-or-name grouping):
-    //   - When supplier_id IS NOT NULL: key on supplier_id + supplier_type + service_date.
-    //     Same FK = same canonical supplier even if the snapshot `supplier_name`
-    //     drifted across renames.
-    //   - When supplier_id IS NULL: fall back to supplier_name + supplier_type +
-    //     service_date. Legitimately supplier-less rows (tips, water, entrance
-    //     fees) stay grouped on the human-readable name so they don't all
-    //     collapse into one row.
-    // A resolved-FK row and an unresolved-name row that happen to share the
-    // same display name are NOT collapsed — they have different keys. This
-    // is correct: one carries provenance to the canonical supplier; the
-    // other is awaiting resolution.
-    const dedupKey = (row: { supplier_id?: string | null; supplier_name?: string | null; supplier_type?: string | null; service_date?: string | null }) => {
-      const type = row.supplier_type ?? ''
-      const date = row.service_date ?? 'no-date'
-      return row.supplier_id
-        ? `id:${row.supplier_id}|${type}|${date}`
-        : `name:${row.supplier_name ?? ''}|${type}|${date}`
-    }
-    const existingKeys = new Set(
-      (existingSuppliers || []).map(dedupKey)
+    // One row per supplier per day, without the lines nobody confirms
+    // (water, tips…) — lib/bookings/supplier-lines, shared with booking
+    // creation. The id-or-name key keeps a linked supplier on its id and an
+    // unlinked line on its name; rows already listed are skipped.
+    const existingKeys = new Set((existingSuppliers || []).map(supplierKey))
+    const dayById = new Map(days.map(d => [d.id as string, d]))
+    const lines = supplierLinesFromServices(
+      services.map(service => {
+        const day = dayById.get(service.itinerary_day_id as string)
+        return { ...service, day_number: day?.day_number ?? null, day_date: day?.date ?? null }
+      }),
+      tripStartDate,
     )
-
-    // Helper to calculate service date from day_number
-    const calculateServiceDate = (day: { date: string | null; day_number: number }): string | null => {
-      // Use day.date if available
-      if (day.date) return day.date
-
-      // Calculate from trip start date and day number
-      if (tripStartDate) {
-        const startDate = new Date(tripStartDate)
-        startDate.setDate(startDate.getDate() + (day.day_number - 1))
-        return startDate.toISOString().split('T')[0]
-      }
-
-      return null
-    }
-
-    // Prepare supplier status entries
-    const supplierStatuses = services
-      .map(service => {
-        const day = days.find(d => d.id === service.itinerary_day_id)
-        if (!day) {
-          console.log(`⚠️ No day found for service: ${service.service_name}`)
-          return null
-        }
-
-        // Use supplier_name if available, otherwise fall back to service_name
-        const supplierName = service.supplier_name || service.service_name || 'Unknown Service'
-        const serviceDate = calculateServiceDate(day)
-        const supplierType = mapServiceType(service.service_type)
-        const supplierId = service.supplier_id || null
-
-        // Id-or-name dedup key — see dedupKey() defined above for the rule.
-        // Resolved-FK rows group on supplier_id; unresolved rows group on
-        // supplier_name; the two never collapse even when the display name
-        // happens to match.
-        const key = dedupKey({ supplier_id: supplierId, supplier_name: supplierName, supplier_type: supplierType, service_date: serviceDate })
-
-        // Skip if already exists
-        if (existingKeys.has(key)) {
-          console.log(`⏭️ Skipping duplicate: ${supplierName} on ${serviceDate}`)
-          return null
-        }
-
-        console.log(`✅ Adding supplier: ${supplierName} (${supplierType}) on ${serviceDate}`)
-
-        return {
-          booking_id: bookingId,
-          supplier_id: service.supplier_id || null,
-          supplier_type: supplierType,
-          supplier_name: supplierName,
-          service_description: service.notes || null,
-          service_date: serviceDate,
-          quoted_cost: service.total_cost || service.rate_eur || null,
-          status: 'pending'
-        }
-      })
-      .filter(Boolean)
+    const supplierStatuses = lines
+      .filter(l => !existingKeys.has(supplierKey(l)))
+      .map(l => ({ ...l, booking_id: bookingId, status: 'pending' }))
 
     if (supplierStatuses.length === 0) {
       return NextResponse.json({
@@ -257,36 +195,4 @@ export async function POST(
     console.error('Sync suppliers error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
-}
-
-// Helper function to map service types
-function mapServiceType(type: string | null): string {
-  if (!type) return 'other'
-
-  const typeMap: Record<string, string> = {
-    'hotel': 'hotel',
-    'accommodation': 'hotel',
-    'guide': 'guide',
-    'tour_guide': 'guide',
-    'transport': 'transport',
-    'transportation': 'transport',
-    'vehicle': 'transport',
-    'restaurant': 'restaurant',
-    'meal': 'restaurant',
-    'activity': 'activity',
-    'tour': 'activity',
-    'entrance': 'entrance',
-    'ticket': 'entrance',
-    'cruise': 'cruise',
-    'nile_cruise': 'cruise',
-    'flight': 'flight',
-    'domestic_flight': 'flight',
-    'train': 'transport',
-    'sleeping_train': 'transport',
-    'tips': 'other',
-    'supplies': 'other',
-    'service_fee': 'other'
-  }
-
-  return typeMap[type.toLowerCase()] || 'other'
 }
