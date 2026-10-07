@@ -7935,7 +7935,10 @@
     "finish": "Finish",
     "received": "Received",
     "customer": "Customer",
-    "result": "Result"
+    "result": "Result",
+    "websiteBaseFare": "Website base fare (1st date)",
+    "websiteBaseFareAdults": "JPY {fare} × {count} adults",
+    "websiteBaseFareChildren": "JPY {fare} × {count} children"
   },
   "travelLeg": {
     "mode": {

@@ -22,7 +22,7 @@
 // Read once into labelled fields, then mapped — the label set is the form's,
 // so a field the website adds later is ignored instead of corrupting its
 // neighbour. Pure. Real sample: __tests__/lib/tup-mail.test.ts.
-import { normalizeJa, parseGender, parseJaDate, type OrderPerson, type TourUpOrder } from '@/lib/intake/tour-up-order'
+import { normalizeJa, parseGender, parseJaDate, type OrderPerson, type TourUpOrder, type WebsiteBaseFare } from '@/lib/intake/tour-up-order'
 
 interface Field { label: string; value: string }
 interface Block { head: string; fields: Field[] }
@@ -118,12 +118,16 @@ function splitName(v: string | undefined, lastTag: string, firstTag: string): [s
 }
 
 const LABELS = {
-  inquiryType: ['問合せ種別', 'お問合せ種別', '問い合わせ種別'],
+  inquiryType: ['問合せ種別', 'お問合せ種別', '問い合わせ種別', '問合せ内容', 'お問合せ内容'],
   code: ['ツアーコード', 'オプショナルコード'],
   title: ['ツアータイトル', 'ツアー名', 'オプショナルタイトル', 'タイトル'],
   category: ['区分'],
-  date1: ['出発日(第1希望)', '希望出発日', '出発日', '希望利用日', '利用日(第1希望)', '利用日'],
-  date2: ['出発日(第2希望)', '利用日(第2希望)', '第2希望'],
+  // The real package-tour notification says 希望出発日(第1希望) (2026-08-30
+  // sample); the form's own field names are kept for the canonical document.
+  date1: ['希望出発日(第1希望)', '出発日(第1希望)', '希望出発日', '出発日', '希望利用日', '利用日(第1希望)', '利用日'],
+  date2: ['希望出発日(第2希望)', '出発日(第2希望)', '利用日(第2希望)', '第2希望'],
+  baseFare1: ['第1希望日基本旅行代金'],
+  baseFare2: ['第2希望日基本旅行代金'],
   airport: ['出発地'],
   party: ['参加人数'],
   subtotal: ['小計'],
@@ -152,6 +156,27 @@ function person(fields: Field[], fallback: Field[] = []): OrderPerson | null {
     gender: parseGender(firstLine(pick(fields, LABELS.gender) ?? pick(fallback, LABELS.gender))),
     birthDate: parseJaDate(pick(fields, LABELS.birth) ?? pick(fallback, LABELS.birth)),
   }
+}
+
+/** "大人 348,000円" / "大人 348,000円、子供 300,000円" → yen per band. */
+function baseFare(v: string | undefined): WebsiteBaseFare | undefined {
+  if (!v) return undefined
+  const yen = (band: string) => {
+    const m = v.match(new RegExp(`${band}\\s*:?\\s*([\\d,]+)\\s*円`))
+    const n = m ? Number(m[1].replace(/,/g, '')) : NaN
+    return Number.isFinite(n) && n > 0 ? n : undefined
+  }
+  const fare = { adultJpy: yen('大人'), childJpy: yen('子供') }
+  return fare.adultJpy || fare.childJpy ? fare : undefined
+}
+
+const CJK = /[\u3000-\u30ff\u3400-\u9fff\uff00-\uffef★☆！？]/
+
+/** A value the mailer wrapped mid-phrase ("★2大\n都市カイロ") joins without a
+ *  space between Japanese characters, and with one between words. */
+function joinWrapped(v: string): string {
+  return v.split('\n').map(l => l.trim()).filter(Boolean).reduce((out, line) =>
+    !out ? line : CJK.test(out.slice(-1)) && CJK.test(line[0]) ? out + line : `${out} ${line}`, '')
 }
 
 /** Read the notification. Null when the tour code or the date is missing. */
@@ -219,7 +244,7 @@ export function parseTupMail(raw: string): TourUpOrder | null {
   return {
     inquiryType: firstLine(pick(top, LABELS.inquiryType)) ?? '',
     tourCode,
-    tourTitle: (pick(top, LABELS.title) ?? '').replace(/\n/g, ' ').trim(),
+    tourTitle: joinWrapped(pick(top, LABELS.title) ?? ''),
     departureDate1,
     departureDate2,
     departureAirport: firstLine(pick(top, LABELS.airport)),
@@ -239,6 +264,8 @@ export function parseTupMail(raw: string): TourUpOrder | null {
     infants: infants || undefined,
     websiteSubtotalJpy: Number.isFinite(subtotal) && subtotal > 0 ? subtotal : undefined,
     priceNotes: pick(top, LABELS.priceNotes) || undefined,
+    websiteBaseFare1: baseFare(pick(top, LABELS.baseFare1)),
+    websiteBaseFare2: baseFare(pick(top, LABELS.baseFare2)),
   }
 }
 

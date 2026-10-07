@@ -23,6 +23,7 @@ interface Preview {
     tourCode: string; tourTitle: string; departureDate1: string; departureDate2?: string; departureAirport?: string
     adults: number; children: number; email: string; phone?: string
     productKind?: 'tour' | 'optional'; websiteUrl?: string; infants?: number; websiteSubtotalJpy?: number; priceNotes?: string
+    websiteBaseFare1?: { adultJpy?: number; childJpy?: number }
     lead: { lastNameRomaji: string; firstNameRomaji: string; lastNameKanji?: string; firstNameKanji?: string; birthDate?: string; gender?: string }
     companions: { lastNameRomaji: string; firstNameRomaji: string; birthDate?: string }[]
     requests?: string
@@ -191,8 +192,25 @@ function OrderIntakeInner() {
           {preview.pricing && (
             <section className="border-t border-gray-200 pt-4">
               <h2 className="font-semibold text-gray-900 mb-2">{t('price')}</h2>
-              <div className={`grid gap-3 ${o.websiteSubtotalJpy ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-3'}`}>
+              <div className={`grid gap-3 ${o.websiteSubtotalJpy || o.websiteBaseFare1 ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-3'}`}>
                 {o.websiteSubtotalJpy ? <div className="bg-blue-50 rounded-lg p-3"><p className="text-xs text-gray-500 flex items-center gap-1"><Globe className="w-3 h-3" />{t('websiteSubtotal')}</p><p className="font-semibold">JPY {o.websiteSubtotalJpy.toLocaleString()}</p></div> : null}
+                {/* A package-tour notification gives the BASE fare per person for
+                    the first-choice date instead of a 小計: shown per person and
+                    times the party, labelled as the base fare. */}
+                {!o.websiteSubtotalJpy && o.websiteBaseFare1 ? (() => {
+                  const f = o.websiteBaseFare1!
+                  const total = (f.adultJpy ?? 0) * o.adults + (f.childJpy ?? 0) * o.children
+                  return (
+                    <div className="bg-blue-50 rounded-lg p-3">
+                      <p className="text-xs text-gray-500 flex items-center gap-1"><Globe className="w-3 h-3" />{t('websiteBaseFare')}</p>
+                      <p className="font-semibold">JPY {total.toLocaleString()}</p>
+                      <p className="text-[11px] text-gray-500">
+                        {f.adultJpy ? t('websiteBaseFareAdults', { fare: f.adultJpy.toLocaleString(), count: o.adults }) : null}
+                        {f.childJpy && o.children > 0 ? ` · ${t('websiteBaseFareChildren', { fare: f.childJpy.toLocaleString(), count: o.children })}` : null}
+                      </p>
+                    </div>
+                  )
+                })() : null}
                 <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500">{t('cost')}</p><p className="font-semibold">{fmt(preview.pricing.total_cost, preview.pricing.currency)}</p></div>
                 <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500">{t('selling', { margin: preview.pricing.margin_percent })}</p><p className="font-semibold">{fmt(preview.pricing.selling_price, preview.pricing.currency)}</p></div>
                 <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500">{t('perPerson')}</p><p className="font-semibold">{fmt(preview.pricing.price_per_person, preview.pricing.currency)}</p></div>
