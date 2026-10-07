@@ -1517,6 +1517,16 @@
         "open": "Open",
         "create": "Create",
         "translateFirst": "No {language} text yet — translate it first"
+      },
+      "coverage": {
+        "title": "Coverage",
+        "subtitle": "What each day's services need, and what is assigned",
+        "summary": "{covered} of {needed} covered",
+        "day": "Day {number}",
+        "assign": "Assign",
+        "extraHint": "Assigned, though no service on this day asks for it",
+        "nothingNeeded": "No service on this trip needs a guide, vehicle, hotel or other resource yet.",
+        "loadFailed": "Could not load the assignments."
       }
     },
     "editAction": "Edit",

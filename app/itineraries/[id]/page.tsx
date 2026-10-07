@@ -34,6 +34,7 @@ import { describeGaps } from '@/lib/pricing/quote-completeness'
 import { LanguageStatusRow, DayLanguageChip, BilingualDayEditor, HighlightPlaceholders, type ContentView } from '@/components/multilingual'
 import ItineraryAttentionStrip from '@/components/itineraries/ItineraryAttentionStrip'
 import StatusPipeline from '@/components/itineraries/StatusPipeline'
+import CoverageGrid from '@/components/itineraries/CoverageGrid'
 import { RailSection, RailGroup, DocRow, RAIL_ACTION } from '@/components/itineraries/RailSection'
 import type { Language, ItineraryVersion } from '@/types/multilingual'
 import { LANGUAGE_NAMES } from '@/types/multilingual'
@@ -1365,6 +1366,11 @@ export default function ViewItineraryPage() {
     window.history.replaceState(null, '', `#${next}`)
   }
 
+  // The coverage grid reloads when an assignment changes, and its "Assign"
+  // opens the assignment panel on that type.
+  const [resourceRefresh, setResourceRefresh] = useState(0)
+  const [requestedResourceTab, setRequestedResourceTab] = useState<{ type: string; nonce: number } | null>(null)
+
   const openDailyItinerary = (view: ContentView) => {
     setTab('itinerary')
     setContentView(view)
@@ -2109,12 +2115,21 @@ export default function ViewItineraryPage() {
                 </div>
               )}
 
+              <CoverageGrid
+                itineraryId={itinerary.id}
+                days={days}
+                refreshKey={resourceRefresh}
+                onAssign={type => {
+                  setRequestedResourceTab({ type, nonce: Date.now() })
+                  document.getElementById('resource-assignment')?.scrollIntoView({ behavior: 'smooth' })
+                }}
+              />
               {/* Resource Cards */}
               {/* Shown only once something is assigned: empty, it was a second
                   "nothing assigned" card stacked on the assignment panel's own. */}
               {(itinerary.assigned_guide_id || itinerary.assigned_vehicle_id || itinerary.pickup_location || itinerary.pickup_time) && <ResourceSummaryCard guideId={itinerary.assigned_guide_id} vehicleId={itinerary.assigned_vehicle_id} guideNotes={itinerary.guide_notes} vehicleNotes={itinerary.vehicle_notes} pickupLocation={itinerary.pickup_location} pickupTime={itinerary.pickup_time} onEdit={() => document.getElementById('resource-assignment')?.scrollIntoView({ behavior: 'smooth' })} />}
               <div id="resource-assignment">
-                <ResourceAssignmentV2 itineraryId={itinerary.id} startDate={itinerary.start_date} endDate={itinerary.end_date} numTravelers={itinerary.num_adults + itinerary.num_children + (itinerary.num_infants || 0)} clientName={itinerary.client_name} tripName={itinerary.trip_name} onUpdate={fetchItinerary} />
+                <ResourceAssignmentV2 itineraryId={itinerary.id} startDate={itinerary.start_date} endDate={itinerary.end_date} numTravelers={itinerary.num_adults + itinerary.num_children + (itinerary.num_infants || 0)} clientName={itinerary.client_name} tripName={itinerary.trip_name} onUpdate={() => { fetchItinerary(); setResourceRefresh(n => n + 1) }} requestedTab={requestedResourceTab} />
               </div>
 
             </div>

@@ -1966,6 +1966,16 @@
         "open": "開く",
         "create": "作成",
         "translateFirst": "{language}のテキストがまだありません。先に翻訳してください"
+      },
+      "coverage": {
+        "title": "手配状況",
+        "subtitle": "各日のサービスに必要な手配と、割り当て状況",
+        "summary": "{needed}件中{covered}件手配済み",
+        "day": "{number}日目",
+        "assign": "割り当て",
+        "extraHint": "割り当て済みですが、この日のサービスには含まれていません",
+        "nothingNeeded": "この旅程にはまだガイド・車両・ホテルなどが必要なサービスがありません。",
+        "loadFailed": "割り当てを読み込めませんでした。"
       }
     },
     "editAction": "編集",
