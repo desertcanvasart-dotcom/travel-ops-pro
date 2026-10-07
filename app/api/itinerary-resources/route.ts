@@ -3,9 +3,15 @@
 import { createServerClient } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { assignmentInOrg, itineraryInOrg } from '@/lib/itinerary-resources/org-scope'
+
+// Every method reads or writes only the signed-in organisation's trips
+// (lib/itinerary-resources/org-scope): the service-role client bypasses RLS.
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     
@@ -14,7 +20,8 @@ export async function GET(request: NextRequest) {
     
     let query = supabase
       .from('itinerary_resources')
-      .select('*')
+      .select('*, itinerary:itineraries!inner(org_id)')
+      .eq('itinerary.org_id', orgId)
       .order('start_date', { ascending: true })
     
     if (itineraryId) {
@@ -29,7 +36,9 @@ export async function GET(request: NextRequest) {
     
     if (error) throw error
     
-    return NextResponse.json({ success: true, data })
+    // The join is only the scope; the rows go out as they always have.
+    const rows = (data ?? []).map(({ itinerary: _scope, ...row }: Record<string, unknown>) => row)
+    return NextResponse.json({ success: true, data: rows })
   } catch (error) {
     console.error('Error fetching itinerary resources:', error)
     return NextResponse.json(
@@ -41,6 +50,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const body = await request.json()
     
@@ -65,6 +76,10 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Missing required fields' },
         { status: 400 }
       )
+    }
+
+    if (!(await itineraryInOrg(supabase, itinerary_id, orgId))) {
+      return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
     }
     
     const { data, error } = await supabase
@@ -109,6 +124,8 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
@@ -118,6 +135,10 @@ export async function DELETE(request: NextRequest) {
         { success: false, error: 'Resource ID required' },
         { status: 400 }
       )
+    }
+
+    if (!(await assignmentInOrg(supabase, id, orgId))) {
+      return NextResponse.json({ success: false, error: 'Assignment not found' }, { status: 404 })
     }
     
     const { error } = await supabase

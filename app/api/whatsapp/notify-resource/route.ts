@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createServiceClient } from '@/lib/supabase/service-client'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
     const { itineraryId, resourceId, resourceType, resourceName, startDate, endDate, notes } = body
 
@@ -19,12 +22,14 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceClient()
 
-    // Get itinerary details
+    // Get itinerary details — only the signed-in organisation's: the message
+    // carries the client's name and phone to the supplier.
     const { data: itinerary, error: itinError } = await supabase
       .from('itineraries')
       .select('*')
       .eq('id', itineraryId)
-      .single()
+      .eq('org_id', orgId)
+      .maybeSingle()
 
     if (itinError || !itinerary) {
       console.error('❌ Itinerary error:', itinError)

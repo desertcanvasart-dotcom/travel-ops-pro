@@ -6881,6 +6881,7 @@
     "hotelStaff": "ホテルアシスタント",
     "schedulingConflictsDetected": "スケジュールの競合が検出されました",
     "isAlsoBookedFor": "は{itinerary}（{dates}）にも予約されています",
+    "anotherWorkspaceTrip": "別のワークスペースの旅程",
     "sendWhatsAppNotification": "WhatsApp通知を送信",
     "sending": "送信中...",
     "sent": "送信完了！",

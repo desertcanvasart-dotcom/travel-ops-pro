@@ -50,7 +50,9 @@ interface AssignedResource {
 interface Conflict {
   resource_id: string
   resource_name: string
-  conflicting_itinerary: string
+  /** Null when the clash is another organisation's trip, which is not named. */
+  conflicting_itinerary: string | null
+  other_workspace?: boolean
   dates: string
 }
 
@@ -850,7 +852,7 @@ export default function ResourceAssignmentV2({
                 <ul className="mt-2 text-sm text-orange-700 space-y-1">
                   {activeConflicts.map((conflict, idx) => (
                     <li key={idx}>
-                      <strong>{conflict.resource_name}</strong> {t('isAlsoBookedFor', { itinerary: conflict.conflicting_itinerary, dates: conflict.dates })}
+                      <strong>{conflict.resource_name}</strong> {t('isAlsoBookedFor', { itinerary: conflict.conflicting_itinerary ?? t('anotherWorkspaceTrip'), dates: conflict.dates })}
                     </li>
                   ))}
                 </ul>

@@ -23,11 +23,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
   const { supabase, org_id, user } = auth
 
+  // itinerary_resources has no org_id of its own: an assignment is the
+  // organisation's through its trip (the filter on a missing column failed
+  // every call with "column itinerary_resources.org_id does not exist").
   const { data: resource, error } = await supabase
     .from('itinerary_resources')
-    .select('id, itinerary_id, status, resource_type, resource_id, resource_name')
+    .select('id, itinerary_id, status, resource_type, resource_id, resource_name, itinerary:itineraries!inner(org_id)')
     .eq('id', id)
-    .eq('org_id', org_id)
+    .eq('itinerary.org_id', org_id)
     .maybeSingle()
   if (error) return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   if (!resource) return NextResponse.json({ success: false, error: 'Assignment not found' }, { status: 404 })
