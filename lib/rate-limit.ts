@@ -88,6 +88,13 @@ export const RATE_LIMITS = {
     limit: 5,          // submits
     windowMs: 600000,  // per 10 minutes
   },
+  // The traveller's trip chat on the share page. Several short lines in a
+  // minute is a conversation, and a hotel's shared IP can carry several
+  // travellers; the per-trip hourly cap in the route is the real flood control.
+  chat: {
+    limit: 20,         // messages
+    windowMs: 60000,   // per minute
+  },
 }
 
 // ============================================

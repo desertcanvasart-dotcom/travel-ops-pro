@@ -155,3 +155,42 @@ export function toClientItinerary(
       }),
   }
 }
+
+// ============================================
+// TRIP MESSAGES — the two-way thread (migrations/20261110_trip_messages.sql)
+// ============================================
+// The traveller reads their own thread with the office. Named copies only:
+// team_member_id, org ids, is_read and notify_outcome are internal and must
+// never cross. Unknown directions are dropped.
+
+export interface ClientTripMessage {
+  direction: 'inbound' | 'outbound'
+  content: string
+  /** Display name only — the traveller's own typed name, or the replying team member's. */
+  senderName: string | null
+  createdAt: string
+}
+
+export function toClientTripMessages(messages: Array<Record<string, unknown>>): ClientTripMessage[] {
+  const out: ClientTripMessage[] = []
+  for (const m of messages ?? []) {
+    const direction = m.direction === 'inbound' || m.direction === 'outbound' ? m.direction : null
+    const content = str(m.content)
+    const createdAt = str(m.created_at)
+    if (!direction || !content || !createdAt) continue
+    out.push({ direction, content, senderName: str(m.sender_name), createdAt })
+  }
+  // Oldest first — a chat reads downward.
+  return out.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+}
+
+/**
+ * Sanitize free text arriving from a token-holder (the chat): strip control
+ * characters (keeping newlines and tabs), trim, cap the length. Returns null
+ * when nothing survives — "no input".
+ */
+export function cleanClientText(v: unknown, max: number): string | null {
+  if (typeof v !== 'string') return null
+  const s = v.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim()
+  return s ? s.slice(0, max) : null
+}

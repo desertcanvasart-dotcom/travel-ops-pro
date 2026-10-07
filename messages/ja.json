@@ -2080,7 +2080,11 @@
         "duplicateHint": "同じ日程・サービス・翻訳で新しい下書きを作成",
         "duplicateTitle": "この旅行を複製しますか？",
         "duplicateMessage": "同じ日程・サービス・料金・翻訳で新しい下書きを作成します。予約・請求書・入金・手配スタッフ・タスク・運行ログはこの旅行に残ります。",
-        "duplicateFailed": "旅行を複製できませんでした。"
+        "duplicateFailed": "旅行を複製できませんでした。",
+        "pickupDetails": "お迎えのご案内",
+        "pickupDetailsHint": "その日のお迎え時間・場所・ガイド・ドライバーをWhatsAppでお客様に送信",
+        "pickupSent": "お迎えのご案内を送信しました",
+        "pickupSaved": "お迎え情報を保存しました — WhatsAppで送信を完了してください"
       },
       "ownWhatsApp": {
         "menuItem": "自分のWhatsAppから送信",
@@ -2161,6 +2165,41 @@
         "kind_completed": "完了",
         "kind_delayed": "遅延",
         "kind_note": "メモ"
+      },
+      "pickup": {
+        "title": "お迎えのご案内",
+        "messageLanguage": "メッセージの言語",
+        "day": "日程",
+        "dayOption": "{number}日目・{date}",
+        "time": "時間",
+        "place": "お迎え場所",
+        "placePlaceholder": "ホテルのロビー",
+        "nobodyAssigned": "この日はまだ誰も手配されていません — メッセージにガイド・ドライバー名は入りません。",
+        "message": "メッセージ",
+        "rewrite": "入力内容から作り直す",
+        "preparing": "準備中…",
+        "noPhone": "この旅程にはお客様の電話番号がありません — 旅程の編集で追加してください。",
+        "cancel": "キャンセル",
+        "sendMine": "自分のWhatsAppから送信",
+        "mineHint": "このメッセージを入力した状態でご自身のWhatsAppを開きます",
+        "sendAgency": "送信（会社番号）",
+        "prepareFailed": "メッセージを準備できませんでした",
+        "sendFailed": "送信できませんでした",
+        "saveFailed": "お迎え情報を保存できませんでした"
+      },
+      "chat": {
+        "title": "旅行者チャット",
+        "subtitle": "旅行者の旅程ページと共有",
+        "loading": "読み込み中…",
+        "empty": "まだメッセージはありません。ここで送信した内容は旅行者の旅程ページ（共有リンク）に表示され、旅行者もそこから返信できます。",
+        "placeholder": "旅行者に返信…",
+        "send": "送信",
+        "sending": "送信中…",
+        "sendFailed": "送信できませんでした",
+        "notNotified": "未通知",
+        "notify_failed": "オフィスへの通知に失敗しました",
+        "notify_not_configured": "通知手段（プッシュ通知または連絡先メール）が設定されていません",
+        "notify_no_recipients": "通知を受け取れる人がいません — 通知を登録したブラウザも連絡先メールもありません"
       }
     },
     "editAction": "編集",

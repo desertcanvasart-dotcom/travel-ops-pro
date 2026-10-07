@@ -385,6 +385,11 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     // token against an active staff_link on a live (non-cancelled) assignment,
     // derives org/itinerary/actor server-side, and rate-limits per assignment.
     '/api/staff/',
+    // The trip chat on the share page: the traveller has no session. The route
+    // resolves the token to an UNREVOKED share, derives org and itinerary from
+    // it, rate-limits per IP and per token, caps a trip's messages per hour,
+    // and returns messages only through an allowlist projection.
+    '/api/share/',
     // Invitation verify/accept: the invitee has NO session yet by definition
     // (they clicked the emailed link; accept runs right after signUp). Both
     // routes authenticate by the unguessable invitation token and check

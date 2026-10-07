@@ -23,11 +23,14 @@ import { notFound } from 'next/navigation'
 import {
   isValidShareToken,
   toClientItinerary,
+  toClientTripMessages,
   type ClientItinerary,
+  type ClientTripMessage,
   type ShareDayType,
 } from '@/lib/itinerary-share'
 import { loadItineraryServiceLines } from '@/lib/pricing/itinerary-completeness'
 import { sharePriceDecision } from '@/lib/itineraries/share-approval'
+import TripChat from './TripChat'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,7 +61,7 @@ const DEFAULT_BRAND = '#647C47'
  */
 const loadShare = cache(async function loadShare(
   token: string
-): Promise<{ itinerary: ClientItinerary; operator: Operator; priceWithheld: boolean } | null> {
+): Promise<{ itinerary: ClientItinerary; operator: Operator; priceWithheld: boolean; messages: ClientTripMessage[] } | null> {
   if (!isValidShareToken(token)) return null
   const supabase = admin()
 
@@ -83,6 +86,14 @@ const loadShare = cache(async function loadShare(
       .maybeSingle(),
     loadItineraryServiceLines(supabase, share.itinerary_id, share.org_id),
   ])
+  // The thread with the office, through its allowlist. Best-effort: before
+  // the table exists, or on a failed read, the page shows an empty chat.
+  const { data: messageRows } = await supabase
+    .from('trip_messages')
+    .select('direction, content, sender_name, created_at')
+    .eq('itinerary_id', share.itinerary_id)
+    .order('created_at', { ascending: false })
+    .limit(50)
   if (!itinerary) return null
 
   // Re-checked on every view. The link was created with the price as it stood
@@ -112,6 +123,7 @@ const loadShare = cache(async function loadShare(
   return {
     itinerary: toClientItinerary(itinerary, days ?? []),
     priceWithheld: !price.show,
+    messages: toClientTripMessages((messageRows ?? []) as Array<Record<string, unknown>>),
     operator: {
       name: org?.name || '',
       logoUrl: org?.logo_url || null,
@@ -195,7 +207,7 @@ export default async function SharedItineraryPage({
   const data = await loadShare(token)
   if (!data) notFound()
 
-  const { itinerary: it, operator: op, priceWithheld } = data
+  const { itinerary: it, operator: op, priceWithheld, messages } = data
   const travellers = it.numAdults + it.numChildren + it.numInfants
 
   return (
@@ -345,6 +357,9 @@ export default async function SharedItineraryPage({
             {it.code && <span className="text-xs text-gray-400 shrink-0">Ref: {it.code}</span>}
           </div>
         )}
+
+        {/* The thread with the office. */}
+        <TripChat token={token} brandHex={op.brandHex} operatorName={op.name} initialMessages={messages} />
       </main>
 
       {/* Operator footer */}
