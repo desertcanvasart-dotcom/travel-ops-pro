@@ -7035,6 +7035,8 @@
   "supplierDocuments": {
     "supplierDocuments": "Supplier Documents",
     "supplierDocumentsSubtitle": "Manage vouchers, service orders, and assignments",
+    "forOneTrip": "Showing the documents of one trip ({code})",
+    "showAllDocuments": "Show all documents",
     "backToAllDocuments": "Back to All Documents",
     "tryAgain": "Try Again",
     "totalDocuments": "Total Documents",

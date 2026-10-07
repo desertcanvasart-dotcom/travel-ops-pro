@@ -639,20 +639,37 @@ export async function generateSupplierDocumentPDF(
     const items = doc.selected_routes || doc.selected_meals || doc.selected_guides || doc.selected_attractions || doc.services || []
     
     items.forEach((item: any, idx: number) => {
-      const isOdd = idx % 2 === 0
-      if (isOdd) {
-        pdf.setFillColor(BRAND.background.r, BRAND.background.g, BRAND.background.b)
-        pdf.rect(margin, y, contentWidth, 10, 'F')
-      }
-      
-      pdf.setFontSize(8)
-      pdf.setFont(fontFamily, 'normal')
-      pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
-      
       // Get item name
       const itemName = item.route_name || item.restaurant_name || (item.guide_language ? `${item.guide_language} ${(item.guide_type || '').replace(/_/g, ' ')} - ${(item.tour_duration || '').replace(/_/g, ' ')}` : null) || item.attraction_name || item.service_name || item.service_type || 'Service'
       const itemCity = item.city ? ` (${item.city})` : ''
-      pdf.text((itemName + itemCity).substring(0, 60), margin + 4, y + 6.5)
+      // The whole name, wrapped — an entrance voucher names its sites, which
+      // ran past the 60 characters this used to cut at — and the line's
+      // notes under it ("Inside: … | Photo stops: …"), never printed before.
+      pdf.setFont(fontFamily, 'normal')
+      pdf.setFontSize(8)
+      const nameLines: string[] = pdf.splitTextToSize(itemName + itemCity, contentWidth - 60).slice(0, 3)
+      pdf.setFontSize(7)
+      const noteLines: string[] = item.notes && typeof item.notes === 'string' && !item.notes.startsWith('__grid:')
+        ? pdf.splitTextToSize(item.notes, contentWidth - 60).slice(0, 2)
+        : []
+      const rowHeight = Math.max(10, 4 + nameLines.length * 4 + noteLines.length * 3.5)
+
+      const isOdd = idx % 2 === 0
+      if (isOdd) {
+        pdf.setFillColor(BRAND.background.r, BRAND.background.g, BRAND.background.b)
+        pdf.rect(margin, y, contentWidth, rowHeight, 'F')
+      }
+
+      pdf.setFontSize(8)
+      pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
+      pdf.text(nameLines, margin + 4, y + 6.5)
+      if (noteLines.length > 0) {
+        pdf.setFontSize(7)
+        pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
+        pdf.text(noteLines, margin + 4, y + 6.5 + nameLines.length * 4)
+        pdf.setFontSize(8)
+        pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
+      }
 
       // Quantity
       const qty = item.quantity || 1
@@ -665,8 +682,8 @@ export async function generateSupplierDocumentPDF(
       } else {
         pdf.text('—', pageWidth - margin - 4, y + 6.5, { align: 'right' })
       }
-      
-      y += 10
+
+      y += rowHeight
       
       // Page break check
       if (y > pageHeight - 70) {
