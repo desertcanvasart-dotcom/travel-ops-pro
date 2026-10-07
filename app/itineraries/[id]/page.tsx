@@ -8,7 +8,7 @@ import { useTranslations, useLocale, createTranslator } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2, Languages, ClipboardList, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, CheckCircle, Loader2, Languages, ClipboardList, AlertTriangle } from 'lucide-react'
 // The itinerary PDF generator (and jsPDF behind it) loads on first use, not
 // with the page.
 const generateItineraryPDF = async (...args: Parameters<typeof import('@/lib/pdf-generator').generateItineraryPDF>) =>
@@ -280,14 +280,6 @@ export default function ViewItineraryPage() {
   // Expenses state
   const [itineraryExpenses, setItineraryExpenses] = useState<any[]>([])
   const [expenseRefreshTrigger, setExpenseRefreshTrigger] = useState(0)
-
-  // Inclusions & Exclusions state
-  const [editingInclusions, setEditingInclusions] = useState(false)
-  const [editingExclusions, setEditingExclusions] = useState(false)
-  const [localInclusions, setLocalInclusions] = useState<string[]>([])
-  const [localExclusions, setLocalExclusions] = useState<string[]>([])
-  const [savingInclusions, setSavingInclusions] = useState(false)
-  const [translatingInclusions, setTranslatingInclusions] = useState(false)
 
   // The content language no longer follows the staff UI language (the
   // sidebar switch): a Japanese-speaking operator still needs to see that the
@@ -851,135 +843,6 @@ export default function ViewItineraryPage() {
     }
   }
 
-  const saveInclusionsExclusions = async (type: 'inclusions' | 'exclusions', items: string[]) => {
-    if (!itinerary) return
-
-    // A target language's lists live on its version row, which a trip
-    // translated day by day may not have yet.
-    if (activeLanguage !== sourceLanguage && !itinerary.versions?.[activeLanguage]) {
-      if (!(await handleCreateVersion(activeLanguage))) return
-    }
-
-    setSavingInclusions(true)
-    try {
-      let response: Response
-      if (activeLanguage === sourceLanguage) {
-        // The source language: save to the base itinerary table
-        response = await fetch(`/api/itineraries/${itinerary.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ [type]: items })
-        })
-        if (response.ok) {
-          setItinerary(prev => prev ? { ...prev, [type]: items } : null)
-        }
-      } else {
-        // A target language: save to version table
-        response = await fetch(`/api/itineraries/${itinerary.id}/versions/${activeLanguage}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ [type]: items })
-        })
-        if (response.ok) {
-          setItinerary(prev => {
-            if (!prev) return null
-            const updatedVersions = { ...(prev.versions || {}) }
-            updatedVersions[activeLanguage] = {
-              ...(updatedVersions[activeLanguage] || {}),
-              [type]: items
-            }
-            return { ...prev, versions: updatedVersions }
-          })
-        }
-      }
-
-      if (response.ok) {
-        if (type === 'inclusions') {
-          setEditingInclusions(false)
-        } else {
-          setEditingExclusions(false)
-        }
-      }
-    } catch (error) {
-      console.error(`Error saving ${type}:`, error)
-    } finally {
-      setSavingInclusions(false)
-    }
-  }
-
-  const translateInclusionsExclusions = async () => {
-    if (!itinerary) return
-
-    const langCode = activeLanguage
-    // Always translate from the base (source-language) inclusions/exclusions
-    const inclusions = itinerary.inclusions || []
-    const exclusions = itinerary.exclusions || []
-    if (inclusions.length === 0 && exclusions.length === 0) return
-    if (!itinerary.versions?.[langCode] && !(await handleCreateVersion(langCode))) return
-
-    setTranslatingInclusions(true)
-    try {
-      // Batch translate inclusions and exclusions separately for better context
-      const [inclusionsRes, exclusionsRes] = await Promise.all([
-        inclusions.length > 0
-          ? fetch('/api/translate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                texts: inclusions,
-                targetLanguage: langCode,
-                action: 'batchTranslate',
-                context: 'inclusions (what is included in the tour package price)'
-              })
-            }).then(r => r.json())
-          : { success: true, data: { translatedTexts: [] } },
-        exclusions.length > 0
-          ? fetch('/api/translate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                texts: exclusions,
-                targetLanguage: langCode,
-                action: 'batchTranslate',
-                context: 'exclusions (what is NOT included in the tour package price)'
-              })
-            }).then(r => r.json())
-          : { success: true, data: { translatedTexts: [] } }
-      ])
-
-      const translatedInclusions = inclusionsRes.success ? inclusionsRes.data.translatedTexts : inclusions
-      const translatedExclusions = exclusionsRes.success ? exclusionsRes.data.translatedTexts : exclusions
-
-      // Save to language version table (not the base itinerary)
-      const response = await fetch(`/api/itineraries/${itinerary.id}/versions/${langCode}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          inclusions: translatedInclusions,
-          exclusions: translatedExclusions
-        })
-      })
-
-      if (response.ok) {
-        // Update the versions map in local state (not the base itinerary)
-        setItinerary(prev => {
-          if (!prev) return null
-          const updatedVersions = { ...(prev.versions || {}) }
-          updatedVersions[langCode] = {
-            ...(updatedVersions[langCode] || {}),
-            inclusions: translatedInclusions,
-            exclusions: translatedExclusions
-          }
-          return { ...prev, versions: updatedVersions }
-        })
-      }
-    } catch (error) {
-      console.error('Error translating inclusions/exclusions:', error)
-    } finally {
-      setTranslatingInclusions(false)
-    }
-  }
-
   const handleSendWhatsApp = async () => {
     if (!itinerary) return
 
@@ -1318,19 +1181,6 @@ export default function ViewItineraryPage() {
   const attentionItems = useMemo(() => {
     if (!itinerary || !dayTranslations) return []
     const servicesByDay = new Map(days.map(d => [d.id, d]))
-    // Each language's own lists; a target without its own is the source's
-    // and would only repeat the source's finding.
-    const lists = (lang: Language) => {
-      if (lang === sourceLanguage) return { inclusions: itinerary.inclusions || [], exclusions: itinerary.exclusions || [] }
-      const v = itinerary.versions?.[lang]
-      if (!v?.inclusions?.length && !v?.exclusions?.length) return null
-      return { inclusions: v.inclusions || [], exclusions: v.exclusions || [] }
-    }
-    const inclusions: Partial<Record<Language, { inclusions: string[]; exclusions: string[] }>> = {}
-    for (const lang of [sourceLanguage, ...dayTranslations.target_languages]) {
-      const l = lists(lang)
-      if (l) inclusions[lang] = l
-    }
     return itineraryAttention({
       status: itinerary.status,
       sourceLanguage,
@@ -1347,7 +1197,9 @@ export default function ViewItineraryPage() {
           overnight: loaded?.overnight,
         }
       }),
-      inclusions,
+      // The inclusion lists are no longer shown or edited on this page, so a
+      // conflict in them is not reported here.
+      inclusions: {},
       hasInvoice: !!existingInvoice,
       hasBooking: !!existingBooking,
     })
@@ -2005,199 +1857,6 @@ export default function ViewItineraryPage() {
 
               {days.length === 0 && <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center"><p className="text-sm text-gray-500">No days planned yet</p></div>}
 
-              {/* Inclusions & Exclusions Section */}
-              {activeLanguage !== sourceLanguage && !editingInclusions && !editingExclusions && (
-                <div className="flex justify-end mt-6 mb-1">
-                  <button
-                    type="button"
-                    onClick={translateInclusionsExclusions}
-                    disabled={translatingInclusions}
-                    className="flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded hover:bg-primary-50 disabled:opacity-50"
-                  >
-                    {translatingInclusions ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Languages className="w-3.5 h-3.5" />}
-                    {t('translateItems')}
-                  </button>
-                </div>
-              )}
-              <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${activeLanguage === sourceLanguage || editingInclusions || editingExclusions ? 'mt-6' : ''}`}>
-                {/* Inclusions */}
-                <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                      {t('whatsIncluded')}
-                    </h3>
-                    {!editingInclusions ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLocalInclusions(getVersionedContent().inclusions)
-                          setEditingInclusions(true)
-                        }}
-                        className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-                      >
-                        {tCommon('edit')}
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => saveInclusionsExclusions('inclusions', localInclusions)}
-                          disabled={savingInclusions}
-                          className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
-                        >
-                          {savingInclusions ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingInclusions(false)}
-                          className="p-1 text-gray-400 hover:bg-gray-100 rounded"
-                          title="Cancel"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {editingInclusions ? (
-                    <div className="space-y-2">
-                      {localInclusions.map((item, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={item}
-                            onChange={(e) => {
-                              const updated = [...localInclusions]
-                              updated[index] = e.target.value
-                              setLocalInclusions(updated)
-                            }}
-                            placeholder="Enter inclusion item"
-                            className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setLocalInclusions(localInclusions.filter((_, i) => i !== index))}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded"
-                            title="Remove item"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setLocalInclusions([...localInclusions, ''])}
-                        className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium mt-2"
-                      >
-                        <Plus className="w-3 h-3" />
-                        {t('addItem')}
-                      </button>
-                    </div>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {getVersionedContent().inclusions.map((item, index) => (
-                        <li key={index} className="text-sm text-gray-600 flex items-start gap-2">
-                          <Check className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" />
-                          {item}
-                        </li>
-                      ))}
-                      {getVersionedContent().inclusions.length === 0 && (
-                        <li className="text-sm text-gray-400 italic">{t('noInclusionsYet')}</li>
-                      )}
-                    </ul>
-                  )}
-                </div>
-
-                {/* Exclusions */}
-                <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                      <XCircle className="w-4 h-4 text-red-500" />
-                      {t('whatsNotIncluded')}
-                    </h3>
-                    {!editingExclusions ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLocalExclusions(getVersionedContent().exclusions)
-                          setEditingExclusions(true)
-                        }}
-                        className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-                      >
-                        {tCommon('edit')}
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => saveInclusionsExclusions('exclusions', localExclusions)}
-                          disabled={savingInclusions}
-                          className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
-                        >
-                          {savingInclusions ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingExclusions(false)}
-                          className="p-1 text-gray-400 hover:bg-gray-100 rounded"
-                          title="Cancel"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {editingExclusions ? (
-                    <div className="space-y-2">
-                      {localExclusions.map((item, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={item}
-                            onChange={(e) => {
-                              const updated = [...localExclusions]
-                              updated[index] = e.target.value
-                              setLocalExclusions(updated)
-                            }}
-                            placeholder="Enter exclusion item"
-                            className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setLocalExclusions(localExclusions.filter((_, i) => i !== index))}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded"
-                            title="Remove item"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setLocalExclusions([...localExclusions, ''])}
-                        className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium mt-2"
-                      >
-                        <Plus className="w-3 h-3" />
-                        {t('addItem')}
-                      </button>
-                    </div>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {getVersionedContent().exclusions.map((item, index) => (
-                        <li key={index} className="text-sm text-gray-600 flex items-start gap-2">
-                          <X className="w-3.5 h-3.5 text-red-400 mt-0.5 flex-shrink-0" />
-                          {item}
-                        </li>
-                      ))}
-                      {getVersionedContent().exclusions.length === 0 && (
-                        <li className="text-sm text-gray-400 italic">{t('noExclusionsYet')}</li>
-                      )}
-                    </ul>
-                  )}
-                </div>
-              </div>
             </div>
           )}
           {tab === 'operations' && (
