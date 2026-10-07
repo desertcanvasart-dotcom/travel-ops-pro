@@ -31,8 +31,18 @@ import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { itineraryCompleteness } from '@/lib/pricing/itinerary-completeness'
 import { describeGaps } from '@/lib/pricing/quote-completeness'
-import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
+import { LanguageStatusRow, DayLanguageChip, BilingualDayEditor, HighlightPlaceholders, type ContentView } from '@/components/multilingual'
+import ItineraryAttentionStrip from '@/components/itineraries/ItineraryAttentionStrip'
 import type { Language, ItineraryVersion } from '@/types/multilingual'
+import { LANGUAGE_NAMES } from '@/types/multilingual'
+import {
+  normalizeClientLanguage,
+  splitTourCode,
+  summarizeLanguage,
+  type DayText,
+  type DayTranslationStatus,
+} from '@/lib/itineraries/content-language'
+import { itineraryAttention } from '@/lib/itineraries/itinerary-attention'
 
 const ItineraryMap = dynamic(() => import('@/components/ItineraryMap'), {
   ssr: false,
@@ -92,6 +102,21 @@ interface Itinerary {
   inclusions?: string[]
   exclusions?: string[]
   generation_warnings?: string[]
+  /** clients.preferred_language, free text (normalised on this page). */
+  client_preferred_language?: string | null
+}
+
+/** GET /api/itineraries/[id]/day-translations */
+interface DayTranslations {
+  source_language: Language
+  target_languages: Language[]
+  days: Array<{
+    id: string
+    day_number: number
+    date: string
+    source: DayText
+    translations: Partial<Record<Language, { text: DayText | null; status: DayTranslationStatus; translated_at: string | null }>>
+  }>
 }
 
 interface ItineraryDay {
@@ -102,6 +127,8 @@ interface ItineraryDay {
   title: string
   description: string
   overnight_city: string
+  hotel_included?: boolean | null
+  overnight?: boolean | null
 }
 
 interface Service {
@@ -134,6 +161,7 @@ export default function ViewItineraryPage() {
   const tEdit = useTranslations('itineraries.edit')
   const tCommon = useTranslations('common')
   const tPdf = useTranslations('pdf')
+  const tLang = useTranslations('itineraries.detail.languages')
   // The letterhead on the generated PDF. It used to come from the message
   // catalogue — where the first operator's name sat as if it were a
   // translation — so every agency's quote carried it. Undefined until the
@@ -174,14 +202,6 @@ export default function ViewItineraryPage() {
   const supabase = createClient()
   const intlLocale = useLocale() as Language
 
-  // Read language directly from cookie to avoid SSR timing issues with useLocale()
-  function getLanguageFromCookie(): Language {
-    if (typeof document === 'undefined') return 'en'
-    const match = document.cookie.match(/preferred_language=([^;]+)/)
-    const lang = match?.[1] as Language | undefined
-    return (lang === 'en' || lang === 'ja') ? lang : 'en'
-  }
-
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [days, setDays] = useState<DayWithServices[]>([])
   const [loading, setLoading] = useState(true)
@@ -212,8 +232,12 @@ export default function ViewItineraryPage() {
   const [error, setError] = useState<string | null>(null)
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set([1]))
 
-  // Multilingual state
+  // Multilingual state. activeLanguage is the language the day cards, PDF
+  // and email are in; contentView is what the Daily Itinerary shows — one
+  // language, or source and target side by side (which reads the source).
   const [activeLanguage, setActiveLanguage] = useState<Language>('en')
+  const [contentView, setContentView] = useState<ContentView | null>(null)
+  const [dayTranslations, setDayTranslations] = useState<DayTranslations | null>(null)
   const [creatingVersion, setCreatingVersion] = useState(false)
   const [generatingPDF, setGeneratingPDF] = useState(false)
   const [pdfPreviewBlob, setPdfPreviewBlob] = useState<Blob | null>(null)
@@ -258,22 +282,28 @@ export default function ViewItineraryPage() {
   const [savingInclusions, setSavingInclusions] = useState(false)
   const [translatingInclusions, setTranslatingInclusions] = useState(false)
 
-  // Sync language from cookie after hydration
-  useEffect(() => {
-    const cookieLang = getLanguageFromCookie()
-    console.log(`🍪 Cookie language on mount: ${cookieLang}, current activeLanguage: en`)
-    if (cookieLang !== 'en') {
-      setActiveLanguage(cookieLang)
-    }
-  }, [])
-
+  // The content language no longer follows the staff UI language (the
+  // sidebar switch): a Japanese-speaking operator still needs to see that the
+  // English source is the source. The view opens on the source, or side by
+  // side when a translation needs work — decided once the statuses load.
   useEffect(() => {
     if (params.id) {
       fetchItinerary()
+      fetchDayTranslations()
       checkExistingInvoice()
       checkExistingBooking()
     }
   }, [params.id])
+
+  const fetchDayTranslations = async () => {
+    try {
+      const res = await fetch(`/api/itineraries/${params.id}/day-translations`)
+      const data = await res.json()
+      if (data.success) setDayTranslations(data.data)
+    } catch (err) {
+      console.error('Error fetching day translations:', err)
+    }
+  }
 
   // Fetch days when language changes
   useEffect(() => {
@@ -786,11 +816,17 @@ export default function ViewItineraryPage() {
   const saveInclusionsExclusions = async (type: 'inclusions' | 'exclusions', items: string[]) => {
     if (!itinerary) return
 
+    // A target language's lists live on its version row, which a trip
+    // translated day by day may not have yet.
+    if (activeLanguage !== sourceLanguage && !itinerary.versions?.[activeLanguage]) {
+      if (!(await handleCreateVersion(activeLanguage))) return
+    }
+
     setSavingInclusions(true)
     try {
       let response: Response
-      if (activeLanguage === 'en') {
-        // English: save to base itinerary table
+      if (activeLanguage === sourceLanguage) {
+        // The source language: save to the base itinerary table
         response = await fetch(`/api/itineraries/${itinerary.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -800,7 +836,7 @@ export default function ViewItineraryPage() {
           setItinerary(prev => prev ? { ...prev, [type]: items } : null)
         }
       } else {
-        // Non-English: save to version table
+        // A target language: save to version table
         response = await fetch(`/api/itineraries/${itinerary.id}/versions/${activeLanguage}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -837,10 +873,11 @@ export default function ViewItineraryPage() {
     if (!itinerary) return
 
     const langCode = activeLanguage
-    // Always translate from the base English inclusions/exclusions
+    // Always translate from the base (source-language) inclusions/exclusions
     const inclusions = itinerary.inclusions || []
     const exclusions = itinerary.exclusions || []
     if (inclusions.length === 0 && exclusions.length === 0) return
+    if (!itinerary.versions?.[langCode] && !(await handleCreateVersion(langCode))) return
 
     setTranslatingInclusions(true)
     try {
@@ -963,6 +1000,21 @@ export default function ViewItineraryPage() {
     setShowSendModal(false)
     const decision = await confirmIncompleteSend(days)
     if (decision === 'stop') return
+    // The PDF goes in the language on screen. When that is not the one the
+    // client reads, say so before it leaves.
+    if (clientLanguage && clientLanguage !== activeLanguage) {
+      const ok = await dialog.confirm({
+        title: tLang('sendLanguageTitle'),
+        message: tLang('sendLanguageMessage', {
+          client: itinerary.client_name,
+          clientLanguage: LANGUAGE_NAMES[clientLanguage],
+          language: LANGUAGE_NAMES[activeLanguage],
+        }),
+        confirmText: tLang('sendAnyway'),
+        variant: 'warning',
+      })
+      if (!ok) return
+    }
     setSendingEmail(true)
     
     try {
@@ -1099,7 +1151,10 @@ export default function ViewItineraryPage() {
         exclusions: itinerary?.exclusions || []
       }
     }
-    const version = itinerary.versions[activeLanguage] || itinerary.versions['en']
+    // The source language IS the base row; a version is only a translation.
+    // (Read off dayTranslations here: this runs before sourceLanguage is set.)
+    const source = dayTranslations?.source_language ?? 'en'
+    const version = activeLanguage === source ? null : itinerary.versions[activeLanguage]
     console.log(`🌐 Version for ${activeLanguage}: trip_name="${version?.trip_name}", hasVersion=${!!version}`)
     if (version) {
       return {
@@ -1123,7 +1178,7 @@ export default function ViewItineraryPage() {
     }
   }
 
-  const handleCreateVersion = async (language: Language) => {
+  const handleCreateVersion = async (language: Language): Promise<boolean> => {
     setCreatingVersion(true)
     try {
       const response = await fetch(`/api/itineraries/${params.id}/versions`, {
@@ -1140,17 +1195,17 @@ export default function ViewItineraryPage() {
       })
       const data = await response.json()
       if (data.success) {
-        // Refresh itinerary to get updated versions
+        // Refresh itinerary to get updated versions. The view stays where it
+        // is: the caller decides what to show.
         await fetchItinerary()
-        // Always re-fetch days with the target language
-        await fetchDays(language)
-        setActiveLanguage(language)
-      } else {
-        await dialog.alert(tCommon('error'), data.error || t('failedToCreateVersion'), 'warning')
+        return true
       }
+      await dialog.alert(tCommon('error'), data.error || t('failedToCreateVersion'), 'warning')
+      return false
     } catch (error) {
       console.error('Error creating version:', error)
       await dialog.alert(tCommon('error'), t('failedToCreateVersion'), 'warning')
+      return false
     } finally {
       setCreatingVersion(false)
     }
@@ -1175,12 +1230,10 @@ export default function ViewItineraryPage() {
         translatedServicesCount: data.translatedServices?.length
       }))
       if (data.success) {
-        // Refresh itinerary to get updated versions
+        // Refresh itinerary to get updated versions, and the days in the
+        // language on screen (their translated service names may be new).
         await fetchItinerary()
-        // Always re-fetch days with the target language
-        // (setActiveLanguage may be a no-op if already set to this language)
-        await fetchDays(language)
-        setActiveLanguage(language)
+        await fetchDays(activeLanguage)
       } else {
         await dialog.alert(tCommon('error'), data.error || t('failedToCreateVersion'), 'warning')
       }
@@ -1193,8 +1246,111 @@ export default function ViewItineraryPage() {
   }
 
   const versionedContent = getVersionedContent()
+  const tourTitle = splitTourCode(versionedContent.trip_name)
   const availableLanguages = itinerary?.available_languages || []
-  const hasActiveVersion = availableLanguages.includes(activeLanguage)
+
+  // ── The language layer ────────────────────────────────────────────────
+  const sourceLanguage: Language = dayTranslations?.source_language ?? 'en'
+  const clientLanguage = normalizeClientLanguage(itinerary?.client_preferred_language)
+  const languageSummaries = useMemo(
+    () => (dayTranslations?.target_languages ?? []).map(lang =>
+      summarizeLanguage(lang, dayTranslations!.days.map(d => d.translations[lang]?.status ?? 'missing'))
+    ),
+    [dayTranslations]
+  )
+  // The target the side-by-side view edits: the client's language when it is
+  // one, else the first target.
+  const sideTarget: Language | null =
+    (clientLanguage && clientLanguage !== sourceLanguage ? clientLanguage : null)
+    ?? dayTranslations?.target_languages[0] ?? null
+  const translationByDay = useMemo(
+    () => new Map((dayTranslations?.days ?? []).map(d => [d.id, d])),
+    [dayTranslations]
+  )
+
+  // First load: side by side when a translation needs work, else the source.
+  useEffect(() => {
+    if (!dayTranslations || contentView !== null) return
+    const needsWork = languageSummaries.some(l => l.status !== 'reviewed' && l.status !== 'machine')
+    setContentView(needsWork && dayTranslations.days.length > 0 ? 'side' : dayTranslations.source_language)
+  }, [dayTranslations, languageSummaries, contentView])
+
+  // The day cards (and the PDF and email) follow the view; side by side
+  // reads the source, with the target beside it.
+  useEffect(() => {
+    if (contentView === null) return
+    setActiveLanguage(contentView === 'side' ? sourceLanguage : contentView)
+  }, [contentView, sourceLanguage])
+
+  const attentionItems = useMemo(() => {
+    if (!itinerary || !dayTranslations) return []
+    const servicesByDay = new Map(days.map(d => [d.id, d]))
+    // Each language's own lists; a target without its own is the source's
+    // and would only repeat the source's finding.
+    const lists = (lang: Language) => {
+      if (lang === sourceLanguage) return { inclusions: itinerary.inclusions || [], exclusions: itinerary.exclusions || [] }
+      const v = itinerary.versions?.[lang]
+      if (!v?.inclusions?.length && !v?.exclusions?.length) return null
+      return { inclusions: v.inclusions || [], exclusions: v.exclusions || [] }
+    }
+    const inclusions: Partial<Record<Language, { inclusions: string[]; exclusions: string[] }>> = {}
+    for (const lang of [sourceLanguage, ...dayTranslations.target_languages]) {
+      const l = lists(lang)
+      if (l) inclusions[lang] = l
+    }
+    return itineraryAttention({
+      status: itinerary.status,
+      sourceLanguage,
+      clientLanguage,
+      languages: languageSummaries,
+      days: dayTranslations.days.map(d => {
+        const loaded = servicesByDay.get(d.id)
+        return {
+          day_number: d.day_number,
+          source: d.source,
+          targets: Object.fromEntries(Object.entries(d.translations).map(([lang, tr]) => [lang, tr?.text ?? null])),
+          services: loaded?.services ?? [],
+          hotel_included: loaded?.hotel_included,
+          overnight: loaded?.overnight,
+        }
+      }),
+      inclusions,
+      hasInvoice: !!existingInvoice,
+      hasBooking: !!existingBooking,
+    })
+  }, [itinerary, dayTranslations, days, sourceLanguage, clientLanguage, languageSummaries, existingInvoice, existingBooking])
+
+  const openDailyItinerary = (view: ContentView) => {
+    setContentView(view)
+    document.getElementById('daily-itinerary')?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  // "Translate missing and outdated days". A language with no version row yet
+  // goes through copy-translate, which also makes the trip title, the
+  // inclusions and the service names; after that, day by day.
+  const [translatingAll, setTranslatingAll] = useState(false)
+  const handleTranslateAll = async (language: Language) => {
+    setTranslatingAll(true)
+    try {
+      if (!availableLanguages.includes(language)) {
+        await handleCopyAndTranslate(language)
+      } else {
+        const res = await fetch(`/api/itineraries/${params.id}/day-translations`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ language }),
+        })
+        const data = await res.json().catch(() => null)
+        if (!res.ok || !data?.success) throw new Error(data?.error || t('failedToCreateVersion'))
+        await fetchDays(activeLanguage)
+      }
+      await fetchDayTranslations()
+    } catch (error) {
+      await dialog.alert(tCommon('error'), error instanceof Error ? error.message : t('failedToCreateVersion'), 'warning')
+    } finally {
+      setTranslatingAll(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -1240,7 +1396,16 @@ export default function ViewItineraryPage() {
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </Link>
               <div>
-                <h1 className="text-xl font-semibold text-gray-900">{versionedContent.trip_name}</h1>
+                {/* The programme code is the office's reference, not part of
+                    the client's title — shown beside it, not in it. */}
+                <h1 className="text-xl font-semibold text-gray-900 flex flex-wrap items-center gap-2">
+                  {tourTitle.title}
+                  {tourTitle.code && (
+                    <span className="px-1.5 py-0.5 rounded border border-gray-200 bg-gray-50 font-mono text-xs font-medium text-gray-600" title={t('tourCode')}>
+                      {tourTitle.code}
+                    </span>
+                  )}
+                </h1>
                 <p className="text-sm text-gray-500">
                   <span className="font-mono text-primary-600">{itinerary.itinerary_code}</span>
                   <span className="mx-2">•</span>
@@ -1259,6 +1424,17 @@ export default function ViewItineraryPage() {
                     </>
                   )}
                 </p>
+                {dayTranslations && (
+                  <div className="mt-1.5">
+                    <LanguageStatusRow
+                      sourceLanguage={sourceLanguage}
+                      targets={languageSummaries}
+                      clientLanguage={clientLanguage}
+                      view={contentView ?? sourceLanguage}
+                      onSelect={openDailyItinerary}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1274,50 +1450,17 @@ export default function ViewItineraryPage() {
         </div>
       </header>
 
-      {/* Language Tabs */}
-      <div className="container mx-auto px-4 pt-4">
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-          <LanguageTabs
-            availableLanguages={availableLanguages}
-            activeLanguage={activeLanguage}
-            onLanguageChange={setActiveLanguage}
-            onCreateVersion={handleCreateVersion}
-            disabled={creatingVersion}
+      {/* Needs attention — this trip's open problems, worst first. The
+          language status itself is in the header; nothing about a missing
+          translation sits above the money and operations any more. */}
+      {attentionItems.length > 0 && (
+        <div className="container mx-auto px-4 pt-4">
+          <ItineraryAttentionStrip
+            items={attentionItems}
+            onOpen={item => openDailyItinerary(item.language && item.language !== sourceLanguage ? 'side' : (contentView ?? sourceLanguage))}
           />
-          {!hasActiveVersion && (
-            <div className="p-6">
-              <CreateVersionPrompt
-                entityType="itinerary"
-                language={activeLanguage}
-                onCreateFromScratch={() => handleCreateVersion(activeLanguage)}
-                onCopyAndTranslate={() => handleCopyAndTranslate(activeLanguage)}
-                isLoading={creatingVersion}
-              />
-            </div>
-          )}
-          {hasActiveVersion && activeLanguage !== 'en' && (
-            <div className="px-4 pb-3 flex justify-end">
-              <button
-                onClick={async () => {
-                  const confirmed = await dialog.confirm({
-                    title: 'Re-translate',
-                    message: `This will delete the existing ${activeLanguage.toUpperCase()} version and re-translate from English. Continue?`,
-                    variant: 'warning',
-                  })
-                  if (confirmed) {
-                    handleCopyAndTranslate(activeLanguage, true)
-                  }
-                }}
-                disabled={creatingVersion}
-                className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 disabled:opacity-50"
-              >
-                <Languages className="w-3.5 h-3.5" />
-                {creatingVersion ? 'Translating...' : 'Re-translate from English'}
-              </button>
-            </div>
-          )}
         </div>
-      </div>
+      )}
 
       {/* Success Messages */}
       {(() => {
@@ -1524,10 +1667,23 @@ export default function ViewItineraryPage() {
             </div>
             <div className="flex items-center gap-2">
               {costModeChanged && <span className="text-xs text-green-600 font-medium flex items-center gap-1"><Check className="w-3 h-3" />{tCommon('saved')}</span>}
-              <button onClick={handleToggleCostMode} disabled={savingCostMode} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${costMode === 'manual' ? 'bg-amber-600' : 'bg-gray-300'} ${savingCostMode ? 'opacity-50' : ''}`}>
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${costMode === 'manual' ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
-              <span className="text-xs font-medium text-gray-700">{costMode === 'manual' ? t('manual') : t('auto')}</span>
+              {/* Two named options, not an on/off switch: "Automatic" beside a
+                  switch drawn in its off position read as automatic being off. */}
+              <div role="radiogroup" aria-label={t('costCalculation')} className={`inline-flex rounded-md border border-gray-300 overflow-hidden text-xs font-medium ${savingCostMode ? 'opacity-50' : ''}`}>
+                {(['auto', 'manual'] as const).map(mode => (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="radio"
+                    aria-checked={costMode === mode}
+                    onClick={() => { if (costMode !== mode) handleToggleCostMode() }}
+                    disabled={savingCostMode}
+                    className={`px-3 py-1 transition-colors ${costMode === mode ? (mode === 'manual' ? 'bg-amber-600 text-white' : 'bg-blue-600 text-white') : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    {mode === 'auto' ? t('auto') : t('manual')}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           {costMode === 'manual' && (
@@ -1883,19 +2039,78 @@ export default function ViewItineraryPage() {
         )}
 
         {/* Resource Cards */}
-        <ResourceSummaryCard guideId={itinerary.assigned_guide_id} vehicleId={itinerary.assigned_vehicle_id} guideNotes={itinerary.guide_notes} vehicleNotes={itinerary.vehicle_notes} pickupLocation={itinerary.pickup_location} pickupTime={itinerary.pickup_time} onEdit={() => document.getElementById('resource-assignment')?.scrollIntoView({ behavior: 'smooth' })} />
+        {/* Shown only once something is assigned: empty, it was a second
+            "nothing assigned" card stacked on the assignment panel's own. */}
+        {(itinerary.assigned_guide_id || itinerary.assigned_vehicle_id || itinerary.pickup_location || itinerary.pickup_time) && <ResourceSummaryCard guideId={itinerary.assigned_guide_id} vehicleId={itinerary.assigned_vehicle_id} guideNotes={itinerary.guide_notes} vehicleNotes={itinerary.vehicle_notes} pickupLocation={itinerary.pickup_location} pickupTime={itinerary.pickup_time} onEdit={() => document.getElementById('resource-assignment')?.scrollIntoView({ behavior: 'smooth' })} />}
         <div id="resource-assignment">
           <ResourceAssignmentV2 itineraryId={itinerary.id} startDate={itinerary.start_date} endDate={itinerary.end_date} numTravelers={itinerary.num_adults + itinerary.num_children + (itinerary.num_infants || 0)} clientName={itinerary.client_name} tripName={itinerary.trip_name} onUpdate={fetchItinerary} />
         </div>
 
         {/* DAY CONTROLS */}
-        <div className="flex justify-between items-center">
-          <h2 className="text-lg font-semibold text-gray-900">{t('dailyItinerary')}</h2>
+        <div id="daily-itinerary" className="flex flex-wrap justify-between items-center gap-2 scroll-mt-24">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-lg font-semibold text-gray-900">{t('dailyItinerary')}</h2>
+            {/* Which language the days are shown in. Content only — the
+                staff UI language is the sidebar's. */}
+            {dayTranslations && dayTranslations.target_languages.length > 0 && (
+              <div className="inline-flex rounded-md border border-gray-300 overflow-hidden text-xs font-medium" role="tablist" data-testid="content-view-switcher">
+                {([sourceLanguage, ...dayTranslations.target_languages] as ContentView[]).concat('side').map(view => (
+                  <button
+                    key={view}
+                    type="button"
+                    role="tab"
+                    aria-selected={contentView === view}
+                    onClick={() => setContentView(view)}
+                    className={`px-3 py-1 ${contentView === view ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                  >
+                    {view === 'side' ? tLang('sideBySide') : LANGUAGE_NAMES[view]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="flex gap-2">
             <button onClick={expandAll} className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors">{t('expandAll')}</button>
             <button onClick={collapseAll} className="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">{t('collapseAll')}</button>
           </div>
         </div>
+
+        {/* The viewed translation's gaps, here and only here — the language a
+            banner is about is the language of the text under it. */}
+        {(() => {
+          const lang: Language | null = contentView === 'side' ? sideTarget : (contentView && contentView !== sourceLanguage ? contentView : null)
+          const summary = lang ? languageSummaries.find(l => l.language === lang) : null
+          if (!lang || !summary || summary.status === 'reviewed' || summary.status === 'machine') return null
+          const text = summary.status === 'missing'
+            ? tLang('missingBanner', { language: LANGUAGE_NAMES[lang] })
+            : summary.status === 'partial'
+              ? tLang('partialBanner', { language: LANGUAGE_NAMES[lang], missing: summary.counts.missing, total: summary.total })
+              : tLang('outdatedBanner', { language: LANGUAGE_NAMES[lang], count: summary.counts.outdated })
+          return (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5" data-testid="language-banner">
+              <Languages className="w-4 h-4 text-amber-700 shrink-0" />
+              <p className="flex-1 text-sm text-amber-900">{text}</p>
+              <button
+                type="button"
+                onClick={() => handleTranslateAll(lang)}
+                disabled={translatingAll || creatingVersion}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50"
+              >
+                {translatingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Languages className="w-3.5 h-3.5" />}
+                {tLang('translateAll')}
+              </button>
+              {contentView !== 'side' && (
+                <button
+                  type="button"
+                  onClick={() => setContentView('side')}
+                  className="px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                >
+                  {tLang('writeSideBySide')}
+                </button>
+              )}
+            </div>
+          )
+        })()}
 
         {/* ROUTE MAP */}
         {days.length > 0 && (
@@ -1922,14 +2137,49 @@ export default function ViewItineraryPage() {
                     <p className="text-xs text-gray-500">{new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{day.city && ` • ${day.city}`}</p>
                   </div>
                 </div>
+                {/* Each target language's state for this day, so gaps can be
+                    found by scanning the collapsed list. */}
+                <div className="ml-auto mr-3 hidden sm:flex items-center gap-1">
+                  {dayTranslations?.target_languages.map(lang => {
+                    const status = translationByDay.get(day.id)?.translations[lang]?.status
+                    return status ? <DayLanguageChip key={lang} language={lang} status={status} /> : null
+                  })}
+                </div>
                 {expandedDays.has(day.day_number) ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
               </button>
               {expandedDays.has(day.day_number) && (
                 <div className="p-4">
-                  {day.description && <div className="mb-4"><p className="text-sm text-gray-700">{day.description}</p></div>}
+                  {(() => {
+                    const tr = translationByDay.get(day.id)
+                    if (contentView === 'side' && sideTarget && tr) {
+                      const target = tr.translations[sideTarget]
+                      return (
+                        <div className="mb-4">
+                          <BilingualDayEditor
+                            itineraryId={itinerary.id}
+                            dayId={day.id}
+                            sourceLanguage={sourceLanguage}
+                            targetLanguage={sideTarget}
+                            source={tr.source}
+                            target={target?.text ?? null}
+                            status={target?.status ?? 'missing'}
+                            onChanged={async () => { await fetchDayTranslations() }}
+                          />
+                        </div>
+                      )
+                    }
+                    return day.description
+                      ? <div className="mb-4"><p className="text-sm text-gray-700 whitespace-pre-line"><HighlightPlaceholders text={day.description} /></p></div>
+                      : null
+                  })()}
                   {day.services && day.services.length > 0 ? (
                     <div>
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3">{t('servicesIncluded')}</h4>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">
+                        {t('servicesIncluded')}
+                        {dayTranslations && dayTranslations.target_languages.length > 0 && (
+                          <span className="ml-2 text-[11px] font-normal text-gray-500" title={tLang('sharedServices')}>· {tLang('sharedServices')}</span>
+                        )}
+                      </h4>
                       <div className="space-y-2">
                         {day.services.map((service) => {
                           const noCost = (Number(service.rate_eur) || 0) === 0 && (Number(service.total_cost) || 0) === 0
@@ -2004,7 +2254,7 @@ export default function ViewItineraryPage() {
         {days.length === 0 && <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center"><p className="text-sm text-gray-500">No days planned yet</p></div>}
 
         {/* Inclusions & Exclusions Section */}
-        {activeLanguage !== 'en' && !editingInclusions && !editingExclusions && (
+        {activeLanguage !== sourceLanguage && !editingInclusions && !editingExclusions && (
           <div className="flex justify-end mt-6 mb-1">
             <button
               type="button"
@@ -2017,7 +2267,7 @@ export default function ViewItineraryPage() {
             </button>
           </div>
         )}
-        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${activeLanguage === 'en' || editingInclusions || editingExclusions ? 'mt-6' : ''}`}>
+        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${activeLanguage === sourceLanguage || editingInclusions || editingExclusions ? 'mt-6' : ''}`}>
           {/* Inclusions */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
             <div className="flex items-center justify-between mb-3">

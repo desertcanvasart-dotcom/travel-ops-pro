@@ -4,6 +4,7 @@ import { translateFields, ITINERARY_TRANSLATION_FIELDS, ITINERARY_DAY_TRANSLATIO
 import type { Language } from '@/types/multilingual'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
+import { dayTextHash, detectContentLanguage, mergeDayText } from '@/lib/itineraries/content-language'
 
 const supabase = createServerClient()
 
@@ -43,15 +44,18 @@ async function translateItineraryDays(
 
   // Translation calls stay SEQUENTIAL on purpose: they hit an external model,
   // and a 12-day fan-out is a rate-limit incident, not a speed-up.
+  const now = new Date().toISOString()
   const rows = []
   for (const day of days) {
     if (existingTarget.has(day.id)) {
       console.log(`Day version already exists for day ${day.id} in ${targetLanguage}`)
       continue
     }
-    const sourceContent = sourceById.get(day.id) || day
+    // Field by field, as the days API shows it: a source-language version
+    // with a blank field falls back to the canonical day, not to nothing.
+    const sourceContent = mergeDayText(day, sourceById.get(day.id))
     const translatedContent = await translateFields(
-      sourceContent,
+      sourceContent as unknown as Record<string, unknown>,
       ITINERARY_DAY_TRANSLATION_FIELDS,
       sourceLanguage,
       targetLanguage
@@ -63,6 +67,12 @@ async function translateItineraryDays(
       description: translatedContent.description || sourceContent.description || null,
       city: translatedContent.city || sourceContent.city || null,
       overnight_city: translatedContent.overnight_city || sourceContent.overnight_city || null,
+      // Machine text, and the source it was made from: the itinerary page
+      // reports it unreviewed, and outdated once the source is edited
+      // (lib/itineraries/content-language.ts).
+      status: 'machine',
+      source_hash: dayTextHash(sourceContent),
+      translated_at: now,
     })
   }
 
@@ -279,6 +289,24 @@ export async function POST(
         )
       }
 
+      // The base itinerary is in whatever language the office wrote it in.
+      // It used to be assumed English, so a Tokyo desk's Japanese trip was
+      // "translated" en→ja into Japanese again. Read it off the text.
+      const { data: baseDays } = await supabase
+        .from('itinerary_days')
+        .select('title, description')
+        .eq('itinerary_id', id)
+      const baseLanguage: Language = detectContentLanguage([
+        itinerary.trip_name,
+        ...(baseDays ?? []).flatMap((d: { title: string | null; description: string | null }) => [d.title, d.description]),
+      ]) ?? 'en'
+      if (baseLanguage === targetLanguage) {
+        return NextResponse.json(
+          { success: false, error: `This itinerary is already written in ${targetLanguage.toUpperCase()} — it is the source language` },
+          { status: 400 }
+        )
+      }
+
       // Use itinerary as source
       console.log('[copy-translate] Using base itinerary as source. Source fields:', {
         trip_name: itinerary.trip_name,
@@ -291,7 +319,7 @@ export async function POST(
       const translatedContent = await translateFields(
         itinerary,
         ITINERARY_TRANSLATION_FIELDS,
-        'en' as Language, // Assume original content is English
+        baseLanguage,
         targetLanguage as Language
       )
 
@@ -330,13 +358,13 @@ export async function POST(
       // Also translate itinerary days and services
       const translatedDays = await translateItineraryDays(
         id,
-        'en' as Language,
+        baseLanguage,
         targetLanguage as Language
       )
 
       const translatedServices = await translateItineraryServices(
         id,
-        'en' as Language,
+        baseLanguage,
         targetLanguage as Language
       )
 
@@ -346,7 +374,7 @@ export async function POST(
         translatedDays,
         translatedServices,
         translated: true,
-        sourceLanguage: 'en',
+        sourceLanguage: baseLanguage,
         targetLanguage
       })
     }

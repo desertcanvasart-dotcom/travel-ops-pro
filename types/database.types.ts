@@ -7235,6 +7235,9 @@ export interface Database {
           overnight_city: string | null
           created_at: string | null
           updated_at: string | null
+          status: string | null
+          source_hash: string | null
+          translated_at: string | null
         }
         Insert: {
           id?: string
@@ -7246,6 +7249,9 @@ export interface Database {
           overnight_city?: string | null
           created_at?: string | null
           updated_at?: string | null
+          status?: string | null
+          source_hash?: string | null
+          translated_at?: string | null
         }
         Update: {
           id?: string
@@ -7257,6 +7263,9 @@ export interface Database {
           overnight_city?: string | null
           created_at?: string | null
           updated_at?: string | null
+          status?: string | null
+          source_hash?: string | null
+          translated_at?: string | null
         }
         Relationships: [
           {

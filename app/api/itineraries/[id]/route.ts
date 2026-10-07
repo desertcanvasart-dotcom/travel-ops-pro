@@ -57,12 +57,27 @@ export async function GET(
 
     const availableLanguages = Object.keys(versionsMap)
 
+    // The language the client reads, so the page can say when the trip is
+    // not written in it. Free text on the client record; the page normalises
+    // it (lib/itineraries/content-language.ts). A missing client is no answer.
+    let clientPreferredLanguage: string | null = null
+    if (data.client_id) {
+      const { data: client } = await supabase
+        .from('clients')
+        .select('preferred_language')
+        .eq('id', data.client_id)
+        .eq('org_id', orgId)
+        .maybeSingle()
+      clientPreferredLanguage = client?.preferred_language ?? null
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         ...data,
         available_languages: availableLanguages,
-        versions: versionsMap
+        versions: versionsMap,
+        client_preferred_language: clientPreferredLanguage
       }
     })
   } catch (error) {
