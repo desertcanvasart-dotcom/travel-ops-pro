@@ -310,6 +310,22 @@ describe('accrued layer keeps its existing behaviour', () => {
     const { pnl } = computeTripPnL(FX, inputs({ itinerary: trip({ currency: 'usd' }) }))
     expect(pnl.currency).toBe('USD')
   })
+
+  it('a booking supplier’s confirmed cost is not counted on top of supplier_cost', () => {
+    // Confirming a supplier records its cost as an expense of the trip — the
+    // same money supplier_cost (6,000) already holds.
+    const { pnl } = computeTripPnL(FX, inputs({ expenses: [
+      expense({ amount: 1500, category: 'hotel', status: 'paid', booking_supplier_status_id: 'bss-1' }),
+      expense({ amount: 500, category: 'guide' }),
+    ] }))
+    expect(pnl.manual_expenses).toBe(500)
+    expect(pnl.total_expenses).toBe(6500)
+    expect(pnl.gross_profit).toBe(3500)
+    expect(pnl.expense_breakdown).toEqual({ guide: 500, supplier_services: 6000 })
+    // Paying the supplier is still money out.
+    expect(pnl.expenses_paid).toBe(1500)
+    expect(pnl.realized_cost).toBe(1500)
+  })
 })
 
 // ============================================

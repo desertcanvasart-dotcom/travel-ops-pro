@@ -91,6 +91,9 @@ export interface PnLExpense {
   currency?: string | null
   expense_date?: string | null
   expense_number?: string | null
+  /** Set when the expense is a booking supplier's confirmed cost — which is
+   *  already in supplier_cost, so it is not counted a second time. */
+  booking_supplier_status_id?: string | null
 }
 
 export interface PnLCommission {
@@ -210,11 +213,15 @@ export function computeTripPnL(fxIndex: FxIndex, inputs: TripPnLInputs): TripPnL
     }
 
     const value = amount ?? 0
-    manualExpenses += value
     if (exp.status === 'paid') expensesPaid += value
     // 'rejected' is excluded from pending: a rejected expense is not owed.
     if (exp.status !== 'paid' && exp.status !== 'rejected') expensesPending += value
 
+    // A booking supplier's confirmed cost is recorded as an expense too, but it
+    // is the same money supplier_cost already counts. Paying it is still cash
+    // out (realized, above), but adding it again here would sink the margin.
+    if (exp.booking_supplier_status_id) continue
+    manualExpenses += value
     const cat = exp.category || 'other'
     expenseBreakdown[cat] = (expenseBreakdown[cat] || 0) + value
   }

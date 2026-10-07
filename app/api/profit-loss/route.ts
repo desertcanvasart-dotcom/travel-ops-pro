@@ -204,7 +204,7 @@ export async function GET(request: NextRequest) {
     for (const ids of chunk(itineraryIds)) {
       const { data, error } = await supabaseAdmin
         .from('expenses')
-        .select('itinerary_id, amount, category, status, currency, expense_date, expense_number')
+        .select('itinerary_id, amount, category, status, currency, expense_date, expense_number, booking_supplier_status_id')
         .eq('org_id', orgId)
         .in('itinerary_id', ids)
       if (error) console.error('Error fetching expenses:', error)

@@ -31,6 +31,7 @@ interface ExtraExpense {
   amount: number
   currency: string
   category: string
+  booking_supplier_status_id?: string | null
 }
 
 interface ItineraryPLProps {
@@ -139,8 +140,11 @@ export default function ItineraryPL({
         : Number(totalCost) / (1 + marginPercent / 100)
     }
 
-    // Add extra expenses (operational costs that reduce margin)
-    if (extraExpenses.length > 0) {
+    // Add extra expenses (operational costs that reduce margin). Not a booking
+    // supplier's confirmed cost: confirming a supplier records it as an expense
+    // of this trip, but it is the same money already in the supplier cost.
+    const extras = extraExpenses.filter(exp => !exp.booking_supplier_status_id)
+    if (extras.length > 0) {
       const fallbackRates = getFallbackRates(currency)
       let extraTotal = 0
       // Expenses whose currency could not be converted. They are LEFT OUT of
@@ -148,7 +152,7 @@ export default function ItineraryPL({
       // and counted so the panel can say the figure is short.
       let unconvertedCount = 0
 
-      extraExpenses.forEach(exp => {
+      extras.forEach(exp => {
         const converted = exp.currency === currency
           ? Number(exp.amount)
           : convertCurrency(Number(exp.amount), exp.currency, currency, fallbackRates)
@@ -172,7 +176,7 @@ export default function ItineraryPL({
           client_price: extraTotal, // pass-through, no markup
           margin: 0,
           margin_percent: 0,
-          count: extraExpenses.length
+          count: extras.length
         }
         totalSupplierCost += extraTotal
         // Note: extra expenses do NOT increase client price — they reduce margin
