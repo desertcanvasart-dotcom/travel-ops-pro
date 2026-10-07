@@ -459,7 +459,11 @@
     "receivedThisMonth": "Received This Month",
     "spentThisMonth": "Spent This Month",
     "paymentsCount": "{count} payments",
-    "attnReplyOverdue": "Customer email waiting for a reply · {time}"
+    "attnReplyOverdue": "Customer email waiting for a reply · {time}",
+    "attnDismiss": "Dismiss",
+    "attnDismissHint": "Hide for the whole office until something changes — the customer writes again, the balance or deadline moves, more forms come in",
+    "attnDismissedCount": "{count} dismissed",
+    "attnUndo": "Undo"
   },
   "analytics": {
     "title": "Analytics Dashboard",
