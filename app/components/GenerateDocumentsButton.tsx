@@ -8,6 +8,9 @@ import { useTranslations } from 'next-intl'
 interface GenerateDocumentsButtonProps {
   itineraryId: string
   itineraryCode: string
+  /** Restyle the trigger (the itinerary page's Documents rail uses a link). */
+  triggerClassName?: string
+  triggerContent?: React.ReactNode
 }
 
 const DOCUMENT_TYPES = [
@@ -19,7 +22,7 @@ const DOCUMENT_TYPES = [
   { value: 'cruise_voucher', labelKey: 'cruiseVouchers', icon: '🚢' },
 ]
 
-export default function GenerateDocumentsButton({ itineraryId, itineraryCode }: GenerateDocumentsButtonProps) {
+export default function GenerateDocumentsButton({ itineraryId, itineraryCode, triggerClassName, triggerContent }: GenerateDocumentsButtonProps) {
   const t = useTranslations('generateDocuments')
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
@@ -103,13 +106,13 @@ export default function GenerateDocumentsButton({ itineraryId, itineraryCode }: 
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         disabled={generating}
-        className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${
+        className={triggerClassName ?? `px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${
           generating
             ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
             : 'bg-[#647C47] text-white hover:bg-[#4f6238]'
         }`}
       >
-        {generating ? (
+        {triggerContent && !generating ? triggerContent : generating ? (
           <>
             <Loader2 size={16} className="animate-spin" />
             <span>{t('generating')}</span>

@@ -4,11 +4,11 @@ import { overnightLabel, overnightProperty } from '@/lib/itineraries/overnight-p
 import { todayLocal } from '@/lib/today'
 import { useEffect, useState, useMemo } from 'react'
 import { formatMoney } from '@/lib/currency-totals'
-import { useTranslations, useLocale } from 'next-intl'
+import { useTranslations, useLocale, createTranslator } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2, Languages, ClipboardList, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2, Languages, ClipboardList, AlertTriangle } from 'lucide-react'
 // The itinerary PDF generator (and jsPDF behind it) loads on first use, not
 // with the page.
 const generateItineraryPDF = async (...args: Parameters<typeof import('@/lib/pdf-generator').generateItineraryPDF>) =>
@@ -31,8 +31,21 @@ import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { itineraryCompleteness } from '@/lib/pricing/itinerary-completeness'
 import { describeGaps } from '@/lib/pricing/quote-completeness'
-import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
+import { LanguageStatusRow, DayLanguageChip, BilingualDayEditor, HighlightPlaceholders, type ContentView } from '@/components/multilingual'
+import ItineraryAttentionStrip from '@/components/itineraries/ItineraryAttentionStrip'
+import StatusPipeline from '@/components/itineraries/StatusPipeline'
+import CoverageGrid from '@/components/itineraries/CoverageGrid'
+import { RailSection, RailGroup, DocRow, RAIL_ACTION } from '@/components/itineraries/RailSection'
 import type { Language, ItineraryVersion } from '@/types/multilingual'
+import { LANGUAGE_NAMES } from '@/types/multilingual'
+import {
+  normalizeClientLanguage,
+  splitTourCode,
+  summarizeLanguage,
+  type DayText,
+  type DayTranslationStatus,
+} from '@/lib/itineraries/content-language'
+import { itineraryAttention } from '@/lib/itineraries/itinerary-attention'
 
 const ItineraryMap = dynamic(() => import('@/components/ItineraryMap'), {
   ssr: false,
@@ -92,7 +105,25 @@ interface Itinerary {
   inclusions?: string[]
   exclusions?: string[]
   generation_warnings?: string[]
+  /** clients.preferred_language, free text (normalised on this page). */
+  client_preferred_language?: string | null
 }
+
+/** GET /api/itineraries/[id]/day-translations */
+interface DayTranslations {
+  source_language: Language
+  target_languages: Language[]
+  days: Array<{
+    id: string
+    day_number: number
+    date: string
+    source: DayText
+    translations: Partial<Record<Language, { text: DayText | null; status: DayTranslationStatus; translated_at: string | null }>>
+  }>
+}
+
+const DETAIL_TABS = ['itinerary', 'operations', 'finance', 'messages'] as const
+type DetailTab = typeof DETAIL_TABS[number]
 
 interface ItineraryDay {
   id: string
@@ -102,6 +133,8 @@ interface ItineraryDay {
   title: string
   description: string
   overnight_city: string
+  hotel_included?: boolean | null
+  overnight?: boolean | null
 }
 
 interface Service {
@@ -134,6 +167,8 @@ export default function ViewItineraryPage() {
   const tEdit = useTranslations('itineraries.edit')
   const tCommon = useTranslations('common')
   const tPdf = useTranslations('pdf')
+  const tLang = useTranslations('itineraries.detail.languages')
+  const tLayout = useTranslations('itineraries.detail.layout')
   // The letterhead on the generated PDF. It used to come from the message
   // catalogue — where the first operator's name sat as if it were a
   // translation — so every agency's quote carried it. Undefined until the
@@ -174,14 +209,6 @@ export default function ViewItineraryPage() {
   const supabase = createClient()
   const intlLocale = useLocale() as Language
 
-  // Read language directly from cookie to avoid SSR timing issues with useLocale()
-  function getLanguageFromCookie(): Language {
-    if (typeof document === 'undefined') return 'en'
-    const match = document.cookie.match(/preferred_language=([^;]+)/)
-    const lang = match?.[1] as Language | undefined
-    return (lang === 'en' || lang === 'ja') ? lang : 'en'
-  }
-
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [days, setDays] = useState<DayWithServices[]>([])
   const [loading, setLoading] = useState(true)
@@ -212,8 +239,12 @@ export default function ViewItineraryPage() {
   const [error, setError] = useState<string | null>(null)
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set([1]))
 
-  // Multilingual state
+  // Multilingual state. activeLanguage is the language the day cards, PDF
+  // and email are in; contentView is what the Daily Itinerary shows — one
+  // language, or source and target side by side (which reads the source).
   const [activeLanguage, setActiveLanguage] = useState<Language>('en')
+  const [contentView, setContentView] = useState<ContentView | null>(null)
+  const [dayTranslations, setDayTranslations] = useState<DayTranslations | null>(null)
   const [creatingVersion, setCreatingVersion] = useState(false)
   const [generatingPDF, setGeneratingPDF] = useState(false)
   const [pdfPreviewBlob, setPdfPreviewBlob] = useState<Blob | null>(null)
@@ -258,22 +289,28 @@ export default function ViewItineraryPage() {
   const [savingInclusions, setSavingInclusions] = useState(false)
   const [translatingInclusions, setTranslatingInclusions] = useState(false)
 
-  // Sync language from cookie after hydration
-  useEffect(() => {
-    const cookieLang = getLanguageFromCookie()
-    console.log(`🍪 Cookie language on mount: ${cookieLang}, current activeLanguage: en`)
-    if (cookieLang !== 'en') {
-      setActiveLanguage(cookieLang)
-    }
-  }, [])
-
+  // The content language no longer follows the staff UI language (the
+  // sidebar switch): a Japanese-speaking operator still needs to see that the
+  // English source is the source. The view opens on the source, or side by
+  // side when a translation needs work — decided once the statuses load.
   useEffect(() => {
     if (params.id) {
       fetchItinerary()
+      fetchDayTranslations()
       checkExistingInvoice()
       checkExistingBooking()
     }
   }, [params.id])
+
+  const fetchDayTranslations = async () => {
+    try {
+      const res = await fetch(`/api/itineraries/${params.id}/day-translations`)
+      const data = await res.json()
+      if (data.success) setDayTranslations(data.data)
+    } catch (err) {
+      console.error('Error fetching day translations:', err)
+    }
+  }
 
   // Fetch days when language changes
   useEffect(() => {
@@ -699,43 +736,82 @@ export default function ViewItineraryPage() {
     }
   }
 
-  // Build the localized labels bundle for the PDF generator. Done at call
-  // time so it picks up the current activeLanguage (operator can toggle in
-  // the editor; the PDF should render in the same language). The PdfLabels
-  // shape is defined in lib/pdf-generator.ts.
-  const buildPdfLabels = () => ({
+  // The localized labels bundle for the PDF generator, in the DOCUMENT's
+  // language — not the staff UI's. A Japanese quote built by an operator
+  // using the English UI used to come out with English headings. The other
+  // locale's messages load on first use. The PdfLabels shape is defined in
+  // lib/pdf-generator.ts.
+  type PdfTr = (key: string, values?: Record<string, string | number>) => string
+  const pdfTranslator = async (lang: Language): Promise<PdfTr> => {
+    if (lang === intlLocale) return tPdf as unknown as PdfTr
+    const messages = (await import(`@/messages/${lang}.json`)).default
+    return createTranslator({ locale: lang, messages, namespace: 'pdf' }) as unknown as PdfTr
+  }
+  const buildPdfLabels = (tr: PdfTr) => ({
     brand: company?.name ?? '',
-    quote: tPdf('quote'),
-    date: tPdf('date'),
-    client: tPdf('client'),
-    travelDates: tPdf('travelDates'),
-    duration: tPdf('duration'),
-    durationDays: (count: number) => tPdf('durationDays', { count }),
-    travelers: tPdf('travelers'),
-    travelerCountAdultsOnly: (adults: number) => tPdf('travelerCountAdultsOnly', { adults }),
-    travelerCountWithChildren: (adults: number, children: number) => tPdf('travelerCountWithChildren', { adults, children }),
-    package: tPdf('package'),
-    packageTier: (tier: string) => tPdf('packageTier', { tier }),
-    egyptTourPackage: tPdf('egyptTourPackage'),
-    day: tPdf('day'),
-    dayN: (n: number) => tPdf('dayN', { n }),
-    dayNumberTitle: (n: number, title: string) => tPdf('dayNumberTitle', { n, title }),
-    activities: tPdf('activities'),
-    overnight: tPdf('overnight'),
-    pricingSummary: tPdf('pricingSummary'),
-    subtotal: tPdf('subtotal'),
-    total: tPdf('total'),
-    totalPerPerson: tPdf('totalPerPerson'),
-    service: tPdf('service'),
-    quantity: tPdf('quantity'),
-    rate: tPdf('rate'),
-    amount: tPdf('amount'),
-    inclusions: tPdf('inclusions'),
-    exclusions: tPdf('exclusions'),
-    notes: tPdf('notes'),
+    quote: tr('quote'),
+    date: tr('date'),
+    client: tr('client'),
+    travelDates: tr('travelDates'),
+    duration: tr('duration'),
+    durationDays: (count: number) => tr('durationDays', { count }),
+    travelers: tr('travelers'),
+    travelerCountAdultsOnly: (adults: number) => tr('travelerCountAdultsOnly', { adults }),
+    travelerCountWithChildren: (adults: number, children: number) => tr('travelerCountWithChildren', { adults, children }),
+    package: tr('package'),
+    packageTier: (tier: string) => tr('packageTier', { tier }),
+    egyptTourPackage: tr('egyptTourPackage'),
+    day: tr('day'),
+    dayN: (n: number) => tr('dayN', { n }),
+    dayNumberTitle: (n: number, title: string) => tr('dayNumberTitle', { n, title }),
+    activities: tr('activities'),
+    overnight: tr('overnight'),
+    pricingSummary: tr('pricingSummary'),
+    subtotal: tr('subtotal'),
+    total: tr('total'),
+    totalPerPerson: tr('totalPerPerson'),
+    service: tr('service'),
+    quantity: tr('quantity'),
+    rate: tr('rate'),
+    amount: tr('amount'),
+    inclusions: tr('inclusions'),
+    exclusions: tr('exclusions'),
+    notes: tr('notes'),
   })
 
-  const handlePreviewPDF = async (showBreakdown = true) => {
+  /** The days in one language — the loaded ones when that is on screen. */
+  const daysIn = async (lang: Language): Promise<DayWithServices[]> => {
+    if (lang === activeLanguage) return days
+    const res = await fetch(`/api/itineraries/${params.id}/days?language=${lang}`)
+    const data = await res.json()
+    if (!data.success) throw new Error(data.error || t('failedToGeneratePDF'))
+    return data.data
+  }
+
+  /**
+   * The quote PDF in one language: that language's days, its trip title and
+   * inclusions (they were the source's before, whatever the language), and
+   * headings in that language.
+   */
+  const buildQuotePdf = async (lang: Language, pdfDays: DayWithServices[], showBreakdown?: boolean) => {
+    if (!itinerary) throw new Error('No itinerary')
+    const content = getVersionedContent(lang)
+    return generateItineraryPDF(
+      { ...itinerary, trip_name: content.trip_name, inclusions: content.inclusions, exclusions: content.exclusions },
+      pdfDays,
+      {
+        ...(showBreakdown === undefined ? {} : { showPricingBreakdown: showBreakdown, showServiceDetails: showBreakdown }),
+        locale: lang,
+        labels: buildPdfLabels(await pdfTranslator(lang)),
+      }
+    )
+  }
+
+  // The language of the PDF in the preview, so the breakdown toggle rebuilds
+  // the same one.
+  const [pdfLanguage, setPdfLanguage] = useState<Language | null>(null)
+
+  const handlePreviewPDF = async (showBreakdown = true, lang: Language = activeLanguage) => {
     if (!itinerary) return
     // A quote PDF is built from the itinerary's days. With none there is
     // nothing to put in it — and a button that returns in silence reads as
@@ -748,15 +824,11 @@ export default function ViewItineraryPage() {
 
     setGeneratingPDF(true)
     try {
-      const pdf = await generateItineraryPDF(itinerary, days, {
-        showPricingBreakdown: showBreakdown,
-        showServiceDetails: showBreakdown,
-        locale: activeLanguage as 'en' | 'ja',
-        labels: buildPdfLabels(),
-      })
+      const pdf = await buildQuotePdf(lang, await daysIn(lang), showBreakdown)
       const blob = pdf.output('blob')
       setPdfPreviewBlob(blob)
       setPdfShowBreakdown(showBreakdown)
+      setPdfLanguage(lang)
       setShowPdfPreview(true)
     } catch (error) {
       console.error('Error generating PDF:', error)
@@ -769,12 +841,8 @@ export default function ViewItineraryPage() {
   const handleToggleBreakdown = async (showBreakdown: boolean) => {
     if (!itinerary || days.length === 0) return
     try {
-      const pdf = await generateItineraryPDF(itinerary, days, {
-        showPricingBreakdown: showBreakdown,
-        showServiceDetails: showBreakdown,
-        locale: activeLanguage as 'en' | 'ja',
-        labels: buildPdfLabels(),
-      })
+      const lang = pdfLanguage ?? activeLanguage
+      const pdf = await buildQuotePdf(lang, await daysIn(lang), showBreakdown)
       const blob = pdf.output('blob')
       setPdfPreviewBlob(blob)
       setPdfShowBreakdown(showBreakdown)
@@ -786,11 +854,17 @@ export default function ViewItineraryPage() {
   const saveInclusionsExclusions = async (type: 'inclusions' | 'exclusions', items: string[]) => {
     if (!itinerary) return
 
+    // A target language's lists live on its version row, which a trip
+    // translated day by day may not have yet.
+    if (activeLanguage !== sourceLanguage && !itinerary.versions?.[activeLanguage]) {
+      if (!(await handleCreateVersion(activeLanguage))) return
+    }
+
     setSavingInclusions(true)
     try {
       let response: Response
-      if (activeLanguage === 'en') {
-        // English: save to base itinerary table
+      if (activeLanguage === sourceLanguage) {
+        // The source language: save to the base itinerary table
         response = await fetch(`/api/itineraries/${itinerary.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -800,7 +874,7 @@ export default function ViewItineraryPage() {
           setItinerary(prev => prev ? { ...prev, [type]: items } : null)
         }
       } else {
-        // Non-English: save to version table
+        // A target language: save to version table
         response = await fetch(`/api/itineraries/${itinerary.id}/versions/${activeLanguage}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -837,10 +911,11 @@ export default function ViewItineraryPage() {
     if (!itinerary) return
 
     const langCode = activeLanguage
-    // Always translate from the base English inclusions/exclusions
+    // Always translate from the base (source-language) inclusions/exclusions
     const inclusions = itinerary.inclusions || []
     const exclusions = itinerary.exclusions || []
     if (inclusions.length === 0 && exclusions.length === 0) return
+    if (!itinerary.versions?.[langCode] && !(await handleCreateVersion(langCode))) return
 
     setTranslatingInclusions(true)
     try {
@@ -963,13 +1038,25 @@ export default function ViewItineraryPage() {
     setShowSendModal(false)
     const decision = await confirmIncompleteSend(days)
     if (decision === 'stop') return
+    // The PDF goes in the language on screen. When that is not the one the
+    // client reads, say so before it leaves.
+    if (clientLanguage && clientLanguage !== activeLanguage) {
+      const ok = await dialog.confirm({
+        title: tLang('sendLanguageTitle'),
+        message: tLang('sendLanguageMessage', {
+          client: itinerary.client_name,
+          clientLanguage: LANGUAGE_NAMES[clientLanguage],
+          language: LANGUAGE_NAMES[activeLanguage],
+        }),
+        confirmText: tLang('sendAnyway'),
+        variant: 'warning',
+      })
+      if (!ok) return
+    }
     setSendingEmail(true)
     
     try {
-      const pdf = await generateItineraryPDF(itinerary, days, {
-        locale: activeLanguage as 'en' | 'ja',
-        labels: buildPdfLabels(),
-      })
+      const pdf = await buildQuotePdf(activeLanguage, days)
       const pdfBlob = pdf.output('blob')
       const pdfBase64 = await blobToBase64(pdfBlob)
 
@@ -1086,8 +1173,7 @@ export default function ViewItineraryPage() {
   }
 
   // Get content for active language version
-  const getVersionedContent = () => {
-    console.log(`🌐 getVersionedContent: activeLanguage=${activeLanguage}, hasVersions=${!!itinerary?.versions}, versionKeys=${Object.keys(itinerary?.versions || {})}`)
+  const getVersionedContent = (lang: Language = activeLanguage) => {
     if (!itinerary?.versions) {
       return {
         trip_name: itinerary?.trip_name || '',
@@ -1099,8 +1185,10 @@ export default function ViewItineraryPage() {
         exclusions: itinerary?.exclusions || []
       }
     }
-    const version = itinerary.versions[activeLanguage] || itinerary.versions['en']
-    console.log(`🌐 Version for ${activeLanguage}: trip_name="${version?.trip_name}", hasVersion=${!!version}`)
+    // The source language IS the base row; a version is only a translation.
+    // (Read off dayTranslations here: this runs before sourceLanguage is set.)
+    const source = dayTranslations?.source_language ?? 'en'
+    const version = lang === source ? null : itinerary.versions[lang]
     if (version) {
       return {
         trip_name: version.trip_name || itinerary.trip_name,
@@ -1123,7 +1211,7 @@ export default function ViewItineraryPage() {
     }
   }
 
-  const handleCreateVersion = async (language: Language) => {
+  const handleCreateVersion = async (language: Language): Promise<boolean> => {
     setCreatingVersion(true)
     try {
       const response = await fetch(`/api/itineraries/${params.id}/versions`, {
@@ -1140,17 +1228,17 @@ export default function ViewItineraryPage() {
       })
       const data = await response.json()
       if (data.success) {
-        // Refresh itinerary to get updated versions
+        // Refresh itinerary to get updated versions. The view stays where it
+        // is: the caller decides what to show.
         await fetchItinerary()
-        // Always re-fetch days with the target language
-        await fetchDays(language)
-        setActiveLanguage(language)
-      } else {
-        await dialog.alert(tCommon('error'), data.error || t('failedToCreateVersion'), 'warning')
+        return true
       }
+      await dialog.alert(tCommon('error'), data.error || t('failedToCreateVersion'), 'warning')
+      return false
     } catch (error) {
       console.error('Error creating version:', error)
       await dialog.alert(tCommon('error'), t('failedToCreateVersion'), 'warning')
+      return false
     } finally {
       setCreatingVersion(false)
     }
@@ -1175,12 +1263,10 @@ export default function ViewItineraryPage() {
         translatedServicesCount: data.translatedServices?.length
       }))
       if (data.success) {
-        // Refresh itinerary to get updated versions
+        // Refresh itinerary to get updated versions, and the days in the
+        // language on screen (their translated service names may be new).
         await fetchItinerary()
-        // Always re-fetch days with the target language
-        // (setActiveLanguage may be a no-op if already set to this language)
-        await fetchDays(language)
-        setActiveLanguage(language)
+        await fetchDays(activeLanguage)
       } else {
         await dialog.alert(tCommon('error'), data.error || t('failedToCreateVersion'), 'warning')
       }
@@ -1193,8 +1279,136 @@ export default function ViewItineraryPage() {
   }
 
   const versionedContent = getVersionedContent()
+  const tourTitle = splitTourCode(versionedContent.trip_name)
   const availableLanguages = itinerary?.available_languages || []
-  const hasActiveVersion = availableLanguages.includes(activeLanguage)
+
+  // ── The language layer ────────────────────────────────────────────────
+  const sourceLanguage: Language = dayTranslations?.source_language ?? 'en'
+  const clientLanguage = normalizeClientLanguage(itinerary?.client_preferred_language)
+  const languageSummaries = useMemo(
+    () => (dayTranslations?.target_languages ?? []).map(lang =>
+      summarizeLanguage(lang, dayTranslations!.days.map(d => d.translations[lang]?.status ?? 'missing'))
+    ),
+    [dayTranslations]
+  )
+  // The target the side-by-side view edits: the client's language when it is
+  // one, else the first target.
+  const sideTarget: Language | null =
+    (clientLanguage && clientLanguage !== sourceLanguage ? clientLanguage : null)
+    ?? dayTranslations?.target_languages[0] ?? null
+  const translationByDay = useMemo(
+    () => new Map((dayTranslations?.days ?? []).map(d => [d.id, d])),
+    [dayTranslations]
+  )
+
+  // First load: side by side when a translation needs work, else the source.
+  useEffect(() => {
+    if (!dayTranslations || contentView !== null) return
+    const needsWork = languageSummaries.some(l => l.status !== 'reviewed' && l.status !== 'machine')
+    setContentView(needsWork && dayTranslations.days.length > 0 ? 'side' : dayTranslations.source_language)
+  }, [dayTranslations, languageSummaries, contentView])
+
+  // The day cards (and the PDF and email) follow the view; side by side
+  // reads the source, with the target beside it.
+  useEffect(() => {
+    if (contentView === null) return
+    setActiveLanguage(contentView === 'side' ? sourceLanguage : contentView)
+  }, [contentView, sourceLanguage])
+
+  const attentionItems = useMemo(() => {
+    if (!itinerary || !dayTranslations) return []
+    const servicesByDay = new Map(days.map(d => [d.id, d]))
+    // Each language's own lists; a target without its own is the source's
+    // and would only repeat the source's finding.
+    const lists = (lang: Language) => {
+      if (lang === sourceLanguage) return { inclusions: itinerary.inclusions || [], exclusions: itinerary.exclusions || [] }
+      const v = itinerary.versions?.[lang]
+      if (!v?.inclusions?.length && !v?.exclusions?.length) return null
+      return { inclusions: v.inclusions || [], exclusions: v.exclusions || [] }
+    }
+    const inclusions: Partial<Record<Language, { inclusions: string[]; exclusions: string[] }>> = {}
+    for (const lang of [sourceLanguage, ...dayTranslations.target_languages]) {
+      const l = lists(lang)
+      if (l) inclusions[lang] = l
+    }
+    return itineraryAttention({
+      status: itinerary.status,
+      sourceLanguage,
+      clientLanguage,
+      languages: languageSummaries,
+      days: dayTranslations.days.map(d => {
+        const loaded = servicesByDay.get(d.id)
+        return {
+          day_number: d.day_number,
+          source: d.source,
+          targets: Object.fromEntries(Object.entries(d.translations).map(([lang, tr]) => [lang, tr?.text ?? null])),
+          services: loaded?.services ?? [],
+          hotel_included: loaded?.hotel_included,
+          overnight: loaded?.overnight,
+        }
+      }),
+      inclusions,
+      hasInvoice: !!existingInvoice,
+      hasBooking: !!existingBooking,
+    })
+  }, [itinerary, dayTranslations, days, sourceLanguage, clientLanguage, languageSummaries, existingInvoice, existingBooking])
+
+  // ── Tabs ──────────────────────────────────────────────────────────────
+  // Four areas of one trip. The tab is kept in the URL hash so a reload, or a
+  // link sent to a colleague, opens the same one.
+  const [tab, setTabState] = useState<DetailTab>('itinerary')
+  useEffect(() => {
+    const fromHash = window.location.hash.slice(1)
+    if ((DETAIL_TABS as readonly string[]).includes(fromHash)) setTabState(fromHash as DetailTab)
+  }, [])
+  const setTab = (next: DetailTab) => {
+    setTabState(next)
+    window.history.replaceState(null, '', `#${next}`)
+  }
+
+  // The coverage grid reloads when an assignment changes, and its "Assign"
+  // opens the assignment panel on that type.
+  const [resourceRefresh, setResourceRefresh] = useState(0)
+  const [requestedResourceTab, setRequestedResourceTab] = useState<{ type: string; nonce: number } | null>(null)
+
+  const openDailyItinerary = (view: ContentView) => {
+    setTab('itinerary')
+    setContentView(view)
+    // After the Itinerary tab has rendered.
+    setTimeout(() => document.getElementById('daily-itinerary')?.scrollIntoView({ behavior: 'smooth' }), 50)
+  }
+
+  /** A document in a target language with no text yet opens the translate
+   *  flow instead of producing a document in the wrong language. */
+  const documentLanguageReady = (lang: Language) =>
+    lang === sourceLanguage || (languageSummaries.find(l => l.language === lang)?.status ?? 'missing') !== 'missing'
+
+  // "Translate missing and outdated days". A language with no version row yet
+  // goes through copy-translate, which also makes the trip title, the
+  // inclusions and the service names; after that, day by day.
+  const [translatingAll, setTranslatingAll] = useState(false)
+  const handleTranslateAll = async (language: Language) => {
+    setTranslatingAll(true)
+    try {
+      if (!availableLanguages.includes(language)) {
+        await handleCopyAndTranslate(language)
+      } else {
+        const res = await fetch(`/api/itineraries/${params.id}/day-translations`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ language }),
+        })
+        const data = await res.json().catch(() => null)
+        if (!res.ok || !data?.success) throw new Error(data?.error || t('failedToCreateVersion'))
+        await fetchDays(activeLanguage)
+      }
+      await fetchDayTranslations()
+    } catch (error) {
+      await dialog.alert(tCommon('error'), error instanceof Error ? error.message : t('failedToCreateVersion'), 'warning')
+    } finally {
+      setTranslatingAll(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -1240,7 +1454,16 @@ export default function ViewItineraryPage() {
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </Link>
               <div>
-                <h1 className="text-xl font-semibold text-gray-900">{versionedContent.trip_name}</h1>
+                {/* The programme code is the office's reference, not part of
+                    the client's title — shown beside it, not in it. */}
+                <h1 className="text-xl font-semibold text-gray-900 flex flex-wrap items-center gap-2">
+                  {tourTitle.title}
+                  {tourTitle.code && (
+                    <span className="px-1.5 py-0.5 rounded border border-gray-200 bg-gray-50 font-mono text-xs font-medium text-gray-600" title={t('tourCode')}>
+                      {tourTitle.code}
+                    </span>
+                  )}
+                </h1>
                 <p className="text-sm text-gray-500">
                   <span className="font-mono text-primary-600">{itinerary.itinerary_code}</span>
                   <span className="mx-2">•</span>
@@ -1259,65 +1482,83 @@ export default function ViewItineraryPage() {
                     </>
                   )}
                 </p>
+                <div className="mt-1.5">
+                  <StatusPipeline
+                    status={itinerary.status}
+                    hasBooking={!!existingBooking}
+                    hasInvoice={!!existingInvoice}
+                    invoicePaid={existingInvoice?.status === 'paid'}
+                  />
+                </div>
+                {dayTranslations && (
+                  <div className="mt-1.5">
+                    <LanguageStatusRow
+                      sourceLanguage={sourceLanguage}
+                      targets={languageSummaries}
+                      clientLanguage={clientLanguage}
+                      view={contentView ?? sourceLanguage}
+                      onSelect={openDailyItinerary}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
-{/* Edit Button Only */}
-            <Link
-              href={`/itineraries/${itinerary.id}/edit`}
-              className="p-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
-              title={tCommon('edit')}
-            >
-              <Edit2 className="w-5 h-5" />
-            </Link>
+{/* One primary action, decided by where the trip is: send the quote,
+                book it once confirmed, then open the booking. */}
+            <div className="flex items-center gap-2 self-start md:self-center">
+              {existingBooking ? (
+                <Link
+                  href={`/bookings/${existingBooking.id}`}
+                  className="h-9 px-4 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-2"
+                  title={t('viewBooking')}
+                >
+                  <Briefcase className="w-4 h-4" />
+                  {existingBooking.booking_code}
+                </Link>
+              ) : itinerary.status === 'confirmed' ? (
+                <button
+                  type="button"
+                  onClick={handleCreateBooking}
+                  disabled={creatingBooking}
+                  className="h-9 px-4 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                >
+                  {creatingBooking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Briefcase className="w-4 h-4" />}
+                  {creatingBooking ? t('creating') : t('createBooking')}
+                </button>
+              ) : (itinerary.status === 'draft' || itinerary.status === 'sent') ? (
+                <button
+                  type="button"
+                  onClick={() => setShowSendModal(true)}
+                  className="h-9 px-4 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-sm font-medium flex items-center gap-2"
+                >
+                  <Send className="w-4 h-4" />
+                  {t('sendQuote')}
+                </button>
+              ) : null}
+              <Link
+                href={`/itineraries/${itinerary.id}/edit`}
+                className="p-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                title={tCommon('edit')}
+              >
+                <Edit2 className="w-5 h-5" />
+              </Link>
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Language Tabs */}
-      <div className="container mx-auto px-4 pt-4">
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm">
-          <LanguageTabs
-            availableLanguages={availableLanguages}
-            activeLanguage={activeLanguage}
-            onLanguageChange={setActiveLanguage}
-            onCreateVersion={handleCreateVersion}
-            disabled={creatingVersion}
+      {/* Needs attention — this trip's open problems, worst first. The
+          language status itself is in the header; nothing about a missing
+          translation sits above the money and operations any more. */}
+      {attentionItems.length > 0 && (
+        <div className="container mx-auto px-4 pt-4">
+          <ItineraryAttentionStrip
+            items={attentionItems}
+            onOpen={item => openDailyItinerary(item.language && item.language !== sourceLanguage ? 'side' : (contentView ?? sourceLanguage))}
           />
-          {!hasActiveVersion && (
-            <div className="p-6">
-              <CreateVersionPrompt
-                entityType="itinerary"
-                language={activeLanguage}
-                onCreateFromScratch={() => handleCreateVersion(activeLanguage)}
-                onCopyAndTranslate={() => handleCopyAndTranslate(activeLanguage)}
-                isLoading={creatingVersion}
-              />
-            </div>
-          )}
-          {hasActiveVersion && activeLanguage !== 'en' && (
-            <div className="px-4 pb-3 flex justify-end">
-              <button
-                onClick={async () => {
-                  const confirmed = await dialog.confirm({
-                    title: 'Re-translate',
-                    message: `This will delete the existing ${activeLanguage.toUpperCase()} version and re-translate from English. Continue?`,
-                    variant: 'warning',
-                  })
-                  if (confirmed) {
-                    handleCopyAndTranslate(activeLanguage, true)
-                  }
-                }}
-                disabled={creatingVersion}
-                className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 disabled:opacity-50"
-              >
-                <Languages className="w-3.5 h-3.5" />
-                {creatingVersion ? 'Translating...' : 'Re-translate from English'}
-              </button>
-            </div>
-          )}
         </div>
-      </div>
+      )}
 
       {/* Success Messages */}
       {(() => {
@@ -1420,343 +1661,796 @@ export default function ViewItineraryPage() {
         </div>
       )}
 
-      <div className="container mx-auto px-4 py-4 space-y-4">
-        {/* INFO CARD */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <p className="text-xs text-gray-500 mb-1">{t('client')}</p>
-              <p className="text-sm font-semibold text-gray-900">{itinerary.client_name}</p>
-              {itinerary.client_email && (
-                <p className="text-xs text-gray-600 truncate">{itinerary.client_email}</p>
-              )}
-              {itinerary.client_phone && (
-                <p className="text-xs text-gray-600">{itinerary.client_phone}</p>
-              )}
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-1">{t('dates')}</p>
-              <p className="text-sm font-semibold text-gray-900">
-                {new Date(itinerary.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              </p>
-              <p className="text-xs text-gray-600">
-                {t('to')} {new Date(itinerary.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              </p>
-              <p className="text-xs text-primary-600 font-medium mt-0.5">{t('daysCount', { count: itinerary.total_days })}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-1">{t('passengers')}</p>
-              <p className="text-sm font-semibold text-gray-900">
-                {t('adultsCount', { count: itinerary.num_adults })}
-              </p>
-              {itinerary.num_children > 0 && (
-                <p className="text-xs text-gray-600">{t('childrenCount', { count: itinerary.num_children })} (4-12)</p>
-              )}
-              {itinerary.num_infants > 0 && (
-                <p className="text-xs text-gray-600">{t('infantsCount', { count: itinerary.num_infants })} (0-3)</p>
-              )}
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-1">{t('totalCost')}</p>
-              <p className="text-xl font-bold text-gray-900">{formatMoney(effectiveTotalCost, itinerary.currency)}</p>
-              <div className="flex items-center gap-2 mt-1">
-                <span className={`inline-block px-2 py-0.5 rounded border text-xs font-medium ${getStatusBadge(itinerary.status)}`}>
-                  {itinerary.status.charAt(0).toUpperCase() + itinerary.status.slice(1)}
-                </span>
-                {existingInvoice && (
-                  <Link href={`/invoices/${existingInvoice.id}`} className="inline-block px-2 py-0.5 rounded border text-xs font-medium bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100">
-                    {existingInvoice.invoice_number}
-                  </Link>
-                )}
+      <div className="container mx-auto px-4 py-4 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4 items-start">
+        <main className="space-y-4 min-w-0">
+          {/* TABS */}
+          <div className="flex gap-1 border-b border-gray-200 overflow-x-auto" role="tablist" data-testid="detail-tabs">
+            {DETAIL_TABS.map(id => {
+              const label = { itinerary: tLayout('tabItinerary'), operations: tLayout('tabOperations'), finance: tLayout('tabFinance'), messages: tLayout('tabMessages') }[id]
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === id}
+                  onClick={() => setTab(id)}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${tab === id ? 'border-primary-600 text-primary-700' : 'border-transparent text-gray-500 hover:text-gray-800'}`}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+          {tab === 'itinerary' && (
+            <div className="space-y-4" role="tabpanel">
+              {/* DAY CONTROLS */}
+              <div id="daily-itinerary" className="flex flex-wrap justify-between items-center gap-2 scroll-mt-24">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="text-lg font-semibold text-gray-900">{t('dailyItinerary')}</h2>
+                  {/* Which language the days are shown in. Content only — the
+                      staff UI language is the sidebar's. */}
+                  {dayTranslations && dayTranslations.target_languages.length > 0 && (
+                    <div className="inline-flex rounded-md border border-gray-300 overflow-hidden text-xs font-medium" role="tablist" data-testid="content-view-switcher">
+                      {([sourceLanguage, ...dayTranslations.target_languages] as ContentView[]).concat('side').map(view => (
+                        <button
+                          key={view}
+                          type="button"
+                          role="tab"
+                          aria-selected={contentView === view}
+                          onClick={() => setContentView(view)}
+                          className={`px-3 py-1 ${contentView === view ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                        >
+                          {view === 'side' ? tLang('sideBySide') : LANGUAGE_NAMES[view]}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={expandAll} className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors">{t('expandAll')}</button>
+                  <button onClick={collapseAll} className="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">{t('collapseAll')}</button>
+                </div>
               </div>
-            </div>
-          </div>
-          {/* Trip owner — who inside the company is responsible for this trip.
-              Distinct from the guide/vehicle/hotel assignments below, which are
-              resources booked FOR the client. */}
-          <div className="mt-3 pt-3 border-t border-gray-200">
-            <TripAssignee itineraryId={itinerary.id} />
-          </div>
-          {versionedContent.notes && (
-            <div className="mt-3 pt-3 border-t border-gray-200">
-              <p className="text-xs text-gray-500 mb-1">{t('notes')}</p>
-              <p className="text-sm text-gray-700">{versionedContent.notes}</p>
+
+              {/* The viewed translation's gaps, here and only here — the language a
+                  banner is about is the language of the text under it. */}
+              {(() => {
+                const lang: Language | null = contentView === 'side' ? sideTarget : (contentView && contentView !== sourceLanguage ? contentView : null)
+                const summary = lang ? languageSummaries.find(l => l.language === lang) : null
+                if (!lang || !summary || summary.status === 'reviewed' || summary.status === 'machine') return null
+                const text = summary.status === 'missing'
+                  ? tLang('missingBanner', { language: LANGUAGE_NAMES[lang] })
+                  : summary.status === 'partial'
+                    ? tLang('partialBanner', { language: LANGUAGE_NAMES[lang], missing: summary.counts.missing, total: summary.total })
+                    : tLang('outdatedBanner', { language: LANGUAGE_NAMES[lang], count: summary.counts.outdated })
+                return (
+                  <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5" data-testid="language-banner">
+                    <Languages className="w-4 h-4 text-amber-700 shrink-0" />
+                    <p className="flex-1 text-sm text-amber-900">{text}</p>
+                    <button
+                      type="button"
+                      onClick={() => handleTranslateAll(lang)}
+                      disabled={translatingAll || creatingVersion}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50"
+                    >
+                      {translatingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Languages className="w-3.5 h-3.5" />}
+                      {tLang('translateAll')}
+                    </button>
+                    {contentView !== 'side' && (
+                      <button
+                        type="button"
+                        onClick={() => setContentView('side')}
+                        className="px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                      >
+                        {tLang('writeSideBySide')}
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* ROUTE MAP */}
+              {days.length > 0 && (
+                <ItineraryMap
+                  days={days.map((d) => ({
+                    day_number: d.day_number,
+                    title: d.title,
+                    city: d.city,
+                    overnight_city: d.overnight_city,
+                    date: d.date,
+                  }))}
+                />
+              )}
+
+              {/* DAYS LIST */}
+              <div className="space-y-3">
+                {days.map((day) => (
+                  <div key={day.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                    <button onClick={() => toggleDay(day.day_number)} className="w-full px-4 py-3 bg-gray-50 flex items-center justify-between hover:bg-gray-100 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-primary-600 text-white rounded-md flex items-center justify-center font-semibold text-sm">{day.day_number}</div>
+                        <div className="text-left">
+                          <h3 className="text-sm font-semibold text-gray-900">{day.title || t('dayNumber', { number: day.day_number })}</h3>
+                          <p className="text-xs text-gray-500">{new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{day.city && ` • ${day.city}`}</p>
+                        </div>
+                      </div>
+                      {/* Each target language's state for this day, so gaps can be
+                          found by scanning the collapsed list. */}
+                      <div className="ml-auto mr-3 hidden sm:flex items-center gap-1">
+                        {dayTranslations?.target_languages.map(lang => {
+                          const status = translationByDay.get(day.id)?.translations[lang]?.status
+                          return status ? <DayLanguageChip key={lang} language={lang} status={status} /> : null
+                        })}
+                      </div>
+                      {expandedDays.has(day.day_number) ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
+                    </button>
+                    {expandedDays.has(day.day_number) && (
+                      <div className="p-4">
+                        {(() => {
+                          const tr = translationByDay.get(day.id)
+                          if (contentView === 'side' && sideTarget && tr) {
+                            const target = tr.translations[sideTarget]
+                            return (
+                              <div className="mb-4">
+                                <BilingualDayEditor
+                                  itineraryId={itinerary.id}
+                                  dayId={day.id}
+                                  sourceLanguage={sourceLanguage}
+                                  targetLanguage={sideTarget}
+                                  source={tr.source}
+                                  target={target?.text ?? null}
+                                  status={target?.status ?? 'missing'}
+                                  onChanged={async () => { await fetchDayTranslations() }}
+                                />
+                              </div>
+                            )
+                          }
+                          return day.description
+                            ? <div className="mb-4"><p className="text-sm text-gray-700 whitespace-pre-line"><HighlightPlaceholders text={day.description} /></p></div>
+                            : null
+                        })()}
+                        {day.services && day.services.length > 0 ? (
+                          <div>
+                            <h4 className="text-sm font-semibold text-gray-900 mb-3">
+                              {t('servicesIncluded')}
+                              {dayTranslations && dayTranslations.target_languages.length > 0 && (
+                                <span className="ml-2 text-[11px] font-normal text-gray-500" title={tLang('sharedServices')}>· {tLang('sharedServices')}</span>
+                              )}
+                            </h4>
+                            <div className="space-y-2">
+                              {day.services.map((service) => {
+                                const noCost = (Number(service.rate_eur) || 0) === 0 && (Number(service.total_cost) || 0) === 0
+                                return (
+                                <div key={service.id} className={`flex items-center justify-between p-3 rounded-md transition-colors ${noCost ? 'bg-red-50 hover:bg-red-100/70 border border-red-200' : 'bg-gray-50 hover:bg-gray-100'}`}>
+                                  <div className="flex items-center gap-2 flex-1">
+                                    <span className="text-lg">{getServiceIcon(service.service_type)}</span>
+                                    <div>
+                                      <p className={`text-sm font-medium ${noCost ? 'text-red-800' : 'text-gray-900'}`}>
+                                        {service.service_name}
+                                        {noCost && <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] font-medium bg-red-600 text-white align-middle">{t('noCost')}</span>}
+                                      </p>
+                                      <p className="text-xs text-gray-500">{tEdit.has(`serviceTypes.${service.service_type}`) ? tEdit(`serviceTypes.${service.service_type}`) : service.service_type.replace('_', ' ')}{service.quantity > 1 && ` • ${t('qty')}: ${service.quantity}`}</p>
+                                      {service.notes && !service.notes.startsWith('__grid:') && <p className="text-xs text-gray-600 mt-0.5">{service.notes}</p>}
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    {costMode === 'manual' && editingServiceId === service.id ? (
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-sm text-gray-500">{itinerary.currency}</span>
+                                        <input type="number" value={editedCost} onChange={(e) => setEditedCost(e.target.value)} className="w-20 px-2 py-1 text-sm font-semibold text-right border border-primary-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent" autoFocus onKeyDown={(e) => { if (e.key === 'Enter') handleSaveServiceCost(service.id, day.id); if (e.key === 'Escape') handleCancelEditCost() }} />
+                                        <button onClick={() => handleSaveServiceCost(service.id, day.id)} disabled={savingServiceCost} className="p-1 text-green-600 hover:bg-green-50 rounded"><Check className="w-4 h-4" /></button>
+                                        <button onClick={handleCancelEditCost} className="p-1 text-gray-400 hover:bg-gray-100 rounded"><X className="w-4 h-4" /></button>
+                                      </div>
+                                    ) : (
+                                      <button onClick={() => handleStartEditCost(service)} disabled={costMode !== 'manual'} className={`text-sm font-semibold ${costMode === 'manual' ? 'text-amber-700 hover:text-amber-800 cursor-pointer underline decoration-dashed underline-offset-2' : 'text-gray-900 cursor-default'}`} title={costMode === 'manual' ? t('clickToEdit') : t('switchToManualMode')}>
+                                        {formatMoney(Number(service.total_cost) || 0, itinerary.currency)}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center py-6 text-gray-500"><p className="text-sm">{t('noServicesAdded')}</p></div>
+                        )}
+                        {(() => {
+                          // The hotel or ship the night is at, read off the day's own
+                          // accommodation line (lib/itineraries/overnight-property).
+                          const property = overnightProperty(day.services)
+                          if (!property && !day.overnight_city) return null
+                          // The night line that named it says whether it is still in Rates.
+                          const status = day.services.find(s => s.property_rate_status)?.property_rate_status
+                          const stale = property && (status === 'not_on_file' || status === 'switched_off')
+                          return (
+                            <div className="mt-3 pt-3 border-t border-gray-200" data-testid="day-overnight">
+                              <p className="text-xs text-gray-600">
+                                {property?.kind === 'cruise'
+                                  ? `🚢 ${t('aboardShip', { name: property.name })}`
+                                  : property
+                                    ? `🏨 ${t('overnightAt', { place: overnightLabel(property, day.overnight_city) })}`
+                                    : `🌙 ${t('overnightIn', { city: day.overnight_city })}`}
+                              </p>
+                              {stale && (
+                                <p className="mt-1 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1" data-testid="overnight-stale">
+                                  ⚠ {status === 'switched_off'
+                                    ? t('propertySwitchedOff', { name: property!.name })
+                                    : t('propertyNotInRates', { name: property!.name })}
+                                </p>
+                              )}
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {days.length === 0 && <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center"><p className="text-sm text-gray-500">No days planned yet</p></div>}
+
+              {/* Inclusions & Exclusions Section */}
+              {activeLanguage !== sourceLanguage && !editingInclusions && !editingExclusions && (
+                <div className="flex justify-end mt-6 mb-1">
+                  <button
+                    type="button"
+                    onClick={translateInclusionsExclusions}
+                    disabled={translatingInclusions}
+                    className="flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded hover:bg-primary-50 disabled:opacity-50"
+                  >
+                    {translatingInclusions ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Languages className="w-3.5 h-3.5" />}
+                    {t('translateItems')}
+                  </button>
+                </div>
+              )}
+              <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${activeLanguage === sourceLanguage || editingInclusions || editingExclusions ? 'mt-6' : ''}`}>
+                {/* Inclusions */}
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                      {t('whatsIncluded')}
+                    </h3>
+                    {!editingInclusions ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLocalInclusions(getVersionedContent().inclusions)
+                          setEditingInclusions(true)
+                        }}
+                        className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                      >
+                        {tCommon('edit')}
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => saveInclusionsExclusions('inclusions', localInclusions)}
+                          disabled={savingInclusions}
+                          className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
+                        >
+                          {savingInclusions ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingInclusions(false)}
+                          className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                          title="Cancel"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {editingInclusions ? (
+                    <div className="space-y-2">
+                      {localInclusions.map((item, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={item}
+                            onChange={(e) => {
+                              const updated = [...localInclusions]
+                              updated[index] = e.target.value
+                              setLocalInclusions(updated)
+                            }}
+                            placeholder="Enter inclusion item"
+                            className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setLocalInclusions(localInclusions.filter((_, i) => i !== index))}
+                            className="p-1 text-red-500 hover:bg-red-50 rounded"
+                            title="Remove item"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setLocalInclusions([...localInclusions, ''])}
+                        className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium mt-2"
+                      >
+                        <Plus className="w-3 h-3" />
+                        {t('addItem')}
+                      </button>
+                    </div>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {getVersionedContent().inclusions.map((item, index) => (
+                        <li key={index} className="text-sm text-gray-600 flex items-start gap-2">
+                          <Check className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" />
+                          {item}
+                        </li>
+                      ))}
+                      {getVersionedContent().inclusions.length === 0 && (
+                        <li className="text-sm text-gray-400 italic">{t('noInclusionsYet')}</li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+
+                {/* Exclusions */}
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                      <XCircle className="w-4 h-4 text-red-500" />
+                      {t('whatsNotIncluded')}
+                    </h3>
+                    {!editingExclusions ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLocalExclusions(getVersionedContent().exclusions)
+                          setEditingExclusions(true)
+                        }}
+                        className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                      >
+                        {tCommon('edit')}
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => saveInclusionsExclusions('exclusions', localExclusions)}
+                          disabled={savingInclusions}
+                          className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
+                        >
+                          {savingInclusions ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingExclusions(false)}
+                          className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                          title="Cancel"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {editingExclusions ? (
+                    <div className="space-y-2">
+                      {localExclusions.map((item, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={item}
+                            onChange={(e) => {
+                              const updated = [...localExclusions]
+                              updated[index] = e.target.value
+                              setLocalExclusions(updated)
+                            }}
+                            placeholder="Enter exclusion item"
+                            className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setLocalExclusions(localExclusions.filter((_, i) => i !== index))}
+                            className="p-1 text-red-500 hover:bg-red-50 rounded"
+                            title="Remove item"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setLocalExclusions([...localExclusions, ''])}
+                        className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium mt-2"
+                      >
+                        <Plus className="w-3 h-3" />
+                        {t('addItem')}
+                      </button>
+                    </div>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {getVersionedContent().exclusions.map((item, index) => (
+                        <li key={index} className="text-sm text-gray-600 flex items-start gap-2">
+                          <X className="w-3.5 h-3.5 text-red-400 mt-0.5 flex-shrink-0" />
+                          {item}
+                        </li>
+                      ))}
+                      {getVersionedContent().exclusions.length === 0 && (
+                        <li className="text-sm text-gray-400 italic">{t('noExclusionsYet')}</li>
+                      )}
+                    </ul>
+                  )}
+                </div>
+              </div>
             </div>
           )}
-        </div>
-
-        {/* GENERATION WARNINGS */}
-        {itinerary.generation_warnings && itinerary.generation_warnings.length > 0 && (
-          <div className="bg-amber-50 rounded-lg border border-amber-300 shadow-sm p-4">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
-              <div className="flex-1">
-                <h3 className="text-sm font-semibold text-amber-900 mb-2">
-                  Pricing Warnings ({itinerary.generation_warnings.length})
-                </h3>
-                <p className="text-xs text-amber-700 mb-3">
-                  The following issues were detected during itinerary generation. Some services may have missing or zero prices.
-                </p>
-                <ul className="space-y-1">
-                  {itinerary.generation_warnings.map((warning: string, idx: number) => (
-                    <li key={idx} className="text-xs text-amber-800 flex items-start gap-2">
-                      <span className="text-amber-500 mt-0.5">•</span>
-                      <span>{warning}</span>
-                    </li>
-                  ))}
-                </ul>
+          {tab === 'operations' && (
+            <div className="space-y-4" role="tabpanel">
+              {/* Tasks for the departments that run the services on this trip. */}
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">{t('operationsTasks')}</h3>
+                  <p className="text-xs text-gray-600">{t('generateOperationsTasks')}</p>
+                </div>
+                <button
+                  onClick={handleOpenTaskDialog}
+                  disabled={generatingTasks}
+                  className="h-9 px-4 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                >
+                  {generatingTasks ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardList className="w-4 h-4" />}
+                  {generatingTasks ? t('generating') : t('operationsTasks')}
+                </button>
               </div>
-            </div>
-          </div>
-        )}
+              {/* Task generation result banner */}
+              {taskResult && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 flex items-center justify-between">
+                  <span className="text-sm text-indigo-700">{taskResult}</span>
+                  <Link
+                    href="/tasks"
+                    className="text-sm font-medium text-indigo-600 hover:text-indigo-800 underline"
+                  >
+                    {t('viewTasks')}
+                  </Link>
+                </div>
+              )}
 
-        {/* COST MODE TOGGLE */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`p-2 rounded-lg ${costMode === 'auto' ? 'bg-blue-100' : 'bg-amber-100'}`}>
-                {costMode === 'auto' ? <Calculator className="w-5 h-5 text-blue-600" /> : <Settings className="w-5 h-5 text-amber-600" />}
+              <CoverageGrid
+                itineraryId={itinerary.id}
+                days={days}
+                refreshKey={resourceRefresh}
+                onAssign={type => {
+                  setRequestedResourceTab({ type, nonce: Date.now() })
+                  document.getElementById('resource-assignment')?.scrollIntoView({ behavior: 'smooth' })
+                }}
+              />
+              {/* Resource Cards */}
+              {/* Shown only once something is assigned: empty, it was a second
+                  "nothing assigned" card stacked on the assignment panel's own. */}
+              {(itinerary.assigned_guide_id || itinerary.assigned_vehicle_id || itinerary.pickup_location || itinerary.pickup_time) && <ResourceSummaryCard guideId={itinerary.assigned_guide_id} vehicleId={itinerary.assigned_vehicle_id} guideNotes={itinerary.guide_notes} vehicleNotes={itinerary.vehicle_notes} pickupLocation={itinerary.pickup_location} pickupTime={itinerary.pickup_time} onEdit={() => document.getElementById('resource-assignment')?.scrollIntoView({ behavior: 'smooth' })} />}
+              <div id="resource-assignment">
+                <ResourceAssignmentV2 itineraryId={itinerary.id} startDate={itinerary.start_date} endDate={itinerary.end_date} numTravelers={itinerary.num_adults + itinerary.num_children + (itinerary.num_infants || 0)} clientName={itinerary.client_name} tripName={itinerary.trip_name} onUpdate={() => { fetchItinerary(); setResourceRefresh(n => n + 1) }} requestedTab={requestedResourceTab} />
+              </div>
+
+            </div>
+          )}
+          {tab === 'finance' && (
+            <div className="space-y-4" role="tabpanel">
+              {/* The invoice and the extra costs, beside the money they change. */}
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 flex flex-wrap items-center gap-3">
+                <button
+                  onClick={handleGenerateInvoice}
+                  disabled={generatingInvoice}
+                  className={`h-9 px-4 rounded-md text-sm font-medium flex items-center gap-2 transition-colors ${
+                    existingInvoice ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-amber-600 text-white hover:bg-amber-700'
+                  } ${generatingInvoice ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  title={existingInvoice ? t('viewInvoiceNumber', { number: existingInvoice.invoice_number }) : t('generateInvoice')}
+                >
+                  {generatingInvoice ? <Loader2 className="w-4 h-4 animate-spin" /> : <Receipt className="w-4 h-4" />}
+                  {generatingInvoice ? t('creating') : existingInvoice ? existingInvoice.invoice_number : t('invoice')}
+                </button>
+                <AddExpenseFromItinerary
+                  itineraryId={itinerary.id}
+                  itineraryCode={itinerary.itinerary_code}
+                  clientName={itinerary.client_name}
+                  onExpenseAdded={() => setExpenseRefreshTrigger(prev => prev + 1)}
+                />
+              </div>
+              {/* GENERATION WARNINGS */}
+              {itinerary.generation_warnings && itinerary.generation_warnings.length > 0 && (
+                <div className="bg-amber-50 rounded-lg border border-amber-300 shadow-sm p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <h3 className="text-sm font-semibold text-amber-900 mb-2">
+                        Pricing Warnings ({itinerary.generation_warnings.length})
+                      </h3>
+                      <p className="text-xs text-amber-700 mb-3">
+                        The following issues were detected during itinerary generation. Some services may have missing or zero prices.
+                      </p>
+                      <ul className="space-y-1">
+                        {itinerary.generation_warnings.map((warning: string, idx: number) => (
+                          <li key={idx} className="text-xs text-amber-800 flex items-start gap-2">
+                            <span className="text-amber-500 mt-0.5">•</span>
+                            <span>{warning}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* COST MODE TOGGLE */}
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${costMode === 'auto' ? 'bg-blue-100' : 'bg-amber-100'}`}>
+                      {costMode === 'auto' ? <Calculator className="w-5 h-5 text-blue-600" /> : <Settings className="w-5 h-5 text-amber-600" />}
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900">{t('costCalculation')}: {costMode === 'auto' ? t('automatic') : t('manual')}</h3>
+                      <p className="text-xs text-gray-600">{costMode === 'auto' ? t('costsCalculatedFromDatabase') : t('clickToEditManually')}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {costModeChanged && <span className="text-xs text-green-600 font-medium flex items-center gap-1"><Check className="w-3 h-3" />{tCommon('saved')}</span>}
+                    {/* Two named options, not an on/off switch: "Automatic" beside a
+                        switch drawn in its off position read as automatic being off. */}
+                    <div role="radiogroup" aria-label={t('costCalculation')} className={`inline-flex rounded-md border border-gray-300 overflow-hidden text-xs font-medium ${savingCostMode ? 'opacity-50' : ''}`}>
+                      {(['auto', 'manual'] as const).map(mode => (
+                        <button
+                          key={mode}
+                          type="button"
+                          role="radio"
+                          aria-checked={costMode === mode}
+                          onClick={() => { if (costMode !== mode) handleToggleCostMode() }}
+                          disabled={savingCostMode}
+                          className={`px-3 py-1 transition-colors ${costMode === mode ? (mode === 'manual' ? 'bg-amber-600 text-white' : 'bg-blue-600 text-white') : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                        >
+                          {mode === 'auto' ? t('auto') : t('manual')}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                {costMode === 'manual' && (
+                  <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-xs text-amber-800">{t('manualModeDescription')}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* PROFIT & LOSS */}
+              {days.length > 0 && <ItineraryPL
+                itineraryId={itinerary.id}
+                totalCost={effectiveTotalCost}
+                supplierCost={itinerary.supplier_cost}
+                currency={itinerary.currency}
+                marginPercent={25}
+                days={days}
+                extraExpenses={itineraryExpenses.map(exp => ({
+                  amount: exp.amount,
+                  currency: exp.currency,
+                  category: exp.category,
+                  booking_supplier_status_id: exp.booking_supplier_status_id
+                }))}
+              />}
+
+              {/* EXTRA EXPENSES */}
+              <ItineraryExpenses
+                itineraryId={itinerary.id}
+                currency={itinerary.currency}
+                refreshTrigger={expenseRefreshTrigger}
+                onExpensesChanged={(expenses) => setItineraryExpenses(expenses)}
+              />
+
+            </div>
+          )}
+          {tab === 'messages' && (
+            <div className="space-y-4" role="tabpanel">
+              {/* The quote to the client, by email or WhatsApp. */}
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">{t('sendQuoteToClient')}</h3>
+                  <p className="text-xs text-gray-600">
+                    {[itinerary.client_email, itinerary.client_phone].filter(Boolean).join(' · ') || itinerary.client_name}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {itinerary.status !== 'draft' && (
+                    <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 text-green-700 rounded-md text-xs font-medium">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      {t('quoteSent')}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowSendModal(true)}
+                    className="h-9 px-4 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-sm font-medium flex items-center gap-2"
+                  >
+                    <Send className="w-4 h-4" />
+                    {t('sendQuote')}
+                  </button>
+                </div>
+              </div>
+              {/* WHATSAPP ACTIONS */}
+              <div className="bg-white rounded-lg border border-green-200 shadow-sm p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center"><span className="text-white text-lg">📱</span></div>
+                  <div><h3 className="text-sm font-semibold text-gray-900">{t('whatsappActions')}</h3><p className="text-xs text-gray-600">{t('sendUpdatesTo', { clientName: itinerary.client_name })}</p></div>
+                </div>
+                {!itinerary.client_phone && <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md"><p className="text-yellow-800 text-xs">{t('clientPhoneRequiredWarning')}</p></div>}
+                {itinerary.client_phone && (
+                  <div className="flex flex-wrap items-center gap-2">
+                  {itinerary.status === 'draft' && <WhatsAppButton itineraryId={itinerary.id} type="status" status="confirmed" onSuccess={() => { setSendSuccess(t('bookingConfirmationSent')); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} className="bg-blue-600 hover:bg-blue-700" />}
+                  {itinerary.status !== 'completed' && <WhatsAppButton itineraryId={itinerary.id} type="status" status="pending_payment" onSuccess={() => { setSendSuccess(t('paymentReminderSent')); setTimeout(() => setSendSuccess(null), 5000) }} className="bg-yellow-600 hover:bg-yellow-700" />}
+                  <WhatsAppButton itineraryId={itinerary.id} type="status" status="paid" onSuccess={() => { setSendSuccess(t('paymentConfirmationSent')); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} className="bg-emerald-600 hover:bg-emerald-700" />
+                </div>
+                )}
+                {itinerary.client_phone && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 text-green-700 rounded-full"><span>📱</span><span>{itinerary.client_phone}</span></div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* SHARE LINK — the client-facing live itinerary page */}
+              <ShareLinkCard itineraryId={itinerary.id} />
+
+            </div>
+          )}
+        </main>
+
+        {/* RIGHT RAIL — the trip at a glance and every document, grouped by
+            who reads it. Language-neutral facts here; client copy in the
+            Itinerary tab. */}
+        <aside className="space-y-4 lg:sticky lg:top-36" data-testid="detail-rail">
+          <RailSection title={tLayout('trip')}>
+            <dl className="space-y-2.5 text-sm">
+              <div>
+                <dt className="text-xs text-gray-500">{t('client')}</dt>
+                <dd className="font-medium text-gray-900">{itinerary.client_name}</dd>
+                {itinerary.client_email && <dd className="text-xs text-gray-600 truncate">{itinerary.client_email}</dd>}
+                {itinerary.client_phone && <dd className="text-xs text-gray-600">{itinerary.client_phone}</dd>}
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-gray-900">{t('costCalculation')}: {costMode === 'auto' ? t('automatic') : t('manual')}</h3>
-                <p className="text-xs text-gray-600">{costMode === 'auto' ? t('costsCalculatedFromDatabase') : t('clickToEditManually')}</p>
+                <dt className="text-xs text-gray-500">{t('dates')}</dt>
+                <dd className="text-gray-900">
+                  {new Date(itinerary.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  {' – '}
+                  {new Date(itinerary.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  <span className="text-xs text-primary-600 font-medium ml-1.5">{t('daysCount', { count: itinerary.total_days })}</span>
+                </dd>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {costModeChanged && <span className="text-xs text-green-600 font-medium flex items-center gap-1"><Check className="w-3 h-3" />{tCommon('saved')}</span>}
-              <button onClick={handleToggleCostMode} disabled={savingCostMode} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${costMode === 'manual' ? 'bg-amber-600' : 'bg-gray-300'} ${savingCostMode ? 'opacity-50' : ''}`}>
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${costMode === 'manual' ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
-              <span className="text-xs font-medium text-gray-700">{costMode === 'manual' ? t('manual') : t('auto')}</span>
-            </div>
-          </div>
-          {costMode === 'manual' && (
-            <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-xs text-amber-800">{t('manualModeDescription')}</p>
-            </div>
-          )}
-        </div>
-
-        {/* PROFIT & LOSS */}
-        {days.length > 0 && <ItineraryPL
-          itineraryId={itinerary.id}
-          totalCost={effectiveTotalCost}
-          supplierCost={itinerary.supplier_cost}
-          currency={itinerary.currency}
-          marginPercent={25}
-          days={days}
-          extraExpenses={itineraryExpenses.map(exp => ({
-            amount: exp.amount,
-            currency: exp.currency,
-            category: exp.category,
-            booking_supplier_status_id: exp.booking_supplier_status_id
-          }))}
-        />}
-
-        {/* EXTRA EXPENSES */}
-        <ItineraryExpenses
-          itineraryId={itinerary.id}
-          currency={itinerary.currency}
-          refreshTrigger={expenseRefreshTrigger}
-          onExpensesChanged={(expenses) => setItineraryExpenses(expenses)}
-        />
-
-        {/* SHARE LINK — the client-facing live itinerary page */}
-        <ShareLinkCard itineraryId={itinerary.id} />
-
-        {/* WHATSAPP ACTIONS */}
-        <div className="bg-white rounded-lg border border-green-200 shadow-sm p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center"><span className="text-white text-lg">📱</span></div>
-            <div><h3 className="text-sm font-semibold text-gray-900">{t('whatsappActions')}</h3><p className="text-xs text-gray-600">{t('sendUpdatesTo', { clientName: itinerary.client_name })}</p></div>
-          </div>
-          {!itinerary.client_phone && <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md"><p className="text-yellow-800 text-xs">{t('clientPhoneRequiredWarning')}</p></div>}
-          {itinerary.client_phone && (
-            <div className="flex flex-wrap items-center gap-2">
-            {itinerary.status === 'draft' && <WhatsAppButton itineraryId={itinerary.id} type="status" status="confirmed" onSuccess={() => { setSendSuccess(t('bookingConfirmationSent')); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} className="bg-blue-600 hover:bg-blue-700" />}
-            {itinerary.status !== 'completed' && <WhatsAppButton itineraryId={itinerary.id} type="status" status="pending_payment" onSuccess={() => { setSendSuccess(t('paymentReminderSent')); setTimeout(() => setSendSuccess(null), 5000) }} className="bg-yellow-600 hover:bg-yellow-700" />}
-            <WhatsAppButton itineraryId={itinerary.id} type="status" status="paid" onSuccess={() => { setSendSuccess(t('paymentConfirmationSent')); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} className="bg-emerald-600 hover:bg-emerald-700" />
-            {itinerary.status === 'draft' ? (
-              <button
-                type="button"
-                onClick={() => setShowSendModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg font-medium transition-all duration-200 shadow-sm hover:shadow-md hover:bg-primary-700"
-              >
-                <Send className="w-4 h-4" />
-                {t('sendQuote')}
-              </button>
-            ) : (
-              <div className="flex items-center gap-1.5 px-4 py-2 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm font-medium">
-                <CheckCircle className="w-4 h-4" />
-                {t('quoteSent')}
+              <div>
+                <dt className="text-xs text-gray-500">{t('passengers')}</dt>
+                <dd className="text-gray-900">
+                  {t('adultsCount', { count: itinerary.num_adults })}
+                  {itinerary.num_children > 0 && <span className="text-xs text-gray-600"> · {t('childrenCount', { count: itinerary.num_children })} (4-12)</span>}
+                  {itinerary.num_infants > 0 && <span className="text-xs text-gray-600"> · {t('infantsCount', { count: itinerary.num_infants })} (0-3)</span>}
+                </dd>
               </div>
-            )}
-          </div>
-          )}
-          {itinerary.client_phone && (
+              <div>
+                <dt className="text-xs text-gray-500">{t('totalCost')}</dt>
+                <dd className="text-lg font-bold text-gray-900">{formatMoney(effectiveTotalCost, itinerary.currency)}</dd>
+                <dd className="flex items-center gap-2 mt-0.5">
+                  <span className={`inline-block px-2 py-0.5 rounded border text-xs font-medium ${getStatusBadge(itinerary.status)}`}>
+                    {itinerary.status.charAt(0).toUpperCase() + itinerary.status.slice(1)}
+                  </span>
+                </dd>
+              </div>
+            </dl>
+            {/* Trip owner — who inside the company is responsible for this trip.
+                Distinct from the guide/vehicle/hotel assignments, which are
+                resources booked FOR the client. */}
             <div className="mt-3 pt-3 border-t border-gray-200">
-              <div className="flex flex-wrap gap-2 text-xs">
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 text-green-700 rounded-full"><span>📱</span><span>{itinerary.client_phone}</span></div>
-                {itinerary.status === 'sent' && <div className="flex items-center gap-1.5 px-2 py-1 bg-primary-50 text-primary-700 rounded-full"><span>✅</span><span>{t('quoteSent')}</span></div>}
-              </div>
+              <TripAssignee itineraryId={itinerary.id} />
             </div>
-          )}
-        </div>
-
-{/* Action Bar */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-          <div className="flex items-center gap-3 flex-wrap">
-            <button
-              onClick={handleGenerateInvoice}
-              disabled={generatingInvoice}
-              className={`h-10 px-4 rounded-md text-sm font-medium flex items-center gap-2 transition-colors ${
-                existingInvoice
-                  ? 'bg-green-600 text-white hover:bg-green-700'
-                  : 'bg-amber-600 text-white hover:bg-amber-700'
-              } ${generatingInvoice ? 'opacity-50 cursor-not-allowed' : ''}`}
-              title={existingInvoice ? t('viewInvoiceNumber', { number: existingInvoice.invoice_number }) : t('generateInvoice')}
-            >
-              {generatingInvoice ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>{t('creating')}</span>
-                </>
-              ) : (
-                <>
-                  <Receipt className="w-4 h-4" />
-                  {existingInvoice ? existingInvoice.invoice_number : t('invoice')}
-                </>
-              )}
-            </button>
-            <Link
-              href={`/documents/contract/${itinerary.id}`}
-              className="h-10 px-4 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium flex items-center gap-2"
-            >
-              <FileText className="w-4 h-4" />
-              {t('contract')}
-            </Link>
-            {/* The printable guest questionnaire with a QR to this booking's
-                online survey (app/api/itineraries/[id]/survey-pdf). */}
-            <a
-              href={`/api/itineraries/${itinerary.id}/survey-pdf`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="h-10 px-4 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium flex items-center gap-2"
-              title="アンケート用紙（QRコード付き）をダウンロード"
-            >
-              <ClipboardList className="w-4 h-4" />
-              Survey (QR)
-            </a>
-            <AddExpenseFromItinerary
-              itineraryId={itinerary.id}
-              itineraryCode={itinerary.itinerary_code}
-              clientName={itinerary.client_name}
-              onExpenseAdded={() => setExpenseRefreshTrigger(prev => prev + 1)}
-            />
-            <GenerateDocumentsButton
-              itineraryId={itinerary.id}
-              itineraryCode={itinerary.itinerary_code}
-            />
-            {/* The ENG. ITIN. worksheet the ground operator runs the trip from.
-                Asks for the office-held header facts (file no., guides,
-                flights) once, then opens the document in a new tab. */}
-            <GenerateOpsSheetButton itineraryId={itinerary.id} itineraryCode={itinerary.itinerary_code} />
-            {/* The customer-facing 日程表, generated from this trip: programme
-                text from the linked programme, traveller and dates from here. */}
-            <GenerateNitteiButton
-              itineraryId={itinerary.id}
-              clientName={itinerary.client_name}
-              startDate={itinerary.start_date}
-              templateId={itinerary.template_id}
-              onLinked={tid =>
-                setItinerary(prev => (prev ? { ...prev, template_id: tid } : prev))
-              }
-            />
-            <button
-              onClick={() => handlePreviewPDF()}
-              disabled={generatingPDF}
-              title={days.length === 0 ? t('pdfNeedsDays') : t('pdfTooltip')}
-              className={`h-10 px-4 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2 ${
-                generatingPDF ? 'opacity-50 cursor-not-allowed' : days.length === 0 ? 'opacity-60' : ''
-              }`}
-            >
-              {generatingPDF ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                  <span>{t('generating')}</span>
-                </>
-              ) : (
-                <>
-                  <FileText className="w-4 h-4" />
-                  {t('pdf')}
-                </>
-              )}
-            </button>
-            <button
-              onClick={handleOpenTaskDialog}
-              disabled={generatingTasks}
-              className="h-10 px-4 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
-              title={t('generateOperationsTasks')}
-            >
-              {generatingTasks ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>{t('generating')}</span>
-                </>
-              ) : (
-                <>
-                  <ClipboardList className="w-4 h-4" />
-                  <span>{t('operationsTasks')}</span>
-                </>
-              )}
-            </button>
-            {/* The booking sits at the far right on its own (operator, 2026-09-03). */}
-            {existingBooking ? (
-              <Link
-                href={`/bookings/${existingBooking.id}`}
-                className="ml-auto h-10 px-4 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-2"
-                title={t('viewBooking')}
-              >
-                <Briefcase className="w-4 h-4" />
-                {existingBooking.booking_code}
-              </Link>
-            ) : itinerary.status === 'confirmed' && (
-              <button
-                onClick={handleCreateBooking}
-                disabled={creatingBooking}
-                className={`ml-auto h-10 px-4 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-2 ${creatingBooking ? 'opacity-50 cursor-not-allowed' : ''}`}
-                title={t('createBooking')}
-              >
-                {creatingBooking ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>{t('creating')}</span>
-                  </>
-                ) : (
-                  <>
-                    <Briefcase className="w-4 h-4" />
-                    {t('createBooking')}
-                  </>
-                )}
-              </button>
+            {versionedContent.notes && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <p className="text-xs text-gray-500 mb-1">{t('notes')}</p>
+                <p className="text-sm text-gray-700">{versionedContent.notes}</p>
+              </div>
             )}
-          </div>
-        </div>
+          </RailSection>
 
-        {/* Task generation result banner */}
-        {taskResult && (
-          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 flex items-center justify-between">
-            <span className="text-sm text-indigo-700">{taskResult}</span>
-            <Link
-              href="/tasks"
-              className="text-sm font-medium text-indigo-600 hover:text-indigo-800 underline"
-            >
-              {t('viewTasks')}
-            </Link>
-          </div>
-        )}
+          <RailSection title={tLayout('documents')} testId="documents-rail">
+            <RailGroup title={tLayout('forClient')}>
+              {/* The customer's 日程表 is a Japanese document by definition. */}
+              <DocRow label={tLayout('docNittei')} hint={LANGUAGE_NAMES.ja}>
+                <GenerateNitteiButton
+                  itineraryId={itinerary.id}
+                  clientName={itinerary.client_name}
+                  startDate={itinerary.start_date}
+                  templateId={itinerary.template_id}
+                  onLinked={tid => setItinerary(prev => (prev ? { ...prev, template_id: tid } : prev))}
+                  triggerClassName={RAIL_ACTION}
+                  triggerContent={tLayout('generate')}
+                />
+              </DocRow>
+              {/* One link per language. A language with no text yet reads
+                  "JA —" and opens the translation instead of a PDF in the
+                  wrong language. */}
+              <DocRow label={tLayout('docQuote')} hint={days.length === 0 ? t('pdfNeedsDays') : undefined}>
+                {[sourceLanguage, ...(dayTranslations?.target_languages ?? [])].map(lang =>
+                  documentLanguageReady(lang) ? (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => handlePreviewPDF(true, lang)}
+                      disabled={generatingPDF}
+                      className={RAIL_ACTION}
+                      data-testid={`quote-pdf-${lang}`}
+                    >
+                      {generatingPDF && pdfLanguage === lang ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                      {lang.toUpperCase()}
+                    </button>
+                  ) : (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => openDailyItinerary('side')}
+                      className={`${RAIL_ACTION} !text-gray-400`}
+                      title={tLayout('translateFirst', { language: LANGUAGE_NAMES[lang] })}
+                      data-testid={`quote-pdf-${lang}`}
+                    >
+                      {lang.toUpperCase()} —
+                    </button>
+                  )
+                )}
+              </DocRow>
+              <DocRow label={t('contract')} hint={tLayout('contractHint')}>
+                <Link href={`/documents/contract/${itinerary.id}`} className={RAIL_ACTION}>{tLayout('open')}</Link>
+              </DocRow>
+              <DocRow label={tLayout('docShareLink')}>
+                <button type="button" onClick={() => setTab('messages')} className={RAIL_ACTION}>{tLayout('open')}</button>
+              </DocRow>
+              {/* The printable guest questionnaire with a QR to this booking's
+                  online survey (app/api/itineraries/[id]/survey-pdf). */}
+              <DocRow label={tLayout('docSurvey')} hint="QR">
+                <a href={`/api/itineraries/${itinerary.id}/survey-pdf`} target="_blank" rel="noopener noreferrer" className={RAIL_ACTION}>
+                  {tLayout('open')}
+                </a>
+              </DocRow>
+            </RailGroup>
+            <RailGroup title={tLayout('internal')}>
+              {/* The ENG. ITIN. worksheet the ground operator runs the trip
+                  from — always in the staff language. */}
+              <DocRow label={tLayout('docOpsSheet')} hint={tLayout('staffLanguage')}>
+                <GenerateOpsSheetButton
+                  itineraryId={itinerary.id}
+                  itineraryCode={itinerary.itinerary_code}
+                  triggerClassName={RAIL_ACTION}
+                  triggerContent={tLayout('generate')}
+                />
+              </DocRow>
+              <DocRow label={tLayout('docSupplier')}>
+                <GenerateDocumentsButton
+                  itineraryId={itinerary.id}
+                  itineraryCode={itinerary.itinerary_code}
+                  triggerClassName={RAIL_ACTION}
+                  triggerContent={<>{tLayout('generate')}<ChevronDown className="w-3 h-3" /></>}
+                />
+              </DocRow>
+              <DocRow label={existingInvoice ? existingInvoice.invoice_number : t('invoice')}>
+                {existingInvoice ? (
+                  <Link href={`/invoices/${existingInvoice.id}`} className={RAIL_ACTION}>{tLayout('open')}</Link>
+                ) : (
+                  <button type="button" onClick={handleGenerateInvoice} disabled={generatingInvoice} className={RAIL_ACTION}>
+                    {generatingInvoice ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                    {tLayout('create')}
+                  </button>
+                )}
+              </DocRow>
+            </RailGroup>
+          </RailSection>
+        </aside>
+      </div>
 
-        {/* Task Assignment Dialog */}
+      {/* Task Assignment Dialog */}
         {showTaskDialog && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl max-w-lg w-full">
@@ -1881,322 +2575,6 @@ export default function ViewItineraryPage() {
             </div>
           </div>
         )}
-
-        {/* Resource Cards */}
-        <ResourceSummaryCard guideId={itinerary.assigned_guide_id} vehicleId={itinerary.assigned_vehicle_id} guideNotes={itinerary.guide_notes} vehicleNotes={itinerary.vehicle_notes} pickupLocation={itinerary.pickup_location} pickupTime={itinerary.pickup_time} onEdit={() => document.getElementById('resource-assignment')?.scrollIntoView({ behavior: 'smooth' })} />
-        <div id="resource-assignment">
-          <ResourceAssignmentV2 itineraryId={itinerary.id} startDate={itinerary.start_date} endDate={itinerary.end_date} numTravelers={itinerary.num_adults + itinerary.num_children + (itinerary.num_infants || 0)} clientName={itinerary.client_name} tripName={itinerary.trip_name} onUpdate={fetchItinerary} />
-        </div>
-
-        {/* DAY CONTROLS */}
-        <div className="flex justify-between items-center">
-          <h2 className="text-lg font-semibold text-gray-900">{t('dailyItinerary')}</h2>
-          <div className="flex gap-2">
-            <button onClick={expandAll} className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors">{t('expandAll')}</button>
-            <button onClick={collapseAll} className="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors">{t('collapseAll')}</button>
-          </div>
-        </div>
-
-        {/* ROUTE MAP */}
-        {days.length > 0 && (
-          <ItineraryMap
-            days={days.map((d) => ({
-              day_number: d.day_number,
-              title: d.title,
-              city: d.city,
-              overnight_city: d.overnight_city,
-              date: d.date,
-            }))}
-          />
-        )}
-
-        {/* DAYS LIST */}
-        <div className="space-y-3">
-          {days.map((day) => (
-            <div key={day.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-              <button onClick={() => toggleDay(day.day_number)} className="w-full px-4 py-3 bg-gray-50 flex items-center justify-between hover:bg-gray-100 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-primary-600 text-white rounded-md flex items-center justify-center font-semibold text-sm">{day.day_number}</div>
-                  <div className="text-left">
-                    <h3 className="text-sm font-semibold text-gray-900">{day.title || t('dayNumber', { number: day.day_number })}</h3>
-                    <p className="text-xs text-gray-500">{new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{day.city && ` • ${day.city}`}</p>
-                  </div>
-                </div>
-                {expandedDays.has(day.day_number) ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
-              </button>
-              {expandedDays.has(day.day_number) && (
-                <div className="p-4">
-                  {day.description && <div className="mb-4"><p className="text-sm text-gray-700">{day.description}</p></div>}
-                  {day.services && day.services.length > 0 ? (
-                    <div>
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3">{t('servicesIncluded')}</h4>
-                      <div className="space-y-2">
-                        {day.services.map((service) => {
-                          const noCost = (Number(service.rate_eur) || 0) === 0 && (Number(service.total_cost) || 0) === 0
-                          return (
-                          <div key={service.id} className={`flex items-center justify-between p-3 rounded-md transition-colors ${noCost ? 'bg-red-50 hover:bg-red-100/70 border border-red-200' : 'bg-gray-50 hover:bg-gray-100'}`}>
-                            <div className="flex items-center gap-2 flex-1">
-                              <span className="text-lg">{getServiceIcon(service.service_type)}</span>
-                              <div>
-                                <p className={`text-sm font-medium ${noCost ? 'text-red-800' : 'text-gray-900'}`}>
-                                  {service.service_name}
-                                  {noCost && <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] font-medium bg-red-600 text-white align-middle">{t('noCost')}</span>}
-                                </p>
-                                <p className="text-xs text-gray-500">{tEdit.has(`serviceTypes.${service.service_type}`) ? tEdit(`serviceTypes.${service.service_type}`) : service.service_type.replace('_', ' ')}{service.quantity > 1 && ` • ${t('qty')}: ${service.quantity}`}</p>
-                                {service.notes && !service.notes.startsWith('__grid:') && <p className="text-xs text-gray-600 mt-0.5">{service.notes}</p>}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              {costMode === 'manual' && editingServiceId === service.id ? (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-sm text-gray-500">{itinerary.currency}</span>
-                                  <input type="number" value={editedCost} onChange={(e) => setEditedCost(e.target.value)} className="w-20 px-2 py-1 text-sm font-semibold text-right border border-primary-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent" autoFocus onKeyDown={(e) => { if (e.key === 'Enter') handleSaveServiceCost(service.id, day.id); if (e.key === 'Escape') handleCancelEditCost() }} />
-                                  <button onClick={() => handleSaveServiceCost(service.id, day.id)} disabled={savingServiceCost} className="p-1 text-green-600 hover:bg-green-50 rounded"><Check className="w-4 h-4" /></button>
-                                  <button onClick={handleCancelEditCost} className="p-1 text-gray-400 hover:bg-gray-100 rounded"><X className="w-4 h-4" /></button>
-                                </div>
-                              ) : (
-                                <button onClick={() => handleStartEditCost(service)} disabled={costMode !== 'manual'} className={`text-sm font-semibold ${costMode === 'manual' ? 'text-amber-700 hover:text-amber-800 cursor-pointer underline decoration-dashed underline-offset-2' : 'text-gray-900 cursor-default'}`} title={costMode === 'manual' ? t('clickToEdit') : t('switchToManualMode')}>
-                                  {formatMoney(Number(service.total_cost) || 0, itinerary.currency)}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-6 text-gray-500"><p className="text-sm">{t('noServicesAdded')}</p></div>
-                  )}
-                  {(() => {
-                    // The hotel or ship the night is at, read off the day's own
-                    // accommodation line (lib/itineraries/overnight-property).
-                    const property = overnightProperty(day.services)
-                    if (!property && !day.overnight_city) return null
-                    // The night line that named it says whether it is still in Rates.
-                    const status = day.services.find(s => s.property_rate_status)?.property_rate_status
-                    const stale = property && (status === 'not_on_file' || status === 'switched_off')
-                    return (
-                      <div className="mt-3 pt-3 border-t border-gray-200" data-testid="day-overnight">
-                        <p className="text-xs text-gray-600">
-                          {property?.kind === 'cruise'
-                            ? `🚢 ${t('aboardShip', { name: property.name })}`
-                            : property
-                              ? `🏨 ${t('overnightAt', { place: overnightLabel(property, day.overnight_city) })}`
-                              : `🌙 ${t('overnightIn', { city: day.overnight_city })}`}
-                        </p>
-                        {stale && (
-                          <p className="mt-1 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1" data-testid="overnight-stale">
-                            ⚠ {status === 'switched_off'
-                              ? t('propertySwitchedOff', { name: property!.name })
-                              : t('propertyNotInRates', { name: property!.name })}
-                          </p>
-                        )}
-                      </div>
-                    )
-                  })()}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {days.length === 0 && <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center"><p className="text-sm text-gray-500">No days planned yet</p></div>}
-
-        {/* Inclusions & Exclusions Section */}
-        {activeLanguage !== 'en' && !editingInclusions && !editingExclusions && (
-          <div className="flex justify-end mt-6 mb-1">
-            <button
-              type="button"
-              onClick={translateInclusionsExclusions}
-              disabled={translatingInclusions}
-              className="flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded hover:bg-primary-50 disabled:opacity-50"
-            >
-              {translatingInclusions ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Languages className="w-3.5 h-3.5" />}
-              {t('translateItems')}
-            </button>
-          </div>
-        )}
-        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${activeLanguage === 'en' || editingInclusions || editingExclusions ? 'mt-6' : ''}`}>
-          {/* Inclusions */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-green-600" />
-                {t('whatsIncluded')}
-              </h3>
-              {!editingInclusions ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLocalInclusions(getVersionedContent().inclusions)
-                    setEditingInclusions(true)
-                  }}
-                  className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-                >
-                  {tCommon('edit')}
-                </button>
-              ) : (
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => saveInclusionsExclusions('inclusions', localInclusions)}
-                    disabled={savingInclusions}
-                    className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
-                  >
-                    {savingInclusions ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingInclusions(false)}
-                    className="p-1 text-gray-400 hover:bg-gray-100 rounded"
-                    title="Cancel"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {editingInclusions ? (
-              <div className="space-y-2">
-                {localInclusions.map((item, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={item}
-                      onChange={(e) => {
-                        const updated = [...localInclusions]
-                        updated[index] = e.target.value
-                        setLocalInclusions(updated)
-                      }}
-                      placeholder="Enter inclusion item"
-                      className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setLocalInclusions(localInclusions.filter((_, i) => i !== index))}
-                      className="p-1 text-red-500 hover:bg-red-50 rounded"
-                      title="Remove item"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setLocalInclusions([...localInclusions, ''])}
-                  className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium mt-2"
-                >
-                  <Plus className="w-3 h-3" />
-                  {t('addItem')}
-                </button>
-              </div>
-            ) : (
-              <ul className="space-y-1.5">
-                {getVersionedContent().inclusions.map((item, index) => (
-                  <li key={index} className="text-sm text-gray-600 flex items-start gap-2">
-                    <Check className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" />
-                    {item}
-                  </li>
-                ))}
-                {getVersionedContent().inclusions.length === 0 && (
-                  <li className="text-sm text-gray-400 italic">{t('noInclusionsYet')}</li>
-                )}
-              </ul>
-            )}
-          </div>
-
-          {/* Exclusions */}
-          <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                <XCircle className="w-4 h-4 text-red-500" />
-                {t('whatsNotIncluded')}
-              </h3>
-              {!editingExclusions ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLocalExclusions(getVersionedContent().exclusions)
-                    setEditingExclusions(true)
-                  }}
-                  className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-                >
-                  {tCommon('edit')}
-                </button>
-              ) : (
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => saveInclusionsExclusions('exclusions', localExclusions)}
-                    disabled={savingInclusions}
-                    className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
-                  >
-                    {savingInclusions ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingExclusions(false)}
-                    className="p-1 text-gray-400 hover:bg-gray-100 rounded"
-                    title="Cancel"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {editingExclusions ? (
-              <div className="space-y-2">
-                {localExclusions.map((item, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={item}
-                      onChange={(e) => {
-                        const updated = [...localExclusions]
-                        updated[index] = e.target.value
-                        setLocalExclusions(updated)
-                      }}
-                      placeholder="Enter exclusion item"
-                      className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setLocalExclusions(localExclusions.filter((_, i) => i !== index))}
-                      className="p-1 text-red-500 hover:bg-red-50 rounded"
-                      title="Remove item"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setLocalExclusions([...localExclusions, ''])}
-                  className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium mt-2"
-                >
-                  <Plus className="w-3 h-3" />
-                  {t('addItem')}
-                </button>
-              </div>
-            ) : (
-              <ul className="space-y-1.5">
-                {getVersionedContent().exclusions.map((item, index) => (
-                  <li key={index} className="text-sm text-gray-600 flex items-start gap-2">
-                    <X className="w-3.5 h-3.5 text-red-400 mt-0.5 flex-shrink-0" />
-                    {item}
-                  </li>
-                ))}
-                {getVersionedContent().exclusions.length === 0 && (
-                  <li className="text-sm text-gray-400 italic">{t('noExclusionsYet')}</li>
-                )}
-              </ul>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* PDF Preview Modal */}
       <PDFPreviewModal

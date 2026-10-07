@@ -68,6 +68,9 @@ interface ResourceAssignmentV2Props {
   clientName?: string
   tripName?: string
   onUpdate?: () => void
+  /** Open a type's tab from outside (the coverage grid). A new nonce re-opens
+   *  the same type after the operator has moved to another tab. */
+  requestedTab?: { type: string; nonce: number } | null
 }
 
 // City options for Egypt
@@ -256,12 +259,16 @@ export default function ResourceAssignmentV2({
   numTravelers,
   clientName,
   tripName,
-  onUpdate
+  onUpdate,
+  requestedTab
 }: ResourceAssignmentV2Props) {
   const t = useTranslations('resourceAssignment')
   const dialog = useConfirmDialog()
   const vehicleLabel = useVehicleLabel()
   const [activeTab, setActiveTab] = useState('guide')
+  useEffect(() => {
+    if (requestedTab && RESOURCE_TYPES.some(t => t.key === requestedTab.type)) setActiveTab(requestedTab.type)
+  }, [requestedTab])
   // Changing an assignment's dates in place (PATCH /api/itinerary-resources).
   const [editingDates, setEditingDates] = useState<{ id: string; start: string; end: string } | null>(null)
   const [savingDates, setSavingDates] = useState(false)

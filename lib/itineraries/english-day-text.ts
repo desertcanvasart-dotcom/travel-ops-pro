@@ -198,7 +198,11 @@ export async function ensureEnglishDayVersions(
   const { error: insertError } = await supabase
     .from('itinerary_day_versions')
     .upsert(
-      rows.map(row => ({ ...row, language: 'en' })),
+      // Machine text, so the itinerary page reports it unreviewed. No
+      // source fingerprint: the source here is the bare canonical row, not
+      // the merged text the page fingerprints, so a hash would report a
+      // false "outdated" (lib/itineraries/content-language.ts).
+      rows.map(row => ({ ...row, language: 'en', status: 'machine', translated_at: new Date().toISOString() })),
       { onConflict: 'itinerary_day_id,language', ignoreDuplicates: true }
     )
   if (insertError) {
