@@ -16,7 +16,7 @@ import { onePerPlace, PLACE_TYPES } from '@/lib/resources/one-per-place'
 import type { VehicleRateResult } from '@/lib/transport-rate-utils'
 import { cruiseRouteLabel, cruiseRoutesPresent } from '@/lib/resources/assignable-cruises'
 import { OUTSIDE_TYPES, outsideAssignmentMessage, outsideResourceName, readOutside } from '@/lib/resources/outside-staff'
-import { formatPhoneForWhatsApp, generateWhatsAppLink } from '@/lib/communication-utils'
+import { formatPhoneForWhatsApp, generateWhatsAppLink } from '@/lib/whatsapp-link'
 
 // Types
 interface Resource {
