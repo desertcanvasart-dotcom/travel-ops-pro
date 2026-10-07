@@ -36,8 +36,9 @@ export function readOutside(resourceName: string | null | undefined): { name: st
   return { name: body.slice(0, at).trim(), phone }
 }
 
-/** The message the office sends from its own WhatsApp to a typed-in person. */
-export function outsideAssignmentMessage(a: {
+/** The assignment as the office sends it from its own WhatsApp (wa.me):
+ *  to a typed-in person, or anyone in the directory (assignment-contact.ts). */
+export function assignmentMessage(a: {
   name: string
   tripName?: string | null
   clientName?: string | null

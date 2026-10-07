@@ -2,7 +2,7 @@
 // (lib/resources/outside-staff.ts).
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { OUTSIDE_TYPES, outsideAssignmentMessage, outsideResourceName, readOutside } from '@/lib/resources/outside-staff'
+import { OUTSIDE_TYPES, assignmentMessage, outsideResourceName, readOutside } from '@/lib/resources/outside-staff'
 import { resolveAssigneeContact, toStaffView } from '@/lib/staff-link'
 
 describe('the name carries the phone', () => {
@@ -25,7 +25,7 @@ describe('the name carries the phone', () => {
 
 describe('reaching them', () => {
   it('the message is the assignment, by first name', () => {
-    const text = outsideAssignmentMessage({ name: 'Ahmed Hassan', tripName: 'Nile Classic', clientName: 'Tersa', startDate: '2026-10-10', endDate: '2026-10-12', travelers: 2, notes: 'Meet at gate 3' })
+    const text = assignmentMessage({ name: 'Ahmed Hassan', tripName: 'Nile Classic', clientName: 'Tersa', startDate: '2026-10-10', endDate: '2026-10-12', travelers: 2, notes: 'Meet at gate 3' })
     expect(text).toContain('Hello Ahmed,')
     expect(text).toContain('"Nile Classic"')
     expect(text).toContain('2026-10-10 – 2026-10-12')
