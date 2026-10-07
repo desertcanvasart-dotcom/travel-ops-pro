@@ -98,10 +98,30 @@ export async function GET(request: NextRequest) {
     const vehicleWords = new Map((await vocabularyItemsForCurrentOrg('vehicle_type')).map(i => [i.key, i.label]))
     const vehicleLabel = (key: string) => vehicleWords.get(key) ?? vehicleKeyLabel(key)
 
+    // The kind of journey, in the agency's words (Settings → Vocabulary →
+    // Transport service types), and a road transfer's trip shape: two routes
+    // on the same road differ only by them, and without them an option read
+    // like the day's whole programme (ported from autoura-saas #612).
+    const typeWords = new Map((await vocabularyItemsForCurrentOrg('transport_service_type')).map(i => [i.key, i.label]))
+    const typeLabel = (key: string | null | undefined) =>
+      key ? (typeWords.get(key) ?? key.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase())) : ''
+    const SHAPE_LABEL: Record<string, string> = { one_way: 'one way', same_day_return: 'day trip, back the same day', overnight_return: 'back the next day' }
+    /** " · Intercity, day trip, back the same day" — the type left out when the
+     *  route's own name already says it ("Cairo Day Tour"). */
+    const kindOf = (r: any, namePrefix: string): string => {
+      if (r.service_type === 'cruise_transport_package') return ''
+      const type = typeLabel(r.service_type)
+      const parts = [
+        type && !namePrefix.toLowerCase().includes(type.toLowerCase()) ? type : '',
+        SHAPE_LABEL[r.trip_shape] ?? '',
+      ].filter(Boolean)
+      return parts.length ? ` · ${parts.join(', ')}` : ''
+    }
+
     const expandTiers = (r: any, namePrefix: string, extra: Record<string, unknown> = {}) =>
       vehicleBands(r).map(b => ({
         id: `${r.id}__${b.key}`,
-        name: `${vehicleLabel(b.key)} (${b.capacity_min}-${b.capacity_max} pax) — ${namePrefix}`,
+        name: `${vehicleLabel(b.key)} (${b.capacity_min}-${b.capacity_max} pax) — ${namePrefix}${kindOf({ ...r, ...extra }, namePrefix)}`,
         rateEur: b.rate_eur,
         rateNonEur: b.rate_non_eur ?? b.rate_eur,
         city: r.origin_city || r.city,
@@ -109,6 +129,7 @@ export async function GET(request: NextRequest) {
         capacity_min: b.capacity_min,
         capacity_max: b.capacity_max,
         service_type: r.service_type,
+        trip_shape: r.trip_shape ?? null,
         origin_city: r.origin_city || r.city,
         destination_city: r.destination_city,
         ...extra,
