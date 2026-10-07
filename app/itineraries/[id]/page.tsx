@@ -8,7 +8,7 @@ import { useTranslations, useLocale, createTranslator } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { ArrowLeft, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2, Languages, ClipboardList, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2, Languages, ClipboardList, AlertTriangle } from 'lucide-react'
 // The itinerary PDF generator (and jsPDF behind it) loads on first use, not
 // with the page.
 const generateItineraryPDF = async (...args: Parameters<typeof import('@/lib/pdf-generator').generateItineraryPDF>) =>
@@ -35,7 +35,7 @@ import { LanguageStatusRow, DayLanguageChip, BilingualDayEditor, HighlightPlaceh
 import ItineraryAttentionStrip from '@/components/itineraries/ItineraryAttentionStrip'
 import StatusPipeline from '@/components/itineraries/StatusPipeline'
 import CoverageGrid from '@/components/itineraries/CoverageGrid'
-import { RailSection, RailGroup, DocRow, RAIL_ACTION } from '@/components/itineraries/RailSection'
+import { RailSection } from '@/components/itineraries/RailSection'
 import type { Language, ItineraryVersion } from '@/types/multilingual'
 import { LANGUAGE_NAMES } from '@/types/multilingual'
 import {
@@ -1663,6 +1663,121 @@ export default function ViewItineraryPage() {
 
       <div className="container mx-auto px-4 py-4 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4 items-start">
         <main className="space-y-4 min-w-0">
+          {/* ACTION BAR — every document and action on the trip, visible on
+              every tab. The redesign had moved these into a side-panel list
+              of small links, where operators could not find them. */}
+          <div className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm" data-testid="action-bar">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={handleGenerateInvoice}
+                disabled={generatingInvoice}
+                className={`h-10 px-4 rounded-md text-sm font-medium flex items-center gap-2 transition-colors ${
+                  existingInvoice ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-amber-600 text-white hover:bg-amber-700'
+                } ${generatingInvoice ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={existingInvoice ? t('viewInvoiceNumber', { number: existingInvoice.invoice_number }) : t('generateInvoice')}
+              >
+                {generatingInvoice ? <Loader2 className="w-4 h-4 animate-spin" /> : <Receipt className="w-4 h-4" />}
+                {generatingInvoice ? t('creating') : existingInvoice ? existingInvoice.invoice_number : t('invoice')}
+              </button>
+              <Link
+                href={`/documents/contract/${itinerary.id}`}
+                className="h-10 px-4 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium flex items-center gap-2"
+              >
+                <FileText className="w-4 h-4" />
+                {t('contract')}
+              </Link>
+              {/* The printable guest questionnaire with a QR to this booking's
+                  online survey (app/api/itineraries/[id]/survey-pdf). */}
+              <a
+                href={`/api/itineraries/${itinerary.id}/survey-pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="h-10 px-4 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium flex items-center gap-2"
+                title="アンケート用紙（QRコード付き）をダウンロード"
+              >
+                <ClipboardList className="w-4 h-4" />
+                Survey (QR)
+              </a>
+              <AddExpenseFromItinerary
+                itineraryId={itinerary.id}
+                itineraryCode={itinerary.itinerary_code}
+                clientName={itinerary.client_name}
+                onExpenseAdded={() => setExpenseRefreshTrigger(prev => prev + 1)}
+              />
+              <GenerateDocumentsButton
+                itineraryId={itinerary.id}
+                itineraryCode={itinerary.itinerary_code}
+              />
+              {/* The ENG. ITIN. worksheet the ground operator runs the trip from. */}
+              <GenerateOpsSheetButton itineraryId={itinerary.id} itineraryCode={itinerary.itinerary_code} />
+              {/* The customer-facing 日程表, generated from this trip. */}
+              <GenerateNitteiButton
+                itineraryId={itinerary.id}
+                clientName={itinerary.client_name}
+                startDate={itinerary.start_date}
+                templateId={itinerary.template_id}
+                onLinked={tid => setItinerary(prev => (prev ? { ...prev, template_id: tid } : prev))}
+              />
+              {/* The quote PDF, one segment per language. A language with no
+                  text yet reads "JA —" and opens the side-by-side translation
+                  instead of a PDF in the wrong language. */}
+              <div
+                className={`h-10 inline-flex items-stretch rounded-md border border-gray-300 text-sm font-medium text-gray-700 overflow-hidden ${days.length === 0 ? 'opacity-60' : ''}`}
+                title={days.length === 0 ? t('pdfNeedsDays') : t('pdfTooltip')}
+                data-testid="quote-pdf"
+              >
+                <span className="px-3 flex items-center gap-2 bg-gray-50 border-r border-gray-300">
+                  {generatingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                  {tLayout('docQuote')}
+                </span>
+                {[sourceLanguage, ...(dayTranslations?.target_languages ?? [])].map(lang =>
+                  documentLanguageReady(lang) ? (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => handlePreviewPDF(true, lang)}
+                      disabled={generatingPDF}
+                      className="px-3 hover:bg-gray-50 disabled:opacity-50 border-l first:border-l-0 border-gray-200"
+                      data-testid={`quote-pdf-${lang}`}
+                    >
+                      {lang.toUpperCase()}
+                    </button>
+                  ) : (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => openDailyItinerary('side')}
+                      className="px-3 text-gray-400 hover:bg-gray-50 border-l border-gray-200"
+                      title={tLayout('translateFirst', { language: LANGUAGE_NAMES[lang] })}
+                      data-testid={`quote-pdf-${lang}`}
+                    >
+                      {lang.toUpperCase()} —
+                    </button>
+                  )
+                )}
+              </div>
+              <button
+                onClick={handleOpenTaskDialog}
+                disabled={generatingTasks}
+                className="h-10 px-4 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                title={t('generateOperationsTasks')}
+              >
+                {generatingTasks ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardList className="w-4 h-4" />}
+                {generatingTasks ? t('generating') : t('operationsTasks')}
+              </button>
+            </div>
+          </div>
+
+          {/* Task generation result banner */}
+          {taskResult && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 flex items-center justify-between">
+              <span className="text-sm text-indigo-700">{taskResult}</span>
+              <Link href="/tasks" className="text-sm font-medium text-indigo-600 hover:text-indigo-800 underline">
+                {t('viewTasks')}
+              </Link>
+            </div>
+          )}
+
           {/* TABS */}
           <div className="flex gap-1 border-b border-gray-200 overflow-x-auto" role="tablist" data-testid="detail-tabs">
             {DETAIL_TABS.map(id => {
@@ -2087,34 +2202,6 @@ export default function ViewItineraryPage() {
           )}
           {tab === 'operations' && (
             <div className="space-y-4" role="tabpanel">
-              {/* Tasks for the departments that run the services on this trip. */}
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-900">{t('operationsTasks')}</h3>
-                  <p className="text-xs text-gray-600">{t('generateOperationsTasks')}</p>
-                </div>
-                <button
-                  onClick={handleOpenTaskDialog}
-                  disabled={generatingTasks}
-                  className="h-9 px-4 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
-                >
-                  {generatingTasks ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardList className="w-4 h-4" />}
-                  {generatingTasks ? t('generating') : t('operationsTasks')}
-                </button>
-              </div>
-              {/* Task generation result banner */}
-              {taskResult && (
-                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 flex items-center justify-between">
-                  <span className="text-sm text-indigo-700">{taskResult}</span>
-                  <Link
-                    href="/tasks"
-                    className="text-sm font-medium text-indigo-600 hover:text-indigo-800 underline"
-                  >
-                    {t('viewTasks')}
-                  </Link>
-                </div>
-              )}
-
               <CoverageGrid
                 itineraryId={itinerary.id}
                 days={days}
@@ -2136,26 +2223,6 @@ export default function ViewItineraryPage() {
           )}
           {tab === 'finance' && (
             <div className="space-y-4" role="tabpanel">
-              {/* The invoice and the extra costs, beside the money they change. */}
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 flex flex-wrap items-center gap-3">
-                <button
-                  onClick={handleGenerateInvoice}
-                  disabled={generatingInvoice}
-                  className={`h-9 px-4 rounded-md text-sm font-medium flex items-center gap-2 transition-colors ${
-                    existingInvoice ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-amber-600 text-white hover:bg-amber-700'
-                  } ${generatingInvoice ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  title={existingInvoice ? t('viewInvoiceNumber', { number: existingInvoice.invoice_number }) : t('generateInvoice')}
-                >
-                  {generatingInvoice ? <Loader2 className="w-4 h-4 animate-spin" /> : <Receipt className="w-4 h-4" />}
-                  {generatingInvoice ? t('creating') : existingInvoice ? existingInvoice.invoice_number : t('invoice')}
-                </button>
-                <AddExpenseFromItinerary
-                  itineraryId={itinerary.id}
-                  itineraryCode={itinerary.itinerary_code}
-                  clientName={itinerary.client_name}
-                  onExpenseAdded={() => setExpenseRefreshTrigger(prev => prev + 1)}
-                />
-              </div>
               {/* GENERATION WARNINGS */}
               {itinerary.generation_warnings && itinerary.generation_warnings.length > 0 && (
                 <div className="bg-amber-50 rounded-lg border border-amber-300 shadow-sm p-4">
@@ -2304,9 +2371,8 @@ export default function ViewItineraryPage() {
           )}
         </main>
 
-        {/* RIGHT RAIL — the trip at a glance and every document, grouped by
-            who reads it. Language-neutral facts here; client copy in the
-            Itinerary tab. */}
+        {/* RIGHT RAIL — the trip at a glance. Language-neutral facts here;
+            client copy in the Itinerary tab; the documents in the button bar. */}
         <aside className="space-y-4 lg:sticky lg:top-36" data-testid="detail-rail">
           <RailSection title={tLayout('trip')}>
             <dl className="space-y-2.5 text-sm">
@@ -2357,96 +2423,6 @@ export default function ViewItineraryPage() {
             )}
           </RailSection>
 
-          <RailSection title={tLayout('documents')} testId="documents-rail">
-            <RailGroup title={tLayout('forClient')}>
-              {/* The customer's 日程表 is a Japanese document by definition. */}
-              <DocRow label={tLayout('docNittei')} hint={LANGUAGE_NAMES.ja}>
-                <GenerateNitteiButton
-                  itineraryId={itinerary.id}
-                  clientName={itinerary.client_name}
-                  startDate={itinerary.start_date}
-                  templateId={itinerary.template_id}
-                  onLinked={tid => setItinerary(prev => (prev ? { ...prev, template_id: tid } : prev))}
-                  triggerClassName={RAIL_ACTION}
-                  triggerContent={tLayout('generate')}
-                />
-              </DocRow>
-              {/* One link per language. A language with no text yet reads
-                  "JA —" and opens the translation instead of a PDF in the
-                  wrong language. */}
-              <DocRow label={tLayout('docQuote')} hint={days.length === 0 ? t('pdfNeedsDays') : undefined}>
-                {[sourceLanguage, ...(dayTranslations?.target_languages ?? [])].map(lang =>
-                  documentLanguageReady(lang) ? (
-                    <button
-                      key={lang}
-                      type="button"
-                      onClick={() => handlePreviewPDF(true, lang)}
-                      disabled={generatingPDF}
-                      className={RAIL_ACTION}
-                      data-testid={`quote-pdf-${lang}`}
-                    >
-                      {generatingPDF && pdfLanguage === lang ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                      {lang.toUpperCase()}
-                    </button>
-                  ) : (
-                    <button
-                      key={lang}
-                      type="button"
-                      onClick={() => openDailyItinerary('side')}
-                      className={`${RAIL_ACTION} !text-gray-400`}
-                      title={tLayout('translateFirst', { language: LANGUAGE_NAMES[lang] })}
-                      data-testid={`quote-pdf-${lang}`}
-                    >
-                      {lang.toUpperCase()} —
-                    </button>
-                  )
-                )}
-              </DocRow>
-              <DocRow label={t('contract')} hint={tLayout('contractHint')}>
-                <Link href={`/documents/contract/${itinerary.id}`} className={RAIL_ACTION}>{tLayout('open')}</Link>
-              </DocRow>
-              <DocRow label={tLayout('docShareLink')}>
-                <button type="button" onClick={() => setTab('messages')} className={RAIL_ACTION}>{tLayout('open')}</button>
-              </DocRow>
-              {/* The printable guest questionnaire with a QR to this booking's
-                  online survey (app/api/itineraries/[id]/survey-pdf). */}
-              <DocRow label={tLayout('docSurvey')} hint="QR">
-                <a href={`/api/itineraries/${itinerary.id}/survey-pdf`} target="_blank" rel="noopener noreferrer" className={RAIL_ACTION}>
-                  {tLayout('open')}
-                </a>
-              </DocRow>
-            </RailGroup>
-            <RailGroup title={tLayout('internal')}>
-              {/* The ENG. ITIN. worksheet the ground operator runs the trip
-                  from — always in the staff language. */}
-              <DocRow label={tLayout('docOpsSheet')} hint={tLayout('staffLanguage')}>
-                <GenerateOpsSheetButton
-                  itineraryId={itinerary.id}
-                  itineraryCode={itinerary.itinerary_code}
-                  triggerClassName={RAIL_ACTION}
-                  triggerContent={tLayout('generate')}
-                />
-              </DocRow>
-              <DocRow label={tLayout('docSupplier')}>
-                <GenerateDocumentsButton
-                  itineraryId={itinerary.id}
-                  itineraryCode={itinerary.itinerary_code}
-                  triggerClassName={RAIL_ACTION}
-                  triggerContent={<>{tLayout('generate')}<ChevronDown className="w-3 h-3" /></>}
-                />
-              </DocRow>
-              <DocRow label={existingInvoice ? existingInvoice.invoice_number : t('invoice')}>
-                {existingInvoice ? (
-                  <Link href={`/invoices/${existingInvoice.id}`} className={RAIL_ACTION}>{tLayout('open')}</Link>
-                ) : (
-                  <button type="button" onClick={handleGenerateInvoice} disabled={generatingInvoice} className={RAIL_ACTION}>
-                    {generatingInvoice ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                    {tLayout('create')}
-                  </button>
-                )}
-              </DocRow>
-            </RailGroup>
-          </RailSection>
         </aside>
       </div>
 
