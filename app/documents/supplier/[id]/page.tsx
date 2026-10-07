@@ -538,7 +538,15 @@ export default function SupplierDocumentViewPage() {
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <p className="text-xs text-gray-500 font-medium mb-1">{t('serviceDate')}</p>
                   <p className="text-lg font-semibold text-gray-900">
-                    {document.service_date && new Date(document.service_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                    {(() => {
+                      // A voucher covering several days shows its first and last.
+                      if (!document.service_date) return null
+                      const dates = (document.services || []).map((sv: any) => sv.date).filter(Boolean).sort()
+                      const last = dates[dates.length - 1]
+                      return last && String(last).slice(0, 10) !== document.service_date.slice(0, 10)
+                        ? `${new Date(document.service_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} – ${new Date(last).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                        : new Date(document.service_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+                    })()}
                   </p>
                   {document.pickup_time && (
                     <p className="text-sm text-gray-600 mt-1">{t('pickup')}: {document.pickup_time}</p>
@@ -560,6 +568,9 @@ export default function SupplierDocumentViewPage() {
                           {service.date && new Date(service.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                           {service.city && ` • ${service.city}`}
                         </p>
+                        {service.notes && !String(service.notes).startsWith('__grid:') && (
+                          <p className="text-xs text-gray-600 mt-0.5 whitespace-pre-line">{service.notes}</p>
+                        )}
                       </div>
                       <p className="text-sm text-gray-600">x{service.quantity || 1}</p>
                     </div>
@@ -572,7 +583,7 @@ export default function SupplierDocumentViewPage() {
             {document.special_requests && (
               <div className="p-6 border-b border-gray-200 bg-amber-50">
                 <p className="text-xs text-amber-700 font-medium mb-1">{t('specialRequests')}</p>
-                <p className="text-sm text-gray-700">{document.special_requests}</p>
+                <p className="text-sm text-gray-700 whitespace-pre-line">{document.special_requests}</p>
               </div>
             )}
 

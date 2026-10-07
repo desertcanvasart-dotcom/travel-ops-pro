@@ -62,13 +62,13 @@ const generate = async (body: Record<string, unknown> = {}) => {
 
 beforeEach(() => { store.docs = [] })
 
-describe('one document per kind, per place', () => {
-  it('Cairo transport and hotel on one voucher each; the Alexandria sites named on theirs; no tips', async () => {
+describe('one document per supplier, split only where it must be', () => {
+  it('Cairo transport and the hotel stay on one voucher each; the sites named on one entrance order; no tips', async () => {
     const out = await generate()
     expect(out.success).toBe(true)
     const titles = store.docs.map(d => `${d.document_type}: ${d.supplier_name} (${d.services.length})`).sort()
     expect(titles).toEqual([
-      'activity_voucher: Alexandria Entrance Fees (1)',
+      'activity_voucher: Entrance Fees (1)',
       'hotel_voucher: Cairo Hotel (3)',
       'transport_voucher: Cairo Transportation (3)',
     ])
@@ -86,5 +86,21 @@ describe('one document per kind, per place', () => {
   it('asking for one kind makes only that kind (the button sends documentTypes)', async () => {
     await generate({ documentTypes: ['hotel_voucher'] })
     expect(store.docs.map(d => d.document_type)).toEqual(['hotel_voucher'])
+  })
+})
+
+describe('a trip documented before the grouping changed', () => {
+  it('regenerating puts no service on a second document, whatever the old ones were called', async () => {
+    // What the old per-kind-per-place grouping made, under its own names.
+    store.docs = [
+      { id: 'old-1', status: 'draft', document_type: 'hotel_voucher', supplier_name: 'Cairo Hotel',
+        services: DAYS.flatMap(d => d.services.filter(s => s.service_type === 'accommodation').map(s => ({ ...s, day_number: d.day_number }))) },
+      { id: 'old-2', status: 'sent', document_type: 'activity_voucher', supplier_name: 'Alexandria Entrance Fees',
+        services: [{ day_number: 3, service_type: 'entrance', service_name: "Entrance Fees (non-EUR) — Catacombs, Pompey's Pillar" }] },
+    ]
+    const out = await generate()
+    // Only the transport, which no document carried yet.
+    expect(out.count).toBe(1)
+    expect(store.docs.slice(2).map(d => d.document_type)).toEqual(['transport_voucher'])
   })
 })

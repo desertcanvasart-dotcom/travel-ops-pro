@@ -516,9 +516,17 @@ export async function generateSupplierDocumentPDF(
     pdf.setFontSize(10)
     pdf.setFont(fontFamily, 'bold')
     pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
-    const serviceDate = doc.service_date ? new Date(doc.service_date).toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US', { 
-      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' 
-    }) : '—'
+    // A voucher covering several days (all of a supplier's Cairo transfers,
+    // a guide's whole booking) shows its first and last day, not just the first.
+    const lineDates = (doc.services || []).map(sv => sv.date).filter((d): d is string => !!d).sort()
+    const lastDate = lineDates[lineDates.length - 1]
+    const fmt = (d: string, long: boolean) => new Date(d).toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US',
+      long ? { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' })
+    const serviceDate = !doc.service_date
+      ? '—'
+      : lastDate && lastDate.slice(0, 10) !== doc.service_date.slice(0, 10)
+        ? `${fmt(doc.service_date, false)} – ${fmt(lastDate, false)}`
+        : fmt(doc.service_date, true)
     pdf.text(serviceDate, margin + 4, y + 14)
     
     // Pickup Time
@@ -642,12 +650,16 @@ export async function generateSupplierDocumentPDF(
       // Get item name
       const itemName = item.route_name || item.restaurant_name || (item.guide_language ? `${item.guide_language} ${(item.guide_type || '').replace(/_/g, ' ')} - ${(item.tour_duration || '').replace(/_/g, ' ')}` : null) || item.attraction_name || item.service_name || item.service_type || 'Service'
       const itemCity = item.city ? ` (${item.city})` : ''
+      // Each line's own day: a consolidated voucher lists several.
+      const itemDate = item.date
+        ? `${new Date(item.date).toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-US', { month: 'short', day: 'numeric' })} · `
+        : ''
       // The whole name, wrapped — an entrance voucher names its sites, which
       // ran past the 60 characters this used to cut at — and the line's
       // notes under it ("Inside: … | Photo stops: …"), never printed before.
       pdf.setFont(fontFamily, 'normal')
       pdf.setFontSize(8)
-      const nameLines: string[] = pdf.splitTextToSize(itemName + itemCity, contentWidth - 60).slice(0, 3)
+      const nameLines: string[] = pdf.splitTextToSize(itemDate + itemName + itemCity, contentWidth - 60).slice(0, 3)
       pdf.setFontSize(7)
       const noteLines: string[] = item.notes && typeof item.notes === 'string' && !item.notes.startsWith('__grid:')
         ? pdf.splitTextToSize(item.notes, contentWidth - 60).slice(0, 2)
