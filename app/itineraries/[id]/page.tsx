@@ -1548,7 +1548,8 @@ export default function ViewItineraryPage() {
           extraExpenses={itineraryExpenses.map(exp => ({
             amount: exp.amount,
             currency: exp.currency,
-            category: exp.category
+            category: exp.category,
+            booking_supplier_status_id: exp.booking_supplier_status_id
           }))}
         />}
 
