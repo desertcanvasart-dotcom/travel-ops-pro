@@ -781,15 +781,15 @@ export default function ViewItineraryPage() {
   }
 
   /**
-   * The quote PDF in one language: that language's days, its trip title and
-   * inclusions (they were the source's before, whatever the language), and
-   * headings in that language.
+   * The quote PDF in one language: that language's days, its trip title (it
+   * was the source's before, whatever the language), and headings in that
+   * language.
    */
   const buildQuotePdf = async (lang: Language, pdfDays: DayWithServices[], showBreakdown?: boolean) => {
     if (!itinerary) throw new Error('No itinerary')
     const content = getVersionedContent(lang)
     return generateItineraryPDF(
-      { ...itinerary, trip_name: content.trip_name, inclusions: content.inclusions, exclusions: content.exclusions },
+      { ...itinerary, trip_name: content.trip_name },
       pdfDays,
       {
         ...(showBreakdown === undefined ? {} : { showPricingBreakdown: showBreakdown, showServiceDetails: showBreakdown }),
