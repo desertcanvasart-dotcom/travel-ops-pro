@@ -59,7 +59,7 @@ export async function GET(
 
     // The language the client reads, so the page can say when the trip is
     // not written in it. Free text on the client record; the page normalises
-    // it (lib/itineraries/content-language.ts). A missing client is no answer.
+    // it (@autoura/ui/lib normalizeClientLanguage). A missing client is no answer.
     let clientPreferredLanguage: string | null = null
     if (data.client_id) {
       const { data: client } = await supabase

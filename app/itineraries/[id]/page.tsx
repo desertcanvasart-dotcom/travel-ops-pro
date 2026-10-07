@@ -31,21 +31,33 @@ import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { itineraryCompleteness } from '@/lib/pricing/itinerary-completeness'
 import { describeGaps } from '@/lib/pricing/quote-completeness'
-import { LanguageStatusRow, DayLanguageChip, BilingualDayEditor, HighlightPlaceholders, type ContentView } from '@/components/multilingual'
-import ItineraryAttentionStrip from '@/components/itineraries/ItineraryAttentionStrip'
-import StatusPipeline from '@/components/itineraries/StatusPipeline'
-import CoverageGrid from '@/components/itineraries/CoverageGrid'
-import { RailSection, RailGroup, DocRow, RAIL_ACTION } from '@/components/itineraries/RailSection'
-import type { Language, ItineraryVersion } from '@/types/multilingual'
-import { LANGUAGE_NAMES } from '@/types/multilingual'
+// The page's shared pieces — header pipeline, Needs attention, rail,
+// coverage, language layer — come from @autoura/ui, which autoura-saas uses
+// too. This page loads the data and owns the actions.
 import {
+  AttentionStrip,
+  BilingualDayEditor,
+  DayLanguageChip,
+  DocRow,
+  HighlightPlaceholders,
+  LABEL_SETS,
+  LanguageStatusRow,
+  RAIL_ACTION,
+  RailGroup,
+  RailSection,
+  StatusPipeline,
+  UiLabelsProvider,
+  itineraryAttention,
   normalizeClientLanguage,
   splitTourCode,
   summarizeLanguage,
+  type ContentView,
   type DayText,
   type DayTranslationStatus,
-} from '@/lib/itineraries/content-language'
-import { itineraryAttention } from '@/lib/itineraries/itinerary-attention'
+} from '@autoura/ui'
+import CoverageGrid from '@/components/itineraries/CoverageGrid'
+import type { Language, ItineraryVersion } from '@/types/multilingual'
+import { LANGUAGE_NAMES } from '@/types/multilingual'
 
 const ItineraryMap = dynamic(() => import('@/components/ItineraryMap'), {
   ssr: false,
@@ -1383,6 +1395,19 @@ export default function ViewItineraryPage() {
   const documentLanguageReady = (lang: Language) =>
     lang === sourceLanguage || (languageSummaries.find(l => l.language === lang)?.status ?? 'missing') !== 'missing'
 
+  /** One call to the day-translations API, then the statuses reloaded. A
+   *  refusal throws with the server's reason, which the editor shows. */
+  const dayTranslationRequest = async (method: 'POST' | 'PUT', body: Record<string, unknown>) => {
+    const res = await fetch(`/api/itineraries/${params.id}/day-translations`, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const data = await res.json().catch(() => null)
+    if (!res.ok || !data?.success) throw new Error(data?.error || '')
+    await fetchDayTranslations()
+  }
+
   // "Translate missing and outdated days". A language with no version row yet
   // goes through copy-translate, which also makes the trip title, the
   // inclusions and the service names; after that, day by day.
@@ -1440,6 +1465,7 @@ export default function ViewItineraryPage() {
   }
 
   return (
+    <UiLabelsProvider labels={LABEL_SETS[intlLocale] ?? LABEL_SETS.en}>
     <div className="min-h-screen bg-gray-50">
       {/* HEADER */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-30">
@@ -1553,7 +1579,7 @@ export default function ViewItineraryPage() {
           translation sits above the money and operations any more. */}
       {attentionItems.length > 0 && (
         <div className="container mx-auto px-4 pt-4">
-          <ItineraryAttentionStrip
+          <AttentionStrip
             items={attentionItems}
             onOpen={item => openDailyItinerary(item.language && item.language !== sourceLanguage ? 'side' : (contentView ?? sourceLanguage))}
           />
@@ -1793,14 +1819,13 @@ export default function ViewItineraryPage() {
                             return (
                               <div className="mb-4">
                                 <BilingualDayEditor
-                                  itineraryId={itinerary.id}
-                                  dayId={day.id}
                                   sourceLanguage={sourceLanguage}
                                   targetLanguage={sideTarget}
                                   source={tr.source}
                                   target={target?.text ?? null}
                                   status={target?.status ?? 'missing'}
-                                  onChanged={async () => { await fetchDayTranslations() }}
+                                  onTranslate={() => dayTranslationRequest('POST', { language: sideTarget, day_ids: [day.id] })}
+                                  onSave={text => dayTranslationRequest('PUT', { language: sideTarget, day_id: day.id, ...text })}
                                 />
                               </div>
                             )
@@ -2594,5 +2619,6 @@ export default function ViewItineraryPage() {
         onToggleBreakdown={handleToggleBreakdown}
       />
     </div>
+    </UiLabelsProvider>
   )
 }
