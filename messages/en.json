@@ -1631,7 +1631,11 @@
         "duplicateHint": "A new draft with the same days, services and translations",
         "duplicateTitle": "Duplicate this trip?",
         "duplicateMessage": "A new draft with the same days, services, prices and translations. The booking, invoices, payments, assigned staff, tasks and live log stay with this one.",
-        "duplicateFailed": "Could not duplicate the trip."
+        "duplicateFailed": "Could not duplicate the trip.",
+        "pickupDetails": "Pickup details",
+        "pickupDetailsHint": "A day's pickup time, place, guide and driver, to the client on WhatsApp",
+        "pickupSent": "Pickup details sent",
+        "pickupSaved": "Pickup details saved — finish sending in WhatsApp"
       },
       "ownWhatsApp": {
         "menuItem": "Send from my WhatsApp",
@@ -1712,6 +1716,41 @@
         "kind_completed": "Completed",
         "kind_delayed": "Running late",
         "kind_note": "Note"
+      },
+      "pickup": {
+        "title": "Pickup details",
+        "messageLanguage": "Message language",
+        "day": "Day",
+        "dayOption": "Day {number} · {date}",
+        "time": "Time",
+        "place": "Pickup point",
+        "placePlaceholder": "Hotel lobby",
+        "nobodyAssigned": "Nobody is assigned to this day yet — the message names no guide or driver.",
+        "message": "Message",
+        "rewrite": "Rewrite from the details",
+        "preparing": "Preparing…",
+        "noPhone": "This itinerary has no client phone number — add it in Edit itinerary.",
+        "cancel": "Cancel",
+        "sendMine": "Send from my WhatsApp",
+        "mineHint": "Open your own WhatsApp with this message typed in",
+        "sendAgency": "Send (business number)",
+        "prepareFailed": "Could not prepare the message",
+        "sendFailed": "Could not send",
+        "saveFailed": "Could not save the pickup details"
+      },
+      "chat": {
+        "title": "Traveller chat",
+        "subtitle": "shared with the traveller's trip page",
+        "loading": "Loading…",
+        "empty": "No messages yet. Anything you send here appears on the traveller's trip page (the share link), and they can write back from it.",
+        "placeholder": "Reply to the traveller…",
+        "send": "Send",
+        "sending": "Sending…",
+        "sendFailed": "Failed to send",
+        "notNotified": "not notified",
+        "notify_failed": "The office notification failed",
+        "notify_not_configured": "No notification channel is set up (push or a contact email)",
+        "notify_no_recipients": "Nobody was reachable — no browser subscribed to notifications and no contact email"
       }
     },
     "editAction": "Edit",

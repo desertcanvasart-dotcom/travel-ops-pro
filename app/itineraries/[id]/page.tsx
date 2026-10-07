@@ -8,7 +8,7 @@ import { useTranslations, useLocale, createTranslator } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Loader2, Languages, ClipboardList, AlertTriangle, BookOpen, MessageCircle, Share2, MoreHorizontal, RotateCcw, XCircle, Info, Copy } from 'lucide-react'
+import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Loader2, Languages, ClipboardList, AlertTriangle, BookOpen, MessageCircle, Share2, MoreHorizontal, RotateCcw, XCircle, Info, Copy, MapPin } from 'lucide-react'
 // The itinerary PDF generator (and jsPDF behind it) loads on first use, not
 // with the page.
 const generateItineraryPDF = async (...args: Parameters<typeof import('@/lib/pdf-generator').generateItineraryPDF>) =>
@@ -48,6 +48,8 @@ import type { TripPnL } from '@/lib/trip-pnl'
 import HeaderMenu from '@/components/HeaderMenu'
 import TripTasksCard from '@/components/itineraries/TripTasksCard'
 import TripTimeline from '@/components/itineraries/TripTimeline'
+import TravellerChat from '@/components/itineraries/TravellerChat'
+import PickupDetailsDialog from '@/components/itineraries/PickupDetailsDialog'
 import CancelTripDialog from '@/components/itineraries/CancelTripDialog'
 import ComposeEmailModal from '@/components/unified/ComposeEmailModal'
 import { useAuth } from '@/app/contexts/AuthContext'
@@ -1352,6 +1354,7 @@ export default function ViewItineraryPage() {
   const [showEmail, setShowEmail] = useState(false)
   const [sendingOwnWhatsApp, setSendingOwnWhatsApp] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
+  const [showPickup, setShowPickup] = useState(false)
 
   const scrollToId = (id: string) => setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
 
@@ -1662,6 +1665,7 @@ export default function ViewItineraryPage() {
                     disabled: sendingOwnWhatsApp || !itinerary.client_phone,
                     title: itinerary.client_phone ? tOwn('menuHint') : t('clientPhoneRequired'),
                   },
+                  { label: tStage('pickupDetails'), icon: <MapPin className="w-4 h-4" />, onSelect: () => setShowPickup(true), disabled: days.length === 0 || itinerary.status === 'cancelled', title: tStage('pickupDetailsHint') },
                   { label: tStage('shareLink'), icon: <Share2 className="w-4 h-4" />, onSelect: () => { setTab('messages'); scrollToId('share-link') }, title: tStage('shareLinkHint') },
                 ]}
               />
@@ -1779,6 +1783,21 @@ export default function ViewItineraryPage() {
         hideTrigger
       />
       <GenerateOpsSheetButton itineraryId={itinerary.id} itineraryCode={itinerary.itinerary_code} openSignal={opsSheetSignal} hideTrigger />
+      {showPickup && (
+        <PickupDetailsDialog
+          itineraryId={itinerary.id}
+          days={days.map(d => ({ day_number: d.day_number, date: d.date }))}
+          today={today}
+          language={clientLanguage ?? sourceLanguage}
+          onClose={() => setShowPickup(false)}
+          onSent={how => {
+            setShowPickup(false)
+            setSendSuccess(how === 'agency' ? tStage('pickupSent') : tStage('pickupSaved'))
+            setTimeout(() => setSendSuccess(null), 5000)
+            fetchItinerary()
+          }}
+        />
+      )}
       {showCancel && (
         <CancelTripDialog
           itineraryId={itinerary.id}
@@ -2448,6 +2467,9 @@ export default function ViewItineraryPage() {
 
             {tab === 'messages' && (
               <div className="space-y-4">
+                {/* The thread with the traveller, shared with their trip page. */}
+                <TravellerChat itineraryId={itinerary.id} />
+
                 {/* WHATSAPP — where the payment stands, then the messages. */}
                 <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2480,6 +2502,11 @@ export default function ViewItineraryPage() {
                       <button type="button" onClick={sendFromMyWhatsApp} disabled={sendingOwnWhatsApp} className="px-3 py-1.5 border border-green-300 bg-white text-green-700 rounded-md hover:bg-green-50 text-sm font-medium flex items-center gap-1.5 disabled:opacity-50">
                         {sendingOwnWhatsApp ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />} {tOwn('menuItem')}
                       </button>
+                      {days.length > 0 && itinerary.status !== 'cancelled' && (
+                        <button type="button" onClick={() => setShowPickup(true)} className="px-3 py-1.5 border border-gray-300 bg-white text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium flex items-center gap-1.5">
+                          <MapPin className="w-4 h-4" /> {tStage('pickupDetails')}
+                        </button>
+                      )}
                       {itinerary.status === 'draft' && <WhatsAppButton itineraryId={itinerary.id} type="status" status="confirmed" onSuccess={() => { setSendSuccess(t('bookingConfirmationSent')); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} className="bg-blue-600 hover:bg-blue-700" />}
                       {itinerary.status !== 'completed' && <WhatsAppButton itineraryId={itinerary.id} type="status" status="pending_payment" onSuccess={() => { setSendSuccess(t('paymentReminderSent')); setTimeout(() => setSendSuccess(null), 5000) }} className="bg-yellow-600 hover:bg-yellow-700" />}
                       <WhatsAppButton itineraryId={itinerary.id} type="status" status="paid" onSuccess={() => { setSendSuccess(t('paymentConfirmationSent')); setTimeout(() => setSendSuccess(null), 5000); fetchItinerary() }} className="bg-emerald-600 hover:bg-emerald-700" />
