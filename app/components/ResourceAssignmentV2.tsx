@@ -15,6 +15,8 @@ import { useVehicleLabel } from '@/hooks/useVehicleLabel'
 import { onePerPlace, PLACE_TYPES } from '@/lib/resources/one-per-place'
 import type { VehicleRateResult } from '@/lib/transport-rate-utils'
 import { cruiseRouteLabel, cruiseRoutesPresent } from '@/lib/resources/assignable-cruises'
+import { OUTSIDE_TYPES, outsideAssignmentMessage, outsideResourceName, readOutside } from '@/lib/resources/outside-staff'
+import { formatPhoneForWhatsApp, generateWhatsAppLink } from '@/lib/communication-utils'
 
 // Types
 interface Resource {
@@ -281,6 +283,11 @@ export default function ResourceAssignmentV2({
   
   // Add resource modal
   const [showAddModal, setShowAddModal] = useState(false)
+  // A guide or staff member from outside the directory, typed in for this
+  // trip only (lib/resources/outside-staff): nothing is added to the directory.
+  const [manualMode, setManualMode] = useState(false)
+  const [manualName, setManualName] = useState('')
+  const [manualPhone, setManualPhone] = useState('')
   const [addFormData, setAddFormData] = useState({
     resource_id: '',
     start_date: startDate,
@@ -505,7 +512,12 @@ export default function ResourceAssignmentV2({
   }
 
   const handleAddResource = async () => {
-    if (!addFormData.resource_id) {
+    const manual = manualMode && OUTSIDE_TYPES.has(activeTab)
+    if (manual && !manualName.trim()) {
+      await dialog.alert(t('outsideNameMissingTitle'), t('outsideNameMissing'), 'warning')
+      return
+    }
+    if (!manual && !addFormData.resource_id) {
       await dialog.alert('Missing Selection', 'Please select a resource', 'warning')
       return
     }
@@ -573,13 +585,21 @@ export default function ResourceAssignmentV2({
         ? `[tier:${addFormData.vehicle_tier}]${addFormData.notes ? ' ' + addFormData.notes : ''}`
         : addFormData.notes
 
+      // Someone typed in by hand has no directory row: a fresh id stands in
+      // (resource_id has no foreign key), and the name carries the phone.
+      let resourceId = addFormData.resource_id
+      if (manual) {
+        resourceId = crypto.randomUUID()
+        resourceName = outsideResourceName(manualName, manualPhone)
+      }
+
       const response = await fetch('/api/itinerary-resources', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           itinerary_id: itineraryId,
           resource_type: activeTab,
-          resource_id: addFormData.resource_id,
+          resource_id: resourceId,
           resource_name: resourceName,
           start_date: addFormData.start_date,
           end_date: addFormData.end_date,
@@ -736,6 +756,9 @@ export default function ResourceAssignmentV2({
     })
     setSelectedRateTiers([])
     setAutoSelectedTier(null)
+    setManualMode(false)
+    setManualName('')
+    setManualPhone('')
     resetModalFilters()
   }
 
@@ -854,7 +877,10 @@ export default function ResourceAssignmentV2({
           <div className="space-y-3 mb-4">
             {activeResources.map((resource) => {
               const typeConfig = RESOURCE_TYPES.find(t => t.key === resource.resource_type)
-              const canNotify = typeConfig?.canNotify || false
+              // Typed in by hand: no record to look up, so no automatic notice —
+              // with a phone, the office messages them from its own WhatsApp.
+              const outside = readOutside(resource.resource_name)
+              const canNotify = (typeConfig?.canNotify || false) && !outside
               const isSending = sendingWhatsApp === resource.id
               const wasSent = whatsAppSent.has(resource.id)
               
@@ -925,6 +951,21 @@ export default function ResourceAssignmentV2({
                     
                     {/* Action Buttons */}
                     <div className="flex items-center gap-2">
+                      {outside?.phone && (
+                        <a
+                          href={generateWhatsAppLink(formatPhoneForWhatsApp(outside.phone), outsideAssignmentMessage({
+                            name: outside.name, tripName, clientName, startDate: resource.start_date,
+                            endDate: resource.end_date, travelers: numTravelers, notes: resource.notes,
+                          }))}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
+                          title={t('sendViaMyWhatsAppHint')}
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                          <span className="hidden sm:inline">{t('sendViaMyWhatsApp')}</span>
+                        </a>
+                      )}
                       {/* WhatsApp Button */}
                       {canNotify && (
                         <button
@@ -1027,7 +1068,7 @@ export default function ResourceAssignmentV2({
               {/* ===== FILTER SECTION ===== */}
 
               {/* City Filter - for guides, vehicles, hotels, restaurants */}
-              {activeTypeConfig.filterType === 'city' && (
+              {activeTypeConfig.filterType === 'city' && !(manualMode && OUTSIDE_TYPES.has(activeTab)) && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     <MapPin className="w-4 h-4 inline mr-1.5 text-gray-400" />
@@ -1057,7 +1098,7 @@ export default function ResourceAssignmentV2({
               )}
 
               {/* Airport Location Filter - for airport assistants */}
-              {activeTypeConfig.filterType === 'airport' && (
+              {activeTypeConfig.filterType === 'airport' && !(manualMode && OUTSIDE_TYPES.has(activeTab)) && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     <Plane className="w-4 h-4 inline mr-1.5 text-gray-400" />
@@ -1086,7 +1127,7 @@ export default function ResourceAssignmentV2({
               )}
 
               {/* Hotel City Filter - for hotel assistants */}
-              {activeTypeConfig.filterType === 'hotelCity' && (
+              {activeTypeConfig.filterType === 'hotelCity' && !(manualMode && OUTSIDE_TYPES.has(activeTab)) && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     <Hotel className="w-4 h-4 inline mr-1.5 text-gray-400" />
@@ -1146,6 +1187,37 @@ export default function ResourceAssignmentV2({
               )}
 
               {/* ===== RESOURCE SELECTION ===== */}
+              {manualMode && OUTSIDE_TYPES.has(activeTab) ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('outsideName')} *</label>
+                    <input
+                      type="text"
+                      value={manualName}
+                      onChange={(e) => setManualName(e.target.value)}
+                      placeholder={t('outsideNamePlaceholder')}
+                      autoFocus
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {t('outsidePhone')} <span className="font-normal text-gray-400">({t('optional')})</span>
+                    </label>
+                    <input
+                      type="tel"
+                      value={manualPhone}
+                      onChange={(e) => setManualPhone(e.target.value)}
+                      placeholder="+20 100 000 0000"
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500">{t('outsideHint')}</p>
+                  <button type="button" onClick={() => setManualMode(false)} className="text-sm font-medium text-primary-700 hover:underline">
+                    {t('outsideBackToList')}
+                  </button>
+                </div>
+              ) : (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   {t('selectResource', { type: t(activeTypeConfig.labelKey).slice(0, -1) })} *
@@ -1179,7 +1251,17 @@ export default function ResourceAssignmentV2({
                     {t('showingOfTotal', { showing: filteredAvailableResources.length, total: allAvailableForType.length })}
                   </p>
                 )}
+                {OUTSIDE_TYPES.has(activeTab) && (
+                  <button
+                    type="button"
+                    onClick={() => { setManualMode(true); setAddFormData({ ...addFormData, resource_id: '' }) }}
+                    className="mt-2 text-sm font-medium text-primary-700 hover:underline"
+                  >
+                    {t('outsideEnterManually')}
+                  </button>
+                )}
               </div>
+              )}
 
               {/* ===== VEHICLE TIER SELECTION ===== */}
               {activeTab === 'vehicle' && addFormData.resource_id && selectedRateTiers.length > 0 && (
@@ -1313,7 +1395,7 @@ export default function ResourceAssignmentV2({
               <button
                 type="button"
                 onClick={handleAddResource}
-                disabled={saving || !addFormData.resource_id}
+                disabled={saving || (manualMode && OUTSIDE_TYPES.has(activeTab) ? !manualName.trim() : !addFormData.resource_id)}
                 className={`px-6 py-2 text-white rounded-lg font-medium flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${activeColor.bg} hover:opacity-90`}
               >
                 {saving ? (

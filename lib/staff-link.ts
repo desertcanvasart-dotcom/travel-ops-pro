@@ -17,6 +17,7 @@
 // difference between the two apps.
 
 import { generateShareToken, isValidShareToken } from '@/lib/itinerary-share'
+import { readOutside } from '@/lib/resources/outside-staff'
 
 export const generateStaffToken = generateShareToken
 export const isValidStaffToken = isValidShareToken
@@ -57,7 +58,8 @@ export function toStaffView(
     tripTitle: str(itinerary.trip_name) ?? 'Trip',
     tripStart: str(itinerary.start_date),
     tripEnd: str(itinerary.end_date),
-    memberName: str(resource.resource_name) ?? 'Team member',
+    // A person typed in for one trip: their name, not "Name · phone (outside)".
+    memberName: readOutside(str(resource.resource_name))?.name ?? str(resource.resource_name) ?? 'Team member',
     assignmentStart: str(resource.start_date),
     assignmentEnd: str(resource.end_date),
     events: [],
@@ -105,6 +107,9 @@ export async function resolveAssigneeContact(
     const rid = resource?.resource_id
     if (!type || !rid) return null
     const fallbackName = str(resource.resource_name)
+    // Typed in for one trip: no directory row; the name carries the phone.
+    const outside = readOutside(fallbackName)
+    if (outside) return { name: outside.name, phone: outside.phone }
 
     // Person-types only — a hotel or restaurant is a venue, not a link-holder.
     const tableFor: Record<string, string | undefined> = {
