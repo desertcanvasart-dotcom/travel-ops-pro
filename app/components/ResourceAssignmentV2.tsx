@@ -15,7 +15,8 @@ import { useVehicleLabel } from '@/hooks/useVehicleLabel'
 import { onePerPlace, PLACE_TYPES } from '@/lib/resources/one-per-place'
 import type { VehicleRateResult } from '@/lib/transport-rate-utils'
 import { cruiseRouteLabel, cruiseRoutesPresent } from '@/lib/resources/assignable-cruises'
-import { OUTSIDE_TYPES, outsideAssignmentMessage, outsideResourceName, readOutside } from '@/lib/resources/outside-staff'
+import { assignmentContact } from '@/lib/resources/assignment-contact'
+import { OUTSIDE_TYPES, assignmentMessage, outsideResourceName, readOutside } from '@/lib/resources/outside-staff'
 import { formatPhoneForWhatsApp, generateWhatsAppLink } from '@/lib/whatsapp-link'
 
 // Types
@@ -881,6 +882,7 @@ export default function ResourceAssignmentV2({
               // with a phone, the office messages them from its own WhatsApp.
               const outside = readOutside(resource.resource_name)
               const canNotify = (typeConfig?.canNotify || false) && !outside
+              const contact = assignmentContact(resource, availableResources[resource.resource_type] || [])
               const isSending = sendingWhatsApp === resource.id
               const wasSent = whatsAppSent.has(resource.id)
               
@@ -951,10 +953,12 @@ export default function ResourceAssignmentV2({
                     
                     {/* Action Buttons */}
                     <div className="flex items-center gap-2">
-                      {outside?.phone && (
+                      {/* From the office's own WhatsApp, the assignment typed in:
+                          for anyone with a number, in the directory or not. */}
+                      {contact && (
                         <a
-                          href={generateWhatsAppLink(formatPhoneForWhatsApp(outside.phone), outsideAssignmentMessage({
-                            name: outside.name, tripName, clientName, startDate: resource.start_date,
+                          href={generateWhatsAppLink(formatPhoneForWhatsApp(contact.phone), assignmentMessage({
+                            name: contact.name, tripName, clientName, startDate: resource.start_date,
                             endDate: resource.end_date, travelers: numTravelers, notes: resource.notes,
                           }))}
                           target="_blank"
