@@ -32,6 +32,9 @@ interface Props {
   templateId?: string | null
   /** Called after the link is saved so the parent can refresh its copy. */
   onLinked?: (templateId: string) => void
+  /** Restyle the trigger (the itinerary page's Documents rail uses a link). */
+  triggerClassName?: string
+  triggerContent?: React.ReactNode
 }
 
 /** Most template_names already open with the code ("NEK502-LND — 5 days: …"),
@@ -57,6 +60,8 @@ export default function GenerateNitteiButton({
   startDate,
   templateId,
   onLinked,
+  triggerClassName,
+  triggerContent,
 }: Props) {
   const t = useTranslations('itineraries.nittei')
   const [open, setOpen] = useState(false)
@@ -140,11 +145,16 @@ export default function GenerateNitteiButton({
   return (
     <>
       <button
+        type="button"
         onClick={() => setOpen(true)}
-        className="h-10 px-4 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-2"
+        className={triggerClassName ?? "h-10 px-4 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-2"}
       >
-        <FileText className="w-4 h-4" />
-        {t('button')}
+        {triggerContent ?? (
+          <>
+            <FileText className="w-4 h-4" />
+            {t('button')}
+          </>
+        )}
       </button>
 
       {open && (

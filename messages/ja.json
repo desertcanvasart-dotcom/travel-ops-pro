@@ -1937,7 +1937,36 @@
         "invoicedWithoutBooking": "請求書は発行済みですが、予約がまだありません。",
         "overnightWithoutStay": "{days}日目は宿泊がありますが、ホテルまたはクルーズの行がありません。料金が不完全な可能性があります。"
       },
-      "tourCode": "プログラムコード"
+      "tourCode": "プログラムコード",
+      "layout": {
+        "tabItinerary": "旅程",
+        "tabOperations": "手配",
+        "tabFinance": "会計",
+        "tabMessages": "連絡",
+        "stepQuote": "見積",
+        "stepSent": "送付済",
+        "stepConfirmed": "確定",
+        "stepBooked": "予約済",
+        "stepInvoiced": "請求済",
+        "stepPaid": "入金済",
+        "cancelled": "キャンセル",
+        "trip": "旅行",
+        "documents": "書類",
+        "forClient": "お客様向け",
+        "internal": "社内用",
+        "docNittei": "日程表",
+        "docQuote": "見積書PDF",
+        "contractHint": "言語は契約書画面で選択",
+        "docShareLink": "共有リンク",
+        "docSurvey": "アンケート",
+        "docOpsSheet": "現地手配書",
+        "staffLanguage": "スタッフ言語",
+        "docSupplier": "サプライヤー書類",
+        "generate": "作成",
+        "open": "開く",
+        "create": "作成",
+        "translateFirst": "{language}のテキストがまだありません。先に翻訳してください"
+      }
     },
     "editAction": "編集",
     "share": {

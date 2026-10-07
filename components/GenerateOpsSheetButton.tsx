@@ -22,6 +22,9 @@ interface Props {
   itineraryId: string
   /** Prefills the group reference — the code the ground company files under. */
   itineraryCode?: string | null
+  /** Restyle the trigger (the itinerary page's Documents rail uses a link). */
+  triggerClassName?: string
+  triggerContent?: React.ReactNode
 }
 
 /** Today on the operator's own calendar, not UTC's. */
@@ -46,7 +49,7 @@ const EMPTY = {
   remarks: '',
 }
 
-export default function GenerateOpsSheetButton({ itineraryId, itineraryCode }: Props) {
+export default function GenerateOpsSheetButton({ itineraryId, itineraryCode, triggerClassName, triggerContent }: Props) {
   const t = useTranslations('itineraries.opsSheet')
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState({ ...EMPTY, group_ref: itineraryCode ?? '', final_date: todayLocalISO() })
@@ -68,12 +71,17 @@ export default function GenerateOpsSheetButton({ itineraryId, itineraryCode }: P
   return (
     <>
       <button
+        type="button"
         onClick={() => setOpen(true)}
         title={t('tooltip')}
-        className="h-10 px-4 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-2"
+        className={triggerClassName ?? "h-10 px-4 bg-[#647C47] text-white rounded-md hover:bg-[#4a5c35] text-sm font-medium flex items-center gap-2"}
       >
-        <FileText className="w-4 h-4" />
-        {t('button')}
+        {triggerContent ?? (
+          <>
+            <FileText className="w-4 h-4" />
+            {t('button')}
+          </>
+        )}
       </button>
       {open && (
         <div

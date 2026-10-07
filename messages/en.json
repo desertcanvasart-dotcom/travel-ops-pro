@@ -1488,7 +1488,36 @@
         "invoicedWithoutBooking": "This trip is invoiced but has no booking yet.",
         "overnightWithoutStay": "No hotel or cruise line on day {days}, although the night is spent there. The price is likely incomplete."
       },
-      "tourCode": "Programme code"
+      "tourCode": "Programme code",
+      "layout": {
+        "tabItinerary": "Itinerary",
+        "tabOperations": "Operations",
+        "tabFinance": "Finance",
+        "tabMessages": "Messages",
+        "stepQuote": "Quote",
+        "stepSent": "Sent",
+        "stepConfirmed": "Confirmed",
+        "stepBooked": "Booked",
+        "stepInvoiced": "Invoiced",
+        "stepPaid": "Paid",
+        "cancelled": "Cancelled",
+        "trip": "Trip",
+        "documents": "Documents",
+        "forClient": "For the client",
+        "internal": "Internal",
+        "docNittei": "Itinerary / 日程表",
+        "docQuote": "Quote PDF",
+        "contractHint": "Language chosen on the contract",
+        "docShareLink": "Share link",
+        "docSurvey": "Guest survey",
+        "docOpsSheet": "Ground ops sheet",
+        "staffLanguage": "Staff language",
+        "docSupplier": "Supplier documents",
+        "generate": "Generate",
+        "open": "Open",
+        "create": "Create",
+        "translateFirst": "No {language} text yet — translate it first"
+      }
     },
     "editAction": "Edit",
     "share": {
