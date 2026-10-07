@@ -25,6 +25,41 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      dashboard_attention_dismissals: {
+        Row: {
+          id: string
+          org_id: string
+          item_key: string
+          fingerprint: string
+          dismissed_by: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          item_key: string
+          fingerprint: string
+          dismissed_by?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          item_key?: string
+          fingerprint?: string
+          dismissed_by?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dashboard_attention_dismissals_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guest_surveys: {
         Row: {
           id: string

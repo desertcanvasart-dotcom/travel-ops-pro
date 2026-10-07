@@ -5,6 +5,7 @@ import { waitingSince } from '@/lib/email/automated-senders'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { attentionFingerprint, attentionKey, withoutDismissed, type AttentionDismissal } from '@/lib/dashboard/attention-dismissals'
 
 // ============================================
 // NEEDS ATTENTION — the dashboard's exceptions list
@@ -17,7 +18,10 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 //   * pending portal change requests (e.g. add-traveller)
 // And, not tied to a departure: customer emails waiting longer than
 // REPLY_OVERDUE_HOURS for an answer (lib/email/reply-status, 20261019).
-// Each item carries a deep link to the screen that fixes it. Severity:
+// Each item carries a deep link to the screen that fixes it, and the key and
+// fingerprint its Dismiss button sends (lib/dashboard/attention-dismissals,
+// migration 20261108): a dismissed row stays hidden until its state changes.
+// Severity:
 // 'urgent' = overdue or departing within 7 days; 'soon' = everything else.
 
 const HORIZON_DAYS = 45
@@ -221,7 +225,7 @@ export async function GET(request: NextRequest) {
     const overdueBefore = new Date(Date.now() - REPLY_OVERDUE_HOURS * 3_600_000).toISOString()
     const { data: waiting } = await supabase
       .from('email_conversations')
-      .select('id, client_name, client_email, subject, awaiting_reply_since')
+      .select('id, client_name, client_email, subject, awaiting_reply_since, last_message_at')
       .not('awaiting_reply_since', 'is', null)
       .lte('awaiting_reply_since', overdueBefore)
       .or('is_hidden.is.null,is_hidden.eq.false')
@@ -229,7 +233,7 @@ export async function GET(request: NextRequest) {
       // Read past the robots: the oldest rows were no-reply and ticket-system
       // mail, which would fill a list of 20 before any customer.
       .limit(100)
-    const customers = ((waiting ?? []) as { id: string; client_name: string | null; client_email: string | null; subject: string | null; awaiting_reply_since: string }[])
+    const customers = ((waiting ?? []) as { id: string; client_name: string | null; client_email: string | null; subject: string | null; awaiting_reply_since: string; last_message_at: string | null }[])
       .filter(c => waitingSince(c.client_email, c.awaiting_reply_since))
       .slice(0, 20)
     for (const c of customers) {
@@ -241,7 +245,8 @@ export async function GET(request: NextRequest) {
         tripName: c.subject,
         clientName: c.client_name || c.client_email,
         startDate: null,
-        detail: { conversationId: c.id, waitingSince: c.awaiting_reply_since, waiting: waitingLabel(c.awaiting_reply_since) },
+        // lastMessageAt: the customer writing again brings a dismissed row back.
+        detail: { conversationId: c.id, waitingSince: c.awaiting_reply_since, lastMessageAt: c.last_message_at, waiting: waitingLabel(c.awaiting_reply_since) },
         href: '/communications?awaiting_reply=1',
       })
     }
@@ -249,7 +254,22 @@ export async function GET(request: NextRequest) {
     // Urgent first, then by departure date (rows already date-ordered)
     items.sort((a, z) => (a.severity === z.severity ? 0 : a.severity === 'urgent' ? -1 : 1))
 
-    return NextResponse.json({ success: true, data: { items, scannedBookings: rows.length } })
+    // What the office has dismissed. A database without the table (migration
+    // 20261108 unapplied) hides nothing rather than sinking the list.
+    const { data: dismissalRows, error: dismissalError } = await supabase
+      .from('dashboard_attention_dismissals')
+      .select('item_key, fingerprint')
+      .eq('org_id', orgId)
+    const visible = withoutDismissed(items, dismissalError ? [] : ((dismissalRows ?? []) as AttentionDismissal[]))
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        items: visible.items.map(i => ({ ...i, dismissKey: attentionKey(i), dismissFingerprint: attentionFingerprint(i) })),
+        scannedBookings: rows.length,
+        dismissed: visible.dismissed,
+      },
+    })
   } catch (error: any) {
     console.error('Error building attention list:', error)
     return NextResponse.json(

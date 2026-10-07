@@ -459,7 +459,11 @@
     "receivedThisMonth": "今月の入金",
     "spentThisMonth": "今月の支出",
     "paymentsCount": "{count} 件",
-    "attnReplyOverdue": "お客様のメールが返信待ち · {time}"
+    "attnReplyOverdue": "お客様のメールが返信待ち · {time}",
+    "attnDismiss": "非表示",
+    "attnDismissHint": "状況が変わるまで（お客様からの新しいメール、残金や期限の変更、申込書の追加など）オフィス全体で非表示にします",
+    "attnDismissedCount": "{count}件を非表示中",
+    "attnUndo": "元に戻す"
   },
   "analytics": {
     "title": "分析ダッシュボード",

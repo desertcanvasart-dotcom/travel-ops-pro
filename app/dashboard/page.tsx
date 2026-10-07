@@ -30,6 +30,7 @@ import {
   Wallet,
   CreditCard,
   Receipt,
+  X,
 } from 'lucide-react'
 
 const supabase = createClient()
@@ -62,7 +63,9 @@ export default function DashboardPage() {
   const tCommon = useTranslations('common')
   const tDates = useTranslations('dates')
   const { profile } = useAuth()
-  const { canViewFinancials } = useRole()
+  const { canViewFinancials, canAccess } = useRole()
+  // Dismissing changes the office's shared list: staff only (the route agrees).
+  const canDismiss = canAccess(['admin', 'manager', 'agent'])
   const [money, setMoney] = useState<any | null>(null)
   const [stats, setStats] = useState<DashboardStats>({
     totalClients: 0,
@@ -86,6 +89,9 @@ export default function DashboardPage() {
     todayPaymentsReceived: 0
   })
   const [attention, setAttention] = useState<any[]>([])
+  // Rows hidden by a dismissal still in force, and the last one, for Undo.
+  const [dismissedCount, setDismissedCount] = useState(0)
+  const [undoable, setUndoable] = useState<{ item: any; index: number } | null>(null)
   const [recentClients, setRecentClients] = useState<any[]>([])
   const [upcomingFollowups, setUpcomingFollowups] = useState<any[]>([])
   const [recentQuotes, setRecentQuotes] = useState<any[]>([])
@@ -131,6 +137,7 @@ export default function DashboardPage() {
       const summary = summaryRes.ok ? (await summaryRes.json()).data : null
       const attentionData = attentionRes.ok ? (await attentionRes.json()).data : null
       setAttention(attentionData?.items || [])
+      setDismissedCount(Number(attentionData?.dismissed) || 0)
 
       // Recent clients (side panel)
       const { data: clients } = await supabase
@@ -211,6 +218,41 @@ export default function DashboardPage() {
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600" />
       </div>
     )
+  }
+
+
+  // Dismiss a Needs attention row: hidden for the office until its state
+  // changes (lib/dashboard/attention-dismissals). Shown gone at once; put back
+  // if the server refuses.
+  const dismissAttention = async (item: any, index: number) => {
+    setAttention(prev => prev.filter(x => x !== item))
+    setDismissedCount(n => n + 1)
+    setUndoable({ item, index })
+    const res = await fetch('/api/dashboard/attention/dismiss', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: item.dismissKey, fingerprint: item.dismissFingerprint }),
+    }).catch(() => null)
+    if (!res?.ok) {
+      setAttention(prev => [...prev.slice(0, index), item, ...prev.slice(index)])
+      setDismissedCount(n => Math.max(0, n - 1))
+      setUndoable(null)
+    }
+  }
+
+  const undoDismiss = async () => {
+    if (!undoable) return
+    const { item, index } = undoable
+    setUndoable(null)
+    const res = await fetch('/api/dashboard/attention/dismiss', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: item.dismissKey }),
+    }).catch(() => null)
+    if (res?.ok) {
+      setAttention(prev => [...prev.slice(0, index), item, ...prev.slice(index)])
+      setDismissedCount(n => Math.max(0, n - 1))
+    }
   }
 
   return (
@@ -465,10 +507,13 @@ export default function DashboardPage() {
         ) : (
           <div className="space-y-2">
             {attention.map((item, i) => (
+              <div
+                key={item.dismissKey ?? `${item.type}-${item.bookingId}-${i}`}
+                className="flex items-center gap-1 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+              >
               <Link
-                key={`${item.type}-${item.bookingId}-${i}`}
                 href={item.href}
-                className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                className="flex flex-1 min-w-0 items-center gap-3 p-3"
               >
                 <span
                   className={`w-2 h-2 rounded-full flex-shrink-0 ${item.severity === 'urgent' ? 'bg-red-500' : 'bg-amber-400'}`}
@@ -490,7 +535,29 @@ export default function DashboardPage() {
                 </div>
                 <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
               </Link>
+              {canDismiss && item.dismissKey && (
+                <button
+                  type="button"
+                  onClick={() => dismissAttention(item, i)}
+                  title={t('attnDismissHint')}
+                  aria-label={t('attnDismiss')}
+                  className="p-2 mr-1 rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-200 flex-shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+              </div>
             ))}
+          </div>
+        )}
+        {(undoable || dismissedCount > 0) && (
+          <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+            {dismissedCount > 0 && <span title={t('attnDismissHint')}>{t('attnDismissedCount', { count: dismissedCount })}</span>}
+            {undoable && (
+              <button type="button" onClick={undoDismiss} className="font-medium text-primary-600 hover:text-primary-700">
+                {t('attnUndo')}
+              </button>
+            )}
           </div>
         )}
       </div>
