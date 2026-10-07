@@ -12,6 +12,7 @@ import { soldAccommodationItems, ratesOn, rateOn, throughoutGuideRows } from '@/
 import { fillTipRoles, type TipRoleReader } from '@/lib/pricing/tip-roles'
 import { dayDate } from '@/lib/rates/date-window'
 import { isOwnAddress, loadOwnAddresses } from '@/lib/email/own-address'
+import { gridOvernightCities } from '@/lib/itineraries/grid-overnight'
 
 /**
  * What a slot SELLS — the lines the save writes, and so the stored total:
@@ -263,12 +264,18 @@ export async function POST(request: NextRequest) {
     // overrides so the rich gridCompleteness() can read them on the next load
     // and decide what each day requires. The 7 override fields stay NULL
     // (meaning "use the preset's default").
+    // Each night is where its bed is — the hotel picked that day (its city in
+    // Rates), the ship, or the night before's when nothing moves the party —
+    // not the day's sightseeing city: a day trip to Alexandria from a Cairo
+    // hotel said "Overnight in Alexandria" (lib/itineraries/overnight-city.ts).
+    const numbered = days.map((day: any, idx: number) => ({ ...day, dayNumber: day.dayNumber || idx + 1 }))
+    const overnightByDay = await gridOvernightCities(supabase as unknown as Parameters<typeof gridOvernightCities>[0], numbered)
     const dayInserts = days.map((day: any, idx: number) => ({
       day_number: day.dayNumber || idx + 1,
       title: day.title || `Day ${idx + 1}`,
       description: day.description || '',
       city: day.city || '',
-      overnight_city: day.city || '',
+      overnight_city: overnightByDay.get(day.dayNumber || idx + 1) ?? '',
       date: addDays(startDate, idx),
       // Day-type preset. Send DEFAULT_DAY_TYPE explicitly rather than NULL —
       // the RPC inserts day_type as given; the column is NOT NULL with a CHECK.

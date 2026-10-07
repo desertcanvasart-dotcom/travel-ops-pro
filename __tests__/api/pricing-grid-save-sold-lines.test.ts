@@ -13,6 +13,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // totalUpdate: the trip's total as finally stored — inserted, then reconciled.
 const state: { rpcDays: any[]; totalUpdate: number | null; inserted: any } = { rpcDays: [], totalUpdate: null, inserted: null }
 const tipRoles: Record<string, string> = {}
+const MENA = '55555555-5555-4555-8555-555555555555'
+const HOTEL_CITY: Record<string, string> = { [MENA]: 'Cairo' }
 
 // The office's addresses, as the own-address loader reads them.
 const OFFICE: Record<string, any[]> = {
@@ -45,7 +47,9 @@ function fakeDb() {
             in: async (_col: string, ids: string[]) => ({
               data: table === 'tipping_rates'
                 ? ids.filter(id => tipRoles[id]).map(id => ({ id, role_type: tipRoles[id] }))
-                : [],
+                : table === 'accommodation_rates'
+                  ? ids.filter(id => HOTEL_CITY[id]).map(id => ({ id, city: HOTEL_CITY[id] }))
+                  : [],
               error: null,
             }),
           }
@@ -166,5 +170,19 @@ describe('the client’s email', () => {
     const res = await POST(new Request('http://x', { method: 'POST', body: JSON.stringify({ config: config({ clientEmail: 'tersa@gmail.com' }), days }) }) as never)
     expect((await res.json()).warnings).toEqual([])
     expect(state.inserted.client_email).toBe('tersa@gmail.com')
+  })
+})
+
+describe('where each night is', () => {
+  it('a day trip to Alexandria from the Cairo hotel saves its night in Cairo, not "Alexandria"', async () => {
+    const mena = { rateId: MENA, name: 'Mena House', rateEur: 100, rateNonEur: 100 }
+    await save([
+      { dayNumber: 1, city: 'Cairo', dayType: 'arrival', slots: [slot('accommodation', [mena])] },
+      { dayNumber: 2, city: 'Alexandria', dayType: 'tour', slots: [slot('accommodation', [mena])] },
+      { dayNumber: 3, city: 'Cairo', dayType: 'departure', slots: [] },
+    ])
+    expect(state.rpcDays.map((d: any) => [d.city, d.overnight_city])).toEqual([
+      ['Cairo', 'Cairo'], ['Alexandria', 'Cairo'], ['Cairo', ''],
+    ])
   })
 })
