@@ -12,6 +12,7 @@ import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { getTransportRateForPax, getAllVehicleTiers } from '@/lib/transport-rate-utils'
 import { vehicleKeyLabel } from '@/lib/rates/vehicle-bands'
 import { useVehicleLabel } from '@/hooks/useVehicleLabel'
+import { onePerPlace, PLACE_TYPES } from '@/lib/resources/one-per-place'
 import type { VehicleRateResult } from '@/lib/transport-rate-utils'
 
 // Types
@@ -230,6 +231,11 @@ const RESOURCE_TYPES = [
   }
 ]
 
+/** Booked for a moment, not a stretch: their end date follows their start.
+ *  Defaulting them to the whole trip put the arrival's airport staff on every
+ *  day (found in autoura-saas, ITN-S-2026-8987; ported from its #611). */
+const SINGLE_DAY_TYPES = new Set(['airport_staff', 'restaurant'])
+
 const COLOR_CLASSES: Record<string, { bg: string, border: string, text: string, light: string }> = {
   blue: { bg: 'bg-blue-600', border: 'border-blue-200', text: 'text-blue-600', light: 'bg-blue-50' },
   green: { bg: 'bg-green-600', border: 'border-green-200', text: 'text-green-600', light: 'bg-green-50' },
@@ -253,6 +259,9 @@ export default function ResourceAssignmentV2({
   const dialog = useConfirmDialog()
   const vehicleLabel = useVehicleLabel()
   const [activeTab, setActiveTab] = useState('guide')
+  // Changing an assignment's dates in place (PATCH /api/itinerary-resources).
+  const [editingDates, setEditingDates] = useState<{ id: string; start: string; end: string } | null>(null)
+  const [savingDates, setSavingDates] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   
@@ -325,13 +334,18 @@ export default function ResourceAssignmentV2({
     const entries = await Promise.all(
       RESOURCE_TYPES.map(async (type): Promise<[string, Resource[]]> => {
         try {
-          const response = await fetch(`${type.apiEndpoint}?is_active=true`)
+          // Active only, in whichever word the list's route reads; and the
+          // vehicle endpoint already has a query string.
+          const sep = type.apiEndpoint.includes('?') ? '&' : '?'
+          const response = await fetch(`${type.apiEndpoint}${sep}is_active=true&active_only=true`)
           if (!response.ok) {
             console.log(`Resource API not available: ${type.apiEndpoint}`)
             return [type.key, []]
           }
           const data = await response.json()
-          return [type.key, Array.isArray(data) ? data : (data.data || [])]
+          const rows: Resource[] = Array.isArray(data) ? data : (data.data || [])
+          // A hotel or restaurant once — not a row per room, season or meal.
+          return [type.key, PLACE_TYPES.has(type.key) ? onePerPlace(rows) : rows]
         } catch (error) {
           console.log(`Error fetching ${type.key}:`, error)
           return [type.key, []]
@@ -606,6 +620,28 @@ export default function ResourceAssignmentV2({
     }
   }
 
+  const handleSaveDates = async () => {
+    if (!editingDates) return
+    setSavingDates(true)
+    try {
+      const res = await fetch(`/api/itinerary-resources?id=${editingDates.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ start_date: editingDates.start, end_date: editingDates.end }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.success) throw new Error(data.error || 'Could not change the dates')
+      setEditingDates(null)
+      await fetchAssignedResources()
+      await fetchConflicts()
+      if (onUpdate) onUpdate()
+    } catch (err) {
+      await dialog.alert('Error', err instanceof Error ? err.message : 'Could not change the dates', 'warning')
+    } finally {
+      setSavingDates(false)
+    }
+  }
+
   const handleRemoveResource = async (resourceId: string) => {
     const confirmed = await dialog.confirm({
       message: 'Remove this resource assignment?',
@@ -700,7 +736,8 @@ export default function ResourceAssignmentV2({
     setAddFormData({
       resource_id: '',
       start_date: startDate,
-      end_date: endDate,
+      // An airport meeting or a restaurant meal is one day, not the trip.
+      end_date: SINGLE_DAY_TYPES.has(activeTab) ? startDate : endDate,
       notes: '',
       quantity: 1,
       vehicle_tier: '',
@@ -858,14 +895,38 @@ export default function ResourceAssignmentV2({
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 mt-1 text-sm text-gray-600">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3.5 h-3.5" />
-                          {formatDate(resource.start_date)}
-                          {resource.end_date && resource.end_date !== resource.start_date && (
-                            <> - {formatDate(resource.end_date)}</>
-                          )}
-                        </span>
+                      <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-gray-600">
+                        {editingDates?.id === resource.id ? (
+                          <span className="flex flex-wrap items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5" />
+                            <input
+                              type="date" value={editingDates.start} min={startDate} max={endDate}
+                              onChange={e => {
+                                const start = e.target.value
+                                setEditingDates(d => d && ({ ...d, start, end: SINGLE_DAY_TYPES.has(resource.resource_type) || d.end < start ? start : d.end }))
+                              }}
+                              className="px-2 py-1 text-sm border border-gray-300 rounded" aria-label={t('startDate')}
+                            />
+                            <span>–</span>
+                            <input
+                              type="date" value={editingDates.end} min={editingDates.start} max={endDate}
+                              onChange={e => setEditingDates(d => d && ({ ...d, end: e.target.value }))}
+                              className="px-2 py-1 text-sm border border-gray-300 rounded" aria-label={t('endDate')}
+                            />
+                            <button type="button" onClick={handleSaveDates} disabled={savingDates} className="px-2 py-1 text-xs font-medium bg-primary-600 text-white rounded hover:bg-primary-700 disabled:opacity-50">
+                              {savingDates ? t('savingDates') : t('saveDates')}
+                            </button>
+                            <button type="button" onClick={() => setEditingDates(null)} className="px-2 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded">{t('cancel')}</button>
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                            {formatDate(resource.start_date)}
+                            {resource.end_date && resource.end_date !== resource.start_date && (
+                              <> - {formatDate(resource.end_date)}</>
+                            )}
+                          </span>
+                        )}
                         {resource.notes && (
                           <span className="text-gray-500 truncate max-w-xs">• {resource.notes}</span>
                         )}
@@ -899,6 +960,18 @@ export default function ResourceAssignmentV2({
                           </span>
                         </button>
                       )}
+
+                      {/* Change dates — an assignment put on the wrong days is
+                          put right in place, not removed and added again. */}
+                      <button
+                        type="button"
+                        onClick={() => setEditingDates({ id: resource.id, start: resource.start_date.slice(0, 10), end: (resource.end_date || resource.start_date).slice(0, 10) })}
+                        className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                        title={t('changeDates')}
+                        aria-label={t('changeDates')}
+                      >
+                        <Calendar className="w-4 h-4" />
+                      </button>
 
                       {/* Remove Button */}
                       <button
@@ -1177,7 +1250,12 @@ export default function ResourceAssignmentV2({
                   <input
                     type="date"
                     value={addFormData.start_date}
-                    onChange={(e) => setAddFormData({ ...addFormData, start_date: e.target.value })}
+                    onChange={(e) => {
+                      const start = e.target.value
+                      // One-day roles move with their start; nothing ends before it starts.
+                      const end = SINGLE_DAY_TYPES.has(activeTab) || addFormData.end_date < start ? start : addFormData.end_date
+                      setAddFormData({ ...addFormData, start_date: start, end_date: end })
+                    }}
                     min={startDate}
                     max={endDate}
                     title={t('startDate')}

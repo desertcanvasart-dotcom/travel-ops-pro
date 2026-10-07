@@ -6861,6 +6861,9 @@
     "fromTripTotals": "サービス単価が未入力のため、旅程の合計金額から算出"
   },
   "resourceAssignment": {
+    "changeDates": "日付を変更",
+    "saveDates": "保存",
+    "savingDates": "保存中…",
     "loadingResources": "リソースを読み込み中...",
     "resourceAssignment": "リソース割り当て",
     "travelers": "名",

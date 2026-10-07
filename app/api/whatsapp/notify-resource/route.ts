@@ -66,8 +66,41 @@ export async function POST(request: NextRequest) {
           resourcePhone = resource.contact_phone || resource.whatsapp || resource.phone2
         }
       }
+    } else if (resourceType === 'restaurant') {
+      // A restaurant is picked from Rates → Meals (/api/resources/restaurants
+      // lists meal_rates), so its id is a MEAL RATE, not a supplier: the
+      // supplier lookup below answered "Resource not found" for every one.
+      // The meal rate's linked supplier holds the number; a directory
+      // restaurant (restaurant_contacts) is tried too.
+      const { data: meal } = await supabase
+        .from('meal_rates')
+        .select('restaurant_name, supplier:supplier_id (id, name, contact_phone, whatsapp, phone2)')
+        .eq('id', resourceId)
+        .maybeSingle()
+      const supplier = (meal as { supplier?: any } | null)?.supplier
+      if (meal) {
+        resource = { name: supplier?.name || (meal as { restaurant_name?: string }).restaurant_name || resourceName }
+        resourcePhone = supplier?.whatsapp || supplier?.contact_phone || supplier?.phone2 || null
+      } else {
+        const { data: contact } = await supabase
+          .from('restaurant_contacts')
+          .select('name, phone, whatsapp')
+          .eq('id', resourceId)
+          .maybeSingle()
+        if (contact) {
+          resource = { name: contact.name }
+          resourcePhone = contact.whatsapp || contact.phone || null
+        } else {
+          const { data: supplierData } = await supabase.from('suppliers').select('*').eq('id', resourceId).maybeSingle()
+          if (supplierData) {
+            resource = supplierData
+            resourcePhone = supplierData.contact_phone || supplierData.whatsapp || supplierData.phone2
+          }
+        }
+      }
     } else {
-      // All other types: direct supplier lookup
+      // All other types: direct supplier lookup (guides, and the airport and
+      // hotel staff views, which read the suppliers table)
       const { data: supplierData, error: resourceError } = await supabase
         .from('suppliers')
         .select('*')

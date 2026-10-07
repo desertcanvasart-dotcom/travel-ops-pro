@@ -5407,6 +5407,9 @@
     "fromTripTotals": "From the trip's own total — no priced services yet"
   },
   "resourceAssignment": {
+    "changeDates": "Change dates",
+    "saveDates": "Save",
+    "savingDates": "Saving…",
     "loadingResources": "Loading resources...",
     "resourceAssignment": "Resource Assignment",
     "travelers": "travelers",
