@@ -11,7 +11,9 @@
 // like the other two in the inbox, with one difference worth knowing: a portal
 // conversation belongs to a BOOKING (or to one traveller on it), not to a phone
 // number or an address, so it is never merged with the same person's WhatsApp.
-export type ConversationChannel = 'whatsapp' | 'email' | 'portal'
+// 'trip' is the thread on a trip's share link (trip_messages): one conversation
+// per ITINERARY, its id the itinerary's id. Like portal, it has no assignment.
+export type ConversationChannel = 'whatsapp' | 'email' | 'portal' | 'trip'
 export type MessageDirection = 'inbound' | 'outbound'
 export type ConversationStatus = 'active' | 'archived' | 'spam' | 'blocked'
 export type SyncStatus = 'idle' | 'running' | 'failed'

@@ -1,6 +1,6 @@
 'use client'
 
-import { MessageSquare, Mail, Plane } from 'lucide-react'
+import { MessageSquare, Mail, Plane, Route } from 'lucide-react'
 import { ConversationChannel } from '@/types/unified'
 import { useTranslations } from 'next-intl'
 
@@ -36,6 +36,15 @@ const channelConfig = {
     lightBg: 'bg-[#647C47]/10',
     lightText: 'text-[#647C47]',
     icon: Plane,
+  },
+  // The traveller writing from the trip's share link.
+  trip: {
+    labelKey: 'trip',
+    bgColor: 'bg-amber-600',
+    textColor: 'text-white',
+    lightBg: 'bg-amber-50',
+    lightText: 'text-amber-700',
+    icon: Route,
   },
 }
 

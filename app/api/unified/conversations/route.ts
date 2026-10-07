@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
-import { requireRole } from '@/lib/auth/current-org'
+import { getCurrentOrgId, requireRole } from '@/lib/auth/current-org'
 import type { UnifiedConversation, UnifiedConversationFilters } from '@/types/unified'
 import { waitingSince } from '@/lib/email/automated-senders'
+import { tripThreads } from '@/lib/unified/trip-threads'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -213,6 +214,76 @@ export async function GET(request: NextRequest) {
     }
     })()
 
+    // Trip chats — the traveller writing from the trip's share link
+    // (trip_messages). One conversation per itinerary, its id the itinerary's
+    // id, so the thread opens on /api/itineraries/[id]/messages like the trip
+    // page's own chat. Built from the org's newest messages: a thread nobody
+    // has written in among the latest TRIP_WINDOW messages is old enough to
+    // drop off the list (it is still on its trip page).
+    const tripTask = (async () => {
+    if (channel === 'all' || channel === 'trip') {
+      // Like portal threads, a trip thread has no client_id to filter on.
+      if (clientId) return
+      const orgId = await getCurrentOrgId()
+      if (!orgId) return
+      const TRIP_WINDOW = 1000
+      const { data: rows, error: tripError } = await supabase
+        .from('trip_messages')
+        .select('itinerary_id, direction, content, sender_name, is_read, created_at')
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(TRIP_WINDOW)
+      // One channel failing must not take the inbox down with it: before the
+      // trip_messages migration has run, or on a failed read, the other
+      // channels still list and trip chats are simply absent.
+      if (tripError) {
+        console.error('[unified conversations] trip chats unavailable:', tripError.message)
+        return
+      }
+
+      const threads = new Map(tripThreads(rows ?? []).map(t => [t.itineraryId, t]))
+      if (threads.size === 0) return
+
+      const { data: trips, error: tripsError } = await supabase
+        .from('itineraries')
+        .select('id, itinerary_code, trip_name, client_name, client_email, client_id')
+        .eq('org_id', orgId)
+        .in('id', [...threads.keys()])
+      if (tripsError) {
+        console.error('[unified conversations] trip chats unavailable:', tripsError.message)
+        return
+      }
+
+      for (const trip of trips ?? []) {
+        const t = threads.get(trip.id)!
+        if (hasUnread && t.unread === 0) continue
+        const who = trip.client_name || t.traveller || 'Traveller'
+        if (search && !`${who} ${trip.itinerary_code ?? ''} ${trip.trip_name ?? ''}`.toLowerCase().includes(search.toLowerCase())) continue
+        conversations.push({
+          id: trip.id,
+          channel: 'trip',
+          identifier: trip.itinerary_code || trip.id,
+          client_id: trip.client_id,
+          client_name: who,
+          client_email: trip.client_email || null,
+          contact_info: trip.itinerary_code || '',
+          subject: trip.trip_name || null,
+          last_message_snippet: t.lastContent?.slice(0, 140) ?? null,
+          last_message_at: t.lastAt,
+          unread_count: t.unread,
+          status: 'active',
+          assigned_team_member_id: null,
+          assigned_at: null,
+          created_at: t.firstAt,
+          updated_at: t.lastAt,
+          is_hidden: false,
+          client: null,
+          assigned_agent: null,
+        })
+      }
+    }
+    })()
+
     // Query Email conversations
     const emailTask = (async () => {
     if (channel === 'all' || channel === 'email') {
@@ -299,7 +370,7 @@ export async function GET(request: NextRequest) {
     // other (three sequential round trips per poll). Each task pushes into
     // `conversations`, which is sorted below, so running them together changes
     // nothing but the wait.
-    await Promise.all([whatsappTask, portalTask, emailTask])
+    await Promise.all([whatsappTask, portalTask, tripTask, emailTask])
 
     // Awaiting reply is an email state; the other channels have none.
     if (awaitingReply) {
