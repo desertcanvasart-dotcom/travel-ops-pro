@@ -64,6 +64,17 @@ export interface TourUpOrder {
   websiteSubtotalJpy?: number
   /** 料金備考 — the website's price notes (single supplement, peak season …). */
   priceNotes?: string
+  /** 第1希望日基本旅行代金 / 第2希望日基本旅行代金 — the website's BASE fare per
+   *  person for each preferred date, as a package-tour notification gives it
+   *  instead of a 小計. Base fare only: surcharges may come on top. */
+  websiteBaseFare1?: WebsiteBaseFare
+  websiteBaseFare2?: WebsiteBaseFare
+}
+
+/** "大人 348,000円 子供 300,000円" — yen per person, by band. */
+export interface WebsiteBaseFare {
+  adultJpy?: number
+  childJpy?: number
 }
 
 const Z2H: Record<string, string> = {}

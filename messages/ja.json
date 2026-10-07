@@ -8520,7 +8520,10 @@
     "finish": "取り込む",
     "received": "受信日時",
     "customer": "お客様",
-    "result": "結果"
+    "result": "結果",
+    "websiteBaseFare": "サイトの基本旅行代金（第1希望日）",
+    "websiteBaseFareAdults": "大人 {fare}円 × {count}名",
+    "websiteBaseFareChildren": "子供 {fare}円 × {count}名"
   },
   "travelLeg": {
     "mode": {

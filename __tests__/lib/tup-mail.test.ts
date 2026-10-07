@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { emailOrderText, looksLikeTupMail, parseTupMail, websitePageKey } from '@/lib/intake/tup-mail'
 import { looksLikeTourUpOrder, parseTourUpOrder } from '@/lib/intake/tour-up-order'
 
-import { OPTIONAL_TOUR_MAIL, PACKAGE_TOUR_MAIL } from '../fixtures/tup-mails'
+import { OPTIONAL_TOUR_MAIL, PACKAGE_TOUR_MAIL, REAL_TOUR_MAIL } from '../fixtures/tup-mails'
 
 describe('T-UP notification email (the website → the office)', () => {
   it('recognises both kinds, and the router sends them here', () => {
@@ -68,6 +68,50 @@ describe('T-UP notification email (the website → the office)', () => {
     expect(o.companions.map(c => c.firstNameRomaji)).toEqual(['YUKI', 'KEN'])
     // The mailer's footer is not the last companion's sex.
     expect(o.companions[1].gender).toBe('male')
+  })
+
+  it('reads the REAL package-tour notification (2026-08-30), which the form-built sample did not match', () => {
+    // It used to return null: the website labels the date 希望出発日(第1希望).
+    const o = parseTupMail(REAL_TOUR_MAIL)!
+    expect(o).not.toBeNull()
+    expect(o).toMatchObject({
+      inquiryType: '申込み',
+      tourCode: 'NEK502',
+      productKind: 'tour',
+      websiteUrl: 'http://tour.ats-hj.com/detail.php?id=2297504&hf=0',
+      departureDate1: '2026-10-09',
+      departureDate2: '2026-10-08',
+      departureAirport: '成田',
+      adults: 3,
+      children: 0,
+      infants: undefined,
+      websiteSubtotalJpy: undefined,
+      websiteBaseFare1: { adultJpy: 348000, childJpy: undefined },
+      websiteBaseFare2: { adultJpy: 348000, childJpy: undefined },
+      contactMethod: 'email',
+      email: 'sato.test@example.jp',
+      phone: '09000001111',
+      postalCode: '100-0001',
+      prefecture: '東京都',
+      address: '千代田区千代田9-9-9-202',
+      requests: undefined,
+    })
+    // Wrapped mid-phrase by the mailer: no space inside 2大都市.
+    expect(o.tourTitle).toBe('★国内線移動で楽々★古代遺跡の宝庫・エジプトを満喫！★2大都市カイロ・ギザ/ルクソール★5日間の旅!')
+    // The lead's romaji, sex and birth are top-level fields here, not a ●代表者 block.
+    expect(o.lead).toEqual({
+      lastNameRomaji: 'SATO', firstNameRomaji: 'HANAKO',
+      lastNameKanji: '佐藤', firstNameKanji: '花子',
+      lastNameKana: 'サトウ', firstNameKana: 'ハナコ',
+      gender: 'female', birthDate: '1997-07-14',
+    })
+    // A birth date in quotes, and only one of the two companions named.
+    expect(o.companions).toEqual([
+      { lastNameRomaji: 'SUZUKI', firstNameRomaji: 'MAI', gender: 'female', birthDate: '1998-06-07' },
+    ])
+    // The inbox router reaches the same reader.
+    expect(looksLikeTourUpOrder(REAL_TOUR_MAIL)).toBe(true)
+    expect(parseTourUpOrder(REAL_TOUR_MAIL)?.tourCode).toBe('NEK502')
   })
 
   it('a second date, infants, and 姓/名 sub-labels are read when given', () => {

@@ -100,3 +100,60 @@ sato.test@example.jp
 株式会社エー・ティー・エス
 https://ats-hj.com/
 `
+
+// A REAL package-tour notification as the office received it (2026-08-30,
+// forwarded from Outlook), layout kept to the character — the 【Tアップ】
+// subject, the header rules, 問合せ内容, the title wrapped mid-phrase,
+// 希望出発日(第N希望) with weekday, the per-date base fare instead of a 小計,
+// the lead's romaji, sex and birth at the top level (no ●代表者 block), the
+// address over two lines, a companion's birth date in quotes, and three
+// adults with one companion named. The customer is replaced with an invented
+// one: this repository is public.
+export const REAL_TOUR_MAIL = `From: sato.test@example.jp <sato.test@example.jp>
+Sent: Sunday, August 30, 2026 3:06 PM
+To: info@example.com
+Subject: 【Tアップ】ツアーお問合せ (10/9出発)
+
+-----------------------------------------------
+Tアップにてユーザより、お問合せがありました。
+ご回答をお願い致します。
+-----------------------------------------------
+
+●問合せ内容：申込み
+
+●希望連絡方法：メール
+
+●ツアーコード：NEK502
+●ツアータイトル：★国内線移動で楽々★古代遺跡の宝庫・エジプトを満喫！★2大
+都市カイロ・ギザ/ルクソール★５日間の旅!
+●区分：ツアー
+http://tour.ats-hj.com/detail.php?id=2297504&hf=0
+
+●希望出発日(第1希望)：2026年10月9日(金)
+●第1希望日基本旅行代金：大人 348,000円
+●希望出発日(第2希望)：2026年10月8日(木)
+●第2希望日基本旅行代金：大人 348,000円
+●出発地：成田
+
+●参加人数：大人 3人、子供 0人、幼児 0人
+
+
+●メールアドレス：sato.test@example.jp
+●電話番号：09000001111
+
+●お名前(漢字)：佐藤 花子
+●お名前(カナ)：サトウ ハナコ
+●性別：女性
+●生年月日：1997年7月14日(29歳)
+●ご要望・質問など：
+
+
+
+●お名前：SATO HANAKO
+●ご住所：〒 100-0001 東京都
+千代田区千代田9-9-9-202
+●同行者1
+　お名前：SUZUKI MAI
+　生年月日：'1998/6/7'
+　性別：女性
+`
