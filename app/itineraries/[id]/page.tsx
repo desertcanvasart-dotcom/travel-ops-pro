@@ -8,7 +8,7 @@ import { useTranslations, useLocale, createTranslator } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Loader2, Languages, ClipboardList, AlertTriangle, BookOpen, MessageCircle, Share2, MoreHorizontal, RotateCcw, XCircle, Info } from 'lucide-react'
+import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Loader2, Languages, ClipboardList, AlertTriangle, BookOpen, MessageCircle, Share2, MoreHorizontal, RotateCcw, XCircle, Info, Copy } from 'lucide-react'
 // The itinerary PDF generator (and jsPDF behind it) loads on first use, not
 // with the page.
 const generateItineraryPDF = async (...args: Parameters<typeof import('@/lib/pdf-generator').generateItineraryPDF>) =>
@@ -47,6 +47,7 @@ import { coverageGrid, type CoverageAssignment } from '@/lib/itineraries/coverag
 import type { TripPnL } from '@/lib/trip-pnl'
 import HeaderMenu from '@/components/HeaderMenu'
 import TripTasksCard from '@/components/itineraries/TripTasksCard'
+import TripTimeline from '@/components/itineraries/TripTimeline'
 import CancelTripDialog from '@/components/itineraries/CancelTripDialog'
 import ComposeEmailModal from '@/components/unified/ComposeEmailModal'
 import { useAuth } from '@/app/contexts/AuthContext'
@@ -1350,6 +1351,7 @@ export default function ViewItineraryPage() {
   const [converting, setConverting] = useState(false)
   const [showEmail, setShowEmail] = useState(false)
   const [sendingOwnWhatsApp, setSendingOwnWhatsApp] = useState(false)
+  const [duplicating, setDuplicating] = useState(false)
 
   const scrollToId = (id: string) => setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
 
@@ -1416,13 +1418,32 @@ export default function ViewItineraryPage() {
     else if (kind === 'create_invoice') handleGenerateInvoice()
     else if (kind === 'record_payment') recordPayment()
     else if (kind === 'assign_resources') { setTab('operations'); scrollToId('resource-assignment') }
-    else if (kind === 'open_trip_log') { setTab('operations') }
+    else if (kind === 'open_trip_log') { setTab('operations'); scrollToId('trip-timeline') }
     else if (kind === 'close_out') closeOut()
     else if (kind === 'open_finance') { setTab('finance'); window.scrollTo({ top: 0, behavior: 'smooth' }) }
     else if (kind === 'go_to_day' && dayNumber != null) {
       setTab('itinerary')
       setExpandedDays(prev => new Set([...prev, dayNumber]))
       scrollToId(`day-${dayNumber}`)
+    }
+  }
+
+  // A new draft of the same trip, in every language (lib/itineraries/duplicate:
+  // days and services come along; booking, payments, assignments and frozen
+  // rates do not).
+  const duplicateTrip = async () => {
+    const ok = await dialog.confirm({ title: tStage('duplicateTitle'), message: tStage('duplicateMessage'), confirmText: tStage('duplicate'), variant: 'info' })
+    if (!ok) return
+    setDuplicating(true)
+    try {
+      const res = await fetch(`/api/itineraries/${params.id}/duplicate`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.success) throw new Error(data.error || tStage('duplicateFailed'))
+      router.push(`/itineraries/${data.data.id}`)
+    } catch (err) {
+      await dialog.alert(tCommon('error'), err instanceof Error ? err.message : tStage('duplicateFailed'), 'warning')
+    } finally {
+      setDuplicating(false)
     }
   }
 
@@ -1686,6 +1707,7 @@ export default function ViewItineraryPage() {
                   { label: tStage('addExpense'), icon: <Receipt className="w-4 h-4" />, onSelect: () => setExpenseSignal(n => n + 1) },
                   { label: generatingTasks ? t('generating') : t('operationsTasks'), icon: <ClipboardList className="w-4 h-4" />, onSelect: handleOpenTaskDialog, disabled: generatingTasks, title: t('generateOperationsTasks') },
                   { label: generatingCommissions ? t('generating') : tStage('generateCommissions'), icon: <Handshake className="w-4 h-4" />, onSelect: handleGenerateCommissions, disabled: generatingCommissions },
+                  { label: duplicating ? tStage('duplicating') : tStage('duplicate'), icon: <Copy className="w-4 h-4" />, onSelect: duplicateTrip, disabled: duplicating, title: tStage('duplicateHint') },
                   itinerary.status === 'cancelled'
                     ? { label: tStage('reopen'), icon: <RotateCcw className="w-4 h-4" />, onSelect: reopenTrip }
                     : { label: tStage('cancelTrip'), icon: <XCircle className="w-4 h-4" />, onSelect: () => setShowCancel(true), danger: true },
@@ -2327,6 +2349,19 @@ export default function ViewItineraryPage() {
                 {(itinerary.assigned_guide_id || itinerary.assigned_vehicle_id || itinerary.pickup_location || itinerary.pickup_time) && <ResourceSummaryCard guideId={itinerary.assigned_guide_id} vehicleId={itinerary.assigned_vehicle_id} guideNotes={itinerary.guide_notes} vehicleNotes={itinerary.vehicle_notes} pickupLocation={itinerary.pickup_location} pickupTime={itinerary.pickup_time} onEdit={() => scrollToId('resource-assignment')} />}
                 <div id="resource-assignment" className="scroll-mt-40">
                   <ResourceAssignmentV2 itineraryId={itinerary.id} startDate={itinerary.start_date} endDate={itinerary.end_date} numTravelers={itinerary.num_adults + itinerary.num_children + (itinerary.num_infants || 0)} clientName={itinerary.client_name} tripName={itinerary.trip_name} onUpdate={() => { fetchItinerary(); setResourceRefresh(n => n + 1) }} requestedTab={requestedResourceTab} />
+                </div>
+                {/* The live log: checkpoints from the road, and the office's notes. */}
+                <div id="trip-timeline" className="scroll-mt-40">
+                  <TripTimeline
+                    itineraryId={itinerary.id}
+                    tripName={tourTitle.title}
+                    startDate={itinerary.start_date}
+                    endDate={itinerary.end_date}
+                    today={today}
+                    people={(assignments ?? [])
+                      .filter(a => a.id && String(a.status ?? '').toLowerCase() !== 'cancelled')
+                      .map(a => ({ id: a.id!, label: `${resourceLabel(a.resource_type)}: ${a.resource_name ?? ''}`.trim() }))}
+                  />
                 </div>
               </div>
             )}
