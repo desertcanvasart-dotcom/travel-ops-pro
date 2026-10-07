@@ -58,6 +58,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
           pricingClass: opt.pricing_class,
           guideRate: opt.guide_rate,
           ...(opt.tip_role ? { tipRole: opt.tip_role } : {}),
+          ...(opt.trip_shape ? { tripShape: opt.trip_shape } : {}),
           // The rate's dated periods, each with its own price. The day is
           // priced by the one covering its date.
           periods: opt.periods,
@@ -85,6 +86,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
       pricingClass: opt.pricing_class,
       guideRate: opt.guide_rate,
       ...(opt.tip_role ? { tipRole: opt.tip_role } : {}),
+      ...(opt.trip_shape ? { tripShape: opt.trip_shape } : {}),
       periods: opt.periods,
       sailingDays: opt.sailingDays,
     }

@@ -69,13 +69,17 @@ export type DayType = 'arrival' | 'tour' | 'transfer' | 'cruise' | 'free' | 'dep
 
 export const DAY_TYPES: DayType[] = ['arrival', 'tour', 'transfer', 'cruise', 'free', 'departure']
 
+// What the day IS, for the completeness gate — never a transport route. The
+// words keep clear of the transport rates' ("overnight return" is a road
+// rate; a day that ends in a hotel is "hotel tonight"), so the two lists are
+// not read as one (ported from autoura-saas #612).
 export const DAY_TYPE_LABELS: Record<DayType, string> = {
-  arrival:   'Arrival (airport in + hotel check-in)',
-  tour:      'Tour (overnight + sightseeing)',
-  transfer:  'Transfer (intercity by road)',
-  cruise:    'Cruise (on board)',
-  free:      'Free day (overnight, no sightseeing)',
-  departure: 'Departure (hotel check-out + airport out)',
+  arrival:   'Arrival day (airport in + hotel check-in)',
+  tour:      'Sightseeing day (hotel tonight)',
+  transfer:  'Travel day (move to another city)',
+  cruise:    'Cruise day (on board)',
+  free:      'Free day (hotel tonight, no sightseeing)',
+  departure: 'Departure day (hotel check-out + airport out)',
 }
 
 export const DEFAULT_DAY_TYPE: DayType = 'tour'
@@ -162,6 +166,9 @@ export interface SelectedItem {
   /** Tipping: whose tip it is (tipping_rates.role_type — 'guide', 'driver' …).
    *  Switching the guide off drops the guide's tips by it (lib/guide-rule.ts). */
   tipRole?: string | null
+  /** Road transfers: one_way / same_day_return / overnight_return
+   *  (transportation_rates.trip_shape) — what the gate counts it as. */
+  tripShape?: string | null
   /** An agency supplement (Settings → Vocabulary) riding on the hotel or
    *  cruise pick above it in the same slot — a view, a deck, a meal plan —
    *  priced PER PERSON PER NIGHT on top of the room. Its rateId is
@@ -243,6 +250,8 @@ export interface RateOption {
   guide_rate?: number | null
   /** Tipping options: tipping_rates.role_type. */
   tip_role?: string | null
+  /** Road transfers: transportation_rates.trip_shape. */
+  trip_shape?: string | null
   /** Hotel / cruise options only: the supplements the property prices, each
    *  with its first-period per-person-per-night rate — the same period the
    *  headline rate mirrors (lib/rates/supplements). */

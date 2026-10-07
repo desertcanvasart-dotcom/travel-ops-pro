@@ -78,6 +78,37 @@ const SEG_AIRPORT = 'airport_transfer'
 const SEG_DAY_TOUR = 'day_tour'
 const SEG_INTERCITY = 'intercity_transfer'
 
+/**
+ * The requirements a picked route covers. The gate asks for three — the
+ * airport run, the day's sightseeing vehicle, the road move — but this app's
+ * rates name journeys more finely, and the gate matched only the literal
+ * 'day_tour' and the retired 'intercity_transfer'. So an Intercity line never
+ * counted as the road move, a Half Day or Extended Day Tour never as the
+ * sightseeing, and the gate reported the right vehicle as missing.
+ *
+ *   airport_transfer              → airport
+ *   airport_with_sightseeing      → airport + sightseeing
+ *   day_tour, half_day, extended_day_tour, city_tour → sightseeing
+ *   intercity (one way / overnight return)          → road move
+ *   intercity, same-day return    → sightseeing: a day trip out and back
+ *                                   is the day's vehicle, not a move
+ *   intercity_with_sightseeing    → road move + sightseeing (same-day
+ *                                   return: sightseeing)
+ *   city_transfer, sound_light, dinner_transfer     → none of the three
+ * (ported in spirit from autoura-saas #612, with this app's vocabulary.)
+ */
+export function transportSegments(serviceType: string | undefined, tripShape?: string | null): string[] {
+  const dayTrip = tripShape === 'same_day_return'
+  switch (serviceType) {
+    case 'airport_transfer': return [SEG_AIRPORT]
+    case 'airport_with_sightseeing': return [SEG_AIRPORT, SEG_DAY_TOUR]
+    case 'day_tour': case 'half_day': case 'extended_day_tour': case 'city_tour': return [SEG_DAY_TOUR]
+    case 'intercity': case 'intercity_transfer': return dayTrip ? [SEG_DAY_TOUR] : [SEG_INTERCITY]
+    case 'intercity_with_sightseeing': return dayTrip ? [SEG_DAY_TOUR] : [SEG_INTERCITY, SEG_DAY_TOUR]
+    default: return []
+  }
+}
+
 const SEG_LABEL: Record<string, string> = {
   [SEG_AIRPORT]: 'airport transfer',
   [SEG_DAY_TOUR]: 'day-tour',
@@ -197,7 +228,7 @@ export function gridCompleteness(
       if (typeAware) {
         for (const seg of [SEG_AIRPORT, SEG_DAY_TOUR, SEG_INTERCITY]) {
           if (need[seg] === 0) continue
-          const have = routeItems.filter((s) => s.serviceType === seg && itemIsPriced(s)).length
+          const have = routeItems.filter((s) => transportSegments(s.serviceType, s.tripShape).includes(seg) && itemIsPriced(s)).length
           if (have < need[seg]) {
             issues.push({
               dayNumber: dn,
