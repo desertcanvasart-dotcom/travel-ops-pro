@@ -8,7 +8,7 @@ import { useTranslations, useLocale, createTranslator } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { ArrowLeft, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, Plus, Trash2, CheckCircle, XCircle, Loader2, Languages, ClipboardList, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, FileText, Download, Send, Edit2, ChevronDown, ChevronUp, Receipt, Calculator, Settings, Check, X, Handshake, Briefcase, CheckCircle, Loader2, Languages, ClipboardList, AlertTriangle } from 'lucide-react'
 // The itinerary PDF generator (and jsPDF behind it) loads on first use, not
 // with the page.
 const generateItineraryPDF = async (...args: Parameters<typeof import('@/lib/pdf-generator').generateItineraryPDF>) =>
@@ -35,7 +35,7 @@ import { LanguageStatusRow, DayLanguageChip, BilingualDayEditor, HighlightPlaceh
 import ItineraryAttentionStrip from '@/components/itineraries/ItineraryAttentionStrip'
 import StatusPipeline from '@/components/itineraries/StatusPipeline'
 import CoverageGrid from '@/components/itineraries/CoverageGrid'
-import { RailSection, RailGroup, DocRow, RAIL_ACTION } from '@/components/itineraries/RailSection'
+import { RailSection } from '@/components/itineraries/RailSection'
 import type { Language, ItineraryVersion } from '@/types/multilingual'
 import { LANGUAGE_NAMES } from '@/types/multilingual'
 import {
@@ -280,14 +280,6 @@ export default function ViewItineraryPage() {
   // Expenses state
   const [itineraryExpenses, setItineraryExpenses] = useState<any[]>([])
   const [expenseRefreshTrigger, setExpenseRefreshTrigger] = useState(0)
-
-  // Inclusions & Exclusions state
-  const [editingInclusions, setEditingInclusions] = useState(false)
-  const [editingExclusions, setEditingExclusions] = useState(false)
-  const [localInclusions, setLocalInclusions] = useState<string[]>([])
-  const [localExclusions, setLocalExclusions] = useState<string[]>([])
-  const [savingInclusions, setSavingInclusions] = useState(false)
-  const [translatingInclusions, setTranslatingInclusions] = useState(false)
 
   // The content language no longer follows the staff UI language (the
   // sidebar switch): a Japanese-speaking operator still needs to see that the
@@ -789,15 +781,15 @@ export default function ViewItineraryPage() {
   }
 
   /**
-   * The quote PDF in one language: that language's days, its trip title and
-   * inclusions (they were the source's before, whatever the language), and
-   * headings in that language.
+   * The quote PDF in one language: that language's days, its trip title (it
+   * was the source's before, whatever the language), and headings in that
+   * language.
    */
   const buildQuotePdf = async (lang: Language, pdfDays: DayWithServices[], showBreakdown?: boolean) => {
     if (!itinerary) throw new Error('No itinerary')
     const content = getVersionedContent(lang)
     return generateItineraryPDF(
-      { ...itinerary, trip_name: content.trip_name, inclusions: content.inclusions, exclusions: content.exclusions },
+      { ...itinerary, trip_name: content.trip_name },
       pdfDays,
       {
         ...(showBreakdown === undefined ? {} : { showPricingBreakdown: showBreakdown, showServiceDetails: showBreakdown }),
@@ -848,135 +840,6 @@ export default function ViewItineraryPage() {
       setPdfShowBreakdown(showBreakdown)
     } catch (error) {
       console.error('Error regenerating PDF:', error)
-    }
-  }
-
-  const saveInclusionsExclusions = async (type: 'inclusions' | 'exclusions', items: string[]) => {
-    if (!itinerary) return
-
-    // A target language's lists live on its version row, which a trip
-    // translated day by day may not have yet.
-    if (activeLanguage !== sourceLanguage && !itinerary.versions?.[activeLanguage]) {
-      if (!(await handleCreateVersion(activeLanguage))) return
-    }
-
-    setSavingInclusions(true)
-    try {
-      let response: Response
-      if (activeLanguage === sourceLanguage) {
-        // The source language: save to the base itinerary table
-        response = await fetch(`/api/itineraries/${itinerary.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ [type]: items })
-        })
-        if (response.ok) {
-          setItinerary(prev => prev ? { ...prev, [type]: items } : null)
-        }
-      } else {
-        // A target language: save to version table
-        response = await fetch(`/api/itineraries/${itinerary.id}/versions/${activeLanguage}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ [type]: items })
-        })
-        if (response.ok) {
-          setItinerary(prev => {
-            if (!prev) return null
-            const updatedVersions = { ...(prev.versions || {}) }
-            updatedVersions[activeLanguage] = {
-              ...(updatedVersions[activeLanguage] || {}),
-              [type]: items
-            }
-            return { ...prev, versions: updatedVersions }
-          })
-        }
-      }
-
-      if (response.ok) {
-        if (type === 'inclusions') {
-          setEditingInclusions(false)
-        } else {
-          setEditingExclusions(false)
-        }
-      }
-    } catch (error) {
-      console.error(`Error saving ${type}:`, error)
-    } finally {
-      setSavingInclusions(false)
-    }
-  }
-
-  const translateInclusionsExclusions = async () => {
-    if (!itinerary) return
-
-    const langCode = activeLanguage
-    // Always translate from the base (source-language) inclusions/exclusions
-    const inclusions = itinerary.inclusions || []
-    const exclusions = itinerary.exclusions || []
-    if (inclusions.length === 0 && exclusions.length === 0) return
-    if (!itinerary.versions?.[langCode] && !(await handleCreateVersion(langCode))) return
-
-    setTranslatingInclusions(true)
-    try {
-      // Batch translate inclusions and exclusions separately for better context
-      const [inclusionsRes, exclusionsRes] = await Promise.all([
-        inclusions.length > 0
-          ? fetch('/api/translate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                texts: inclusions,
-                targetLanguage: langCode,
-                action: 'batchTranslate',
-                context: 'inclusions (what is included in the tour package price)'
-              })
-            }).then(r => r.json())
-          : { success: true, data: { translatedTexts: [] } },
-        exclusions.length > 0
-          ? fetch('/api/translate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                texts: exclusions,
-                targetLanguage: langCode,
-                action: 'batchTranslate',
-                context: 'exclusions (what is NOT included in the tour package price)'
-              })
-            }).then(r => r.json())
-          : { success: true, data: { translatedTexts: [] } }
-      ])
-
-      const translatedInclusions = inclusionsRes.success ? inclusionsRes.data.translatedTexts : inclusions
-      const translatedExclusions = exclusionsRes.success ? exclusionsRes.data.translatedTexts : exclusions
-
-      // Save to language version table (not the base itinerary)
-      const response = await fetch(`/api/itineraries/${itinerary.id}/versions/${langCode}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          inclusions: translatedInclusions,
-          exclusions: translatedExclusions
-        })
-      })
-
-      if (response.ok) {
-        // Update the versions map in local state (not the base itinerary)
-        setItinerary(prev => {
-          if (!prev) return null
-          const updatedVersions = { ...(prev.versions || {}) }
-          updatedVersions[langCode] = {
-            ...(updatedVersions[langCode] || {}),
-            inclusions: translatedInclusions,
-            exclusions: translatedExclusions
-          }
-          return { ...prev, versions: updatedVersions }
-        })
-      }
-    } catch (error) {
-      console.error('Error translating inclusions/exclusions:', error)
-    } finally {
-      setTranslatingInclusions(false)
     }
   }
 
@@ -1318,19 +1181,6 @@ export default function ViewItineraryPage() {
   const attentionItems = useMemo(() => {
     if (!itinerary || !dayTranslations) return []
     const servicesByDay = new Map(days.map(d => [d.id, d]))
-    // Each language's own lists; a target without its own is the source's
-    // and would only repeat the source's finding.
-    const lists = (lang: Language) => {
-      if (lang === sourceLanguage) return { inclusions: itinerary.inclusions || [], exclusions: itinerary.exclusions || [] }
-      const v = itinerary.versions?.[lang]
-      if (!v?.inclusions?.length && !v?.exclusions?.length) return null
-      return { inclusions: v.inclusions || [], exclusions: v.exclusions || [] }
-    }
-    const inclusions: Partial<Record<Language, { inclusions: string[]; exclusions: string[] }>> = {}
-    for (const lang of [sourceLanguage, ...dayTranslations.target_languages]) {
-      const l = lists(lang)
-      if (l) inclusions[lang] = l
-    }
     return itineraryAttention({
       status: itinerary.status,
       sourceLanguage,
@@ -1347,7 +1197,9 @@ export default function ViewItineraryPage() {
           overnight: loaded?.overnight,
         }
       }),
-      inclusions,
+      // The inclusion lists are no longer shown or edited on this page, so a
+      // conflict in them is not reported here.
+      inclusions: {},
       hasInvoice: !!existingInvoice,
       hasBooking: !!existingBooking,
     })
@@ -1663,6 +1515,121 @@ export default function ViewItineraryPage() {
 
       <div className="container mx-auto px-4 py-4 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-4 items-start">
         <main className="space-y-4 min-w-0">
+          {/* ACTION BAR — every document and action on the trip, visible on
+              every tab. The redesign had moved these into a side-panel list
+              of small links, where operators could not find them. */}
+          <div className="bg-white rounded-lg border border-gray-200 p-3 shadow-sm" data-testid="action-bar">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={handleGenerateInvoice}
+                disabled={generatingInvoice}
+                className={`h-10 px-4 rounded-md text-sm font-medium flex items-center gap-2 transition-colors ${
+                  existingInvoice ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-amber-600 text-white hover:bg-amber-700'
+                } ${generatingInvoice ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={existingInvoice ? t('viewInvoiceNumber', { number: existingInvoice.invoice_number }) : t('generateInvoice')}
+              >
+                {generatingInvoice ? <Loader2 className="w-4 h-4 animate-spin" /> : <Receipt className="w-4 h-4" />}
+                {generatingInvoice ? t('creating') : existingInvoice ? existingInvoice.invoice_number : t('invoice')}
+              </button>
+              <Link
+                href={`/documents/contract/${itinerary.id}`}
+                className="h-10 px-4 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium flex items-center gap-2"
+              >
+                <FileText className="w-4 h-4" />
+                {t('contract')}
+              </Link>
+              {/* The printable guest questionnaire with a QR to this booking's
+                  online survey (app/api/itineraries/[id]/survey-pdf). */}
+              <a
+                href={`/api/itineraries/${itinerary.id}/survey-pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="h-10 px-4 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium flex items-center gap-2"
+                title="アンケート用紙（QRコード付き）をダウンロード"
+              >
+                <ClipboardList className="w-4 h-4" />
+                Survey (QR)
+              </a>
+              <AddExpenseFromItinerary
+                itineraryId={itinerary.id}
+                itineraryCode={itinerary.itinerary_code}
+                clientName={itinerary.client_name}
+                onExpenseAdded={() => setExpenseRefreshTrigger(prev => prev + 1)}
+              />
+              <GenerateDocumentsButton
+                itineraryId={itinerary.id}
+                itineraryCode={itinerary.itinerary_code}
+              />
+              {/* The ENG. ITIN. worksheet the ground operator runs the trip from. */}
+              <GenerateOpsSheetButton itineraryId={itinerary.id} itineraryCode={itinerary.itinerary_code} />
+              {/* The customer-facing 日程表, generated from this trip. */}
+              <GenerateNitteiButton
+                itineraryId={itinerary.id}
+                clientName={itinerary.client_name}
+                startDate={itinerary.start_date}
+                templateId={itinerary.template_id}
+                onLinked={tid => setItinerary(prev => (prev ? { ...prev, template_id: tid } : prev))}
+              />
+              {/* The quote PDF, one segment per language. A language with no
+                  text yet reads "JA —" and opens the side-by-side translation
+                  instead of a PDF in the wrong language. */}
+              <div
+                className={`h-10 inline-flex items-stretch rounded-md border border-gray-300 text-sm font-medium text-gray-700 overflow-hidden ${days.length === 0 ? 'opacity-60' : ''}`}
+                title={days.length === 0 ? t('pdfNeedsDays') : t('pdfTooltip')}
+                data-testid="quote-pdf"
+              >
+                <span className="px-3 flex items-center gap-2 bg-gray-50 border-r border-gray-300">
+                  {generatingPDF ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                  {tLayout('docQuote')}
+                </span>
+                {[sourceLanguage, ...(dayTranslations?.target_languages ?? [])].map(lang =>
+                  documentLanguageReady(lang) ? (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => handlePreviewPDF(true, lang)}
+                      disabled={generatingPDF}
+                      className="px-3 hover:bg-gray-50 disabled:opacity-50 border-l first:border-l-0 border-gray-200"
+                      data-testid={`quote-pdf-${lang}`}
+                    >
+                      {lang.toUpperCase()}
+                    </button>
+                  ) : (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => openDailyItinerary('side')}
+                      className="px-3 text-gray-400 hover:bg-gray-50 border-l border-gray-200"
+                      title={tLayout('translateFirst', { language: LANGUAGE_NAMES[lang] })}
+                      data-testid={`quote-pdf-${lang}`}
+                    >
+                      {lang.toUpperCase()} —
+                    </button>
+                  )
+                )}
+              </div>
+              <button
+                onClick={handleOpenTaskDialog}
+                disabled={generatingTasks}
+                className="h-10 px-4 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                title={t('generateOperationsTasks')}
+              >
+                {generatingTasks ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardList className="w-4 h-4" />}
+                {generatingTasks ? t('generating') : t('operationsTasks')}
+              </button>
+            </div>
+          </div>
+
+          {/* Task generation result banner */}
+          {taskResult && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 flex items-center justify-between">
+              <span className="text-sm text-indigo-700">{taskResult}</span>
+              <Link href="/tasks" className="text-sm font-medium text-indigo-600 hover:text-indigo-800 underline">
+                {t('viewTasks')}
+              </Link>
+            </div>
+          )}
+
           {/* TABS */}
           <div className="flex gap-1 border-b border-gray-200 overflow-x-auto" role="tablist" data-testid="detail-tabs">
             {DETAIL_TABS.map(id => {
@@ -1890,231 +1857,10 @@ export default function ViewItineraryPage() {
 
               {days.length === 0 && <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 text-center"><p className="text-sm text-gray-500">No days planned yet</p></div>}
 
-              {/* Inclusions & Exclusions Section */}
-              {activeLanguage !== sourceLanguage && !editingInclusions && !editingExclusions && (
-                <div className="flex justify-end mt-6 mb-1">
-                  <button
-                    type="button"
-                    onClick={translateInclusionsExclusions}
-                    disabled={translatingInclusions}
-                    className="flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded hover:bg-primary-50 disabled:opacity-50"
-                  >
-                    {translatingInclusions ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Languages className="w-3.5 h-3.5" />}
-                    {t('translateItems')}
-                  </button>
-                </div>
-              )}
-              <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${activeLanguage === sourceLanguage || editingInclusions || editingExclusions ? 'mt-6' : ''}`}>
-                {/* Inclusions */}
-                <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                      {t('whatsIncluded')}
-                    </h3>
-                    {!editingInclusions ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLocalInclusions(getVersionedContent().inclusions)
-                          setEditingInclusions(true)
-                        }}
-                        className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-                      >
-                        {tCommon('edit')}
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => saveInclusionsExclusions('inclusions', localInclusions)}
-                          disabled={savingInclusions}
-                          className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
-                        >
-                          {savingInclusions ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingInclusions(false)}
-                          className="p-1 text-gray-400 hover:bg-gray-100 rounded"
-                          title="Cancel"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {editingInclusions ? (
-                    <div className="space-y-2">
-                      {localInclusions.map((item, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={item}
-                            onChange={(e) => {
-                              const updated = [...localInclusions]
-                              updated[index] = e.target.value
-                              setLocalInclusions(updated)
-                            }}
-                            placeholder="Enter inclusion item"
-                            className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setLocalInclusions(localInclusions.filter((_, i) => i !== index))}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded"
-                            title="Remove item"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setLocalInclusions([...localInclusions, ''])}
-                        className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium mt-2"
-                      >
-                        <Plus className="w-3 h-3" />
-                        {t('addItem')}
-                      </button>
-                    </div>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {getVersionedContent().inclusions.map((item, index) => (
-                        <li key={index} className="text-sm text-gray-600 flex items-start gap-2">
-                          <Check className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" />
-                          {item}
-                        </li>
-                      ))}
-                      {getVersionedContent().inclusions.length === 0 && (
-                        <li className="text-sm text-gray-400 italic">{t('noInclusionsYet')}</li>
-                      )}
-                    </ul>
-                  )}
-                </div>
-
-                {/* Exclusions */}
-                <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                      <XCircle className="w-4 h-4 text-red-500" />
-                      {t('whatsNotIncluded')}
-                    </h3>
-                    {!editingExclusions ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLocalExclusions(getVersionedContent().exclusions)
-                          setEditingExclusions(true)
-                        }}
-                        className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-                      >
-                        {tCommon('edit')}
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => saveInclusionsExclusions('exclusions', localExclusions)}
-                          disabled={savingInclusions}
-                          className="p-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-50"
-                        >
-                          {savingInclusions ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingExclusions(false)}
-                          className="p-1 text-gray-400 hover:bg-gray-100 rounded"
-                          title="Cancel"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {editingExclusions ? (
-                    <div className="space-y-2">
-                      {localExclusions.map((item, index) => (
-                        <div key={index} className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            value={item}
-                            onChange={(e) => {
-                              const updated = [...localExclusions]
-                              updated[index] = e.target.value
-                              setLocalExclusions(updated)
-                            }}
-                            placeholder="Enter exclusion item"
-                            className="flex-1 px-2 py-1 text-sm border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setLocalExclusions(localExclusions.filter((_, i) => i !== index))}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded"
-                            title="Remove item"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setLocalExclusions([...localExclusions, ''])}
-                        className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 font-medium mt-2"
-                      >
-                        <Plus className="w-3 h-3" />
-                        {t('addItem')}
-                      </button>
-                    </div>
-                  ) : (
-                    <ul className="space-y-1.5">
-                      {getVersionedContent().exclusions.map((item, index) => (
-                        <li key={index} className="text-sm text-gray-600 flex items-start gap-2">
-                          <X className="w-3.5 h-3.5 text-red-400 mt-0.5 flex-shrink-0" />
-                          {item}
-                        </li>
-                      ))}
-                      {getVersionedContent().exclusions.length === 0 && (
-                        <li className="text-sm text-gray-400 italic">{t('noExclusionsYet')}</li>
-                      )}
-                    </ul>
-                  )}
-                </div>
-              </div>
             </div>
           )}
           {tab === 'operations' && (
             <div className="space-y-4" role="tabpanel">
-              {/* Tasks for the departments that run the services on this trip. */}
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-900">{t('operationsTasks')}</h3>
-                  <p className="text-xs text-gray-600">{t('generateOperationsTasks')}</p>
-                </div>
-                <button
-                  onClick={handleOpenTaskDialog}
-                  disabled={generatingTasks}
-                  className="h-9 px-4 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium flex items-center gap-2 disabled:opacity-50"
-                >
-                  {generatingTasks ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardList className="w-4 h-4" />}
-                  {generatingTasks ? t('generating') : t('operationsTasks')}
-                </button>
-              </div>
-              {/* Task generation result banner */}
-              {taskResult && (
-                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3 flex items-center justify-between">
-                  <span className="text-sm text-indigo-700">{taskResult}</span>
-                  <Link
-                    href="/tasks"
-                    className="text-sm font-medium text-indigo-600 hover:text-indigo-800 underline"
-                  >
-                    {t('viewTasks')}
-                  </Link>
-                </div>
-              )}
-
               <CoverageGrid
                 itineraryId={itinerary.id}
                 days={days}
@@ -2136,26 +1882,6 @@ export default function ViewItineraryPage() {
           )}
           {tab === 'finance' && (
             <div className="space-y-4" role="tabpanel">
-              {/* The invoice and the extra costs, beside the money they change. */}
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 flex flex-wrap items-center gap-3">
-                <button
-                  onClick={handleGenerateInvoice}
-                  disabled={generatingInvoice}
-                  className={`h-9 px-4 rounded-md text-sm font-medium flex items-center gap-2 transition-colors ${
-                    existingInvoice ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-amber-600 text-white hover:bg-amber-700'
-                  } ${generatingInvoice ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  title={existingInvoice ? t('viewInvoiceNumber', { number: existingInvoice.invoice_number }) : t('generateInvoice')}
-                >
-                  {generatingInvoice ? <Loader2 className="w-4 h-4 animate-spin" /> : <Receipt className="w-4 h-4" />}
-                  {generatingInvoice ? t('creating') : existingInvoice ? existingInvoice.invoice_number : t('invoice')}
-                </button>
-                <AddExpenseFromItinerary
-                  itineraryId={itinerary.id}
-                  itineraryCode={itinerary.itinerary_code}
-                  clientName={itinerary.client_name}
-                  onExpenseAdded={() => setExpenseRefreshTrigger(prev => prev + 1)}
-                />
-              </div>
               {/* GENERATION WARNINGS */}
               {itinerary.generation_warnings && itinerary.generation_warnings.length > 0 && (
                 <div className="bg-amber-50 rounded-lg border border-amber-300 shadow-sm p-4">
@@ -2304,9 +2030,8 @@ export default function ViewItineraryPage() {
           )}
         </main>
 
-        {/* RIGHT RAIL — the trip at a glance and every document, grouped by
-            who reads it. Language-neutral facts here; client copy in the
-            Itinerary tab. */}
+        {/* RIGHT RAIL — the trip at a glance. Language-neutral facts here;
+            client copy in the Itinerary tab; the documents in the button bar. */}
         <aside className="space-y-4 lg:sticky lg:top-36" data-testid="detail-rail">
           <RailSection title={tLayout('trip')}>
             <dl className="space-y-2.5 text-sm">
@@ -2357,96 +2082,6 @@ export default function ViewItineraryPage() {
             )}
           </RailSection>
 
-          <RailSection title={tLayout('documents')} testId="documents-rail">
-            <RailGroup title={tLayout('forClient')}>
-              {/* The customer's 日程表 is a Japanese document by definition. */}
-              <DocRow label={tLayout('docNittei')} hint={LANGUAGE_NAMES.ja}>
-                <GenerateNitteiButton
-                  itineraryId={itinerary.id}
-                  clientName={itinerary.client_name}
-                  startDate={itinerary.start_date}
-                  templateId={itinerary.template_id}
-                  onLinked={tid => setItinerary(prev => (prev ? { ...prev, template_id: tid } : prev))}
-                  triggerClassName={RAIL_ACTION}
-                  triggerContent={tLayout('generate')}
-                />
-              </DocRow>
-              {/* One link per language. A language with no text yet reads
-                  "JA —" and opens the translation instead of a PDF in the
-                  wrong language. */}
-              <DocRow label={tLayout('docQuote')} hint={days.length === 0 ? t('pdfNeedsDays') : undefined}>
-                {[sourceLanguage, ...(dayTranslations?.target_languages ?? [])].map(lang =>
-                  documentLanguageReady(lang) ? (
-                    <button
-                      key={lang}
-                      type="button"
-                      onClick={() => handlePreviewPDF(true, lang)}
-                      disabled={generatingPDF}
-                      className={RAIL_ACTION}
-                      data-testid={`quote-pdf-${lang}`}
-                    >
-                      {generatingPDF && pdfLanguage === lang ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                      {lang.toUpperCase()}
-                    </button>
-                  ) : (
-                    <button
-                      key={lang}
-                      type="button"
-                      onClick={() => openDailyItinerary('side')}
-                      className={`${RAIL_ACTION} !text-gray-400`}
-                      title={tLayout('translateFirst', { language: LANGUAGE_NAMES[lang] })}
-                      data-testid={`quote-pdf-${lang}`}
-                    >
-                      {lang.toUpperCase()} —
-                    </button>
-                  )
-                )}
-              </DocRow>
-              <DocRow label={t('contract')} hint={tLayout('contractHint')}>
-                <Link href={`/documents/contract/${itinerary.id}`} className={RAIL_ACTION}>{tLayout('open')}</Link>
-              </DocRow>
-              <DocRow label={tLayout('docShareLink')}>
-                <button type="button" onClick={() => setTab('messages')} className={RAIL_ACTION}>{tLayout('open')}</button>
-              </DocRow>
-              {/* The printable guest questionnaire with a QR to this booking's
-                  online survey (app/api/itineraries/[id]/survey-pdf). */}
-              <DocRow label={tLayout('docSurvey')} hint="QR">
-                <a href={`/api/itineraries/${itinerary.id}/survey-pdf`} target="_blank" rel="noopener noreferrer" className={RAIL_ACTION}>
-                  {tLayout('open')}
-                </a>
-              </DocRow>
-            </RailGroup>
-            <RailGroup title={tLayout('internal')}>
-              {/* The ENG. ITIN. worksheet the ground operator runs the trip
-                  from — always in the staff language. */}
-              <DocRow label={tLayout('docOpsSheet')} hint={tLayout('staffLanguage')}>
-                <GenerateOpsSheetButton
-                  itineraryId={itinerary.id}
-                  itineraryCode={itinerary.itinerary_code}
-                  triggerClassName={RAIL_ACTION}
-                  triggerContent={tLayout('generate')}
-                />
-              </DocRow>
-              <DocRow label={tLayout('docSupplier')}>
-                <GenerateDocumentsButton
-                  itineraryId={itinerary.id}
-                  itineraryCode={itinerary.itinerary_code}
-                  triggerClassName={RAIL_ACTION}
-                  triggerContent={<>{tLayout('generate')}<ChevronDown className="w-3 h-3" /></>}
-                />
-              </DocRow>
-              <DocRow label={existingInvoice ? existingInvoice.invoice_number : t('invoice')}>
-                {existingInvoice ? (
-                  <Link href={`/invoices/${existingInvoice.id}`} className={RAIL_ACTION}>{tLayout('open')}</Link>
-                ) : (
-                  <button type="button" onClick={handleGenerateInvoice} disabled={generatingInvoice} className={RAIL_ACTION}>
-                    {generatingInvoice ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                    {tLayout('create')}
-                  </button>
-                )}
-              </DocRow>
-            </RailGroup>
-          </RailSection>
         </aside>
       </div>
 
