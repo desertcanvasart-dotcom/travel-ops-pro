@@ -114,6 +114,29 @@ describe('T-UP notification email (the website → the office)', () => {
     expect(parseTourUpOrder(REAL_TOUR_MAIL)?.tourCode).toBe('NEK502')
   })
 
+  it('an optional tour in the real tour email\'s newer layout parses too (constructed, not yet seen)', () => {
+    // The real package-tour email (REAL_TOUR_MAIL) dropped orders over its
+    // 希望出発日(第1希望) label. An optional tour sent in that layout would say
+    // 希望利用日(第1希望): built from REAL_TOUR_MAIL's layout to guard the same gap.
+    const mail = REAL_TOUR_MAIL
+      .replace('●ツアーコード：NEK502', '●オプショナルコード：EXR-B12-FD')
+      .replace('●区分：ツアー', '●区分：オプショナルツアー')
+      .replace('detail.php?id=2297504&hf=0', 'opt_detail.php?id=67')
+      .replace('●希望出発日(第1希望)：2026年10月9日(金)', '●希望利用日(第1希望)：2027年2月24日(水)')
+      .replace('●希望出発日(第2希望)：2026年10月8日(木)', '●希望利用日(第2希望)：2027年2月25日(木)')
+      .replace('●出発地：成田\n', '')
+    const o = parseTupMail(mail)!
+    expect(o).toMatchObject({
+      tourCode: 'EXR-B12-FD',
+      productKind: 'optional',
+      departureDate1: '2027-02-24',
+      departureDate2: '2027-02-25',
+      departureAirport: undefined,
+      websiteBaseFare1: { adultJpy: 348000 },
+    })
+    expect(parseTourUpOrder(mail)?.tourCode).toBe('EXR-B12-FD')
+  })
+
   it('a second date, infants, and 姓/名 sub-labels are read when given', () => {
     const o = parseTupMail(PACKAGE_TOUR_MAIL
       .replace('●出発日(第2希望)：----/--/--', '●出発日(第2希望)：2026/10/23')

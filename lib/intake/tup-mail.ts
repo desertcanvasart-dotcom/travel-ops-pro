@@ -124,8 +124,10 @@ const LABELS = {
   category: ['区分'],
   // The real package-tour notification says 希望出発日(第1希望) (2026-08-30
   // sample); the form's own field names are kept for the canonical document.
-  date1: ['希望出発日(第1希望)', '出発日(第1希望)', '希望出発日', '出発日', '希望利用日', '利用日(第1希望)', '利用日'],
-  date2: ['希望出発日(第2希望)', '出発日(第2希望)', '利用日(第2希望)', '第2希望'],
+  // An optional tour's dates in the same style (希望利用日(第N希望)) are read
+  // too — not yet seen in a real email, but the same gap would drop it.
+  date1: ['希望出発日(第1希望)', '出発日(第1希望)', '希望出発日', '出発日', '希望利用日(第1希望)', '希望利用日', '利用日(第1希望)', '利用日'],
+  date2: ['希望出発日(第2希望)', '出発日(第2希望)', '希望利用日(第2希望)', '利用日(第2希望)', '第2希望'],
   baseFare1: ['第1希望日基本旅行代金'],
   baseFare2: ['第2希望日基本旅行代金'],
   airport: ['出発地'],
