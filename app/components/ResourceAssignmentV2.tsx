@@ -14,6 +14,7 @@ import { vehicleKeyLabel } from '@/lib/rates/vehicle-bands'
 import { useVehicleLabel } from '@/hooks/useVehicleLabel'
 import { onePerPlace, PLACE_TYPES } from '@/lib/resources/one-per-place'
 import type { VehicleRateResult } from '@/lib/transport-rate-utils'
+import { cruiseRouteLabel, cruiseRoutesPresent } from '@/lib/resources/assignable-cruises'
 
 // Types
 interface Resource {
@@ -95,13 +96,12 @@ const AIRPORT_LOCATION_OPTIONS = [
   { value: 'Marsa Alam', label: 'Marsa Alam (RMF)' }
 ]
 
-// Cruise route options
-const CRUISE_ROUTE_OPTIONS = [
-  { value: 'all', label: 'All Routes' },
-  { value: 'luxor_aswan', label: 'Luxor → Aswan (4 nights)' },
-  { value: 'aswan_luxor', label: 'Aswan → Luxor (3 nights)' },
-  { value: 'round_trip', label: 'Round Trip (7 nights)' }
-]
+/** Whether a listed cruise sails this route (any of its routes). */
+const sailsRoute = (r: any, route: string): boolean =>
+  (r.routes?.length ? r.routes : r.route ? [r.route] : []).includes(route)
+
+// Cruise routes are read from the cruises themselves, however they are written
+// (lib/resources/assignable-cruises): the filter offers every route present.
 
 // Resource type configurations - using existing API endpoints
 const RESOURCE_TYPES = [
@@ -189,17 +189,15 @@ const RESOURCE_TYPES = [
     labelKey: 'nileCruises',
     icon: Ship,
     color: 'indigo',
-    apiEndpoint: '/api/cruises',
+    // The directory and the ships priced in Rates → Nile Cruises, one entry
+    // per ship per route.
+    apiEndpoint: '/api/cruises/assignable',
     nameField: 'name',
     phoneField: 'phone',
     displayField: (r: any) => {
-      const routeLabels: Record<string, string> = {
-        'luxor_aswan': 'Luxor → Aswan (4n)',
-        'aswan_luxor': 'Aswan → Luxor (3n)',
-        'round_trip': 'Round Trip (7n)'
-      }
-      const routeLabel = r.route ? routeLabels[r.route] || r.route : ''
-      return `${r.name}${r.ship_name ? ` - ${r.ship_name}` : ''}${routeLabel ? ` • ${routeLabel}` : ''}`
+      const routes: string[] = r.routes?.length ? r.routes : r.route ? [r.route] : []
+      const routeLabel = routes.map(cruiseRouteLabel).join(' / ')
+      return `${r.name}${r.ship_name && r.ship_name !== r.name ? ` - ${r.ship_name}` : ''}${routeLabel ? ` • ${routeLabel}` : ''}`
     },
     canNotify: false,
     filterType: 'route',
@@ -423,7 +421,7 @@ export default function ResourceAssignmentV2({
       case 'route':
         // For cruises - filter by route
         if (modalRouteFilter === 'all') return resources
-        return resources.filter(r => r.route === modalRouteFilter)
+        return resources.filter(r => sailsRoute(r, modalRouteFilter))
       
       default:
         return resources
@@ -449,14 +447,7 @@ export default function ResourceAssignmentV2({
     return Array.from(cities).sort()
   }
 
-  const getUniqueCruiseRoutes = (): string[] => {
-    const resources = availableResources['cruise'] || []
-    const routes = new Set<string>()
-    resources.forEach(r => {
-      if (r.route) routes.add(r.route)
-    })
-    return Array.from(routes)
-  }
+  const getUniqueCruiseRoutes = (): string[] => cruiseRoutesPresent(availableResources['cruise'] || [])
 
   const getUniqueCities = (type: string): string[] => {
     const resources = availableResources[type] || []
@@ -570,12 +561,9 @@ export default function ResourceAssignmentV2({
       } else if (activeTab === 'hotel_staff' && selectedResource?.hotel?.name) {
         resourceName += ` - ${selectedResource.hotel.name}`
       } else if (activeTab === 'cruise' && selectedResource?.route) {
-        const routeLabels: Record<string, string> = {
-          'luxor_aswan': 'Luxor → Aswan',
-          'aswan_luxor': 'Aswan → Luxor',
-          'round_trip': 'Round Trip'
-        }
-        resourceName += ` (${routeLabels[selectedResource.route] || selectedResource.route})`
+        // The route the office filtered on, when this ship sails it.
+        const route = modalRouteFilter !== 'all' && sailsRoute(selectedResource, modalRouteFilter) ? modalRouteFilter : selectedResource.route
+        resourceName += ` (${cruiseRouteLabel(route)})`
       } else if (selectedResource?.city && ['guide', 'hotel', 'restaurant'].includes(activeTab)) {
         resourceName += ` (${selectedResource.city})`
       }
@@ -1143,11 +1131,13 @@ export default function ResourceAssignmentV2({
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                   >
                     <option value="all">{t('allRoutes')} ({allAvailableForType.length})</option>
-                    {CRUISE_ROUTE_OPTIONS.filter(r => r.value !== 'all' && getUniqueCruiseRoutes().includes(r.value)).map((route) => {
-                      const count = allAvailableForType.filter(r => r.route === route.value).length
+                    {/* Every route the cruises actually sail — one written in its
+                        own words is offered too, not hidden. */}
+                    {getUniqueCruiseRoutes().map((route) => {
+                      const count = allAvailableForType.filter(r => sailsRoute(r, route)).length
                       return (
-                        <option key={route.value} value={route.value}>
-                          {route.label} ({count})
+                        <option key={route} value={route}>
+                          {cruiseRouteLabel(route)} ({count})
                         </option>
                       )
                     })}
