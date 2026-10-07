@@ -1541,6 +1541,10 @@ export async function createLandItineraryServices(
       c.toLowerCase() !== overnightCity && c.toLowerCase() !== effectiveCity.toLowerCase()
     ) ?? (isSameDayReturnTrip ? currentCity : undefined)
     const isDayTrip = !!dayTripCity && !isIntercityTransfer && !isCruiseDay
+    // The day-trip vehicle drives the sightseeing at the far city and back
+    // (Cairo → Alexandria, Aswan → Abu Simbel, Cairo → Fayoum): once it is
+    // priced, a local sightseeing vehicle there would be charged twice.
+    let dayTripVehiclePriced = false
 
     if (isDayTrip) {
       // Fetch the same-day round-trip intercity rate for the day trip
@@ -1596,6 +1600,7 @@ export async function createLandItineraryServices(
         })
         totalSupplierCost += dayTripRate
         totalClientPrice += withMargin(dayTripRate)
+        dayTripVehiclePriced = true
         console.log(`🚌 Day ${dayNumber}: Added day-trip intercity transfer ${overnightCity}→${dayTripCity} (€${dayTripRate})`)
       } else {
         console.warn(`⚠️ Day ${dayNumber}: No intercity rate found for day trip to ${dayTripCity}`)
@@ -1609,7 +1614,9 @@ export async function createLandItineraryServices(
     // CRUISE DISEMBARKATION: If previous day was cruise, sightseeing at the disembarkation
     // city (e.g., Luxor West Bank on checkout day) is PART of the cruise transport package
     const isCruiseDisembarkationDay = previousWasCruise && !isCruiseDay
-    const skipRegularTransport = hasDomesticFlightOnThisDay || (isIntercityTransfer && isTransferOnly) || isCruiseDisembarkationDay
+    // A priced day-trip vehicle IS the day's transport. Without one (no rate
+    // for the road), the local vehicle stays so the day is not left unpriced.
+    const skipRegularTransport = hasDomesticFlightOnThisDay || (isIntercityTransfer && isTransferOnly) || isCruiseDisembarkationDay || dayTripVehiclePriced
     if (!isFreeDay && !isCruiseDay && !skipRegularTransport) {
       // --- Per-day transport rate lookup ---
       // If the day is in a different city, fetch transport rate for THAT city

@@ -211,3 +211,47 @@ describe('generate-itinerary route — land path end to end (mock DB, stubbed AI
     expect(itins![0].thread_id).toBe('thread-7')
   })
 })
+
+describe('generate-itinerary route — a day trip is one vehicle', () => {
+  // The day-trip vehicle drives the sightseeing at the far city and back
+  // (Cairo → Alexandria → Cairo): no local sightseeing vehicle on top of it.
+  const DAY_TRIP = () => ({
+    trip_name: 'Cairo and Alexandria',
+    total_days: 3,
+    days: [
+      { day_number: 1, title: 'Arrival in Cairo', city: 'Cairo', overnight_city: 'Cairo', description: 'Arrive.', attractions: [] },
+      { day_number: 2, title: 'Alexandria day trip', city: 'Alexandria', overnight_city: 'Cairo', cities_visited: ['Cairo', 'Alexandria'], description: 'Day trip.', attractions: ['Catacombs'] },
+      { day_number: 3, title: 'Departure', city: 'Cairo', overnight_city: null, description: 'Fly home.', attractions: [] },
+    ],
+  })
+  const rate = (over: Record<string, unknown>) => ({ is_active: true, base_rate_eur: 50, base_rate_non_eur: 50, vehicle_type: 'Sedan', ...over })
+
+  async function transportOfDay2(rates: Record<string, unknown>[]) {
+    seed({ transportation_rates: rates })
+    mockedCreative.mockResolvedValueOnce(DAY_TRIP() as any)
+    const res = await POST(makeRequest({ ...VALID_BODY, duration_days: 3, cities: ['Cairo', 'Alexandria'], skip_pricing: false }))
+    expect((await res.json()).success).toBe(true)
+    const db = (await import('../_mock-supabase')).createMockClient()
+    const { data: days } = await db.from('itinerary_days').select()
+    const day2 = days!.find((d: any) => d.day_number === 2)
+    const { data: services } = await db.from('itinerary_services').select()
+    return services!.filter((s: any) => s.itinerary_day_id === day2.id && s.service_type === 'transportation').map((s: any) => s.service_name)
+  }
+
+  it('the day-trip vehicle only, when its rate is found', async () => {
+    const names = await transportOfDay2([
+      rate({ id: 'cai-tour', service_type: 'day_tour', city: 'Cairo' }),
+      rate({ id: 'alex-tour', service_type: 'day_tour', city: 'Alexandria' }),
+      rate({ id: 'cai-alex', service_type: 'intercity_with_sightseeing', origin_city: 'Cairo', destination_city: 'Alexandria', trip_shape: 'same_day_return', base_rate_eur: 180, base_rate_non_eur: 180 }),
+    ])
+    expect(names).toEqual(['Sedan Day Trip Transfer (Cairo → Alexandria → Cairo)'])
+  })
+
+  it('the local vehicle stays when the road has no rate, so the day is not unpriced', async () => {
+    const names = await transportOfDay2([
+      rate({ id: 'cai-tour', service_type: 'day_tour', city: 'Cairo' }),
+      rate({ id: 'alex-tour', service_type: 'day_tour', city: 'Alexandria' }),
+    ])
+    expect(names).toEqual(['Sedan Sightseeing Transportation (Alexandria)'])
+  })
+})
