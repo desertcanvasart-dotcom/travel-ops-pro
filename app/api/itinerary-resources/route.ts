@@ -2,6 +2,7 @@
 
 import { createServerClient } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export async function GET(request: NextRequest) {
   try {
@@ -133,5 +134,55 @@ export async function DELETE(request: NextRequest) {
       { success: false, error: 'Failed to delete resource' },
       { status: 500 }
     )
+  }
+}
+/**
+ * PATCH /api/itinerary-resources?id=<assignment id>
+ * Change an assignment's dates — airport staff booked for the whole trip when
+ * they meet the arrival only. Body: { start_date, end_date? }; the end
+ * defaults to the start (one day) and cannot fall before it. Only an
+ * assignment on one of the signed-in organisation's itineraries is changed.
+ * Ported from autoura-saas (#611).
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const supabase = createServerClient()
+
+    const id = new URL(request.url).searchParams.get('id')
+    const body = await request.json().catch(() => ({}))
+    const isDay = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
+    const start = body.start_date
+    const end = body.end_date || start
+    if (!id) return NextResponse.json({ success: false, error: 'Resource ID required' }, { status: 400 })
+    if (!isDay(start) || !isDay(end)) {
+      return NextResponse.json({ success: false, error: 'start_date and end_date must be dates (YYYY-MM-DD)' }, { status: 400 })
+    }
+    if (end < start) return NextResponse.json({ success: false, error: 'The end date is before the start date' }, { status: 400 })
+
+    const { data: assignment } = await supabase
+      .from('itinerary_resources')
+      .select('id, itinerary:itineraries!inner(org_id)')
+      .eq('id', id)
+      .eq('itinerary.org_id', orgId)
+      .maybeSingle()
+    if (!assignment) {
+      return NextResponse.json({ success: false, error: 'Assignment not found' }, { status: 404 })
+    }
+
+    const { data, error } = await supabase
+      .from('itinerary_resources')
+      .update({ start_date: start, end_date: end, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('id, start_date, end_date')
+    if (error) throw error
+    if (!data || data.length === 0) {
+      return NextResponse.json({ success: false, error: 'Assignment not found' }, { status: 404 })
+    }
+    return NextResponse.json({ success: true, data: data[0] })
+  } catch (error) {
+    console.error('Error updating itinerary resource dates:', error)
+    return NextResponse.json({ success: false, error: 'Failed to update the dates' }, { status: 500 })
   }
 }

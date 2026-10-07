@@ -43,9 +43,12 @@ test('the unedited sample is skipped rather than imported as a rate', async ({ r
   expect(json.inserted).toBe(0)
   expect(json.warnings?.some((w: any) => w.kind === 'example_row_skipped')).toBe(true)
 
-  // And nothing landed.
+  // And the sample did not land. Asserted on the sample row itself, not on an
+  // empty table: the seeded org is shared with every other CI run, and a
+  // concurrent run's own test row (rate-periods-roundtrip, live until its
+  // cleanup) made "header only" fail a PR that touched no rates (#533).
   const after = await request.get('/api/rates/bulk/export?table=accommodation_rates')
-  expect((await after.text()).trim().split('\n')).toHaveLength(1)  // header only
+  expect(await after.text()).not.toContain('EXAMPLE-DELETE-THIS-ROW')
 })
 
 test('the periods sheet has a sample too', async ({ request }) => {
