@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { shiftDateISO, todayFromRequest } from '@/lib/today'
 import { REPLY_OVERDUE_HOURS, waitingLabel } from '@/lib/email/reply-status'
+import { waitingSince } from '@/lib/email/automated-senders'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
@@ -225,8 +226,13 @@ export async function GET(request: NextRequest) {
       .lte('awaiting_reply_since', overdueBefore)
       .or('is_hidden.is.null,is_hidden.eq.false')
       .order('awaiting_reply_since', { ascending: true })
-      .limit(20)
-    for (const c of (waiting ?? []) as { id: string; client_name: string | null; client_email: string | null; subject: string | null; awaiting_reply_since: string }[]) {
+      // Read past the robots: the oldest rows were no-reply and ticket-system
+      // mail, which would fill a list of 20 before any customer.
+      .limit(100)
+    const customers = ((waiting ?? []) as { id: string; client_name: string | null; client_email: string | null; subject: string | null; awaiting_reply_since: string }[])
+      .filter(c => waitingSince(c.client_email, c.awaiting_reply_since))
+      .slice(0, 20)
+    for (const c of customers) {
       items.push({
         type: 'reply_overdue',
         severity: 'urgent', // a customer has written and is waiting

@@ -4,6 +4,7 @@ import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
 import { requireRole } from '@/lib/auth/current-org'
 import type { UnifiedConversation, UnifiedConversationFilters } from '@/types/unified'
+import { waitingSince } from '@/lib/email/automated-senders'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -275,7 +276,9 @@ export async function GET(request: NextRequest) {
           last_message_at: conv.last_message_at,
           unread_count: conv.unread_count || 0,
           status: conv.status,
-          awaiting_reply_since: conv.awaiting_reply_since ?? null,
+          // A no-reply or service address is nobody waiting: no badge, and the
+          // "awaiting reply" filter below drops it (lib/email/automated-senders).
+          awaiting_reply_since: waitingSince(conv.client_email, conv.awaiting_reply_since),
           assigned_team_member_id: conv.assigned_team_member_id,
           assigned_at: conv.assigned_at,
           created_at: conv.created_at,
