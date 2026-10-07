@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { syncExpense } from '@/lib/accounting'
 import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-numbering'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { paymentDateForStatus } from '@/lib/expense-status'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -121,7 +122,7 @@ export async function POST(request: NextRequest) {
       receipt_filename: body.receipt_filename || null,
       status: body.status || 'pending',
       payment_method: body.payment_method || null,
-      payment_date: body.payment_date || null,
+      payment_date: paymentDateForStatus(body.status || 'pending', body.payment_date),
       payment_reference: body.payment_reference || null,
       notes: body.notes || null,
       created_at: new Date().toISOString(),

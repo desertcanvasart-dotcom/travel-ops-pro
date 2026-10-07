@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { PAYABLE_EXPENSE_STATUSES } from '@/lib/expense-status'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -97,6 +98,9 @@ export async function POST(
         })
         .in('id', expenseIds)
         .eq('org_id', orgId)
+        // Only what is still owed: a rejected expense was never owed, and a
+        // paid one keeps its own date, method and reference.
+        .in('status', [...PAYABLE_EXPENSE_STATUSES])
     }
 
     return NextResponse.json({ success: true, data })
