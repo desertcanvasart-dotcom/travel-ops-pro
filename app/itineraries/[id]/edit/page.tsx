@@ -5,6 +5,8 @@ import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useTranslations, useLocale } from 'next-intl'
+import ServiceSupplierSelect from '@/components/itineraries/ServiceSupplierSelect'
+import { supplierCityForService } from '@/lib/suppliers/service-supplier-kinds'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useSupplierTypes } from '@/hooks/useSupplierTypes'
 import { useTierOptions } from '@/hooks/useTierOptions'
@@ -574,9 +576,10 @@ export default function ItineraryEditorPage() {
     }
   }
 
+  // The "Sold by" guide list. Each line's own supplier list is
+  // ServiceSupplierSelect: its kind, in its city.
   const loadSuppliers = async () => {
     try {
-      console.log('Loading suppliers...')
       const { data, error } = await supabase
         .from('suppliers')
         .select('id, name, type, types, city, contact_phone')
@@ -587,52 +590,11 @@ export default function ItineraryEditorPage() {
         console.error('Error loading suppliers:', error)
         return
       }
-      
-      console.log('Loaded suppliers:', data?.length || 0)
       setSuppliers(data || [])
     } catch (error) {
       console.error('Error loading suppliers:', error)
     }
   }
-
-  // Helper to get relevant suppliers for a service type
-  const getSuppliersForServiceType = (serviceType: string) => {
-    const typeMapping: Record<string, string[]> = {
-      transportation: ['transport', 'driver', 'dmc', 'ground_handler'],
-      guide: ['guide', 'dmc', 'ground_handler'],
-      accommodation: ['hotel'],
-      entrance: ['activity_provider', 'attraction', 'dmc'],
-      activity: ['activity_provider', 'attraction', 'dmc'],
-      meal: ['restaurant', 'dmc', 'ground_handler'],
-      cruise: ['cruise', 'cruise_line'],
-      tips: ['dmc', 'ground_handler'],
-      supplies: ['dmc', 'ground_handler'],
-      service_fee: ['dmc', 'ground_handler', 'tour_operator']
-    }
-    
-    const relevantTypes = typeMapping[serviceType] || []
-    if (relevantTypes.length === 0) return suppliers
-    
-    return suppliers.filter(s => relevantTypes.includes(s.type))
-  }
-
-  // Memoized per-service-type supplier split for the dropdown. The unmemoized
-  // version filtered the full supplier list four times per service row on every
-  // render (O(suppliers²) per keystroke while editing a service).
-  const supplierOptionsByType = useMemo(() => {
-    const cache = new Map<string, { recommended: Supplier[]; others: Supplier[] }>()
-    return (serviceType: string) => {
-      let entry = cache.get(serviceType)
-      if (!entry) {
-        const recommended = getSuppliersForServiceType(serviceType)
-        const recommendedIds = new Set(recommended.map(s => s.id))
-        entry = { recommended, others: suppliers.filter(s => !recommendedIds.has(s.id)) }
-        cache.set(serviceType, entry)
-      }
-      return entry
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [suppliers])
 
   /** The programme this trip is linked to, for the length check below. */
   const linkedProgramme = useMemo(
@@ -2023,38 +1985,14 @@ export default function ItineraryEditorPage() {
                                           <label className="text-xs font-medium text-gray-600 whitespace-nowrap">
                                             📦 {t('supplier')}:
                                           </label>
-                                          <select
-                                            value={service.supplier_id || ''}
-                                            onChange={(e) => {
-                                              const supplierId = e.target.value || null
-                                              const supplier = suppliers.find(s => s.id === supplierId)
-                                              updateService(service.id, {
-                                                supplier_id: supplierId,
-                                                supplier_name: supplier?.name || null
-                                              })
-                                            }}
+                                          <ServiceSupplierSelect
+                                            serviceType={service.service_type}
+                                            city={supplierCityForService(service.service_type, day)}
+                                            supplierId={service.supplier_id}
+                                            supplierName={service.supplier_name}
+                                            onChange={next => updateService(service.id, next)}
                                             className="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-[#647C47] bg-white"
-                                          >
-                                            <option value="">{t('noSupplierOptional')}</option>
-                                            {supplierOptionsByType(service.service_type).recommended.length > 0 && (
-                                              <optgroup label={t('recommendedFor', { type: service.service_type })}>
-                                                {supplierOptionsByType(service.service_type).recommended.map(s => (
-                                                  <option key={s.id} value={s.id}>
-                                                    {s.name} {s.city ? `(${s.city})` : ''} - {s.type}
-                                                  </option>
-                                                ))}
-                                              </optgroup>
-                                            )}
-                                            {supplierOptionsByType(service.service_type).others.length > 0 && (
-                                              <optgroup label={t('allOtherSuppliers')}>
-                                                {supplierOptionsByType(service.service_type).others.map(s => (
-                                                  <option key={s.id} value={s.id}>
-                                                    {s.name} {s.city ? `(${s.city})` : ''} - {s.type}
-                                                  </option>
-                                                ))}
-                                              </optgroup>
-                                            )}
-                                          </select>
+                                          />
                                         </>
                                       )}
                                     </div>
