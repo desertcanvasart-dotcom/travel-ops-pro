@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { paymentDateForStatus } from '@/lib/expense-status'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -83,6 +84,22 @@ export async function PUT(
         { error: `status must be one of: ${ALLOWED_STATUSES.join(', ')}` },
         { status: 400 }
       )
+    }
+
+    // The payment date follows the status: set when it becomes paid (keeping
+    // the date it already has, else today), cleared when it is not paid.
+    if (updateData.status !== undefined) {
+      let existing: string | null = null
+      if (updateData.status === 'paid' && !(typeof body.payment_date === 'string' && body.payment_date)) {
+        const { data: row } = await supabaseAdmin
+          .from('expenses')
+          .select('payment_date')
+          .eq('id', id)
+          .eq('org_id', orgId)
+          .maybeSingle()
+        existing = (row as { payment_date?: string | null } | null)?.payment_date ?? null
+      }
+      updateData.payment_date = paymentDateForStatus(updateData.status, body.payment_date, existing)
     }
 
     const { data, error } = await supabaseAdmin
