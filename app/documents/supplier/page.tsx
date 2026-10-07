@@ -69,8 +69,13 @@ export default function SupplierDocumentsPage() {
   const [typeFilter, setTypeFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [mounted, setMounted] = useState(false)
+  // "View documents" on an itinerary links here with ?itineraryId=…, which
+  // the page used to ignore — so it listed every trip's documents. Read on
+  // mount (no useSearchParams: it would need a Suspense boundary to build).
+  const [itineraryFilter, setItineraryFilter] = useState<string | null>(null)
 
   useEffect(() => {
+    setItineraryFilter(new URLSearchParams(window.location.search).get('itineraryId'))
     setMounted(true)
   }, [])
 
@@ -78,7 +83,13 @@ export default function SupplierDocumentsPage() {
     if (mounted) {
       fetchDocuments()
     }
-  }, [mounted, typeFilter, statusFilter])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted, typeFilter, statusFilter, itineraryFilter])
+
+  const showAllDocuments = () => {
+    setItineraryFilter(null)
+    window.history.replaceState({}, '', '/documents/supplier')
+  }
 
   const fetchDocuments = async () => {
     setLoading(true)
@@ -88,6 +99,7 @@ export default function SupplierDocumentsPage() {
       const params = new URLSearchParams()
       if (typeFilter) params.append('type', typeFilter)
       if (statusFilter) params.append('status', statusFilter)
+      if (itineraryFilter) params.append('itineraryId', itineraryFilter)
       
       const response = await fetch(`/api/supplier-documents?${params}`)
       
@@ -182,6 +194,12 @@ export default function SupplierDocumentsPage() {
             <div>
               <h1 className="text-xl font-semibold text-gray-900">{t('supplierDocuments')}</h1>
               <p className="text-sm text-gray-500">{t('supplierDocumentsSubtitle')}</p>
+              {itineraryFilter && (
+                <p className="text-sm text-primary-700 mt-1">
+                  {t('forOneTrip', { code: documents[0]?.itinerary?.itinerary_code ?? '' })}{' '}
+                  <button type="button" onClick={showAllDocuments} className="underline hover:text-primary-800">{t('showAllDocuments')}</button>
+                </p>
+              )}
             </div>
             <Link
               href="/documents"

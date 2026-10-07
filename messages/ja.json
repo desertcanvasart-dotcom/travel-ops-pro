@@ -7620,6 +7620,8 @@
   "supplierDocuments": {
     "supplierDocuments": "サプライヤー書類",
     "supplierDocumentsSubtitle": "バウチャー、サービスオーダー、割り当てを管理",
+    "forOneTrip": "1件の旅程の書類を表示しています（{code}）",
+    "showAllDocuments": "すべての書類を表示",
     "backToAllDocuments": "すべての書類に戻る",
     "tryAgain": "再試行",
     "totalDocuments": "書類合計",
