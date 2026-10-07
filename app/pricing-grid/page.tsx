@@ -665,10 +665,15 @@ function PricingGridContent() {
       const data = await res.json()
 
       if (data.success) {
+        // An office address offered as the client's was dropped by the save
+        // (lib/email/own-address.ts): say so, and clear it here too.
+        const warned = Array.isArray(data.warnings) && data.warnings.length > 0
+        const note = warned ? ` — ${(data.warnings as string[]).join(' ')}` : ''
         setConfig(prev => ({
           ...prev,
           itineraryId: data.itineraryId,
           itineraryCode: data.itineraryCode,
+          ...(warned ? { clientEmail: '' } : {}),
         }))
 
         // For B2B: create quote + template, then redirect to /tours/manage
@@ -707,22 +712,22 @@ function PricingGridContent() {
             const templateData = await templateRes.json()
 
             if (templateData.success && templateData.data?.variation_id) {
-              setSaveMessage(`Saved as ${data.itineraryCode} + B2B Quote ${quoteNum || ''} — Redirecting to B2B Calculator...`)
+              setSaveMessage(`Saved as ${data.itineraryCode} + B2B Quote ${quoteNum || ''} — Redirecting to B2B Calculator...${note}`)
               // Redirect to B2B calculator which has full Plus 0/Plus 1 pricing table
               setTimeout(() => {
                 router.push(`/b2b/calculator/${templateData.data.variation_id}`)
               }, 1000)
             } else {
-              setSaveMessage(`Saved as ${data.itineraryCode} + B2B Quote ${quoteNum || ''} (template creation: ${templateData.error || 'failed'})`)
+              setSaveMessage(`Saved as ${data.itineraryCode} + B2B Quote ${quoteNum || ''} (template creation: ${templateData.error || 'failed'})${note}`)
             }
           } catch (quoteErr) {
             console.error('B2B quote/template creation error:', quoteErr)
-            setSaveMessage(`Saved as ${data.itineraryCode} (B2B processing failed)`)
+            setSaveMessage(`Saved as ${data.itineraryCode} (B2B processing failed)${note}`)
           }
         } else {
           setSavedQuoteId(null)
           setSavedQuoteNumber(null)
-          setSaveMessage(`Saved as ${data.itineraryCode}`)
+          setSaveMessage(`Saved as ${data.itineraryCode}${note}`)
         }
       } else {
         alert(`Save failed: ${data.error}`)

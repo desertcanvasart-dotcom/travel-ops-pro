@@ -89,12 +89,62 @@ export type PropertyRateStatus = 'on_file' | 'switched_off' | 'not_on_file'
 export const propertyKey = (name: string | null | undefined): string =>
   String(name ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
 
-export function propertyRateStatus(
-  property: OvernightProperty,
-  catalog: { hotels: ReadonlyArray<{ name: unknown; active: unknown }>; ships: ReadonlyArray<{ name: unknown; active: unknown }> }
-): PropertyRateStatus {
-  const key = propertyKey(property.name)
-  const rows = (property.kind === 'cruise' ? catalog.ships : catalog.hotels).filter(r => propertyKey(String(r.name ?? '')) === key)
-  if (rows.length === 0) return 'not_on_file'
-  return rows.some(r => r.active !== false) ? 'on_file' : 'switched_off'
+export interface RatesCatalogRow { id?: unknown; name: unknown; city?: unknown; active: unknown }
+export interface RatesCatalog {
+  hotels: ReadonlyArray<RatesCatalogRow>
+  ships: ReadonlyArray<RatesCatalogRow>
+}
+
+/** The rate row a line was priced from. This app's Pricing Grid writes it into
+ *  the line's notes: "__grid:slot:accommodation|rate_id:<id>". */
+export interface RatePin {
+  rate_table: 'accommodation_rates' | 'nile_cruises'
+  rate_id: string
+}
+
+const PIN_TABLE: Record<string, RatePin['rate_table']> = { accommodation: 'accommodation_rates', cruise: 'nile_cruises' }
+
+/** The pin a grid line carries in its notes, or null. A supplement under the
+ *  room (`<id>_supp`, `<id>#supp:…`) is not the room's row. */
+export function gridRatePin(notes: string | null | undefined): RatePin | null {
+  const m = String(notes ?? '').match(/slot:(accommodation|cruise)\|rate_id:([^|\s]+)/)
+  if (!m || /_supp$|#supp:/.test(m[2])) return null
+  return { rate_table: PIN_TABLE[m[1]], rate_id: m[2] }
+}
+
+/** Separators aside too: "Marriott Mena House | Cairo" reads "marriott mena house cairo". */
+const looseKey = (name: string | null | undefined): string =>
+  propertyKey(String(name ?? '').replace(/[|,;/()\[\]–—-]+/g, ' '))
+
+/**
+ * Is the night's hotel or ship still in the rates?
+ *
+ *   1. A line pinned to its rate row is judged by THAT row: there and on,
+ *      switched off, or gone. Its name is never re-read.
+ *   2. Otherwise by name, loosely: case, spacing and separators aside, and
+ *      "<hotel> <city>" counts as <hotel> in that city.
+ *
+ * It compared names exactly, so a name that had drifted from the rate's (a
+ * supplier name, a city added on the end) read as "no longer in your rates"
+ * for a hotel that is. Ported from autoura-saas (#610), where it was found on
+ * "Marriott Mena House | Cairo".
+ */
+export function propertyRateStatus(property: OvernightProperty, catalog: RatesCatalog, pin?: RatePin | null): PropertyRateStatus {
+  const rows = property.kind === 'cruise' ? catalog.ships : catalog.hotels
+  const table = property.kind === 'cruise' ? 'nile_cruises' : 'accommodation_rates'
+  if (pin?.rate_id && pin.rate_table === table && rows.some(r => r.id !== undefined)) {
+    const row = rows.find(r => String(r.id) === pin.rate_id)
+    if (!row) return 'not_on_file'
+    return row.active !== false ? 'on_file' : 'switched_off'
+  }
+  const key = looseKey(property.name)
+  const matches = rows.filter(r => {
+    const name = looseKey(String(r.name ?? ''))
+    if (!name) return false
+    if (name === key) return true
+    const city = looseKey(String(r.city ?? ''))
+    return !!city && (key === `${name} ${city}` || key === `${city} ${name}`)
+  })
+  if (matches.length === 0) return 'not_on_file'
+  return matches.some(r => r.active !== false) ? 'on_file' : 'switched_off'
 }

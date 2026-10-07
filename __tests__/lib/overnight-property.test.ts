@@ -111,9 +111,39 @@ describe('is the named property still in the rates (staff warning)', () => {
     const route = readFileSync('app/api/itineraries/[id]/days/route.ts', 'utf8')
     expect(route).toContain('property_rate_status')
     // A failed catalog read withholds the status instead of flagging every hotel.
-    expect(route).toContain('property && loadedFor[property.kind] ? propertyRateStatus(property, catalog) : null')
+    expect(route).toContain('property && loadedFor[property.kind] ? propertyRateStatus(property, catalog, gridRatePin(service.notes)) : null')
     expect(route).toContain('const loadedFor = { hotel: !hotelError, cruise: !shipError }')
     expect(readFileSync('app/itineraries/[id]/page.tsx', 'utf8')).toContain('overnight-stale')
     expect(readFileSync('lib/itinerary-share.ts', 'utf8')).not.toContain('property_rate_status')
+  })
+})
+
+describe('a hotel still in Rates is not reported removed (ported from autoura-saas #610)', () => {
+  it('a name with its city added — "Marriott Mena House | Cairo" — is the Cairo hotel', async () => {
+    const { propertyRateStatus } = await import('@/lib/itineraries/overnight-property')
+    const catalog = { hotels: [{ id: 'h1', name: 'Marriott Mena House', city: 'Cairo', active: true }], ships: [] }
+    expect(propertyRateStatus({ name: 'Marriott Mena House | Cairo', kind: 'hotel' }, catalog)).toBe('on_file')
+    expect(propertyRateStatus({ name: 'Marriott Mena House, Cairo', kind: 'hotel' }, catalog)).toBe('on_file')
+    expect(propertyRateStatus({ name: 'Marriott Mena House | Luxor', kind: 'hotel' }, catalog)).toBe('not_on_file')
+  })
+
+  it('a grid line is judged by the rate row it was priced from, whatever its name says', async () => {
+    const { propertyRateStatus, gridRatePin } = await import('@/lib/itineraries/overnight-property')
+    const catalog = { hotels: [
+      { id: 'h1', name: 'Marriott Mena House', city: 'Cairo', active: true },
+      { id: 'h2', name: 'Old Hotel', city: 'Cairo', active: false },
+    ], ships: [] }
+    const odd = { name: 'Something else entirely', kind: 'hotel' as const }
+    expect(propertyRateStatus(odd, catalog, gridRatePin('__grid:slot:accommodation|rate_id:h1'))).toBe('on_file')
+    expect(propertyRateStatus(odd, catalog, gridRatePin('__grid:slot:accommodation|rate_id:h2'))).toBe('switched_off')
+    expect(propertyRateStatus(odd, catalog, gridRatePin('__grid:slot:accommodation|rate_id:gone'))).toBe('not_on_file')
+  })
+
+  it('a supplement under the room is not the room’s pin; other slots carry none', async () => {
+    const { gridRatePin } = await import('@/lib/itineraries/overnight-property')
+    expect(gridRatePin('__grid:slot:accommodation|rate_id:h1_supp')).toBeNull()
+    expect(gridRatePin('__grid:slot:accommodation|rate_id:h1#supp:view')).toBeNull()
+    expect(gridRatePin('__grid:slot:route|rate_id:r1')).toBeNull()
+    expect(gridRatePin('__grid:slot:cruise|rate_id:c1')).toEqual({ rate_table: 'nile_cruises', rate_id: 'c1' })
   })
 })

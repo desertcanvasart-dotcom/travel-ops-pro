@@ -14,9 +14,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const state: { rpcDays: any[]; totalUpdate: number | null; inserted: any } = { rpcDays: [], totalUpdate: null, inserted: null }
 const tipRoles: Record<string, string> = {}
 
+// The office's addresses, as the own-address loader reads them.
+const OFFICE: Record<string, any[]> = {
+  gmail_tokens: [{ email: 'bookings@desertcanvas.com' }],
+  organizations: [{ office_email_addresses: [] }],
+  team_members: [{ email: 'rabab.saber85@gmail.com' }],
+  organization_members: [],
+}
+function readChain(rows: any[]) {
+  const p: any = new Proxy({}, { get: (_t, k: string) => k === 'then' ? (r: any) => r({ data: rows, error: null }) : () => p })
+  return p
+}
+
 function fakeDb() {
   return {
     from(table: string) {
+      if (table in OFFICE) return { select: () => readChain(OFFICE[table]) }
       return {
         insert(rows: any[]) {
           if (table === 'itineraries') { state.inserted = rows[0]; state.totalUpdate = rows[0].total_cost }
@@ -136,5 +149,22 @@ describe('the season premium', () => {
   it('stays in the stored total', async () => {
     await save([{ dayNumber: 1, slots: [slot('accommodation', [hotel])] }], config(), { sellingPriceTotal: 230, seasonUplift: 30 })
     expect(state.totalUpdate).toBe(230)
+  })
+})
+
+describe('the client’s email', () => {
+  const days = [{ dayNumber: 1, slots: [slot('accommodation', [hotel])] }]
+  it('the office’s own address is not saved as the client’s, and the save says so', async () => {
+    for (const email of ['bookings@desertcanvas.com', 'Rabab.Saber85@gmail.com']) {
+      const res = await POST(new Request('http://x', { method: 'POST', body: JSON.stringify({ config: config({ clientEmail: email }), days }) }) as never)
+      const json = await res.json()
+      expect(state.inserted.client_email).toBeNull()
+      expect(json.warnings[0]).toMatch(/one of your own addresses/)
+    }
+  })
+  it('a client’s own address is saved', async () => {
+    const res = await POST(new Request('http://x', { method: 'POST', body: JSON.stringify({ config: config({ clientEmail: 'tersa@gmail.com' }), days }) }) as never)
+    expect((await res.json()).warnings).toEqual([])
+    expect(state.inserted.client_email).toBe('tersa@gmail.com')
   })
 })

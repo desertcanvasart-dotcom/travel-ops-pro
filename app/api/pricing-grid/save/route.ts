@@ -11,6 +11,7 @@ import { soldItems, customAmountSold } from '@/app/pricing-grid/lib/guide-rule'
 import { soldAccommodationItems, ratesOn, rateOn, throughoutGuideRows } from '@/app/pricing-grid/lib/sold-lines'
 import { fillTipRoles, type TipRoleReader } from '@/lib/pricing/tip-roles'
 import { dayDate } from '@/lib/rates/date-window'
+import { isOwnAddress, loadOwnAddresses } from '@/lib/email/own-address'
 
 /**
  * What a slot SELLS — the lines the save writes, and so the stored total:
@@ -145,6 +146,22 @@ export async function POST(request: NextRequest) {
     const finalSellingTotal = (totals?.sellingPriceTotal && totals.sellingPriceTotal > 0)
       ? totals.sellingPriceTotal
       : computedSellingTotal
+
+    // The office's own address is never saved as the client's (own-address.ts):
+    // filled from the From of a message the office sent, it became the
+    // client's email. Dropped with a warning; a failed lookup blocks nothing.
+    const warnings: string[] = []
+    if (config.clientEmail) {
+      try {
+        const own = await loadOwnAddresses(supabase, await getCurrentOrgId())
+        if (isOwnAddress(own, config.clientEmail)) {
+          warnings.push(`${config.clientEmail} is one of your own addresses, so it was not saved as the client's email. Add the client's own email.`)
+          config.clientEmail = ''
+        }
+      } catch (e) {
+        console.warn('[pricing-grid save] own-address check skipped:', e instanceof Error ? e.message : e)
+      }
+    }
 
     // --- 1. Create or update itinerary ---
     const startDate = config.startDate || now.split('T')[0]
@@ -496,6 +513,7 @@ export async function POST(request: NextRequest) {
       daysCreated,
       servicesCreated,
       completeness,
+      warnings,
     })
   } catch (error: any) {
     console.error('Save pricing grid error:', error)
