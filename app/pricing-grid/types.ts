@@ -159,6 +159,9 @@ export interface SelectedItem {
   serviceType?: string         // e.g. 'airport_transfer' / 'day_tour' / 'intercity_transfer' on route slot
   pricingClass?: PricingClass  // 'mandatory' / 'optional' / 'free' on entrance_fees
   guideRate?: number | null    // throughout-guide money on this pick (bed / guide fare) — see RateOption.guide_rate
+  /** Tipping: whose tip it is (tipping_rates.role_type — 'guide', 'driver' …).
+   *  Switching the guide off drops the guide's tips by it (lib/guide-rule.ts). */
+  tipRole?: string | null
   /** An agency supplement (Settings → Vocabulary) riding on the hotel or
    *  cruise pick above it in the same slot — a view, a deck, a meal plan —
    *  priced PER PERSON PER NIGHT on top of the room. Its rateId is
@@ -238,6 +241,8 @@ export interface RateOption {
    *  night (first rate period's guide_rate — the same period the headline
    *  pp_double mirrors), or the flight's guide fare (null = customer fare). */
   guide_rate?: number | null
+  /** Tipping options: tipping_rates.role_type. */
+  tip_role?: string | null
   /** Hotel / cruise options only: the supplements the property prices, each
    *  with its first-period per-person-per-night rate — the same period the
    *  headline rate mirrors (lib/rates/supplements). */
