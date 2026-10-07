@@ -5427,6 +5427,7 @@
     "hotelStaff": "Hotel Assistants",
     "schedulingConflictsDetected": "Scheduling Conflicts Detected",
     "isAlsoBookedFor": "is also booked for {itinerary} ({dates})",
+    "anotherWorkspaceTrip": "another workspace's trip",
     "sendWhatsAppNotification": "Send WhatsApp notification",
     "sending": "Sending...",
     "sent": "Sent!",

@@ -2,9 +2,17 @@
 
 import { createServerClient } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { itinerariesInOrg, itineraryInOrg } from '@/lib/itinerary-resources/org-scope'
+
+// Drivers, guides and vehicles are shared by the whole install, so one can be
+// double-booked by another organisation's trip. That clash is still reported —
+// it is real — but without naming a trip the office cannot see.
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     
@@ -16,6 +24,10 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    if (!(await itineraryInOrg(supabase, itineraryId, orgId))) {
+      return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
+    }
     
     // Try to use the view first, fall back to query if view doesn't exist
     const { data: viewData, error: viewError } = await supabase
@@ -24,15 +36,21 @@ export async function GET(request: NextRequest) {
       .or(`itinerary_1_id.eq.${itineraryId},itinerary_2_id.eq.${itineraryId}`)
     
     if (!viewError && viewData) {
+      const otherOf = (c: any) => c.itinerary_1_id === itineraryId ? c.itinerary_2_id : c.itinerary_1_id
+      const ours = await itinerariesInOrg(supabase, viewData.map(otherOf), orgId)
       // Format conflicts for the response
-      const conflicts = viewData.map((c: any) => ({
-        resource_id: c.resource_id,
-        resource_name: c.resource_name,
-        conflicting_itinerary: c.itinerary_1_id === itineraryId 
-          ? c.itinerary_2_code || c.itinerary_2_id 
-          : c.itinerary_1_code || c.itinerary_1_id,
-        dates: `${c.conflict_start || c.start_date_1} - ${c.conflict_end || c.end_date_1}`
-      }))
+      const conflicts = viewData.map((c: any) => {
+        const mine = ours.has(otherOf(c))
+        return {
+          resource_id: c.resource_id,
+          resource_name: c.resource_name,
+          conflicting_itinerary: !mine ? null : c.itinerary_1_id === itineraryId
+            ? c.itinerary_2_code || c.itinerary_2_id
+            : c.itinerary_1_code || c.itinerary_1_id,
+          other_workspace: !mine,
+          dates: `${c.conflict_start || c.start_date_1} - ${c.conflict_end || c.end_date_1}`
+        }
+      })
       
       return NextResponse.json({ success: true, data: conflicts })
     }
@@ -60,7 +78,7 @@ export async function GET(request: NextRequest) {
           *,
           itineraries!inner (
             itinerary_code,
-            client_name
+            org_id
           )
         `)
         .eq('resource_type', resource.resource_type)
@@ -72,10 +90,12 @@ export async function GET(request: NextRequest) {
       
       if (!conflictError && conflicting && conflicting.length > 0) {
         conflicting.forEach((c: any) => {
+          const mine = c.itineraries?.org_id === orgId
           conflicts.push({
             resource_id: resource.resource_id,
             resource_name: resource.resource_name,
-            conflicting_itinerary: c.itineraries?.itinerary_code || c.itinerary_id,
+            conflicting_itinerary: mine ? c.itineraries?.itinerary_code || c.itinerary_id : null,
+            other_workspace: !mine,
             dates: `${c.start_date} - ${c.end_date || c.start_date}`
           })
         })

@@ -77,7 +77,10 @@ describe('a restaurant’s WhatsApp notice', () => {
     }) }) as never)
   }
   beforeEach(() => {
-    db.tables.itineraries = [{ id: 'itn-1', client_name: 'Tersa', num_adults: 2 }]
+    db.tables.itineraries = [
+      { id: 'itn-1', org_id: 'org-1', client_name: 'Tersa', num_adults: 2 },
+      { id: 'itn-other', org_id: 'org-2', client_name: 'Someone else', client_phone: '+819000000000', num_adults: 2 },
+    ]
     db.tables.meal_rates = [{ id: 'meal-1', restaurant_name: 'Fish Market', supplier: { name: 'Fish Market Alexandria', whatsapp: '+201000000001' } }]
     db.tables.restaurant_contacts = [{ id: 'rc-1', name: 'Kebabgy', phone: '+201000000002', whatsapp: null }]
   })
@@ -93,5 +96,13 @@ describe('a restaurant’s WhatsApp notice', () => {
   })
   it('an unknown id is still "not found"', async () => {
     expect((await notify('nope')).status).toBe(404)
+  })
+  it('another organisation’s trip is not found, and nothing is sent', async () => {
+    const { POST } = await import('@/app/api/whatsapp/notify-resource/route')
+    const res = await POST(new Request('http://x', { method: 'POST', body: JSON.stringify({
+      itineraryId: 'itn-other', resourceId: 'meal-1', resourceType: 'restaurant', startDate: '2026-10-03',
+    }) }) as never)
+    expect(res.status).toBe(404)
+    expect(sent).toEqual([])
   })
 })
