@@ -4,6 +4,7 @@
 // ============================================
 
 import { priceByBasis, toPricingBasis, type PricingBasis } from '@/lib/pricing/pricing-basis'
+import { pickRoadRate, isSameDayReturn } from './road-rate-pick'
 import { type ServiceTier, toNumber } from '@/lib/ai/parsing-utils'
 import { type CabinAllocation, getCruiseRate } from '@/lib/ai/cruise-pricing'
 import {
@@ -1006,8 +1007,16 @@ export async function createLandItineraryServices(
     // Cruise embarkation day: first cruise day after hotel stay (e.g., fly to Aswan, board cruise)
     // Pre-boarding services (hotel checkout, airport services, transfers) should NOT be blocked
     const isCruiseEmbarkationDay = isCruiseDay && !previousWasCruise && dayNumber > 1
+    // A day trip out and back — the night where the night before was, the day
+    // elsewhere — is not a move: no one-way transfer, no hotel check-out and
+    // check-in; it is priced below as the day trip it is (road-rate-pick.ts).
+    const isSameDayReturnTrip = isSameDayReturn({
+      overnightCity: dayData.overnight_city, previousOvernightCity, city: currentCity,
+      flies: !!hasDomesticFlightOnThisDay, aboard: !!isCruiseDay,
+    })
     const isIntercityTransfer = previousDayData
       && previousOvernightCity
+      && !isSameDayReturnTrip
       && (
         // Standard: previous overnight city differs from current day's city
         (previousOvernightCity.toLowerCase() !== currentCity.toLowerCase())
@@ -1399,14 +1408,17 @@ export async function createLandItineraryServices(
       // migration normalized the old 'intercity_transfer' rows to 'intercity',
       // so this is the only value that returns rows here.
       const { getTransportRateForPax: getIntercityRate } = await import('@/lib/transport-rate-utils')
-      const { data: intercityRates } = await supabase
+      // A move: the one-way rate, never the same-day-return one (road-rate-pick.ts).
+      const { data: intercityCandidates } = await supabase
         .from('transportation_rates')
         .select('*')
         .eq('is_active', true)
         .eq('service_type', 'intercity')
         .ilike('origin_city', originCity)
         .ilike('destination_city', destCity)
-        .limit(1)
+        .limit(20)
+      const pickedMove = pickRoadRate<any>(intercityCandidates, 'move')
+      const intercityRates = pickedMove ? [pickedMove] : []
 
       let intercityRate = 0
       let intercityVehicle = 'Vehicle'
@@ -1523,9 +1535,11 @@ export async function createLandItineraryServices(
     // This adds the intercity round-trip vehicle SEPARATE from the local sightseeing sedan
     const citiesVisited = dayData.cities_visited || []
     const overnightCity = (dayData.overnight_city || dayData.city || effectiveCity).toLowerCase()
+    // The far city of a day trip: named in cities_visited, or the day's own
+    // city when the AI wrote the day as "Alexandria, night in Cairo".
     const dayTripCity = citiesVisited.find((c: string) =>
       c.toLowerCase() !== overnightCity && c.toLowerCase() !== effectiveCity.toLowerCase()
-    )
+    ) ?? (isSameDayReturnTrip ? currentCity : undefined)
     const isDayTrip = !!dayTripCity && !isIntercityTransfer && !isCruiseDay
 
     if (isDayTrip) {
@@ -1536,15 +1550,18 @@ export async function createLandItineraryServices(
       // -OVER-DAY rows). Falls back to plain intercity when no sightseeing
       // variant exists for the route.
       const { getTransportRateForPax: getDayTripRate } = await import('@/lib/transport-rate-utils')
-      const { data: dayTripRates } = await supabase
+      // The same-day-return rate (a sightseeing variant preferred), never a
+      // one-way or overnight-return row for the same road (road-rate-pick.ts).
+      const { data: dayTripCandidates } = await supabase
         .from('transportation_rates')
         .select('*')
         .eq('is_active', true)
         .in('service_type', ['intercity_with_sightseeing', 'intercity'])
         .ilike('origin_city', overnightCity.charAt(0).toUpperCase() + overnightCity.slice(1))
         .ilike('destination_city', dayTripCity)
-        .order('service_type', { ascending: false }) // descending: 'intercity_with_sightseeing' > 'intercity' lexicographically — sightseeing variant preferred
-        .limit(1)
+        .limit(20)
+      const pickedDayTrip = pickRoadRate<any>(dayTripCandidates, 'day_trip')
+      const dayTripRates = pickedDayTrip ? [pickedDayTrip] : []
 
       let dayTripRate = 0
       let dayTripVehicle = 'Vehicle'
