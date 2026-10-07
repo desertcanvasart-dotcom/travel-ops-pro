@@ -23,7 +23,6 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",
-    "@autoura/ui": "github:desertcanvasart-dotcom/autoura-ui#66fffef0aa408fe8e6e4cc28038ae0ff5b6d5e59",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/utilities": "^3.2.2",
     "@react-pdf/renderer": "^4.3.1",

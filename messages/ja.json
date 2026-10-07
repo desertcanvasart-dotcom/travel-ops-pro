@@ -1893,8 +1893,29 @@
       "taskToCancel": "要キャンセル{count}件",
       "taskUnpricedRows": "未見積{count}件",
       "languages": {
+        "source": "原文",
+        "missing": "未作成",
+        "partial": "{done}/{total}日",
+        "outdated": "{count}日が古い",
+        "machine": "機械翻訳・未確認{count}日",
+        "reviewed": "確認済み",
+        "clientLanguage": "お客様の言語",
+        "clientReadsThis": "お客様はこの言語を読みます",
         "sideBySide": "並べて表示",
+        "dayMissing": "未作成",
+        "dayMachine": "機械翻訳",
+        "dayReviewed": "確認済み",
+        "dayOutdated": "要更新",
+        "dayTranslated": "翻訳済み",
+        "titlePlaceholder": "日のタイトル",
+        "descriptionPlaceholder": "この日の内容",
+        "translateThisDay": "この日を翻訳",
         "translateAll": "未作成・要更新の日を翻訳",
+        "translateFailed": "翻訳に失敗しました",
+        "saveFailed": "保存できませんでした",
+        "saveReviewed": "確認済みとして保存",
+        "markReviewed": "確認済みにする",
+        "placeholdersInText": "未記入のプレースホルダー: {samples}",
         "missingBanner": "この旅程の{language}版はまだありません。下のサービスと料金はすべての言語で共通です。",
         "partialBanner": "{total}日中{missing}日に{language}のテキストがありません。",
         "outdatedBanner": "{language}の{count}日は、原文の変更前に翻訳されたものです。",
@@ -1902,7 +1923,19 @@
         "sharedServices": "サービスは全言語で共通です。変更するとすべての言語に反映されます。",
         "sendLanguageTitle": "お客様の言語ではありません",
         "sendLanguageMessage": "{client}様は{clientLanguage}をお読みになりますが、{language}版を送信します。送信しますか？",
-        "sendAnyway": "送信する"
+        "sendAnyway": "送信する",
+        "translatedDays": "{count}日を翻訳しました"
+      },
+      "attention": {
+        "title": "要対応（{count}）",
+        "open": "開く",
+        "clientLanguageMissing": "お客様は{language}を読みますが、{total}日中{missing}日に{language}のテキストがありません。",
+        "clientLanguageUnreviewed": "{language}の{count}日は機械翻訳のままで、まだ確認されていません。",
+        "languageOutdated": "{language}の{count}日が古くなっています（翻訳後に原文が変更されました）。",
+        "placeholders": "お客様向けテキストに未記入のプレースホルダーがあります（{days}日目）: {samples}",
+        "tipsConflict": "チップが含まれる項目（「{included}」）と含まれない項目（「{excluded}」）の両方にあります。意図通りか確認してください。",
+        "invoicedWithoutBooking": "請求書は発行済みですが、予約がまだありません。",
+        "overnightWithoutStay": "{days}日目は宿泊がありますが、ホテルまたはクルーズの行がありません。料金が不完全な可能性があります。"
       },
       "tourCode": "プログラムコード",
       "layout": {
@@ -1933,6 +1966,16 @@
         "open": "開く",
         "create": "作成",
         "translateFirst": "{language}のテキストがまだありません。先に翻訳してください"
+      },
+      "coverage": {
+        "title": "手配状況",
+        "subtitle": "各日のサービスに必要な手配と、割り当て状況",
+        "summary": "{needed}件中{covered}件手配済み",
+        "day": "{number}日目",
+        "assign": "割り当て",
+        "extraHint": "割り当て済みですが、この日のサービスには含まれていません",
+        "nothingNeeded": "この旅程にはまだガイド・車両・ホテルなどが必要なサービスがありません。",
+        "loadFailed": "割り当てを読み込めませんでした。"
       }
     },
     "editAction": "編集",

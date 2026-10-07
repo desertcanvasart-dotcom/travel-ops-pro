@@ -9,7 +9,7 @@ import {
   mergeDayText,
   targetLanguages,
   type DayText,
-} from '@autoura/ui/lib'
+} from '@/lib/itineraries/content-language'
 import type { Language } from '@/types/multilingual'
 import { SUPPORTED_LANGUAGES } from '@/types/multilingual'
 
@@ -17,7 +17,7 @@ import { SUPPORTED_LANGUAGES } from '@/types/multilingual'
 // One itinerary's day text, side by side, per language
 // ============================================
 // GET   the source text of every day and its translation in each target
-//       language, with that translation's status (@autoura/ui/lib).
+//       language, with that translation's status (content-language.ts).
 // POST  translate days into one language — the given days, or every day that
 //       is missing or outdated. Rows are stamped 'machine' with the source's
 //       fingerprint, so a later edit to the source marks them outdated.
@@ -26,7 +26,6 @@ import { SUPPORTED_LANGUAGES } from '@/types/multilingual'
 //
 // Services are not here. They are shared across languages and edited on the
 // itinerary editor; only their names are translated (copy-translate).
-// The status rules are @autoura/ui's, so the page and this route agree.
 
 const supabase = createServerClient()
 

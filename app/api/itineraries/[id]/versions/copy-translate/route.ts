@@ -4,7 +4,7 @@ import { translateFields, ITINERARY_TRANSLATION_FIELDS, ITINERARY_DAY_TRANSLATIO
 import type { Language } from '@/types/multilingual'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
-import { dayTextHash, detectContentLanguage, mergeDayText } from '@autoura/ui/lib'
+import { dayTextHash, detectContentLanguage, mergeDayText } from '@/lib/itineraries/content-language'
 
 const supabase = createServerClient()
 
@@ -69,7 +69,7 @@ async function translateItineraryDays(
       overnight_city: translatedContent.overnight_city || sourceContent.overnight_city || null,
       // Machine text, and the source it was made from: the itinerary page
       // reports it unreviewed, and outdated once the source is edited
-      // (@autoura/ui/lib, content-language).
+      // (lib/itineraries/content-language.ts).
       status: 'machine',
       source_hash: dayTextHash(sourceContent),
       translated_at: now,
