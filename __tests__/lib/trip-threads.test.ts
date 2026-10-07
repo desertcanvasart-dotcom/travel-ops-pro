@@ -37,3 +37,13 @@ describe('the inbox reads trip chats within the org', () => {
     expect(trip).toMatch(/from\('itineraries'\)[\s\S]*?\.eq\('org_id', orgId\)/)
   })
 })
+
+describe('a failing trip-chat read does not take the inbox down', () => {
+  const src = readFileSync(join(process.cwd(), 'app/api/unified/conversations/route.ts'), 'utf8')
+  const trip = src.slice(src.indexOf('const tripTask'), src.indexOf('const emailTask'))
+  it('the trip channel logs and skips its errors instead of throwing', () => {
+    // Before the trip_messages migration had run, a throw here failed the
+    // whole inbox list (CI e2e: "Could not find the table 'public.trip_messages'").
+    expect(trip).not.toMatch(/throw /)
+  })
+})

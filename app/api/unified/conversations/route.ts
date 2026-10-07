@@ -233,7 +233,13 @@ export async function GET(request: NextRequest) {
         .eq('org_id', orgId)
         .order('created_at', { ascending: false })
         .limit(TRIP_WINDOW)
-      if (tripError) throw tripError
+      // One channel failing must not take the inbox down with it: before the
+      // trip_messages migration has run, or on a failed read, the other
+      // channels still list and trip chats are simply absent.
+      if (tripError) {
+        console.error('[unified conversations] trip chats unavailable:', tripError.message)
+        return
+      }
 
       const threads = new Map(tripThreads(rows ?? []).map(t => [t.itineraryId, t]))
       if (threads.size === 0) return
@@ -243,7 +249,10 @@ export async function GET(request: NextRequest) {
         .select('id, itinerary_code, trip_name, client_name, client_email, client_id')
         .eq('org_id', orgId)
         .in('id', [...threads.keys()])
-      if (tripsError) throw tripsError
+      if (tripsError) {
+        console.error('[unified conversations] trip chats unavailable:', tripsError.message)
+        return
+      }
 
       for (const trip of trips ?? []) {
         const t = threads.get(trip.id)!
