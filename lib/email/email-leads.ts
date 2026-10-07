@@ -29,6 +29,7 @@ import { bareAddress, isOfficeAddress, type OfficeRule } from '@/lib/email/offic
 import { loadOfficeRule } from '@/lib/email/office-addresses-server'
 import { looksLikeTourUpOrder } from '@/lib/intake/tour-up-order'
 import { emailOrderText } from '@/lib/intake/tup-mail'
+import { isAutomatedSender } from '@/lib/email/automated-senders'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from(table: string): any }
@@ -119,7 +120,7 @@ export function leadNotes(x: LeadExtraction, subject: string, receivedAt: string
   ].filter(Boolean).join('\n')
 }
 
-type Outcome = 'lead_created' | 'not_a_request' | 'known_contact' | 'office' | 'dismissed' | 'web_order' | 'error'
+type Outcome = 'lead_created' | 'not_a_request' | 'known_contact' | 'office' | 'dismissed' | 'web_order' | 'skipped' | 'error'
 
 /**
  * Judge every new email conversation not judged yet. Returns what happened to
@@ -166,6 +167,8 @@ export async function processNewEmailLeads(
       const sender = bareAddress(msg.from_address)
       if (isOfficeAddress(rule, sender)) { await mark('office'); continue }
       if (conv.client_id || known.has(sender)) { await mark('known_contact'); continue }
+      // A no-reply or service address asks for nothing: not worth a model call.
+      if (isAutomatedSender(sender)) { await mark('skipped'); continue }
 
       const orgId = await orgForMailbox(db, conv.user_id)
       if (!orgId) { await mark('error'); continue }

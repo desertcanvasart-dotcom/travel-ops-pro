@@ -90,6 +90,18 @@ describe('a travel request by email becomes a Lead', () => {
     expect(db.tables.clients).toEqual([])
   })
 
+  it('a no-reply or service address is skipped, and the AI is not asked', async () => {
+    let asked = 0
+    const db = inbox([
+      { id: 'robot', from: 'Twilio <donotreply@twilio.com>' },
+      { id: 'tickets', from: 'info@egymonuments.gov.eg' },
+    ])
+    const out = await processNewEmailLeads(db, { extract: async () => { asked++; return request } })
+    expect(out.map(o => [o.conversationId, o.outcome])).toEqual([['robot', 'skipped'], ['tickets', 'skipped']])
+    expect(asked).toBe(0)
+    expect(db.tables.clients).toEqual([])
+  })
+
   it("the website's order notification is not a lead: the order intake made the client; the AI is not asked", async () => {
     let asked = 0
     const db = inbox([{ id: 'tup', from: 'noreply@example.com' }])
