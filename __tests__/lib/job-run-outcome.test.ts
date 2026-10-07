@@ -40,6 +40,25 @@ describe('withJobRun records what the route reports', () => {
     await withJobRun('gmail-sync', () => d.client, async () => new Response('{}'))()
     expect(d.updates[0]).toMatchObject({ outcome: 'ok', detail: null })
   })
+  it('a 500 records the error its body gives, not just the status', async () => {
+    const d = db()
+    const res = await withJobRun('send-reminders', () => d.client, async () =>
+      Response.json({ success: false, error: 'column tenants_1.foo does not exist' }, { status: 500 }))()
+    expect(d.updates[0]).toMatchObject({ outcome: 'failed', detail: 'HTTP 500: column tenants_1.foo does not exist' })
+    // The caller still gets the body.
+    expect((await res.json()).error).toBe('column tenants_1.foo does not exist')
+  })
+  it('the header, when set, wins over the body', async () => {
+    const d = db()
+    await withJobRun('send-reminders', () => d.client, async () =>
+      Response.json({ error: 'raw' }, { status: 500, headers: jobRunHeaders('failed', '0 of 3 sent') }))()
+    expect(d.updates[0]).toMatchObject({ detail: 'HTTP 500: 0 of 3 sent' })
+  })
+  it('a 500 with no usable body still records its status', async () => {
+    const d = db()
+    await withJobRun('send-reminders', () => d.client, async () => new Response('boom', { status: 500 }))()
+    expect(d.updates[0]).toMatchObject({ outcome: 'failed', detail: 'HTTP 500' })
+  })
   it('non-ASCII in a summary cannot break the header', () => {
     expect(jobRunHeaders('ok', '山田 2 sent')['x-job-detail']).toBe('?? 2 sent')
   })

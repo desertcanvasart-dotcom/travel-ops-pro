@@ -109,6 +109,20 @@ export function isStale(lastRun: string | null, now: Date = new Date()): boolean
   return now.getTime() - then > STALE_AFTER_HOURS * 3600000
 }
 
+/** The error a non-2xx JSON body gives (`error`, else `message`), read from a
+ *  clone so the caller still gets the body. Null when there is none. */
+async function bodyError(res: Response): Promise<string | null> {
+  try {
+    const body = await res.clone().json()
+    const said = body?.error ?? body?.message
+    if (typeof said === 'string') return said.trim() || null
+    if (said && typeof said.message === 'string') return said.message.trim() || null
+    return null
+  } catch {
+    return null // not JSON: the status is all there is
+  }
+}
+
 /**
  * Wrap a cron route handler so that running it is recorded.
  *
@@ -199,7 +213,13 @@ export function withJobRun<A extends unknown[]>(
       // these every row's detail was null and a finding was invisible here.
       const reported = res.headers.get(JOB_OUTCOME_HEADER)
       const detail = res.headers.get(JOB_DETAIL_HEADER)
-      if (!res.ok) await finish('failed', detail ? `HTTP ${res.status}: ${detail}` : `HTTP ${res.status}`)
+      if (!res.ok) {
+        // A failing route rarely sets the header: its catch answers 500 with
+        // the reason in the body ({ error }). Recording only "HTTP 500" left a
+        // failed run with nothing to say why.
+        const reason = detail ?? await bodyError(res)
+        await finish('failed', reason ? `HTTP ${res.status}: ${reason}` : `HTTP ${res.status}`)
+      }
       else await finish(reported === 'failed' ? 'failed' : 'ok', detail ?? undefined)
       return res
     } catch (err) {
