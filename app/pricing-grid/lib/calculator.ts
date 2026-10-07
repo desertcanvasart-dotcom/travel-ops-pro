@@ -13,6 +13,8 @@ import { isSupplementItem, isSingleSupplementItem, SLOT_DEFINITIONS } from '../t
 import { priceAcrossPax } from '@/lib/pricing/pax-range'
 import { computeUplift, seasonForDate, type SeasonWindow } from '@/lib/pricing/season-uplift'
 import { dayDate, rateOnDate } from '@/lib/rates/date-window'
+import { soldItems, customAmountSold } from './guide-rule'
+import { soldAccommodationItems } from './sold-lines'
 
 // --- Helpers ---
 
@@ -101,33 +103,28 @@ export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
     }
 
     if (GROUP_SLOT_IDS.has(slot.slotId)) {
-      // Group: guide slot respects the withGuide toggle
-      if (slot.slotId === 'guide' && !config.withGuide) continue
-      // Tipping: skip guide_tip if no guide
-      if (slot.slotId === 'tipping' && !config.withGuide) {
-        // Only include non-guide tips (driver_tip, etc.)
-        const nonGuideTips = slot.selectedItems
-          .filter(item => !item.rateId.includes('guide'))
-          .reduce((sum, item) => sum + getRate(item, passport, on), 0)
-        groupTotal += nonGuideTips
+      // The guide switch (guide-rule.ts): guide off sells no guide and none of
+      // the guide's tips — decided by each tip's role, the same rule the save
+      // uses. (It looked for "guide" in the tip's id, a row UUID, so the
+      // guide's tips stayed in the price.)
+      if (slot.customAmount > 0) {
+        if (customAmountSold(slot.slotId, config.withGuide)) groupTotal += slot.customAmount
         continue
       }
-      groupTotal += cost
+      groupTotal += soldItems(slot, config.withGuide).reduce((sum, item) => sum + getRate(item, passport, on), 0)
 
     } else if (PP_SLOT_IDS.has(slot.slotId)) {
       if (slot.slotId === 'accommodation') {
-        // Accommodation: pp_double_eur is already a per-person rate.
-        // Under the hotel pick ride two kinds of add-on: the single
-        // supplement (`${id}_supp`, charged for a party of one only) and the
-        // agency's supplements (`#supp:<key>` — a view, a meal plan), which
-        // every traveller pays per night.
-        if (slot.selectedItems.length > 0) {
-          const ppDouble = getRate(slot.selectedItems[0], passport, on)
-          const singleSupp = pax === 1
-            ? slot.selectedItems.slice(1).filter(isSingleSupplementItem).reduce((sum, i) => sum + getRate(i, passport, on), 0)
-            : 0
-          const supplements = slot.selectedItems.slice(1).filter(isSupplementItem).reduce((sum, i) => sum + getRate(i, passport, on), 0)
-          perPersonTotal += ppDouble + singleSupp + supplements
+        // Accommodation: pp_double_eur is already a per-person rate. Under
+        // the hotel pick ride the agency's supplements (`#supp:<key>` — a
+        // view, a meal plan, every traveller pays them) and the single
+        // supplement (`${id}_supp`, a party of one only) — sold-lines.ts,
+        // the rule the save follows too. A typed amount is per person and
+        // wins, as in every slot and the save.
+        if (slot.customAmount > 0) {
+          perPersonTotal += slot.customAmount
+        } else {
+          perPersonTotal += soldAccommodationItems(slot.selectedItems, pax).reduce((sum, i) => sum + getRate(i, passport, on), 0)
         }
       } else {
         perPersonTotal += cost
@@ -320,18 +317,19 @@ function aggregateNonTransport(days: GridDay[], config: GridConfig) {
       }
 
       if (GROUP_SLOT_IDS.has(slot.slotId)) {
-        if (slot.slotId === 'guide' && !withGuide) continue
-        if (slot.slotId === 'tipping' && !withGuide) {
-          groupFixed += slot.selectedItems
-            .filter(item => !item.rateId.includes('guide'))
-            .reduce((sum, item) => sum + getRate(item, passport, on), 0)
+        // The guide switch, as in calculateDay (guide-rule.ts).
+        if (slot.customAmount > 0) {
+          if (customAmountSold(slot.slotId, withGuide)) groupFixed += slot.customAmount
           continue
         }
-        groupFixed += slotTotal(slot, passport, on)
+        groupFixed += soldItems(slot, withGuide).reduce((sum, item) => sum + getRate(item, passport, on), 0)
 
       } else if (PP_SLOT_IDS.has(slot.slotId)) {
         if (slot.slotId === 'accommodation') {
-          if (slot.selectedItems.length > 0) {
+          // A typed amount wins, as in calculateDay and the save.
+          if (slot.customAmount > 0) {
+            perPerson += slot.customAmount
+          } else if (slot.selectedItems.length > 0) {
             // First item = double-occupancy per-person rate. Under it: the
             // single-supplement add-on (SlotRow's `${id}_supp`, the solo
             // traveller's extra) and the agency's supplements (`#supp:<key>`),
@@ -342,8 +340,6 @@ function aggregateNonTransport(days: GridDay[], config: GridConfig) {
               else if (isSingleSupplementItem(extra)) singleSupplement += getRate(extra, passport, on)
               else singleSupplement += getRate(extra, passport, on) // legacy: anything else under the hotel was the single supp
             }
-          } else if (slot.customAmount > 0) {
-            perPerson += slot.customAmount
           }
         } else {
           perPerson += slotTotal(slot, passport, on)

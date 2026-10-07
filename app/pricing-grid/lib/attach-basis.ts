@@ -7,6 +7,10 @@
 // price but no basis; without it the calculator would fall back to the row's
 // rule and a per-person airport assist would count once. This attaches the
 // basis from the grid's rate list, by rate id. Prices are never touched.
+//
+// A reloaded TIP likewise takes its rate's role (who it is for): switching the
+// guide off drops the guide's tips by it (guide-rule.ts), and a reloaded tip
+// without one would stay in the price.
 
 import type { AllRates, GridDay, RateOption } from '../types'
 import { BASIS_SLOTS } from './item-basis'
@@ -16,6 +20,20 @@ export function attachPricingBasis(days: GridDay[], rates: Partial<AllRates>): {
   const next = days.map(day => {
     let dayChanged = false
     const slots = day.slots.map(slot => {
+      if (slot.slotId === 'tipping' && slot.selectedItems.length > 0) {
+        const byId = new Map(((rates.tipping ?? []) as RateOption[]).map(o => [o.id, o]))
+        let tipsChanged = false
+        const items = slot.selectedItems.map(item => {
+          const role = byId.get(item.rateId)?.tip_role
+          if (!role || item.tipRole) return item
+          tipsChanged = true
+          changed++
+          return { ...item, tipRole: role }
+        })
+        if (!tipsChanged) return slot
+        dayChanged = true
+        return { ...slot, selectedItems: items }
+      }
       if (!BASIS_SLOTS.has(slot.slotId) || slot.selectedItems.length === 0) return slot
       const options: RateOption[] = (rates as Record<string, RateOption[] | undefined>)[slot.slotId] ?? []
       if (options.length === 0) return slot

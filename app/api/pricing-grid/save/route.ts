@@ -7,6 +7,21 @@ import { gridCompleteness } from '@/app/pricing-grid/lib/grid-completeness'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { DEFAULT_DAY_TYPE } from '@/app/pricing-grid/types'
+import { soldItems, customAmountSold } from '@/app/pricing-grid/lib/guide-rule'
+import { soldAccommodationItems, ratesOn, rateOn, throughoutGuideRows } from '@/app/pricing-grid/lib/sold-lines'
+import { fillTipRoles, type TipRoleReader } from '@/lib/pricing/tip-roles'
+import { dayDate } from '@/lib/rates/date-window'
+
+/**
+ * What a slot SELLS — the lines the save writes, and so the stored total:
+ * the guide switch (guide-rule.ts) and, on the accommodation row, the single
+ * supplement for a party of one only (sold-lines.ts). The calculator charges
+ * exactly these; anything else here would be a cost the quote never charged.
+ */
+function soldSlotItems(slot: any, pax: number, withGuide: boolean): any[] {
+  const items = soldItems<any>(slot, withGuide)
+  return slot.slotId === 'accommodation' ? soldAccommodationItems(items, pax) : items
+}
 
 /** Add-ons under a hotel / cruise pick (see app/pricing-grid/types). */
 const isAddOnItem = (item: { rateId?: string }) =>
@@ -83,6 +98,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Missing config or days' }, { status: 400 })
     }
 
+    // A tip from a grid tab opened before tips carried their role is given it
+    // from its rate row, so the guide switch below decides by role (tip-roles.ts).
+    await fillTipRoles(supabase as unknown as TipRoleReader, days)
+    const withGuide = config.withGuide !== false
+
     // Completeness signal (harness consolidation Phase B). The grid saves a
     // DRAFT, so this does NOT block the save (you build incrementally) — it is
     // returned so the UI can surface "needs attention". The hard gate is the
@@ -98,20 +118,27 @@ export async function POST(request: NextRequest) {
     // services hold real prices. Prefer the grid's exact client total when sent.
     const paxN = config.pax || 1
     const passport = config.passport || 'non_eu'
-    const supplierTotal = (days || []).reduce((sum: number, day: any) => {
-      return sum + (day.slots || []).reduce((dsum: number, slot: any) => {
+    // The same lines the save writes below: what is sold, at the day's rate,
+    // and the throughout guide's own costs.
+    const supplierTotal = (days || []).reduce((sum: number, day: any, idx: number) => {
+      const on = dayDate(config.startDate, day.dayNumber || idx + 1)
+      const slotsTotal = (day.slots || []).reduce((dsum: number, slot: any) => {
         const isGroup = GROUP_SLOTS.has(slot.slotId)
         if (slot.customAmount > 0) {
+          if (!customAmountSold(slot.slotId, withGuide)) return dsum
           return dsum + (isGroup ? slot.customAmount : slot.customAmount * paxN)
         }
         let line = 0
-        for (const item of (slot.selectedItems || [])) {
-          const rate = passport === 'eu' ? Number(item.rateEur) || 0 : Number(item.rateNonEur) || 0
+        for (const item of soldSlotItems(slot, paxN, withGuide)) {
+          const rate = rateOn(item, passport, on)
           // Airport / hotel services and activities: by the item's own basis.
           line += BASIS_SLOTS.has(slot.slotId) ? itemCost(slot.slotId, item, rate, paxN).lineTotal : isGroup ? rate : rate * paxN
         }
         return dsum + line
       }, 0)
+      const guideTotal = throughoutGuideRows(day.slots || [], { ...config, pax: paxN, passport, withGuide }, on)
+        .reduce((g, r) => g + r.amount, 0)
+      return sum + slotsTotal + guideTotal
     }, 0)
     const marginPct = resolveMarginPercent({ requested: config.marginPercent, orgDefault: await getOrgDefaultMargin(supabase, await getCurrentOrgId()) })
     const computedSellingTotal = Math.round(supplierTotal * (1 + marginPct / 100) * 100) / 100
@@ -326,17 +353,22 @@ export async function POST(request: NextRequest) {
       else servicesByDay.set(dayNumber, [svc])
     }
 
-    for (const day of days) {
+    days.forEach((day: any, idx: number) => {
       const dayNumber = day.dayNumber
       const slots = day.slots || []
+      // The day's own date: each line at the rate period that covers it, as
+      // the grid priced it (it wrote each rate's base price, the first period).
+      const on = dayDate(config.startDate, dayNumber || idx + 1)
       for (const slot of slots) {
         const serviceType = SLOT_TO_SERVICE[slot.slotId]
         if (!serviceType) continue
         const isGroup = GROUP_SLOTS.has(slot.slotId)
         const passport = config.passport || 'non_eu'
 
-        // Custom amount slots — no rateId, no canonical supplier
+        // Custom amount slots — no rateId, no canonical supplier. Guide off
+        // sells no typed guide or tipping amount (guide-rule.ts).
         if (slot.customAmount > 0) {
+          if (!customAmountSold(slot.slotId, withGuide)) continue
           const supplierCost = isGroup ? slot.customAmount : slot.customAmount * (config.pax || 1)
           pushService(dayNumber, {
             service_type: serviceType,
@@ -352,9 +384,11 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        // Selected items — rateId-keyed; supplier_id from batched lookup
-        for (const item of (slot.selectedItems || [])) {
-          const rate = passport === 'eu' ? item.rateEur : item.rateNonEur
+        // Selected items — only what is SOLD (the guide switch; the single
+        // supplement for a party of one), at the day's rate.
+        for (const item of soldSlotItems(slot, config.pax || 1, withGuide)) {
+          const dated = ratesOn(item, on)
+          const rate = passport === 'eu' ? dated.rateEur : dated.rateNonEur
           // Airport / hotel services and activities: quantity and total by the
           // item's own basis (per group / per person / per unit).
           const byBasis = BASIS_SLOTS.has(slot.slotId) ? itemCost(slot.slotId, item, Number(rate) || 0, config.pax || 1) : null
@@ -363,8 +397,8 @@ export async function POST(request: NextRequest) {
             service_type: serviceType,
             service_name: item.name,
             quantity: byBasis ? byBasis.quantity : isGroup ? 1 : (config.pax || 1),
-            rate_eur: item.rateEur,
-            rate_non_eur: item.rateNonEur,
+            rate_eur: dated.rateEur,
+            rate_non_eur: dated.rateNonEur,
             total_cost: supplierCost,
             client_price: grossUp(supplierCost),
             // An add-on carries its property's supplier: the id before the marker.
@@ -373,7 +407,25 @@ export async function POST(request: NextRequest) {
           })
         }
       }
-    }
+
+      // The throughout guide's own costs — his bed, his seats, his meals at
+      // three or fewer (sold-lines.ts) — as GROUP lines. They are in the
+      // grid's price, so they are in the stored total. Their tag names no real
+      // slot, so a reload leaves them out of the day's picks (slot-mapping).
+      for (const row of throughoutGuideRows(slots, { ...config, pax: config.pax || 1, passport: config.passport || 'non_eu', withGuide }, on)) {
+        pushService(dayNumber, {
+          service_type: row.serviceType,
+          service_name: row.name,
+          quantity: 1,
+          rate_eur: row.amount,
+          rate_non_eur: row.amount,
+          total_cost: row.amount,
+          client_price: grossUp(row.amount),
+          supplier_id: null,
+          notes: `__grid:slot:throughout_guide|${row.kind}`,
+        })
+      }
+    })
 
     // Sanitize all service numeric values
     for (const svc of serviceInserts) {
@@ -412,10 +464,16 @@ export async function POST(request: NextRequest) {
     // initial INSERT, but the initial INSERT used finalSellingTotal from the
     // client body — when that was missing/zero, the row stuck at 0 and the
     // view rendered EUR 0.00 despite real per-service prices.
+    //
+    // The season premium (calculator: computeUplift, on the departure date)
+    // rides on top of the selling price and is not a service line, so it was
+    // lost here: a high-season quote was stored without its premium. The grid
+    // sends it with its totals; it is added back.
     const actualSupplierTotal = serviceInserts.reduce((s, svc) => s + (svc.total_cost || 0), 0)
     const actualClientTotal = serviceInserts.reduce((s, svc) => s + (svc.client_price || 0), 0)
+    const seasonUplift = Math.max(Number(totals?.seasonUplift) || 0, 0)
     const authoritativeTotal = actualClientTotal > 0
-      ? Math.round(actualClientTotal * 100) / 100
+      ? Math.round((actualClientTotal + seasonUplift) * 100) / 100
       : Math.round(actualSupplierTotal * 100) / 100
     if (authoritativeTotal !== itineraryData.total_cost) {
       const { error: updErr } = await supabase
