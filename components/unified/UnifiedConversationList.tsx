@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   Search, RefreshCw, User, Filter, Loader2,
-  MessageSquare, Mail, Plane, UserX, Users, Plus, X, Trash2, Check,
+  MessageSquare, Mail, Plane, Route, UserX, Users, Plus, X, Trash2, Check,
   CloudDownload
 } from 'lucide-react'
 import { ChannelBadge, ChannelBadgeLight } from './ChannelBadge'
@@ -67,6 +67,8 @@ function ContactAvatar({ name, channel, size = 'md' }: {
     ? ['bg-emerald-500', 'bg-teal-500', 'bg-green-500', 'bg-lime-600']
     : channel === 'portal'
       ? ['bg-[#647C47]', 'bg-[#4f6339]', 'bg-[#7a9159]', 'bg-[#566b3c]']
+      : channel === 'trip'
+        ? ['bg-amber-600', 'bg-orange-500', 'bg-amber-700', 'bg-yellow-600']
       : ['bg-blue-500', 'bg-indigo-500', 'bg-violet-500', 'bg-sky-500']
   const colorIndex = displayName.charCodeAt(0) % colors.length
 
@@ -417,6 +419,7 @@ export function UnifiedConversationList({
   const getChannelIcon = (channel: ConversationChannel) => {
     if (channel === 'whatsapp') return MessageSquare
     if (channel === 'portal') return Plane
+    if (channel === 'trip') return Route
     return Mail
   }
 
@@ -425,6 +428,7 @@ export function UnifiedConversationList({
   const whatsappCount = conversations.filter(c => c.channel === 'whatsapp').length
   const emailCount = conversations.filter(c => c.channel === 'email').length
   const portalCount = conversations.filter(c => c.channel === 'portal').length
+  const tripCount = conversations.filter(c => c.channel === 'trip').length
 
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-200">
@@ -502,18 +506,20 @@ export function UnifiedConversationList({
           </div>
         )}
 
-        {/* Channel Filter Tabs — 2×2, deliberately not a single row.
+        {/* Channel Filter Tabs — two to a row, deliberately not one row.
             The rail is a fixed w-96, which leaves ~83px per tab on one line;
             "WhatsApp" plus its icon and count needs ~130px. As flex items with
             the default min-width:auto these refused to shrink, so the row
-            overflowed the rail and clipped Portal off the right edge. Two rows
-            fit every label at full width instead of hiding or truncating one. */}
+            overflowed the rail and clipped Portal off the right edge. Two to a
+            row fits every label at full width; "All" takes a row of its own so
+            the four channels pair up. */}
         <div className="grid grid-cols-2 gap-1 mb-3 p-1 bg-gray-100/80 rounded-xl">
           {[
-            { key: 'all', label: t('all'), count: conversations.length, icon: null, color: 'gray' },
+            { key: 'all', label: t('all'), count: conversations.length, icon: null, color: 'gray', wide: true },
             { key: 'whatsapp', label: t('whatsapp'), count: whatsappCount, icon: MessageSquare, color: 'emerald' },
             { key: 'email', label: t('email'), count: emailCount, icon: Mail, color: 'blue' },
             { key: 'portal', label: t('portal'), count: portalCount, icon: Plane, color: 'olive' },
+            { key: 'trip', label: t('trip'), count: tripCount, icon: Route, color: 'amber' },
           ].map(tab => {
             const isActive = filters.channel === tab.key
             const IconComp = tab.icon
@@ -522,7 +528,7 @@ export function UnifiedConversationList({
                 type="button"
                 key={tab.key}
                 onClick={() => setFilters(f => ({ ...f, channel: tab.key as any }))}
-                className={`min-w-0 px-2.5 py-2 text-xs font-semibold rounded-lg transition-all duration-150 flex items-center justify-center gap-1.5 ${
+                className={`${tab.wide ? 'col-span-2 ' : ''}min-w-0 px-2.5 py-2 text-xs font-semibold rounded-lg transition-all duration-150 flex items-center justify-center gap-1.5 ${
                   isActive
                     ? 'bg-white text-gray-900 shadow-sm'
                     : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
@@ -533,6 +539,7 @@ export function UnifiedConversationList({
                     isActive
                       ? tab.color === 'emerald' ? 'text-emerald-500'
                         : tab.color === 'olive' ? 'text-[#647C47]'
+                        : tab.color === 'amber' ? 'text-amber-600'
                         : 'text-blue-500'
                       : ''
                   }`} />
@@ -757,7 +764,7 @@ export function UnifiedConversationList({
                       {/* Portal conversations belong to a booking and have no
                           assignment, so an amber "Unassigned" chip on every one
                           of them is a permanent false alarm. */}
-                      {!conv.assigned_agent && conv.channel !== 'portal' && (
+                      {!conv.assigned_agent && conv.channel !== 'portal' && conv.channel !== 'trip' && (
                         <span className="text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded font-medium">
                           {t('unassigned')}
                         </span>

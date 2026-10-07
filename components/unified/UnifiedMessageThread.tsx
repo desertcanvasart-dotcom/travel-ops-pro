@@ -13,7 +13,7 @@ import {
   Send, User, Clock, Loader2, CheckCheck, Check,
   AlertCircle, Plus, History, Paperclip, Download,
   MessageSquare, Mail, UserPlus, UserX, ChevronDown,
-  ExternalLink, Languages, Sparkles, Trash2, Archive, MailOpen, X
+  ExternalLink, Languages, Sparkles, Trash2, Archive, MailOpen, X, Plane, Route
 } from 'lucide-react'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { sanitizeHtml } from '@/lib/sanitize-html'
@@ -238,11 +238,13 @@ export function UnifiedMessageThread({
   const { user } = useAuth()
   const t = useTranslations('communications')
   const tCommon = useTranslations('common')
-  // A portal conversation belongs to a BOOKING. Assignment is not modelled for
-  // it, and "deleting" it here would destroy a traveller's questions from a
-  // screen that is only a view onto them — so neither control is offered,
-  // rather than offered and quietly doing the wrong thing to the wrong channel.
-  const isPortal = conversation?.channel === 'portal'
+  // A portal conversation belongs to a BOOKING, a trip chat to an ITINERARY.
+  // Assignment is not modelled for either, and "deleting" one here would
+  // destroy a traveller's questions from a screen that is only a view onto
+  // them — so neither control is offered, rather than offered and quietly
+  // doing the wrong thing to the wrong channel.
+  const isTrip = conversation?.channel === 'trip'
+  const isPortal = conversation?.channel === 'portal' || isTrip
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const [messages, setMessages] = useState<UnifiedMessage[]>([])
@@ -306,6 +308,9 @@ export function UnifiedMessageThread({
         url = `/api/whatsapp/messages?conversation_id=${conversation.id}`
       } else if (conversation.channel === 'portal') {
         url = `/api/portal-chat/messages?conversation_id=${conversation.id}`
+      } else if (conversation.channel === 'trip') {
+        // The conversation id is the itinerary's (/api/unified/conversations).
+        url = `/api/itineraries/${conversation.id}/messages`
       } else {
         url = `/api/email/messages?conversation_id=${conversation.id}`
       }
@@ -321,11 +326,11 @@ export function UnifiedMessageThread({
           channel: conversation.channel,
           conversation_id: conversation.id,
           direction: msg.direction,
-          content: msg.message_body || msg.body_html || msg.body_text || msg.snippet || '',
+          content: msg.message_body || msg.body_html || msg.body_text || msg.content || msg.snippet || '',
           isHtml: !!(msg.body_html && !msg.message_body),
           snippet: msg.snippet || null,
           subject: msg.subject,
-          from_address: msg.from_address,
+          from_address: msg.from_address ?? msg.sender_name ?? undefined,
           to_addresses: msg.to_addresses,
           media_url: msg.media_url,
           media_type: msg.media_type,
@@ -336,6 +341,12 @@ export function UnifiedMessageThread({
           created_at: msg.created_at,
         }))
         setMessages(msgs)
+        // Opening a trip chat is reading it, as for portal threads.
+        if (conversation.channel === 'trip' && msgs.some((m: { direction: string; is_read?: boolean }) => m.direction === 'inbound' && !m.is_read)) {
+          fetch(`/api/itineraries/${conversation.id}/messages`, { method: 'PATCH' })
+            .then(() => onConversationUpdate?.({ ...conversation, unread_count: 0 }))
+            .catch(() => undefined)
+        }
       }
     } catch (error: any) {
       // Expected when a newer fetch (switch/unmount) aborted this one — not an error.
@@ -481,6 +492,9 @@ export function UnifiedMessageThread({
         // and is surfaced below — not assumed.
         url = '/api/portal-chat/messages'
         body = { conversationId: conversation.id, message: messageToSend }
+      } else if (conversation.channel === 'trip') {
+        url = `/api/itineraries/${conversation.id}/messages`
+        body = { message: messageToSend }
       } else {
         // For email, we need the thread_id and recipient
         url = '/api/gmail/send'
@@ -521,6 +535,9 @@ export function UnifiedMessageThread({
         // A portal reply is stored even when the traveller could not be
         // notified — say so, with the reason, instead of looking identical
         // to a notified send. Mirrors PortalMessagesPanel on the booking page.
+        // A trip reply is not emailed: the traveller reads it on the trip's
+        // share link. Said once, so nobody assumes it was delivered.
+        if (conversation.channel === 'trip') setSendNotice(t('tripReplyNotice'))
         if (conversation.channel === 'portal') {
           const json = await res.json().catch(() => null)
           if (json && json.emailed === false) {
@@ -889,15 +906,25 @@ export function UnifiedMessageThread({
           <div className="flex items-center gap-2.5">
             <div className="relative">
               <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold ${
-                conversation.channel === 'whatsapp' ? 'bg-emerald-600' : 'bg-blue-600'
+                conversation.channel === 'whatsapp' ? 'bg-emerald-600'
+                  : conversation.channel === 'portal' ? 'bg-[#647C47]'
+                  : isTrip ? 'bg-amber-600'
+                  : 'bg-blue-600'
               }`}>
                 {initials}
               </div>
               <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center ${
-                conversation.channel === 'whatsapp' ? 'bg-[#25D366]' : 'bg-blue-500'
+                conversation.channel === 'whatsapp' ? 'bg-[#25D366]'
+                  : conversation.channel === 'portal' ? 'bg-[#647C47]'
+                  : isTrip ? 'bg-amber-500'
+                  : 'bg-blue-500'
               }`}>
                 {conversation.channel === 'whatsapp' ? (
                   <MessageSquare className="w-2 h-2 text-white" />
+                ) : conversation.channel === 'portal' ? (
+                  <Plane className="w-2 h-2 text-white" />
+                ) : isTrip ? (
+                  <Route className="w-2 h-2 text-white" />
                 ) : (
                   <Mail className="w-2 h-2 text-white" />
                 )}
@@ -935,6 +962,12 @@ export function UnifiedMessageThread({
                 <p className="text-xs text-gray-700 font-medium truncate mt-0.5 max-w-[300px]" title={conversation.subject}>
                   {conversation.subject}
                 </p>
+              )}
+              {/* The trip the chat belongs to, with its own chat, live log and share link. */}
+              {isTrip && (
+                <Link href={`/itineraries/${conversation.id}#messages`} className="text-xs text-primary-600 hover:underline inline-flex items-center gap-1 mt-0.5">
+                  <ExternalLink className="w-3 h-3" /> {t('openTrip')}
+                </Link>
               )}
             </div>
           </div>

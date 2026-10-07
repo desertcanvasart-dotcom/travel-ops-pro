@@ -903,7 +903,10 @@
     "lead": "Lead",
     "notALead": "Not a lead",
     "notALeadConfirm": "This email is not someone asking to travel. Remove the lead from Clients? Their next email will not be made a lead again.",
-    "notALeadFailed": "Could not dismiss the lead"
+    "notALeadFailed": "Could not dismiss the lead",
+    "trip": "Trip chat",
+    "openTrip": "Open the trip",
+    "tripReplyNotice": "Reply saved to the trip's share page. It isn't emailed: the traveller sees it the next time they open their link."
   },
   "pdf": {
     "quote": "Quote",
@@ -5828,7 +5831,8 @@
   "channels": {
     "whatsapp": "WhatsApp",
     "email": "Email",
-    "portal": "Portal"
+    "portal": "Portal",
+    "trip": "Trip chat"
   },
   "commissions": {
     "title": "Commission Tracking",
