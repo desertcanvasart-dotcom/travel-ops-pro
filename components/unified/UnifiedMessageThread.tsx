@@ -535,9 +535,19 @@ export function UnifiedMessageThread({
         // A portal reply is stored even when the traveller could not be
         // notified — say so, with the reason, instead of looking identical
         // to a notified send. Mirrors PortalMessagesPanel on the booking page.
-        // A trip reply is not emailed: the traveller reads it on the trip's
-        // share link. Said once, so nobody assumes it was delivered.
-        if (conversation.channel === 'trip') setSendNotice(t('tripReplyNotice'))
+        // A trip reply emails the traveller that it is waiting; when it could
+        // not, say why, as for portal replies.
+        if (conversation.channel === 'trip') {
+          const json = await res.json().catch(() => null)
+          if (json && json.emailed === false) {
+            setSendNotice(
+              json.notified === 'no-recipient' ? t('tripNotifyNoRecipient')
+                : json.notified === 'no-link' ? t('tripNotifyNoLink')
+                : json.notified === 'no-account' ? t('portalNotifyNoAccount')
+                : t('tripNotifyFailed')
+            )
+          }
+        }
         if (conversation.channel === 'portal') {
           const json = await res.json().catch(() => null)
           if (json && json.emailed === false) {

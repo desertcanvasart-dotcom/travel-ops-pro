@@ -906,7 +906,9 @@
     "notALeadFailed": "Could not dismiss the lead",
     "trip": "Trip chat",
     "openTrip": "Open the trip",
-    "tripReplyNotice": "Reply saved to the trip's share page. It isn't emailed: the traveller sees it the next time they open their link."
+    "tripNotifyNoRecipient": "Reply saved, but no email went out: this trip has no client email address. Add one on the trip.",
+    "tripNotifyNoLink": "Reply saved, but no email went out: this trip has no share link. Create one on the trip's Messages tab.",
+    "tripNotifyFailed": "Reply saved, but the notification email failed. The traveller will only see it if they reopen their link."
   },
   "pdf": {
     "quote": "Quote",
@@ -1753,7 +1755,12 @@
         "notNotified": "not notified",
         "notify_failed": "The office notification failed",
         "notify_not_configured": "No notification channel is set up (push or a contact email)",
-        "notify_no_recipients": "Nobody was reachable — no browser subscribed to notifications and no contact email"
+        "notify_no_recipients": "Nobody was reachable — no browser subscribed to notifications and no contact email",
+        "emailed": "The traveller was emailed that a reply is waiting.",
+        "notEmailed_no_recipient": "Reply saved, but not emailed: this trip has no client email address. Add one in Edit itinerary.",
+        "notEmailed_no_link": "Reply saved, but not emailed: the trip has no share link to send. Create one below.",
+        "notEmailed_no_account": "Reply saved, but not emailed: mail is not connected. Connect Gmail in Settings → Email.",
+        "notEmailed_failed": "Reply saved, but the email to the traveller failed. They will see it when they open their link."
       }
     },
     "editAction": "Edit",

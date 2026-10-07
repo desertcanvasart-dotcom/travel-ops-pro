@@ -35,6 +35,8 @@ export default function TravellerChat({ itineraryId }: { itineraryId: string }) 
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Whether the last reply reached the traveller by email, and if not, why.
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null)
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -79,6 +81,7 @@ export default function TravellerChat({ itineraryId }: { itineraryId: string }) 
     if (sending || !draft.trim()) return
     setSending(true)
     setError(null)
+    setNotice(null)
     try {
       const res = await fetch(`/api/itineraries/${itineraryId}/messages`, {
         method: 'POST',
@@ -89,6 +92,11 @@ export default function TravellerChat({ itineraryId }: { itineraryId: string }) 
       if (!res.ok || !data.success) throw new Error(data.error || t('sendFailed'))
       setMessages(prev => [...prev, data.message])
       setDraft('')
+      if (data.notified) {
+        setNotice(data.emailed
+          ? { ok: true, text: t('emailed') }
+          : { ok: false, text: t(`notEmailed_${String(data.notified).replace('-', '_')}`) })
+      }
       markRead() // replying is reading
     } catch (e) {
       setError(e instanceof Error ? e.message : t('sendFailed'))
@@ -150,6 +158,11 @@ export default function TravellerChat({ itineraryId }: { itineraryId: string }) 
           </button>
         </div>
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        {notice && (
+          <p className={`mt-2 text-xs ${notice.ok ? 'text-green-700' : 'text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1'}`} data-testid="chat-email-notice">
+            {notice.ok ? '✓ ' : '⚠ '}{notice.text}
+          </p>
+        )}
       </div>
     </div>
   )
