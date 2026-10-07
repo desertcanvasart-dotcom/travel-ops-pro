@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { propertyFromService, propertyRateStatus, type PropertyRateStatus } from '@/lib/itineraries/overnight-property'
+import { propertyFromService, propertyRateStatus, gridRatePin, type PropertyRateStatus } from '@/lib/itineraries/overnight-property'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
@@ -87,8 +87,10 @@ export async function GET(
     // rates" warning on a night whose property was deleted or switched off
     // after the itinerary was sold. Small tables, read whole.
     const [{ data: hotelRows, error: hotelError }, { data: shipRows, error: shipError }] = await Promise.all([
-      supabase.from('accommodation_rates').select('property_name, is_active'),
-      supabase.from('nile_cruises').select('ship_name, is_active'),
+      // id and city too: a line pinned to its rate row is judged by that row,
+      // and "<hotel> <city>" by the hotel in that city (overnight-property.ts).
+      supabase.from('accommodation_rates').select('id, property_name, city, is_active'),
+      supabase.from('nile_cruises').select('id, ship_name, is_active'),
     ])
     // A catalog that failed to load says nothing about its properties: no
     // status rather than a false "no longer in your rates" — withheld only for
@@ -97,8 +99,8 @@ export async function GET(
     const loadedFor = { hotel: !hotelError, cruise: !shipError }
     if (hotelError || shipError) console.warn('[days-api] rates catalog partly unavailable; affected overnight statuses withheld', hotelError?.message ?? shipError?.message)
     const catalog = {
-      hotels: (hotelRows ?? []).map(r => ({ name: r.property_name, active: r.is_active })),
-      ships: (shipRows ?? []).map(r => ({ name: r.ship_name, active: r.is_active })),
+      hotels: (hotelRows ?? []).map(r => ({ id: r.id, name: r.property_name, city: r.city, active: r.is_active })),
+      ships: (shipRows ?? []).map(r => ({ id: r.id, name: r.ship_name, active: r.is_active })),
     }
 
     // Index by day / service id for in-memory joins.
@@ -130,7 +132,7 @@ export async function GET(
           // Staff-only: whether that hotel or ship is still in Rates.
           property_rate_status: ((): PropertyRateStatus | null => {
             const property = propertyFromService(service)
-            return property && loadedFor[property.kind] ? propertyRateStatus(property, catalog) : null
+            return property && loadedFor[property.kind] ? propertyRateStatus(property, catalog, gridRatePin(service.notes)) : null
           })(),
           service_name: version?.service_name || service.service_name,
           notes: version?.notes ?? service.notes
