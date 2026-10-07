@@ -17,6 +17,9 @@ interface CoverageGridProps {
   refreshKey?: number
   /** Open the assignment panel on a type (a missing cell's "Assign"). */
   onAssign?: (type: CoverageType) => void
+  /** The trip's assignments when the page has loaded them already (null while
+   *  loading). Left out, the grid loads them itself. */
+  assignments?: CoverageAssignment[] | null
 }
 
 /**
@@ -24,23 +27,26 @@ interface CoverageGridProps {
  * whether it is assigned (lib/itineraries/coverage.ts). Replaces the two
  * "nothing assigned" empty states, which said nothing about what was NEEDED.
  */
-export default function CoverageGrid({ itineraryId, days, refreshKey = 0, onAssign }: CoverageGridProps) {
+export default function CoverageGrid({ itineraryId, days, refreshKey = 0, onAssign, assignments: given }: CoverageGridProps) {
   const t = useTranslations('itineraries.detail.coverage')
   const tRes = useTranslations('resourceAssignment')
-  const [assignments, setAssignments] = useState<CoverageAssignment[] | null>(null)
+  const [loaded, setLoaded] = useState<CoverageAssignment[] | null>(null)
   const [failed, setFailed] = useState(false)
+  const fromPage = given !== undefined
+  const assignments = fromPage ? given : loaded
 
   useEffect(() => {
+    if (fromPage) return
     let live = true
     fetch(`/api/itinerary-resources?itinerary_id=${itineraryId}`)
       .then(r => r.json())
       .then(data => {
         if (!live) return
-        if (data.success) { setAssignments(data.data); setFailed(false) } else setFailed(true)
+        if (data.success) { setLoaded(data.data); setFailed(false) } else setFailed(true)
       })
       .catch(() => { if (live) setFailed(true) })
     return () => { live = false }
-  }, [itineraryId, refreshKey])
+  }, [itineraryId, refreshKey, fromPage])
 
   const grid = useMemo(() => coverageGrid(days, assignments ?? []), [days, assignments])
 

@@ -35,6 +35,10 @@ interface Props {
   /** Restyle the trigger (the itinerary page's Documents rail uses a link). */
   triggerClassName?: string
   triggerContent?: React.ReactNode
+  /** Bump to open the dialog from elsewhere (the itinerary page's Documents menu). */
+  openSignal?: number
+  /** Only the dialog: the caller has its own way to open it. */
+  hideTrigger?: boolean
 }
 
 /** Most template_names already open with the code ("NEK502-LND — 5 days: …"),
@@ -62,9 +66,12 @@ export default function GenerateNitteiButton({
   onLinked,
   triggerClassName,
   triggerContent,
+  openSignal = 0,
+  hideTrigger = false,
 }: Props) {
   const t = useTranslations('itineraries.nittei')
   const [open, setOpen] = useState(false)
+  useEffect(() => { if (openSignal > 0) setOpen(true) }, [openSignal])
   const [programmes, setProgrammes] = useState<Programme[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -144,6 +151,7 @@ export default function GenerateNitteiButton({
 
   return (
     <>
+      {!hideTrigger && (
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -156,6 +164,7 @@ export default function GenerateNitteiButton({
           </>
         )}
       </button>
+      )}
 
       {open && (
         <div

@@ -1,7 +1,7 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { X, Receipt, AlertCircle, CheckCircle } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
@@ -14,6 +14,10 @@ interface AddExpenseFromItineraryProps {
   itineraryCode: string
   clientName: string
   onExpenseAdded?: () => void
+  /** Bump to open the dialog from elsewhere (the itinerary page's ⋯ menu). */
+  openSignal?: number
+  /** Only the dialog: the caller has its own way to open it. */
+  hideTrigger?: boolean
 }
 
 interface FormData {
@@ -39,11 +43,16 @@ export default function AddExpenseFromItinerary({
   itineraryId,
   itineraryCode,
   clientName,
-  onExpenseAdded
+  onExpenseAdded,
+  openSignal = 0,
+  hideTrigger = false
 }: AddExpenseFromItineraryProps) {
   const t = useTranslations('expenseModal')
   const tCommon = useTranslations('common')
   const [isOpen, setIsOpen] = useState(false)
+  useEffect(() => {
+    if (openSignal > 0) { setIsOpen(true); setErrorMessage(null); setSuccessMessage(null) }
+  }, [openSignal])
   const [saving, setSaving] = useState(false)
   const [city, setCity] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -136,6 +145,7 @@ export default function AddExpenseFromItinerary({
   return (
     <>
       {/* Trigger Button */}
+      {!hideTrigger && (
       <button
         onClick={() => { setIsOpen(true); setErrorMessage(null); setSuccessMessage(null) }}
         className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-[#647C47] text-[#647C47] rounded-lg hover:bg-[#e8ede3] transition-colors"
@@ -143,6 +153,7 @@ export default function AddExpenseFromItinerary({
         <Receipt className="h-4 w-4" />
         {t('addExpense')}
       </button>
+      )}
 
       {/* Modal */}
       {isOpen && (

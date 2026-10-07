@@ -8,6 +8,14 @@
 //
 // Pure: the page passes in what it knows and gets back codes and parameters;
 // the wording lives in messages/*.json under itineraries.detail.attention.
+//
+// Two families: this app's content checks (languages, placeholders, a night
+// with no hotel) and the trip's operational ones, ported from autoura-saas's
+// tripAttention (lib/itineraries/trip-stage there) — a night whose property
+// left Rates, no invoice or money still owed close to the start, a guide or
+// vehicle still missing close to the start, a trip losing money, a trip that
+// ended and was never closed. Each operational item carries the action that
+// deals with it.
 
 import type { Language } from '@/types/multilingual'
 import {
@@ -30,12 +38,42 @@ export interface AttentionItem {
     | 'tipsConflict'
     | 'invoicedWithoutBooking'
     | 'overnightWithoutStay'
+    | 'staleNight'
+    | 'noInvoiceSoon'
+    | 'unpaidSoon'
+    | 'missingResource'
+    | 'losingMoney'
+    | 'endedNotClosed'
   severity: AttentionSeverity
   params: Record<string, string | number>
   /** The language the item is about, when it is about one. */
   language?: Language
   /** Day numbers the item points at, for the "Day 1, 3" list and jump links. */
   days?: number[]
+  /** What deals with it, when one action does. */
+  action?: { kind: AttentionAction; day?: number }
+}
+
+export type AttentionAction = 'create_invoice' | 'record_payment' | 'close_out' | 'go_to_day' | 'assign_resources' | 'open_finance'
+
+/** Where the trip stands, for the operational rules (autoura-saas TripFacts). */
+export interface TripState {
+  /** YYYY-MM-DD, the office's today. */
+  today: string
+  startDate: string | null | undefined
+  endDate: string | null | undefined
+  currency: string
+  /** From the P&L: what was invoiced and paid; null until it has loaded. */
+  invoiced: number | null
+  paid: number | null
+  /** Profit on the costs recorded so far (P&L gross profit); null = unknown. */
+  profit: number | null
+  /** A night whose hotel or ship has since left Rates, or was switched off. */
+  staleNights: Array<{ day: number; property: string; switchedOff: boolean }>
+  /** Guide / vehicle / airport staff some day needs with nobody assigned. */
+  missingResources: Array<{ type: string; days: number[] }>
+  /** How many days before the start money owed becomes urgent. Default 14. */
+  paymentDueDays?: number
 }
 
 export interface AttentionDay {
@@ -60,11 +98,74 @@ export interface AttentionInput {
   inclusions: Partial<Record<Language, { inclusions: string[]; exclusions: string[] }>>
   hasInvoice: boolean
   hasBooking: boolean
+  /** The operational rules run only when this is given. */
+  trip?: TripState
 }
 
 const STAY_TYPES = new Set(['accommodation', 'hotel', 'cruise'])
 
 const SEVERITY_ORDER: Record<AttentionSeverity, number> = { high: 0, medium: 1, low: 2 }
+
+const day10 = (d: string | null | undefined) => (d ? String(d).slice(0, 10) : null)
+const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
+
+/** The operational items — autoura-saas's tripAttention, as codes. */
+function tripItems(status: string, hasInvoice: boolean, hasBooking: boolean, t: TripState): AttentionItem[] {
+  const out: AttentionItem[] = []
+  if (status === 'cancelled') return out
+  const start = day10(t.startDate)
+  const end = day10(t.endDate)
+  const dueDays = t.paymentDueDays ?? 14
+
+  for (const n of t.staleNights) {
+    out.push({
+      key: `staleNight:${n.day}`,
+      code: 'staleNight',
+      severity: 'medium',
+      days: [n.day],
+      params: { day: n.day, property: n.property, switchedOff: n.switchedOff ? 'yes' : 'no' },
+      action: { kind: 'go_to_day', day: n.day },
+    })
+  }
+
+  const balance = t.invoiced != null && t.paid != null ? t.invoiced - t.paid : null
+  const untilStart = start ? daysBetween(t.today, start) : null
+  const ended = !!end && end < t.today
+  const when = untilStart == null ? '' : untilStart < 0 ? 'started' : untilStart === 0 ? 'today' : 'days'
+
+  if (!ended && untilStart != null && untilStart <= dueDays) {
+    if ((status === 'confirmed' || hasBooking) && !hasInvoice) {
+      out.push({ key: 'noInvoiceSoon', code: 'noInvoiceSoon', severity: 'high', params: { when, days: Math.max(untilStart, 0) }, action: { kind: 'create_invoice' } })
+    } else if (hasInvoice && balance != null && balance > 0.005) {
+      out.push({
+        key: 'unpaidSoon', code: 'unpaidSoon', severity: 'high',
+        params: { when, days: Math.max(untilStart, 0), amount: `${t.currency} ${balance.toFixed(2)}` },
+        action: { kind: 'record_payment' },
+      })
+    }
+  }
+
+  // A guide or a vehicle still missing matters once the trip is booked and close.
+  if (!ended && untilStart != null && untilStart <= dueDays && (status === 'confirmed' || hasBooking)) {
+    for (const m of t.missingResources) {
+      if (m.days.length === 0) continue
+      out.push({
+        key: `missingResource:${m.type}`, code: 'missingResource', severity: 'high', days: m.days,
+        params: { type: m.type, days: m.days.join(', ') },
+        action: { kind: 'assign_resources' },
+      })
+    }
+  }
+
+  if (t.profit != null && t.profit < -0.005) {
+    out.push({ key: 'losingMoney', code: 'losingMoney', severity: 'high', params: { amount: `${t.currency} ${t.profit.toFixed(2)}` }, action: { kind: 'open_finance' } })
+  }
+
+  if (ended && status !== 'completed') {
+    out.push({ key: 'endedNotClosed', code: 'endedNotClosed', severity: 'low', params: { end: end!, status: status || 'open' }, action: { kind: 'close_out' } })
+  }
+  return out
+}
 
 export function itineraryAttention(input: AttentionInput): AttentionItem[] {
   const items: AttentionItem[] = []
@@ -169,6 +270,8 @@ export function itineraryAttention(input: AttentionInput): AttentionItem[] {
       params: { days: unhoused.join(', '), count: unhoused.length },
     })
   }
+
+  if (input.trip) items.push(...tripItems(input.status, input.hasInvoice, input.hasBooking, input.trip))
 
   return items.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
 }

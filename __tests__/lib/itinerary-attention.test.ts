@@ -86,4 +86,49 @@ describe('itineraryAttention', () => {
   it('a booked trip is not flagged for its invoice', () => {
     expect(codes(base({ hasBooking: true }))).not.toContain('invoicedWithoutBooking')
   })
+
+  describe('the trip itself (autoura-saas rules)', () => {
+    const trip = (over: Partial<NonNullable<AttentionInput['trip']>> = {}): NonNullable<AttentionInput['trip']> => ({
+      today: '2026-11-28', startDate: '2026-12-05', endDate: '2026-12-12', currency: 'EUR',
+      invoiced: null, paid: null, profit: null, staleNights: [], missingResources: [], ...over,
+    })
+    const tripCodes = (over: Partial<AttentionInput>) =>
+      codes(base({ clientLanguage: 'en', days: [], inclusions: {}, ...over }))
+
+    it('a booked trip a week out with no invoice needs one', () => {
+      const items = itineraryAttention(base({ clientLanguage: 'en', days: [], inclusions: {}, hasBooking: true, hasInvoice: false, trip: trip() }))
+      expect(items.map(i => i.code)).toEqual(['noInvoiceSoon'])
+      expect(items[0].params).toMatchObject({ when: 'days', days: 7 })
+      expect(items[0].action).toEqual({ kind: 'create_invoice' })
+    })
+
+    it('an invoice still owing close to the start asks for the payment', () => {
+      const items = itineraryAttention(base({ clientLanguage: 'en', days: [], inclusions: {}, hasBooking: true, trip: trip({ invoiced: 1000, paid: 300 }) }))
+      expect(items.find(i => i.code === 'unpaidSoon')?.params.amount).toBe('EUR 700.00')
+    })
+
+    it('far from the start, neither is flagged', () => {
+      expect(tripCodes({ hasBooking: true, hasInvoice: false, trip: trip({ today: '2026-10-07' }) })).toEqual([])
+    })
+
+    it('a guide missing on a booked trip that is close', () => {
+      const items = itineraryAttention(base({ clientLanguage: 'en', days: [], inclusions: {}, hasBooking: true, trip: trip({ invoiced: 1000, paid: 1000, missingResources: [{ type: 'guide', days: [2, 3] }] }) }))
+      expect(items.map(i => i.code)).toEqual(['missingResource'])
+      expect(items[0].params).toMatchObject({ type: 'guide', days: '2, 3' })
+    })
+
+    it('a night at a hotel no longer in Rates points at its day', () => {
+      const items = itineraryAttention(base({ clientLanguage: 'en', days: [], inclusions: {}, hasBooking: true, trip: trip({ today: '2026-10-07', staleNights: [{ day: 4, property: 'Mena House', switchedOff: true }] }) }))
+      expect(items[0]).toMatchObject({ code: 'staleNight', action: { kind: 'go_to_day', day: 4 }, params: { switchedOff: 'yes' } })
+    })
+
+    it('a loss, and a trip that ended but is not closed out', () => {
+      expect(tripCodes({ hasBooking: true, trip: trip({ today: '2026-12-20', invoiced: 1000, paid: 1000, profit: -50 }) }))
+        .toEqual(['losingMoney', 'endedNotClosed'])
+    })
+
+    it('nothing operational on a cancelled trip', () => {
+      expect(tripCodes({ status: 'cancelled', hasBooking: true, hasInvoice: false, trip: trip({ profit: -50 }) })).toEqual([])
+    })
+  })
 })

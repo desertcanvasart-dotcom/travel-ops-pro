@@ -19,6 +19,9 @@ export async function GET(request: NextRequest) {
 
     // Build query
     const departmentId = searchParams.get('departmentId')
+    // One trip's tasks (the itinerary page's Tasks card): generate-tasks links
+    // them as linked_type 'itinerary'.
+    const itineraryId = searchParams.get('itineraryId')
 
     let query = supabase
       .from('tasks')
@@ -31,6 +34,10 @@ export async function GET(request: NextRequest) {
 
     if (departmentId) {
       query = query.eq('department_id', departmentId)
+    }
+
+    if (itineraryId) {
+      query = query.eq('linked_type', 'itinerary').eq('linked_id', itineraryId)
     }
 
     // Filter by archived status - only show non-archived by default

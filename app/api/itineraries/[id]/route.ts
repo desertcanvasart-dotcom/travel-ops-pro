@@ -124,6 +124,8 @@ export async function PUT(
     if (body.num_children !== undefined) updateData.num_children = body.num_children
     if (body.total_cost !== undefined) updateData.total_cost = body.total_cost
     if (body.status !== undefined) updateData.status = body.status
+    // Why a trip was cancelled (the itinerary page's Cancel trip dialog).
+    if (body.cancellation_reason !== undefined) updateData.cancellation_reason = body.cancellation_reason || null
     if (body.notes !== undefined) updateData.notes = body.notes
 
     // Resource fields

@@ -14,7 +14,7 @@
 // hand-edit the URL. This asks once, in a small form, and opens the document
 // with whatever was typed. Nothing is saved back to the trip: these are
 // per-departure operational facts, and the sheet is the place they live.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { FileText } from 'lucide-react'
 
@@ -25,6 +25,10 @@ interface Props {
   /** Restyle the trigger (the itinerary page's Documents rail uses a link). */
   triggerClassName?: string
   triggerContent?: React.ReactNode
+  /** Bump to open the dialog from elsewhere (the itinerary page's Documents menu). */
+  openSignal?: number
+  /** Only the dialog: the caller has its own way to open it. */
+  hideTrigger?: boolean
 }
 
 /** Today on the operator's own calendar, not UTC's. */
@@ -49,9 +53,10 @@ const EMPTY = {
   remarks: '',
 }
 
-export default function GenerateOpsSheetButton({ itineraryId, itineraryCode, triggerClassName, triggerContent }: Props) {
+export default function GenerateOpsSheetButton({ itineraryId, itineraryCode, triggerClassName, triggerContent, openSignal = 0, hideTrigger = false }: Props) {
   const t = useTranslations('itineraries.opsSheet')
   const [open, setOpen] = useState(false)
+  useEffect(() => { if (openSignal > 0) setOpen(true) }, [openSignal])
   const [form, setForm] = useState({ ...EMPTY, group_ref: itineraryCode ?? '', final_date: todayLocalISO() })
 
   function generate(format: 'pdf' | 'html') {
@@ -70,6 +75,7 @@ export default function GenerateOpsSheetButton({ itineraryId, itineraryCode, tri
 
   return (
     <>
+      {!hideTrigger && (
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -83,6 +89,7 @@ export default function GenerateOpsSheetButton({ itineraryId, itineraryCode, tri
           </>
         )}
       </button>
+      )}
       {open && (
         <div
           className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
