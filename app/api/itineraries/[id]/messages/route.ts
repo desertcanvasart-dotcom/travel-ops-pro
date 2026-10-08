@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { orgAuth } from '@/lib/auth/org-auth'
 import { cleanClientText } from '@/lib/itinerary-share'
+import { notifyTravellerOfTripReply } from '@/lib/trip-chat/notify-traveller'
 
 /**
  * The trip thread, office side. GET returns the thread; PATCH marks the
@@ -9,7 +10,9 @@ import { cleanClientText } from '@/lib/itinerary-share'
  * service-role, so every query is scoped to the caller's org here, and the
  * direction is pinned to 'outbound' in code (the RLS insert policy pins it
  * for any session client too) — this route cannot forge a traveller message.
- * Ported from autoura-saas.
+ * A reply also emails the traveller that it is waiting, with their trip
+ * link (lib/trip-chat/notify-traveller); the response says whether it went
+ * and, if not, why. Ported from autoura-saas.
  */
 
 const MAX_MESSAGE = 2000
@@ -112,7 +115,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       console.error('[itinerary messages POST]', error.message)
       return NextResponse.json({ success: false, error: 'Failed to send' }, { status: 500 })
     }
-    return NextResponse.json({ success: true, message: inserted })
+    // Stored first; then the traveller is told. A mail failure never loses the reply.
+    const notified = await notifyTravellerOfTripReply(a.supabase, { itineraryId: id, orgId: a.orgId })
+    return NextResponse.json({ success: true, message: inserted, emailed: notified === 'sent', notified })
   } catch (err) {
     console.error('[itinerary messages POST]', err)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
