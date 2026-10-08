@@ -20,7 +20,9 @@ export default function RootLayout({
   const pathname = usePathname()
   
   // Pages that should NOT show the sidebar (public pages)
-  const publicPages = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/terms', '/privacy', '/contact', '/integrations', '/about']
+  const publicPages = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/terms', '/privacy', '/contact', '/integrations', '/about', '/blog']
+  // The blog's posts (/blog/<slug>): marketing pages, so they keep the providers.
+  const marketingPrefixes = ['/blog/']
   // Prefixed public sections, matched by prefix because their paths are dynamic.
   // /share/[token] is a CLIENT-facing page: a traveller must never be shown the
   // operator's sidebar and navigation.
@@ -32,7 +34,7 @@ export default function RootLayout({
   // page, but at a fixed path rather than behind a token.
   const customerPages = ['/order']
   const isPublicPage =
-    publicPages.includes(pathname) || customerPages.includes(pathname) || publicPrefixes.some(p => pathname.startsWith(p))
+    publicPages.includes(pathname) || customerPages.includes(pathname) || publicPrefixes.some(p => pathname.startsWith(p)) || marketingPrefixes.some(p => pathname.startsWith(p))
 
   // A CUSTOMER page — token-gated, no session, never will have one. It mounts
   // none of the operator providers, because AuthProvider and
