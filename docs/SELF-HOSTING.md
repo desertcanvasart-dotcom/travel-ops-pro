@@ -321,7 +321,8 @@ credential (`__tests__/ci/workflow-secrets.test.ts` pins every fence).
 **Setting it up (once):**
 
 1. GitHub → **Settings → Environments → New environment**, named exactly
-   `production`.
+   `production-database`. (Not `Production`: Vercel records its deployments
+   there, and names are case-insensitive.)
 2. In that environment:
    - **Deployment branches and tags** → *Selected branches and tags* → add
      `main`. A branch with an edited copy of the workflow then cannot reach the

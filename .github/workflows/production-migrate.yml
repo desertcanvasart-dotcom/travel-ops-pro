@@ -10,7 +10,8 @@ name: Production database migrations
 #   * Manual only — Actions → "Production database migrations" → Run workflow.
 #     Never on push, never on a pull request.
 #   * The connection string is an ENVIRONMENT secret (environment
-#     "production"), not a repository secret: GitHub hands it only to a job
+#     "production-database" — not "Production", which is Vercel's deployment
+#     record), not a repository secret: GitHub hands it only to a job
 #     that declares that environment. Configure the environment to allow only
 #     the main branch and to require your approval (docs/SELF-HOSTING.md →
 #     "Migrating production from GitHub").
@@ -46,7 +47,7 @@ jobs:
     name: Migrate the production database
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: production
+    environment: production-database
     env:
       DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
       PUPPETEER_SKIP_DOWNLOAD: 'true'
@@ -56,7 +57,7 @@ jobs:
       - name: Check the request
         run: |
           if [ -z "$DATABASE_URL" ]; then
-            echo "::error::PRODUCTION_DATABASE_URL is not set in the 'production' environment. See docs/SELF-HOSTING.md → 'Migrating production from GitHub'."
+            echo "::error::PRODUCTION_DATABASE_URL is not set in the 'production-database' environment. See docs/SELF-HOSTING.md → 'Migrating production from GitHub'."
             exit 1
           fi
           if { [ "$MODE" = "apply" ] || [ "$MODE" = "baseline" ]; } && [ "$CONFIRM" != "production" ]; then
