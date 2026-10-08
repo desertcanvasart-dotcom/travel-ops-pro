@@ -47,7 +47,7 @@ vi.mock('@/lib/gmail', () => ({
   GmailAuthError: class extends Error {},
 }))
 const whatsapp = vi.hoisted(() => vi.fn(async () => ({ success: true, messageId: 'wa-1' })))
-vi.mock('@/lib/twilio-whatsapp', () => ({ sendWhatsAppMessage: () => whatsapp() }))
+vi.mock('@/lib/twilio-whatsapp', () => ({ sendWhatsAppMessage: (args: unknown) => (whatsapp as any)(args) }))
 vi.mock('@/lib/storage/outbound-documents', () => ({ uploadOutboundPdf: async () => 'https://signed' }))
 
 import { GET as getOne, PUT, DELETE } from '@/app/api/supplier-documents/[id]/route'
@@ -124,11 +124,18 @@ describe('sending a voucher', () => {
     expect(whatsapp).not.toHaveBeenCalled()
   })
 
+  // The voucher row: the recipient, number and names come from here.
+  const row = {
+    id: 'doc-1', status: 'draft', document_type: 'hotel_voucher', document_number: 'HV-1',
+    supplier_name: '<b>Hotel</b>', supplier_contact_email: 'hotel@example.com', client_name: 'Guest',
+    supplier_whatsapp: '+201000000000',
+  }
+
   it('emails from the org’s mailbox, with no copy to a platform address and names escaped', async () => {
-    db.state.rows.supplier_documents = [{ id: 'doc-1' }]
+    db.state.rows.supplier_documents = [row]
     db.state.rows.organization_members = [{ user_id: 'user-1' }]
     db.state.rows.gmail_tokens = [{ user_id: 'user-1' }]
-    const res = await sendEmail(req({ ...email, supplierName: '<b>Hotel</b>', documentType: 'Voucher\r\nBcc: x@evil.test' }) as never)
+    const res = await sendEmail(req({ ...email, documentType: 'Voucher\r\nBcc: x@evil.test' }) as never)
     expect(res.status).toBe(200)
     expect(gmailFor).toHaveBeenCalledWith('user-1')
     const raw = Buffer.from((gmailSend.mock.calls[0] as any)[0].requestBody.raw, 'base64url').toString()
@@ -140,8 +147,38 @@ describe('sending a voucher', () => {
     expect(html).toContain('&lt;b&gt;Hotel&lt;/b&gt;')
   })
 
+  it('sends to the voucher’s supplier, never an address the request names', async () => {
+    db.state.rows.supplier_documents = [row]
+    db.state.rows.organization_members = [{ user_id: 'user-1' }]
+    db.state.rows.gmail_tokens = [{ user_id: 'user-1' }]
+    await sendEmail(req({ ...email, supplierEmail: 'attacker@evil.test' }) as never)
+    const raw = Buffer.from((gmailSend.mock.calls.at(-1) as any)[0].requestBody.raw, 'base64url').toString()
+    expect(raw).toMatch(/^To: hotel@example\.com$/m)
+    expect(raw).not.toContain('attacker@evil.test')
+  })
+
+  it('marks the voucher sent itself once the email has gone', async () => {
+    db.state.rows.supplier_documents = [row]
+    db.state.rows.organization_members = [{ user_id: 'user-1' }]
+    db.state.rows.gmail_tokens = [{ user_id: 'user-1' }]
+    await sendEmail(req(email) as never)
+    const update = calls.filter(c => c.table === 'supplier_documents' && c.op === 'update').at(-1)!.args[0] as Record<string, unknown>
+    expect(update).toMatchObject({ status: 'sent', sent_via: 'email' })
+    expect(orgFilters().every(o => o === 'org-A')).toBe(true)
+  })
+
+  it('sends WhatsApp to the voucher’s number and marks it sent', async () => {
+    db.state.rows.supplier_documents = [row]
+    const res = await sendWhatsApp(req({ ...wa, supplierPhone: '+19999999999' }))
+    expect(res.status).toBe(200)
+    expect(whatsapp).toHaveBeenCalledOnce()
+    expect((whatsapp.mock.calls[0] as any[])[0].to).toBe('+201000000000')
+    const update = calls.filter(c => c.table === 'supplier_documents' && c.op === 'update').at(-1)!.args[0] as Record<string, unknown>
+    expect(update).toMatchObject({ status: 'sent', sent_via: 'whatsapp' })
+  })
+
   it('says Gmail is not connected when no member of the org has a mailbox', async () => {
-    db.state.rows.supplier_documents = [{ id: 'doc-1' }]
+    db.state.rows.supplier_documents = [row]
     db.state.rows.organization_members = [{ user_id: 'user-1' }]
     db.state.rows.gmail_tokens = []
     expect((await sendEmail(req(email) as never)).status).toBe(401)

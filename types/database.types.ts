@@ -10024,6 +10024,8 @@ export interface Database {
           pickup_time: string | null
           pickup_location: string | null
           dropoff_location: string | null
+          driver_name: string | null
+          vehicle_type: string | null
           currency: string | null
           total_cost: number | null
           payment_terms: string | null
@@ -10069,6 +10071,8 @@ export interface Database {
           pickup_time?: string | null
           pickup_location?: string | null
           dropoff_location?: string | null
+          driver_name?: string | null
+          vehicle_type?: string | null
           currency?: string | null
           total_cost?: number | null
           payment_terms?: string | null
@@ -10114,6 +10118,8 @@ export interface Database {
           pickup_time?: string | null
           pickup_location?: string | null
           dropoff_location?: string | null
+          driver_name?: string | null
+          vehicle_type?: string | null
           currency?: string | null
           total_cost?: number | null
           payment_terms?: string | null

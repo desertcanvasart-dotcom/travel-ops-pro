@@ -27,7 +27,7 @@ function builder(table: string) {
   return b
 }
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ from: builder }) }))
-vi.mock('@/lib/auth/current-org', () => ({ getCurrentOrgId: async () => 'org-a', noOrgResponse: () => new Response(null, { status: 403 }) }))
+vi.mock('@/lib/auth/current-org', () => ({ getCurrentOrgId: async () => 'org-a', getCurrentUserId: async () => 'user-a', noOrgResponse: () => new Response(null, { status: 403 }) }))
 vi.mock('@/lib/email-send', () => ({ sendEmailInternal: async () => ({ success: true }) }))
 
 import { POST } from '@/app/api/invitations/route'

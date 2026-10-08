@@ -4,6 +4,8 @@ import { safeKeySegment } from '@/lib/storage-key'
 import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createClient } from '@supabase/supabase-js'
+import { orgIdentity } from '@/lib/org-identity'
+import { markSupplierDocumentSent } from '@/lib/documents/mark-sent'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createClient(
@@ -14,23 +16,10 @@ const supabase = createClient(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const {
-      documentId,
-      supplierPhone,
-      supplierName,
-      documentNumber,
-      documentType,
-      clientName,
-      serviceDate,
-      pdfBase64,
-    } = body
-
-    if (!supplierPhone) {
-      return NextResponse.json(
-        { success: false, error: 'Supplier phone number is required' },
-        { status: 400 }
-      )
-    }
+    // The recipient, number and names come from the voucher row, not the
+    // request: the browser chooses only which voucher, its display title and
+    // the PDF it rendered from that row.
+    const { documentId, documentType: documentTitle, pdfBase64 } = body
 
     if (!pdfBase64) {
       return NextResponse.json(
@@ -45,7 +34,7 @@ export async function POST(request: NextRequest) {
     const { data: document } = documentId
       ? await supabase
           .from('supplier_documents')
-          .select('id')
+          .select('id, document_type, document_number, supplier_name, supplier_contact_name, supplier_whatsapp, supplier_contact_phone, client_name, check_in, service_date')
           .eq('id', documentId)
           .eq('org_id', orgId)
           .maybeSingle()
@@ -54,11 +43,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 })
     }
 
-    // Upload PDF to Supabase Storage so Twilio can access it.
-    // documentNumber comes straight off the request body and is checked against
-    // nothing — it was the only key here built from arbitrary caller text. The
-    // `documents` bucket was public, so a key of the caller's choosing was a file
-    // of the caller's choosing at a URL of the caller's choosing.
+    const supplierPhone = document.supplier_whatsapp || document.supplier_contact_phone
+    if (!supplierPhone) {
+      return NextResponse.json(
+        { success: false, error: 'Supplier phone number is required' },
+        { status: 400 }
+      )
+    }
+    const supplierName = document.supplier_contact_name || document.supplier_name || ''
+    const documentNumber = document.document_number
+    const clientName = document.client_name || ''
+    const documentType = String(documentTitle || document.document_type)
+    const serviceDate = document.check_in || document.service_date || null
+
+    // Upload PDF to Supabase Storage so Twilio can access it. The key is still
+    // made safe: document numbers are editable text.
     const fileName = `supplier-documents/${safeKeySegment(documentNumber, 'document')}-${Date.now()}.pdf`
     const pdfBuffer = Buffer.from(pdfBase64, 'base64')
 
@@ -66,8 +65,8 @@ export async function POST(request: NextRequest) {
 
     const pdfUrl = await uploadOutboundPdf(supabase, fileName, pdfBuffer)
 
-    // Build WhatsApp message
-    const businessName = process.env.BUSINESS_NAME || ''
+    // Build WhatsApp message, signed by the organization sending it (Settings).
+    const businessName = (await orgIdentity(orgId)).name
 
     const message =
       `*${businessName}*\n\n` +
@@ -92,6 +91,10 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('✅ Supplier document sent via WhatsApp:', result.messageId)
+
+    // The message has gone: record it here, not in a second request from the page.
+    const marked = await markSupplierDocumentSent(supabase, { documentId: document.id, orgId, via: 'whatsapp' })
+    if (marked.error) console.error('Supplier document sent but not marked sent:', marked.error)
 
     return NextResponse.json({
       success: true,

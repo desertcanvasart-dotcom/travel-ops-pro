@@ -22,6 +22,7 @@ import { portalVerifyCookieName } from '@/lib/booking-portal'
 import { travellerWriteContext } from '@/lib/portal/traveller-gate'
 import {
   TRAVELLER_DOCS_BUCKET,
+  ensureTravellerDocsBucket,
   MAX_DOCUMENT_BYTES,
   checkUpload,
   documentStorageKey,
@@ -148,6 +149,14 @@ export async function POST(
     ext: verdict.ext,
     unique: randomUUID(),
   })
+
+  // A new install has no bucket until the first upload creates it.
+  try {
+    await ensureTravellerDocsBucket(db)
+  } catch (err) {
+    console.error('[portal] traveller documents bucket:', err instanceof Error ? err.message : err)
+    return NextResponse.json({ error: 'アップロードに失敗しました。時間をおいてお試しください。' }, { status: 500 })
+  }
 
   const { error: uploadError } = await db.storage
     .from(TRAVELLER_DOCS_BUCKET)
