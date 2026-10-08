@@ -57,7 +57,11 @@ export async function getAuthenticatedGmail(userId: string): Promise<Authenticat
   // legacy plaintext rows pass through unchanged.
   let accessToken = decryptToken(tokenData.access_token)!
   const refreshToken = decryptToken(tokenData.refresh_token)!
-  const emailAddress = tokenData.email_address || ''
+  // The column is `email`. This read `email_address`, which gmail_tokens has
+  // never had, so every caller got '': a reply drafted by the copilot went
+  // out with an empty From header, sent mail recorded no from_address, and
+  // every mailbox sync re-fetched the address from Google.
+  const emailAddress = tokenData.email || ''
 
   // Check if token is expired and refresh if needed
   if (tokenData.token_expiry && new Date(tokenData.token_expiry) <= new Date()) {
