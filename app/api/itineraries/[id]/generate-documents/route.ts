@@ -2,20 +2,10 @@ import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
-import { createDocumentNumberer } from '@/lib/documents/numberer'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { createDocumentNumberer, supplierDocumentPrefix } from '@/lib/documents/numberer'
 import { requestedDocTypes } from '@/lib/documents/group-services'
 import { planDocuments, serviceDocKeys, type PlanGuide } from '@/lib/documents/plan-documents'
-
-// Document number prefixes
-const DOC_PREFIXES: Record<string, string> = {
-  hotel_voucher: 'HV',
-  service_order: 'SO',
-  transport_voucher: 'TV',
-  guide_assignment: 'GA',
-  cruise_voucher: 'CV',
-  activity_voucher: 'AV'
-}
 
 export async function POST(
   request: NextRequest,
@@ -30,7 +20,9 @@ export async function POST(
 
     const body = await request.json().catch(() => ({}))
     const document_types = requestedDocTypes(body)
-    const nextNumber = createDocumentNumberer(supabase, t => DOC_PREFIXES[t] || 'SD')
+    const nextNumber = createDocumentNumberer(supabase, supplierDocumentPrefix)
+
+    const createdBy = await getCurrentUserId()
 
     console.log('📄 Generating documents for itinerary:', itineraryId)
     console.log('📋 Requested types:', document_types || 'ALL')
@@ -164,6 +156,7 @@ export async function POST(
       documentsToCreate.push({
         itinerary_id: itineraryId,
         org_id: orgId,
+        created_by: createdBy,
         supplier_id: plan.supplierId,
         document_type: plan.docType,
         document_number: docNumber,
@@ -208,7 +201,7 @@ export async function POST(
       // Another request took one of these numbers between our read and our
       // insert (the column is UNIQUE): renumber from the new highest and retry.
       for (let attempt = 0; createError?.code === '23505' && attempt < 3; attempt++) {
-        const renumber = createDocumentNumberer(supabase, t => DOC_PREFIXES[t] || 'SD')
+        const renumber = createDocumentNumberer(supabase, supplierDocumentPrefix)
         for (const doc of documentsToCreate) doc.document_number = await renumber(doc.document_type)
         ;({ data: createdDocs, error: createError } = await supabase
           .from('supplier_documents')

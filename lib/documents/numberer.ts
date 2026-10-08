@@ -9,6 +9,18 @@
 // repeated and the whole batch failed on the UNIQUE constraint. Each request
 // now owns its numberer.
 
+/** Document-number prefix per supplier-document type (SD for anything else). */
+export const SUPPLIER_DOCUMENT_PREFIXES: Record<string, string> = {
+  hotel_voucher: 'HV',
+  service_order: 'SO',
+  transport_voucher: 'TV',
+  activity_voucher: 'AV',
+  guide_assignment: 'GA',
+  cruise_voucher: 'CV',
+}
+
+export const supplierDocumentPrefix = (docType: string): string => SUPPLIER_DOCUMENT_PREFIXES[docType] || 'SD'
+
 type NumberReader = {
   from: (table: string) => any // eslint-disable-line @typescript-eslint/no-explicit-any
 }

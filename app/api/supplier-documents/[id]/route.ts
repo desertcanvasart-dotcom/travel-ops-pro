@@ -1,6 +1,6 @@
 import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(
@@ -84,6 +84,8 @@ export async function PUT(
     }
     if (updateData.status === 'confirmed' && !updateData.confirmed_at) {
       updateData.confirmed_at = new Date().toISOString()
+      // Who confirmed it, stamped with the first confirmation only.
+      updateData.confirmed_by = await getCurrentUserId()
     }
     if (updateData.status === 'completed' && !updateData.completed_at) {
       updateData.completed_at = new Date().toISOString()

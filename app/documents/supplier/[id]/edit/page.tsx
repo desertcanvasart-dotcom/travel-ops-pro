@@ -13,6 +13,8 @@ import { currencySymbol } from '@/lib/currency-totals'
 import { vehicleBands } from '@/lib/rates/vehicle-bands'
 import { slugifyKey } from '@/lib/vocabulary'
 import { pickerOwnsLines } from '@/lib/documents/voucher-lines'
+import { TripBreadcrumb } from '@/components/nav/TripNav'
+import { withReturnTo, safeReturnPath, FROM_PARAM } from '@/lib/nav/return-to'
 
 interface TransportRate {
   id: string
@@ -135,6 +137,13 @@ export default function EditSupplierDocumentPage() {
   const params = useParams()
   const router = useRouter()
   const [document, setDocument] = useState<any>(null)
+  // ?from= (where the document page was opened from): back and save return to
+  // the document page with it, so its back link still reaches the trip.
+  const [returnTo, setReturnTo] = useState<string | null>(null)
+  useEffect(() => {
+    setReturnTo(safeReturnPath(new URLSearchParams(window.location.search).get(FROM_PARAM)))
+  }, [])
+  const documentHref = withReturnTo(`/documents/supplier/${params.id}`, returnTo)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -462,7 +471,7 @@ export default function EditSupplierDocumentPage() {
       })
 
       if (response.ok) {
-        router.push(`/documents/supplier/${params.id}`)
+        router.push(documentHref)
       } else {
         const errorData = await response.json().catch(() => null)
         console.error('Save error:', errorData)
@@ -792,7 +801,7 @@ export default function EditSupplierDocumentPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-600 mb-4">{error}</p>
-          <Link href="/documents/supplier" className="text-primary-600">← {t('back')}</Link>
+          <Link href={returnTo ?? '/documents/supplier'} className="text-primary-600">← {t('back')}</Link>
         </div>
       </div>
     )
@@ -805,9 +814,10 @@ export default function EditSupplierDocumentPage() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="container mx-auto px-4 py-4">
+          <TripBreadcrumb itineraryId={document.itinerary?.id ?? document.itinerary_id} current={document.document_number} />
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Link href={`/documents/supplier/${params.id}`} className="p-2 hover:bg-gray-100 rounded-lg">
+              <Link href={documentHref} className="p-2 hover:bg-gray-100 rounded-lg">
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </Link>
               <div>

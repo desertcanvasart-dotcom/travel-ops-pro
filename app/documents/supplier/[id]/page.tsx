@@ -5,13 +5,14 @@ import { useCompanyInfo } from '@/lib/use-company-info'
 import { useTranslations, useLocale } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Download, Send, Mail, MessageSquare, Printer, CheckCircle, Eye } from 'lucide-react'
+import { Download, Send, Mail, MessageSquare, Printer, CheckCircle, Eye, Pencil } from 'lucide-react'
 import { generateSupplierDocumentPDF } from '@/lib/supplier-document-pdf'
 import { fetchCompanyInfo } from '@/lib/company-info-client'
 import type { CompanyInfo } from '@/lib/invoice-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import { BackLink, TripBreadcrumb } from '@/components/nav/TripNav'
+import { withReturnTo, safeReturnPath, FROM_PARAM } from '@/lib/nav/return-to'
 
 interface SupplierDocument {
   id: string
@@ -41,6 +42,9 @@ interface SupplierDocument {
   special_requests?: string
   internal_notes?: string
   status: string
+  sent_at?: string | null
+  sent_via?: string | null
+  confirmed_at?: string | null
   created_at: string
   itinerary?: {
     id: string
@@ -151,6 +155,11 @@ export default function SupplierDocumentViewPage() {
   const params = useParams()
   const router = useRouter()
   const [document, setDocument] = useState<SupplierDocument | null>(null)
+  // ?from= (the list or trip this was opened from), passed on to Edit.
+  const [returnTo, setReturnTo] = useState<string | null>(null)
+  useEffect(() => {
+    setReturnTo(safeReturnPath(new URLSearchParams(window.location.search).get(FROM_PARAM)))
+  }, [])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
@@ -369,6 +378,16 @@ export default function SupplierDocumentViewPage() {
             </div>
             
             <div className="flex items-center gap-2 flex-wrap">
+              {document.status !== 'cancelled' && (
+                <Link
+                  // Edit returns here, keeping where this page was opened from.
+                  href={withReturnTo(`/documents/supplier/${document.id}/edit`, returnTo)}
+                  className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium flex items-center gap-1.5"
+                >
+                  <Pencil className="w-4 h-4" />
+                  {t('edit')}
+                </Link>
+              )}
               <button
                 onClick={handlePreviewPDF}
                 className="px-3 py-1.5 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-sm font-medium flex items-center gap-1.5"
@@ -458,6 +477,20 @@ export default function SupplierDocumentViewPage() {
                   }`}>
                     {document.status.toUpperCase()}
                   </span>
+                  {/* When and how it went out (the send routes record both). */}
+                  {document.sent_at && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {document.sent_via === 'email' || document.sent_via === 'whatsapp'
+                        ? t('sentVia', {
+                            via: document.sent_via === 'email' ? t('viaEmail') : t('viaWhatsapp'),
+                            date: new Date(document.sent_at).toLocaleDateString(),
+                          })
+                        : t('sentOn', { date: new Date(document.sent_at).toLocaleDateString() })}
+                    </p>
+                  )}
+                  {document.confirmed_at && (
+                    <p className="text-xs text-gray-500">{t('confirmedOn', { date: new Date(document.confirmed_at).toLocaleDateString() })}</p>
+                  )}
                 </div>
               </div>
             </div>
