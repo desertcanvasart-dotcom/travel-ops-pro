@@ -48,7 +48,12 @@
     "saved": "保存しました",
     "unknownError": "不明なエラー",
     "saving": "保存中…",
-    "duplicate": "複製"
+    "duplicate": "複製",
+    "backTo": "{name}に戻る",
+    "backToTrip": "旅程",
+    "trip": "旅程",
+    "breadcrumb": "パンくずリスト",
+    "contract": "契約書"
   },
   "contract": {
     "loadingContract": "契約書を読み込み中...",

@@ -5,12 +5,13 @@ import { useCompanyInfo } from '@/lib/use-company-info'
 import { useTranslations, useLocale } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Download, Send, Mail, MessageSquare, Printer, CheckCircle, Eye } from 'lucide-react'
+import { Download, Send, Mail, MessageSquare, Printer, CheckCircle, Eye } from 'lucide-react'
 import { generateSupplierDocumentPDF } from '@/lib/supplier-document-pdf'
 import { fetchCompanyInfo } from '@/lib/company-info-client'
 import type { CompanyInfo } from '@/lib/invoice-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
+import { BackLink, TripBreadcrumb } from '@/components/nav/TripNav'
 
 interface SupplierDocument {
   id: string
@@ -52,6 +53,7 @@ export default function SupplierDocumentViewPage() {
   // The operator's own letterhead — the PDF already used it; the preview did not.
   const company = useCompanyInfo()
   const t = useTranslations('supplierDocumentDetail')
+  const tNav = useTranslations('navigation')
   const tVoucher = useTranslations('pdf.voucher')
   const tBrand = useTranslations('pdf')
   const currentLocale = useLocale()
@@ -364,19 +366,19 @@ export default function SupplierDocumentViewPage() {
     )
   }
 
+  const tripRef = document.itinerary
+    ? { id: document.itinerary.id, code: document.itinerary.itinerary_code, name: document.itinerary.trip_name }
+    : null
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="container mx-auto px-4 py-4">
+          <TripBreadcrumb itineraryId={document.itinerary?.id} trip={tripRef} current={document.document_number} />
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <Link
-                href="/documents/supplier"
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <ArrowLeft className="w-5 h-5 text-gray-600" />
-              </Link>
+              <BackLink fallbackHref="/documents/supplier" fallbackLabel={tNav('documents')} trip={tripRef} />
               <div>
                 <h1 className="text-lg font-semibold text-gray-900">{document.document_number}</h1>
                 <p className="text-sm text-gray-500">{DOCUMENT_TITLES[document.document_type]} • {document.supplier_name}</p>

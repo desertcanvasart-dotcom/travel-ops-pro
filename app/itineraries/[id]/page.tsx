@@ -54,6 +54,7 @@ import CancelTripDialog from '@/components/itineraries/CancelTripDialog'
 import ComposeEmailModal from '@/components/unified/ComposeEmailModal'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { formatPhoneForWhatsApp, generateWhatsAppLink } from '@/lib/whatsapp-link'
+import { withReturnTo } from '@/lib/nav/return-to'
 
 const ItineraryMap = dynamic(() => import('@/components/ItineraryMap'), {
   ssr: false,
@@ -216,6 +217,8 @@ export default function ViewItineraryPage() {
     })
   }
   const params = useParams()
+  // Pages this trip opens (booking, invoice, contract) go back to it (lib/nav/return-to).
+  const fromThisTrip = (href: string) => withReturnTo(href, `/itineraries/${params.id}`)
   const router = useRouter()
   const supabase = createClient()
   const intlLocale = useLocale() as Language
@@ -635,7 +638,7 @@ export default function ViewItineraryPage() {
     if (!itinerary) return
 
     if (existingInvoice) {
-      router.push(`/invoices/${existingInvoice.id}`)
+      router.push(fromThisTrip(`/invoices/${existingInvoice.id}`))
       return
     }
 
@@ -729,7 +732,7 @@ export default function ViewItineraryPage() {
 
       if (response.ok) {
         const invoice = await response.json()
-        router.push(`/invoices/${invoice.id}`)
+        router.push(fromThisTrip(`/invoices/${invoice.id}`))
       } else {
         const error = await response.json()
         await dialog.alert(tCommon('error'), error.error || t('failedToCreateInvoice'), 'warning')
@@ -1412,7 +1415,7 @@ export default function ViewItineraryPage() {
 
   // Payments are recorded on the invoice.
   const recordPayment = () => {
-    if (existingInvoice) router.push(`/invoices/${existingInvoice.id}`)
+    if (existingInvoice) router.push(fromThisTrip(`/invoices/${existingInvoice.id}`))
     else handleGenerateInvoice()
   }
 
@@ -1641,12 +1644,12 @@ export default function ViewItineraryPage() {
                   )}
                   {/* Linked records are links, not actions. */}
                   {existingBooking && (
-                    <Link href={`/bookings/${existingBooking.id}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 text-xs text-gray-700 hover:bg-gray-50">
+                    <Link href={fromThisTrip(`/bookings/${existingBooking.id}`)} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 text-xs text-gray-700 hover:bg-gray-50">
                       <BookOpen className="w-3 h-3" /> {existingBooking.booking_code}
                     </Link>
                   )}
                   {existingInvoice && (
-                    <Link href={`/invoices/${existingInvoice.id}`} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 text-xs text-gray-700 hover:bg-gray-50">
+                    <Link href={fromThisTrip(`/invoices/${existingInvoice.id}`)} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 text-xs text-gray-700 hover:bg-gray-50">
                       <Receipt className="w-3 h-3" /> {existingInvoice.invoice_number}
                     </Link>
                   )}
@@ -1688,7 +1691,7 @@ export default function ViewItineraryPage() {
                     title: days.length === 0 ? t('pdfNeedsDays') : documentLanguageReady(lang) ? t('pdfTooltip') : tLayout('translateFirst', { language: LANGUAGE_NAMES[lang] }),
                   })),
                   { label: tLayout('docNittei'), icon: <FileText className="w-4 h-4" />, onSelect: () => setNitteiSignal(n => n + 1) },
-                  { label: t('contract'), icon: <FileText className="w-4 h-4" />, href: `/documents/contract/${itinerary.id}` },
+                  { label: t('contract'), icon: <FileText className="w-4 h-4" />, href: fromThisTrip(`/documents/contract/${itinerary.id}`) },
                   { label: tLayout('docSurvey'), icon: <ClipboardList className="w-4 h-4" />, onSelect: () => window.open(`/api/itineraries/${itinerary.id}/survey-pdf`, '_blank', 'noopener') },
                   { label: tLayout('docOpsSheet'), icon: <FileText className="w-4 h-4" />, onSelect: () => setOpsSheetSignal(n => n + 1), title: tLayout('staffLanguage') },
                   {
@@ -2431,7 +2434,7 @@ export default function ViewItineraryPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     {existingInvoice && (
-                      <Link href={`/invoices/${existingInvoice.id}`} className="px-3 py-1.5 border border-gray-300 bg-white text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium">
+                      <Link href={fromThisTrip(`/invoices/${existingInvoice.id}`)} className="px-3 py-1.5 border border-gray-300 bg-white text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium">
                         {tStage('recordPayment')}
                       </Link>
                     )}

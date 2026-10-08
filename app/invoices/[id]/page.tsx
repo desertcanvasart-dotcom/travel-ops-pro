@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import {
-  ArrowLeft,
   FileText,
   Send,
   Download,
@@ -36,6 +35,7 @@ import { useConfirm, useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
+import { BackLink, TripBreadcrumb } from '@/components/nav/TripNav'
 
 interface Invoice {
   id: string
@@ -146,6 +146,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const router = useRouter()
   const t = useTranslations('invoices.detail')
   const tCommon = useTranslations('common')
+  const tNav = useTranslations('navigation')
   const dialog = useConfirmDialog()
   const confirmDialog = useConfirm()
   const [invoice, setInvoice] = useState<Invoice | null>(null)
@@ -507,15 +508,11 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="p-6">
+      <TripBreadcrumb itineraryId={invoice.itinerary_id} current={invoice.invoice_number} />
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Link
-            href="/invoices"
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
+          <BackLink fallbackHref="/invoices" fallbackLabel={tNav('invoices')} />
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-xl font-semibold text-gray-900">{invoice.invoice_number}</h1>

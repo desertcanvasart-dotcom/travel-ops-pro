@@ -9,6 +9,8 @@ import {
   Clock, RotateCcw
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { TripBreadcrumb } from '@/components/nav/TripNav'
+import { withReturnTo } from '@/lib/nav/return-to'
 
 interface SupplierDocument {
   id: string
@@ -192,6 +194,7 @@ export default function SupplierDocumentsPage() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
+              <TripBreadcrumb itineraryId={itineraryFilter} current={t('supplierDocuments')} />
               <h1 className="text-xl font-semibold text-gray-900">{t('supplierDocuments')}</h1>
               <p className="text-sm text-gray-500">{t('supplierDocumentsSubtitle')}</p>
               {itineraryFilter && (
@@ -386,7 +389,8 @@ export default function SupplierDocumentsPage() {
                           <div className="flex items-center justify-end gap-1">
                             {/* View */}
                             <Link
-                              href={`/documents/supplier/${doc.id}`}
+                              // Back from the document returns to this list, still filtered to the trip.
+                              href={itineraryFilter ? withReturnTo(`/documents/supplier/${doc.id}`, `/documents/supplier?itineraryId=${encodeURIComponent(itineraryFilter)}`) : `/documents/supplier/${doc.id}`}
                               className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
                               title={t('view')}
                             >
