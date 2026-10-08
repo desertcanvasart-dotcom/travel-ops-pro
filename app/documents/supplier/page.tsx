@@ -9,8 +9,8 @@ import {
   Clock, RotateCcw
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
-import { TripBreadcrumb } from '@/components/nav/TripNav'
-import { withReturnTo } from '@/lib/nav/return-to'
+import { BackLink, TripBreadcrumb } from '@/components/nav/TripNav'
+import { withReturnTo, safeReturnPath, FROM_PARAM } from '@/lib/nav/return-to'
 
 interface SupplierDocument {
   id: string
@@ -75,10 +75,14 @@ export default function SupplierDocumentsPage() {
   // the page used to ignore — so it listed every trip's documents. Read on
   // mount (no useSearchParams: it would need a Suspense boundary to build).
   const [itineraryFilter, setItineraryFilter] = useState<string | null>(null)
+  // Where this list was opened from (a trip, its booking): ?from=, kept through
+  // the list's own links so back from a document, then back again, gets there.
+  const [returnTo, setReturnTo] = useState<string | null>(null)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     setItineraryFilter(params.get('itineraryId'))
+    setReturnTo(safeReturnPath(params.get(FROM_PARAM)))
     // The documents hub's cards link here with ?type=…; only a known type filters.
     const type = params.get('type')
     if (type && DOCUMENT_TYPES.some(d => d.value === type)) setTypeFilter(type)
@@ -94,8 +98,15 @@ export default function SupplierDocumentsPage() {
 
   const showAllDocuments = () => {
     setItineraryFilter(null)
-    window.history.replaceState({}, '', '/documents/supplier')
+    window.history.replaceState({}, '', withReturnTo('/documents/supplier', returnTo))
   }
+
+  // This list as it stands (trip filter and ?from=), for a document's back link.
+  const listHref = withReturnTo(
+    itineraryFilter ? `/documents/supplier?itineraryId=${encodeURIComponent(itineraryFilter)}` : '/documents/supplier',
+    returnTo
+  )
+  const fromList = (href: string) => (listHref === '/documents/supplier' ? href : withReturnTo(href, listHref))
 
   const fetchDocuments = async () => {
     setLoading(true)
@@ -203,17 +214,15 @@ export default function SupplierDocumentsPage() {
               <p className="text-sm text-gray-500">{t('supplierDocumentsSubtitle')}</p>
               {itineraryFilter && (
                 <p className="text-sm text-primary-700 mt-1">
-                  {t('forOneTrip', { code: documents[0]?.itinerary?.itinerary_code ?? '' })}{' '}
+                  {documents[0]?.itinerary?.itinerary_code
+                    ? t('forOneTrip', { code: documents[0].itinerary.itinerary_code })
+                    : t('forThisTrip')}{' '}
                   <button type="button" onClick={showAllDocuments} className="underline hover:text-primary-800">{t('showAllDocuments')}</button>
                 </p>
               )}
             </div>
-            <Link
-              href="/documents"
-              className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-            >
-              ← {t('backToAllDocuments')}
-            </Link>
+            {/* Back to the trip or booking it was opened from, else all documents. */}
+            <BackLink fallbackHref="/documents" fallbackLabel={t('backToAllDocuments')} />
           </div>
         </div>
       </header>
@@ -393,8 +402,8 @@ export default function SupplierDocumentsPage() {
                           <div className="flex items-center justify-end gap-1">
                             {/* View */}
                             <Link
-                              // Back from the document returns to this list, still filtered to the trip.
-                              href={itineraryFilter ? withReturnTo(`/documents/supplier/${doc.id}`, `/documents/supplier?itineraryId=${encodeURIComponent(itineraryFilter)}`) : `/documents/supplier/${doc.id}`}
+                              // Back from the document returns to this list, as it stands.
+                              href={fromList(`/documents/supplier/${doc.id}`)}
                               className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
                               title={t('view')}
                             >
@@ -404,7 +413,7 @@ export default function SupplierDocumentsPage() {
                             {/* Edit - available for all statuses EXCEPT cancelled */}
                             {doc.status !== 'cancelled' && (
                               <Link
-                                href={`/documents/supplier/${doc.id}/edit`}
+                                href={fromList(`/documents/supplier/${doc.id}/edit`)}
                                 className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded"
                                 title={t('edit')}
                               >

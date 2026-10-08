@@ -1,42 +1,9 @@
 import { createServerClient } from '@/lib/supabase-server'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { NextRequest, NextResponse } from 'next/server'
-
-// Document number prefixes
-const DOC_PREFIXES: Record<string, string> = {
-  hotel_voucher: 'HV',
-  service_order: 'SO',
-  transport_voucher: 'TV',
-  activity_voucher: 'AV',
-  guide_assignment: 'GA',
-  cruise_voucher: 'CV'
-}
-
-async function generateDocumentNumber(supabase: any, docType: string): Promise<string> {
-  const prefix = DOC_PREFIXES[docType] || 'SD'
-  const year = new Date().getFullYear()
-  const pattern = `${prefix}-${year}-%`
-  
-  const { data } = await supabase
-    .from('supplier_documents')
-    .select('document_number')
-    .like('document_number', pattern)
-    .order('document_number', { ascending: false })
-    .limit(1)
-  
-  let nextNum = 1
-  if (data && data.length > 0) {
-    const lastNum = data[0].document_number
-    const match = lastNum.match(/-(\d+)$/)
-    if (match) {
-      nextNum = parseInt(match[1], 10) + 1
-    }
-  }
-  
-  return `${prefix}-${year}-${String(nextNum).padStart(4, '0')}`
-}
+import { createDocumentNumberer, supplierDocumentPrefix } from '@/lib/documents/numberer'
 
 export async function GET(request: NextRequest) {
   const supabase = createServerClient()
@@ -135,7 +102,7 @@ export async function POST(request: NextRequest) {
     
     // Generate document number if not provided
     if (!body.document_number) {
-      body.document_number = await generateDocumentNumber(supabase, body.document_type)
+      body.document_number = await createDocumentNumberer(supabase, supplierDocumentPrefix)(body.document_type)
     }
     
     // If supplier_id provided, fetch supplier details
@@ -175,6 +142,7 @@ export async function POST(request: NextRequest) {
       }
     }
     body.org_id = orgId
+    body.created_by = await getCurrentUserId()
 
     const { data, error } = await supabase
       .from('supplier_documents')

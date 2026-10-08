@@ -7388,6 +7388,7 @@
     "supplierDocuments": "Supplier Documents",
     "supplierDocumentsSubtitle": "Manage vouchers, service orders, and assignments",
     "forOneTrip": "Showing the documents of one trip ({code})",
+    "forThisTrip": "Showing the documents of this trip",
     "showAllDocuments": "Show all documents",
     "backToAllDocuments": "Back to All Documents",
     "tryAgain": "Try Again",
@@ -7577,6 +7578,12 @@
     }
   },
   "supplierDocumentDetail": {
+    "sentVia": "Sent by {via} on {date}",
+    "sentOn": "Sent on {date}",
+    "confirmedOn": "Confirmed on {date}",
+    "viaEmail": "email",
+    "viaWhatsapp": "WhatsApp",
+    "edit": "Edit",
     "documentTypes": {
       "hotelVoucher": "Hotel Voucher",
       "serviceOrder": "Service Order",

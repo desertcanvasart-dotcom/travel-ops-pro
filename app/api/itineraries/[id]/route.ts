@@ -184,6 +184,20 @@ export async function PUT(
 
     if (error) throw error
 
+    // A cancelled trip's DRAFT supplier vouchers are cancelled with it (no
+    // supplier has seen them), so they stop showing as work to send. Vouchers
+    // already sent stay as they are: the supplier holds them, and marking them
+    // cancelled here would hide that someone still has to tell the supplier.
+    if (body.status === 'cancelled' && data) {
+      const { error: voucherError } = await supabaseAdmin
+        .from('supplier_documents')
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+        .eq('itinerary_id', id)
+        .eq('org_id', orgId)
+        .eq('status', 'draft')
+      if (voucherError) console.warn('[itinerary] cancelling draft vouchers failed:', voucherError.message)
+    }
+
     // Auto-create booking when status changes to "confirmed"
     if (body.status === 'confirmed' && previousStatus !== 'confirmed' && data) {
       try {

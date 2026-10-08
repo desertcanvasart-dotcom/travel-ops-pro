@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileText, ChevronDown, Loader2, Check, AlertCircle } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import { withReturnTo } from '@/lib/nav/return-to'
 
 interface GenerateDocumentsButtonProps {
   itineraryId: string
@@ -51,6 +52,13 @@ export default function GenerateDocumentsButton({ itineraryId, itineraryCode, tr
     }
   }, [result])
 
+  // The trip's documents, with back returning to the page this was opened on
+  // (the trip, its edit page, or its booking).
+  const documentsHref = () => withReturnTo(
+    `/documents/supplier?itineraryId=${encodeURIComponent(itineraryId)}`,
+    `${window.location.pathname}${window.location.search}`
+  )
+
   const generateDocuments = async (documentType: string) => {
     setGenerating(true)
     setIsOpen(false)
@@ -83,7 +91,7 @@ export default function GenerateDocumentsButton({ itineraryId, itineraryCode, tr
 
       // Navigate to documents page for this itinerary
       setTimeout(() => {
-        router.push(`/documents/supplier?itineraryId=${itineraryId}`)
+        router.push(documentsHref())
       }, 1500)
 
     } catch (error: any) {
@@ -98,7 +106,7 @@ export default function GenerateDocumentsButton({ itineraryId, itineraryCode, tr
   }
 
   const viewDocuments = () => {
-    router.push(`/documents/supplier?itineraryId=${itineraryId}`)
+    router.push(documentsHref())
   }
 
   return (

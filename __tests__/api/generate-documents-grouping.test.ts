@@ -51,7 +51,7 @@ function chain(table: string) {
 }
 
 vi.mock('@/lib/supabase-server', () => ({ createServerClient: () => ({ from: (t: string) => chain(t) }) }))
-vi.mock('@/lib/auth/current-org', () => ({ getCurrentOrgId: async () => 'org-1', noOrgResponse: () => new Response(null, { status: 403 }) }))
+vi.mock('@/lib/auth/current-org', () => ({ getCurrentOrgId: async () => 'org-1', getCurrentUserId: async () => 'user-1', noOrgResponse: () => new Response(null, { status: 403 }) }))
 
 import { POST } from '@/app/api/itineraries/[id]/generate-documents/route'
 
@@ -74,6 +74,9 @@ describe('one document per supplier, split only where it must be', () => {
     ])
     const entrance = store.docs.find(d => d.document_type === 'activity_voucher')
     expect(entrance.services[0].service_name).toBe("Entrance Fees (non-EUR) — Catacombs, Pompey's Pillar")
+
+    // Each voucher records who generated it.
+    expect(store.docs.every(d => d.created_by === 'user-1')).toBe(true)
   })
 
   it('a second Generate makes nothing new', async () => {
