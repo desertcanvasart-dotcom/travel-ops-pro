@@ -16,11 +16,14 @@ async function sendReminderEmail(params: {
   to: string
   subject: string
   html: string
+  orgId: string
 }): Promise<{ success: boolean; error?: string }> {
+  // From the invoice's own organization's mailbox (lib/email-send).
   const result = await sendEmailInternal({
     to: params.to,
     subject: params.subject,
     html: params.html,
+    orgId: params.orgId,
   })
   return { success: result.success, error: result.error }
 }
@@ -152,7 +155,8 @@ async function getHandler(request: NextRequest) {
       const result = await sendReminderEmail({
         to: invoice.client_email,
         subject,
-        html
+        html,
+        orgId: invoice.org_id,
       })
 
       if (result.success) {

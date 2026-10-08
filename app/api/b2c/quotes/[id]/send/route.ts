@@ -7,7 +7,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentUserRole, getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { sendEmailInternal } from '@/lib/email-send'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 
@@ -85,7 +85,7 @@ export async function POST(
       const html = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222;white-space:pre-wrap;line-height:1.6">${
         messageText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       }</div>`
-      const result = await sendEmailInternal({ to: clientEmail, subject, html })
+      const result = await sendEmailInternal({ to: clientEmail, subject, html, orgId, senderUserId: await getCurrentUserId() })
       if (!result.success) {
         return NextResponse.json({ success: false, error: result.error || 'Email send failed' }, { status: 502 })
       }

@@ -75,6 +75,7 @@ export async function markSentAndDeliver(
   let result: { success: boolean; error?: string }
   try {
     result = await sendEmailInternal({
+      orgId: opts.orgId,
       to: pax.email,
       subject: 'ご旅行の参加者情報のご登録のお願い',
       html:

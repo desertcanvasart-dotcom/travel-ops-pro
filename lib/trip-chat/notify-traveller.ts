@@ -102,7 +102,7 @@ export function tripReplyEmail(m: TripReplyEmailInput): { subject: string; html:
 type Db = { from(table: string): any }
 
 export interface NotifyTravellerDeps {
-  mail: (input: { to: string; subject: string; html: string }) => Promise<SendEmailInternalResult>
+  mail: (input: { to: string; subject: string; html: string; orgId: string }) => Promise<SendEmailInternalResult>
 }
 
 const liveDeps = (): NotifyTravellerDeps => ({
@@ -203,7 +203,7 @@ async function decideAndSend(
     agency: org?.name ?? null,
     url: `${base}/share/${share.token}`,
   })
-  const sent = await deps.mail({ to, ...email })
+  const sent = await deps.mail({ to, ...email, orgId: args.orgId })
   if (sent?.success) return done('sent')
   return done(sent?.noAccount ? 'no-account' : 'failed')
 }

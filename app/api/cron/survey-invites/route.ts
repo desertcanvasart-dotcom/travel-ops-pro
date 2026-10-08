@@ -93,7 +93,7 @@ async function getHandler(request: NextRequest): Promise<Response> {
     let sentEmail = false
     let sentWa = false
     if (it.client_email) {
-      const r = await sendEmailInternal({ to: it.client_email, subject: msg.subject, html: msg.html })
+      const r = await sendEmailInternal({ to: it.client_email, subject: msg.subject, html: msg.html, orgId: it.org_id })
       sentEmail = r.success
       if (sentEmail) email++
     }

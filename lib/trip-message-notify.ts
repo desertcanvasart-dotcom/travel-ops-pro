@@ -70,7 +70,7 @@ interface Db {
 
 export interface NotifyDeps {
   push: (orgId: string, payload: PushPayload) => Promise<PushResult>
-  mail: (input: { to: string; subject: string; html: string }) => Promise<SendEmailInternalResult>
+  mail: (input: { to: string; subject: string; html: string; orgId: string }) => Promise<SendEmailInternalResult>
   db: () => Db
 }
 
@@ -111,6 +111,7 @@ export async function notifyTripMessage(input: TripMessageNotifyInput, deps: Not
       const contact = (org as { contact_email?: string | null } | null)?.contact_email
       if (contact) {
         const result = await deps.mail({
+          orgId: input.orgId,
           to: contact,
           subject: `New trip message — ${input.tripName}`,
           html: `

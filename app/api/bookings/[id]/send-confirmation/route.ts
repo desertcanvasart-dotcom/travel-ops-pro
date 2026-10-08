@@ -9,7 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 import { sendEmailInternal } from '@/lib/email-send'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 
@@ -102,7 +102,7 @@ export async function POST(
       messageText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     }</div>`
 
-    const result = await sendEmailInternal({ to: booking.client_email, subject, html })
+    const result = await sendEmailInternal({ to: booking.client_email, subject, html, orgId, senderUserId: await getCurrentUserId() })
     if (!result.success) {
       return NextResponse.json({ success: false, error: result.error || 'Email send failed' }, { status: 502 })
     }
