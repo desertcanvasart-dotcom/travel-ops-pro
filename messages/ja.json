@@ -2089,7 +2089,9 @@
         "pickupDetails": "お迎えのご案内",
         "pickupDetailsHint": "その日のお迎え時間・場所・ガイド・ドライバーをWhatsAppでお客様に送信",
         "pickupSent": "お迎えのご案内を送信しました",
-        "pickupSaved": "お迎え情報を保存しました — WhatsAppで送信を完了してください"
+        "pickupSaved": "お迎え情報を保存しました — WhatsAppで送信を完了してください",
+        "stepNext": "次",
+        "stepNextHint": "この旅行の次のステップ（未完了）"
       },
       "ownWhatsApp": {
         "menuItem": "自分のWhatsAppから送信",

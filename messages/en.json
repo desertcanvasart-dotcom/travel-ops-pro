@@ -1640,7 +1640,9 @@
         "pickupDetails": "Pickup details",
         "pickupDetailsHint": "A day's pickup time, place, guide and driver, to the client on WhatsApp",
         "pickupSent": "Pickup details sent",
-        "pickupSaved": "Pickup details saved — finish sending in WhatsApp"
+        "pickupSaved": "Pickup details saved — finish sending in WhatsApp",
+        "stepNext": "Next",
+        "stepNextHint": "The next step for this trip — not done yet"
       },
       "ownWhatsApp": {
         "menuItem": "Send from my WhatsApp",
