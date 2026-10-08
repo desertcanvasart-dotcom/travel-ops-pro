@@ -16,6 +16,7 @@
 // lose it. Each outcome is a different thing for the operator to do:
 //
 //   sent          the traveller was emailed
+//   grouped       covered by the email of a reply sent just before (below)
 //   no-recipient  the itinerary has no client email   → add one
 //   no-link       the trip has no live share link     → create one
 //   no-account    no Gmail is connected               → connect one
@@ -24,7 +25,34 @@
 import type { SendEmailInternalResult } from '@/lib/email-send'
 import { splitTourCode } from '@/lib/itineraries/content-language'
 
-export type TripNotifyTravellerOutcome = 'sent' | 'no-recipient' | 'no-link' | 'no-account' | 'failed'
+export type TripNotifyTravellerOutcome = 'sent' | 'grouped' | 'no-recipient' | 'no-link' | 'no-account' | 'failed'
+
+/** Replies within this long of an emailed one ride on its email. */
+export const GROUP_WINDOW_MINUTES = 10
+
+export interface ThreadRow {
+  direction: string
+  created_at: string
+  traveller_notified?: string | null
+}
+
+/**
+ * Replies sent close together make one email, not one each. A reply is
+ * grouped when the traveller was emailed about an earlier reply less than
+ * GROUP_WINDOW_MINUTES ago and has not written since: that email already
+ * sends them to the page, which shows every reply. The window runs from the
+ * last email, not the last reply, so a long back-and-forth still emails
+ * every so often; and once the traveller writes back, the next reply emails
+ * again. `earlier` is the thread before this reply, in any order. Pure.
+ */
+export function groupedWithEarlierEmail(earlier: ThreadRow[], now: Date): { grouped: boolean; emailedAt: string | null } {
+  const byTime = [...earlier].sort((a, b) => b.created_at.localeCompare(a.created_at))
+  const lastEmailed = byTime.find(m => m.direction === 'outbound' && m.traveller_notified === 'sent')
+  if (!lastEmailed) return { grouped: false, emailedAt: null }
+  const travellerWroteSince = byTime.some(m => m.direction === 'inbound' && m.created_at > lastEmailed.created_at)
+  const recent = now.getTime() - Date.parse(lastEmailed.created_at) < GROUP_WINDOW_MINUTES * 60_000
+  return { grouped: recent && !travellerWroteSince, emailedAt: lastEmailed.created_at }
+}
 
 export type MailLanguage = 'en' | 'ja'
 
@@ -88,58 +116,94 @@ const toLanguage = (v: string | null | undefined): MailLanguage => {
 }
 
 /**
- * Email the trip's client that a reply is waiting. The itinerary must already
- * be proven to belong to `orgId` by the caller.
+ * Email the trip's client that a reply is waiting — unless a reply sent just
+ * before already did (groupedWithEarlierEmail) — and record on the reply what
+ * happened, so the next reply can tell. The itinerary must already be proven
+ * to belong to `orgId` by the caller.
  */
 export async function notifyTravellerOfTripReply(
   db: Db,
-  args: { itineraryId: string; orgId: string; appUrl?: string },
+  args: { itineraryId: string; orgId: string; messageId: string; appUrl?: string; now?: Date },
   deps: NotifyTravellerDeps = liveDeps()
-): Promise<TripNotifyTravellerOutcome> {
+): Promise<{ outcome: TripNotifyTravellerOutcome; emailedAt: string | null }> {
+  let result: { outcome: TripNotifyTravellerOutcome; emailedAt: string | null }
   try {
-    const { data: trip } = await db
-      .from('itineraries')
-      .select('itinerary_code, trip_name, client_name, client_email, client_id')
-      .eq('id', args.itineraryId)
-      .eq('org_id', args.orgId)
-      .maybeSingle()
-    const to = trip?.client_email?.trim()
-    if (!to) return 'no-recipient'
-
-    // The newest live share link: the page that holds the conversation.
-    const { data: share } = await db
-      .from('itinerary_shares')
-      .select('token')
-      .eq('itinerary_id', args.itineraryId)
-      .eq('org_id', args.orgId)
-      .is('revoked_at', null)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    if (!share?.token) return 'no-link'
-
-    const [{ data: client }, { data: org }] = await Promise.all([
-      trip.client_id
-        ? db.from('clients').select('preferred_language').eq('id', trip.client_id).eq('org_id', args.orgId).maybeSingle()
-        : Promise.resolve({ data: null }),
-      db.from('organizations').select('name').eq('id', args.orgId).maybeSingle(),
-    ])
-
-    const base = (args.appUrl || process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '')
-    const email = tripReplyEmail({
-      language: toLanguage(client?.preferred_language),
-      clientName: trip.client_name,
-      // The client's title, without the programme code the office prefixes.
-      tripName: splitTourCode(trip.trip_name).title || null,
-      itineraryCode: trip.itinerary_code,
-      agency: org?.name ?? null,
-      url: `${base}/share/${share.token}`,
-    })
-    const result = await deps.mail({ to, ...email })
-    if (result?.success) return 'sent'
-    return result?.noAccount ? 'no-account' : 'failed'
+    result = await decideAndSend(db, args, deps)
   } catch (err) {
     console.warn('[trip-chat] reply email failed:', err)
-    return 'failed'
+    result = { outcome: 'failed', emailedAt: null }
   }
+  // Best effort: before the 20261111 migration the column is missing, and
+  // then replies are simply never grouped.
+  try {
+    const { error } = await db.from('trip_messages').update({ traveller_notified: result.outcome }).eq('id', args.messageId)
+    if (error) console.warn('[trip-chat] could not record the reply email outcome:', error.message ?? error)
+  } catch (err) {
+    console.warn('[trip-chat] could not record the reply email outcome:', err)
+  }
+  return result
+}
+
+async function decideAndSend(
+  db: Db,
+  args: { itineraryId: string; orgId: string; messageId: string; appUrl?: string; now?: Date },
+  deps: NotifyTravellerDeps
+): Promise<{ outcome: TripNotifyTravellerOutcome; emailedAt: string | null }> {
+  const done = (outcome: TripNotifyTravellerOutcome): { outcome: TripNotifyTravellerOutcome; emailedAt: string | null } => ({ outcome, emailedAt: null })
+
+  // The thread so far. A failed read (the column not there yet) groups nothing.
+  const { data: earlier, error: earlierError } = await db
+    .from('trip_messages')
+    .select('direction, created_at, traveller_notified')
+    .eq('itinerary_id', args.itineraryId)
+    .eq('org_id', args.orgId)
+    .neq('id', args.messageId)
+    .order('created_at', { ascending: false })
+    .limit(50)
+  if (!earlierError) {
+    const g = groupedWithEarlierEmail((earlier ?? []) as ThreadRow[], args.now ?? new Date())
+    if (g.grouped) return { outcome: 'grouped', emailedAt: g.emailedAt }
+  }
+
+  const { data: trip } = await db
+    .from('itineraries')
+    .select('itinerary_code, trip_name, client_name, client_email, client_id')
+    .eq('id', args.itineraryId)
+    .eq('org_id', args.orgId)
+    .maybeSingle()
+  const to = trip?.client_email?.trim()
+  if (!to) return done('no-recipient')
+
+  // The newest live share link: the page that holds the conversation.
+  const { data: share } = await db
+    .from('itinerary_shares')
+    .select('token')
+    .eq('itinerary_id', args.itineraryId)
+    .eq('org_id', args.orgId)
+    .is('revoked_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (!share?.token) return done('no-link')
+
+  const [{ data: client }, { data: org }] = await Promise.all([
+    trip.client_id
+      ? db.from('clients').select('preferred_language').eq('id', trip.client_id).eq('org_id', args.orgId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    db.from('organizations').select('name').eq('id', args.orgId).maybeSingle(),
+  ])
+
+  const base = (args.appUrl || process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '')
+  const email = tripReplyEmail({
+    language: toLanguage(client?.preferred_language),
+    clientName: trip.client_name,
+    // The client's title, without the programme code the office prefixes.
+    tripName: splitTourCode(trip.trip_name).title || null,
+    itineraryCode: trip.itinerary_code,
+    agency: org?.name ?? null,
+    url: `${base}/share/${share.token}`,
+  })
+  const sent = await deps.mail({ to, ...email })
+  if (sent?.success) return done('sent')
+  return done(sent?.noAccount ? 'no-account' : 'failed')
 }

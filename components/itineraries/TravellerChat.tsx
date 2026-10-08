@@ -95,7 +95,10 @@ export default function TravellerChat({ itineraryId }: { itineraryId: string }) 
       if (data.notified) {
         setNotice(data.emailed
           ? { ok: true, text: t('emailed') }
-          : { ok: false, text: t(`notEmailed_${String(data.notified).replace('-', '_')}`) })
+          : data.notified === 'grouped'
+            // Replies close together share one email (lib/trip-chat/notify-traveller).
+            ? { ok: true, text: t('emailedGrouped', { time: data.emailedAt ? fmtTime(data.emailedAt) : '' }) }
+            : { ok: false, text: t(`notEmailed_${String(data.notified).replace('-', '_')}`) })
       }
       markRead() // replying is reading
     } catch (e) {

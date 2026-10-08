@@ -1760,7 +1760,8 @@
         "notEmailed_no_recipient": "Reply saved, but not emailed: this trip has no client email address. Add one in Edit itinerary.",
         "notEmailed_no_link": "Reply saved, but not emailed: the trip has no share link to send. Create one below.",
         "notEmailed_no_account": "Reply saved, but not emailed: mail is not connected. Connect Gmail in Settings → Email.",
-        "notEmailed_failed": "Reply saved, but the email to the traveller failed. They will see it when they open their link."
+        "notEmailed_failed": "Reply saved, but the email to the traveller failed. They will see it when they open their link.",
+        "emailedGrouped": "Covered by the email the traveller was sent at {time} — replies a few minutes apart share one email."
       }
     },
     "editAction": "Edit",

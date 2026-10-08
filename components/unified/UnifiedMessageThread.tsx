@@ -539,7 +539,8 @@ export function UnifiedMessageThread({
         // not, say why, as for portal replies.
         if (conversation.channel === 'trip') {
           const json = await res.json().catch(() => null)
-          if (json && json.emailed === false) {
+          // 'grouped' is not a failure: the email for a reply just before covers it.
+          if (json && json.emailed === false && json.notified !== 'grouped') {
             setSendNotice(
               json.notified === 'no-recipient' ? t('tripNotifyNoRecipient')
                 : json.notified === 'no-link' ? t('tripNotifyNoLink')
