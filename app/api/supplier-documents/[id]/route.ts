@@ -1,5 +1,6 @@
 import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(
@@ -10,6 +11,9 @@ export async function GET(
   const { id } = await params
 
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { data, error } = await supabase
       .from('supplier_documents')
       .select(`
@@ -17,6 +21,7 @@ export async function GET(
         itinerary:itineraries(id, itinerary_code, trip_name, client_name)
       `)
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (error) {
@@ -39,14 +44,19 @@ export async function PUT(
   const { id } = await params
 
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
     console.log('Updating document:', id)
 
     // Whitelist of allowed columns on supplier_documents table
     // Only these fields will be sent to Supabase — everything else
     // (joined relations, computed fields, non-column data) is ignored
+    // Not itinerary_id or org_id: a voucher stays on its trip, and its org
+    // comes from that trip (migrations/20261113_supplier_documents_org.sql).
     const ALLOWED_FIELDS = [
-      'itinerary_id', 'supplier_id', 'document_type', 'document_number',
+      'supplier_id', 'document_type', 'document_number',
       'supplier_name', 'supplier_contact_name', 'supplier_contact_email',
       'supplier_contact_phone', 'supplier_address', 'supplier_whatsapp',
       'client_name', 'client_nationality', 'num_adults', 'num_children',
@@ -85,9 +95,14 @@ export async function PUT(
       .from('supplier_documents')
       .update(updateData)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
       .single()
 
+    // .single() on no row: not this org's document (or none at all).
+    if (error?.code === 'PGRST116') {
+      return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 })
+    }
     if (error) {
       console.error('Error updating document:', error)
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -109,11 +124,19 @@ export async function DELETE(
   const { id } = await params
 
   try {
-    const { error } = await supabase
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
+    const { data, error } = await supabase
       .from('supplier_documents')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
+      .select('id')
 
+    if (!error && (data ?? []).length === 0) {
+      return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 })
+    }
     if (error) {
       console.error('Error deleting document:', error)
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })

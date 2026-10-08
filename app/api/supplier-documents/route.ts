@@ -50,7 +50,10 @@ export async function GET(request: NextRequest) {
   const search = sanitizeSearchTerm(searchParams.get('search'))
   const startDate = searchParams.get('startDate')
   const endDate = searchParams.get('endDate')
-  
+
+  const orgId = await getCurrentOrgId()
+  if (!orgId) return noOrgResponse()
+
   let query = supabase
     .from('supplier_documents')
     .select(`
@@ -58,6 +61,7 @@ export async function GET(request: NextRequest) {
       itinerary:itineraries(id, itinerary_code, trip_name, client_name),
       supplier:suppliers(id, name, type)
     `)
+    .eq('org_id', orgId)
     .order('created_at', { ascending: false })
   
   // Apply filters
@@ -152,22 +156,26 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // If itinerary_id provided, fetch client details
-    if (body.itinerary_id && !body.client_name) {
+    // A voucher goes on one of this org's trips, or on none.
+    if (body.itinerary_id) {
       const { data: itinerary } = await supabase
         .from('itineraries')
         .select('client_name, num_adults, num_children')
         .eq('id', body.itinerary_id)
         .eq('org_id', orgId)
-        .single()
-      
-      if (itinerary) {
+        .maybeSingle()
+
+      if (!itinerary) {
+        return NextResponse.json({ error: 'Itinerary not found' }, { status: 404 })
+      }
+      if (!body.client_name) {
         body.client_name = itinerary.client_name
         body.num_adults = body.num_adults || itinerary.num_adults
         body.num_children = body.num_children || itinerary.num_children
       }
     }
-    
+    body.org_id = orgId
+
     const { data, error } = await supabase
       .from('supplier_documents')
       .insert([body])

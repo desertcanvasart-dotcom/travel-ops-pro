@@ -10015,6 +10015,7 @@ export interface Database {
           client_nationality: string | null
           num_adults: number | null
           num_children: number | null
+          org_id: string | null
           services: Json | null
           city: string | null
           service_date: string | null
@@ -10059,6 +10060,7 @@ export interface Database {
           client_nationality?: string | null
           num_adults?: number | null
           num_children?: number | null
+          org_id?: string | null
           services?: Json | null
           city?: string | null
           service_date?: string | null
@@ -10103,6 +10105,7 @@ export interface Database {
           client_nationality?: string | null
           num_adults?: number | null
           num_children?: number | null
+          org_id?: string | null
           services?: Json | null
           city?: string | null
           service_date?: string | null
@@ -10133,6 +10136,13 @@ export interface Database {
           selected_guides?: Json | null
         }
         Relationships: [
+          {
+            foreignKeyName: "supplier_documents_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "supplier_documents_itinerary_id_fkey"
             columns: ["itinerary_id"]
