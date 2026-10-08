@@ -10,6 +10,9 @@
 // It now runs against a dedicated project (docs/ci-e2e-project.md). This test
 // is what stops that decision quietly eroding — a secret renamed back, or a new
 // job added that reaches for the production key out of habit.
+//
+// One deliberate exception, fenced and pinned below: the manual production
+// migration workflow may read the production DATABASE URL (never the app keys).
 
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
@@ -66,6 +69,54 @@ describe('GitHub workflows', () => {
     expect(yaml).toContain('E2E_DATABASE_URL is not set')
     // Never from a pull request: a PR's code would run with the database secret.
     expect(yaml).not.toMatch(/^\s*pull_request(_target)?:/m)
+  })
+
+  // ------------------------------------------------------------------------
+  // The one exception: migrating production
+  // ------------------------------------------------------------------------
+  // Production has to be migrated by something, and pasting SQL into the
+  // Supabase editor is how three migrations once sat unapplied. So ONE
+  // workflow may hold ONE production credential — the database URL, never the
+  // app's keys above — and only behind every fence pinned here.
+  const PROD_WORKFLOW = 'production-migrate.yml'
+
+  it.each(workflows.filter(f => f !== PROD_WORKFLOW))('%s never reads the production database URL', file => {
+    const src = readFileSync(join(WORKFLOW_DIR, file), 'utf8')
+    const yaml = src.split('\n').filter(l => !l.trim().startsWith('#')).join('\n')
+    expect(yaml, `${file}: only ${PROD_WORKFLOW} may read the production database`).not.toMatch(/secrets\.PRODUCTION_DATABASE_URL\b/)
+  })
+
+  describe(`${PROD_WORKFLOW} — the production migration workflow`, () => {
+    const src = readFileSync(join(WORKFLOW_DIR, PROD_WORKFLOW), 'utf8')
+    const yaml = src.split('\n').filter(l => !l.trim().startsWith('#')).join('\n')
+    const triggers = yaml.slice(yaml.indexOf('\non:'), yaml.indexOf('\nconcurrency:'))
+
+    it('runs only when a person starts it — never on push, a PR, a schedule or another workflow', () => {
+      expect(triggers).toMatch(/^\s*workflow_dispatch:/m)
+      for (const t of ['push', 'pull_request', 'pull_request_target', 'schedule', 'workflow_run', 'workflow_call', 'repository_dispatch']) {
+        expect(triggers, `${PROD_WORKFLOW} must not trigger on ${t}`).not.toMatch(new RegExp(`^\\s*${t}:`, 'm'))
+      }
+    })
+
+    it('gets the URL from the "production" environment, so GitHub can hold it to main and an approval', () => {
+      expect(yaml).toMatch(/^\s*environment: production\s*$/m)
+      expect(yaml).toMatch(/DATABASE_URL: \$\{\{ secrets\.PRODUCTION_DATABASE_URL \}\}/)
+    })
+
+    it('runs only from main', () => {
+      expect(yaml).toContain("if: github.ref == 'refs/heads/main'")
+    })
+
+    it('writes only when "production" is typed, and stops when the URL is missing', () => {
+      expect(yaml).toMatch(/\[ "\$CONFIRM" != "production" \]/)
+      expect(yaml).toContain('PRODUCTION_DATABASE_URL is not set')
+      // Reading is the default; writing is chosen.
+      expect(yaml).toMatch(/default: status/)
+    })
+
+    it('is never cancelled halfway through a migration', () => {
+      expect(yaml).toMatch(/cancel-in-progress: false/)
+    })
   })
 
   it('fails loudly when the E2E secrets are missing outside a fork', () => {
