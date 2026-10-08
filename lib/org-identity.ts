@@ -29,6 +29,7 @@
 // person whose company it is, rather than in a deploy variable.
 
 import { customerFacingOrgName } from '@/lib/org-name'
+import { escapeHtml } from '@/lib/html-escape'
 
 // createServerClient is imported LAZILY, inside orgIdentity(), on purpose.
 // At module scope it builds a Supabase client and throws "supabaseUrl is
@@ -79,6 +80,22 @@ export function businessIdentity(env: NodeJS.ProcessEnv = process.env): OrgIdent
     // No BUSINESS_TAGLINE: a tagline is written, edited and reconsidered, which
     // is Settings' job, not a deploy variable's.
     tagline: '',
+  }
+}
+
+/**
+ * The identity with every field HTML-escaped, for interpolating into an email
+ * or page. The organization's fields are typed in Settings by its own admins,
+ * not set in a deploy variable, so they are text, never markup.
+ */
+export function htmlIdentity(identity: OrgIdentity): OrgIdentity {
+  return {
+    name: escapeHtml(identity.name),
+    email: escapeHtml(identity.email),
+    phone: escapeHtml(identity.phone),
+    website: escapeHtml(identity.website),
+    address: escapeHtml(identity.address),
+    tagline: escapeHtml(identity.tagline),
   }
 }
 

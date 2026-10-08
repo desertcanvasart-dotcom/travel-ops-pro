@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { businessIdentity } from '@/lib/org-identity'
+import { businessIdentity, htmlIdentity, orgIdentity, type OrgIdentity } from '@/lib/org-identity'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
@@ -9,9 +9,9 @@ import { businessToday } from '@/lib/today'
 import { daysUntilDue } from '@/lib/invoices/reminder-schedule'
 
 // Reuse the email generation from the main route
-function generateReminderEmail(invoice: any, reminderType: string): { subject: string; html: string } {
+function generateReminderEmail(invoice: any, reminderType: string, identity: OrgIdentity = businessIdentity()): { subject: string; html: string } {
   // The operator's own name, never a literal — this goes to their customer.
-  const brand = businessIdentity()
+  const brand = htmlIdentity(identity)
   // formatMoney knows each currency's symbol and decimals (¥110,000, not JPY110000.00).
   const balanceDue = formatMoney(Number(invoice.balance_due), invoice.currency)
   const totalAmount = formatMoney(Number(invoice.total_amount), invoice.currency)
@@ -177,7 +177,7 @@ export async function POST(
       )
     }
 
-    const { subject, html } = generateReminderEmail(invoice, 'manual')
+    const { subject, html } = generateReminderEmail(invoice, 'manual', await orgIdentity(orgId))
 
     // Send via the shared in-process helper.
     const emailResult = await sendEmailInternal({

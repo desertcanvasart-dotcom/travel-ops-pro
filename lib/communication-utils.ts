@@ -2,7 +2,7 @@
 
 import { lookupServerMessage } from '@/lib/i18n/server-messages'
 import type { RecipientLocale } from '@/lib/i18n/recipient-locale'
-import { businessIdentity } from '@/lib/org-identity'
+import { businessIdentity, htmlIdentity, type OrgIdentity } from '@/lib/org-identity'
 
 // The sender block on every customer email and WhatsApp message.
 //
@@ -13,8 +13,9 @@ import { businessIdentity } from '@/lib/org-identity'
 // nothing is unfinished, an email signed with the wrong company is wrong.
 //
 // A function, not a constant: a constant is evaluated once at import and would
-// freeze whatever the environment looked like at module load.
-export function companyInfo(): {
+// freeze whatever the environment looked like at module load. Pass the sending
+// organization's identity (orgIdentity) when there is one.
+export function companyInfo(identity: OrgIdentity = businessIdentity()): {
   name: string
   title: string
   company: string
@@ -22,7 +23,6 @@ export function companyInfo(): {
   phone: string
   website: string
 } {
-  const identity = businessIdentity()
   return {
     // The individual signing. Optional — most operators sign as the company.
     name: (process.env.BUSINESS_CONTACT_NAME ?? '').trim(),
@@ -40,13 +40,15 @@ export function generateEmailTemplate(
   tripName: string,
   totalCost: string,
   currency: string,
-  locale: RecipientLocale = 'en'
+  locale: RecipientLocale = 'en',
+  identity: OrgIdentity = businessIdentity()
 ): string {
   // Client-facing copy is localized to the recipient's language (email.itinerary.*).
   // Brand constants (COMPANY_INFO), colors and layout stay as-is.
   const t = (k: string, p: Record<string, string | number> = {}) =>
     lookupServerMessage(locale, `email.itinerary.${k}`, p)
-  const info = companyInfo()
+  // HTML-escaped: the organization's fields are typed in Settings.
+  const info = companyInfo(htmlIdentity(identity))
   return `
 <html>
 <head>

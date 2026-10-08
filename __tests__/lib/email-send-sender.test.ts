@@ -46,6 +46,16 @@ const h = vi.hoisted(() => {
 })
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => h.client }))
+// Each organization's own name, as Settings holds it (lib/org-identity).
+vi.mock('@/lib/org-identity', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/org-identity')>()
+  const names: Record<string, string> = { 'org-A': 'Nile Journeys', 'org-B': 'Red Sea Tours' }
+  return {
+    ...real,
+    businessIdentity: () => ({ ...real.EMPTY_IDENTITY, name: 'Autoura' }),
+    orgIdentity: async (orgId?: string | null) => ({ ...real.EMPTY_IDENTITY, name: (orgId && names[orgId]) || 'Autoura' }),
+  }
+})
 vi.mock('@/lib/gmail', () => ({
   GmailAuthError: class extends Error {},
   getAuthenticatedGmail: async (userId: string) => ({
@@ -78,7 +88,7 @@ describe('sendEmailInternal: whose mailbox', () => {
     const r = await sendEmailInternal({ ...mail, orgId: 'org-A' })
     expect(r.success).toBe(true)
     expect(h.sent.at(-1)!.userId).toBe('a-owner')
-    expect(headers()).toMatch(/^From: (.*<office@org-a\.example>|office@org-a\.example)$/m)
+    expect(headers()).toMatch(/^From: Nile Journeys <office@org-a\.example>$/m)
   })
 
   it('prefers the member who clicked Send, when they connected their own', async () => {
@@ -101,5 +111,10 @@ describe('sendEmailInternal: whose mailbox', () => {
     await sendEmailInternal({ ...mail, orgId: 'org-B' })
     expect(headers()).not.toMatch(/^Bcc:/m)
     expect(h.sent.at(-1)!.raw).not.toContain('platform@autoura.example')
+  })
+
+  it('names the platform on the platform’s own mail', async () => {
+    await sendEmailInternal(mail)
+    expect(headers()).toMatch(/^From: Autoura <platform@autoura\.example>$/m)
   })
 })
