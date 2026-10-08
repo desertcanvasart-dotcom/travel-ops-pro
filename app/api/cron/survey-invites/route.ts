@@ -15,7 +15,7 @@ import { jobRunHeaders, withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { sendEmailInternal } from '@/lib/email-send'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
-import { businessIdentity } from '@/lib/org-identity'
+import { orgIdentity } from '@/lib/org-identity'
 import { todayLocal } from '@/lib/today'
 import { ensureSurvey } from '@/lib/surveys/ensure-survey'
 
@@ -46,7 +46,7 @@ async function getHandler(request: NextRequest): Promise<Response> {
 
   const db = createServerClient()
   const today = todayLocal()
-  const brand = businessIdentity()
+  const identities = new Map<string, string>()
 
   // Itineraries that ended in the last RETRY_DAYS days (today included) and
   // represent a real trip. Today's trips get their first invite; a survey from
@@ -89,7 +89,9 @@ async function getHandler(request: NextRequest): Promise<Response> {
       continue
     }
     const link = `${APP_URL}/survey/${survey.token}`
-    const msg = invitation(brand.name, it.client_name ?? '', link)
+    // Signed by the trip's own organization (Settings), read once per org.
+    if (!identities.has(it.org_id)) identities.set(it.org_id, (await orgIdentity(it.org_id)).name)
+    const msg = invitation(identities.get(it.org_id) ?? '', it.client_name ?? '', link)
     let sentEmail = false
     let sentWa = false
     if (it.client_email) {

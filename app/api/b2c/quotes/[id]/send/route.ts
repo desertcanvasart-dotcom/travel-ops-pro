@@ -9,6 +9,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserRole, getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { sendEmailInternal } from '@/lib/email-send'
+import { orgIdentity } from '@/lib/org-identity'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 
 const supabaseAdmin = createClient(
@@ -68,7 +69,8 @@ export async function POST(
       'We look forward to welcoming you.',
       '',
       'Best regards,',
-      process.env.BUSINESS_NAME || '',
+      // Signed by the organization sending it (Settings), not the platform.
+      (await orgIdentity(orgId)).name,
     ].filter((l) => l !== '')
     const messageText = lines.join('\n')
 

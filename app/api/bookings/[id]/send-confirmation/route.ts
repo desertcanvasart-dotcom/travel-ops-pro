@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 import { sendEmailInternal } from '@/lib/email-send'
+import { orgIdentity } from '@/lib/org-identity'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 
 const supabaseAdmin = createClient(
@@ -85,7 +86,8 @@ export async function POST(
     if (booking.special_requests) {
       lines.push('', `Special Requests: ${booking.special_requests}`)
     }
-    lines.push('', 'We look forward to welcoming you.', '', 'Best regards,', process.env.BUSINESS_NAME || '')
+    // Signed by the organization sending it (Settings), not the platform.
+    lines.push('', 'We look forward to welcoming you.', '', 'Best regards,', (await orgIdentity(orgId)).name)
     const messageText = lines.join('\n')
 
     if (sendVia === 'whatsapp') {

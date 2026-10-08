@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { businessIdentity } from '@/lib/org-identity'
+import { businessIdentity, htmlIdentity, orgIdentity, type OrgIdentity } from '@/lib/org-identity'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
@@ -35,9 +35,9 @@ async function sendReminderEmail(params: {
   return { success: result.success, error: result.error }
 }
 
-function generateReminderEmail(invoice: any, reminderType: string, locale: RecipientLocale = 'en'): { subject: string; html: string } {
+function generateReminderEmail(invoice: any, reminderType: string, locale: RecipientLocale = 'en', identity: OrgIdentity = businessIdentity()): { subject: string; html: string } {
   // The operator's own name, never a literal — this goes to their customer.
-  const brand = businessIdentity()
+  const brand = htmlIdentity(identity)
   // Client-facing copy localized to the recipient's language (email.reminder.*).
   // Colors / layout stay in code; dates format per the recipient's locale.
   const t = (k: string, p: Record<string, string | number> = {}) =>
@@ -295,6 +295,8 @@ export async function POST(request: NextRequest) {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
     const senderUserId = await getCurrentUserId()
+    // Signed by the organization sending them (Settings), not the platform.
+    const identity = await orgIdentity(orgId)
 
     const supabase = createServerClient()
     const body = await request.json()
@@ -391,7 +393,7 @@ export async function POST(request: NextRequest) {
       }
 
       const recipientLocale: RecipientLocale = localeByEmail.get(invoice.client_email) ?? 'en'
-      const { subject, html } = generateReminderEmail(invoice, reminderType, recipientLocale)
+      const { subject, html } = generateReminderEmail(invoice, reminderType, recipientLocale, identity)
 
       // Send email
       const emailResult = await sendReminderEmail({

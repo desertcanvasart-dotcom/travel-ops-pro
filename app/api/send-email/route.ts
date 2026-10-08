@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { generateEmailTemplate } from '@/lib/communication-utils'
+import { orgIdentity } from '@/lib/org-identity'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { allowsIncomplete } from '@/lib/pricing/quote-completeness'
 import { loadItineraryServiceLines } from '@/lib/pricing/itinerary-completeness'
@@ -100,7 +101,7 @@ export async function POST(request: Request) {
         )
       }
       emailSubject = lookupServerMessage(recipientLocale, 'email.itinerary.subject', { tripName, itineraryCode })
-      emailBody = generateEmailTemplate(clientName, itineraryCode, tripName, totalCost, currency, recipientLocale)
+      emailBody = generateEmailTemplate(clientName, itineraryCode, tripName, totalCost, currency, recipientLocale, await orgIdentity(await getCurrentOrgId()))
     } else {
       return NextResponse.json(
         { success: false, error: 'Missing email content parameters' },

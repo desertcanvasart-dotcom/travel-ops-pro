@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cronAuthorized } from '@/lib/cron/auth'
-import { businessIdentity } from '@/lib/org-identity'
+import { businessIdentity, htmlIdentity, orgIdentity, type OrgIdentity } from '@/lib/org-identity'
 import { jobRunHeaders, withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
@@ -28,9 +28,9 @@ async function sendReminderEmail(params: {
   return { success: result.success, error: result.error }
 }
 
-function generateReminderEmail(invoice: any, reminderType: string): { subject: string; html: string } {
+function generateReminderEmail(invoice: any, reminderType: string, identity: OrgIdentity = businessIdentity()): { subject: string; html: string } {
   // The operator's own name, never a literal — this goes to their customer.
-  const brand = businessIdentity()
+  const brand = htmlIdentity(identity)
   // formatMoney knows each currency's symbol and decimals (¥110,000, not JPY110000.00).
   const balanceDue = formatMoney(Number(invoice.balance_due), invoice.currency)
   const dueDate = new Date(invoice.due_date).toLocaleDateString('en-GB', { 
@@ -137,6 +137,7 @@ async function getHandler(request: NextRequest) {
     let sent = 0
     let failed = 0
     let skipped = 0
+    const identities = new Map<string, OrgIdentity>()
 
     for (const invoice of invoices) {
       const reminderType = reminderStage(daysUntilDue(invoice.due_date, today))
@@ -150,7 +151,9 @@ async function getHandler(request: NextRequest) {
         continue
       }
 
-      const { subject, html } = generateReminderEmail(invoice, reminderType)
+      // Signed by the invoice's own organization (Settings), read once per org.
+      if (!identities.has(invoice.org_id)) identities.set(invoice.org_id, await orgIdentity(invoice.org_id))
+      const { subject, html } = generateReminderEmail(invoice, reminderType, identities.get(invoice.org_id))
 
       const result = await sendReminderEmail({
         to: invoice.client_email,

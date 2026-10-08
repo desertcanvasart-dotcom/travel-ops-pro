@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { businessIdentity } from '@/lib/org-identity'
+import { businessIdentity, orgIdentity } from '@/lib/org-identity'
 import { headerSafe, safeEmailAddress } from '@/lib/http/safe-header'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { orgGmailSenderId } from '@/lib/email/org-gmail-sender'
@@ -101,9 +101,12 @@ export async function sendEmailInternal(
       throw err
     }
 
+    // The From name: the organization's own (Settings), else the platform's.
+    const fromName = orgId ? (await orgIdentity(orgId)).name : businessIdentity().name
+    const from = fromHeader(fromName, fromAddress)
     const rawEmail = attachment
-      ? buildEmailWithAttachment(fromAddress, to, subject, html, attachment.filename, attachment.contentBase64)
-      : buildSimpleEmail(fromAddress, to, subject, html)
+      ? buildEmailWithAttachment(from, to, subject, html, attachment.filename, attachment.contentBase64)
+      : buildSimpleEmail(from, to, subject, html)
 
     const response = await gmail.users.messages.send({
       userId: 'me',
@@ -154,19 +157,19 @@ async function platformSenderId(): Promise<string | null> {
 // there is no Bcc: the copy is in that account's Sent folder. The name is the
 // operator's, not ours; blank lets the mail client show the address rather
 // than name the wrong company.
-function fromHeader(fromAddress: string): string {
-  const name = headerSafe(businessIdentity().name)
+function fromHeader(fromName: string, fromAddress: string): string {
+  const name = headerSafe(fromName)
   const address = safeEmailAddress(fromAddress)
   if (!address) return ''
   return name ? `From: ${encodeEmailHeader(name)} <${address}>` : `From: ${address}`
 }
 
-function buildSimpleEmail(fromAddress: string, to: string, subject: string, body: string): string {
+function buildSimpleEmail(from: string, to: string, subject: string, body: string): string {
   // The HTML body is base64-encoded (Content-Transfer-Encoding: base64) so
   // multi-byte UTF-8 (Japanese) survives intact rather than being emitted as
   // raw 8-bit text under a default 7-bit assumption.
   const emailLines = [
-    fromHeader(fromAddress),
+    from,
     `To: ${safeEmailAddress(to)}`,
     `Subject: ${encodeEmailHeader(headerSafe(subject))}`,
     'MIME-Version: 1.0',
@@ -184,7 +187,7 @@ function buildSimpleEmail(fromAddress: string, to: string, subject: string, body
 }
 
 function buildEmailWithAttachment(
-  fromAddress: string,
+  from: string,
   to: string,
   subject: string,
   body: string,
@@ -194,7 +197,7 @@ function buildEmailWithAttachment(
   const boundary = `boundary_${Date.now()}`
 
   const emailParts = [
-    fromHeader(fromAddress),
+    from,
     `To: ${safeEmailAddress(to)}`,
     `Subject: ${encodeEmailHeader(headerSafe(subject))}`,
     'MIME-Version: 1.0',
