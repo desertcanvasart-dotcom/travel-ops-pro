@@ -1,0 +1,78 @@
+name: E2E database migrations
+
+# Keeps the dedicated E2E Supabase project (docs/ci-e2e-project.md) on the same
+# schema as the repo. Nothing applied migrations to it before: it fell eleven
+# behind production, and the E2E suite failed on a missing table.
+#
+#   * A merge to main that touches migrations/ applies whatever is pending.
+#   * "Run workflow" (Actions tab) does the same on demand, shows the state
+#     (status), or records every migration as already applied (baseline).
+#
+# Uses ONE secret, E2E_DATABASE_URL: the E2E project's Session pooler
+# connection string. It never touches production — no production secret is
+# read here (__tests__/ci/workflow-secrets.test.ts).
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'migrations/**'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'apply = run pending migrations · status = only show what is applied/pending · baseline = record ALL as applied without running them (once, for a database whose schema already matches the repo)'
+        required: true
+        default: apply
+        type: choice
+        options:
+          - apply
+          - status
+          - baseline
+
+# One run at a time against the database; a second waits rather than racing.
+concurrency:
+  group: e2e-database-migrations
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Migrate the E2E database
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+      MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'apply' }}
+    steps:
+      - name: Require the E2E database secret
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::E2E_DATABASE_URL is not set. Add the E2E project's Session pooler connection string as a repository secret — see docs/ci-e2e-project.md → 'Keeping it working'."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Before
+        run: node scripts/migrate.mjs --status
+
+      # --yes: there is nobody to answer the runner's confirmation prompt. The
+      # runner still refuses the wrong product's database, applying the
+      # baseline dump to a populated one, and baselining an empty one.
+      - name: Apply pending migrations
+        if: env.MODE == 'apply'
+        run: node scripts/migrate.mjs --yes
+
+      - name: Record every migration as applied (baseline)
+        if: env.MODE == 'baseline'
+        run: node scripts/migrate.mjs --baseline --yes
+
+      - name: After
+        if: env.MODE != 'status'
+        run: node scripts/migrate.mjs --status

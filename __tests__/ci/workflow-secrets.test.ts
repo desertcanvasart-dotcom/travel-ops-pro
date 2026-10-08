@@ -23,6 +23,9 @@ const PRODUCTION_SECRETS = [
   'SUPABASE_SERVICE_ROLE_KEY',
   'NEXT_PUBLIC_SUPABASE_URL',
   'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+  // A plain DATABASE_URL would be read as "the" database — production. The
+  // E2E migration workflow reads E2E_DATABASE_URL, never this.
+  'DATABASE_URL',
 ]
 
 describe('GitHub workflows', () => {
@@ -52,6 +55,17 @@ describe('GitHub workflows', () => {
     for (const name of ['E2E_SUPABASE_URL', 'E2E_SUPABASE_ANON_KEY', 'E2E_SUPABASE_SERVICE_ROLE_KEY']) {
       expect(ci, `ci.yml should read secrets.${name}`).toMatch(new RegExp(`secrets\\.${name}\\b`))
     }
+  })
+
+  it('the E2E migration workflow migrates only the dedicated project', () => {
+    const wf = readFileSync(join(WORKFLOW_DIR, 'e2e-migrate.yml'), 'utf8')
+    const yaml = wf.split('\n').filter(l => !l.trim().startsWith('#')).join('\n')
+    // Its one database is the E2E project's, and it stops when that is unset
+    // rather than migrating whatever DATABASE_URL happens to point at.
+    expect(yaml).toMatch(/DATABASE_URL: \$\{\{ secrets\.E2E_DATABASE_URL \}\}/)
+    expect(yaml).toContain('E2E_DATABASE_URL is not set')
+    // Never from a pull request: a PR's code would run with the database secret.
+    expect(yaml).not.toMatch(/^\s*pull_request(_target)?:/m)
   })
 
   it('fails loudly when the E2E secrets are missing outside a fork', () => {

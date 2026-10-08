@@ -158,6 +158,29 @@ time, and it writes to live data.
 
 The CI project's schema drifts as production's does. When a migration lands,
 apply it to both — the E2E suite failing on a missing column is the symptom.
+(In October 2026 it had fallen eleven migrations behind.)
+
+**The E2E side is automated** by `.github/workflows/e2e-migrate.yml`. A merge to
+`main` that touches `migrations/` runs `npm run migrate` against the E2E
+project; **Actions → E2E database migrations → Run workflow** does the same on
+demand, or shows the state (`status`), or records every migration as applied
+without running it (`baseline`).
+
+It needs one repository secret, **`E2E_DATABASE_URL`**: the E2E project's
+connection string from **Project Settings → Database → Connection string →
+Session pooler** (the pooler, not the direct `db.<ref>.supabase.co` host, which
+GitHub's runners cannot reach over IPv4). Never put production's connection
+string here.
+
+**Once, before the first run:** the E2E schema was copied from production
+rather than built by the runner, so the runner has not recorded most
+migrations and would refuse to apply the baseline dump on top of an existing
+schema. Check with `check-all-migrations` that the E2E project is fully up to
+date (every row `ok`), then run the workflow with **`baseline`**. From then on
+the merge-time runs apply only what is new.
+
+Production is still migrated by hand (`DATABASE_URL=… npm run migrate`, or the
+SQL in the Supabase editor).
 
 `__tests__/ci/workflow-secrets.test.ts` asserts no workflow ever reads a
 production Supabase secret again, and that the gate keeps distinguishing a fork
