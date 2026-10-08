@@ -141,7 +141,7 @@ async function notifyTraveller(
   try {
     const { data: booking } = await db
       .from('bookings')
-      .select('booking_code, trip_name, client_name, client_email')
+      .select('booking_code, trip_name, client_name, client_email, org_id')
       .eq('id', args.thread.booking_id)
       .maybeSingle()
     if (!booking) return 'no-booking'
@@ -176,6 +176,7 @@ async function notifyTraveller(
     const url = `${base}/portal/${chosen.token}`
 
     const result = await sendEmailInternal({
+      orgId: booking.org_id,
       to,
       subject: `【${booking.trip_name || 'ご旅行'}】担当者からのご返信`,
       // Deliberately does NOT quote the reply. The conversation may concern a

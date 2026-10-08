@@ -4,7 +4,7 @@ import { generateEmailTemplate } from '@/lib/communication-utils'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { allowsIncomplete } from '@/lib/pricing/quote-completeness'
 import { loadItineraryServiceLines } from '@/lib/pricing/itinerary-completeness'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId } from '@/lib/auth/current-org'
 import { lookupServerMessage } from '@/lib/i18n/server-messages'
 import { resolveClientLocaleByEmail, type RecipientLocale } from '@/lib/i18n/recipient-locale'
 import { sendEmailInternal } from '@/lib/email-send'
@@ -126,6 +126,8 @@ export async function POST(request: Request) {
       subject: emailSubject,
       html: emailBody,
       attachment,
+      orgId: await getCurrentOrgId(),
+      senderUserId: await getCurrentUserId(),
     })
 
     if (!result.success) {

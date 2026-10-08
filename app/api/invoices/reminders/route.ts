@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { businessIdentity } from '@/lib/org-identity'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { lookupServerMessage } from '@/lib/i18n/server-messages'
 import { resolveClientLocalesByEmail, type RecipientLocale } from '@/lib/i18n/recipient-locale'
 import { sendEmailInternal } from '@/lib/email-send'
@@ -17,6 +17,8 @@ async function sendReminderEmail(params: {
   subject: string
   html: string
   invoiceNumber: string
+  orgId: string
+  senderUserId: string | null
 }): Promise<{ success: boolean; error?: string }> {
   // Send via the shared in-process helper (the send path used everywhere;
   // a fetch to /api/send-email would be rejected by the /api/* auth gate).
@@ -24,6 +26,8 @@ async function sendReminderEmail(params: {
     to: params.to,
     subject: params.subject,
     html: params.html,
+    orgId: params.orgId,
+    senderUserId: params.senderUserId,
   })
   if (!result.success) {
     console.error('Error sending reminder email:', result.error)
@@ -290,6 +294,7 @@ export async function POST(request: NextRequest) {
   try {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
+    const senderUserId = await getCurrentUserId()
 
     const supabase = createServerClient()
     const body = await request.json()
@@ -393,7 +398,9 @@ export async function POST(request: NextRequest) {
         to: invoice.client_email,
         subject,
         html,
-        invoiceNumber: invoice.invoice_number
+        invoiceNumber: invoice.invoice_number,
+        orgId,
+        senderUserId,
       })
 
       if (emailResult.success) {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { sendEmailInternal } from '@/lib/email-send'
 import { inviteDelivery, inviteDeliveryMessage } from '@/lib/invitation-accept'
 
@@ -196,7 +196,7 @@ export async function POST(request: NextRequest) {
     // never left.
     let delivery
     try {
-      const result = await sendInvitationEmail(email, role, inviteUrl)
+      const result = await sendInvitationEmail(email, role, inviteUrl, orgId)
       delivery = inviteDelivery(result)
     } catch (emailError) {
       console.error('Failed to send invitation email:', emailError)
@@ -260,7 +260,8 @@ export async function DELETE(request: NextRequest) {
 async function sendInvitationEmail(
   toEmail: string,
   role: string,
-  inviteUrl: string
+  inviteUrl: string,
+  orgId: string
 ) {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://autoura.net'
   
@@ -324,6 +325,8 @@ async function sendInvitationEmail(
     to: toEmail,
     subject: `You're invited to join Autoura`,
     html: htmlContent,
+    orgId,
+    senderUserId: await getCurrentUserId(),
   })
 
   if (!result.success) {

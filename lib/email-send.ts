@@ -2,10 +2,12 @@ import { createClient } from '@supabase/supabase-js'
 import { businessIdentity } from '@/lib/org-identity'
 import { headerSafe, safeEmailAddress } from '@/lib/http/safe-header'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
+import { orgGmailSenderId } from '@/lib/email/org-gmail-sender'
 
 /**
- * In-process transactional email sender (Gmail API via the first connected
- * OAuth account).
+ * In-process transactional email sender (Gmail API): an organization's mail
+ * from that organization's own connected mailbox, the platform's from the
+ * GMAIL_USER mailbox.
  *
  * Server-only. This is the single send path shared by the /api/send-email
  * route and every internal caller (reminders, notifications, invitations,
@@ -38,6 +40,15 @@ export interface SendEmailInternalInput {
   subject: string
   html: string
   attachment?: SendEmailAttachment
+  /**
+   * The organization this mail is sent for. When given, it goes out from that
+   * organization's own mailbox (lib/email/org-gmail-sender) and never from
+   * another organization's; with none connected, nothing is sent. Omit it
+   * only for the platform's own mail (staff notifications, ops alerts).
+   */
+  orgId?: string | null
+  /** Prefer this member's mailbox within `orgId` (the user who clicked Send). */
+  senderUserId?: string | null
 }
 
 export interface SendEmailInternalResult {
@@ -53,21 +64,22 @@ export interface SendEmailInternalResult {
 export async function sendEmailInternal(
   input: SendEmailInternalInput
 ): Promise<SendEmailInternalResult> {
-  const { to, subject, html, attachment } = input
+  const { to, subject, html, attachment, orgId, senderUserId } = input
 
   if (!to) {
     return { success: false, error: 'Recipient email is required' }
   }
 
   try {
-    // Get first connected Gmail account (system-level sending)
-    const { data: tokenRecord } = await supabase
-      .from('gmail_tokens')
-      .select('user_id')
-      .limit(1)
-      .single()
+    // This used to send everything (reminders, confirmations, quotes, every
+    // organization's mail to its customers) through the FIRST row of
+    // gmail_tokens, whichever organization's mailbox that was, with a Bcc
+    // to the platform's GMAIL_USER.
+    const senderId = orgId
+      ? await orgGmailSenderId(supabase, orgId, senderUserId ?? null)
+      : await platformSenderId()
 
-    if (!tokenRecord) {
+    if (!senderId) {
       return {
         success: false,
         noAccount: true,
@@ -77,9 +89,11 @@ export async function sendEmailInternal(
 
     // Get authenticated Gmail client via centralized helper
     let gmail
+    let fromAddress: string
     try {
-      const auth = await getAuthenticatedGmail(tokenRecord.user_id)
+      const auth = await getAuthenticatedGmail(senderId)
       gmail = auth.gmail
+      fromAddress = auth.emailAddress
     } catch (err) {
       if (err instanceof GmailAuthError) {
         return { success: false, authError: true, error: err.message }
@@ -88,8 +102,8 @@ export async function sendEmailInternal(
     }
 
     const rawEmail = attachment
-      ? buildEmailWithAttachment(to, subject, html, attachment.filename, attachment.contentBase64)
-      : buildSimpleEmail(to, subject, html)
+      ? buildEmailWithAttachment(fromAddress, to, subject, html, attachment.filename, attachment.contentBase64)
+      : buildSimpleEmail(fromAddress, to, subject, html)
 
     const response = await gmail.users.messages.send({
       userId: 'me',
@@ -116,19 +130,44 @@ function encodeEmailHeader(value: string): string {
   return `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`
 }
 
-function buildSimpleEmail(to: string, subject: string, body: string): string {
-  const fromAddress = process.env.GMAIL_USER || ''
-  // The From name a customer sees. Their operator's, not ours; blank lets the
-  // mail client fall back to the address rather than name the wrong company.
-  const fromName = businessIdentity().name
+/**
+ * The platform's own mailbox, for mail no organization sends: the connected
+ * account whose address is GMAIL_USER, else (legacy installs that never set
+ * it) the first connected account.
+ */
+async function platformSenderId(): Promise<string | null> {
+  const platformAddress = (process.env.GMAIL_USER || '').trim()
+  if (platformAddress) {
+    const { data } = await supabase
+      .from('gmail_tokens')
+      .select('user_id')
+      .ilike('email', platformAddress)
+      .limit(1)
+      .maybeSingle()
+    if (data?.user_id) return data.user_id
+  }
+  const { data } = await supabase.from('gmail_tokens').select('user_id').limit(1).maybeSingle()
+  return data?.user_id ?? null
+}
 
+// From is the sending account's own address (Gmail would rewrite any other);
+// there is no Bcc: the copy is in that account's Sent folder. The name is the
+// operator's, not ours; blank lets the mail client show the address rather
+// than name the wrong company.
+function fromHeader(fromAddress: string): string {
+  const name = headerSafe(businessIdentity().name)
+  const address = safeEmailAddress(fromAddress)
+  if (!address) return ''
+  return name ? `From: ${encodeEmailHeader(name)} <${address}>` : `From: ${address}`
+}
+
+function buildSimpleEmail(fromAddress: string, to: string, subject: string, body: string): string {
   // The HTML body is base64-encoded (Content-Transfer-Encoding: base64) so
   // multi-byte UTF-8 (Japanese) survives intact rather than being emitted as
   // raw 8-bit text under a default 7-bit assumption.
   const emailLines = [
-    `From: ${fromName} <${fromAddress}>`,
+    fromHeader(fromAddress),
     `To: ${safeEmailAddress(to)}`,
-    `Bcc: ${fromAddress}`,
     `Subject: ${encodeEmailHeader(headerSafe(subject))}`,
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=utf-8',
@@ -145,22 +184,18 @@ function buildSimpleEmail(to: string, subject: string, body: string): string {
 }
 
 function buildEmailWithAttachment(
+  fromAddress: string,
   to: string,
   subject: string,
   body: string,
   filename: string,
   attachmentBase64: string
 ): string {
-  const fromAddress = process.env.GMAIL_USER || ''
-  // The From name a customer sees. Their operator's, not ours; blank lets the
-  // mail client fall back to the address rather than name the wrong company.
-  const fromName = businessIdentity().name
   const boundary = `boundary_${Date.now()}`
 
   const emailParts = [
-    `From: ${fromName} <${fromAddress}>`,
+    fromHeader(fromAddress),
     `To: ${safeEmailAddress(to)}`,
-    `Bcc: ${fromAddress}`,
     `Subject: ${encodeEmailHeader(headerSafe(subject))}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`,

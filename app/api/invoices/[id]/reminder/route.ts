@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { businessIdentity } from '@/lib/org-identity'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { sendEmailInternal } from '@/lib/email-send'
 import { formatMoney } from '@/lib/currency-totals'
 import { businessToday } from '@/lib/today'
@@ -184,6 +184,8 @@ export async function POST(
       to: invoice.client_email,
       subject,
       html,
+      orgId,
+      senderUserId: await getCurrentUserId(),
     })
 
     if (!emailResult.success) {
