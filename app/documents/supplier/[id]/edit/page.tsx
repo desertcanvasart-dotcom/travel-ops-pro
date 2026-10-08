@@ -12,6 +12,7 @@ import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
 import { vehicleBands } from '@/lib/rates/vehicle-bands'
 import { slugifyKey } from '@/lib/vocabulary'
+import { pickerOwnsLines } from '@/lib/documents/voucher-lines'
 
 interface TransportRate {
   id: string
@@ -406,8 +407,10 @@ export default function EditSupplierDocumentPage() {
         selected_attractions: selectedAttractions,
       }
 
-      // Build services array based on document type
-      if (document.document_type === 'transport_voucher' && selectedRoutes.length > 0) {
+      // Rebuild the lines from this document type's picker only when that
+      // picker is in use. Otherwise the lines stay as they are: a generated
+      // voucher's come from the trip, and no picker here can rebuild them.
+      if (document.document_type === 'transport_voucher' && pickerOwnsLines(selectedRoutes, document.selected_routes)) {
         dataToSave.selected_routes = selectedRoutes
         dataToSave.services = selectedRoutes.map(r => ({
           service_type: 'transportation',
@@ -419,7 +422,7 @@ export default function EditSupplierDocumentPage() {
           total_cost: r.total_cost,
           unit_rate: r.unit_rate
         }))
-      } else if (document.document_type === 'service_order' && selectedMeals.length > 0) {
+      } else if (document.document_type === 'service_order' && pickerOwnsLines(selectedMeals, document.selected_meals)) {
         dataToSave.selected_meals = selectedMeals
         dataToSave.services = selectedMeals.map(m => ({
           service_type: 'meal',
@@ -430,7 +433,7 @@ export default function EditSupplierDocumentPage() {
           total_cost: m.total_cost,
           unit_rate: m.unit_rate
         }))
-      } else if (document.document_type === 'guide_assignment' && selectedGuides.length > 0) {
+      } else if (document.document_type === 'guide_assignment' && pickerOwnsLines(selectedGuides, document.selected_guides)) {
         dataToSave.selected_guides = selectedGuides
         dataToSave.services = selectedGuides.map(g => ({
           service_type: 'guide',
@@ -441,14 +444,14 @@ export default function EditSupplierDocumentPage() {
           total_cost: g.total_cost,
           unit_rate: g.unit_rate
         }))
-      } else {
-        // Default: entrance fee services for activity_voucher
+      } else if (document.document_type === 'activity_voucher' && pickerOwnsLines(selectedAttractions, document.selected_attractions)) {
         dataToSave.services = selectedAttractions.map(a => ({
           service_name: a.attraction_name,
           service_type: 'entrance_fee',
+          city: a.city,
           quantity: a.quantity,
-          unit_price: a.eur_rate,
-          total_price: a.eur_rate * a.quantity
+          unit_rate: a.eur_rate,
+          total_cost: a.eur_rate * a.quantity
         }))
       }
 

@@ -5,6 +5,7 @@
 import jsPDF from 'jspdf'
 import { loadJapaneseFont, pickFontFamily } from './pdf-fonts'
 import { formatMoney } from '@/lib/currency-totals'
+import { voucherLines } from '@/lib/documents/voucher-lines'
 
 // Caller-supplied translations. Construct in the calling page via
 // useTranslations('pdf.voucher') and pass in. Async font load happens
@@ -619,9 +620,10 @@ export async function generateSupplierDocumentPDF(
 
   // ==================== SERVICES TABLE ====================
   
-  const hasServices = (doc.services && doc.services.length > 0) || (doc.selected_attractions && doc.selected_attractions.length > 0) || (doc.selected_routes && doc.selected_routes.length > 0) || (doc.selected_meals && doc.selected_meals.length > 0) || (doc.selected_guides && doc.selected_guides.length > 0)
-  
-  if (hasServices) {
+  // The voucher's lines: `services`, else a picker list (lib/documents/voucher-lines).
+  const items: any[] = voucherLines(doc)
+
+  if (items.length > 0) {
     pdf.setFontSize(9)
     pdf.setFont(fontFamily, 'bold')
     pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
@@ -642,9 +644,6 @@ export async function generateSupplierDocumentPDF(
     pdf.text(labels.amount, pageWidth - margin - 4, y + 6.5, { align: 'right' })
     
     y += 12
-    
-    // Use selected_routes for transport, selected_meals for meals, selected_attractions for entrance fees, otherwise use services
-    const items = doc.selected_routes || doc.selected_meals || doc.selected_guides || doc.selected_attractions || doc.services || []
     
     items.forEach((item: any, idx: number) => {
       // Get item name
