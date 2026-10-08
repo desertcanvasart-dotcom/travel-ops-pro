@@ -98,8 +98,9 @@ describe('GitHub workflows', () => {
       }
     })
 
-    it('gets the URL from the "production" environment, so GitHub can hold it to main and an approval', () => {
-      expect(yaml).toMatch(/^\s*environment: production\s*$/m)
+    it('gets the URL from its own "production-database" environment, so GitHub can hold it to main and an approval', () => {
+      // Not "Production": that is Vercel's deployment record, and its rules are Vercel's.
+      expect(yaml).toMatch(/^\s*environment: production-database\s*$/m)
       expect(yaml).toMatch(/DATABASE_URL: \$\{\{ secrets\.PRODUCTION_DATABASE_URL \}\}/)
     })
 
