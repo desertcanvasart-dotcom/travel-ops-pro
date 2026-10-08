@@ -34,6 +34,10 @@ export async function GET(request: NextRequest) {
     const startDateTo = searchParams.get('startDateTo')
     const search = sanitizeSearchTerm(searchParams.get('search'))
     const assignedGuideId = searchParams.get('assignedGuideId')
+    // One itinerary's booking (the itinerary page). `search` matches names and
+    // codes only, so looking a booking up by itinerary id through it never
+    // found anything.
+    const itineraryId = searchParams.get('itinerary_id')
 
     // Pagination
     const page = parseInt(searchParams.get('page') || '1')
@@ -62,6 +66,10 @@ export async function GET(request: NextRequest) {
 
     if (assignedGuideId) {
       query = query.eq('assigned_guide_id', assignedGuideId)
+    }
+
+    if (itineraryId) {
+      query = query.eq('itinerary_id', itineraryId)
     }
 
     if (search) {

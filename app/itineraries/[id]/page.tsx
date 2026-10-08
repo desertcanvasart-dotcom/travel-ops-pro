@@ -385,11 +385,13 @@ export default function ViewItineraryPage() {
 
   const checkExistingBooking = async () => {
     try {
-      const response = await fetch(`/api/bookings?search=${params.id}`)
+      // By itinerary id — `search` matches names and codes, never the id, so
+      // looking the booking up through it never found one: no booking chip,
+      // "Create booking" offered, and "invoiced but no booking" on every trip.
+      const response = await fetch(`/api/bookings?itinerary_id=${encodeURIComponent(String(params.id))}&limit=1`)
       if (response.ok) {
         const data = await response.json()
         if (data.success && data.data && data.data.length > 0) {
-          // Find booking that matches this itinerary
           const booking = data.data.find((b: any) => b.itinerary_id === params.id)
           if (booking) {
             setExistingBooking({ id: booking.id, booking_code: booking.booking_code })
@@ -1748,12 +1750,18 @@ export default function ViewItineraryPage() {
               {steps.map((st, i) => (
                 <li key={st.key} className="flex items-center gap-1">
                   {i > 0 && <span className="text-gray-300 mx-0.5">→</span>}
-                  <span className={`px-2 py-0.5 rounded-full border ${
-                    st.current ? 'border-amber-300 bg-amber-50 text-amber-800 font-medium'
-                    : st.done ? 'border-green-200 bg-green-50 text-green-800'
-                    : 'border-gray-200 text-gray-400'
-                  }`}>
-                    {st.done ? '✓ ' : ''}{tStage(`step_${st.key}`)}
+                  {/* Done: green with a tick. Next: dashed amber, "next" — it
+                      must not read as done. Later: grey. */}
+                  <span
+                    className={`px-2 py-0.5 rounded-full border ${
+                      st.current ? 'border-dashed border-amber-400 bg-white text-amber-800 font-medium'
+                      : st.done ? 'border-green-200 bg-green-50 text-green-800'
+                      : 'border-gray-200 text-gray-400'
+                    }`}
+                    title={st.current ? tStage('stepNextHint') : undefined}
+                    data-state={st.done ? 'done' : st.current ? 'next' : 'later'}
+                  >
+                    {st.done ? '✓ ' : st.current ? `${tStage('stepNext')}: ` : ''}{tStage(`step_${st.key}`)}
                   </span>
                 </li>
               ))}
