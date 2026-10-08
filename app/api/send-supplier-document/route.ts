@@ -5,6 +5,8 @@ import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { orgGmailSenderId } from '@/lib/email/org-gmail-sender'
 import { escapeHtml } from '@/lib/html-escape'
+import { orgIdentity } from '@/lib/org-identity'
+import { markSupplierDocumentSent } from '@/lib/documents/mark-sent'
 import { headerSafe, safeEmailAddress } from '@/lib/http/safe-header'
 
 const supabase = createClient(
@@ -15,22 +17,10 @@ const supabase = createClient(
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const {
-      documentId,
-      supplierEmail,
-      supplierName,
-      documentNumber,
-      documentType,
-      clientName,
-      pdfBase64,
-    } = body
-
-    if (!safeEmailAddress(supplierEmail)) {
-      return NextResponse.json(
-        { success: false, error: 'Supplier email is required' },
-        { status: 400 }
-      )
-    }
+    // The recipient, number and names come from the voucher row, not the
+    // request: the browser chooses only which voucher, its display title and
+    // the PDF it rendered from that row.
+    const { documentId, documentType: documentTitle, pdfBase64 } = body
 
     if (!pdfBase64) {
       return NextResponse.json(
@@ -45,7 +35,7 @@ export async function POST(request: Request) {
     const { data: document } = documentId
       ? await supabase
           .from('supplier_documents')
-          .select('id')
+          .select('id, document_type, document_number, supplier_name, supplier_contact_email, client_name')
           .eq('id', documentId)
           .eq('org_id', orgId)
           .maybeSingle()
@@ -54,9 +44,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 })
     }
 
-    // Build email content
-    const businessName = process.env.BUSINESS_NAME || ''
-    const businessEmail = process.env.BUSINESS_EMAIL || ''
+    const supplierEmail = document.supplier_contact_email
+    if (!safeEmailAddress(supplierEmail)) {
+      return NextResponse.json(
+        { success: false, error: 'Supplier email is required' },
+        { status: 400 }
+      )
+    }
+    const supplierName = document.supplier_name || ''
+    const documentNumber = document.document_number
+    const clientName = document.client_name || ''
+    const documentType = String(documentTitle || document.document_type)
+
+    // Signed by the organization sending it (Settings), not the platform.
+    const identity = await orgIdentity(orgId)
+    const businessName = identity.name
+    const businessEmail = identity.email
 
     const emailSubject = `${documentType} - ${documentNumber} | Guest: ${clientName} | ${businessName}`
 
@@ -139,10 +142,15 @@ export async function POST(request: Request) {
 
     console.log('✅ Supplier document email sent:', response.data.id)
 
+    // The email has gone: record it here, not in a second request from the page.
+    const marked = await markSupplierDocumentSent(supabase, { documentId: document.id, orgId, via: 'email' })
+    if (marked.error) console.error('Supplier document sent but not marked sent:', marked.error)
+
     return NextResponse.json({
       success: true,
       messageId: response.data.id,
       message: 'Email sent successfully',
+      markedSent: !marked.error,
     })
   } catch (error) {
     console.error('Error sending supplier document email:', error)

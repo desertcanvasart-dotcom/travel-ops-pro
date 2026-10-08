@@ -14,7 +14,10 @@
 //   3. The stored extension comes from the VALIDATED type, never the filename.
 //      A name of `passport.jpg.html` must not decide how the object is served.
 //
-// The bucket is PRIVATE (migration 20260827_traveller_documents). Nothing here
+// The bucket is PRIVATE. It was created by migrations/archive/
+// 20260827_traveller_documents.sql, which a new install never replays (the
+// baseline schema holds the table but not Supabase's storage schema), so the
+// upload route creates it on first use: ensureTravellerDocsBucket. Nothing here
 // ever builds a public URL; reads are signed URLs issued by an org-scoped
 // route. If you find yourself reaching for getPublicUrl on this bucket, stop.
 
@@ -24,6 +27,46 @@ export const TRAVELLER_DOCS_BUCKET = 'traveller-documents'
 
 /** 10 MB. A phone photo of a passport page is 2–5 MB; a scan is smaller. */
 export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024
+
+type BucketCreator = {
+  storage: {
+    createBucket: (
+      id: string,
+      opts: { public: boolean; fileSizeLimit?: number; allowedMimeTypes?: string[] }
+    ) => Promise<{ error: { message: string } | null }>
+  }
+}
+
+let bucketReady: Promise<void> | null = null
+
+/**
+ * Create the private bucket on first use, with the archived migration's
+ * storage-level ceilings (size, MIME allowlist) as a second gate behind the
+ * route's checks. "Already exists" is success; any other failure is retried
+ * on the next upload rather than cached.
+ */
+export function ensureTravellerDocsBucket(db: BucketCreator): Promise<void> {
+  if (!bucketReady) {
+    bucketReady = db.storage
+      .createBucket(TRAVELLER_DOCS_BUCKET, {
+        public: false,
+        fileSizeLimit: MAX_DOCUMENT_BYTES,
+        allowedMimeTypes: ALLOWED_TYPES,
+      })
+      .then(({ error }) => {
+        if (error && !/exist/i.test(error.message)) {
+          bucketReady = null
+          throw new Error(`Could not create storage bucket ${TRAVELLER_DOCS_BUCKET}: ${error.message}`)
+        }
+      })
+  }
+  return bucketReady
+}
+
+/** Test hook: forget the cached bucket check. */
+export function resetTravellerDocsBucketCache(): void {
+  bucketReady = null
+}
 
 /** Supporting documents per traveller, excluding the passport slot. A cap so
  *  "attach anything" cannot become an unbounded store of personal data we did

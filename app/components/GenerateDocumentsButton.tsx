@@ -19,6 +19,8 @@ const DOCUMENT_TYPES = [
   { value: 'transport_voucher', labelKey: 'transportVouchers', icon: '🚗' },
   { value: 'guide_assignment', labelKey: 'guideAssignments', icon: '👨‍🏫' },
   { value: 'service_order', labelKey: 'serviceOrders', icon: '📋' },
+  // Entrance fees and activities go on an activity voucher (lib/documents/group-services).
+  { value: 'activity_voucher', labelKey: 'activityVouchers', icon: '🎟️' },
   { value: 'cruise_voucher', labelKey: 'cruiseVouchers', icon: '🚢' },
 ]
 

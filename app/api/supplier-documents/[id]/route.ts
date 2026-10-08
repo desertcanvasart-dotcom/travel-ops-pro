@@ -63,6 +63,7 @@ export async function PUT(
       'services', 'selected_attractions', 'selected_routes', 'selected_meals', 'selected_guides',
       'city', 'service_date', 'check_in', 'check_out',
       'pickup_time', 'pickup_location', 'dropoff_location',
+      'vehicle_type', 'driver_name',
       'currency', 'total_cost', 'payment_terms',
       'special_requests', 'internal_notes',
       'status', 'sent_at', 'confirmed_at', 'completed_at',

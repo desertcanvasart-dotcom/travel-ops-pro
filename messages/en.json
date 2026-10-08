@@ -5716,7 +5716,8 @@
     "hotelVouchers": "Hotel Vouchers",
     "transportVouchers": "Transport Vouchers",
     "guideAssignments": "Guide Assignments",
-    "serviceOrders": "Service Orders (Meals & Entrance)",
+    "serviceOrders": "Service Orders (Meals)",
+    "activityVouchers": "Activity Vouchers (Entrance & Activities)",
     "cruiseVouchers": "Cruise Vouchers"
   },
   "itineraryPL": {

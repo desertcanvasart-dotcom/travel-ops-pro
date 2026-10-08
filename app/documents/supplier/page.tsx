@@ -77,7 +77,11 @@ export default function SupplierDocumentsPage() {
   const [itineraryFilter, setItineraryFilter] = useState<string | null>(null)
 
   useEffect(() => {
-    setItineraryFilter(new URLSearchParams(window.location.search).get('itineraryId'))
+    const params = new URLSearchParams(window.location.search)
+    setItineraryFilter(params.get('itineraryId'))
+    // The documents hub's cards link here with ?type=…; only a known type filters.
+    const type = params.get('type')
+    if (type && DOCUMENT_TYPES.some(d => d.value === type)) setTypeFilter(type)
     setMounted(true)
   }, [])
 

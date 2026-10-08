@@ -238,23 +238,13 @@ export default function SupplierDocumentViewPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           documentId: document.id,
-          supplierEmail: document.supplier_contact_email,
-          supplierName: document.supplier_name,
-          documentNumber: document.document_number,
           documentType: DOCUMENT_TITLES[document.document_type],
-          clientName: document.client_name,
           pdfBase64
         })
       })
 
       if (response.ok) {
-        // Update status to sent
-        await fetch(`/api/supplier-documents/${document.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'sent', sent_via: 'email' })
-        })
-
+        // The route marks the voucher sent once the email has gone.
         setActionSuccess(t('emailSentSuccessfully'))
         fetchDocument()
         setTimeout(() => setActionSuccess(null), 5000)
@@ -288,24 +278,13 @@ export default function SupplierDocumentViewPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           documentId: document.id,
-          supplierPhone: whatsappNumber,
-          supplierName: document.supplier_contact_name || document.supplier_name,
-          documentNumber: document.document_number,
           documentType: DOCUMENT_TITLES[document.document_type],
-          clientName: document.client_name,
-          serviceDate: document.check_in || document.service_date || null,
           pdfBase64
         })
       })
 
       if (response.ok) {
-        // Update status to sent
-        await fetch(`/api/supplier-documents/${document.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'sent', sent_via: 'whatsapp' })
-        })
-
+        // The route marks the voucher sent once the message has gone.
         setActionSuccess(t('whatsappSentSuccessfully'))
         fetchDocument()
         setTimeout(() => setActionSuccess(null), 5000)
@@ -326,11 +305,15 @@ export default function SupplierDocumentViewPage() {
 
     setActionLoading('confirm')
     try {
-      await fetch(`/api/supplier-documents/${document.id}`, {
+      const res = await fetch(`/api/supplier-documents/${document.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'confirmed' })
       })
+      if (!res.ok) {
+        await dialog.alert(t('error'), t('failedToUpdateStatus'), 'warning')
+        return
+      }
 
       setActionSuccess(t('markedAsConfirmed'))
       fetchDocument()
