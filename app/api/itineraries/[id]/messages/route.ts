@@ -116,8 +116,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: false, error: 'Failed to send' }, { status: 500 })
     }
     // Stored first; then the traveller is told. A mail failure never loses the reply.
-    const notified = await notifyTravellerOfTripReply(a.supabase, { itineraryId: id, orgId: a.orgId })
-    return NextResponse.json({ success: true, message: inserted, emailed: notified === 'sent', notified })
+    // Replies close together share one email (lib/trip-chat/notify-traveller).
+    const { outcome: notified, emailedAt } = await notifyTravellerOfTripReply(a.supabase, { itineraryId: id, orgId: a.orgId, messageId: inserted.id })
+    return NextResponse.json({ success: true, message: inserted, emailed: notified === 'sent', notified, emailedAt })
   } catch (err) {
     console.error('[itinerary messages POST]', err)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })

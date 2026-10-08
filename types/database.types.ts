@@ -12495,6 +12495,7 @@ export interface Database {
           team_member_id: string | null
           is_read: boolean
           notify_outcome: string | null
+          traveller_notified: string | null
           created_at: string
         }
         Insert: {
@@ -12507,6 +12508,7 @@ export interface Database {
           team_member_id?: string | null
           is_read?: boolean
           notify_outcome?: string | null
+          traveller_notified?: string | null
           created_at?: string
         }
         Update: {
@@ -12519,6 +12521,7 @@ export interface Database {
           team_member_id?: string | null
           is_read?: boolean
           notify_outcome?: string | null
+          traveller_notified?: string | null
           created_at?: string
         }
         Relationships: [
