@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service-client'
 import { requirePlatformAdmin } from '@/lib/blog/platform-admin'
-import { validatePostInput, SLUG_TAKEN } from '@/lib/blog/posts'
+import { validatePostInput, SLUG_TAKEN, POST_COLUMNS } from '@/lib/blog/posts'
 import { clientMessage } from '@/lib/api-errors'
 
 export async function GET() {
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
         published_at: checked.post.status === 'published' ? now : null,
         created_by: auth.userId,
       })
-      .select('*')
+      .select(POST_COLUMNS)
       .single()
     if (error?.code === '23505') return NextResponse.json({ success: false, error: SLUG_TAKEN }, { status: 409 })
     if (error) throw error

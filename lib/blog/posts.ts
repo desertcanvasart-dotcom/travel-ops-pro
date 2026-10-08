@@ -11,6 +11,8 @@ export * from './posts-shared'
 import { BLOG_LANGUAGES, isValidSlug, slugify, type BlogLanguage, type BlogPost, type BlogPostSummary } from './posts-shared'
 
 const SUMMARY_COLUMNS = 'id, slug, language, title, excerpt, cover_image_url, author_name, tags, status, published_at, created_at, updated_at'
+/** Every column a post page or the editor needs. */
+export const POST_COLUMNS = `${SUMMARY_COLUMNS}, body_html`
 
 export type PostInput = {
   title: string
@@ -90,7 +92,7 @@ export async function getPublishedPost(slug: string): Promise<BlogPost | null> {
   try {
     const { data, error } = await createServiceClient()
       .from('blog_posts')
-      .select('*')
+      .select(POST_COLUMNS)
       .eq('slug', slug)
       .eq('status', 'published')
       .lte('published_at', new Date().toISOString())
