@@ -303,6 +303,42 @@ Migrations are **append-only**: a released migration's meaning never changes, an
 would then hold a name no file has, and the runner would try to re-apply schema
 that is already there.
 
+### Migrating production from GitHub
+
+The same runner can be started from GitHub instead of a laptop:
+**Actions → Production database migrations → Run workflow**
+(`.github/workflows/production-migrate.yml`). It is manual only — nothing runs
+it on a merge — and it is the one workflow allowed to hold a production
+credential (`__tests__/ci/workflow-secrets.test.ts` pins every fence).
+
+| mode | does |
+|---|---|
+| `status` (default) | shows how many migrations are recorded and pending — reads only |
+| `dry-run` | lists the files that would run — reads only |
+| `apply` | runs the pending files; needs `production` typed in **confirm** |
+| `baseline` | records every file as applied without running it; needs `production` typed in **confirm**. Only for a database whose schema already matches the repo but whose runner tracker does not (check with `migrate:status` first) |
+
+**Setting it up (once):**
+
+1. GitHub → **Settings → Environments → New environment**, named exactly
+   `production`.
+2. In that environment:
+   - **Deployment branches and tags** → *Selected branches and tags* → add
+     `main`. A branch with an edited copy of the workflow then cannot reach the
+     secret.
+   - **Required reviewers** → add yourself (and anyone else who may approve a
+     production migration). Each run then waits for an approval.
+   - **Environment secrets → Add secret**: `PRODUCTION_DATABASE_URL`, the
+     production project's **Session pooler** connection string (Supabase →
+     Project Settings → Database → Connection string). Not the direct
+     `db.<ref>.supabase.co` host, which GitHub's runners cannot reach.
+3. Run it once with `status`. If the runner has never been used on production,
+   it reports most files pending although the schema is there; confirm the
+   schema with the full migration check, then run `baseline` once.
+
+After a pull request that adds a migration merges: run `dry-run`, read the list,
+then `apply`.
+
 ### When a migration fails
 
 **Do not restore a database snapshot.** The runner applies one file at a time and

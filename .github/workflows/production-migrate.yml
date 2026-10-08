@@ -1,0 +1,96 @@
+name: Production database migrations
+
+# Applies migrations/ to the PRODUCTION database with the repo's own runner
+# (scripts/migrate.mjs), so production is no longer migrated by pasting SQL
+# into the Supabase editor — which is how three migrations once sat unapplied.
+#
+# The one workflow allowed to hold a production credential, and fenced for it
+# (__tests__/ci/workflow-secrets.test.ts pins every fence below):
+#
+#   * Manual only — Actions → "Production database migrations" → Run workflow.
+#     Never on push, never on a pull request.
+#   * The connection string is an ENVIRONMENT secret (environment
+#     "production"), not a repository secret: GitHub hands it only to a job
+#     that declares that environment. Configure the environment to allow only
+#     the main branch and to require your approval (docs/SELF-HOSTING.md →
+#     "Migrating production from GitHub").
+#   * Only from main, and `apply` / `baseline` only when "production" is typed
+#     into the confirm box. `status` and `dry-run` only read.
+#   * The runner's own refusals still apply: the wrong product's database,
+#     the baseline dump on top of an existing schema, baselining an empty one.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'status = what is applied/pending · dry-run = which files would run · apply = run them · baseline = record ALL as applied without running (once, if the runner was never used here)'
+        required: true
+        default: status
+        type: choice
+        options:
+          - status
+          - dry-run
+          - apply
+          - baseline
+      confirm:
+        description: 'For apply or baseline: type production'
+        required: false
+        default: ''
+
+# One production migration at a time, and never cancelled halfway.
+concurrency:
+  group: production-database-migrations
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Migrate the production database
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+      MODE: ${{ inputs.mode }}
+      CONFIRM: ${{ inputs.confirm }}
+    steps:
+      - name: Check the request
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::PRODUCTION_DATABASE_URL is not set in the 'production' environment. See docs/SELF-HOSTING.md → 'Migrating production from GitHub'."
+            exit 1
+          fi
+          if { [ "$MODE" = "apply" ] || [ "$MODE" = "baseline" ]; } && [ "$CONFIRM" != "production" ]; then
+            echo "::error::'$MODE' writes to the production database. Run it again with 'production' typed in the confirm box."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Before
+        run: node scripts/migrate.mjs --status
+
+      - name: Files that would run
+        if: env.MODE == 'dry-run' || env.MODE == 'apply'
+        run: node scripts/migrate.mjs --dry-run
+
+      # --yes: the typed confirmation (and the environment's approval, when
+      # configured) stands in for the runner's interactive prompt.
+      - name: Apply pending migrations
+        if: env.MODE == 'apply'
+        run: node scripts/migrate.mjs --yes
+
+      - name: Record every migration as applied (baseline)
+        if: env.MODE == 'baseline'
+        run: node scripts/migrate.mjs --baseline --yes
+
+      - name: After
+        if: env.MODE == 'apply' || env.MODE == 'baseline'
+        run: node scripts/migrate.mjs --status

@@ -179,8 +179,9 @@ schema. Check with `check-all-migrations` that the E2E project is fully up to
 date (every row `ok`), then run the workflow with **`baseline`**. From then on
 the merge-time runs apply only what is new.
 
-Production is still migrated by hand (`DATABASE_URL=… npm run migrate`, or the
-SQL in the Supabase editor).
+Production is migrated deliberately, never on a merge: by hand
+(`DATABASE_URL=… npm run migrate`) or from **Actions → Production database
+migrations** (docs/SELF-HOSTING.md → "Migrating production from GitHub").
 
 `__tests__/ci/workflow-secrets.test.ts` asserts no workflow ever reads a
 production Supabase secret again, and that the gate keeps distinguishing a fork
