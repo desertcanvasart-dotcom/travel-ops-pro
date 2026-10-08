@@ -13,6 +13,7 @@ import { useTierOptions } from '@/hooks/useTierOptions'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase'
+import { withReturnTo } from '@/lib/nav/return-to'
 import {
   GripVertical,
   ChevronDown,
@@ -1355,7 +1356,7 @@ export default function ItineraryEditorPage() {
 
                 {/* Contract Link */}
                 <Link
-                  href={`/documents/contract/${itinerary.id}`}
+                  href={withReturnTo(`/documents/contract/${itinerary.id}`, `/itineraries/${itinerary.id}/edit`)}
                   className="p-2 xl:px-3 xl:py-1.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 flex items-center gap-1.5"
                   title={t('contract')}
                 >
@@ -1418,7 +1419,7 @@ export default function ItineraryEditorPage() {
                 </button>
               )}
               <Link
-                href={bookingId ? `/bookings/${bookingId}` : '/bookings'}
+                href={bookingId ? withReturnTo(`/bookings/${bookingId}`, `/itineraries/${itineraryId}/edit`) : '/bookings'}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 flex items-center gap-2"
               >
                 {t('confirmedBookingBanner.goToBooking')}

@@ -7,10 +7,11 @@ import { useTranslations } from 'next-intl'
 import { useParams } from 'next/navigation'
 import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
 import Link from 'next/link'
-import { ArrowLeft, Download, Eye, Edit2, Plus, X, Loader2, Copy, Check, Languages, ChevronDown } from 'lucide-react'
+import { Download, Eye, Edit2, Plus, X, Loader2, Copy, Check, Languages, ChevronDown } from 'lucide-react'
 import { generateContractPDF } from '@/lib/contract-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
+import { BackLink, TripBreadcrumb } from '@/components/nav/TripNav'
 
 // The columns /api/itineraries/[id] actually returns. The prefill used to read
 // num_travelers, tour_name and parsed_data.duration — none of which exist on
@@ -93,6 +94,7 @@ interface ContractData {
 
 export default function ContractPage() {
   const t = useTranslations('contract')
+  const tCommon = useTranslations('common')
   const dialog = useConfirmDialog()
   const params = useParams()
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
@@ -498,19 +500,18 @@ This contract is governed by the laws of Egypt.
     )
   }
 
+  const tripRef = { id: itinerary.id, code: itinerary.itinerary_code, name: itinerary.trip_name ?? null }
+
   return (
     <div className="p-4 lg:p-6 bg-gray-50 min-h-screen">
       <div className="max-w-5xl mx-auto">
         
+        <TripBreadcrumb itineraryId={itinerary.id} trip={tripRef} current={tCommon('contract')} />
         {/* COMPACT HEADER */}
         <div className="flex items-center justify-between mb-4">
-          <Link
-            href="/itineraries"
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 text-sm"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            {t('backToItineraries')}
-          </Link>
+          {/* A contract is its trip's: back goes to the trip, or wherever the
+              user came from (the booking, the edit page). */}
+          <BackLink fallbackHref={`/itineraries/${itinerary.id}`} fallbackLabel={tripRef.code || tCommon('trip')} trip={tripRef} />
 
           <div className="flex gap-2">
             <button

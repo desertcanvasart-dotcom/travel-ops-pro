@@ -48,7 +48,12 @@
     "saved": "Saved",
     "unknownError": "Unknown error",
     "saving": "Saving…",
-    "duplicate": "Duplicate"
+    "duplicate": "Duplicate",
+    "backTo": "Back to {name}",
+    "backToTrip": "Trip",
+    "trip": "Trip",
+    "breadcrumb": "Breadcrumb",
+    "contract": "Contract"
   },
   "contract": {
     "loadingContract": "Loading contract...",

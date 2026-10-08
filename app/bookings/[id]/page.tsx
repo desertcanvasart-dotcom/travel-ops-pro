@@ -4,7 +4,6 @@ import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
-  ArrowLeft,
   Briefcase,
   Calendar,
   Users,
@@ -56,6 +55,8 @@ import BookingExtrasPanel from '@/app/components/BookingExtrasPanel'
 import InsuranceCard from '@/app/components/InsuranceCard'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { isSupplierBacked } from '@/lib/bookings/supplier-backing'
+import { BackLink, TripBreadcrumb } from '@/components/nav/TripNav'
+import { withReturnTo } from '@/lib/nav/return-to'
 
 type TabType = 'overview' | 'suppliers' | 'payments' | 'passengers' | 'notes'
 
@@ -86,6 +87,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
   // The Add Supplier modal offers the agency's supplier types (Settings → Vocabulary), grouped.
   const supplierTypeGroups = supplierTypeGroupsFor(useSupplierTypes().options)
   const tCommon = useTranslations('common')
+  const tNav = useTranslations('navigation')
   const confirmDialog = useConfirm()
 
   const [booking, setBooking] = useState<BookingWithDetails | null>(null)
@@ -402,16 +404,20 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
   // soon as the status changes or the supplier rows catch up.
   const statusOverride = booking.status_override
 
+  // The trip this booking belongs to, for the back link and breadcrumb.
+  const trip = booking.itinerary
+    ? { id: booking.itinerary.id, code: booking.itinerary.itinerary_code, name: booking.trip_name }
+    : null
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
+      <TripBreadcrumb itineraryId={booking.itinerary?.id} trip={trip} current={booking.booking_code} />
       {/* Header - Two Row Layout */}
       <div className="bg-white rounded-xl shadow-sm border mb-6 p-4">
         {/* Row 1: Booking Info & Status */}
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 pb-4 border-b border-gray-100">
           <div className="flex items-center gap-3 min-w-0">
-            <Link href="/bookings" className="p-2 -ml-2 hover:bg-gray-100 rounded-lg transition-colors shrink-0">
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
-            </Link>
+            <BackLink fallbackHref="/bookings" fallbackLabel={tNav('bookings')} trip={trip} />
             <div className="min-w-0">
               <h1 className="text-xl font-semibold text-gray-900 truncate">{booking.booking_code}</h1>
               <p className="text-sm text-gray-500 truncate">{booking.client_name} · {booking.trip_name}</p>
@@ -495,7 +501,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
 
             {/* Secondary Actions - Outlined */}
             <Link
-              href={`/documents/contract/${booking.itinerary.id}`}
+              href={withReturnTo(`/documents/contract/${booking.itinerary.id}`, `/bookings/${resolvedParams.id}`)}
               className="px-4 py-2 text-sm font-medium border border-[#647C47] text-[#647C47] rounded-lg hover:bg-[#e8ede3] transition-colors flex items-center gap-2"
             >
               <FileText className="w-4 h-4" />
