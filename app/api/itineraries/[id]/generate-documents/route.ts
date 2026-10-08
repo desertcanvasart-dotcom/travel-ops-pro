@@ -163,6 +163,7 @@ export async function POST(
 
       documentsToCreate.push({
         itinerary_id: itineraryId,
+        org_id: orgId,
         supplier_id: plan.supplierId,
         document_type: plan.docType,
         document_number: docNumber,

@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
-import { businessIdentity } from '@/lib/org-identity'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { orgGmailSenderId } from '@/lib/email/org-gmail-sender'
+import { escapeHtml } from '@/lib/html-escape'
+import { headerSafe, safeEmailAddress } from '@/lib/http/safe-header'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,7 +25,7 @@ export async function POST(request: Request) {
       pdfBase64,
     } = body
 
-    if (!supplierEmail) {
+    if (!safeEmailAddress(supplierEmail)) {
       return NextResponse.json(
         { success: false, error: 'Supplier email is required' },
         { status: 400 }
@@ -34,6 +37,21 @@ export async function POST(request: Request) {
         { success: false, error: 'PDF attachment is required' },
         { status: 400 }
       )
+    }
+
+    // Only this organization's vouchers, from this organization's mailbox.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const { data: document } = documentId
+      ? await supabase
+          .from('supplier_documents')
+          .select('id')
+          .eq('id', documentId)
+          .eq('org_id', orgId)
+          .maybeSingle()
+      : { data: null }
+    if (!document) {
+      return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 })
     }
 
     // Build email content
@@ -55,35 +73,30 @@ export async function POST(request: Request) {
 </head>
 <body>
   <div class="header">
-    <h2 style="margin: 0;">${businessName}</h2>
-    <p style="margin: 5px 0 0 0; opacity: 0.9;">${documentType}</p>
+    <h2 style="margin: 0;">${escapeHtml(businessName)}</h2>
+    <p style="margin: 5px 0 0 0; opacity: 0.9;">${escapeHtml(documentType)}</p>
   </div>
   <div class="content">
-    <p>Dear <strong>${supplierName}</strong>,</p>
-    <p>Please find the attached ${documentType.toLowerCase()} for your reference.</p>
+    <p>Dear <strong>${escapeHtml(supplierName)}</strong>,</p>
+    <p>Please find the attached ${escapeHtml(String(documentType).toLowerCase())} for your reference.</p>
     <div class="details">
-      <p><strong>Document:</strong> ${documentNumber}</p>
-      <p><strong>Type:</strong> ${documentType}</p>
-      <p><strong>Guest:</strong> ${clientName}</p>
+      <p><strong>Document:</strong> ${escapeHtml(documentNumber)}</p>
+      <p><strong>Type:</strong> ${escapeHtml(documentType)}</p>
+      <p><strong>Guest:</strong> ${escapeHtml(clientName)}</p>
     </div>
     <p>Please review the attached document and confirm at your earliest convenience.</p>
     <p>If you have any questions, please don't hesitate to contact us.</p>
-    <p>Best regards,<br/><strong>${businessName} Team</strong></p>
+    <p>Best regards,<br/><strong>${escapeHtml(businessName)} Team</strong></p>
   </div>
   <div class="footer">
-    <p>${businessName} | ${businessEmail}</p>
+    <p>${escapeHtml(businessName)} | ${escapeHtml(businessEmail)}</p>
   </div>
 </body>
 </html>`
 
-    // Get first connected Gmail account
-    const { data: tokenRecord } = await supabase
-      .from('gmail_tokens')
-      .select('user_id')
-      .limit(1)
-      .single()
+    const senderId = await orgGmailSenderId(supabase, orgId, await getCurrentUserId())
 
-    if (!tokenRecord) {
+    if (!senderId) {
       return NextResponse.json(
         {
           success: false,
@@ -96,7 +109,7 @@ export async function POST(request: Request) {
     // Get authenticated Gmail client
     let gmail
     try {
-      const auth = await getAuthenticatedGmail(tokenRecord.user_id)
+      const auth = await getAuthenticatedGmail(senderId)
       gmail = auth.gmail
     } catch (err) {
       if (err instanceof GmailAuthError) {
@@ -156,15 +169,16 @@ function buildEmailWithAttachment(
   filename: string,
   attachmentBase64: string
 ): string {
-  const fromAddress = process.env.GMAIL_USER || ''
-  const fromName = businessIdentity().name
   const boundary = `boundary_${Date.now()}`
+  const safeFilename = headerSafe(filename).replace(/"/g, '')
 
+  // No From: Gmail sends as the account the organization's mail goes out
+  // from (lib/email/org-gmail-sender), and the copy is in its Sent folder.
+  // There used to be a From and a Bcc to the platform-wide GMAIL_USER, which
+  // copied every organization's vouchers to one mailbox.
   const emailParts = [
-    `From: ${fromName} <${fromAddress}>`,
-    `To: ${to}`,
-    `Bcc: ${fromAddress}`,
-    `Subject: ${subject}`,
+    `To: ${safeEmailAddress(to)}`,
+    `Subject: ${headerSafe(subject)}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     '',
@@ -174,9 +188,9 @@ function buildEmailWithAttachment(
     '',
     Buffer.from(body).toString('base64'),
     `--${boundary}`,
-    `Content-Type: application/pdf; name="${filename}"`,
+    `Content-Type: application/pdf; name="${safeFilename}"`,
     'Content-Transfer-Encoding: base64',
-    `Content-Disposition: attachment; filename="${filename}"`,
+    `Content-Disposition: attachment; filename="${safeFilename}"`,
     '',
     attachmentBase64,
     `--${boundary}--`,

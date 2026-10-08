@@ -4,6 +4,7 @@ import { safeKeySegment } from '@/lib/storage-key'
 import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -36,6 +37,21 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'PDF attachment is required' },
         { status: 400 }
       )
+    }
+
+    // Only this organization's vouchers.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const { data: document } = documentId
+      ? await supabase
+          .from('supplier_documents')
+          .select('id')
+          .eq('id', documentId)
+          .eq('org_id', orgId)
+          .maybeSingle()
+      : { data: null }
+    if (!document) {
+      return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 })
     }
 
     // Upload PDF to Supabase Storage so Twilio can access it.
