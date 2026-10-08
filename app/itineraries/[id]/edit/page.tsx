@@ -393,6 +393,25 @@ export default function ItineraryEditorPage() {
     loadProgrammes()
   }, [itineraryId, activeLanguage])
 
+  // The confirmed banner's "Go to booking" opens this trip's booking. It used
+  // to link to the bookings list with a search for the itinerary code, which the list
+  // never reads — it opened the whole list. Looked up by itinerary id, as
+  // the itinerary page does; without one found it falls back to the list.
+  const [bookingId, setBookingId] = useState<string | null>(null)
+  const isConfirmed = itinerary?.status === 'confirmed'
+  useEffect(() => {
+    if (!itineraryId || !isConfirmed) return
+    let live = true
+    fetch(`/api/bookings?itinerary_id=${encodeURIComponent(String(itineraryId))}&limit=1`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        const booking = data?.success ? (data.data || []).find((b: { itinerary_id?: string }) => b.itinerary_id === itineraryId) : null
+        if (live) setBookingId(booking?.id ?? null)
+      })
+      .catch(() => {})
+    return () => { live = false }
+  }, [itineraryId, isConfirmed])
+
   const loadItinerary = async () => {
     if (!itineraryId) return
 
@@ -1399,7 +1418,7 @@ export default function ItineraryEditorPage() {
                 </button>
               )}
               <Link
-                href={`/bookings?search=${encodeURIComponent(itinerary.itinerary_code)}`}
+                href={bookingId ? `/bookings/${bookingId}` : '/bookings'}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 flex items-center gap-2"
               >
                 {t('confirmedBookingBanner.goToBooking')}

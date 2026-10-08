@@ -26,4 +26,11 @@ describe("the itinerary page's booking lookup", () => {
     expect(fn).toContain('/api/bookings?itinerary_id=')
     expect(fn).not.toContain('?search=')
   })
+
+  it("the edit page's \"Go to booking\" opens the trip's booking, not a search the list ignores", () => {
+    const edit = read('app/itineraries/[id]/edit/page.tsx')
+    expect(edit).toContain('/api/bookings?itinerary_id=')
+    expect(edit).toContain('`/bookings/${bookingId}`')
+    expect(edit).not.toContain('/bookings?search=')
+  })
 })
