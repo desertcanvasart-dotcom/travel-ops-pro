@@ -306,9 +306,9 @@ export default function AccountsPayablePage() {
             onClick={() => {
               const cols = [
                 { key: 'supplier_name', label: 'Supplier' },
-                { key: 'total_expenses', label: 'Total Expenses', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                { key: 'total_paid', label: 'Total Paid', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                { key: 'total_outstanding', label: 'Outstanding', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'total_expenses', label: 'Total Expenses', align: 'right' as const, money: true },
+                { key: 'total_paid', label: 'Total Paid', align: 'right' as const, money: true },
+                { key: 'total_outstanding', label: 'Outstanding', align: 'right' as const, money: true },
                 { key: 'expense_count', label: 'Expense Count', align: 'right' as const },
               ]
               exportFinanceCSV(filteredSuppliers as unknown as Record<string, unknown>[], cols, 'accounts-payable')
@@ -322,9 +322,9 @@ export default function AccountsPayablePage() {
             onClick={() => {
               const cols = [
                 { key: 'supplier_name', label: 'Supplier' },
-                { key: 'total_expenses', label: 'Total Expenses', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                { key: 'total_paid', label: 'Total Paid', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                { key: 'total_outstanding', label: 'Outstanding', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'total_expenses', label: 'Total Expenses', align: 'right' as const, money: true },
+                { key: 'total_paid', label: 'Total Paid', align: 'right' as const, money: true },
+                { key: 'total_outstanding', label: 'Outstanding', align: 'right' as const, money: true },
                 { key: 'expense_count', label: 'Expense Count', align: 'right' as const },
               ]
               exportFinancePDF({

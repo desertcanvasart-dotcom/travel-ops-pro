@@ -2,6 +2,7 @@
 // not with every finance page that offers the button (nine of them imported
 // this module, and so the PDF engine, just to render).
 import { format } from 'date-fns'
+import { currencyDecimals } from './currency-totals'
 
 // ============================================
 // TYPES
@@ -12,6 +13,23 @@ export interface ExportColumn {
   label: string
   align?: 'left' | 'right' | 'center'
   format?: (value: unknown) => string
+  /**
+   * An amount: printed with ITS ROW's currency decimals (row.currency) —
+   * ¥15,431, not "15431.00" — and without symbols, so a spreadsheet still
+   * reads it as a number. Rows with no currency get two decimals.
+   */
+  money?: boolean
+}
+
+/** One cell's text, as the column formats it (lib/finance-export). */
+export function cellText(col: ExportColumn, row: Record<string, unknown>): string {
+  const value = row[col.key]
+  if (col.money && typeof value === 'number' && Number.isFinite(value)) {
+    const code = typeof row.currency === 'string' && row.currency.trim() ? row.currency.trim().toUpperCase() : ''
+    const decimals = code ? currencyDecimals(code) : 2
+    return value.toFixed(decimals)
+  }
+  return col.format ? col.format(value) : String(value ?? '')
 }
 
 export interface ExportSummaryItem {
@@ -65,8 +83,7 @@ export function exportFinanceCSV(
   const headers = columns.map(c => c.label)
   const rows = data.map(row =>
     columns.map(col => {
-      const value = row[col.key]
-      const formatted = col.format ? col.format(value) : String(value ?? '')
+      const formatted = cellText(col, row)
       // Neutralise formula triggers, THEN escape quotes and wrap.
       const safe = csvSafeCell(String(formatted))
       return `"${safe.replace(/"/g, '""')}"`
@@ -188,8 +205,7 @@ export async function exportFinancePDF(options: PDFExportOptions): Promise<void>
     const tableRows = data.map(row => {
       const mapped: Record<string, string> = {}
       columns.forEach(col => {
-        const value = row[col.key]
-        mapped[col.key] = col.format ? col.format(value) : String(value ?? '')
+        mapped[col.key] = cellText(col, row)
       })
       return mapped
     })

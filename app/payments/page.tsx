@@ -265,7 +265,7 @@ export default function PaymentsPage() {
                 { key: 'source', label: 'Source' },
                 { key: 'source_reference', label: 'Reference' },
                 { key: 'client_name', label: 'Client' },
-                { key: 'amount', label: 'Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'amount', label: 'Amount', align: 'right' as const, money: true },
                 { key: 'payment_method', label: 'Method' },
                 { key: 'transaction_reference', label: 'Txn Ref' },
               ]
@@ -283,7 +283,7 @@ export default function PaymentsPage() {
                 { key: 'source', label: 'Source' },
                 { key: 'source_reference', label: 'Reference' },
                 { key: 'client_name', label: 'Client' },
-                { key: 'amount', label: 'Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'amount', label: 'Amount', align: 'right' as const, money: true },
                 { key: 'payment_method', label: 'Method' },
                 { key: 'transaction_reference', label: 'Txn Ref' },
               ]

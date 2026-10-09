@@ -1,3 +1,4 @@
+import { serviceClientPrice } from '@/lib/itinerary-client-price'
 import { NextRequest, NextResponse } from 'next/server'
 import { businessIdentity, monogram, orgIdentity, type OrgIdentity } from '@/lib/org-identity'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
@@ -108,18 +109,21 @@ function generateHTML(itinerary: Itinerary, days: Day[], identity: OrgIdentity):
   
   days.forEach(day => {
     if (!day.services) return
+    // Client prices (lib/itinerary-client-price), never total_cost: that is
+    // the supplier's cost, and this client document listed it per line.
     day.services
-      .filter(s => s.total_cost > 0)
+      .filter(s => serviceClientPrice(s) > 0)
       .forEach(service => {
-        const key = `${service.service_name}-${service.total_cost}`
+        const price = serviceClientPrice(service)
+        const key = `${service.service_name}-${price}`
         if (seenServices.has(key)) return
         seenServices.add(key)
         
         allServices.push({
           name: cleanServiceName(service.service_name, service.service_type),
           quantity: service.quantity,
-          rate: service.quantity > 0 ? service.total_cost / service.quantity : service.total_cost,
-          total: service.total_cost
+          rate: service.quantity > 0 ? price / service.quantity : price,
+          total: price
         })
       })
   })

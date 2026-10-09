@@ -93,3 +93,24 @@ describe('quote convert', () => {
     expect(route).not.toContain('quote.travel_date ? new Date(quote.travel_date) : new Date()')
   })
 })
+
+describe('round 7', () => {
+  it('finance export money columns use the row currency decimals', async () => {
+    const { cellText } = await import('@/lib/finance-export')
+    const col = { key: 'amount', label: 'Amount', money: true }
+    expect(cellText(col, { amount: 15431, currency: 'JPY' })).toBe('15431')
+    expect(cellText(col, { amount: 12.5, currency: 'EUR' })).toBe('12.50')
+    expect(cellText(col, { amount: 12.5 })).toBe('12.50')
+  })
+  it('the inbox gets each template\'s language', () => {
+    expect(src('app/api/email/templates/route.ts')).toContain('language: template.language')
+  })
+  it('template analytics count this org\'s sends, not the shared row\'s counter', () => {
+    const a = src('app/api/templates/analytics/route.ts')
+    expect(a).not.toContain(".order('usage_count'")
+    expect(a).toContain('withOrgCopies(')
+  })
+  it('the server itinerary PDF lists client prices', () => {
+    expect(src('app/api/pdf/generate/route.ts')).toContain('serviceClientPrice(service)')
+  })
+})

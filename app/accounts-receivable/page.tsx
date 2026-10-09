@@ -247,9 +247,9 @@ export default function AccountsReceivablePage() {
             onClick={() => {
               const cols = [
                 { key: 'client_name', label: 'Client' },
-                { key: 'total_invoiced', label: 'Total Invoiced', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                { key: 'total_paid', label: 'Total Paid', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                { key: 'total_outstanding', label: 'Outstanding', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'total_invoiced', label: 'Total Invoiced', align: 'right' as const, money: true },
+                { key: 'total_paid', label: 'Total Paid', align: 'right' as const, money: true },
+                { key: 'total_outstanding', label: 'Outstanding', align: 'right' as const, money: true },
                 { key: 'invoice_count', label: 'Invoice Count', align: 'right' as const },
                 { key: 'oldest_invoice_date', label: 'Oldest Invoice' },
               ]
@@ -264,9 +264,9 @@ export default function AccountsReceivablePage() {
             onClick={() => {
               const cols = [
                 { key: 'client_name', label: 'Client' },
-                { key: 'total_invoiced', label: 'Total Invoiced', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                { key: 'total_paid', label: 'Total Paid', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                { key: 'total_outstanding', label: 'Outstanding', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'total_invoiced', label: 'Total Invoiced', align: 'right' as const, money: true },
+                { key: 'total_paid', label: 'Total Paid', align: 'right' as const, money: true },
+                { key: 'total_outstanding', label: 'Outstanding', align: 'right' as const, money: true },
                 { key: 'invoice_count', label: 'Invoice Count', align: 'right' as const },
                 { key: 'oldest_invoice_date', label: 'Oldest Invoice' },
               ]

@@ -608,9 +608,9 @@ export default function InvoicesContent() {
                 { key: 'invoice_type', label: 'Type' },
                 { key: 'issue_date', label: 'Issue Date' },
                 { key: 'due_date', label: 'Due Date' },
-                { key: 'total_amount', label: 'Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                { key: 'amount_paid', label: 'Paid', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                { key: 'balance_due', label: 'Balance', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'total_amount', label: 'Amount', align: 'right' as const, money: true },
+                { key: 'amount_paid', label: 'Paid', align: 'right' as const, money: true },
+                { key: 'balance_due', label: 'Balance', align: 'right' as const, money: true },
                 { key: 'status', label: 'Status' },
               ]
               exportFinanceCSV(filteredInvoices as unknown as Record<string, unknown>[], cols, 'invoices')
@@ -628,9 +628,9 @@ export default function InvoicesContent() {
                 { key: 'invoice_type', label: 'Type' },
                 { key: 'issue_date', label: 'Issue Date' },
                 { key: 'due_date', label: 'Due Date' },
-                { key: 'total_amount', label: 'Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                { key: 'amount_paid', label: 'Paid', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                { key: 'balance_due', label: 'Balance', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'total_amount', label: 'Amount', align: 'right' as const, money: true },
+                { key: 'amount_paid', label: 'Paid', align: 'right' as const, money: true },
+                { key: 'balance_due', label: 'Balance', align: 'right' as const, money: true },
                 { key: 'status', label: 'Status' },
               ]
               exportFinancePDF({

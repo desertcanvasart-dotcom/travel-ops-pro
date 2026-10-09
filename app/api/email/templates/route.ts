@@ -69,6 +69,9 @@ export async function GET(request: NextRequest) {
       subcategory: template.subcategory,
       description: template.description,
       channel: template.channel,
+      // The inbox shows one language at a time; without this every Japanese
+      // twin was read as English and listed beside its original.
+      language: template.language,
       placeholders: template.placeholders,
       // Add a flag to identify source
       source: 'message_templates'
