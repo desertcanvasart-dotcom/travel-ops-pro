@@ -1,3 +1,5 @@
+import { escapeHtml } from '@/lib/html-escape'
+import { REMINDABLE_INVOICE_STATUSES } from '@/lib/invoices/reminder-schedule'
 import { NextRequest, NextResponse } from 'next/server'
 import { cronAuthorized } from '@/lib/cron/auth'
 import { businessIdentity, htmlIdentity, orgIdentity, type OrgIdentity } from '@/lib/org-identity'
@@ -75,10 +77,10 @@ function generateReminderEmail(invoice: any, reminderType: string, identity: Org
 <p style="margin:0;color:#fff;text-align:center;font-size:14px;">${urgencyMessage}</p>
 </td></tr>
 <tr><td style="padding:40px;">
-<p style="color:#374151;font-size:16px;">Dear ${invoice.client_name},</p>
+<p style="color:#374151;font-size:16px;">Dear ${escapeHtml(invoice.client_name)},</p>
 <table width="100%" style="background:#f9fafb;border-radius:8px;margin:20px 0;">
 <tr><td style="padding:20px;">
-<p style="margin:5px 0;"><strong>Invoice:</strong> ${invoice.invoice_number}</p>
+<p style="margin:5px 0;"><strong>Invoice:</strong> ${escapeHtml(invoice.invoice_number)}</p>
 <p style="margin:5px 0;"><strong>Due Date:</strong> ${dueDate}</p>
 <p style="margin:15px 0 0;font-size:18px;"><strong>Balance Due: <span style="color:#ef4444;">${balanceDue}</span></strong></p>
 </td></tr>
@@ -114,7 +116,8 @@ async function getHandler(request: NextRequest) {
     const { data: invoices, error } = await supabase
       .from('invoices')
       .select('*')
-      .not('status', 'in', '("paid","cancelled")')
+      .in('status', [...REMINDABLE_INVOICE_STATUSES])
+      .not('due_date', 'is', null)
       .gt('balance_due', 0)
       .eq('reminder_paused', false)
       .lte('next_reminder_date', today)

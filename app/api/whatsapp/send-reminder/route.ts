@@ -2,9 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createServiceClient } from '@/lib/supabase/service-client'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { orgIdentity } from '@/lib/org-identity'
 
 export async function POST(request: NextRequest) {
   try {
+    // The caller's org only; signed with its own name, not the install's
+    // BUSINESS_NAME. This read any org's trip by id with the service client.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
     const { itineraryId } = body
 
@@ -24,7 +31,8 @@ export async function POST(request: NextRequest) {
       .from('itineraries')
       .select('*')
       .eq('id', itineraryId)
-      .single()
+      .eq('org_id', orgId)
+      .maybeSingle()
 
     if (itinError || !itinerary) {
       console.error('❌ Itinerary error:', itinError)
@@ -41,7 +49,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const businessName = process.env.BUSINESS_NAME || ''
+    const businessName = (await orgIdentity(orgId)).name
 
     const formatDate = (dateStr: string) => {
       return new Date(dateStr).toLocaleDateString('en-GB', {
@@ -52,10 +60,10 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const message = `⏰ *${businessName} - Tour Reminder* ⏰\n\n` +
+    const message = `⏰ *${businessName ? `${businessName} - ` : ''}Tour Reminder* ⏰\n\n` +
       `Hi ${itinerary.client_name},\n\n` +
       `Reminder: Your tour is tomorrow! 🌟\n\n` +
-      `🎯 *Tour:* ${itinerary.trip_name || 'Egypt Tour'}\n` +
+      `🎯 *Tour:* ${itinerary.trip_name || 'your trip'}\n` +
       `📅 *Date:* ${formatDate(itinerary.start_date)}\n` +
       `🕐 *Pickup Time:* ${itinerary.pickup_time || 'To be confirmed'}\n` +
       `📍 *Pickup Location:* ${itinerary.pickup_location || 'To be confirmed'}\n\n` +
@@ -65,7 +73,7 @@ export async function POST(request: NextRequest) {
       `✅ Don't forget your camera! 📸\n\n` +
       `Your guide will contact you shortly before pickup.\n\n` +
       `See you soon! 🐪✨\n\n` +
-      `${businessName} Team`
+      `${businessName ? `${businessName} Team` : 'Your travel team'}`
 
     console.log('📤 Sending reminder to:', itinerary.client_phone)
 

@@ -2,16 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createServiceClient } from '@/lib/supabase/service-client'
-
-type BookingStatus = 'confirmed' | 'cancelled' | 'pending_payment' | 'paid' | 'completed'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { orgIdentity } from '@/lib/org-identity'
+import { statusAfterMessage, type StatusMessage as BookingStatus } from '@/lib/whatsapp-status-after-message'
 
 function getStatusMessage(
+  businessName: string,
   clientName: string,
   tourName: string,
   status: BookingStatus,
   notes?: string
 ): string {
-  const businessName = process.env.BUSINESS_NAME || ''
   const emoji = {
     confirmed: '✅',
     cancelled: '❌',
@@ -20,13 +21,13 @@ function getStatusMessage(
     completed: '🎉'
   }[status]
 
-  let message = `${emoji} *${businessName}* ${emoji}\n\n`
+  let message = businessName ? `${emoji} *${businessName}* ${emoji}\n\n` : ''
   message += `Dear ${clientName},\n\n`
 
   switch (status) {
     case 'confirmed':
       message += `Great news! Your booking for *${tourName}* has been confirmed! 🎉\n\n`
-      message += `We're excited to show you the wonders of Egypt! Your guide will contact you 24 hours before your tour with pickup details.\n\n`
+      message += `We're excited to welcome you! Your guide will contact you 24 hours before your tour with pickup details.\n\n`
       message += `If you have any questions, feel free to reach out anytime.`
       break
 
@@ -51,19 +52,25 @@ function getStatusMessage(
       break
 
     case 'completed':
-      message += `Thank you for choosing ${businessName} for your *${tourName}*! 🎉\n\n`
-      message += `We hope you had an incredible experience exploring Egypt! 🇪🇬\n\n`
+      message += `Thank you for choosing ${businessName || 'us'} for your *${tourName}*! 🎉\n\n`
+      message += `We hope you had an incredible trip!\n\n`
       message += `We'd love to hear your feedback. If you enjoyed your tour, please consider leaving us a review!\n\n`
       message += `We hope to see you again soon! 🌟`
       break
   }
 
-  message += `\n\nBest regards,\n${businessName} Team`
+  message += `\n\nBest regards,\n${businessName ? `${businessName} Team` : 'Your travel team'}`
   return message
 }
 
 export async function POST(request: NextRequest) {
   try {
+    // The caller's org: the trip is read and written only within it. This
+    // read any org's trip by id with the service client and messaged its
+    // client in the install's name (BUSINESS_NAME).
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
     const { itineraryId, status, notes } = body
 
@@ -99,7 +106,8 @@ export async function POST(request: NextRequest) {
       .from('itineraries')
       .select('*')
       .eq('id', itineraryId)
-      .single()
+      .eq('org_id', orgId)
+      .maybeSingle()
 
     if (dbError || !itinerary) {
       console.error('❌ Database error:', dbError)
@@ -118,8 +126,9 @@ export async function POST(request: NextRequest) {
 
     // Build message
     const message = getStatusMessage(
+      (await orgIdentity(orgId)).name,
       itinerary.client_name || 'Valued Client',
-      itinerary.trip_name || itinerary.tour_name || 'Egypt Tour',
+      itinerary.trip_name || itinerary.tour_name || 'your trip',
       status as BookingStatus,
       notes
     )
@@ -139,14 +148,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update itinerary status
-    await supabase
-      .from('itineraries')
-      .update({
-        status: status,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', itineraryId)
+    // The trip's status moves only where the message says it has
+    // (lib/whatsapp-status-after-message): a payment reminder turned a
+    // confirmed trip into 'pending_payment', and it dropped out of analytics.
+    const next = statusAfterMessage(itinerary.status, status as BookingStatus)
+    if (next) {
+      await supabase
+        .from('itineraries')
+        .update({ status: next, updated_at: new Date().toISOString() })
+        .eq('id', itineraryId)
+        .eq('org_id', orgId)
+    }
 
     console.log('✅ Status update sent:', result.messageId)
 
