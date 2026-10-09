@@ -6,6 +6,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createServiceClient } from '@/lib/supabase/service-client'
 import { generateInvoicePDF } from '@/lib/invoice-pdf-generator'
+import { formatMoney } from '@/lib/currency-totals'
 import { toCompanyInfo } from '@/lib/company-info-client'
 import { inlineImage } from '@/lib/documents/inline-image'
 import { loadJapaneseFont } from '@/lib/pdf-fonts-node'
@@ -119,7 +120,6 @@ export async function POST(request: NextRequest) {
 
     const businessName = identity.name
     const businessEmail = identity.email
-    const currencySymbol = ({ EUR: '€', USD: '$', GBP: '£' } as Record<string, string>)[invoice.currency] || invoice.currency
 
     const issueDate = new Date(invoice.issue_date).toLocaleDateString('en-GB', {
       day: 'numeric', month: 'long', year: 'numeric'
@@ -144,7 +144,8 @@ export async function POST(request: NextRequest) {
       `📋 *Invoice:* ${invoice.invoice_number}\n` +
       `📅 *Issue Date:* ${issueDate}\n` +
       `⏰ *Due Date:* ${dueDate}\n\n` +
-      `💰 *Balance Due: ${currencySymbol}${Number(invoice.balance_due).toFixed(2)}*\n\n` +
+      // The currency's own decimals (JPY has none): formatMoney, as the PDF.
+      `💰 *Balance Due: ${formatMoney(Number(invoice.balance_due), invoice.currency)}*\n\n` +
       (businessEmail ? `For questions, contact us:\n📧 ${businessEmail}\n\n` : '') +
       `Thank you! 🙏` + (businessName ? `\n${businessName} Team` : '')
 
