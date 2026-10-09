@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { quoteInOrg, quoteNotFound } from '@/lib/b2b/quote-scope'
+import { quoteInOrg, quoteNotFound, quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
@@ -133,6 +133,7 @@ export async function PUT(
     // not re-home the quote to another org, nor stamp who last touched it. The
     // actor is the signed-in user.
     const { id: _, org_id: _dropOrg, changed_by: _c, last_modified_by: _l, created_by: _cb, ...updates } = body
+    if (!(await quoteRefsInOrg(supabaseAdmin, orgId, updates))) return quoteRefNotFound()
     const actor = await getCurrentUserId()
     updates.updated_at = new Date().toISOString()
     updates.last_modified_by = actor

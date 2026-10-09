@@ -9,7 +9,7 @@ import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { currencySymbol } from '@/lib/currency-totals'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // ============================================
 // B2B QUOTE FROM ITINERARY API
@@ -185,7 +185,13 @@ export async function POST(request: NextRequest) {
     // operator-set capacity bands) — NOT the rate-less `vehicles` fleet list.
     const findDayTourVehicle = makeDayTourVehicleFinder()
 
-    const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(supabaseAdmin, await getCurrentOrgId()) })
+    // TENANT BOUNDARY — every read below is the service role, so the trip and
+    // the partner must be this organisation's: another org's itinerary id
+    // returned its client's contact details and supplier costs in our quote.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
+    const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(supabaseAdmin, orgId) })
 
     if (!itinerary_id) {
       return NextResponse.json(
@@ -201,7 +207,8 @@ export async function POST(request: NextRequest) {
       .from('itineraries')
       .select('*')
       .eq('id', itinerary_id)
-      .single()
+      .eq('org_id', orgId)
+      .maybeSingle()
 
     if (itinError || !itinerary) {
       console.error('Itinerary not found:', itinError)
@@ -236,7 +243,8 @@ export async function POST(request: NextRequest) {
         .from('b2b_partners')
         .select('default_margin_percent')
         .eq('id', partner_id)
-        .single()
+        .eq('org_id', orgId)
+        .maybeSingle()
 
       if (partner?.default_margin_percent) {
         effectiveMargin = partner.default_margin_percent
@@ -249,7 +257,6 @@ export async function POST(request: NextRequest) {
     // The operator's own high dates, judged on the itinerary's DEPARTURE — the
     // same calendar and the same rule as the template engine, so a quote built
     // from an itinerary cannot disagree with one built from a programme.
-    const orgId = await getCurrentOrgId()
     // What the rate tables (and services' supplier_cost_original) are in.
     const rateCurrency = await getOrgRateCurrency(supabaseAdmin, orgId)
     const rateSym = currencySymbol(rateCurrency)
@@ -570,7 +577,8 @@ export async function POST(request: NextRequest) {
         price_per_person: pricePerPerson,
         tour_leader_cost: tourLeaderCost,
         single_supplement: singleSupplement,
-        currency: itinerary.currency || 'EUR',
+        // The quote's own currency: every amount above is in the rate currency.
+        currency: rateCurrency,
         num_pax: numPax,
         season_name: season?.name ?? null,
         season_uplift_percent: season?.upliftPercent ?? 0,
