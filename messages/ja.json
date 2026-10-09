@@ -8013,7 +8013,16 @@
     "revertToDraft": "下書きに戻す",
     "delete": "削除",
     "deleteDocument": "書類を削除",
-    "confirmDeleteDocument": "この書類を削除してもよろしいですか？"
+    "confirmDeleteDocument": "この書類を削除してもよろしいですか？",
+    "missingTitle": "未作成の書類が{count}件あります",
+    "missingNote": "どの書類にも載っていないサービスがあります。多くは書類作成後に旅程が変更されたためです。",
+    "generateMissing": "未作成分を作成",
+    "generatingMissing": "作成中…",
+    "generateMissingFailed": "未作成の書類を作成できませんでした。",
+    "documentsNotGenerated": "書類は作成されませんでした",
+    "staleTitle": "旅程と一致しない書類が{count}件あります",
+    "staleLines": "旅程にない明細 {count}件",
+    "staleNote": "書類作成後に旅程が変更されました。書類を編集するか、取り消して再作成してください。送付済みの場合はサプライヤーにもお知らせください。"
   },
   "supplierDocumentEdit": {
     "documentNotFound": "書類が見つかりません",
