@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
-import { visibleToOrg, withOrgCopies } from '@/lib/templates/template-scope'
+import { orgReplacedDefaults, visibleToOrg, withOrgCopies } from '@/lib/templates/template-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Failed to fetch templates' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data: withOrgCopies(data ?? [], orgId) })
+    return NextResponse.json({ success: true, data: withOrgCopies(data ?? [], orgId, await orgReplacedDefaults(supabase, orgId)) })
   } catch (error) {
     console.error('Templates GET error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })

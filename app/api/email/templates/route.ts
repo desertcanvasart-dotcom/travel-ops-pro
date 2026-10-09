@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
-import { visibleToOrg, withOrgCopies } from '@/lib/templates/template-scope'
+import { orgReplacedDefaults, visibleToOrg, withOrgCopies } from '@/lib/templates/template-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform message_templates to match the expected format
-    const transformedMessageTemplates = withOrgCopies((messageTemplates || []) as any[], orgId).map(template => ({
+    const transformedMessageTemplates = withOrgCopies((messageTemplates || []) as any[], orgId, await orgReplacedDefaults(supabase, orgId)).map(template => ({
       id: template.id,
       name: template.name,
       subject: template.subject || '',

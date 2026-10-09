@@ -32,6 +32,7 @@ interface EmailTemplate {
   content: string
   category: string
   channel?: string
+  language?: string | null
 }
 
 interface Client {
@@ -387,6 +388,10 @@ export default function ComposeEmailModal({
                             >
                               <div className="flex items-center justify-between">
                                 <span className="font-medium text-gray-900">{template.name}</span>
+                                {/* The English and Japanese twins share a name; say which is which. */}
+                                {template.language === 'ja' && (
+                                  <span className="text-[9px] px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">JA</span>
+                                )}
                                 {template.channel === 'whatsapp' && (
                                   <span className="text-[9px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded">WA only</span>
                                 )}

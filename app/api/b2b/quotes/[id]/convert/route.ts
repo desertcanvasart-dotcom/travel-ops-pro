@@ -227,11 +227,14 @@ export async function POST(
       }
     }
 
-    // Generate itinerary code
-    const year = new Date().getFullYear().toString().slice(-2)
-    const { count } = await supabaseAdmin.from('itineraries').select('*', { count: 'exact', head: true })
-    const itineraryNumber = ((count || 0) + 1).toString().padStart(3, '0')
-    const itineraryCode = `ITN-${year}-${itineraryNumber}`
+    // The itinerary code: random, as POST /api/itineraries makes it, retried on
+    // a clash below. It was "count of ALL itineraries + 1" — across every
+    // organisation (printed on this org's documents), and after any delete it
+    // re-issued a code already taken, so the UNIQUE insert failed and the
+    // quote could not be converted.
+    const newItineraryCode = () =>
+      `ITN-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000) + 1000}`
+    let itineraryCode = newItineraryCode()
 
     const startDate = new Date(`${String(startIso).slice(0, 10)}T00:00:00Z`)
     const endDate = new Date(startDate)
@@ -240,48 +243,56 @@ export async function POST(
     // Get partner info for the itinerary
     const partnerInfo = quote.b2b_partners as { id: string; company_name: string; partner_code: string; commission_percent: number } | null
 
-    const { data: itinerary, error: itinError } = await supabaseAdmin
-      .from('itineraries')
-      .insert({
-        itinerary_code: itineraryCode,
-        org_id: orgId,
-        client_id: clientId,
-        client_name: quote.client_name || 'B2B Client',
-        trip_name: template?.template_name || quote.trip_name || 'Tour Package',
-        start_date: startDate.toISOString().split('T')[0],
-        end_date: endDate.toISOString().split('T')[0],
-        total_days: template?.duration_days || 1,
-        num_adults: quote.num_adults,
-        num_children: quote.num_children || 0,
-        status: 'quoted',
-        // package_type is an ENUM; 'custom' was not a member and the insert
-        // failed for every template quote (lib/itineraries/template-days.ts).
-        package_type: packageTypeForTemplate(template),
-        // The programme this trip follows — so the 日程表 button is already
-        // linked and does not ask again.
-        template_id: template?.id ?? null,
-        // Standard at all times (operator, 2026-09-03): the quote was priced
-        // at the standard tier by default, so the trip is labelled the same
-        // way. The variation's imported tier ("Deluxe") is not a rate level
-        // the office holds contracts for; the edit page can still change it.
-        tier: 'standard',
-        total_cost: quote.selling_price,
-        supplier_cost: quote.total_cost,
-        profit: quote.margin_amount,
-        margin_percent: quote.margin_percent,
-        currency: quote.currency || 'EUR',
-        deposit_amount: depositOf(quote.selling_price),
-        balance_due: Math.round(((quote.selling_price || 0) - depositOf(quote.selling_price)) * 100) / 100,
-        payment_status: 'not_paid',
-        user_id, // itineraries has user_id, not created_by
-        notes: `Converted from B2B quote ${quote.quote_number}`,
-        // B2B Partner fields
-        partner_id: quote.partner_id || null,
-        partner_commission_percent: partnerInfo?.commission_percent || 0,
-        source: 'b2b_template'
-      })
-      .select()
-      .single()
+    let itinerary: any = null
+    let itinError: any = null
+    for (let tries = 0; tries < 5; tries++) {
+      const attempt = await supabaseAdmin
+        .from('itineraries')
+        .insert({
+          itinerary_code: itineraryCode,
+          org_id: orgId,
+          client_id: clientId,
+          client_name: quote.client_name || 'B2B Client',
+          trip_name: template?.template_name || quote.trip_name || 'Tour Package',
+          start_date: startDate.toISOString().split('T')[0],
+          end_date: endDate.toISOString().split('T')[0],
+          total_days: template?.duration_days || 1,
+          num_adults: quote.num_adults,
+          num_children: quote.num_children || 0,
+          status: 'quoted',
+          // package_type is an ENUM; 'custom' was not a member and the insert
+          // failed for every template quote (lib/itineraries/template-days.ts).
+          package_type: packageTypeForTemplate(template),
+          // The programme this trip follows — so the 日程表 button is already
+          // linked and does not ask again.
+          template_id: template?.id ?? null,
+          // Standard at all times (operator, 2026-09-03): the quote was priced
+          // at the standard tier by default, so the trip is labelled the same
+          // way. The variation's imported tier ("Deluxe") is not a rate level
+          // the office holds contracts for; the edit page can still change it.
+          tier: 'standard',
+          total_cost: quote.selling_price,
+          supplier_cost: quote.total_cost,
+          profit: quote.margin_amount,
+          margin_percent: quote.margin_percent,
+          currency: quote.currency || 'EUR',
+          deposit_amount: depositOf(quote.selling_price),
+          balance_due: Math.round(((quote.selling_price || 0) - depositOf(quote.selling_price)) * 100) / 100,
+          payment_status: 'not_paid',
+          user_id, // itineraries has user_id, not created_by
+          notes: `Converted from B2B quote ${quote.quote_number}`,
+          // B2B Partner fields
+          partner_id: quote.partner_id || null,
+          partner_commission_percent: partnerInfo?.commission_percent || 0,
+          source: 'b2b_template'
+        })
+        .select()
+        .single()
+      itinerary = attempt.data
+      itinError = attempt.error
+      if (itinError?.code !== '23505') break
+      itineraryCode = newItineraryCode()
+    }
 
     if (itinError || !itinerary) {
       // The database's reason must reach the log: this exact insert failed

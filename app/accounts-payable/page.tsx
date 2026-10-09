@@ -34,6 +34,34 @@ interface AgingBucket {
   days90Plus: CurrencyTotals
 }
 
+/**
+ * One export row per supplier AND currency. A supplier's totals are kept per
+ * currency (CurrencyTotals), and the export printed the object itself —
+ * "[object Object]" in every money column, with no currency named.
+ */
+function payableExportRows(suppliers: SupplierPayable[]): Record<string, unknown>[] {
+  const rows: Record<string, unknown>[] = []
+  for (const s of suppliers) {
+    const codes = new Set([
+      ...Object.keys(s.total_expenses ?? {}),
+      ...Object.keys(s.total_paid ?? {}),
+      ...Object.keys(s.total_outstanding ?? {}),
+    ])
+    if (codes.size === 0) codes.add('')
+    for (const currency of codes) {
+      rows.push({
+        supplier_name: s.supplier_name,
+        currency: currency || null,
+        total_expenses: s.total_expenses?.[currency] ?? 0,
+        total_paid: s.total_paid?.[currency] ?? 0,
+        total_outstanding: s.total_outstanding?.[currency] ?? 0,
+        expense_count: s.expense_count,
+      })
+    }
+  }
+  return rows
+}
+
 interface SupplierPayable {
   supplier_name: string
   supplier_type: string
@@ -311,7 +339,7 @@ export default function AccountsPayablePage() {
                 { key: 'total_outstanding', label: 'Outstanding', align: 'right' as const, money: true },
                 { key: 'expense_count', label: 'Expense Count', align: 'right' as const },
               ]
-              exportFinanceCSV(filteredSuppliers as unknown as Record<string, unknown>[], cols, 'accounts-payable')
+              exportFinanceCSV(payableExportRows(filteredSuppliers), cols, 'accounts-payable')
             }}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
@@ -334,7 +362,7 @@ export default function AccountsPayablePage() {
                   { label: 'Supplier Count', value: String(summary.supplier_count) },
                   { label: 'Overdue Amount', value: `${money(summary.overdue_amount)}` },
                 ] : [],
-                data: filteredSuppliers as unknown as Record<string, unknown>[],
+                data: payableExportRows(filteredSuppliers),
                 columns: cols,
                 filename: 'accounts-payable',
               })

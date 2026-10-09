@@ -110,7 +110,31 @@ describe('round 7', () => {
     expect(a).not.toContain(".order('usage_count'")
     expect(a).toContain('withOrgCopies(')
   })
-  it('the server itinerary PDF lists client prices', () => {
-    expect(src('app/api/pdf/generate/route.ts')).toContain('serviceClientPrice(service)')
+  it('the unused server itinerary PDF (caller-supplied prices, fixed terms) is gone', () => {
+    expect(() => src('app/api/pdf/generate/route.ts')).toThrow()
+  })
+})
+
+describe('round 8', () => {
+  it('accounts payable exports one numeric row per supplier and currency', () => {
+    const page = src('app/accounts-payable/page.tsx')
+    expect(page).toContain('payableExportRows(filteredSuppliers)')
+    expect(page).not.toContain('filteredSuppliers as unknown as Record<string, unknown>[]')
+  })
+  it('convert never re-issues a taken itinerary code', () => {
+    const route = src('app/api/b2b/quotes/[id]/convert/route.ts')
+    expect(route).not.toContain("select('*', { count: 'exact', head: true })")
+    expect(route).toContain("itinError?.code !== '23505'")
+  })
+  it('template analytics count sent rows only, paged, and by database count', () => {
+    const a = src('app/api/templates/analytics/route.ts')
+    expect(a).toContain(".eq('status', 'sent')")
+    expect(a).toContain('.range(from, from + 999)')
+    expect(a).toContain("{ count: 'exact', head: true }")
+  })
+  it('a replaced default stays hidden whatever the list filter', async () => {
+    const { withOrgCopies } = await import('@/lib/templates/template-scope')
+    // The copy did not match the search; only the default came back.
+    expect(withOrgCopies([{ id: 'd1', org_id: null }], 'org1', ['d1'])).toEqual([])
   })
 })
