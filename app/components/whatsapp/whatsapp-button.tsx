@@ -12,6 +12,9 @@ interface WhatsAppButtonProps {
   clientName?: string
   guideId?: string
   contractPdfUrl?: string
+  /** type 'contract': the contract as the page shows it (lib/contract-document),
+   *  so the client receives that contract rather than one rebuilt from the database. */
+  contractDocument?: unknown
   onSuccess?: () => void
   className?: string
 }
@@ -24,6 +27,7 @@ export default function WhatsAppButton({
   clientName,
   guideId,
   contractPdfUrl,
+  contractDocument,
   onSuccess,
   className = ''
 }: WhatsAppButtonProps) {
@@ -55,7 +59,7 @@ export default function WhatsAppButton({
           break
         case 'contract':
           endpoint = '/api/whatsapp/send-contract'
-          body = { itineraryId, contractPdfUrl }
+          body = { itineraryId, contractPdfUrl, contract: contractDocument }
           break
       }
 

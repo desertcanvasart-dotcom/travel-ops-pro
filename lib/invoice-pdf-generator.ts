@@ -59,6 +59,8 @@ export interface CompanyInfo {
   /** When the operator keeps offices, they are what goes on the paper — the
    *  single `address` line is the fallback for one that does not. */
   offices?: CompanyOffice[]
+  /** The law travel contracts are governed by (Company profile; may be blank). */
+  governingLaw?: string
   /** The letterhead logo as a data URI. A URL is no use here: jsPDF draws from
    *  bytes it already has and never fetches. */
   logoDataUrl?: string | null

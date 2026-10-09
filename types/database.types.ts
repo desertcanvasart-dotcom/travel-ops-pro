@@ -8443,6 +8443,8 @@ export interface Database {
           deposit_due_days: number | null
           balance_due_days_before_departure: number | null
           company_address: string | null
+          operating_country: string | null
+          contract_governing_law: string | null
           document_contacts: Json
           offices: Json
           default_currency: string | null
@@ -8469,6 +8471,8 @@ export interface Database {
           deposit_due_days?: number | null
           balance_due_days_before_departure?: number | null
           company_address?: string | null
+          operating_country?: string | null
+          contract_governing_law?: string | null
           document_contacts: Json
           offices: Json
           default_currency?: string | null
@@ -8495,6 +8499,8 @@ export interface Database {
           deposit_due_days?: number | null
           balance_due_days_before_departure?: number | null
           company_address?: string | null
+          operating_country?: string | null
+          contract_governing_law?: string | null
           document_contacts?: Json
           offices?: Json
           default_currency?: string | null

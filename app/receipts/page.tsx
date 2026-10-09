@@ -19,7 +19,8 @@ import {
   FileText,
   MapPin
 } from 'lucide-react'
-import { generateReceiptPDF, downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
+import { generateReceiptPDF, receiptBrand, downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
+import { useCompanyInfo } from '@/lib/use-company-info'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { withReturnTo } from '@/lib/nav/return-to'
@@ -44,6 +45,8 @@ interface UnifiedPayment {
 
 export default function ReceiptsPage() {
   const router = useRouter()
+  // The operator's name and contacts for the receipt PDF (Company profile).
+  const company = useCompanyInfo()
   const dialog = useConfirmDialog()
   const [payments, setPayments] = useState<UnifiedPayment[]>([])
   const [loading, setLoading] = useState(true)
@@ -172,7 +175,7 @@ export default function ReceiptsPage() {
         client_name: payment.client_name,
         total_amount: payment.amount,
         currency: payment.currency
-      })
+      }, receiptBrand(company))
 
       const blob = doc.output('blob')
       setPdfPreviewBlob(blob)

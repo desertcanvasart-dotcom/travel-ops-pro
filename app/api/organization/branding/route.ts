@@ -43,7 +43,20 @@ const FIELDS = [
   'default_margin_percent',
   // Rate-change digest for managers: off | in_app | in_app_email
   'rate_change_alerts',
+  // What travel contracts name (migration 20261115): the country trips run
+  // in and the law the contract is under. They said Egypt for everyone.
+  'operating_country',
+  'contract_governing_law',
 ] as const
+
+/** The columns migration 20261115 adds. Until it is applied, reads and
+ *  writes go on without them rather than failing the whole profile. */
+const CONTRACT_FIELDS = ['operating_country', 'contract_governing_law'] as const
+function missingContractColumns(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false
+  const undefinedColumn = error.code === '42703' || error.code === 'PGRST204'
+  return undefinedColumn && CONTRACT_FIELDS.some(f => (error.message ?? '').includes(f))
+}
 
 /** Offices arrive as arbitrary JSON; keep only the known string fields, cap
  *  the list, and drop rows that say nothing. */
@@ -72,11 +85,18 @@ export async function GET() {
       )
     }
 
-    const { data, error } = await admin
+    let { data, error } = await admin
       .from('organizations')
       .select(FIELDS.join(', '))
       .eq('id', auth.org_id)
       .single()
+    if (missingContractColumns(error)) {
+      ;({ data, error } = await admin
+        .from('organizations')
+        .select(FIELDS.filter(f => !(CONTRACT_FIELDS as readonly string[]).includes(f)).join(', '))
+        .eq('id', auth.org_id)
+        .single())
+    }
 
     if (error) throw error
     return NextResponse.json({ success: true, data })
@@ -129,9 +149,15 @@ export async function PUT(request: NextRequest) {
     }
     update.updated_at = new Date().toISOString()
 
-    const { error } = await admin.from('organizations').update(update).eq('id', auth.org_id)
+    let { error } = await admin.from('organizations').update(update).eq('id', auth.org_id)
+    let contractTermsPending = false
+    if (missingContractColumns(error)) {
+      for (const f of CONTRACT_FIELDS) delete update[f]
+      contractTermsPending = true
+      ;({ error } = await admin.from('organizations').update(update).eq('id', auth.org_id))
+    }
     if (error) throw error
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, ...(contractTermsPending ? { contractTermsPending: true } : {}) })
   } catch (error) {
     return NextResponse.json(
       { success: false, error: clientMessage(error, 'Failed to save company profile') },

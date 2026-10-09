@@ -19,7 +19,10 @@ export function toCompanyInfo(org: Record<string, unknown> | null | undefined): 
     name: customerFacingOrgName(org.name as string | undefined),
     address: (org.company_address as string) ?? '',
     city: '',
-    country: '',
+    // Where the operator runs its trips (Company profile): the receipt and
+    // invoice show it, and contracts name it.
+    country: (org.operating_country as string) ?? '',
+    governingLaw: (org.contract_governing_law as string) ?? '',
     email: (org.contact_email as string) ?? '',
     phone: (org.company_phone as string) ?? '',
     website: (org.company_website as string) ?? '',

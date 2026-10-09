@@ -41,6 +41,9 @@ interface Profile {
   rate_currency: string
   default_margin_percent: string
   rate_change_alerts: string
+  /** What travel contracts name (migration 20261115). */
+  operating_country: string
+  contract_governing_law: string
 }
 
 // Company-LEVEL contacts only. The カイロガイド / 南部ガイド header cells are
@@ -65,6 +68,8 @@ export default function CompanyProfileCard() {
     rate_currency: 'EUR',
     default_margin_percent: '',
     rate_change_alerts: 'in_app',
+    operating_country: '',
+    contract_governing_law: '',
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -91,6 +96,8 @@ export default function CompanyProfileCard() {
         rate_currency: data.data.rate_currency ?? 'EUR',
         default_margin_percent: data.data.default_margin_percent == null ? '' : String(data.data.default_margin_percent),
         rate_change_alerts: data.data.rate_change_alerts ?? 'in_app',
+        operating_country: data.data.operating_country ?? '',
+        contract_governing_law: data.data.contract_governing_law ?? '',
         offices: (Array.isArray(data.data.offices) ? data.data.offices : []).map((o: Partial<Office>) => ({
           ...EMPTY_OFFICE,
           ...o,
@@ -118,6 +125,8 @@ export default function CompanyProfileCard() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
+      // Saved, except the two contract fields: their migration is not applied.
+      if (data.contractTermsPending) setError(t('contractTermsPending'))
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err: any) {
@@ -295,6 +304,18 @@ export default function CompanyProfileCard() {
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">{t('address')}</label>
           <input className={inputClass} value={form.company_address} onChange={e => set('company_address', e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">{t('operatingCountry')}</label>
+          <input className={inputClass} maxLength={100} value={form.operating_country}
+            onChange={e => set('operating_country', e.target.value)} placeholder={t('operatingCountryPlaceholder')} />
+          <p className="text-xs text-gray-500 mt-1">{t('operatingCountryHint')}</p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">{t('governingLaw')}</label>
+          <input className={inputClass} maxLength={255} value={form.contract_governing_law}
+            onChange={e => set('contract_governing_law', e.target.value)} placeholder={t('governingLawPlaceholder')} />
+          <p className="text-xs text-gray-500 mt-1">{t('governingLawHint')}</p>
         </div>
       </div>
 

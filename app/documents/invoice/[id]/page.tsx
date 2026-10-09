@@ -11,6 +11,7 @@ import { fetchCompanyInfo } from '@/lib/company-info-client'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import { BackLink } from '@/components/nav/TripNav'
+import { paymentInvoiceShape } from '@/lib/payment-invoice'
 
 interface Payment {
   id: string
@@ -28,6 +29,8 @@ interface Payment {
   due_date?: string
   notes: string
   created_at: string
+  /** The trip's total (the itinerary's total_cost); null when unpriced. */
+  total_cost?: number | string | null
 }
 
 export default function InvoicePage() {
@@ -63,15 +66,40 @@ export default function InvoicePage() {
     }
   }
 
+  // The operator's own payment rule (Settings), as the contract states it —
+  // it stated a 30% deposit with the balance on arrival for everyone. Null until
+  // it loads, and the PDF then prints no terms rather than wrong ones.
+  const tContract = useTranslations('contract')
+  const [paymentTerms, setPaymentTerms] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    fetch('/api/settings/payment-terms')
+      .then(r => r.json())
+      .then(j => {
+        if (!alive || !j?.success) return
+        const rule = { ...(j.defaults ?? {}), ...Object.fromEntries(Object.entries(j.terms ?? {}).filter(([, v]) => v != null)) }
+        const pct = Number(rule.deposit_percent)
+        if (!Number.isFinite(pct)) return
+        setPaymentTerms(tContract('paymentTermsFromRule', {
+          percent: pct,
+          dueDays: Number(rule.deposit_due_days),
+          beforeDays: Number(rule.balance_due_days_before_departure),
+        }))
+      })
+      .catch(() => { /* no terms rather than invented ones */ })
+    return () => { alive = false }
+  }, [tContract])
+
   const buildInvoiceData = (p: Payment) => {
     const invoiceNumber = `INV-${p.itinerary_code}-${p.id.slice(0, 4).toUpperCase()}`
+    // From the payment and its trip's real total — not an assumed 30%.
+    const shape = paymentInvoiceShape(p.payment_type, p.amount, p.total_cost)
     return {
       id: p.id,
       invoice_number: invoiceNumber,
-      invoice_type: p.payment_type === 'deposit' ? 'deposit' as const :
-                    p.payment_type === 'final' ? 'final' as const :
-                    'standard' as const,
-      deposit_percent: p.payment_type === 'deposit' ? 30 : undefined,
+      invoice_type: shape.invoiceType,
+      deposit_percent: shape.depositPercent,
+      full_trip_cost: shape.tripTotal ?? null,
       parent_invoice_id: null,
       client_name: p.client_name,
       client_email: p.client_email || '',
@@ -93,7 +121,7 @@ export default function InvoicePage() {
       issue_date: p.created_at,
       due_date: p.due_date || p.payment_date || new Date().toISOString(),
       notes: p.notes,
-      payment_terms: '30% deposit required to confirm booking. Balance due upon arrival.',
+      payment_terms: paymentTerms,
       payment_instructions: 'Payment accepted via bank transfer or credit card.'
     }
   }
