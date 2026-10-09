@@ -13,6 +13,9 @@ describe('what goes on which document', () => {
     expect(docMappingFor({ service_type: 'accommodation', description: '[pricing-grid:cruise] MS Nile' })?.docType).toBe('cruise_voucher')
     for (const t of ['tip', 'water', 'flight']) expect(docMappingFor({ service_type: t })?.docType).toBeNull()
     expect(docMappingFor({ service_type: 'unknown' })).toBeUndefined()
+    for (const t of ['airport_service', 'hotel_service']) expect(docMappingFor({ service_type: t })).toEqual({ docType: 'service_order', category: 'assistance' })
+    expect(docMappingFor({ service_type: 'other', description: '[pricing-grid:hotel_services] checkin_assist' })?.category).toBe('assistance')
+    expect(docMappingFor({ service_type: 'transfer' })?.docType).toBe('transport_voucher')
   })
 })
 

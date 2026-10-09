@@ -108,10 +108,28 @@ describe('planDocuments', () => {
     expect(guides.map(g => g.supplierName)).toEqual(['Cairo Guide Services', 'Luxor Guide Services'])
   })
 
-  it('tips and lines that need no document make none; the whole trip is eight documents, not one per line', () => {
+  it('tips and lines that need no document make none; the whole trip is nine documents, not one per line', () => {
     const docs = plan()
     expect(docs.flatMap(d => d.services).some(s => s.service_type === 'tips')).toBe(false)
-    expect(docs).toHaveLength(8) // 2 hotel stays, 1 cruise, 2 transport, 1 entrance, 2 guide (unassigned, per place)
+    // 2 hotel stays, 1 cruise, 2 transport, 1 entrance, 2 guide (unassigned,
+    // per place), 1 meet & assist (the airport meet & greet was on none).
+    expect(docs).toHaveLength(9)
+  })
+
+  it('airport and hotel meet & assist go on their own order, never the driver’s voucher', () => {
+    const days = [
+      day(1, 'Cairo', 'Cairo', [
+        { service_type: 'airport_service', service_name: 'Airport Meet & Greet (CAI)' },
+        { service_type: 'hotel_service', service_name: 'Check-in assist' },
+        { service_type: 'transportation', service_name: 'Sedan - Cairo airport transfer' },
+        // Older grid rows: the slot tag says what it is, whatever the type.
+        { service_type: 'transfer', service_name: 'full_service CAI', description: '[pricing-grid:airport_services] full_service CAI' },
+      ]),
+    ]
+    expect(summary(plan(days))).toEqual([
+      'service_order: Cairo Meet & Assist [1,1,1]',
+      'transport_voucher: Cairo Transportation [1]',
+    ])
   })
 
   it('a supplement joins the stay it falls in', () => {

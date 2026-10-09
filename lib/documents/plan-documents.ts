@@ -22,6 +22,8 @@
 //   entrance   one order for the whole booking (per supplier when one is on
 //              the line): every site, day by day.
 //   meals      per supplier; unassigned meals per place (local restaurants).
+//   assist     airport and hotel meet & assist: per supplier; unassigned per
+//              place ("Cairo Meet & Assist").
 //
 // Before, a supplier's services all went on one document whatever they were
 // (a Cairo and an Aswan stay on one voucher, dated from the first night to the
@@ -134,6 +136,7 @@ const DEFAULT_NAMES: Record<string, string> = {
   cruise_voucher: 'Nile Cruise',
   activity_voucher: 'Entrance Fees',
   meals: 'Restaurant & Meals',
+  assistance: 'Meet & Assist',
   service_order: 'Ground Services',
 }
 
@@ -326,7 +329,8 @@ export function planDocuments(input: {
     else if (nightly && list.find(e => e.property)?.property) supplierName = list.find(e => e.property)!.property!
     else if (docType === 'activity_voucher') supplierName = DEFAULT_NAMES.activity_voucher
     else {
-      const base = first.mapping.category === 'meals' ? DEFAULT_NAMES.meals : DEFAULT_NAMES[docType] ?? 'Services'
+      const category = first.mapping.category
+      const base = category === 'meals' || category === 'assistance' ? DEFAULT_NAMES[category] : DEFAULT_NAMES[docType] ?? 'Services'
       supplierName = `${first.place} ${base}`
     }
 
