@@ -56,7 +56,7 @@ export async function GET(
 
   const { data: link } = await supabase
     .from('booking_portal_links')
-    .select('id, booking_id, org_id, revoked_at, expires_at')
+    .select('id, booking_id, org_id, passenger_id, revoked_at, expires_at')
     .eq('token', token)
     .maybeSingle()
 
@@ -68,6 +68,10 @@ export async function GET(
   const id = colon === -1 ? '' : decoded.slice(colon + 1)
   if (kind !== 'invoice' && kind !== 'nittei' && kind !== 'insurance-guide') return notFound()
   if (kind === 'invoice' && !id) return notFound()
+  // A traveller's own link never serves the booking's invoices: they name the
+  // lead booker and the whole trip's total and balance. The page does not
+  // list them for such a link; a known URL must not fetch one either.
+  if (kind === 'invoice' && link!.passenger_id) return notFound()
 
   // ---------- the insurer's own brochure ----------
   // A fixed object per org, streamed through here rather than linked directly,

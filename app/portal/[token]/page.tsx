@@ -208,7 +208,10 @@ async function resolve(token: string): Promise<{
 
   // Then the invoices — deposit before final, oldest first, so the list reads
   // in the order the money is asked for.
-  for (const inv of invoices ?? []) {
+  // A traveller's own link (a friend on the booking) shows that traveller's
+  // form and the shared trip — never the booking's invoices, which name the
+  // lead booker and the whole trip's money (docs/plans/portal-multi-traveller.md §2).
+  for (const inv of scopedPassengerId ? [] : invoices ?? []) {
     // A draft is not something to hand a customer — it has not been sent —
     // and neither is a cancelled one. An ALLOW-list rather than a deny-list:
     // a status nobody has thought about yet must not reach the traveller by

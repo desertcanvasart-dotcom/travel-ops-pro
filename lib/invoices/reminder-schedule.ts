@@ -43,3 +43,27 @@ export function addDaysISO(iso: string, days: number): string {
 export function firstReminderDate(dueDate: string): string {
   return addDaysISO(dueDate, -7)
 }
+
+// ============================================
+// Which invoices may be chased
+// ============================================
+// "Send all reminders" and the daily cron excluded only paid and cancelled
+// invoices, so a DRAFT — never sent to the client, and hidden from them on
+// the portal (lib/booking-portal isCustomerFacingInvoice) — got "Payment
+// Overdue" in the client's inbox.
+
+/** The statuses a client has been sent and still owes on. */
+export const REMINDABLE_INVOICE_STATUSES = ['sent', 'partial', 'overdue'] as const
+
+/** Why an invoice cannot be chased, or null when it can. */
+export function reminderBlocker(invoice: { status?: string | null; due_date?: string | null }): string | null {
+  if (!(REMINDABLE_INVOICE_STATUSES as readonly string[]).includes(String(invoice.status ?? ''))) {
+    return invoice.status === 'draft'
+      ? 'This invoice is still a draft. Send it to the client before sending a reminder.'
+      : 'Only sent, partly paid or overdue invoices get reminders.'
+  }
+  if (!invoice.due_date || Number.isNaN(new Date(invoice.due_date).getTime())) {
+    return 'This invoice has no due date. Set one before sending a reminder.'
+  }
+  return null
+}

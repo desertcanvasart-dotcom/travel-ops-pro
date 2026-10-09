@@ -1,3 +1,5 @@
+import { escapeHtml } from '@/lib/html-escape'
+import { REMINDABLE_INVOICE_STATUSES } from '@/lib/invoices/reminder-schedule'
 import { NextRequest, NextResponse } from 'next/server'
 import { businessIdentity, htmlIdentity, orgIdentity, type OrgIdentity } from '@/lib/org-identity'
 import { clientMessage } from '@/lib/api-errors'
@@ -108,7 +110,7 @@ function generateReminderEmail(invoice: any, reminderType: string, locale: Recip
           <tr>
             <td style="padding: 40px;">
               <p style="margin: 0 0 20px; color: #374151; font-size: 16px; line-height: 1.6;">
-                ${t('greeting', { clientName: invoice.client_name })}
+                ${t('greeting', { clientName: escapeHtml(invoice.client_name) })}
               </p>
 
               <p style="margin: 0 0 30px; color: #374151; font-size: 16px; line-height: 1.6;">
@@ -125,7 +127,7 @@ function generateReminderEmail(invoice: any, reminderType: string, locale: Recip
                           <span style="color: #6b7280; font-size: 14px;">${t('invoiceNumber')}</span>
                         </td>
                         <td style="padding: 8px 0; text-align: right;">
-                          <span style="color: #111827; font-size: 14px; font-weight: 600;">${invoice.invoice_number}</span>
+                          <span style="color: #111827; font-size: 14px; font-weight: 600;">${escapeHtml(invoice.invoice_number)}</span>
                         </td>
                       </tr>
                       <tr>
@@ -179,7 +181,7 @@ function generateReminderEmail(invoice: any, reminderType: string, locale: Recip
               ${invoice.payment_instructions ? `
               <div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; padding: 15px 20px; margin-bottom: 30px; border-radius: 0 8px 8px 0;">
                 <p style="margin: 0 0 5px; color: #166534; font-size: 14px; font-weight: 600;">${t('paymentInstructions')}</p>
-                <p style="margin: 0; color: #15803d; font-size: 14px; line-height: 1.5;">${invoice.payment_instructions}</p>
+                <p style="margin: 0; color: #15803d; font-size: 14px; line-height: 1.5; white-space: pre-line;">${escapeHtml(invoice.payment_instructions)}</p>
               </div>
               ` : ''}
 
@@ -189,7 +191,7 @@ function generateReminderEmail(invoice: any, reminderType: string, locale: Recip
 
               <p style="margin: 30px 0 0; color: #374151; font-size: 16px; line-height: 1.6;">
                 ${t('regards')}${brand.name ? `<br>
-                <strong>${t('team', { company: brand.name })}</strong>` : ''}
+                <strong>${t('team', { company: escapeHtml(brand.name) })}</strong>` : ''}
               </p>
             </td>
           </tr>
@@ -241,7 +243,8 @@ export async function GET(request: NextRequest) {
       .from('invoices')
       .select('*')
       .eq('org_id', orgId)
-      .not('status', 'in', '("paid","cancelled")')
+      .in('status', [...REMINDABLE_INVOICE_STATUSES])
+      .not('due_date', 'is', null)
       .gt('balance_due', 0)
       .eq('reminder_paused', false)
       .or(`next_reminder_date.lte.${today},next_reminder_date.is.null`)
@@ -307,7 +310,8 @@ export async function POST(request: NextRequest) {
       .from('invoices')
       .select('*')
       .eq('org_id', orgId)
-      .not('status', 'in', '("paid","cancelled")')
+      .in('status', [...REMINDABLE_INVOICE_STATUSES])
+      .not('due_date', 'is', null)
       .gt('balance_due', 0)
       .eq('reminder_paused', false)
       .not('client_email', 'is', null)

@@ -1,3 +1,5 @@
+import { escapeHtml } from '@/lib/html-escape'
+import { reminderBlocker } from '@/lib/invoices/reminder-schedule'
 import { NextRequest, NextResponse } from 'next/server'
 import { businessIdentity, htmlIdentity, orgIdentity, type OrgIdentity } from '@/lib/org-identity'
 import { clientMessage } from '@/lib/api-errors'
@@ -62,7 +64,7 @@ function generateReminderEmail(invoice: any, reminderType: string, identity: Org
           <tr>
             <td style="padding: 40px;">
               <p style="margin: 0 0 20px; color: #374151; font-size: 16px;">
-                Dear ${invoice.client_name},
+                Dear ${escapeHtml(invoice.client_name)},
               </p>
               
               <p style="margin: 0 0 30px; color: #374151; font-size: 16px;">
@@ -75,7 +77,7 @@ function generateReminderEmail(invoice: any, reminderType: string, identity: Org
                     <table width="100%" cellpadding="0" cellspacing="0">
                       <tr>
                         <td style="padding: 8px 0;"><span style="color: #6b7280; font-size: 14px;">Invoice Number:</span></td>
-                        <td style="padding: 8px 0; text-align: right;"><span style="color: #111827; font-size: 14px; font-weight: 600;">${invoice.invoice_number}</span></td>
+                        <td style="padding: 8px 0; text-align: right;"><span style="color: #111827; font-size: 14px; font-weight: 600;">${escapeHtml(invoice.invoice_number)}</span></td>
                       </tr>
                       <tr>
                         <td style="padding: 8px 0;"><span style="color: #6b7280; font-size: 14px;">Due Date:</span></td>
@@ -107,7 +109,7 @@ function generateReminderEmail(invoice: any, reminderType: string, identity: Org
               ${invoice.payment_instructions ? `
               <div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; padding: 15px 20px; margin-bottom: 30px;">
                 <p style="margin: 0 0 5px; color: #166534; font-size: 14px; font-weight: 600;">Payment Instructions</p>
-                <p style="margin: 0; color: #15803d; font-size: 14px;">${invoice.payment_instructions}</p>
+                <p style="margin: 0; color: #15803d; font-size: 14px; white-space: pre-line;">${escapeHtml(invoice.payment_instructions)}</p>
               </div>
               ` : ''}
               
@@ -175,6 +177,13 @@ export async function POST(
         { success: false, error: 'Invoice has no balance due' },
         { status: 400 }
       )
+    }
+
+    // A draft was never sent to the client; with no due date the reminder
+    // would compute from new Date(null) — 1 January 1970.
+    const blocked = reminderBlocker(invoice)
+    if (blocked) {
+      return NextResponse.json({ success: false, error: blocked }, { status: 400 })
     }
 
     const { subject, html } = generateReminderEmail(invoice, 'manual', await orgIdentity(orgId))
