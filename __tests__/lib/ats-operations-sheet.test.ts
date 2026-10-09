@@ -374,3 +374,35 @@ describe('applyDayLanguageVersions', () => {
     expect(src).toMatch(/days:\s*translatedDays/)
   })
 })
+
+describe('cruise nights on the operations sheet', () => {
+  // Cruise days saved by the itinerary builder: a night on board is
+  // is_cruise_day with hotel_included false. They were not counted at all.
+  const base = DAYS[0]
+  const days: SourceDay[] = [
+    { ...base, day_number: 1, date: '2026-10-04', city: 'Cairo', overnight_city: 'Cairo', hotel_included: true },
+    { ...base, day_number: 2, date: '2026-10-05', city: 'Luxor', overnight_city: 'Luxor', hotel_included: false, is_cruise_day: true, hotel_check_in: null },
+    { ...base, day_number: 3, date: '2026-10-06', city: 'Edfu', overnight_city: 'Edfu', hotel_included: false, is_cruise_day: true, hotel_check_in: null },
+    { ...base, day_number: 4, date: '2026-10-07', city: 'Aswan', overnight_city: 'Aswan', hotel_included: false, is_cruise_day: true, hotel_check_in: null },
+    { ...base, day_number: 5, date: '2026-10-08', city: 'Aswan', overnight_city: 'Aswan', hotel_included: true, hotel_check_in: null },
+    { ...base, day_number: 6, date: '2026-10-09', city: 'Cairo', overnight_city: null, hotel_included: false, hotel_check_in: null },
+  ]
+  const sheet = assembleOperationsSheet({ itinerary: ITINERARY, days })
+
+  it('counts nights on board', () => {
+    expect(sheet.nights).toBe(5)
+  })
+
+  it('books the sailing as one stay, apart from the hotel night after it in the same city', () => {
+    expect(sheet.hotels.map(h => [h.city, h.hotel, h.nights])).toEqual([
+      ['CAI', null, 1],
+      [cityCode('Luxor'), 'Cruise', 3],
+      [cityCode('Aswan'), null, 1],
+    ])
+  })
+
+  it('gives breakfast the morning after a night on board, and codes the port', () => {
+    expect(sheet.days.map(d => d.meals.breakfast)).toEqual([false, true, true, true, true, true])
+    expect(sheet.days[2].accommodation_code).toBe(cityCode('Edfu'))
+  })
+})

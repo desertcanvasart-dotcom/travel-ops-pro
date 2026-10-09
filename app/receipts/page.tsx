@@ -198,17 +198,13 @@ export default function ReceiptsPage() {
     setSendingId(payment.id)
     
     try {
-      // For itinerary payments, use the send-receipt API
-      // For invoice payments, use the invoice's send functionality
-      const endpoint = payment.source === 'itinerary' 
-        ? '/api/whatsapp/send-receipt'
-        : '/api/whatsapp/send-invoice'
-      
+      // A receipt for both kinds of payment: invoice payments were sent the
+      // invoice itself (with its balance due) and a draft one marked 'sent'.
       const body = payment.source === 'itinerary'
         ? { paymentId: payment.id }
-        : { invoiceId: payment.source_id }
+        : { invoicePaymentId: payment.id }
 
-      const response = await fetch(endpoint, {
+      const response = await fetch('/api/whatsapp/send-receipt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { quoteInOrg, quoteNotFound } from '@/lib/b2b/quote-scope'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,6 +15,10 @@ export async function GET(
 ) {
   try {
     const { id, lang } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    // TENANT BOUNDARY — see lib/b2b/quote-scope.ts (service-role client, id from the URL).
+    if (!(await quoteInOrg(supabaseAdmin, id, orgId))) return quoteNotFound()
 
     if (!['en', 'ja'].includes(lang)) {
       return NextResponse.json(
@@ -61,6 +67,10 @@ export async function PUT(
 ) {
   try {
     const { id, lang } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    // TENANT BOUNDARY — see lib/b2b/quote-scope.ts (service-role client, id from the URL).
+    if (!(await quoteInOrg(supabaseAdmin, id, orgId))) return quoteNotFound()
     const body = await request.json()
 
     if (!['en', 'ja'].includes(lang)) {
@@ -121,6 +131,10 @@ export async function DELETE(
 ) {
   try {
     const { id, lang } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    // TENANT BOUNDARY — see lib/b2b/quote-scope.ts (service-role client, id from the URL).
+    if (!(await quoteInOrg(supabaseAdmin, id, orgId))) return quoteNotFound()
 
     if (!['en', 'ja'].includes(lang)) {
       return NextResponse.json(

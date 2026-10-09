@@ -7,7 +7,8 @@ import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { allowsIncomplete } from '@/lib/pricing/quote-completeness'
 import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
 import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
-import { currencySymbol } from '@/lib/currency-totals'
+import { formatMoney } from '@/lib/currency-totals'
+import { partnerSingleSupplement } from '@/lib/b2b/partner-prices'
 import { escapeHtml as esc } from '@/lib/html-escape'
 import { businessIdentity, identityFromOrg, mergeIdentity, monogram, type OrgIdentity } from '@/lib/org-identity'
 
@@ -40,7 +41,13 @@ function formatDate(dateStr: string, locale: 'en' | 'ja', tbd: string, format: '
  *  already knows which organization it is acting for. */
 async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record<string, string>, operator: OrgIdentity): Promise<string> {
   // Every amount on the PDF is in the quote's own currency (the org's rate currency since #148).
-  const sym = currencySymbol(quote.currency || 'EUR')
+  // Money in its currency's decimals and separators: "¥1234567.00" was how a
+  // yen quote read.
+  const money = (n: unknown) => formatMoney(Number(n) || 0, quote.currency || 'EUR')
+  // The tour leader's cost is already inside the price (shown as included,
+  // never its net amount); the supplement is stored at net cost, so the
+  // partner is quoted it with the quote's margin (lib/b2b/partner-prices).
+  const supplement = partnerSingleSupplement(quote)
   const tag = locale === 'ja' ? 'ja-JP' : 'en-US'
   const today = new Date().toLocaleDateString(tag, { year: 'numeric', month: 'short', day: 'numeric' })
   const template = quote.tour_variations?.tour_templates
@@ -496,7 +503,7 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
           📅 ${labels.daysNights.replace('{days}', String(template?.duration_days || quote.itineraries?.total_days || '-')).replace('{nights}', String(template?.duration_nights || (quote.itineraries?.total_days ? quote.itineraries.total_days - 1 : '-')))}
         </div>
         <div class="tour-meta-item">
-          👥 ${(quote.tour_leader_included ? labels.paxWithLeader : labels.paxLabel).replace('{pax}', String(quote.num_adults))}
+          👥 ${(quote.tour_leader_included ? labels.paxWithLeader : labels.paxLabel).replace('{pax}', String((Number(quote.num_adults) || 0) + (Number(quote.num_children) || 0)))}
         </div>
         <div class="tour-meta-item">
           🗓️ ${quote.travel_date ? formatDate(quote.travel_date, locale, tbd, 'short') : tbd}
@@ -507,7 +514,10 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
       </div>
     </div>
 
-    <!-- Services Breakdown -->
+    <!-- Services included. What the partner is buying, never what it costs
+         us: this printed each service's cost, then "Subtotal (Cost)" and
+         "Margin (25%)" above the total — the operator's cost structure and
+         markup on a document handed to the partner. -->
     ${services.length > 0 ? `
     <div class="section-header">${labels.servicesIncluded}</div>
     <div class="pricing-section">
@@ -516,63 +526,43 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
           <tr>
             <th>${labels.tableService}</th>
             <th>${labels.tableQty}</th>
-            <th>${labels.tableRate}</th>
-            <th>${labels.tableTotal}</th>
           </tr>
         </thead>
         <tbody>
-          ${services.slice(0, 20).map((service: any) => `
+          ${services.map((service: any) => `
             <tr>
               <td>${esc(service.service_name || labels.fallbackService)}</td>
               <td>${service.quantity || 1}</td>
-              <td>${sym}${(service.unit_cost || 0).toFixed(2)}</td>
-              <td><strong>${sym}${(service.line_total || 0).toFixed(2)}</strong></td>
             </tr>
           `).join('')}
-          ${services.length > 20 ? `
-            <tr>
-              <td colspan="4" style="text-align: center; color: #6b7280; font-style: italic;">
-                ... ${services.length - 20}+
-              </td>
-            </tr>
-          ` : ''}
         </tbody>
       </table>
     </div>
     ` : ''}
 
-    <!-- Pricing Summary -->
+    <!-- Pricing Summary: the price only. -->
     <div class="section-header">${labels.pricingSummary}</div>
     <div class="totals-section">
-      <div class="totals-row">
-        <span>${labels.subtotalCost}</span>
-        <span>${sym}${(quote.total_cost || 0).toFixed(2)}</span>
-      </div>
-      <div class="totals-row">
-        <span>${labels.marginPercent.replace('{percent}', String(quote.margin_percent || 0))}</span>
-        <span>${sym}${(quote.margin_amount || 0).toFixed(2)}</span>
-      </div>
       <div class="totals-row highlight">
         <span class="label">${labels.tableTotal.toUpperCase()}</span>
-        <span class="value">${sym}${(quote.selling_price || 0).toFixed(2)}</span>
+        <span class="value">${money(quote.selling_price)}</span>
       </div>
     </div>
 
     <div class="per-person-note">
-      ${labels.tableRate}: <strong>${sym}${(quote.price_per_person || 0).toFixed(2)}</strong>
+      ${labels.tableRate}: <strong>${money(quote.price_per_person)}</strong>
     </div>
 
-    ${quote.tour_leader_included && quote.tour_leader_cost ? `
+    ${quote.tour_leader_included ? `
     <div class="tour-leader-badge">
       <span class="label">${labels.tourLeaderIncluded}</span>
-      <span class="value">${sym}${quote.tour_leader_cost.toFixed(2)}</span>
     </div>
     ` : ''}
 
-    ${quote.single_supplement && quote.single_supplement > 0 ? `
+    ${supplement > 0 ? `
     <div class="single-supplement">
       <span class="label">${labels.singleSupplement}</span>
-      <span class="value">${sym}${quote.single_supplement.toFixed(2)}</span>
+      <span class="value">${money(supplement)}</span>
     </div>
     ` : ''}
     
@@ -729,7 +719,7 @@ export async function GET(
       'directClient', 'client', 'clientTBC', 'tourPackage', 'customTourWhatsApp',
       'daysNights', 'paxLabel', 'paxWithLeader', 'tbd', 'seasonSuffix',
       'servicesIncluded', 'tableService', 'tableQty', 'tableRate', 'tableTotal',
-      'fallbackService', 'pricingSummary', 'subtotalCost', 'marginPercent',
+      'fallbackService', 'pricingSummary',
       'tourLeaderIncluded', 'singleSupplement', 'notes', 'termsConditions',
       'paymentTerms', 'paymentDeposit', 'paymentBalance', 'paymentMethods',
       'cancellationPolicy', 'cancelGenerous', 'cancelMedium', 'cancelShort',

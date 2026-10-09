@@ -30,6 +30,8 @@ export interface SourceDay {
   lunch_included: boolean | null
   dinner_included: boolean | null
   hotel_included: boolean | null
+  /** A night on board: a cruise day is a night slept, though not in a hotel. */
+  is_cruise_day?: boolean | null
   flight_from: string | null
   hotel_check_in: string | null
   hotel_check_out: string | null
@@ -147,6 +149,16 @@ function dayLines(day: SourceDay): string[] {
   return lines
 }
 
+/** A night slept on this day — in a hotel or on a cruise. Cruise nights were
+ *  missed: the sheet said "NO. OF NTS 4" for a seven-night trip with three on
+ *  board, with no cruise in the hotel block and no breakfast after it. */
+function sleptAboard(day: SourceDay | undefined): boolean {
+  return Boolean(day?.is_cruise_day)
+}
+function sleptNight(day: SourceDay | undefined): boolean {
+  return Boolean(day?.hotel_included) || sleptAboard(day)
+}
+
 export function assembleOperationsSheet(input: AssembleInput): OperationsSheetContext {
   const { itinerary, days, overrides = {} } = input
   const ordered = [...days].sort((a, b) => (a.day_number ?? 0) - (b.day_number ?? 0))
@@ -164,11 +176,13 @@ export function assembleOperationsSheet(input: AssembleInput): OperationsSheetCo
         // itinerary_days has no breakfast column because breakfast is not
         // arranged, it is a consequence: you get one if you slept somewhere
         // last night. The first ground day therefore has none.
-        breakfast: Boolean(previous?.hotel_included),
+        breakfast: sleptNight(previous),
         lunch: Boolean(day.lunch_included),
         dinner: Boolean(day.dinner_included),
       },
-      accommodation_code: day.hotel_included
+      // The port the night is spent at — on board or ashore — as the sheet
+      // the operator sends codes it.
+      accommodation_code: sleptNight(day)
         ? cityCode(day.overnight_city ?? day.city)
         : null,
     }
@@ -207,7 +221,7 @@ export function assembleOperationsSheet(input: AssembleInput): OperationsSheetCo
 }
 
 function countNights(days: SourceDay[]): number | null {
-  const nights = days.filter(d => d.hotel_included).length
+  const nights = days.filter(sleptNight).length
   return nights || null
 }
 
@@ -215,20 +229,25 @@ function countNights(days: SourceDay[]): number | null {
 function deriveHotels(days: SourceDay[]): OperationsSheetHotel[] {
   const stays: OperationsSheetHotel[] = []
 
+  let lastWasCruise = false
   for (const day of days) {
-    if (!day.hotel_included) continue
+    if (!sleptNight(day)) continue
+    const cruise = sleptAboard(day)
     const code = cityCode(day.overnight_city ?? day.city)
     const last = stays[stays.length - 1]
 
-    if (last && last.city === code) {
+    // A sailing is one stay whatever port it is moored at; a hotel night
+    // after it (same city) is a new stay, not the cruise's.
+    if (last && lastWasCruise === cruise && (cruise || last.city === code)) {
       last.nights = (last.nights ?? 0) + 1
       last.check_out = day.hotel_check_out ?? last.check_out
       continue
     }
 
+    lastWasCruise = cruise
     stays.push({
       city: code,
-      hotel: null,
+      hotel: cruise ? 'Cruise' : null,
       check_in: day.hotel_check_in ?? day.date,
       check_out: day.hotel_check_out ?? null,
       nights: 1,

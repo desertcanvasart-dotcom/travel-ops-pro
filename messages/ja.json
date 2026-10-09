@@ -1502,7 +1502,7 @@
       "pricingSummary": "料金概要",
       "subtotalCost": "小計（原価）",
       "marginPercent": "マージン（{percent}%）",
-      "tourLeaderIncluded": "ツアーリーダー費用（合計に含む）",
+      "tourLeaderIncluded": "ツアーリーダー費用は料金に含まれます",
       "singleSupplement": "シングルサプリメント（一人参加用）",
       "notes": "備考",
       "termsConditions": "利用規約",
