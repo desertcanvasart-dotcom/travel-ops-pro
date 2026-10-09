@@ -168,7 +168,7 @@ export default function QuoteDetailPage() {
     // No travel date: ask for the trip's first day. The itinerary was dated
     // TODAY, so its vouchers, deposit and balance dates were all invented.
     let startDate: string | undefined
-    if (!quote.travel_date) {
+    if (!quote.travel_date && !quote.itinerary_id) {
       const entered = prompt(t('convertNeedsDate'))?.trim()
       if (!entered) return
       if (!/^\d{4}-\d{2}-\d{2}$/.test(entered)) { alert(t('convertNeedsDate')); return }

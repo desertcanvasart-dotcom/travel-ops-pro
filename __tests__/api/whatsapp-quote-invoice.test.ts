@@ -118,7 +118,7 @@ describe('the B2B quote PDF', () => {
   const code = readFileSync(join(process.cwd(), 'app/api/b2b/quotes/[id]/pdf/route.ts'), 'utf8')
 
   it('escapes the tour banner fields', () => {
-    expect(code).toContain('${esc(version?.title || template?.template_name || quote.trip_name || labels.tourPackage)}')
+    expect(code).toContain('${esc(versionTitle || template?.template_name || quote.trip_name || labels.tourPackage)}')
     expect(code).toContain('${esc(variation?.variation_name ||')
   })
 

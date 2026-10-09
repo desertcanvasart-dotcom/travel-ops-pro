@@ -9,19 +9,26 @@ import { roundToCurrency } from '@/lib/currency-totals'
 const src = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
 
 describe('voucherMoney', () => {
-  it("states a supplier's own currency and cost when every line carries it", () => {
+  it("states a supplier's own currency and cost while it agrees with the line's total", () => {
     const m = voucherMoney([
-      { total_cost: 45000, supplier_currency: 'EGP', supplier_cost_original: 15000 },
-      { total_cost: 3000, supplier_currency: 'egp', supplier_cost_original: 1000 },
+      { total_cost: 45000, supplier_currency: 'EGP', supplier_cost_original: 15000, exchange_rate_used: 3 },
+      { total_cost: 3000, supplier_currency: 'egp', supplier_cost_original: 1000, exchange_rate_used: 3 },
     ], 'JPY')
     expect(m).toEqual({ currency: 'EGP', total: 16000, lineAmounts: [15000, 1000] })
   })
-  it("stays in the trip's currency when the lines mix currencies or lack the original", () => {
+  it('never states a stale original: a line edited after it was priced uses its current total', () => {
+    // Created at 2 rooms (EGP 15,000 = ¥45,000); edited to 3 rooms (¥67,500).
+    const m = voucherMoney([{ total_cost: 67500, supplier_currency: 'EGP', supplier_cost_original: 15000, exchange_rate_used: 3 }], 'JPY')
+    expect(m).toEqual({ currency: 'JPY', total: 67500, lineAmounts: [67500] })
+  })
+  it("stays in the trip's currency when the lines mix currencies, lack the original, or are already in it", () => {
     expect(voucherMoney([
-      { total_cost: 100, supplier_currency: 'EGP', supplier_cost_original: 3000 },
-      { total_cost: 50, supplier_currency: 'USD', supplier_cost_original: 55 },
+      { total_cost: 100, supplier_currency: 'EGP', supplier_cost_original: 3000, exchange_rate_used: 1 / 30 },
+      { total_cost: 50, supplier_currency: 'USD', supplier_cost_original: 55, exchange_rate_used: 50 / 55 },
     ], 'EUR')).toEqual({ currency: 'EUR', total: 150, lineAmounts: [100, 50] })
     expect(voucherMoney([{ total_cost: 80, supplier_currency: null, supplier_cost_original: null }], 'EUR').currency).toBe('EUR')
+    // Same currency as the trip: total_cost, even if the stored original is stale.
+    expect(voucherMoney([{ total_cost: 90, supplier_currency: 'EUR', supplier_cost_original: 60, exchange_rate_used: 1 }], 'EUR').total).toBe(90)
   })
 })
 
@@ -65,8 +72,10 @@ describe('partner quote PDF terms', () => {
       expect(pdf).not.toContain(fixed)
     }
   })
-  it("uses the quote's language version", () => {
+  it("uses the quote's language version, but not its placeholder title", () => {
     expect(pdf).toContain(".from('quote_versions')")
+    expect(pdf).toContain('t.includes(String(quote.quote_number))')
+    expect(pdf).toContain('labels.specialRequests')
   })
 })
 

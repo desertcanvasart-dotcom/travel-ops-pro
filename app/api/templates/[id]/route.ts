@@ -78,11 +78,24 @@ export async function PUT(
       return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 })
     }
 
-    const { data, error } = access === 'own'
+    // A default this org already copied: edit that copy, never a second one.
+    const { data: existingCopy } = access === 'shared'
+      ? await supabase
+          .from('message_templates')
+          .select('id')
+          .eq('org_id', orgId)
+          .eq('source_template_id', id)
+          .eq('is_active', true)
+          .limit(1)
+          .maybeSingle()
+      : { data: null }
+    const ownId = access === 'own' ? id : existingCopy?.id ?? null
+
+    const { data, error } = ownId
       ? await supabase
           .from('message_templates')
           .update(updateData)
-          .eq('id', id)
+          .eq('id', ownId)
           .eq('org_id', orgId)
           .select()
           .single()
@@ -107,6 +120,9 @@ export async function PUT(
           .select()
           .single()
 
+    if (error?.code === '23505') {
+      return NextResponse.json({ success: false, error: 'Your organization already has a template with this name, channel and language' }, { status: 409 })
+    }
     if (error) {
       console.error('Error updating template:', error)
       return NextResponse.json({ success: false, error: 'Failed to update template' }, { status: 500 })

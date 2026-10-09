@@ -85,17 +85,6 @@ export async function POST(
       )
     }
 
-    // The trip's own first day: the quote's travel date, else the one the
-    // operator gave. Never today — that dated the itinerary, its vouchers and
-    // its payment schedule from the moment of conversion.
-    const startIso = (typeof quote.travel_date === 'string' && quote.travel_date)
-      || (typeof body.start_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.start_date) ? body.start_date : null)
-    if (!startIso) {
-      return NextResponse.json(
-        { error: 'This quote has no travel date. Give the trip\'s first day (start_date) to convert it.' },
-        { status: 400 }
-      )
-    }
 
     // Output gate (harness Layer 2): don't convert a quote with a non-deliverable
     // price into a "quoted" itinerary that then flows to PDFs/invoices.
@@ -183,6 +172,17 @@ export async function POST(
     // ============================================
     // PATH B: Template-based quote (create new itinerary)
     // ============================================
+    // PATH B builds the itinerary, so it needs the trip's own first day: the quote's travel date, else the one the
+    // operator gave. Never today — that dated the itinerary, its vouchers and
+    // its payment schedule from the moment of conversion.
+    const startIso = (typeof quote.travel_date === 'string' && quote.travel_date)
+      || (typeof body.start_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.start_date) ? body.start_date : null)
+    if (!startIso) {
+      return NextResponse.json(
+        { error: 'This quote has no travel date. Give the trip\'s first day (start_date) to convert it.' },
+        { status: 400 }
+      )
+    }
     const template = quote.tour_variations?.tour_templates
     const variation = quote.tour_variations
 
