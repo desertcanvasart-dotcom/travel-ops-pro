@@ -747,9 +747,13 @@ async function renderPdf(html: string): Promise<Uint8Array> {
     await page.setRequestInterception(true)
     page.on('request', request => {
       // The document itself is the HTML we just built and is served from
-      // memory by setContent — never a network fetch.
+      // memory by setContent — never a network fetch — so no main-frame
+      // navigation is let through on that account (a <meta refresh> in the
+      // markup would otherwise load whatever URL it named).
       if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
-        void request.continue()
+        const scheme = request.url().split(':', 1)[0]
+        if (scheme === 'about' || scheme === 'data') void request.continue()
+        else void request.abort()
         return
       }
       let host = ''
