@@ -6,6 +6,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { statusAfterMessage } from '@/lib/whatsapp-status-after-message'
 import { reminderBlocker, REMINDABLE_INVOICE_STATUSES } from '@/lib/invoices/reminder-schedule'
+import { formatMoney } from '@/lib/currency-totals'
 
 describe('a WhatsApp status message and the trip’s status', () => {
   it('a payment reminder or a payment thank-you leaves the trip as it is', () => {
@@ -16,6 +17,13 @@ describe('a WhatsApp status message and the trip’s status', () => {
     expect(statusAfterMessage('draft', 'confirmed')).toBe('confirmed')
     expect(statusAfterMessage('confirmed', 'completed')).toBe('completed')
     expect(statusAfterMessage('cancelled', 'confirmed')).toBeNull()
+  })
+})
+
+describe('money in client messages', () => {
+  it('yen has no decimals and has separators — "JPY 450000.00" was how a confirmation read', () => {
+    expect(formatMoney(450000, 'JPY')).not.toContain('.00')
+    expect(formatMoney(450000, 'JPY')).toContain('450,000')
   })
 })
 

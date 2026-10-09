@@ -68,3 +68,22 @@ describe('supplier voucher PDF', () => {
     expect(out).not.toContain('Ahmed Saleh')
   })
 })
+
+describe('a long voucher', () => {
+  it('prints every special request, and its total and signatures stay on a page', async () => {
+    const requests = Array.from({ length: 12 }, (_, i) => `Request line ${i + 1}: something the supplier must know`)
+    const pdf = await generateSupplierDocumentPDF({
+      ...base,
+      document_type: 'cruise_voucher',
+      services: Array.from({ length: 18 }, (_, i) => ({ service_name: `Night ${i + 1}`, date: `2026-11-${String(i + 1).padStart(2, '0')}`, quantity: 1, total_cost: 10 })),
+      special_requests: requests.join('\n'),
+    } as never)
+    const out = pdf.output()
+    for (const r of requests) expect(out).toContain(r)
+    // Every text line sits above the footer bar (pageHeight - 20 on A4 = 277mm).
+    const pageHeightPt = 297 * 72 / 25.4
+    const ys = [...out.matchAll(/([\d.]+) ([\d.]+) Td/g)].map(m => pageHeightPt - Number(m[2]))
+    expect(Math.max(...ys) * 25.4 / 72).toBeLessThan(297)
+    expect(pdf.getNumberOfPages()).toBeGreaterThan(1)
+  })
+})

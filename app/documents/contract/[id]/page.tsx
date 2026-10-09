@@ -1,5 +1,6 @@
 'use client'
 
+import { formatMoney } from '@/lib/currency-totals'
 import { todayLocal } from '@/lib/today'
 import { useCompanyInfo } from '@/lib/use-company-info'
 import { useEffect, useState } from 'react'
@@ -431,7 +432,7 @@ Destinations: ${contractData.destinations}
 FINANCIAL TERMS
 
 Total Package Price: ${contractPrice(contractData.totalCost, currency)}${perPerson !== null ? `
-(${currency} ${perPerson.toFixed(2)} per person × ${contractData.numTravelers} travelers)` : ''}
+(${formatMoney(perPerson, currency)} per person × ${contractData.numTravelers} travelers)` : ''}
 
 Payment Terms:
 ${contractData.paymentTerms}

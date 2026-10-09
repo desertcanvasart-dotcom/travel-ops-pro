@@ -4,6 +4,7 @@
 // Twilio) and mark it 'sent'. Manager+ only. body: { send_via?: 'email'|'whatsapp' }
 // ============================================
 
+import { formatMoney } from '@/lib/currency-totals'
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
@@ -19,7 +20,7 @@ const supabaseAdmin = createClient(
 
 const money = (v: unknown, currency: string) => {
   const n = Number(v)
-  return `${currency} ${Number.isFinite(n) ? n.toFixed(2) : '0.00'}`
+  return formatMoney(Number.isFinite(n) ? n : 0, currency)
 }
 
 export async function POST(
@@ -93,9 +94,17 @@ export async function POST(
       }
     }
 
+    // Only a draft becomes 'sent'. Sending an accepted quote again (a copy
+    // for the client) demoted it to 'sent' and took away its Convert-to-
+    // booking card; the send itself is still recorded.
+    const statusNow = String(quote.status ?? '')
     await supabaseAdmin
       .from('b2c_quotes')
-      .update({ status: 'sent', sent_via: sendVia, sent_at: new Date().toISOString() })
+      .update({
+        ...(statusNow === 'draft' || statusNow === '' ? { status: 'sent' } : {}),
+        sent_via: sendVia,
+        sent_at: new Date().toISOString(),
+      })
       .eq('id', id)
       .eq('org_id', orgId)
 

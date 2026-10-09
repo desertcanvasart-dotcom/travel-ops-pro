@@ -147,6 +147,20 @@ describe('sending a voucher', () => {
     expect(html).toContain('&lt;b&gt;Hotel&lt;/b&gt;')
   })
 
+  it('a Japanese subject and file name are encoded, not sent raw (they arrived as mojibake)', async () => {
+    db.state.rows.supplier_documents = [{ ...row, supplier_name: 'カイロ交通', client_name: '山田 太郎' }]
+    db.state.rows.organization_members = [{ user_id: 'user-1' }]
+    db.state.rows.gmail_tokens = [{ user_id: 'user-1' }]
+    await sendEmail(req({ ...email, documentType: 'ホテルバウチャー' }) as never)
+    const raw = Buffer.from((gmailSend.mock.calls.at(-1) as any)[0].requestBody.raw, 'base64url').toString()
+    const subject = raw.match(/^Subject: (.*)$/m)![1]
+    expect(subject).toMatch(/^=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=$/)
+    expect(Buffer.from(subject.slice(10, -2), 'base64').toString('utf8')).toContain('ホテルバウチャー')
+    expect(raw).toContain(`filename*=UTF-8''`)
+    expect(raw).toContain(encodeURIComponent('カイロ交通'))
+    expect(raw.split('\r\n').filter(l => /^(Subject|Content-Disposition|Content-Type): /.test(l)).every(l => /^[\x00-\x7F]*$/.test(l))).toBe(true)
+  })
+
   it('sends to the voucher’s supplier, never an address the request names', async () => {
     db.state.rows.supplier_documents = [row]
     db.state.rows.organization_members = [{ user_id: 'user-1' }]

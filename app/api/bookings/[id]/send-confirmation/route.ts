@@ -7,6 +7,7 @@
 // body: { send_via?: 'email' | 'whatsapp' }
 // =====================================================
 
+import { formatMoney } from '@/lib/currency-totals'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
@@ -19,9 +20,11 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// The currency's own decimals and separators: "JPY 450000.00" was how a yen
+// booking confirmation read.
 const money = (v: unknown, currency: string) => {
   const n = Number(v)
-  return `${currency} ${Number.isFinite(n) ? n.toFixed(2) : '0.00'}`
+  return formatMoney(Number.isFinite(n) ? n : 0, currency)
 }
 const date = (v: unknown) => {
   if (!v) return 'TBC'

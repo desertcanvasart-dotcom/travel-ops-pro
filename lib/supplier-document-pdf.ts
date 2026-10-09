@@ -711,30 +711,58 @@ export async function generateSupplierDocumentPDF(
     y += 5
   }
 
+  // Content stops above the footer bar (drawn from pageHeight - 20). Only the
+  // item rows checked for room: special requests, the total box and the
+  // signature lines after a long table landed under the footer or off the
+  // A4 page.
+  const bottomLimit = pageHeight - 24
+  const newPage = () => {
+    pdf.addPage()
+    pdf.setFillColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
+    pdf.rect(0, 0, pageWidth, 4, 'F')
+    y = 15
+  }
+  const ensureSpace = (needed: number) => { if (y + needed > bottomLimit) newPage() }
+
   // ==================== SPECIAL REQUESTS ====================
   
   if (doc.special_requests) {
-    pdf.setFillColor(255, 250, 240)
-    pdf.setDrawColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
-    pdf.setLineWidth(0.5)
-    pdf.roundedRect(margin, y, contentWidth, 22, 3, 3, 'FD')
-    
-    pdf.setFontSize(7)
-    pdf.setFont(fontFamily, 'bold')
-    pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
-    pdf.text(labels.specialRequests, margin + 4, y + 5)
-    
+    // Every line, the box sized to the text and continued across pages. It
+    // printed three lines in a fixed box: a 7-night cruise's "Cabin:" line or
+    // a long guide booking's "Languages:" line never reached the supplier.
     pdf.setFontSize(9)
     pdf.setFont(fontFamily, 'normal')
-    pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
-    const requestLines = pdf.splitTextToSize(doc.special_requests, contentWidth - 8)
-    pdf.text(requestLines.slice(0, 3), margin + 4, y + 12)
-    
-    y += 28
+    const requestLines: string[] = pdf.splitTextToSize(doc.special_requests, contentWidth - 8)
+    const lineHeight = 4.2
+    let start = 0
+    while (start < requestLines.length) {
+      ensureSpace(12 + lineHeight * Math.min(3, requestLines.length - start))
+      const room = Math.max(1, Math.floor((bottomLimit - y - 12) / lineHeight))
+      const chunk = requestLines.slice(start, start + room)
+      const boxHeight = 10 + chunk.length * lineHeight
+      pdf.setFillColor(255, 250, 240)
+      pdf.setDrawColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
+      pdf.setLineWidth(0.5)
+      pdf.roundedRect(margin, y, contentWidth, boxHeight, 3, 3, 'FD')
+
+      pdf.setFontSize(7)
+      pdf.setFont(fontFamily, 'bold')
+      pdf.setTextColor(BRAND.primary.r, BRAND.primary.g, BRAND.primary.b)
+      pdf.text(labels.specialRequests, margin + 4, y + 5)
+
+      pdf.setFontSize(9)
+      pdf.setFont(fontFamily, 'normal')
+      pdf.setTextColor(BRAND.text.r, BRAND.text.g, BRAND.text.b)
+      pdf.text(chunk, margin + 4, y + 10.5, { lineHeightFactor: 1.32 })
+
+      y += boxHeight + 6
+      start += chunk.length
+    }
   }
 
   // ==================== TOTAL & PAYMENT ====================
   
+  ensureSpace(18)
   // Payment terms (left)
   const paymentBoxWidth = contentWidth * 0.55
   pdf.setFillColor(BRAND.background.r, BRAND.background.g, BRAND.background.b)
@@ -776,6 +804,7 @@ export async function generateSupplierDocumentPDF(
 
   // ==================== SIGNATURES ====================
   
+  ensureSpace(22)
   const sigWidth = (contentWidth - 20) / 2
   
   // Our signature
@@ -793,22 +822,24 @@ export async function generateSupplierDocumentPDF(
   pdf.text(labels.supplierConfirmationStamp, pageWidth - margin - sigWidth, y + 18)
 
   // ==================== FOOTER ====================
-  
+  // On every page (it was drawn on the last one only).
   const footerY = pageHeight - 12
-  
-  // Footer bar
-  pdf.setFillColor(BRAND.primaryLight.r, BRAND.primaryLight.g, BRAND.primaryLight.b)
-  pdf.rect(0, footerY - 8, pageWidth, 20, 'F')
-  
-  pdf.setFontSize(7)
-  pdf.setFont(fontFamily, 'normal')
-  pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
-  if (labels.footerContact) pdf.text(labels.footerContact, pageWidth / 2, footerY, { align: 'center' })
-  
-  pdf.setFontSize(6)
-  pdf.setTextColor(BRAND.textLight.r, BRAND.textLight.g, BRAND.textLight.b)
   const generatedAt = new Date().toLocaleString(locale === 'ja' ? 'ja-JP' : 'en-US')
-  pdf.text(`${labels.generatedOn(generatedAt)} | ${doc.document_number}`, pageWidth / 2, footerY + 5, { align: 'center' })
+  const pages = pdf.getNumberOfPages()
+  for (let p = 1; p <= pages; p++) {
+    pdf.setPage(p)
+    pdf.setFillColor(BRAND.primaryLight.r, BRAND.primaryLight.g, BRAND.primaryLight.b)
+    pdf.rect(0, footerY - 8, pageWidth, 20, 'F')
+
+    pdf.setFontSize(7)
+    pdf.setFont(fontFamily, 'normal')
+    pdf.setTextColor(BRAND.textMuted.r, BRAND.textMuted.g, BRAND.textMuted.b)
+    if (labels.footerContact) pdf.text(labels.footerContact, pageWidth / 2, footerY, { align: 'center' })
+
+    pdf.setFontSize(6)
+    pdf.setTextColor(BRAND.textLight.r, BRAND.textLight.g, BRAND.textLight.b)
+    pdf.text(`${labels.generatedOn(generatedAt)} | ${doc.document_number}${pages > 1 ? ` | ${p}/${pages}` : ''}`, pageWidth / 2, footerY + 5, { align: 'center' })
+  }
 
   return pdf
 }

@@ -2,6 +2,7 @@
 // API: SEND QUOTE VIA WHATSAPP
 // ============================================
 
+import { formatMoney } from '@/lib/currency-totals'
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
       (startDate ? `📅 *Dates:* ${startDate}${endDate ? ` - ${endDate}` : ''}\n` : '') +
       `👥 *Travelers:* ${itinerary.num_adults || 1} adult${(itinerary.num_adults || 1) > 1 ? 's' : ''}` +
       `${itinerary.num_children > 0 ? `, ${itinerary.num_children} child${itinerary.num_children > 1 ? 'ren' : ''}` : ''}\n` +
-      `💰 *Total Cost:* ${itinerary.currency || 'EUR'} ${Number(itinerary.total_cost || 0).toFixed(2)}\n\n` +
+      `💰 *Total Cost:* ${formatMoney(Number(itinerary.total_cost || 0), itinerary.currency || 'EUR')}\n\n` +
       // No fixed "What's Included" list: it promised a guide, entrance fees,
       // meals and pickups whatever the trip held.
       `💳 *Ready to Book?*\n` +
