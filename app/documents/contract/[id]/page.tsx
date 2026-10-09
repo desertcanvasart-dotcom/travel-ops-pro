@@ -13,6 +13,8 @@ import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import { BackLink, TripBreadcrumb } from '@/components/nav/TripNav'
 import { contractNumberFor, contractPrice, contractPricePerPerson, describeDestinations } from '@/lib/contract-facts'
+import type { ContractDocument, ContractTermsSection } from '@/lib/contract-document'
+import { japaneseFontData } from '@/lib/pdf-fonts'
 
 // The columns /api/itineraries/[id] actually returns. The prefill used to read
 // num_travelers, tour_name and parsed_data.duration — none of which exist on
@@ -108,7 +110,9 @@ export default function ContractPage() {
     // below. Blank until then, never another agency's name.
     serviceProvider: '',
     providerWebsite: '',
-    providerLocation: 'Cairo, Egypt',
+    // The operator's own address (Company profile), filled below — every
+    // contract placed the operator in "Cairo, Egypt".
+    providerLocation: '',
     clientName: '',
     clientEmail: '',
     numTravelers: 2,
@@ -118,8 +122,10 @@ export default function ContractPage() {
     duration: '',
     destinations: '',
     totalCost: 0,
-    depositPercentage: 10,
-    paymentTerms: 'A 10% deposit is required at the time of booking to secure the reservation. The remaining balance is to be paid in cash upon arrival in Egypt.',
+    // Replaced by the operator's own rule from Settings once it loads (below);
+    // 30% is the booking default it falls back to.
+    depositPercentage: 30,
+    paymentTerms: t('paymentTermsDefault', { percent: 30 }),
     inclusions: [
       t('defaultInclusions.privateTransport'),
       t('defaultInclusions.guiding'),
@@ -157,6 +163,7 @@ export default function ContractPage() {
       ...prev,
       serviceProvider: prev.serviceProvider || company.name || '',
       providerWebsite: prev.providerWebsite || company.website || '',
+      providerLocation: prev.providerLocation || company.address || '',
     }))
   }, [company])
 
@@ -177,9 +184,9 @@ export default function ContractPage() {
     { code: 'it', name: 'Italian', flag: '🇮🇹' },
     { code: 'pt', name: 'Portuguese', flag: '🇵🇹' },
     { code: 'ru', name: 'Russian', flag: '🇷🇺' },
-    { code: 'zh', name: 'Chinese', flag: '🇨🇳' },
     { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
-    { code: 'ko', name: 'Korean', flag: '🇰🇷' },
+    // No Chinese or Korean: the PDF's font (Noto Sans JP) has no Hangul and
+    // only part of simplified Chinese, so those contracts printed with gaps.
   ]
 
   useEffect(() => {
@@ -276,7 +283,84 @@ export default function ContractPage() {
   const currency = itinerary?.currency || 'USD'
   const perPerson = contractPricePerPerson(contractData.totalCost, contractData.numTravelers)
 
+  // The terms and conditions in the page's language, naming the operator's
+  // own governing law (Company profile) — they named Egyptian law and Cairo
+  // courts for everyone. One list for the page, the PDF and WhatsApp.
+  const law = company?.governingLaw?.trim() || ''
+  const who = contractData.serviceProvider
+  const termsSections: ContractTermsSection[] = [
+    { title: t('terms.bookingConfirmation.title'), text: [t('terms.bookingConfirmation.text', { serviceProvider: who })] },
+    { title: t('terms.travelDocuments.title'), text: [t('terms.travelDocuments.text')] },
+    { title: t('terms.healthAndSafety.title'), text: [t('terms.healthAndSafety.point1'), t('terms.healthAndSafety.point2'), t('terms.healthAndSafety.point3')] },
+    { title: t('terms.changesToItinerary.title'), text: [t('terms.changesToItinerary.text', { serviceProvider: who })] },
+    { title: t('terms.liabilityLimitations.title'), text: [t('terms.liabilityLimitations.text', { serviceProvider: who })] },
+    {
+      title: t('terms.disputeResolution.title'),
+      text: [law ? t('terms.disputeResolution.text', { law }) : t('terms.disputeResolution.textNoLaw', { serviceProvider: who })],
+    },
+    { title: t('terms.dataProtection.title'), text: [t('terms.dataProtection.text')] },
+  ]
+  const governingNote = law ? t('contractGovernedBy', { law }) : t('contractGovernedByDefault', { serviceProvider: who })
+  const cancellationLines = [
+    t('domesticTicketsNonRefundable'),
+    contractData.cancellation45Days,
+    contractData.cancellation44to30Days,
+    contractData.cancellation29to15Days,
+    contractData.cancellation14to0Days,
+    t('cancellationFeesAccommodationOnly'),
+  ].filter(l => l.trim())
+
+  // The contract exactly as this page shows it — edited, translated, in the
+  // page's language. The PDF printed none of this (a fixed "10% deposit…
+  // upon arrival", its own lists, no cancellation terms), and the WhatsApp
+  // send rebuilt the contract from the database.
+  const contractDocument: ContractDocument = {
+    labels: {
+      title: t('travelContract').toUpperCase(),
+      parties: t('parties'),
+      serviceProvider: t('serviceProvider'),
+      client: t('clients'),
+      travellers: t('numberOfTravelers'),
+      tourDetails: t('tourDetails'),
+      tour: t('tourPackage'),
+      destinations: t('destinations'),
+      financialTerms: t('financialTerms'),
+      totalPrice: t('totalPackagePrice'),
+      paymentTerms: t('paymentTerms'),
+      inclusions: t('whatsIncluded'),
+      exclusions: t('whatsNotIncluded'),
+      cancellationPolicy: t('cancellationPolicy'),
+      flightCancellation: t('flightCancellationPolicy'),
+      noShowPolicy: t('noShowPolicy'),
+      forceMajeure: t('forceMajeure'),
+      termsAndConditions: t('termsAndConditions'),
+      specialNotes: t('specialNotes'),
+      signatures: t('signatures'),
+      date: t('date'),
+    },
+    paymentTerms: contractData.paymentTerms,
+    inclusions: contractData.inclusions.filter(i => i.trim()),
+    exclusions: contractData.exclusions.filter(i => i.trim()),
+    cancellationIntro: t('cancellationChargesApply'),
+    cancellationLines,
+    flightCancellation: contractData.flightCancellation,
+    noShowPolicy: contractData.noShowPolicy,
+    forceMajeure: contractData.forceMajeure,
+    termsSections,
+    specialNotes: contractData.specialNotes,
+    governingNote,
+    tourName: contractData.tourPackage,
+    destinations: contractData.destinations,
+    totalCost: contractData.totalCost,
+  }
+
   const buildContractPDFData = () => ({
+    provider: {
+      name: contractData.serviceProvider,
+      website: contractData.providerWebsite,
+      email: company?.email,
+      location: contractData.providerLocation,
+    },
     contractNumber: contractData.contractNumber,
     contractDate: contractData.contractDate,
     clientName: contractData.clientName,
@@ -288,14 +372,15 @@ export default function ContractPage() {
     destinations: contractData.destinations,
     totalCost: contractData.totalCost,
     currency,
-    inclusions: contractData.inclusions,
-    exclusions: contractData.exclusions,
+    document: contractDocument,
   })
 
   const handlePreviewPDF = async () => {
     setSaving(true)
     try {
-      const pdfBytes = await generateContractPDF(buildContractPDFData())
+      // Noto Sans JP: the built-in fonts cannot draw a contract translated
+      // into Japanese or Russian.
+      const pdfBytes = await generateContractPDF(buildContractPDFData(), { font: await japaneseFontData() })
       const blob = new Blob([pdfBytes as BlobPart], { type: 'application/pdf' })
       setPdfPreviewBlob(blob)
       setShowPdfPreview(true)
@@ -382,7 +467,7 @@ ${contractData.specialNotes}
 
 ═══════════════════════════════════════════
 
-This contract is governed by the laws of Egypt.
+${governingNote}
 `
   }
 
@@ -418,6 +503,9 @@ This contract is governed by the laws of Egypt.
       ]
 
       const translatedFields: Partial<ContractData> = {}
+      // Items left in English because their translation failed: said, not
+      // reported as "Contract translated".
+      let failed = 0
 
       for (const field of fieldsToTranslate) {
         const response = await fetch('/api/translate', {
@@ -429,9 +517,11 @@ This contract is governed by the laws of Egypt.
             action: 'fromEnglish'
           })
         })
-        const data = await response.json()
-        if (data.success) {
+        const data = await response.json().catch(() => ({}))
+        if (response.ok && data.success) {
           translatedFields[field.key as keyof ContractData] = data.data.translatedText
+        } else {
+          failed++
         }
       }
 
@@ -443,8 +533,10 @@ This contract is governed by the laws of Egypt.
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: item, targetLanguage: langCode, action: 'fromEnglish' })
           })
-          const data = await response.json()
-          return data.success ? data.data.translatedText : item
+          const data = await response.json().catch(() => ({}))
+          if (response.ok && data.success) return data.data.translatedText
+          failed++
+          return item
         })
       )
 
@@ -456,8 +548,10 @@ This contract is governed by the laws of Egypt.
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: item, targetLanguage: langCode, action: 'fromEnglish' })
           })
-          const data = await response.json()
-          return data.success ? data.data.translatedText : item
+          const data = await response.json().catch(() => ({}))
+          if (response.ok && data.success) return data.data.translatedText
+          failed++
+          return item
         })
       )
 
@@ -469,7 +563,8 @@ This contract is governed by the laws of Egypt.
       }))
 
       const langName = SUPPORTED_LANGUAGES.find(l => l.code === langCode)?.name || langCode
-      dialog.alert(t('success'), `Contract translated to ${langName}`, 'success')
+      if (failed > 0) dialog.alert(t('error'), t('translatedPartly', { language: langName, failed }), 'warning')
+      else dialog.alert(t('success'), `Contract translated to ${langName}`, 'success')
     } catch (error) {
       console.error('Error translating contract:', error)
       dialog.alert(t('error'), 'Failed to translate contract', 'warning')
@@ -601,6 +696,7 @@ This contract is governed by the laws of Egypt.
               <WhatsAppButton
                 itineraryId={params.id as string}
                 type="contract"
+                contractDocument={contractDocument}
                 clientPhone={itinerary.client_phone}
                 clientName={itinerary.client_name}
                 onSuccess={() => {
@@ -1019,12 +1115,7 @@ This contract is governed by the laws of Egypt.
                   <h3 className="font-semibold text-gray-900 mb-1.5 text-sm">{t('standardCancellationPolicy')}</h3>
                   <div className="bg-gray-50 rounded-md p-3 space-y-1 text-xs text-gray-700">
                     <p>{t('cancellationChargesApply')}</p>
-                    <p>• {t('domesticTicketsNonRefundable')}</p>
-                    <p>• {contractData.cancellation45Days}</p>
-                    <p>• {contractData.cancellation44to30Days}</p>
-                    <p>• {contractData.cancellation29to15Days}</p>
-                    <p>• {contractData.cancellation14to0Days}</p>
-                    <p>• {t('cancellationFeesAccommodationOnly')}</p>
+                    {cancellationLines.map((l, i) => <p key={i}>• {l}</p>)}
                   </div>
                 </div>
 
@@ -1056,57 +1147,20 @@ This contract is governed by the laws of Egypt.
           <div>
             <h2 className="text-lg font-bold text-gray-900 mb-3">{t('termsAndConditions')}</h2>
 
+            {/* The same sections the PDF and WhatsApp copy print. */}
             <div className="space-y-3 text-xs">
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">{t('terms.bookingConfirmation.title')}</h3>
-                <p className="text-gray-700">
-                  {t('terms.bookingConfirmation.text', { serviceProvider: contractData.serviceProvider })}
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">{t('terms.travelDocuments.title')}</h3>
-                <p className="text-gray-700">
-                  {t('terms.travelDocuments.text')}
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">{t('terms.healthAndSafety.title')}</h3>
-                <div className="text-gray-700 space-y-0.5">
-                  <p>• {t('terms.healthAndSafety.point1')}</p>
-                  <p>• {t('terms.healthAndSafety.point2')}</p>
-                  <p>• {t('terms.healthAndSafety.point3')}</p>
+              {termsSections.map(section => (
+                <div key={section.title}>
+                  <h3 className="font-semibold text-gray-900 mb-1">{section.title}</h3>
+                  {section.text.length > 1 ? (
+                    <div className="text-gray-700 space-y-0.5">
+                      {section.text.map((line, i) => <p key={i}>• {line}</p>)}
+                    </div>
+                  ) : (
+                    <p className="text-gray-700">{section.text[0]}</p>
+                  )}
                 </div>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">{t('terms.changesToItinerary.title')}</h3>
-                <p className="text-gray-700">
-                  {t('terms.changesToItinerary.text', { serviceProvider: contractData.serviceProvider })}
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">{t('terms.liabilityLimitations.title')}</h3>
-                <p className="text-gray-700">
-                  {t('terms.liabilityLimitations.text', { serviceProvider: contractData.serviceProvider })}
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">{t('terms.disputeResolution.title')}</h3>
-                <p className="text-gray-700">
-                  {t('terms.disputeResolution.text')}
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-semibold text-gray-900 mb-1">{t('terms.dataProtection.title')}</h3>
-                <p className="text-gray-700">
-                  {t('terms.dataProtection.text')}
-                </p>
-              </div>
+              ))}
             </div>
           </div>
 
@@ -1164,7 +1218,7 @@ This contract is governed by the laws of Egypt.
               <p className="text-xs text-gray-700">{new Date(contractData.endDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} ({t('completionOfTourServices')})</p>
 
               <p className="text-xs text-gray-500 italic mt-5">
-                {t('contractGovernedByEgyptianLaw')}
+                {governingNote}
               </p>
             </div>
           </div>

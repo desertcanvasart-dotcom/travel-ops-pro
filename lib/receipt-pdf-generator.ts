@@ -34,6 +34,17 @@ export interface ReceiptBrand {
   footer?: string
 }
 
+/** The brand from the operator's Company profile (lib/company-info-client).
+ *  Both receipt pages called the generator without one, so every receipt
+ *  PDF went out with no company name on it. */
+export function receiptBrand(company: { name?: string; website?: string; email?: string; phone?: string } | undefined): ReceiptBrand {
+  if (!company) return {}
+  return {
+    name: company.name || undefined,
+    footer: [company.website, company.email, company.phone].filter(Boolean).join(' | ') || undefined,
+  }
+}
+
 export function generateReceiptPDF(
   receipt: ReceiptData,
   invoice: Invoice,

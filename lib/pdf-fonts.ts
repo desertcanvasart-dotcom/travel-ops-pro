@@ -76,3 +76,31 @@ export async function loadJapaneseFont(pdf: jsPDF): Promise<void> {
 export function pickFontFamily(_locale?: string): string {
   return JP_FONT_FAMILY
 }
+
+/**
+ * The same fonts as data, for generators that take a font option rather than
+ * a document (lib/contract-pdf-generator, lib/invoice-pdf-generator). Null if
+ * the files cannot be fetched: the document then falls back to helvetica
+ * rather than failing.
+ */
+export async function japaneseFontData(): Promise<{
+  family: string
+  files: Array<{ name: string; base64: string; weight: string }>
+} | null> {
+  try {
+    const [regular, bold] = await Promise.all([
+      fetchFontBase64(WEIGHTS.normal.file),
+      fetchFontBase64(WEIGHTS.bold.file),
+    ])
+    return {
+      family: JP_FONT_FAMILY,
+      files: [
+        { name: WEIGHTS.normal.vfs, base64: regular, weight: 'normal' },
+        { name: WEIGHTS.bold.vfs, base64: bold, weight: 'bold' },
+      ],
+    }
+  } catch (error) {
+    console.error('Japanese font unavailable, falling back to helvetica:', error)
+    return null
+  }
+}

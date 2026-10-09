@@ -8,6 +8,8 @@ import { generateContractPDF } from '@/lib/contract-pdf-generator'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { orgIdentity } from '@/lib/org-identity'
 import { contractNumberFor, contractPrice, describeDestinations } from '@/lib/contract-facts'
+import { sanitizeContractDocument } from '@/lib/contract-document'
+import { loadJapaneseFont } from '@/lib/pdf-fonts-node'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,6 +21,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { itineraryId } = body
+    // The contract as the page shows it (bounded, text only). The parties and
+    // the recipient still come from the database.
+    const contract = sanitizeContractDocument(body.contract)
 
     if (!itineraryId) {
       return NextResponse.json(
@@ -55,9 +60,13 @@ export async function POST(request: NextRequest) {
     console.log('📄 Generating contract PDF...')
     // No price yet = "To be confirmed": total_cost.toFixed threw here after
     // the PDF had already been uploaded.
-    const totalCost: number | null = typeof itinerary.total_cost === 'number' ? itinerary.total_cost : null
-    const tourName = itinerary.trip_name || 'Your tour'
+    const totalCost: number | null = contract.totalCost !== undefined
+      ? contract.totalCost
+      : typeof itinerary.total_cost === 'number' ? itinerary.total_cost : null
+    const tourName = contract.tourName?.trim() || itinerary.trip_name || 'Your tour'
+    const identity = await orgIdentity(orgId)
     const contractData = {
+      provider: { name: identity.name, website: identity.website, email: identity.email, location: identity.address },
       contractNumber: contractNumberFor(itinerary),
       contractDate: new Date().toISOString(),
       clientName: itinerary.client_name || 'Valued Guest',
@@ -67,14 +76,19 @@ export async function POST(request: NextRequest) {
       startDate: itinerary.start_date,
       endDate: itinerary.end_date,
       // The trip's own destinations — it printed "Cairo, Luxor, Aswan" for all.
-      destinations: describeDestinations(itinerary.destinations),
+      destinations: contract.destinations?.trim() || describeDestinations(itinerary.destinations),
       totalCost,
+      document: {
+        ...contract,
+        // Sent without the page (an older client): the trip's own lists.
+        inclusions: contract.inclusions ?? (itinerary.inclusions || undefined),
+        exclusions: contract.exclusions ?? (itinerary.exclusions || undefined),
+      },
       currency: itinerary.currency || 'EUR',
-      inclusions: itinerary.inclusions || undefined,
-      exclusions: itinerary.exclusions || undefined,
     }
 
-    const pdfBytes = await generateContractPDF(contractData)
+    // Noto Sans JP, so a contract translated into Japanese or Russian prints.
+    const pdfBytes = await generateContractPDF(contractData, { font: await loadJapaneseFont() })
     
     // Upload to Supabase Storage
     console.log('📤 Uploading PDF to storage...')
@@ -87,7 +101,6 @@ export async function POST(request: NextRequest) {
 
     // Build message
     // The org's own name and contacts (Settings), not one install-wide name.
-    const identity = await orgIdentity(orgId)
     const businessName = identity.name
 
     const message = (businessName ? `📄 *${businessName}* 📄\n\n` : '') +

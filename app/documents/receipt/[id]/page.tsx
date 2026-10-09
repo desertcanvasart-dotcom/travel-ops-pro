@@ -19,7 +19,7 @@ import {
   Phone,
   Eye
 } from 'lucide-react'
-import { generateReceiptPDF, downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
+import { generateReceiptPDF, downloadReceiptPDF, receiptBrand } from '@/lib/receipt-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import { BackLink } from '@/components/nav/TripNav'
@@ -102,7 +102,7 @@ export default function ReceiptPage() {
 
     setDownloading(true)
     try {
-      const doc = generateReceiptPDF(buildReceiptData(payment), buildInvoiceData(payment))
+      const doc = generateReceiptPDF(buildReceiptData(payment), buildInvoiceData(payment), receiptBrand(company))
       const blob = doc.output('blob')
       setPdfPreviewBlob(blob)
       setShowPdfPreview(true)
