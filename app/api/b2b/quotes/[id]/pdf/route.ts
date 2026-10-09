@@ -9,6 +9,7 @@ import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages
 import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
 import { formatMoney } from '@/lib/currency-totals'
 import { partnerSingleSupplement } from '@/lib/b2b/partner-prices'
+import { paymentRuleFrom, type PaymentRule } from '@/lib/payment-schedule'
 import { escapeHtml as esc } from '@/lib/html-escape'
 import { businessIdentity, identityFromOrg, mergeIdentity, monogram, type OrgIdentity } from '@/lib/org-identity'
 
@@ -39,7 +40,7 @@ function formatDate(dateStr: string, locale: 'en' | 'ja', tbd: string, format: '
 // @font-face — no system-font dependency, no CDN.
 /** Whose paper this is. Passed in rather than read here, because the route
  *  already knows which organization it is acting for. */
-async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record<string, string>, operator: OrgIdentity): Promise<string> {
+async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record<string, string>, operator: OrgIdentity, terms: PaymentRule): Promise<string> {
   // Every amount on the PDF is in the quote's own currency (the org's rate currency since #148).
   // Money in its currency's decimals and separators: "¥1234567.00" was how a
   // yen quote read.
@@ -48,6 +49,18 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
   // never its net amount); the supplement is stored at net cost, so the
   // partner is quoted it with the quote's margin (lib/b2b/partner-prices).
   const supplement = partnerSingleSupplement(quote)
+  // The quote's version in the PDF's language (the quote page's language tab):
+  // its title, notes, special requests and terms. The PDF printed the source
+  // language's text whatever language it was rendered in.
+  const version = (quote.language_version ?? null) as { title?: string | null; notes?: string | null; terms_conditions?: string | null; special_requests?: string | null } | null
+  const notes = version?.notes ?? quote.notes
+  // What the tour includes and excludes: the variation's own lists, else the
+  // safe generic lines (never a guide language or bottled water it may not have).
+  const listOf = (v: unknown) => (Array.isArray(v) ? v.map(x => String(x ?? '').trim()).filter(Boolean) : [])
+  const variationIncludes = listOf(quote.tour_variations?.inclusions)
+  const variationExcludes = listOf(quote.tour_variations?.exclusions)
+  const includes = variationIncludes.length ? variationIncludes : [labels.includesItinerary]
+  const excludes = variationExcludes.length ? variationExcludes : [labels.excludesFlights, labels.excludesInsurance]
   const tag = locale === 'ja' ? 'ja-JP' : 'en-US'
   const today = new Date().toLocaleDateString(tag, { year: 'numeric', month: 'short', day: 'numeric' })
   const template = quote.tour_variations?.tour_templates
@@ -496,7 +509,7 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
     
     <!-- Tour Banner -->
     <div class="tour-banner">
-      <h2>${esc(template?.template_name || quote.trip_name || labels.tourPackage)}</h2>
+      <h2>${esc(version?.title || template?.template_name || quote.trip_name || labels.tourPackage)}</h2>
       <p>${esc(variation?.variation_name || (quote.source === 'whatsapp_b2b' ? labels.customTourWhatsApp : ''))}</p>
       <div class="tour-meta">
         <div class="tour-meta-item">
@@ -567,44 +580,50 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
     ` : ''}
     
     <!-- Notes -->
-    ${quote.notes ? `
+    ${notes ? `
     <div class="notes-section">
       <h4>${labels.notes}</h4>
-      <p>${esc(quote.notes)}</p>
+      <p>${esc(notes)}</p>
     </div>
     ` : ''}
 
-    <!-- Terms -->
+    ${version?.special_requests ? `
+    <div class="notes-section">
+      <p>${esc(version.special_requests)}</p>
+    </div>
+    ` : ''}
+
+    ${version?.terms_conditions ? `
+    <div class="notes-section">
+      <h4>${labels.termsConditions}</h4>
+      <p>${esc(version.terms_conditions)}</p>
+    </div>
+    ` : ''}
+
+    <!-- Terms. The payment lines are the organisation's own rule (Settings →
+         Payment terms) and the inclusions the tour variation's own lists. It
+         printed a fixed 30% deposit / 14 days, a cancellation scale, the
+         payment methods and "English-speaking guide, bottled water" for every
+         organisation and every tour — a partner then saw a different deposit
+         on the booking confirmation. -->
     <div class="section-header">${labels.termsConditions}</div>
     <div class="terms-grid">
       <div class="terms-column">
         <h4>${labels.paymentTerms}</h4>
         <ul>
-          <li>${labels.paymentDeposit}</li>
-          <li>${labels.paymentBalance}</li>
-          <li>${labels.paymentMethods}</li>
-        </ul>
-        <h4 style="margin-top: 12px;">${labels.cancellationPolicy}</h4>
-        <ul>
-          <li>${labels.cancelGenerous}</li>
-          <li>${labels.cancelMedium}</li>
-          <li>${labels.cancelShort}</li>
+          <li>${labels.paymentDepositRule.replace('{percent}', String(terms.deposit_percent)).replace('{dueDays}', String(terms.deposit_due_days))}</li>
+          <li>${labels.paymentBalanceRule.replace('{beforeDays}', String(terms.balance_due_days_before_departure))}</li>
         </ul>
       </div>
       <div class="terms-column">
+        ${includes.length ? `
         <h4>${labels.priceIncludes}</h4>
-        <ul>
-          <li>${labels.includesItinerary}</li>
-          <li>${labels.includesGuide}</li>
-          <li>${labels.includesEntranceFees}</li>
-          <li>${labels.includesWater}</li>
-        </ul>
+        <ul>${includes.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
+        ` : ''}
+        ${excludes.length ? `
         <h4 style="margin-top: 12px;">${labels.notIncluded}</h4>
-        <ul>
-          <li>${labels.excludesFlights}</li>
-          <li>${labels.excludesPersonal}</li>
-          <li>${labels.excludesInsurance}</li>
-        </ul>
+        <ul>${excludes.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
+        ` : ''}
       </div>
     </div>
 
@@ -721,10 +740,8 @@ export async function GET(
       'servicesIncluded', 'tableService', 'tableQty', 'tableRate', 'tableTotal',
       'fallbackService', 'pricingSummary',
       'tourLeaderIncluded', 'singleSupplement', 'notes', 'termsConditions',
-      'paymentTerms', 'paymentDeposit', 'paymentBalance', 'paymentMethods',
-      'cancellationPolicy', 'cancelGenerous', 'cancelMedium', 'cancelShort',
-      'priceIncludes', 'includesItinerary', 'includesGuide', 'includesEntranceFees',
-      'includesWater', 'notIncluded', 'excludesFlights', 'excludesPersonal',
+      'paymentTerms', 'paymentDepositRule', 'paymentBalanceRule',
+      'priceIncludes', 'includesItinerary', 'notIncluded', 'excludesFlights',
       'excludesInsurance',
       // NOT here any more: brand, footerBrand, footerContact, footerTagline.
       // A company's name, phone number and tagline are not translations of
@@ -749,7 +766,19 @@ export async function GET(
       : businessIdentity()
 
     // Generate HTML
-    const html = await generateQuoteHTML(finalQuote, locale, labels, operator)
+    // The quote's own text in this language, when it has a version for it.
+    const { data: languageVersion } = await supabaseAdmin
+      .from('quote_versions')
+      .select('title, notes, terms_conditions, special_requests')
+      .eq('quote_id', id)
+      .eq('language', locale)
+      .maybeSingle()
+    finalQuote = { ...finalQuote, language_version: languageVersion ?? null }
+
+    // The organisation's payment rule (lib/payment-schedule), the one its
+    // invoices and booking confirmations follow.
+    const terms = paymentRuleFrom(orgRow as Record<string, unknown> | null)
+    const html = await generateQuoteHTML(finalQuote, locale, labels, operator, terms)
 
     // Launch Puppeteer
     const browser = await puppeteer.launch({

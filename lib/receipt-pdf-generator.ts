@@ -45,10 +45,17 @@ export function receiptBrand(company: { name?: string; website?: string; email?:
   }
 }
 
+/** Fonts to embed (lib/pdf-fonts japaneseFontData), as the invoice takes them. */
+export interface ReceiptFont {
+  family: string
+  files: Array<{ name: string; base64: string; weight: string }>
+}
+
 export function generateReceiptPDF(
   receipt: ReceiptData,
   invoice: Invoice,
   brand: ReceiptBrand = {},
+  font?: ReceiptFont | null,
 ): jsPDF {
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -56,13 +63,24 @@ export function generateReceiptPDF(
     format: 'a4'
   })
 
+  // Noto Sans JP, as on the invoice: Helvetica has no kanji, so a Japanese
+  // client name or note came out as mojibake on the customer's receipt.
+  let FONT = 'helvetica'
+  if (font) {
+    for (const file of font.files) {
+      doc.addFileToVFS(file.name, file.base64)
+      doc.addFont(file.name, font.family, file.weight)
+    }
+    FONT = font.family
+  }
+
   const pageWidth = doc.internal.pageSize.getWidth()
   const margin = 20
   let y = margin
 
   // Header
   doc.setFontSize(24)
-  doc.setFont('helvetica', 'bold')
+  doc.setFont(FONT, 'bold')
   doc.setTextColor(100, 124, 71)
   if (brand.name) doc.text(brand.name, margin, y + 8)
 
@@ -74,7 +92,7 @@ export function generateReceiptPDF(
 
   // Receipt info
   doc.setFontSize(10)
-  doc.setFont('helvetica', 'normal')
+  doc.setFont(FONT, 'normal')
   doc.setTextColor(100, 100, 100)
   doc.text(`Receipt #: ${receipt.receiptNumber}`, margin, y)
   doc.text(`Date: ${new Date(receipt.paymentDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`, pageWidth - margin, y, { align: 'right' })
@@ -90,12 +108,12 @@ export function generateReceiptPDF(
 
   // Client info
   doc.setFontSize(12)
-  doc.setFont('helvetica', 'bold')
+  doc.setFont(FONT, 'bold')
   doc.setTextColor(40, 40, 40)
   doc.text('Received From:', margin, y)
 
   y += 8
-  doc.setFont('helvetica', 'normal')
+  doc.setFont(FONT, 'normal')
   doc.text(receipt.clientName, margin, y)
   
   if (receipt.clientEmail) {
@@ -115,11 +133,11 @@ export function generateReceiptPDF(
   doc.setFontSize(11)
   doc.setTextColor(40, 40, 40)
   
-  doc.setFont('helvetica', 'bold')
+  doc.setFont(FONT, 'bold')
   doc.text('Payment Details', margin + 10, y)
 
   y += 10
-  doc.setFont('helvetica', 'normal')
+  doc.setFont(FONT, 'normal')
   doc.text(`Invoice: ${receipt.invoiceNumber}`, margin + 10, y)
   
   y += 7
@@ -139,7 +157,7 @@ export function generateReceiptPDF(
   doc.roundedRect(margin, y, pageWidth - 2 * margin, 25, 3, 3, 'F')
 
   doc.setFontSize(12)
-  doc.setFont('helvetica', 'bold')
+  doc.setFont(FONT, 'bold')
   doc.setTextColor(255, 255, 255)
   doc.text('AMOUNT RECEIVED', margin + 10, y + 10)
   
@@ -154,18 +172,20 @@ export function generateReceiptPDF(
   if (receipt.notes) {
     doc.setFontSize(10)
     doc.setTextColor(100, 100, 100)
-    doc.setFont('helvetica', 'normal')
+    doc.setFont(FONT, 'normal')
     doc.text('Notes:', margin, y)
     y += 6
-    doc.text(receipt.notes, margin, y)
-    y += 15
+    // Wrapped to the page (a long note ran off the right edge), at most 6 lines.
+    const noteLines = (doc.splitTextToSize(receipt.notes, pageWidth - 2 * margin) as string[]).slice(0, 6)
+    doc.text(noteLines, margin, y)
+    y += noteLines.length * 5 + 10
   }
 
   // Thank you
   y += 10
   doc.setFontSize(11)
   doc.setTextColor(100, 124, 71)
-  doc.setFont('helvetica', 'bold')
+  doc.setFont(FONT, 'bold')
   doc.text('Thank you for your payment!', pageWidth / 2, y, { align: 'center' })
 
   // Footer
@@ -176,13 +196,23 @@ export function generateReceiptPDF(
 
   doc.setFontSize(8)
   doc.setTextColor(150, 150, 150)
-  doc.setFont('helvetica', 'normal')
+  doc.setFont(FONT, 'normal')
   if (brand.footer) doc.text(brand.footer, pageWidth / 2, footerY, { align: 'center' })
 
   return doc
 }
 
-export function downloadReceiptPDF(receipt: ReceiptData, invoice: Invoice, brand: ReceiptBrand = {}) {
-  const doc = generateReceiptPDF(receipt, invoice, brand)
+export function downloadReceiptPDF(receipt: ReceiptData, invoice: Invoice, brand: ReceiptBrand = {}, font?: ReceiptFont | null) {
+  const doc = generateReceiptPDF(receipt, invoice, brand, font)
   doc.save(`Receipt-${receipt.receiptNumber}.pdf`)
+}
+/**
+ * A payment's receipt number — ONE rule for every place a receipt is made
+ * (the invoice page, the receipts page, the receipt page, WhatsApp): its
+ * transaction reference, else RCP- and the payment id. The invoice page
+ * numbered receipts by their position in a newest-first list, so each new
+ * payment renumbered the older receipts.
+ */
+export function receiptNumberFor(payment: { id: string; transaction_reference?: string | null }): string {
+  return payment.transaction_reference || `RCP-${payment.id.slice(0, 8).toUpperCase()}`
 }

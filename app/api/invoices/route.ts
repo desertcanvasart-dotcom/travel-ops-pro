@@ -281,10 +281,23 @@ export async function POST(request: NextRequest) {
       if (body.parent_invoice_id) {
         const { data: parent } = await supabaseAdmin
           .from('invoices')
-          .select('total_amount, currency')
+          .select('total_amount, currency, full_trip_cost')
           .eq('id', body.parent_invoice_id)
           .eq('org_id', orgId)
           .single()
+        // The trip cost the deposit invoice STORED, not the page's rebuild of
+        // it (deposit × 100 / percent): dividing a rounded deposit back out
+        // loses what rounding removed — 20% of ¥1,854,367 is ¥370,873, which
+        // rebuilds as ¥1,854,365 and under-bills the balance by ¥2. Used when
+        // it reproduces the deposit exactly (same additions then and now).
+        const storedTrip = Number(parent?.full_trip_cost)
+        if (Number.isFinite(storedTrip) && storedTrip > 0 && parent?.total_amount != null) {
+          const storedBase = storedTrip - additionsTotal
+          const depositFromStored = roundToCurrency((storedBase * depositPercent) / 100, currency)
+          if (storedBase > 0 && Math.abs(depositFromStored - Number(parent.total_amount)) < 0.005) {
+            fullTripCost = storedTrip
+          }
+        }
         if (parent?.total_amount != null) {
           depositAmount = Number(parent.total_amount)
           depositSource = 'parent'
@@ -311,6 +324,11 @@ export async function POST(request: NextRequest) {
         amount: tourBalance
       }]
     }
+
+    // A standard invoice's own total in the currency's smallest unit: the trip
+    // page sends cost × 1.25 to the cent (¥15,431.25), and a client paying the
+    // ¥15,431 shown left the invoice "partial" with ¥0.25 due — and reminded.
+    if (invoiceType === 'standard') totalAmount = roundToCurrency(totalAmount, currency)
 
     // A standard invoice is whatever the caller said, PLUS anything added here.
     // Without this the document lists a premium line it does not bill.

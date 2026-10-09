@@ -27,7 +27,7 @@ export async function GET(
 
     const { data, error } = await supabaseAdmin
       .from('b2c_quotes')
-      .select('*, itineraries (id, trip_name, itinerary_code, client_name, client_email, total_cost)')
+      .select('*, itineraries (id, trip_name, itinerary_code, client_name, client_email, client_phone, total_cost)')
       .eq('id', id)
       .eq('org_id', orgId)
       .single()

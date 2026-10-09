@@ -17,7 +17,7 @@ import { useVocabLabel } from '@/hooks/useVocabLabel'
 import GuideLanguageSelect, { useGuideLanguageChoice } from '@/components/pricing/GuideLanguageSelect'
 import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileSpreadsheet, TrendingUp, AlertCircle, UserPlus, Save, X, CheckCircle2, Building2, User, Mail, Phone, FileText, ChevronDown, ChevronUp, Pencil, Plane, Ship, MapPin, Plus, RotateCcw, Tag, Star } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
-import { currencySymbol } from '@/lib/currency-totals'
+import { currencySymbol, formatMoney } from '@/lib/currency-totals'
 import AttractionPicker from '@/components/AttractionPicker'
 import TravelLegPicker, { storedRoadTransfers } from '@/components/TravelLegPicker'
 import { markServiceSetByHand, toEditableDay } from '@/lib/itineraries/editable-day'
@@ -864,7 +864,9 @@ function TourPriceCalculatorInner() {
   const exportToCSV = () => {
     if (rateSheet.length === 0) return
     const tourLeaderSuffix = tourLeaderIncluded ? ' (+1 TL)' : ' (+0)'
-    const headers = ['Passengers', 'Total Cost (\u20AC)', 'Margin (\u20AC)', 'Selling Price (\u20AC)', 'Per Person (\u20AC)', 'Single Supplement (\u20AC)']
+    // The run's own currency — the headers said EUR whatever was priced.
+    const cur = result?.currency || extrasRateCurrency
+    const headers = ['Passengers', `Total Cost (${cur})`, `Margin (${cur})`, `Selling Price (${cur})`, `Per Person (${cur})`, `Single Supplement (${cur})`]
     const rows = rateSheet.map(row => [
       row.pax,
       row.total_cost.toFixed(2),
@@ -2001,7 +2003,7 @@ function TourPriceCalculatorInner() {
                       <td className="px-4 py-2 text-right font-medium">{sym}{row.selling_price.toFixed(2)}</td>
                       <td className="px-4 py-2 text-right font-bold text-[#647C47]">{sym}{row.price_per_person.toFixed(2)}</td>
                       <td className="px-4 py-2 text-right text-amber-600">
-                        {row.single_supplement != null ? `\u20AC${row.single_supplement.toFixed(2)}` : '\u2014'}
+                        {row.single_supplement != null ? formatMoney(row.single_supplement, result?.currency || extrasRateCurrency) : '\u2014'}
                       </td>
                     </tr>
                   ))}

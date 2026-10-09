@@ -11,6 +11,12 @@ import { contractNumberFor, contractPrice, describeDestinations } from '@/lib/co
 import { sanitizeContractDocument } from '@/lib/contract-document'
 import { loadJapaneseFont } from '@/lib/pdf-fonts-node'
 
+/** A calendar date as words, on its own day (no timezone shift). */
+function contractDay(iso: string): string {
+  const d = new Date(`${String(iso).slice(0, 10)}T00:00:00Z`)
+  return Number.isNaN(d.getTime()) ? String(iso) : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
+}
+
 export async function POST(request: NextRequest) {
   try {
     // The service-role client below sees every org: the caller's org is the
@@ -109,7 +115,8 @@ export async function POST(request: NextRequest) {
       `📋 *Contract Details:*\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `🎯 *Tour:* ${tourName}\n` +
-      `📅 *Dates:* ${new Date(itinerary.start_date).toLocaleDateString()} - ${new Date(itinerary.end_date).toLocaleDateString()}\n` +
+      // "8 November 2026", not Node's default US "11/8/2026".
+      `📅 *Dates:* ${contractDay(itinerary.start_date)} - ${contractDay(itinerary.end_date)}\n` +
       `👥 *Travelers:* ${itinerary.num_adults} adult${itinerary.num_adults > 1 ? 's' : ''}` +
       `${itinerary.num_children > 0 ? `, ${itinerary.num_children} child${itinerary.num_children > 1 ? 'ren' : ''}` : ''}\n` +
       `💰 *Total:* ${contractPrice(totalCost, itinerary.currency)}\n\n` +

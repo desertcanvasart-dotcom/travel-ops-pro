@@ -45,6 +45,9 @@ export interface PlanService {
   notes?: string | null
   quantity?: number | null
   total_cost?: number | string | null
+  /** What the supplier charges, in its own currency (total_cost is converted to the trip's). */
+  supplier_currency?: string | null
+  supplier_cost_original?: number | string | null
   supplier_id?: string | null
   supplier_name?: string | null
   city?: string | null
@@ -90,6 +93,8 @@ export interface PlannedService {
   city: string
   notes: string | null
   total_cost: number | string | null
+  supplier_currency?: string | null
+  supplier_cost_original?: number | string | null
 }
 
 export interface PlannedDocument {
@@ -257,6 +262,8 @@ export function planDocuments(input: {
           city: place,
           notes: raw.notes ?? null,
           total_cost: raw.total_cost ?? null,
+          supplier_currency: raw.supplier_currency ?? null,
+          supplier_cost_original: raw.supplier_cost_original ?? null,
         },
       })
     }
@@ -432,4 +439,30 @@ export function staleDocuments(
       .length
     return gone ? [{ id: doc.id, document_number: doc.document_number ?? null, supplier_name: doc.supplier_name ?? null, gone }] : []
   })
+}
+
+/**
+ * The money a voucher states. A supplier confirms what it charges in its own
+ * currency: itinerary_services.total_cost is converted to the TRIP's currency
+ * (and moves with every FX reprice), so an Egyptian hotel contracted at
+ * EGP 15,000 on a yen trip was asked to confirm "¥45,xxx". When every line
+ * carries the supplier's own cost in one currency, the voucher is in that
+ * currency; otherwise it stays in the trip's.
+ */
+export function voucherMoney(
+  services: Array<Pick<PlannedService, 'total_cost' | 'supplier_currency' | 'supplier_cost_original'>>,
+  tripCurrency: string
+): { currency: string; total: number; lineAmounts: number[] } {
+  const num = (v: unknown) => {
+    const n = parseFloat(String(v ?? ''))
+    return Number.isFinite(n) ? n : null
+  }
+  const currencies = new Set(services.map(s => String(s.supplier_currency ?? '').trim().toUpperCase()))
+  const own = services.length > 0
+    && currencies.size === 1
+    && !currencies.has('')
+    && services.every(s => num(s.supplier_cost_original) !== null)
+  const lineAmounts = services.map(s => (own ? num(s.supplier_cost_original) : num(s.total_cost)) ?? 0)
+  const total = Math.round(lineAmounts.reduce((a, b) => a + b, 0) * 100) / 100
+  return { currency: own ? [...currencies][0] : tripCurrency, total, lineAmounts }
 }

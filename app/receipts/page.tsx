@@ -19,7 +19,8 @@ import {
   FileText,
   MapPin
 } from 'lucide-react'
-import { generateReceiptPDF, receiptBrand, downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
+import { generateReceiptPDF, receiptBrand, downloadReceiptPDF, receiptNumberFor } from '@/lib/receipt-pdf-generator'
+import { japaneseFontData } from '@/lib/pdf-fonts'
 import { useCompanyInfo } from '@/lib/use-company-info'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
@@ -153,11 +154,11 @@ export default function ReceiptsPage() {
     }
   }
 
-  const handlePreviewReceipt = (payment: UnifiedPayment) => {
+  const handlePreviewReceipt = async (payment: UnifiedPayment) => {
     setDownloadingId(payment.id)
 
     try {
-      const receiptNumber = payment.transaction_reference || `RCP-${payment.id.slice(0, 8).toUpperCase()}`
+      const receiptNumber = receiptNumberFor(payment)
 
       const doc = generateReceiptPDF({
         receiptNumber,
@@ -175,7 +176,7 @@ export default function ReceiptsPage() {
         client_name: payment.client_name,
         total_amount: payment.amount,
         currency: payment.currency
-      }, receiptBrand(company))
+      }, receiptBrand(company), await japaneseFontData())
 
       const blob = doc.output('blob')
       setPdfPreviewBlob(blob)
@@ -190,7 +191,9 @@ export default function ReceiptsPage() {
   }
 
   const handleSendWhatsApp = async (payment: UnifiedPayment) => {
-    if (!payment.client_phone) {
+    // An invoice payment's number is looked up by the server (the client's,
+    // else the trip's); only a trip payment is known to have none here.
+    if (!payment.client_phone && payment.source !== 'invoice') {
       await dialog.alert('No Phone', 'No phone number available for this client', 'warning')
       return
     }
@@ -535,13 +538,13 @@ export default function ReceiptsPage() {
                             {/* WhatsApp Button */}
                             <button
                               onClick={() => handleSendWhatsApp(payment)}
-                              disabled={isSending || !payment.client_phone}
+                              disabled={isSending || (!payment.client_phone && payment.source !== 'invoice')}
                               className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
                                 isSent 
                                   ? 'text-green-600 bg-green-50' 
                                   : 'text-gray-600 hover:text-[#25D366] hover:bg-green-50'
                               }`}
-                              title={payment.client_phone ? 'Send via WhatsApp' : 'No phone number'}
+                              title={payment.client_phone || payment.source === 'invoice' ? 'Send via WhatsApp' : 'No phone number'}
                             >
                               {isSending ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />

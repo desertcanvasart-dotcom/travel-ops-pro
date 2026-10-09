@@ -1,5 +1,6 @@
 'use client'
 
+import { japaneseFontData } from '@/lib/pdf-fonts'
 import { useEffect, useState } from 'react'
 import { useCompanyInfo } from '@/lib/use-company-info'
 import { useTranslations } from 'next-intl'
@@ -97,12 +98,12 @@ export default function ReceiptPage() {
     currency: p.currency
   })
 
-  const handlePreviewPDF = () => {
+  const handlePreviewPDF = async () => {
     if (!payment) return
 
     setDownloading(true)
     try {
-      const doc = generateReceiptPDF(buildReceiptData(payment), buildInvoiceData(payment), receiptBrand(company))
+      const doc = generateReceiptPDF(buildReceiptData(payment), buildInvoiceData(payment), receiptBrand(company), await japaneseFontData())
       const blob = doc.output('blob')
       setPdfPreviewBlob(blob)
       setShowPdfPreview(true)

@@ -165,12 +165,21 @@ export default function QuoteDetailPage() {
     if (!complete && !(await confirmDialog(t('convertIncompleteConfirm', { count: gaps.length, services: describeGaps(gaps) }), {
       title: t('incompleteTitle'), confirmText: t('continueAnyway'), variant: 'warning',
     }))) return
+    // No travel date: ask for the trip's first day. The itinerary was dated
+    // TODAY, so its vouchers, deposit and balance dates were all invented.
+    let startDate: string | undefined
+    if (!quote.travel_date) {
+      const entered = prompt(t('convertNeedsDate'))?.trim()
+      if (!entered) return
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(entered)) { alert(t('convertNeedsDate')); return }
+      startDate = entered
+    }
     setConverting(true)
     try {
       const res = await fetch(`/api/b2b/quotes/${quoteId}/convert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(complete ? {} : { allow_incomplete: true })
+        body: JSON.stringify({ ...(complete ? {} : { allow_incomplete: true }), ...(startDate ? { start_date: startDate } : {}) })
       })
       const data = await res.json()
       if (data.success) {

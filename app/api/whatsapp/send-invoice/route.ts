@@ -102,8 +102,22 @@ export async function POST(request: NextRequest) {
       .select('name, contact_email, company_phone, company_website, company_address, offices, logo_url')
       .eq('id', orgId)
       .maybeSingle()
+    // When the balance is due, from the trip's booking — the office and portal
+    // copies print "Balance by <date>"; this one said only "Balance".
+    let balanceDueDate: string | null = null
+    if (invoice.itinerary_id) {
+      const { data: booking } = await supabase
+        .from('bookings')
+        .select('balance_due_date')
+        .eq('itinerary_id', invoice.itinerary_id)
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      balanceDueDate = (booking?.balance_due_date as string | null) ?? null
+    }
     const doc = generateInvoicePDF(
-      { ...invoice, line_items: invoice.line_items || [] },
+      { ...invoice, line_items: invoice.line_items || [], balance_due_date: balanceDueDate },
       toCompanyInfo({ ...(org ?? {}), logo_data_url: await inlineImage((org as { logo_url?: string } | null)?.logo_url) }),
       { font: await loadJapaneseFont() }
     )

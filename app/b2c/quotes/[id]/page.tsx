@@ -1,5 +1,6 @@
 'use client'
 
+import { formatMoney } from '@/lib/currency-totals'
 import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Loader2, Send, CheckCircle2, XCircle, Eye, Save, MessageCircle, Mail } from 'lucide-react'
@@ -27,7 +28,7 @@ interface B2CQuote {
   sent_at: string | null
   internal_notes: string | null
   client_notes: string | null
-  itineraries?: { id: string; trip_name: string | null; itinerary_code: string | null; client_name: string | null; client_email: string | null } | null
+  itineraries?: { id: string; trip_name: string | null; itinerary_code: string | null; client_name: string | null; client_email: string | null; client_phone?: string | null } | null
 }
 
 const STATUS: Record<string, string> = {
@@ -86,9 +87,11 @@ export default function B2CQuoteDetail({ params }: { params: Promise<{ id: strin
     try {
       const payload: any = { send_via: channel }
       if (channel === 'whatsapp') {
-        const to = prompt('WhatsApp number (with country code):')
-        if (!to) { setBusy(false); return }
-        payload.to = to
+        // Prefilled with the client's number on the trip; left blank, the
+        // server uses that number. Cancel stops the send.
+        const to = prompt('WhatsApp number (with country code):', quote?.itineraries?.client_phone || '')
+        if (to === null) { setBusy(false); return }
+        if (to.trim()) payload.to = to.trim()
       }
       const res = await fetch(`/api/b2c/quotes/${id}/send`, {
         method: 'POST',
@@ -106,7 +109,7 @@ export default function B2CQuoteDetail({ params }: { params: Promise<{ id: strin
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-[#647C47]" /></div>
   if (!quote) return <div className="p-6 text-gray-500">Offer not found.</div>
 
-  const money = (v: number) => `${quote.currency} ${Number(v).toFixed(2)}`
+  const money = (v: number) => formatMoney(Number(v) || 0, quote.currency || 'EUR')
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
