@@ -77,3 +77,17 @@ describe('quoteAmountsInTripCurrency', () => {
     expect(quoteAmountsInTripCurrency(quote, 'JPY', { base: 'EUR', rates: {} } as never)).toBeNull()
   })
 })
+
+describe('round 10', () => {
+  it("quote-from-itinerary refuses another org's partner before saving it", () => {
+    const q = src('app/api/b2b/quote-from-itinerary/route.ts')
+    const check = q.indexOf('quoteRefsInOrg(supabaseAdmin, orgId, { partner_id })')
+    expect(check).toBeGreaterThan(0)
+    expect(check).toBeLessThan(q.indexOf("partner_id: partner_id || null"))
+  })
+  it("convert uses the run rates (org table over ECB), not the ECB feed alone", () => {
+    const c = src('app/api/b2b/quotes/[id]/convert/route.ts')
+    expect(c).toContain('await fetchRunExchangeRates()')
+    expect(c).not.toContain('fetchExchangeRates(quoteCurrency)')
+  })
+})
