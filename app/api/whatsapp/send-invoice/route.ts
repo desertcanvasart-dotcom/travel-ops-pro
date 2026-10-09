@@ -1,179 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { uploadOutboundPdf } from '@/lib/storage/outbound-documents'
-import { orgIdentity, type OrgIdentity } from '@/lib/org-identity'
+import { orgIdentity } from '@/lib/org-identity'
 import { safeKeySegment } from '@/lib/storage-key'
 import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createServiceClient } from '@/lib/supabase/service-client'
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
+import { generateInvoicePDF } from '@/lib/invoice-pdf-generator'
+import { toCompanyInfo } from '@/lib/company-info-client'
+import { inlineImage } from '@/lib/documents/inline-image'
+import { loadJapaneseFont } from '@/lib/pdf-fonts-node'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
-// Generate Invoice PDF
-async function generateInvoicePDF(invoice: any, brand: OrgIdentity): Promise<Uint8Array> {
-  const pdfDoc = await PDFDocument.create()
-  const page = pdfDoc.addPage([595, 842]) // A4
-  
-  const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
-  const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica)
-  
-  const { width, height } = page.getSize()
-  const margin = 50
-  let y = height - 50
-
-  const currencySymbol = ({ EUR: '€', USD: '$', GBP: '£' } as Record<string, string>)[invoice.currency] || invoice.currency
-
-  // Header: the sending org's name (Settings), not the install's env name.
-  if (brand.name) page.drawText(brand.name, {
-    x: margin, y, size: 24, font: helveticaBold, color: rgb(0.39, 0.49, 0.28)
-  })
-  
-  page.drawText('INVOICE', {
-    x: width - margin - 80, y, size: 20, font: helveticaBold, color: rgb(0.2, 0.2, 0.2)
-  })
-  y -= 30
-
-  // Invoice details
-  page.drawText(`Invoice: ${invoice.invoice_number}`, {
-    x: margin, y, size: 10, font: helvetica, color: rgb(0.4, 0.4, 0.4)
-  })
-  
-  const typeLabel = invoice.invoice_type === 'deposit' 
-    ? `Deposit (${invoice.deposit_percent}%)`
-    : invoice.invoice_type === 'final' ? 'Final Balance' : 'Standard'
-  page.drawText(`Type: ${typeLabel}`, {
-    x: width - margin - 100, y, size: 10, font: helvetica, color: rgb(0.4, 0.4, 0.4)
-  })
-  y -= 15
-
-  page.drawText(`Issue Date: ${new Date(invoice.issue_date).toLocaleDateString('en-GB')}`, {
-    x: margin, y, size: 10, font: helvetica, color: rgb(0.4, 0.4, 0.4)
-  })
-  page.drawText(`Due: ${invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('en-GB') : 'On Arrival'}`, {
-    x: width - margin - 100, y, size: 10, font: helvetica, color: rgb(0.4, 0.4, 0.4)
-  })
-  y -= 30
-
-  // Divider
-  page.drawLine({
-    start: { x: margin, y },
-    end: { x: width - margin, y },
-    thickness: 1,
-    color: rgb(0.8, 0.8, 0.8)
-  })
-  y -= 25
-
-  // Bill To
-  page.drawText('BILL TO', { x: margin, y, size: 10, font: helveticaBold, color: rgb(0.5, 0.5, 0.5) })
-  y -= 15
-  page.drawText(invoice.client_name, { x: margin, y, size: 12, font: helveticaBold, color: rgb(0.2, 0.2, 0.2) })
-  y -= 15
-  if (invoice.client_email) {
-    page.drawText(invoice.client_email, { x: margin, y, size: 10, font: helvetica, color: rgb(0.4, 0.4, 0.4) })
-    y -= 15
-  }
-  y -= 20
-
-  // Line Items Header
-  page.drawRectangle({
-    x: margin, y: y - 5, width: width - 2 * margin, height: 25,
-    color: rgb(0.95, 0.95, 0.95)
-  })
-  
-  page.drawText('Description', { x: margin + 10, y: y + 5, size: 9, font: helveticaBold, color: rgb(0.3, 0.3, 0.3) })
-  page.drawText('Qty', { x: 350, y: y + 5, size: 9, font: helveticaBold, color: rgb(0.3, 0.3, 0.3) })
-  page.drawText('Price', { x: 400, y: y + 5, size: 9, font: helveticaBold, color: rgb(0.3, 0.3, 0.3) })
-  page.drawText('Amount', { x: 480, y: y + 5, size: 9, font: helveticaBold, color: rgb(0.3, 0.3, 0.3) })
-  y -= 30
-
-  // Line Items
-  const lineItems = invoice.line_items || []
-  for (const item of lineItems) {
-    const description = item.description.length > 45 
-      ? item.description.substring(0, 45) + '...' 
-      : item.description
-    
-    page.drawText(description, { x: margin + 10, y, size: 10, font: helvetica, color: rgb(0.2, 0.2, 0.2) })
-    page.drawText(String(item.quantity), { x: 350, y, size: 10, font: helvetica, color: rgb(0.3, 0.3, 0.3) })
-    page.drawText(`${currencySymbol}${Number(item.unit_price).toFixed(2)}`, { x: 400, y, size: 10, font: helvetica, color: rgb(0.3, 0.3, 0.3) })
-    page.drawText(`${currencySymbol}${Number(item.amount).toFixed(2)}`, { x: 480, y, size: 10, font: helveticaBold, color: rgb(0.2, 0.2, 0.2) })
-    y -= 20
-  }
-  y -= 10
-
-  // Divider
-  page.drawLine({
-    start: { x: 350, y },
-    end: { x: width - margin, y },
-    thickness: 1,
-    color: rgb(0.8, 0.8, 0.8)
-  })
-  y -= 20
-
-  // Totals
-  page.drawText('Subtotal:', { x: 400, y, size: 10, font: helvetica, color: rgb(0.4, 0.4, 0.4) })
-  page.drawText(`${currencySymbol}${Number(invoice.subtotal).toFixed(2)}`, { x: 480, y, size: 10, font: helvetica, color: rgb(0.2, 0.2, 0.2) })
-  y -= 18
-
-  if (Number(invoice.tax_amount) > 0) {
-    page.drawText(`Tax (${invoice.tax_rate}%):`, { x: 400, y, size: 10, font: helvetica, color: rgb(0.4, 0.4, 0.4) })
-    page.drawText(`${currencySymbol}${Number(invoice.tax_amount).toFixed(2)}`, { x: 480, y, size: 10, font: helvetica, color: rgb(0.2, 0.2, 0.2) })
-    y -= 18
-  }
-
-  if (Number(invoice.discount_amount) > 0) {
-    page.drawText('Discount:', { x: 400, y, size: 10, font: helvetica, color: rgb(0.4, 0.4, 0.4) })
-    page.drawText(`-${currencySymbol}${Number(invoice.discount_amount).toFixed(2)}`, { x: 480, y, size: 10, font: helvetica, color: rgb(0.0, 0.5, 0.0) })
-    y -= 18
-  }
-
-  y -= 5
-  page.drawLine({
-    start: { x: 350, y },
-    end: { x: width - margin, y },
-    thickness: 1,
-    color: rgb(0.39, 0.49, 0.28)
-  })
-  y -= 20
-
-  // Total
-  page.drawText('TOTAL:', { x: 400, y, size: 12, font: helveticaBold, color: rgb(0.2, 0.2, 0.2) })
-  page.drawText(`${currencySymbol}${Number(invoice.total_amount).toFixed(2)}`, { x: 480, y, size: 14, font: helveticaBold, color: rgb(0.39, 0.49, 0.28) })
-  y -= 25
-
-  // Amount Paid & Balance
-  page.drawText('Amount Paid:', { x: 400, y, size: 10, font: helvetica, color: rgb(0.4, 0.4, 0.4) })
-  page.drawText(`${currencySymbol}${Number(invoice.amount_paid).toFixed(2)}`, { x: 480, y, size: 10, font: helvetica, color: rgb(0.0, 0.5, 0.0) })
-  y -= 18
-
-  page.drawText('Balance Due:', { x: 400, y, size: 11, font: helveticaBold, color: rgb(0.2, 0.2, 0.2) })
-  const balanceColor = Number(invoice.balance_due) > 0 ? rgb(0.8, 0.2, 0.2) : rgb(0.0, 0.5, 0.0)
-  page.drawText(`${currencySymbol}${Number(invoice.balance_due).toFixed(2)}`, { x: 480, y, size: 12, font: helveticaBold, color: balanceColor })
-  y -= 40
-
-  // Payment Terms
-  if (invoice.payment_terms) {
-    page.drawText('Payment Terms:', { x: margin, y, size: 10, font: helveticaBold, color: rgb(0.3, 0.3, 0.3) })
-    y -= 15
-    page.drawText(invoice.payment_terms, { x: margin, y, size: 9, font: helvetica, color: rgb(0.4, 0.4, 0.4) })
-    y -= 25
-  }
-
-  // Notes
-  if (invoice.notes) {
-    page.drawText('Notes:', { x: margin, y, size: 10, font: helveticaBold, color: rgb(0.3, 0.3, 0.3) })
-    y -= 15
-    page.drawText(invoice.notes, { x: margin, y, size: 9, font: helvetica, color: rgb(0.4, 0.4, 0.4) })
-  }
-
-  // Footer
-  const footerLine = [brand.name, brand.website, brand.email].filter(Boolean).join(' | ')
-  if (footerLine) page.drawText(footerLine, {
-    x: width / 2 - 100, y: 30, size: 8, font: helvetica, color: rgb(0.5, 0.5, 0.5)
-  })
-
-  return await pdfDoc.save()
-}
+// The invoice PDF is the shared one (lib/invoice-pdf-generator), as the
+// portal and the invoice page draw it, with Noto Sans JP. This route had its
+// own pdf-lib invoice in Latin-only Helvetica, which cannot encode Japanese:
+// every invoice with insurance lines (海外旅行傷害保障…), a kanji client name
+// or Japanese notes failed to send. It also crashed on a null client name.
 
 export async function POST(request: NextRequest) {
   try {
@@ -253,7 +96,17 @@ export async function POST(request: NextRequest) {
     // Generate PDF
     console.log('📄 Generating invoice PDF...')
     const identity = await orgIdentity(orgId)
-    const pdfBytes = await generateInvoicePDF(invoice, identity)
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('name, contact_email, company_phone, company_website, company_address, offices, logo_url')
+      .eq('id', orgId)
+      .maybeSingle()
+    const doc = generateInvoicePDF(
+      { ...invoice, line_items: invoice.line_items || [] },
+      toCompanyInfo({ ...(org ?? {}), logo_data_url: await inlineImage((org as { logo_url?: string } | null)?.logo_url) }),
+      { font: await loadJapaneseFont() }
+    )
+    const pdfBytes = new Uint8Array(doc.output('arraybuffer'))
 
     // Upload to Supabase Storage
     console.log('📤 Uploading PDF to storage...')

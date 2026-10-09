@@ -489,8 +489,8 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
     
     <!-- Tour Banner -->
     <div class="tour-banner">
-      <h2>${template?.template_name || quote.trip_name || labels.tourPackage}</h2>
-      <p>${variation?.variation_name || (quote.source === 'whatsapp_b2b' ? labels.customTourWhatsApp : '')}</p>
+      <h2>${esc(template?.template_name || quote.trip_name || labels.tourPackage)}</h2>
+      <p>${esc(variation?.variation_name || (quote.source === 'whatsapp_b2b' ? labels.customTourWhatsApp : ''))}</p>
       <div class="tour-meta">
         <div class="tour-meta-item">
           📅 ${labels.daysNights.replace('{days}', String(template?.duration_days || quote.itineraries?.total_days || '-')).replace('{nights}', String(template?.duration_nights || (quote.itineraries?.total_days ? quote.itineraries.total_days - 1 : '-')))}
@@ -782,9 +782,11 @@ export async function GET(
     // THIS SERVER fetch an internal URL and render the response into the PDF.
     await page.setRequestInterception(true)
     page.on('request', req => {
-      if (req.isNavigationRequest() && req.frame() === page.mainFrame()) return void req.continue()
+      // setContent loads the document without a network request, so the only
+      // navigation to allow is to about: or data: — not any main-frame one,
+      // which let a <meta refresh> smuggled into a field load an internal URL.
       const scheme = req.url().split(':', 1)[0]
-      if (scheme === 'data') return void req.continue()
+      if (scheme === 'data' || scheme === 'about') return void req.continue()
       void req.abort()
     })
 

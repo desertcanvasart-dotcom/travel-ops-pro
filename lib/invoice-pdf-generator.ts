@@ -319,7 +319,7 @@ export function generateInvoicePDF(
   // Client name
   doc.setFont(FONT, 'bold')
   doc.setTextColor(...darkGray)
-  doc.text(invoice.client_name, rightColX, y)
+  doc.text(invoice.client_name ?? '', rightColX, y)
 
   y += 6
 
@@ -408,7 +408,8 @@ export function generateInvoicePDF(
     }
 
     // Truncate long descriptions
-    let description = item.description
+    // A line with no description draws blank rather than failing the invoice.
+    let description = item.description ?? ''
     if (description.length > 50) {
       description = description.substring(0, 47) + '...'
     }
