@@ -109,20 +109,23 @@ export default function RecordPaymentPage() {
         setFormData(prev => ({
           ...prev,
           target_id: selectedItinerary.id,
-          amount: depositAmount.toString()
+          amount: depositAmount.toString(),
+          currency: selectedItinerary.currency || prev.currency
         }))
       } else if (formData.payment_type === 'full') {
         setFormData(prev => ({
           ...prev,
           target_id: selectedItinerary.id,
-          amount: selectedItinerary.total_cost.toString()
+          amount: selectedItinerary.total_cost.toString(),
+          currency: selectedItinerary.currency || prev.currency
         }))
       } else {
         const balance = selectedItinerary.total_cost - (selectedItinerary.total_paid || 0)
         setFormData(prev => ({
           ...prev,
           target_id: selectedItinerary.id,
-          amount: balance.toString()
+          amount: balance.toString(),
+          currency: selectedItinerary.currency || prev.currency
         }))
       }
     }
@@ -506,6 +509,8 @@ export default function RecordPaymentPage() {
                     name="currency"
                     value={formData.currency}
                     onChange={handleChange}
+                    // A payment is in its invoice's or trip's currency (lib/payment-currency).
+                    disabled={!!((paymentTarget === 'invoice' && selectedInvoice?.currency) || (paymentTarget === 'itinerary' && selectedItinerary?.currency))}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   >
                     {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c} ({currencySymbol(c)})</option>)}

@@ -186,11 +186,13 @@ function EmailSettingsContent() {
     if (!user || !(await confirmDialog('Delete this template?'))) return
     
     try {
-      await fetch('/api/email/templates', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, userId: user.id }),
-      })
+      // /api/email/templates has no DELETE (a 405 the page never noticed);
+      // the template routes delete the org's own templates.
+      const res = await fetch(`/api/templates/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        window.alert(data.error || 'Could not delete the template')
+      }
       fetchTemplates()
     } catch (err) {
       console.error('Error deleting template:', err)
@@ -613,16 +615,25 @@ function TemplateModal({
     
     setSaving(true)
     try {
-      const method = template ? 'PUT' : 'POST'
-      const body = template
-        ? { id: template.id, userId, name, subject, content, category }
-        : { userId, name, subject, content, category }
-
-      await fetch('/api/email/templates', {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
+      // An edit goes to the template routes (org-scoped, copy-on-edit for a
+      // shared default): /api/email/templates has no PUT, and the edit was a
+      // silent 405.
+      const res = template
+        ? await fetch(`/api/templates/${template.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, subject, body: content, category }),
+          })
+        : await fetch('/api/email/templates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, name, subject, content, category }),
+          })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        window.alert(data.error || 'Could not save the template')
+        return
+      }
       onSaved()
     } catch (err) {
       console.error('Error saving template:', err)

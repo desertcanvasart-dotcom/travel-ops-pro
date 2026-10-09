@@ -72,6 +72,8 @@ export default function RecordPaymentPage() {
     if (formData.itinerary_id) {
       const itinerary = itineraries.find(it => it.id === formData.itinerary_id)
       setSelectedItinerary(itinerary || null)
+      // A trip payment is in the trip's currency (lib/payment-currency).
+      if (itinerary?.currency) setFormData(prev => ({ ...prev, currency: itinerary.currency as string }))
       
       // Auto-calculate deposit amount based on percentage
       if (itinerary && formData.payment_type.startsWith('deposit_')) {
@@ -269,6 +271,7 @@ export default function RecordPaymentPage() {
                 name="currency"
                 value={formData.currency}
                 onChange={handleChange}
+                disabled={!!selectedItinerary?.currency}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
                 {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c} ({currencySymbol(c)})</option>)}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { syncInvoicePayment } from '@/lib/accounting'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { paymentCurrencyFor } from '@/lib/payment-currency'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -79,6 +80,11 @@ export async function POST(
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
+    // In the invoice's currency (lib/payment-currency): the balance trigger
+    // sums amounts with no currency of their own.
+    const paid = paymentCurrencyFor(body.currency, invoice.currency)
+    if (!paid.ok) return NextResponse.json({ error: paid.error }, { status: 400 })
+
     // Check if payment exceeds balance (allow small overpayment for rounding)
     if (body.amount > Number(invoice.balance_due) + 0.01) {
       return NextResponse.json(
@@ -90,7 +96,7 @@ export async function POST(
     const newPayment = {
       invoice_id: id,
       amount: body.amount,
-      currency: body.currency || invoice.currency || 'EUR',
+      currency: paid.currency,
       payment_method: body.payment_method || 'bank_transfer',
       payment_date: body.payment_date || new Date().toISOString().split('T')[0],
       transaction_reference: body.transaction_reference || null,

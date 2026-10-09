@@ -8,9 +8,10 @@
 -- @ats-hj.com address (as 20261116 identifies it).
 --
 --   * each shared default becomes ATS's own template;
---   * where ATS already edited one (an active copy under the same name,
---     channel and language), the copy stands and the default is moved to ATS
---     inactive — uq_message_templates_org_name counts active rows only;
+--   * where ATS already edited one (an active copy made from it, or under the
+--     same name, channel and language), the copy stands and the default is
+--     moved to ATS inactive — uq_message_templates_org_name counts active
+--     rows only;
 --   * other organizations keep any copies they made (their own rows); they no
 --     longer see the defaults. New organizations start with no templates.
 --
@@ -52,14 +53,17 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Defaults ATS has already replaced with its own active copy: moved inactive.
+  -- Defaults ATS has already replaced with its own active copy — made from
+  -- it (source_template_id: an edit may rename it or change its language),
+  -- or under the same name/channel/language: moved to ATS inactive.
   UPDATE public.message_templates d
      SET org_id = ats, is_active = false, updated_at = now()
    WHERE d.org_id IS NULL
      AND EXISTS (
        SELECT 1 FROM public.message_templates c
         WHERE c.org_id = ats AND c.is_active
-          AND c.name = d.name AND c.channel = d.channel AND c.language IS NOT DISTINCT FROM d.language
+          AND (c.source_template_id = d.id
+               OR (c.name = d.name AND c.channel = d.channel AND c.language IS NOT DISTINCT FROM d.language))
      );
   GET DIAGNOSTICS retired = ROW_COUNT;
 

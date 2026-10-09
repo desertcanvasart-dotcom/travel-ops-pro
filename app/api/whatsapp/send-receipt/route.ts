@@ -84,7 +84,8 @@ export async function POST(request: NextRequest) {
             itinerary_code,
             client_name,
             client_phone,
-            client_email
+            client_email,
+            org_id
           )
         `)
         .eq('id', paymentId)
@@ -104,16 +105,19 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      // Only this org's trip: the key was stored as given (lib/org-refs), and
+      // another org's would send our receipt to their client.
+      const trip = payment.itineraries?.org_id === orgId ? payment.itineraries : null
       receipt = {
-        clientName: payment.itineraries?.client_name ?? null,
-        clientPhone: payment.itineraries?.client_phone ?? null,
+        clientName: trip?.client_name ?? null,
+        clientPhone: trip?.client_phone ?? null,
         receiptNumber: payment.transaction_reference || `RCP-${payment.id.slice(0, 8).toUpperCase()}`,
         amount: payment.amount,
         currency: payment.currency,
         paymentDate: payment.payment_date || payment.created_at,
         paymentMethod: payment.payment_method,
         referenceLabel: 'Itinerary',
-        reference: payment.itineraries?.itinerary_code || 'N/A',
+        reference: trip?.itinerary_code || 'N/A',
       }
     }
 

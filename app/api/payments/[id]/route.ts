@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { paymentCurrencyFor } from '@/lib/payment-currency'
 
 export async function GET(
   request: NextRequest,
@@ -73,6 +74,33 @@ export async function PUT(
     // M3 Phase 2A: strip any caller-supplied org_id so an update can't
     // re-home a payment row into another org.
     const { org_id: _ignoredOrgId, ...safeBody } = body
+
+    // As POST: the trip is this org's and the payment is in its currency.
+    if ('itinerary_id' in safeBody || 'currency' in safeBody) {
+      const { data: current } = await supabase
+        .from('payments')
+        .select('itinerary_id')
+        .eq('id', id)
+        .eq('org_id', orgId)
+        .maybeSingle()
+      if (!current) return NextResponse.json({ success: false, error: 'Payment not found' }, { status: 404 })
+      const tripId = 'itinerary_id' in safeBody ? safeBody.itinerary_id : current.itinerary_id
+      if (tripId) {
+        if (typeof tripId !== 'string') {
+          return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
+        }
+        const { data: trip } = await supabase
+          .from('itineraries')
+          .select('id, currency')
+          .eq('id', tripId)
+          .eq('org_id', orgId)
+          .maybeSingle()
+        if (!trip) return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
+        const paid = paymentCurrencyFor(safeBody.currency, trip.currency)
+        if (!paid.ok) return NextResponse.json({ success: false, error: paid.error }, { status: 400 })
+        safeBody.currency = paid.currency
+      }
+    }
 
     const { data, error } = await supabase
       .from('payments')

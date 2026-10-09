@@ -11,6 +11,9 @@ import { currencySymbol } from '@/lib/currency-totals'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
+import { getExchangeRate, type ExchangeRates } from '@/lib/currency-service'
+import { parseFrozenFx, frozenToExchangeRates } from '@/lib/itinerary-fx'
+import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
 
 // ============================================
 // B2B QUOTE FROM ITINERARY API
@@ -294,6 +297,34 @@ export async function POST(request: NextRequest) {
       return legacy ? legacy[legacyCol] : 0
     }
 
+    // A kept line's cost in the rate currency. itinerary_services.total_cost is
+    // in the trip's currency; service-creation stamps supplier_currency /
+    // supplier_cost_original / exchange_rate_used to undo that. A stamp counts
+    // only while it still agrees with total_cost (an operator's edit since
+    // wins, as voucherMoney judges it), and a line added by hand in the editor
+    // has none: its total_cost went through as rate currency (¥20,000 → €20,000).
+    // Those convert at the trip's frozen rate, else today's run rates.
+    const tripCurrency = String(itinerary.currency || rateCurrency).toUpperCase()
+    let tripRates: ExchangeRates | null | undefined
+    const lineInRateCurrency = async (svc: any): Promise<number | null> => {
+      const total = Number(svc.total_cost) || 0
+      const original = svc.supplier_cost_original == null ? null : Number(svc.supplier_cost_original)
+      const rate = Number(svc.exchange_rate_used)
+      const stampHolds = original !== null && Number.isFinite(original) && rate > 0
+        && Math.abs(original * rate - total) <= Math.max(0.01, Math.abs(total) * 0.005)
+      // total / exchange_rate_used is the SUPPLIER's currency (EGP for an
+      // Egyptian hotel), not the rate currency — only the trip's own rate
+      // converts the rest.
+      if (stampHolds && svc.supplier_currency === rateCurrency) return original
+      if (tripCurrency === rateCurrency || total === 0) return total
+      if (tripRates === undefined) {
+        const frozen = parseFrozenFx(itinerary.fx_frozen)
+        tripRates = frozen ? frozenToExchangeRates(frozen) : await fetchRunExchangeRates()
+      }
+      const fx = tripRates ? getExchangeRate(tripCurrency, rateCurrency, tripRates) : null
+      return fx && fx > 0 ? total * fx : null
+    }
+
     const servicesSnapshot: any[] = []
     let subtotalCost = 0
 
@@ -306,12 +337,13 @@ export async function POST(request: NextRequest) {
         // too — itinerary_services.total_cost is stored in the itinerary's
         // display currency (e.g. JPY). service-creation stamps supplier_currency
         // / supplier_cost_original / exchange_rate_used for exactly this.
-        const eurLineTotal =
-          svc.supplier_currency === rateCurrency && svc.supplier_cost_original != null
-            ? Number(svc.supplier_cost_original) || 0
-            : Number(svc.exchange_rate_used) > 0
-              ? (Number(svc.total_cost) || 0) / Number(svc.exchange_rate_used)
-              : Number(svc.total_cost) || 0
+        const eurLineTotal = await lineInRateCurrency(svc)
+        if (eurLineTotal === null) {
+          return NextResponse.json(
+            { success: false, error: `No exchange rate from ${tripCurrency} to ${rateCurrency} for "${svc.service_name || 'a service'}" — the quote cannot be priced.` },
+            { status: 409 }
+          )
+        }
 
         let unitCost = svc.rate_eur || eurLineTotal
         let lineTotal = eurLineTotal
