@@ -35,14 +35,19 @@ export function localeFromPreferred(preferredLanguage?: string | null): Recipien
  */
 export async function resolveClientLocaleByEmail(
   supabase: SupabaseClient,
-  email?: string | null
+  email?: string | null,
+  /** The sending org's own client record. By email alone (service role), the
+   *  same address as another org's client let that org's setting decide. */
+  orgId?: string | null
 ): Promise<RecipientLocale> {
   if (!email) return 'en'
   try {
-    const { data } = await supabase
+    let query = supabase
       .from('clients')
       .select('preferred_language')
       .eq('email', email)
+    if (orgId) query = query.eq('org_id', orgId)
+    const { data } = await query
       .limit(1)
       .maybeSingle()
     return localeFromPreferred(data?.preferred_language)
@@ -59,16 +64,19 @@ export async function resolveClientLocaleByEmail(
  */
 export async function resolveClientLocalesByEmail(
   supabase: SupabaseClient,
-  emails: (string | null | undefined)[]
+  emails: (string | null | undefined)[],
+  orgId?: string | null
 ): Promise<Map<string, RecipientLocale>> {
   const out = new Map<string, RecipientLocale>()
   const unique = Array.from(new Set(emails.filter((e): e is string => !!e)))
   if (unique.length === 0) return out
   try {
-    const { data } = await supabase
+    let query = supabase
       .from('clients')
       .select('email, preferred_language')
       .in('email', unique)
+    if (orgId) query = query.eq('org_id', orgId)
+    const { data } = await query
     for (const row of data || []) {
       if (row.email) out.set(row.email, localeFromPreferred(row.preferred_language))
     }

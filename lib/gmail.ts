@@ -1,6 +1,6 @@
 import { google } from 'googleapis'
 import { decryptToken, encryptToken } from '@/lib/crypto/token-cipher'
-import { headerSafe, safeEmailAddress } from '@/lib/http/safe-header'
+import { headerSafe, safeEmailAddress, encodeEmailHeader } from '@/lib/http/safe-header'
 
 // A FRESH OAuth2 client per call — never a shared, mutated singleton.
 //
@@ -209,13 +209,16 @@ export async function sendEmail(
   const gmail = getGmailClient(accessToken, refreshToken)
 
   // Create email in RFC 2822 format
+  // The subject as an RFC 2047 encoded-word and the body base64: template
+  // sends with a Japanese subject reached non-Gmail clients as mojibake.
   const emailLines = [
     `To: ${safeEmailAddress(to)}`,
-    `Subject: ${headerSafe(subject)}`,
+    `Subject: ${encodeEmailHeader(headerSafe(subject))}`,
     'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
     'MIME-Version: 1.0',
     '',
-    body,
+    Buffer.from(body).toString('base64'),
   ]
   const email = emailLines.join('\r\n')
 

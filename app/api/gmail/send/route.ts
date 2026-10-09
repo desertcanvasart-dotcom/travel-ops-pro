@@ -3,6 +3,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { getCurrentUserId } from '@/lib/auth/current-org'
+import { headerSafe, encodeEmailHeader } from '@/lib/http/safe-header'
 import { claimSend, finishSend, replyBodyHash, threadConflict } from '@/lib/email/send-guard'
 
 const supabase = createClient(
@@ -216,15 +217,20 @@ const threadingLines = (t: ThreadingHeaders): string[] => [
   ...(t.references ? [`References: ${t.references}`] : []),
 ]
 
+// Headers built from the request: To and Subject went in raw — a CR/LF could
+// add a header, and a Japanese subject reached non-Gmail clients as mojibake
+// (the supplier-voucher send was fixed for this in #581). The subject is an
+// RFC 2047 encoded-word, the body base64, attachment names ASCII + RFC 2231.
 function buildSimpleEmail(to: string, subject: string, body: string, threading: ThreadingHeaders = {}): string {
   const emailLines = [
-    `To: ${to}`,
-    `Subject: ${subject}`,
+    `To: ${headerSafe(to)}`,
+    `Subject: ${encodeEmailHeader(headerSafe(subject))}`,
     ...threadingLines(threading),
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
     '',
-    body,
+    Buffer.from(body).toString('base64'),
   ]
   
   return Buffer.from(emailLines.join('\r\n'))
@@ -244,8 +250,8 @@ function buildEmailWithAttachments(
   const boundary = `boundary_${Date.now()}`
   
   const emailParts = [
-    `To: ${to}`,
-    `Subject: ${subject}`,
+    `To: ${headerSafe(to)}`,
+    `Subject: ${encodeEmailHeader(headerSafe(subject))}`,
     ...threadingLines(threading),
     'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
@@ -259,11 +265,13 @@ function buildEmailWithAttachments(
 
   // Add attachments
   for (const attachment of attachments) {
+    const safeName = headerSafe(attachment.filename).replace(/"/g, '')
+    const asciiName = safeName.replace(/[^\x20-\x7E]/g, '_')
     emailParts.push(
       `--${boundary}`,
-      `Content-Type: ${attachment.mimeType}; name="${attachment.filename}"`,
+      `Content-Type: ${headerSafe(attachment.mimeType)}; name="${asciiName}"`,
       'Content-Transfer-Encoding: base64',
-      `Content-Disposition: attachment; filename="${attachment.filename}"`,
+      `Content-Disposition: attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`,
       '',
       attachment.data
     )

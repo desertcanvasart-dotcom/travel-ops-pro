@@ -153,6 +153,50 @@ export function generateInvoicePDF(
   const amberColor: [number, number, number] = [217, 119, 6]
   const emeraldColor: [number, number, number] = [5, 150, 105]
 
+  // Where to reach the operator, at the bottom where a reader looks for it, and
+  // out of the way of the badge it used to collide with. Each office on one
+  // line; a long one wraps rather than running off the page.
+  const cityCountry = [company.city, company.country].filter(Boolean).join(', ')
+  const contactLines: string[] = []
+  for (const office of company.offices ?? []) {
+    const line = [
+      office.label,
+      [office.postal_code, office.address].map(v => (v ?? '').trim()).filter(Boolean).join(' '),
+      [office.tel ? `TEL ${office.tel}` : '', office.fax ? `FAX ${office.fax}` : '']
+        .filter(Boolean).join('  '),
+    ].map(v => (v ?? '').trim()).filter(Boolean).join('   ')
+    if (line) contactLines.push(...(doc.splitTextToSize(line, contentWidth) as string[]))
+  }
+  if (!contactLines.length) {
+    for (const line of [company.address, cityCountry]) {
+      if ((line ?? '').trim()) contactLines.push(line.trim())
+    }
+  }
+  // company.phone is dropped when an office already carries it, or the head
+  // office's number prints twice.
+  const digits = (v: string | undefined) => (v ?? '').replace(/\D/g, '')
+  const phoneInOffices = (company.offices ?? []).some(o => digits(o.tel) && digits(o.tel) === digits(company.phone))
+  const tailLine = [company.email, phoneInOffices ? '' : company.phone, company.website]
+    .map(v => (v ?? '').trim()).filter(Boolean).join('   ')
+  if (tailLine) contactLines.push(tailLine)
+
+  // Content stops above the footer, which grows upward from the bottom of the
+  // page. Nothing ever started a new page: on a deposit or final invoice with
+  // the breakdown box, seven or eight lines (the tour, an insurance line per
+  // traveller, extras) pushed the totals into the footer and the balance due
+  // and payment instructions off the A4 sheet.
+  const pageHeight = doc.internal.pageSize.getHeight()
+  const lineGap = 3.4
+  const footerTop = pageHeight - 12 - (contactLines.length + (company.name.trim() ? 1 : 0)) * lineGap
+  const bottomLimit = footerTop - 9
+  /** A new page when `needed` mm would cross into the footer; true if one was added. */
+  const ensureSpace = (needed: number): boolean => {
+    if (y + needed <= bottomLimit) return false
+    doc.addPage()
+    y = margin
+    return true
+  }
+
   // Get invoice type configuration
   const invoiceType = invoice.invoice_type || 'standard'
   const typeConfig = getInvoiceTypeConfig(invoiceType)
@@ -372,26 +416,26 @@ export function generateInvoicePDF(
   // LINE ITEMS TABLE
   // ============================================
 
-  // Table header background
-  doc.setFillColor(...primaryColor)
-  doc.rect(margin, y, contentWidth, 10, 'F')
-
-  // Table header text
-  doc.setTextColor(255, 255, 255)
-  doc.setFontSize(9)
-  doc.setFont(FONT, 'bold')
-  
   const colDescription = margin + 3
   const colQty = margin + contentWidth * 0.55
   const colUnitPrice = margin + contentWidth * 0.70
   const colAmount = margin + contentWidth * 0.88
 
-  doc.text('Description', colDescription, y + 7)
-  doc.text('Qty', colQty, y + 7, { align: 'center' })
-  doc.text('Unit Price', colUnitPrice, y + 7, { align: 'right' })
-  doc.text('Amount', colAmount, y + 7, { align: 'right' })
-
-  y += 10
+  const drawTableHeader = () => {
+    doc.setFillColor(...primaryColor)
+    doc.rect(margin, y, contentWidth, 10, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(9)
+    doc.setFont(FONT, 'bold')
+    doc.text('Description', colDescription, y + 7)
+    doc.text('Qty', colQty, y + 7, { align: 'center' })
+    doc.text('Unit Price', colUnitPrice, y + 7, { align: 'right' })
+    doc.text('Amount', colAmount, y + 7, { align: 'right' })
+    y += 10
+  }
+  ensureSpace(20)
+  drawTableHeader()
+  let tableTop = y - 10
 
   // Table rows
   doc.setTextColor(...darkGray)
@@ -401,6 +445,19 @@ export function generateInvoicePDF(
   const lineItems = invoice.line_items || []
   
   lineItems.forEach((item, index) => {
+    // A row that would run into the footer starts a new page, under the
+    // table's header again (the border is closed on the page it leaves).
+    if (y + 10 > bottomLimit) {
+      doc.setDrawColor(...mediumGray)
+      doc.setLineWidth(0.1)
+      doc.rect(margin, tableTop, contentWidth, y - tableTop)
+      ensureSpace(20)
+      drawTableHeader()
+      tableTop = y - 10
+      doc.setTextColor(...darkGray)
+      doc.setFont(FONT, 'normal')
+      doc.setFontSize(9)
+    }
     // Alternate row background
     if (index % 2 === 0) {
       doc.setFillColor(...lightGray)
@@ -428,7 +485,7 @@ export function generateInvoicePDF(
   // Table border
   doc.setDrawColor(...mediumGray)
   doc.setLineWidth(0.1)
-  doc.rect(margin, y - (lineItems.length * 10) - 10, contentWidth, (lineItems.length * 10) + 10)
+  doc.rect(margin, tableTop, contentWidth, y - tableTop)
 
   y += 10
 
@@ -438,6 +495,8 @@ export function generateInvoicePDF(
 
   const totalsX = margin + contentWidth * 0.55
   const totalsValueX = margin + contentWidth - 3
+  // Subtotal down to the balance due stays on one page.
+  ensureSpace(70)
 
   // Subtotal — the sum of the LINES above it.
   //
@@ -544,6 +603,7 @@ export function generateInvoicePDF(
   // ============================================
 
   if (invoice.payment_terms || invoice.payment_instructions || invoice.notes) {
+    ensureSpace(20)
     // Divider
     doc.setDrawColor(...lightGray)
     doc.setLineWidth(0.5)
@@ -552,6 +612,7 @@ export function generateInvoicePDF(
 
     if (invoice.payment_terms) {
       doc.setFontSize(9)
+      ensureSpace(13 + (doc.splitTextToSize(invoice.payment_terms, contentWidth) as string[]).length * 4)
       doc.setTextColor(...primaryColor)
       doc.setFont(FONT, 'bold')
       doc.text('Payment Terms', margin, y)
@@ -565,6 +626,7 @@ export function generateInvoicePDF(
 
     if (invoice.payment_instructions) {
       doc.setFontSize(9)
+      ensureSpace(13 + (doc.splitTextToSize(invoice.payment_instructions, contentWidth) as string[]).length * 4)
       doc.setTextColor(...primaryColor)
       doc.setFont(FONT, 'bold')
       doc.text('Payment Instructions', margin, y)
@@ -578,6 +640,7 @@ export function generateInvoicePDF(
 
     if (invoice.notes) {
       doc.setFontSize(9)
+      ensureSpace(13 + (doc.splitTextToSize(invoice.notes, contentWidth) as string[]).length * 4)
       doc.setTextColor(...primaryColor)
       doc.setFont(FONT, 'bold')
       doc.text('Notes', margin, y)
@@ -595,6 +658,7 @@ export function generateInvoicePDF(
   // ============================================
 
   if (invoiceType === 'deposit') {
+    ensureSpace(30)
     y += 5
     doc.setFillColor(254, 243, 199) // Light amber
     doc.roundedRect(margin, y, contentWidth, 20, 2, 2, 'F')
@@ -623,6 +687,7 @@ export function generateInvoicePDF(
   }
 
   if (invoiceType === 'final') {
+    ensureSpace(30)
     y += 5
     doc.setFillColor(209, 250, 229) // Light emerald
     doc.roundedRect(margin, y, contentWidth, 20, 2, 2, 'F')
@@ -652,38 +717,11 @@ export function generateInvoicePDF(
   // FOOTER
   // ============================================
 
-  // Where to reach the operator, at the bottom where a reader looks for it, and
-  // out of the way of the badge it used to collide with. Each office on one
-  // line; a long one wraps rather than running off the page.
-  const cityCountry = [company.city, company.country].filter(Boolean).join(', ')
-  const contactLines: string[] = []
-  for (const office of company.offices ?? []) {
-    const line = [
-      office.label,
-      [office.postal_code, office.address].map(v => (v ?? '').trim()).filter(Boolean).join(' '),
-      [office.tel ? `TEL ${office.tel}` : '', office.fax ? `FAX ${office.fax}` : '']
-        .filter(Boolean).join('  '),
-    ].map(v => (v ?? '').trim()).filter(Boolean).join('   ')
-    if (line) contactLines.push(...(doc.splitTextToSize(line, contentWidth) as string[]))
-  }
-  if (!contactLines.length) {
-    for (const line of [company.address, cityCountry]) {
-      if ((line ?? '').trim()) contactLines.push(line.trim())
-    }
-  }
-  // company.phone is dropped when an office already carries it, or the head
-  // office's number prints twice.
-  const digits = (v: string | undefined) => (v ?? '').replace(/\D/g, '')
-  const phoneInOffices = (company.offices ?? []).some(o => digits(o.tel) && digits(o.tel) === digits(company.phone))
-  const tailLine = [company.email, phoneInOffices ? '' : company.phone, company.website]
-    .map(v => (v ?? '').trim()).filter(Boolean).join('   ')
-  if (tailLine) contactLines.push(tailLine)
-
-  const pageHeight = doc.internal.pageSize.getHeight()
-  const lineGap = 3.4
-  // Grows upward from the bottom, so adding an office never pushes the footer
-  // off the page.
-  let footerY = pageHeight - 12 - (contactLines.length + (company.name.trim() ? 1 : 0)) * lineGap
+  // The footer on EVERY page (it was on the one page there was).
+  const pageCount = doc.getNumberOfPages()
+  for (let page = 1; page <= pageCount; page++) {
+  doc.setPage(page)
+  let footerY = footerTop
 
   doc.setDrawColor(...lightGray)
   doc.setLineWidth(0.4)
@@ -705,11 +743,12 @@ export function generateInvoicePDF(
     footerY += lineGap
   }
   doc.text(
-    `Generated on ${formatDate(new Date().toISOString())}`,
+    `Generated on ${formatDate(new Date().toISOString())}${pageCount > 1 ? `  ·  ${page}/${pageCount}` : ''}`,
     pageWidth / 2,
     footerY + 4,
     { align: 'center' }
   )
+  }
 
   return doc
 }

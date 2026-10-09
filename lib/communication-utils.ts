@@ -1,6 +1,8 @@
 // Email and WhatsApp integration utilities
 
 import { lookupServerMessage } from '@/lib/i18n/server-messages'
+import { escapeHtml } from '@/lib/html-escape'
+import { formatMoney } from '@/lib/currency-totals'
 import type { RecipientLocale } from '@/lib/i18n/recipient-locale'
 import { businessIdentity, htmlIdentity, type OrgIdentity } from '@/lib/org-identity'
 
@@ -47,6 +49,10 @@ export function generateEmailTemplate(
   // Brand constants (COMPANY_INFO), colors and layout stay as-is.
   const t = (k: string, p: Record<string, string | number> = {}) =>
     lookupServerMessage(locale, `email.itinerary.${k}`, p)
+  // The client's and the trip's text is escaped (it went in as raw HTML), and
+  // the price is money in its currency — "JPY 450000.00" was how yen read.
+  const amount = Number(totalCost)
+  const totalLabel = Number.isFinite(amount) ? formatMoney(amount, currency) : `${currency} ${totalCost}`
   // HTML-escaped: the organization's fields are typed in Settings.
   const info = companyInfo(htmlIdentity(identity))
   return `
@@ -97,15 +103,15 @@ export function generateEmailTemplate(
   </div>
 
   <div class="content">
-    <p>${t('greeting', { clientName: `<strong>${clientName}</strong>` })}</p>
+    <p>${t('greeting', { clientName: `<strong>${escapeHtml(clientName)}</strong>` })}</p>
 
     <p>${t('intro')}</p>
 
     <div class="highlight">
       <h3 style="margin-top: 0; color: #2563eb;">${t('detailsTitle')}</h3>
-      <p><strong>${t('quoteRef')}</strong> ${itineraryCode}</p>
-      <p><strong>${t('tour')}</strong> ${tripName}</p>
-      <p><strong>${t('totalInvestment')}</strong> ${currency} ${totalCost}</p>
+      <p><strong>${t('quoteRef')}</strong> ${escapeHtml(itineraryCode)}</p>
+      <p><strong>${t('tour')}</strong> ${escapeHtml(tripName)}</p>
+      <p><strong>${t('totalInvestment')}</strong> ${escapeHtml(totalLabel)}</p>
     </div>
 
     <p>${t('pdfIntro')}</p>

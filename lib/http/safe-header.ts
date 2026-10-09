@@ -26,3 +26,11 @@ export function safeEmailAddress(value: unknown): string {
   const cleaned = headerSafe(value)
   return cleaned.includes('@') ? cleaned : ''
 }
+
+// RFC 2047 encoded-word for a header value (e.g. a Japanese Subject). Email
+// headers must be 7-bit ASCII; a raw non-ASCII Subject mojibakes in many
+// clients. ASCII subjects are passed through unchanged.
+export function encodeEmailHeader(value: string): string {
+  if (/^[\x00-\x7F]*$/.test(value)) return value
+  return `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`
+}
