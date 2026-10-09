@@ -8,6 +8,7 @@ import { escapeHtml } from '@/lib/html-escape'
 import { orgIdentity } from '@/lib/org-identity'
 import { markSupplierDocumentSent } from '@/lib/documents/mark-sent'
 import { headerSafe, safeEmailAddress } from '@/lib/http/safe-header'
+import { encodeEmailHeader } from '@/lib/email-send'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -179,6 +180,12 @@ function buildEmailWithAttachment(
 ): string {
   const boundary = `boundary_${Date.now()}`
   const safeFilename = headerSafe(filename).replace(/"/g, '')
+  // Headers are 7-bit: a Japanese org's subject (書類名, guest, company) and a
+  // Japanese supplier's file name arrived as mojibake. The subject is an
+  // RFC 2047 encoded-word; the file name keeps an ASCII fallback plus the
+  // RFC 2231 UTF-8 form every current client reads.
+  const asciiFilename = safeFilename.replace(/[^\x20-\x7E]/g, '_')
+  const utf8Filename = encodeURIComponent(safeFilename)
 
   // No From: Gmail sends as the account the organization's mail goes out
   // from (lib/email/org-gmail-sender), and the copy is in its Sent folder.
@@ -186,7 +193,7 @@ function buildEmailWithAttachment(
   // copied every organization's vouchers to one mailbox.
   const emailParts = [
     `To: ${safeEmailAddress(to)}`,
-    `Subject: ${headerSafe(subject)}`,
+    `Subject: ${encodeEmailHeader(headerSafe(subject))}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     '',
@@ -196,9 +203,9 @@ function buildEmailWithAttachment(
     '',
     Buffer.from(body).toString('base64'),
     `--${boundary}`,
-    `Content-Type: application/pdf; name="${safeFilename}"`,
+    `Content-Type: application/pdf; name="${asciiFilename}"`,
     'Content-Transfer-Encoding: base64',
-    `Content-Disposition: attachment; filename="${safeFilename}"`,
+    `Content-Disposition: attachment; filename="${asciiFilename}"; filename*=UTF-8''${utf8Filename}`,
     '',
     attachmentBase64,
     `--${boundary}--`,

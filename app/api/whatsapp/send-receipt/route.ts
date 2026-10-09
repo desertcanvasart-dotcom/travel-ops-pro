@@ -1,3 +1,4 @@
+import { formatMoney } from '@/lib/currency-totals'
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
@@ -57,9 +58,8 @@ export async function POST(request: NextRequest) {
     }
 
     const receiptNumber = payment.transaction_reference || `RCP-${payment.id.slice(0, 8).toUpperCase()}`
-    const currencySymbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£' }
-    const currencySymbol = currencySymbols[payment.currency] || payment.currency
-    const amount = `${currencySymbol}${Number(payment.amount).toFixed(2)}`
+    // Its own symbol map had no JPY: "JPY150000.00".
+    const amount = formatMoney(Number(payment.amount), payment.currency)
     // No payment_date printed "1 January 1970".
     const paymentDate = new Date(payment.payment_date || payment.created_at || Date.now()).toLocaleDateString('en-GB', {
       day: 'numeric',
