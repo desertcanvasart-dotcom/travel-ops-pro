@@ -8445,6 +8445,7 @@ export interface Database {
           company_address: string | null
           operating_country: string | null
           contract_governing_law: string | null
+          document_templates: string[]
           document_contacts: Json
           offices: Json
           default_currency: string | null
@@ -8473,6 +8474,7 @@ export interface Database {
           company_address?: string | null
           operating_country?: string | null
           contract_governing_law?: string | null
+          document_templates?: string[]
           document_contacts: Json
           offices: Json
           default_currency?: string | null
@@ -8501,6 +8503,7 @@ export interface Database {
           company_address?: string | null
           operating_country?: string | null
           contract_governing_law?: string | null
+          document_templates?: string[]
           document_contacts?: Json
           offices?: Json
           default_currency?: string | null

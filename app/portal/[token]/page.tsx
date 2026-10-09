@@ -43,6 +43,7 @@ import ExtrasSection from './ExtrasSection'
 import LeadCoordinator from './LeadCoordinator'
 import PortalChat from './PortalChat'
 import { customerFacingOrgName } from '@/lib/org-name'
+import { orgHasDocumentTemplate } from '@/lib/documents/org-templates'
 
 export const dynamic = 'force-dynamic'
 
@@ -174,7 +175,13 @@ async function resolve(token: string): Promise<{
   // in the older format — and today most trips have no link, since nothing in
   // the UI sets itineraries.template_id yet. Linking the programme is what
   // upgrades a trip to the real document.
-  const programmeTemplateId: string | null = (itin?.template_id as string | null) ?? null
+  //
+  // The 日程表 is one operator's own paper (lib/documents/org-templates.ts); an
+  // org without it shows the day list, as does a failed read of that setting.
+  const hasNittei = itin?.template_id
+    ? await orgHasDocumentTemplate(supabase, link!.org_id, 'ats-daily-itinerary').catch(() => false)
+    : false
+  const programmeTemplateId: string | null = hasNittei ? ((itin?.template_id as string | null) ?? null) : null
   let itinerary = null
   if (itin && !programmeTemplateId) {
     const { data: days } = await supabase

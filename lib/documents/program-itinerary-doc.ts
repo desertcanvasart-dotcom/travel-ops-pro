@@ -18,6 +18,7 @@ import { assembleProgramItinerary } from './assemble-program-itinerary'
 import { inlineImage } from './inline-image'
 import { loadTripStays } from './trip-stays'
 import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
+import { orgHasDocumentTemplate } from './org-templates'
 import type { DocumentPage } from './types'
 
 const TEMPLATE_SLUG = 'ats-daily-itinerary'
@@ -79,6 +80,11 @@ export async function buildProgramItineraryHtml(input: {
 
   const template = getTemplate(TEMPLATE_SLUG)
   if (!template) throw new ProgramItineraryError('Template not found', 404)
+  // One operator's paper (lib/documents/org-templates.ts). Checked here so the
+  // office button and the customer's portal refuse alike.
+  if (!(await orgHasDocumentTemplate(supabase, orgId, 'ats-daily-itinerary'))) {
+    throw new ProgramItineraryError('This document is not enabled for your organization', 403)
+  }
 
   const { data: program, error: programError } = await supabase
     .from('tour_templates')
