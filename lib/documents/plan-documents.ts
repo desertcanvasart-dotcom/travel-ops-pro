@@ -48,6 +48,8 @@ export interface PlanService {
   /** What the supplier charges, in its own currency (total_cost is converted to the trip's). */
   supplier_currency?: string | null
   supplier_cost_original?: number | string | null
+  /** The rate total_cost was converted at (supplier currency → trip currency). */
+  exchange_rate_used?: number | string | null
   supplier_id?: string | null
   supplier_name?: string | null
   city?: string | null
@@ -95,6 +97,7 @@ export interface PlannedService {
   total_cost: number | string | null
   supplier_currency?: string | null
   supplier_cost_original?: number | string | null
+  exchange_rate_used?: number | string | null
 }
 
 export interface PlannedDocument {
@@ -264,6 +267,7 @@ export function planDocuments(input: {
           total_cost: raw.total_cost ?? null,
           supplier_currency: raw.supplier_currency ?? null,
           supplier_cost_original: raw.supplier_cost_original ?? null,
+          exchange_rate_used: raw.exchange_rate_used ?? null,
         },
       })
     }
@@ -445,24 +449,41 @@ export function staleDocuments(
  * The money a voucher states. A supplier confirms what it charges in its own
  * currency: itinerary_services.total_cost is converted to the TRIP's currency
  * (and moves with every FX reprice), so an Egyptian hotel contracted at
- * EGP 15,000 on a yen trip was asked to confirm "¥45,xxx". When every line
- * carries the supplier's own cost in one currency, the voucher is in that
- * currency; otherwise it stays in the trip's.
+ * EGP 15,000 on a yen trip was asked to confirm "¥45,xxx".
+ *
+ * supplier_cost_original is written when the line is created and NOT kept in
+ * step when the line is edited (2 rooms → 3 changes total_cost only). So a
+ * line's own-currency cost is used only while it still agrees with total_cost
+ * at the rate it was converted at; a voucher never states a stale amount.
+ * When every line is in one foreign currency and agrees, the voucher is in
+ * that currency; otherwise it stays in the trip's, at total_cost.
  */
 export function voucherMoney(
-  services: Array<Pick<PlannedService, 'total_cost' | 'supplier_currency' | 'supplier_cost_original'>>,
+  services: Array<Pick<PlannedService, 'total_cost' | 'supplier_currency' | 'supplier_cost_original' | 'exchange_rate_used'>>,
   tripCurrency: string
 ): { currency: string; total: number; lineAmounts: number[] } {
   const num = (v: unknown) => {
-    const n = parseFloat(String(v ?? ''))
+    if (v === null || v === undefined || v === '') return null
+    const n = parseFloat(String(v))
     return Number.isFinite(n) ? n : null
   }
+  const trip = String(tripCurrency || '').trim().toUpperCase()
   const currencies = new Set(services.map(s => String(s.supplier_currency ?? '').trim().toUpperCase()))
+  const [only] = [...currencies]
+  const current = (s: (typeof services)[number]) => {
+    const original = num(s.supplier_cost_original)
+    const rate = num(s.exchange_rate_used)
+    const total = num(s.total_cost)
+    if (original === null || rate === null || rate <= 0 || total === null) return false
+    // Within a cent per unit of trip currency, or 0.5% — rounding, not an edit.
+    return Math.abs(original * rate - total) <= Math.max(0.01, Math.abs(total) * 0.005)
+  }
   const own = services.length > 0
     && currencies.size === 1
-    && !currencies.has('')
-    && services.every(s => num(s.supplier_cost_original) !== null)
+    && !!only
+    && only !== trip
+    && services.every(current)
   const lineAmounts = services.map(s => (own ? num(s.supplier_cost_original) : num(s.total_cost)) ?? 0)
   const total = Math.round(lineAmounts.reduce((a, b) => a + b, 0) * 100) / 100
-  return { currency: own ? [...currencies][0] : tripCurrency, total, lineAmounts }
+  return { currency: own ? only : tripCurrency, total, lineAmounts }
 }

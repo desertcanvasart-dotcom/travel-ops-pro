@@ -54,6 +54,14 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
   // language's text whatever language it was rendered in.
   const version = (quote.language_version ?? null) as { title?: string | null; notes?: string | null; terms_conditions?: string | null; special_requests?: string | null } | null
   const notes = version?.notes ?? quote.notes
+  // Every quote is created with a version titled "Quote <number>" (and its
+  // translation) — a placeholder, not a tour name. Only a title the operator
+  // actually wrote replaces the tour name in the banner.
+  const versionTitle = (() => {
+    const t = String(version?.title ?? '').trim()
+    if (!t || (quote.quote_number && t.includes(String(quote.quote_number)))) return null
+    return t
+  })()
   // What the tour includes and excludes: the variation's own lists, else the
   // safe generic lines (never a guide language or bottled water it may not have).
   const listOf = (v: unknown) => (Array.isArray(v) ? v.map(x => String(x ?? '').trim()).filter(Boolean) : [])
@@ -509,7 +517,7 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
     
     <!-- Tour Banner -->
     <div class="tour-banner">
-      <h2>${esc(version?.title || template?.template_name || quote.trip_name || labels.tourPackage)}</h2>
+      <h2>${esc(versionTitle || template?.template_name || quote.trip_name || labels.tourPackage)}</h2>
       <p>${esc(variation?.variation_name || (quote.source === 'whatsapp_b2b' ? labels.customTourWhatsApp : ''))}</p>
       <div class="tour-meta">
         <div class="tour-meta-item">
@@ -589,6 +597,7 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
 
     ${version?.special_requests ? `
     <div class="notes-section">
+      <h4>${labels.specialRequests}</h4>
       <p>${esc(version.special_requests)}</p>
     </div>
     ` : ''}
@@ -739,7 +748,7 @@ export async function GET(
       'daysNights', 'paxLabel', 'paxWithLeader', 'tbd', 'seasonSuffix',
       'servicesIncluded', 'tableService', 'tableQty', 'tableRate', 'tableTotal',
       'fallbackService', 'pricingSummary',
-      'tourLeaderIncluded', 'singleSupplement', 'notes', 'termsConditions',
+      'tourLeaderIncluded', 'singleSupplement', 'notes', 'specialRequests', 'termsConditions',
       'paymentTerms', 'paymentDepositRule', 'paymentBalanceRule',
       'priceIncludes', 'includesItinerary', 'notIncluded', 'excludesFlights',
       'excludesInsurance',
