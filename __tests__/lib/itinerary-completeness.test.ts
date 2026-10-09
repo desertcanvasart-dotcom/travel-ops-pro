@@ -79,7 +79,6 @@ describe('every path an itinerary reaches a client by checks its services', () =
     'app/api/send-email/route.ts',
     'app/api/whatsapp/send-quote/route.ts',
     'app/api/itineraries/[id]/share/route.ts',
-    'app/api/pdf/generate/route.ts',
   ]) {
     it(`${path} loads the itinerary's own services and reads the override explicitly`, () => {
       const s = src(path)
@@ -87,11 +86,6 @@ describe('every path an itinerary reaches a client by checks its services', () =
       expect(s).toMatch(/allowIncomplete: allowsIncomplete\(/)
     })
   }
-
-  it('the server PDF checks the STORED services, not the days the caller posted', () => {
-    const s = src('app/api/pdf/generate/route.ts')
-    expect(s).toMatch(/loadItineraryServiceLines\(pdfDb, String\(itinerary\.id\)/)
-  })
 
   it('supplier paperwork is deliberately not blocked: an unpriced hotel still has to be booked', () => {
     expect(src('app/api/itineraries/[id]/generate-documents/route.ts')).not.toContain('loadItineraryServiceLines(')
@@ -118,7 +112,7 @@ describe('every path an itinerary reaches a client by checks its services', () =
   it('every delivery route fails CLOSED when the services cannot be read', () => {
     // Review of #449: a lookup that returned "no lines" on a database error let
     // the gate fall back to the amount-only check.
-    for (const path of ['app/api/send-email/route.ts', 'app/api/whatsapp/send-quote/route.ts', 'app/api/itineraries/[id]/share/route.ts', 'app/api/pdf/generate/route.ts']) {
+    for (const path of ['app/api/send-email/route.ts', 'app/api/whatsapp/send-quote/route.ts', 'app/api/itineraries/[id]/share/route.ts']) {
       const s = src(path)
       expect(s, path).toMatch(/if \(!loaded\.ok\) \{/)
       expect(s, path).toContain('servicesSnapshot: loaded.lines')

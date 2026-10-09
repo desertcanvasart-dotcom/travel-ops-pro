@@ -42,17 +42,34 @@ export async function GET() {
     // Top templates by THIS org's sends. usage_count / last_used_at sit on the
     // template row, which a shared default shares with every org — each org's
     // "top templates" counted the others' sends too.
-    const { data: orgSends } = await supabaseAdmin
-      .from('template_send_log')
-      .select('template_id, sent_at')
-      .eq('org_id', orgId)
-      .not('template_id', 'is', null)
+    // Every sent row, paged (PostgREST returns at most 1000 per request, so one
+    // read silently undercounted a busy org); failures are not usage.
+    const orgSends: Array<{ template_id: string; sent_at: string | null }> = []
+    for (let from = 0; ; from += 1000) {
+      const { data: page } = await supabaseAdmin
+        .from('template_send_log')
+        .select('template_id, sent_at')
+        .eq('org_id', orgId)
+        .eq('status', 'sent')
+        .not('template_id', 'is', null)
+        .order('sent_at', { ascending: true })
+        .range(from, from + 999)
+      orgSends.push(...((page ?? []) as Array<{ template_id: string; sent_at: string | null }>))
+      if (!page || page.length < 1000) break
+    }
+    // Sends of a shared default this org later copied count for the copy —
+    // they were the org's own sends of that message.
+    const copyOf = new Map<string, string>()
+    for (const r of (visibleRows ?? []) as Array<{ id: string; org_id: string | null; source_template_id: string | null }>) {
+      if (r.org_id === orgId && r.source_template_id) copyOf.set(r.source_template_id, r.id)
+    }
     const usage = new Map<string, { count: number; last: string | null }>()
-    for (const r of (orgSends ?? []) as Array<{ template_id: string; sent_at: string | null }>) {
-      const u = usage.get(r.template_id) ?? { count: 0, last: null }
+    for (const r of orgSends) {
+      const id = copyOf.get(r.template_id) ?? r.template_id
+      const u = usage.get(id) ?? { count: 0, last: null }
       u.count++
       if (r.sent_at && (!u.last || r.sent_at > u.last)) u.last = r.sent_at
-      usage.set(r.template_id, u)
+      usage.set(id, u)
     }
     const topTemplates = visible
       .map(t => ({ id: t.id, name: t.name, channel: t.channel, usage_count: usage.get(t.id)?.count ?? 0, last_used_at: usage.get(t.id)?.last ?? null }))
@@ -78,24 +95,24 @@ export async function GET() {
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-    const { data: sendStats } = await supabaseAdmin
-      .from('template_send_log')
-      .select('status, channel')
-      .eq('org_id', orgId)
-      .gte('sent_at', thirtyDaysAgo.toISOString())
-
-    const stats = {
-      totalSent: 0,
-      successful: 0,
-      failed: 0,
-      byChannel: { email: 0, whatsapp: 0, sms: 0 },
+    // Counted by the database, not by fetching rows (a fetch stops at 1000).
+    const since = thirtyDaysAgo.toISOString()
+    const countSends = async (filter: { status?: string; channel?: string }) => {
+      let q = supabaseAdmin
+        .from('template_send_log')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .gte('sent_at', since)
+      if (filter.status) q = q.eq('status', filter.status)
+      if (filter.channel) q = q.eq('channel', filter.channel)
+      const { count } = await q
+      return count ?? 0
     }
-    sendStats?.forEach((s: any) => {
-      stats.totalSent++
-      if (s.status === 'sent') stats.successful++
-      if (s.status === 'failed') stats.failed++
-      if (s.channel in stats.byChannel) stats.byChannel[s.channel as keyof typeof stats.byChannel]++
-    })
+    const [totalSent, successful, failed, email, whatsapp, sms] = await Promise.all([
+      countSends({}), countSends({ status: 'sent' }), countSends({ status: 'failed' }),
+      countSends({ channel: 'email' }), countSends({ channel: 'whatsapp' }), countSends({ channel: 'sms' }),
+    ])
+    const stats = { totalSent, successful, failed, byChannel: { email, whatsapp, sms } }
 
     return NextResponse.json({
       success: true,
