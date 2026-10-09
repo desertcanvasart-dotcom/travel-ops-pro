@@ -83,8 +83,17 @@ export async function POST(
       `Total: ${money(booking.total_cost, currency)}`,
       `Balance Due: ${money(booking.balance_due, currency)}`,
     ]
-    if (Number(booking.balance_due) > 0 && booking.payment_deadline) {
-      lines.push(`Payment Due: ${date(booking.payment_deadline)}`)
+    // payment_deadline is the DEPOSIT's due date (lib/booking-creation); it
+    // was printed as the date the whole balance was due. While the deposit is
+    // unpaid: the deposit, by its date. After: the balance, by balance_due_date.
+    if (Number(booking.balance_due) > 0) {
+      const depositOwed = !booking.deposit_paid && Number(booking.deposit_amount) > 0
+      if (depositOwed) {
+        lines.push(`Deposit Due: ${money(booking.deposit_amount, currency)}${booking.payment_deadline ? ` by ${date(booking.payment_deadline)}` : ''}`)
+        if (booking.balance_due_date) lines.push(`Balance Due By: ${date(booking.balance_due_date)}`)
+      } else if (booking.balance_due_date) {
+        lines.push(`Balance Due By: ${date(booking.balance_due_date)}`)
+      }
     }
     if (booking.special_requests) {
       lines.push('', `Special Requests: ${booking.special_requests}`)

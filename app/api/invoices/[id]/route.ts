@@ -29,7 +29,22 @@ export async function GET(
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
-    return NextResponse.json(data)
+    // When the balance is due, from the trip's booking — the portal and
+    // WhatsApp copies of this invoice print it; the office's own did not.
+    let balance_due_date: string | null = null
+    if (data?.itinerary_id) {
+      const { data: booking } = await supabaseAdmin
+        .from('bookings')
+        .select('balance_due_date')
+        .eq('itinerary_id', data.itinerary_id)
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      balance_due_date = (booking?.balance_due_date as string | null) ?? null
+    }
+
+    return NextResponse.json({ ...data, balance_due_date })
   } catch (error) {
     console.error('Error in invoice GET:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

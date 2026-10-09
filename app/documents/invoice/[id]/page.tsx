@@ -132,7 +132,9 @@ export default function InvoicePage() {
     setDownloading(true)
     try {
       const invoiceData = buildInvoiceData(payment)
-      const doc = generateInvoicePDF(invoiceData, await fetchCompanyInfo())
+      const { japaneseFontData } = await import('@/lib/pdf-fonts')
+      // Noto Sans JP, as the portal and WhatsApp copies: Helvetica has no Japanese.
+      const doc = generateInvoicePDF(invoiceData, await fetchCompanyInfo(), { font: await japaneseFontData() })
       const blob = doc.output('blob')
       setPdfPreviewBlob(blob)
       setShowPdfPreview(true)
