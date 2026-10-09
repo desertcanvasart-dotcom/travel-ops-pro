@@ -52,6 +52,14 @@ const prettyDate = (iso: string) => {
     : `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
 }
 
+// The gate answers a locked form with { error: 'locked', message: <Japanese> }:
+// show the message, never the bare code.
+function portalError(json: { error?: string; message?: string }, fallback: string): string {
+  if (json.message) return json.message
+  if (json.error && json.error !== 'locked') return json.error
+  return fallback
+}
+
 export default function TravellerDocuments({ token, passengerId, locked }: Props) {
   const [docs, setDocs] = useState<DocumentRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -69,7 +77,11 @@ export default function TravellerDocuments({ token, passengerId, locked }: Props
       try {
         const res = await fetch(base)
         const json = await res.json().catch(() => ({}))
-        if (!cancelled && res.ok) setDocs(json.documents ?? [])
+        if (cancelled) return
+        if (res.ok) setDocs(json.documents ?? [])
+        else setError(portalError(json, '読み込みに失敗しました。ページを再読み込みしてください。'))
+      } catch {
+        if (!cancelled) setError('読み込みに失敗しました。通信状況をご確認ください。')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -104,7 +116,7 @@ export default function TravellerDocuments({ token, passengerId, locked }: Props
       const res = await fetch(base, { method: 'POST', body })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setError(json.error || 'アップロードに失敗しました。')
+        setError(portalError(json, 'アップロードに失敗しました。'))
         return
       }
       setDocs(prev => {
@@ -129,10 +141,12 @@ export default function TravellerDocuments({ token, passengerId, locked }: Props
       const res = await fetch(`${base}/${doc.id}`, { method: 'DELETE' })
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
-        setError(json.error || '削除に失敗しました。')
+        setError(portalError(json, '削除に失敗しました。'))
         return
       }
       setDocs(prev => prev.filter(d => d.id !== doc.id))
+    } catch {
+      setError('削除に失敗しました。通信状況をご確認ください。')
     } finally {
       setBusy(null)
     }

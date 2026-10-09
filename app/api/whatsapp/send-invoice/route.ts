@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { uploadOutboundPdf } from '@/lib/storage/outbound-documents'
-import { businessIdentity } from '@/lib/org-identity'
+import { orgIdentity, type OrgIdentity } from '@/lib/org-identity'
 import { safeKeySegment } from '@/lib/storage-key'
 import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createServiceClient } from '@/lib/supabase/service-client'
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Generate Invoice PDF
-async function generateInvoicePDF(invoice: any): Promise<Uint8Array> {
+async function generateInvoicePDF(invoice: any, brand: OrgIdentity): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create()
   const page = pdfDoc.addPage([595, 842]) // A4
   
@@ -22,8 +23,7 @@ async function generateInvoicePDF(invoice: any): Promise<Uint8Array> {
 
   const currencySymbol = ({ EUR: '€', USD: '$', GBP: '£' } as Record<string, string>)[invoice.currency] || invoice.currency
 
-  // Header
-  const brand = businessIdentity()
+  // Header: the sending org's name (Settings), not the install's env name.
   if (brand.name) page.drawText(brand.name, {
     x: margin, y, size: 24, font: helveticaBold, color: rgb(0.39, 0.49, 0.28)
   })
@@ -177,6 +177,12 @@ async function generateInvoicePDF(invoice: any): Promise<Uint8Array> {
 
 export async function POST(request: NextRequest) {
   try {
+    // The service client below sees every org: the caller's org is the
+    // boundary. It read the invoice by id alone, so anyone signed in could
+    // send another org's invoice and flip it to "sent".
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
     const { invoiceId } = body
 
@@ -196,6 +202,7 @@ export async function POST(request: NextRequest) {
       .from('invoices')
       .select('*')
       .eq('id', invoiceId)
+      .eq('org_id', orgId)
       .single()
 
     if (invoiceError || !invoice) {
@@ -221,6 +228,7 @@ export async function POST(request: NextRequest) {
         .from('clients')
         .select('phone')
         .eq('id', invoice.client_id)
+        .eq('org_id', orgId)
         .single()
       clientPhone = client?.phone
     }
@@ -230,6 +238,7 @@ export async function POST(request: NextRequest) {
         .from('itineraries')
         .select('client_phone')
         .eq('id', invoice.itinerary_id)
+        .eq('org_id', orgId)
         .single()
       clientPhone = itinerary?.client_phone
     }
@@ -243,7 +252,8 @@ export async function POST(request: NextRequest) {
 
     // Generate PDF
     console.log('📄 Generating invoice PDF...')
-    const pdfBytes = await generateInvoicePDF(invoice)
+    const identity = await orgIdentity(orgId)
+    const pdfBytes = await generateInvoicePDF(invoice, identity)
 
     // Upload to Supabase Storage
     console.log('📤 Uploading PDF to storage...')
@@ -254,8 +264,8 @@ export async function POST(request: NextRequest) {
     const pdfUrl = await uploadOutboundPdf(supabase, fileName, pdfBytes)
     console.log('✅ PDF uploaded (private, signed link)')
 
-    const businessName = process.env.BUSINESS_NAME || ''
-    const businessEmail = process.env.BUSINESS_EMAIL || ''
+    const businessName = identity.name
+    const businessEmail = identity.email
     const currencySymbol = ({ EUR: '€', USD: '$', GBP: '£' } as Record<string, string>)[invoice.currency] || invoice.currency
 
     const issueDate = new Date(invoice.issue_date).toLocaleDateString('en-GB', {
@@ -273,7 +283,7 @@ export async function POST(request: NextRequest) {
         ? 'Final Balance Invoice'
         : 'Invoice'
 
-    const message = `📄 *${businessName}* 📄\n\n` +
+    const message = (businessName ? `📄 *${businessName}* 📄\n\n` : '') +
       `Dear ${invoice.client_name},\n\n` +
       `Please find your invoice attached.\n\n` +
       `🧾 *${typeLabel}*\n` +
@@ -282,9 +292,8 @@ export async function POST(request: NextRequest) {
       `📅 *Issue Date:* ${issueDate}\n` +
       `⏰ *Due Date:* ${dueDate}\n\n` +
       `💰 *Balance Due: ${currencySymbol}${Number(invoice.balance_due).toFixed(2)}*\n\n` +
-      `For questions, contact us:\n` +
-      `📧 ${businessEmail}\n\n` +
-      `Thank you! 🙏\n${businessName} Team`
+      (businessEmail ? `For questions, contact us:\n📧 ${businessEmail}\n\n` : '') +
+      `Thank you! 🙏` + (businessName ? `\n${businessName} Team` : '')
 
     console.log('📤 Sending to:', clientPhone)
 
@@ -310,6 +319,7 @@ export async function POST(request: NextRequest) {
           sent_at: new Date().toISOString()
         })
         .eq('id', invoiceId)
+        .eq('org_id', orgId)
     }
 
     console.log('✅ Invoice sent with PDF:', result.messageId)

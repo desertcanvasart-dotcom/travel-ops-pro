@@ -67,7 +67,11 @@ export async function DELETE(
     return NextResponse.json({ error: '削除に失敗しました。' }, { status: 500 })
   }
 
-  await db.from('booking_passenger_documents').delete().eq('id', doc.id)
+  const { error: rowError } = await db.from('booking_passenger_documents').delete().eq('id', doc.id)
+  if (rowError) {
+    console.error('[portal] document row delete failed:', rowError.message)
+    return NextResponse.json({ error: '削除に失敗しました。' }, { status: 500 })
+  }
 
   return NextResponse.json({ success: true })
 }

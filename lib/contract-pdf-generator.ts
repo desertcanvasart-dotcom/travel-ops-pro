@@ -3,6 +3,7 @@
 // ============================================
 
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
+import { contractPrice } from '@/lib/contract-facts'
 
 interface ContractData {
   /**
@@ -24,7 +25,8 @@ interface ContractData {
   startDate: string
   endDate: string
   destinations: string
-  totalCost: number
+  /** null = no price yet: prints "To be confirmed". */
+  totalCost: number | null
   currency: string
   inclusions?: string[]
   exclusions?: string[]
@@ -89,7 +91,7 @@ export async function generateContractPDF(data: ContractData): Promise<Uint8Arra
   // Financial
   page.drawText('FINANCIAL TERMS', { x: 50, y, size: 14, font: helveticaBold, color: rgb(0.2, 0.2, 0.2) })
   y -= 20
-  page.drawText(`Total Price: ${data.currency} ${data.totalCost.toLocaleString()}`, { 
+  page.drawText(`Total Price: ${contractPrice(data.totalCost, data.currency)}`, { 
     x: 50, y, size: 13, font: helveticaBold, color: rgb(0.39, 0.49, 0.28) 
   })
   y -= 20

@@ -45,15 +45,20 @@ export default function TravellerDocumentsPanel({ bookingId }: { bookingId: stri
   const [loading, setLoading] = useState(true)
   const [forbidden, setForbidden] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
+  // A load or delete that failed: shown, never read as "nothing uploaded".
+  const [error, setError] = useState<string | null>(null)
   const { confirmDelete } = useConfirmDialog()
 
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/bookings/${bookingId}/passenger-documents`)
       if (res.status === 403) { setForbidden(true); return }
-      if (!res.ok) return
+      if (!res.ok) { setError('Could not load the traveller documents.'); return }
       const json = await res.json()
       setTravellers(json.travellers ?? [])
+      setError(null)
+    } catch {
+      setError('Could not load the traveller documents.')
     } finally {
       setLoading(false)
     }
@@ -73,6 +78,9 @@ export default function TravellerDocumentsPanel({ bookingId }: { bookingId: stri
     try {
       const res = await fetch(`/api/bookings/${bookingId}/passenger-documents/${doc.id}`, { method: 'DELETE' })
       if (res.ok) await load()
+      else setError(`Could not delete the ${what}. Please try again.`)
+    } catch {
+      setError(`Could not delete the ${what}. Please try again.`)
     } finally {
       setBusy(null)
     }
@@ -89,6 +97,14 @@ export default function TravellerDocumentsPanel({ bookingId }: { bookingId: stri
     )
   }
   const anyDocs = (travellers ?? []).some(t => t.documents.length > 0)
+  if (error && !anyDocs) {
+    return (
+      <div className="bg-white rounded-lg shadow-sm border p-4 mb-6 text-sm text-red-600">
+        {error}{' '}
+        <button type="button" onClick={() => { setLoading(true); load() }} className="underline">Try again</button>
+      </div>
+    )
+  }
   if (!anyDocs) return null
 
   return (

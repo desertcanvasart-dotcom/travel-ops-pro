@@ -5,11 +5,12 @@ import { useCompanyInfo } from '@/lib/use-company-info'
 import { useTranslations } from 'next-intl'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Download, Loader2, FileText, Calendar, CreditCard, Eye } from 'lucide-react'
+import { Download, Loader2, FileText, Calendar, CreditCard, Eye } from 'lucide-react'
 import { generateInvoicePDF, downloadInvoicePDF } from '@/lib/invoice-pdf-generator'
 import { fetchCompanyInfo } from '@/lib/company-info-client'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
+import { BackLink } from '@/components/nav/TripNav'
 
 interface Payment {
   id: string
@@ -159,13 +160,8 @@ export default function InvoicePage() {
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
-          <Link
-            href="/payments"
-            className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            {t('backToPayments')}
-          </Link>
+          {/* Back to wherever it was opened from (?from=), else its payment. */}
+          <BackLink fallbackHref={`/payments/${payment.id}`} fallbackLabel={t('backToPayments')} />
           <button
             onClick={handlePreviewPDF}
             disabled={downloading}
@@ -190,7 +186,9 @@ export default function InvoicePage() {
             </div>
             <div className="text-right">
               {company?.name && <p className="text-lg font-bold text-gray-900">{company.name}</p>}
-              <p className="text-xs text-gray-500">Cairo, Egypt</p>
+              {(company?.city || company?.country) && (
+                <p className="text-xs text-gray-500">{[company?.city, company?.country].filter(Boolean).join(', ')}</p>
+              )}
               {company?.email && <p className="text-xs text-gray-500">{company.email}</p>}
             </div>
           </div>

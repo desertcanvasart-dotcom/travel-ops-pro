@@ -22,6 +22,7 @@ import {
 import { generateReceiptPDF, downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { withReturnTo } from '@/lib/nav/return-to'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 
 interface UnifiedPayment {
@@ -74,7 +75,8 @@ export default function ReceiptsPage() {
 
       // Process itinerary payments
       {
-        itineraryPayments.forEach((p: any) => {
+        // Receipts are for money received: not pending, failed or refunded.
+        itineraryPayments.filter((p: any) => p.payment_status === 'completed').forEach((p: any) => {
           allPayments.push({
             id: p.id,
             source: 'itinerary',
@@ -142,7 +144,7 @@ export default function ReceiptsPage() {
     // For itinerary payments, go to the receipt page
     // For invoice payments, go to the invoice page
     if (payment.source === 'itinerary') {
-      router.push(`/documents/receipt/${payment.id}`)
+      router.push(withReturnTo(`/documents/receipt/${payment.id}`, '/receipts'))
     } else {
       router.push(`/invoices/${payment.source_id}`)
     }
