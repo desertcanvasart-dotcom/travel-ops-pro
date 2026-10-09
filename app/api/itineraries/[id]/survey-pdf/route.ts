@@ -15,6 +15,7 @@ import { orgAuth } from '@/lib/auth/org-auth'
 import { clientMessage } from '@/lib/api-errors'
 import { ensureSurvey } from '@/lib/surveys/ensure-survey'
 import { stampSurveyQr } from '@/lib/surveys/survey-pdf'
+import { orgHasDocumentTemplate } from '@/lib/documents/org-templates'
 
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://autoura.net').replace(/\/$/, '')
 
@@ -24,6 +25,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (auth.error) return NextResponse.json({ success: false, error: auth.error }, { status: auth.status })
     const { supabase, org_id } = auth
     if (!supabase || !org_id) return NextResponse.json({ success: false, error: 'Authentication failed' }, { status: 401 })
+    // The printed questionnaire is one operator's own (lib/documents/org-templates.ts).
+    if (!(await orgHasDocumentTemplate(supabase, org_id, 'ats-questionnaire'))) {
+      return NextResponse.json({ success: false, error: 'This document is not enabled for your organization' }, { status: 403 })
+    }
 
     const { id } = await params
     const { data: itinerary, error } = await supabase

@@ -7,7 +7,7 @@
 // document was written rather than the day it was reprinted.
 
 import { describe, it, expect } from 'vitest'
-import { buildProgramItineraryHtml, formatCreatedDate } from '@/lib/documents/program-itinerary-doc'
+import { buildProgramItineraryHtml, formatCreatedDate, ProgramItineraryError } from '@/lib/documents/program-itinerary-doc'
 
 const PROGRAM = {
   id: 'p1',
@@ -35,16 +35,28 @@ function fakeSupabase(program: unknown, org: unknown) {
   } as never
 }
 
-const build = (departure: Parameters<typeof buildProgramItineraryHtml>[0]['departure']) =>
+const ATS_ORG = { name: 'Operator', logo_url: null, document_templates: ['ats-daily-itinerary'] }
+
+const build = (departure: Parameters<typeof buildProgramItineraryHtml>[0]['departure'], org: unknown = ATS_ORG) =>
   buildProgramItineraryHtml({
-    supabase: fakeSupabase(PROGRAM, { name: 'Operator', logo_url: null }),
+    supabase: fakeSupabase(PROGRAM, org),
     orgId: 'org1',
     templateId: 'p1',
     createdDate: '2026-08-20',
     departure,
   })
 
+const NO_DEPARTURE = { start_date: null, cairo_guide: null, south_guide: null, author: null, customer_name: null }
+
 describe('buildProgramItineraryHtml', () => {
+  // One operator's paper (lib/documents/org-templates.ts): the office button and
+  // the portal both come through here, so both refuse an org without it.
+  it('refuses an organization that does not have the 日程表', async () => {
+    const err = await build(NO_DEPARTURE, { name: 'Other', logo_url: null, document_templates: [] }).catch(e => e)
+    expect(err).toBeInstanceOf(ProgramItineraryError)
+    expect(err.status).toBe(403)
+  })
+
   it('fills the date column from the departure, one day per row', async () => {
     const { html, templateCode } = await build({
       start_date: '2026-11-03',

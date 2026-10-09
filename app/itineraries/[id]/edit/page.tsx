@@ -5,6 +5,7 @@ import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useTranslations, useLocale } from 'next-intl'
+import { useOrgDocumentTemplates } from '@/lib/documents/use-org-templates'
 import ServiceSupplierSelect from '@/components/itineraries/ServiceSupplierSelect'
 import { supplierCityForService } from '@/lib/suppliers/service-supplier-kinds'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
@@ -270,6 +271,7 @@ interface Programme {
 export default function ItineraryEditorPage() {
   const { rateSymbol } = useCurrency()
   const t = useTranslations('itineraries.edit')
+  const orgDocuments = useOrgDocumentTemplates()
   const tCommon = useTranslations('common')
   // The agency's tiers (Settings → Vocabulary); the presets read in caps as before.
   const tierOptions = useTierOptions(key => key.toUpperCase())
@@ -2250,7 +2252,7 @@ export default function ItineraryEditorPage() {
             )}
 
             {itinerary.template_id ? (
-              <a
+              orgDocuments.has('ats-daily-itinerary') && <a
                 href={`/api/documents/program-itinerary?itinerary_id=${itineraryId}&format=html`}
                 target="_blank"
                 rel="noopener noreferrer"

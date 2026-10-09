@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { orgAuth } from '@/lib/auth/org-auth'
 import { clientMessage } from '@/lib/api-errors'
 import { getTemplate } from '@/lib/documents/registry'
+import { orgHasDocumentTemplate } from '@/lib/documents/org-templates'
 import { renderHtmlToPdf } from '@/lib/documents/render'
 import { assembleOperationsSheet, applyDayLanguageVersions } from '@/lib/documents/assemble-operations-sheet'
 import type { DayLanguageVersion } from '@/lib/documents/assemble-operations-sheet'
@@ -32,6 +33,13 @@ export async function GET(request: NextRequest) {
       )
     }
     const { supabase, org_id } = auth
+
+    if (!(await orgHasDocumentTemplate(supabase, org_id, TEMPLATE_SLUG))) {
+      return NextResponse.json(
+        { success: false, error: 'This document is not enabled for your organization' },
+        { status: 403 }
+      )
+    }
 
     const params = request.nextUrl.searchParams
     const itineraryId = params.get('itinerary_id')

@@ -17,6 +17,7 @@ import { useCompanyInfo } from '@/lib/use-company-info'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import GenerateNitteiButton from '@/components/GenerateNitteiButton'
 import GenerateOpsSheetButton from '@/components/GenerateOpsSheetButton'
+import { useOrgDocumentTemplates } from '@/lib/documents/use-org-templates'
 import ResourceAssignmentV2 from '@/app/components/ResourceAssignmentV2'
 import ResourceSummaryCard from '@/app/components/ResourceSummaryCard'
 import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
@@ -181,6 +182,8 @@ export default function ViewItineraryPage() {
   const tAtt = useTranslations('itineraries.detail.attention')
   const tOwn = useTranslations('itineraries.detail.ownWhatsApp')
   const tLayout = useTranslations('itineraries.detail.layout')
+  // One operator's own documents — offered only to the org that has them.
+  const orgDocuments = useOrgDocumentTemplates()
   // The letterhead on the generated PDF. It used to come from the message
   // catalogue — where the first operator's name sat as if it were a
   // translation — so every agency's quote carried it. Undefined until the
@@ -1690,10 +1693,10 @@ export default function ViewItineraryPage() {
                     disabled: generatingPDF || days.length === 0,
                     title: days.length === 0 ? t('pdfNeedsDays') : documentLanguageReady(lang) ? t('pdfTooltip') : tLayout('translateFirst', { language: LANGUAGE_NAMES[lang] }),
                   })),
-                  { label: tLayout('docNittei'), icon: <FileText className="w-4 h-4" />, onSelect: () => setNitteiSignal(n => n + 1) },
+                  ...(orgDocuments.has('ats-daily-itinerary') ? [{ label: tLayout('docNittei'), icon: <FileText className="w-4 h-4" />, onSelect: () => setNitteiSignal(n => n + 1) }] : []),
                   { label: t('contract'), icon: <FileText className="w-4 h-4" />, href: fromThisTrip(`/documents/contract/${itinerary.id}`) },
-                  { label: tLayout('docSurvey'), icon: <ClipboardList className="w-4 h-4" />, onSelect: () => window.open(`/api/itineraries/${itinerary.id}/survey-pdf`, '_blank', 'noopener') },
-                  { label: tLayout('docOpsSheet'), icon: <FileText className="w-4 h-4" />, onSelect: () => setOpsSheetSignal(n => n + 1), title: tLayout('staffLanguage') },
+                  ...(orgDocuments.has('ats-questionnaire') ? [{ label: tLayout('docSurvey'), icon: <ClipboardList className="w-4 h-4" />, onSelect: () => window.open(`/api/itineraries/${itinerary.id}/survey-pdf`, '_blank', 'noopener') }] : []),
+                  ...(orgDocuments.has('ats-operations-sheet') ? [{ label: tLayout('docOpsSheet'), icon: <FileText className="w-4 h-4" />, onSelect: () => setOpsSheetSignal(n => n + 1), title: tLayout('staffLanguage') }] : []),
                   {
                     label: existingInvoice ? tStage('invoiceNumber', { number: existingInvoice.invoice_number }) : generatingInvoice ? t('creating') : tStage('createInvoice'),
                     icon: <Receipt className="w-4 h-4" />,

@@ -14,6 +14,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
+import { useOrgDocumentTemplates } from '@/lib/documents/use-org-templates'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
@@ -166,6 +167,7 @@ export default function TourDetailPage() {
   const company = useCompanyInfo()
   const params = useParams()
   const t = useTranslations('tours')
+  const orgDocuments = useOrgDocumentTemplates()
   // Engine prices are EUR; render them in the preferred currency.
   const { formatWithConversion, currency, rateCurrency } = useCurrency()
   const currencySymbol = CURRENCY_SYMBOLS[currency] || currency
@@ -472,12 +474,12 @@ export default function TourDetailPage() {
         <div className="flex items-center gap-2">
           {/* The office's own 日程表 document — blank template or a filled
               departure, chosen in a small dialog. */}
-          <button
+          {orgDocuments.has('ats-daily-itinerary') && <button
             onClick={() => setShowNitteiDialog(true)}
             className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#647C47] text-white hover:bg-[#4a5c35] transition-colors"
           >
             {t('detail.itineraryDoc')}
-          </button>
+          </button>}
           <span className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${tierStyle.bg} ${tierStyle.text}`}>
             {tierStyle.icon} {tour.tier.charAt(0).toUpperCase() + tour.tier.slice(1)}
           </span>
