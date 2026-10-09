@@ -9,7 +9,7 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { paymentRuleFrom } from '@/lib/payment-schedule'
 import { computeDeposit } from '@/lib/booking-creation'
 import { roundToCurrency } from '@/lib/currency-totals'
-import { fetchExchangeRates } from '@/lib/currency-service'
+import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
 import { parseFrozenFx, frozenToExchangeRates } from '@/lib/itinerary-fx'
 import { quoteAmountsInTripCurrency } from '@/lib/b2b/convert-money'
 import { templateDaysToItineraryDays, packageTypeForTemplate, serviceLineForItinerary } from '@/lib/itineraries/template-days'
@@ -137,7 +137,10 @@ export async function POST(
       const frozen = parseFrozenFx(trip.fx_frozen)
       const rates = !trip.currency || trip.currency === quoteCurrency
         ? null
-        : frozen ? frozenToExchangeRates(frozen) : await fetchExchangeRates(quoteCurrency)
+        // Today's rates as pricing runs read them — the org's exchange_rates
+        // table over the ECB feed, which has no EGP (and fell back to
+        // hard-coded rates for it without a word).
+        : frozen ? frozenToExchangeRates(frozen) : await fetchRunExchangeRates()
       const amounts = quoteAmountsInTripCurrency(quote, trip.currency, rates)
       if (!amounts) {
         return NextResponse.json(

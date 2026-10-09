@@ -10,6 +10,7 @@ import { usableRate } from '@/lib/pricing/usable-rate'
 import { currencySymbol } from '@/lib/currency-totals'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
 
 // ============================================
 // B2B QUOTE FROM ITINERARY API
@@ -190,6 +191,9 @@ export async function POST(request: NextRequest) {
     // returned its client's contact details and supplier costs in our quote.
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
+    // The partner is saved on the quote (and printed on its PDF, and copied to
+    // the trip on convert), not only used for its margin.
+    if (!(await quoteRefsInOrg(supabaseAdmin, orgId, { partner_id }))) return quoteRefNotFound()
 
     const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(supabaseAdmin, orgId) })
 
