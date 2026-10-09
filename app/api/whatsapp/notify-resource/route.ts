@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { orgIdentity } from '@/lib/org-identity'
 import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createServiceClient } from '@/lib/supabase/service-client'
@@ -139,7 +140,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const businessName = process.env.BUSINESS_NAME || ''
+    // Signed by the organization sending it (Settings), not the install's
+    // BUSINESS_NAME — every org's suppliers got the same name, or a blank.
+    const businessName = (await orgIdentity(orgId)).name
     
     // Format dates
     const formatDate = (dateStr: string) => {

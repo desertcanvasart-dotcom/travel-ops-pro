@@ -1,5 +1,6 @@
 'use client'
 
+import { clientTotalOfDays } from '@/lib/itinerary-client-price'
 import { overnightLabel, overnightProperty } from '@/lib/itineraries/overnight-property'
 import { todayLocal } from '@/lib/today'
 import { useEffect, useState, useMemo } from 'react'
@@ -235,20 +236,7 @@ export default function ViewItineraryPage() {
   // which is why the header read EUR 0.00 while Profit & Loss showed a price).
   // The services are the source of truth, so derive the client total from them,
   // mirroring the Profit & Loss card, and use that whenever services exist.
-  const computedClientTotal = useMemo(() => {
-    const margin = 25 // matches the Profit & Loss card below
-    let total = 0
-    for (const day of days) {
-      for (const s of (day.services || [])) {
-        const supplier = Number(s.total_cost) || 0
-        const clientPrice = (s as any).client_price != null
-          ? Number((s as any).client_price)
-          : supplier * (1 + margin / 100)
-        total += clientPrice
-      }
-    }
-    return Math.round(total * 100) / 100
-  }, [days])
+  const computedClientTotal = useMemo(() => clientTotalOfDays(days as never), [days])
 
   const effectiveTotalCost = computedClientTotal > 0
     ? computedClientTotal
@@ -983,7 +971,7 @@ export default function ViewItineraryPage() {
 
   const markAsSent = async (method: string) => {
     try {
-      await fetch(`/api/itineraries/${params.id}/mark-sent`, {
+      const res = await fetch(`/api/itineraries/${params.id}/mark-sent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -991,8 +979,11 @@ export default function ViewItineraryPage() {
           recipientEmail: itinerary?.client_email
         })
       })
-      
-      if (itinerary) {
+      const result = await res.json().catch(() => null)
+
+      // Only a trip still at the quote stage moves to 'sent' — a confirmed
+      // one keeps its status (the route changes nothing then).
+      if (itinerary && result?.statusChanged) {
         setItinerary({ ...itinerary, status: 'sent' })
       }
     } catch (error) {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { visibleToOrg } from '@/lib/templates/template-scope'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError, sendEmail as gmailSendEmail } from '@/lib/gmail'
@@ -12,6 +13,9 @@ const supabase = createClient(
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
     const {
       templateId,
@@ -69,40 +73,40 @@ export async function POST(request: NextRequest) {
       error_message: result.error,
     }
 
-    // Add recipient info based on type
-    if (recipientType && recipientId) {
-      logEntry.recipient_type = recipientType
-      logEntry.recipient_id = recipientId
-
-      // Also set client_id if it's a client (for backwards compatibility)
-      if (recipientType === 'client') {
-        logEntry.client_id = recipientId
-      }
+    // template_send_log has client_id but no recipient_type / recipient_id:
+    // writing them made PostgREST reject the whole row, so every send from
+    // the Templates page vanished from history and analytics.
+    if (recipientType === 'client' && recipientId) {
+      logEntry.client_id = recipientId
     } else if (clientId) {
-      // Legacy support
       logEntry.client_id = clientId
-      logEntry.recipient_type = 'client'
-      logEntry.recipient_id = clientId
     }
+    logEntry.sent_by = await getCurrentUserId()
+    logEntry.org_id = orgId
 
-    await supabase.from('template_send_log').insert(logEntry)
+    const { error: logError } = await supabase.from('template_send_log').insert(logEntry)
+    if (logError) console.error('template_send_log insert failed:', logError.message)
 
     // Update template usage count
     if (templateId) {
       // Fetch current template to get usage_count
+      // Only a template this org can see (its own or a shared default).
       const { data: template } = await supabase
         .from('message_templates')
         .select('usage_count')
         .eq('id', templateId)
-        .single()
+        .or(visibleToOrg(orgId))
+        .maybeSingle()
 
-      await supabase
-        .from('message_templates')
-        .update({
-          usage_count: (template?.usage_count || 0) + 1,
-          last_used_at: new Date().toISOString()
-        })
-        .eq('id', templateId)
+      if (template) {
+        await supabase
+          .from('message_templates')
+          .update({
+            usage_count: (template.usage_count || 0) + 1,
+            last_used_at: new Date().toISOString()
+          })
+          .eq('id', templateId)
+      }
     }
 
     if (!result.success) {

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { templateAccess, visibleToOrg } from '@/lib/templates/template-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,12 +14,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
 
     const { data, error } = await supabase
       .from('message_templates')
       .select('*')
       .eq('id', id)
+      .or(visibleToOrg(orgId))
       .single()
 
     if (error) {
@@ -37,6 +42,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
     const body = await request.json()
     const { name, description, category, subcategory, channel, subject, body: templateBody, language } = body
@@ -58,12 +65,47 @@ export async function PUT(
       updateData.placeholders = placeholders
     }
 
-    const { data, error } = await supabase
+    // An org edits its own templates. A shared default is never changed in
+    // place — every org sends it — so the edit is saved as this org's copy,
+    // which replaces the default in its list (lib/templates/template-scope).
+    const { data: current } = await supabase
       .from('message_templates')
-      .update(updateData)
+      .select('*')
       .eq('id', id)
-      .select()
-      .single()
+      .maybeSingle()
+    const access = templateAccess(current, orgId)
+    if (access === 'none') {
+      return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 })
+    }
+
+    const { data, error } = access === 'own'
+      ? await supabase
+          .from('message_templates')
+          .update(updateData)
+          .eq('id', id)
+          .eq('org_id', orgId)
+          .select()
+          .single()
+      : await supabase
+          .from('message_templates')
+          .insert({
+            name: current.name,
+            description: current.description,
+            category: current.category,
+            subcategory: current.subcategory,
+            channel: current.channel,
+            subject: current.subject,
+            body: current.body,
+            language: current.language,
+            placeholders: current.placeholders,
+            ...updateData,
+            is_active: true,
+            org_id: orgId,
+            source_template_id: current.id,
+            created_by: await getCurrentUserId(),
+          })
+          .select()
+          .single()
 
     if (error) {
       console.error('Error updating template:', error)
@@ -83,12 +125,23 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
 
-    const { error } = await supabase
+    // Only the org's own template. A shared default stays on for every other
+    // organization; it cannot be switched off from one.
+    const { data: deleted, error } = await supabase
       .from('message_templates')
       .update({ is_active: false })
       .eq('id', id)
+      .eq('org_id', orgId)
+      .select('id')
+      .maybeSingle()
+
+    if (!error && !deleted) {
+      return NextResponse.json({ success: false, error: 'Only your organization\'s own templates can be deleted' }, { status: 403 })
+    }
 
     if (error) {
       console.error('Error deleting template:', error)

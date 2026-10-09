@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { visibleToOrg, withOrgCopies } from '@/lib/templates/template-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,6 +12,9 @@ const supabase = createClient(
 // GET - List all templates
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { searchParams } = new URL(request.url)
     const category = searchParams.get('category')
     const channel = searchParams.get('channel')
@@ -20,6 +25,8 @@ export async function GET(request: NextRequest) {
       .from('message_templates')
       .select('*')
       .eq('is_active', true)
+      // The org's own templates and the shared defaults (lib/templates/template-scope).
+      .or(visibleToOrg(orgId))
       .order('category')
       .order('subcategory')
       .order('name')
@@ -49,7 +56,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Failed to fetch templates' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data: withOrgCopies(data ?? [], orgId) })
   } catch (error) {
     console.error('Templates GET error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
@@ -59,6 +66,9 @@ export async function GET(request: NextRequest) {
 // POST - Create new template
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
     const { name, description, category, subcategory, channel, subject, body: templateBody, language } = body
 
@@ -83,6 +93,8 @@ export async function POST(request: NextRequest) {
         language: language === 'ja' ? 'ja' : 'en',
         placeholders,
         is_active: true,
+        org_id: orgId,
+        created_by: await getCurrentUserId(),
       })
       .select()
       .single()

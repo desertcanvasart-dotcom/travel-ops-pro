@@ -4,13 +4,14 @@
 // (from template_send_log, which /api/templates/send already populates),
 // and pending scheduled-send count.
 //
-// Ported from the sibling app (autoura-saas). Adapted to ours: single-org
-// service-role aggregation (template_send_log is unscoped here) and ordering
-// by sent_at (ours' log timestamp).
+// Ported from the sibling app (autoura-saas). Service-role reads, every one
+// scoped to the caller's org (message_templates / template_send_log org_id,
+// migration 20261117); ordered by sent_at (ours' log timestamp).
 // ============================================
 
 import { NextResponse } from 'next/server'
-import { requireRole } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
+import { visibleToOrg } from '@/lib/templates/template-scope'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -24,12 +25,15 @@ export async function GET() {
     // needs — manager and above, matching the other analytics surfaces.
     const denied = await requireRole(['admin', 'manager'])
     if (denied) return denied
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
 
     // Top templates by usage
     const { data: topTemplates } = await supabaseAdmin
       .from('message_templates')
       .select('id, name, channel, usage_count, last_used_at')
       .eq('is_active', true)
+      .or(visibleToOrg(orgId))
       .order('usage_count', { ascending: false })
       .limit(5)
 
@@ -38,12 +42,14 @@ export async function GET() {
       .from('message_templates')
       .select('*', { count: 'exact', head: true })
       .eq('is_active', true)
+      .or(visibleToOrg(orgId))
 
     // Channel distribution
     const { data: allTemplates } = await supabaseAdmin
       .from('message_templates')
       .select('channel')
       .eq('is_active', true)
+      .or(visibleToOrg(orgId))
 
     const channelCounts = { email: 0, whatsapp: 0, sms: 0, both: 0 }
     allTemplates?.forEach((t: any) => {
@@ -54,6 +60,8 @@ export async function GET() {
     const { data: recentSends } = await supabaseAdmin
       .from('template_send_log')
       .select('id, channel, status, sent_at, template:message_templates(name)')
+      // This org's sends only (template_send_log.org_id, migration 20261117).
+      .eq('org_id', orgId)
       .order('sent_at', { ascending: false })
       .limit(10)
 
@@ -64,6 +72,7 @@ export async function GET() {
     const { data: sendStats } = await supabaseAdmin
       .from('template_send_log')
       .select('status, channel')
+      .eq('org_id', orgId)
       .gte('sent_at', thirtyDaysAgo.toISOString())
 
     const stats = {
