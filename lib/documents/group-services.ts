@@ -46,7 +46,7 @@ function citiesFarApart(a: string, b: string): boolean {
   return 2 * 6371 * Math.asin(Math.sqrt(h)) > 40
 }
 
-export type DocCategory = 'meals' | 'entrance'
+export type DocCategory = 'meals' | 'entrance' | 'assistance'
 
 export interface ServiceMapping {
   docType: string | null
@@ -72,6 +72,15 @@ export const SERVICE_TO_DOC_TYPE: Record<string, ServiceMapping> = {
   accommodation: { docType: 'hotel_voucher' },
   hotel: { docType: 'hotel_voucher' },
   cruise: { docType: 'cruise_voucher' },
+  // Meet & assist at the airport and the hotel (check-in / check-out assist,
+  // porters): the representative's own order. Unlisted, the grid's airport
+  // and hotel services — and the AI builder's — were on no document, so the
+  // meet & assist company was never sent one. The plurals are what the grid
+  // wrote before AUT-L02.
+  airport_service: { docType: 'service_order', category: 'assistance' },
+  airport_services: { docType: 'service_order', category: 'assistance' },
+  hotel_service: { docType: 'service_order', category: 'assistance' },
+  hotel_services: { docType: 'service_order', category: 'assistance' },
   // No document: tips, water, supplies, a flight (ticketed by the airline).
   tips: { docType: null },
   tip: { docType: null },
@@ -87,7 +96,11 @@ export const SERVICE_TO_DOC_TYPE: Record<string, ServiceMapping> = {
 export function docMappingFor(service: { service_type?: string | null; description?: string | null }): ServiceMapping | undefined {
   // The grid saves a cruise as 'accommodation' (its slot tag says cruise) —
   // that is a cruise voucher, not a hotel voucher.
-  if (String(service.description ?? '').startsWith('[pricing-grid:cruise]')) return SERVICE_TO_DOC_TYPE.cruise
+  const description = String(service.description ?? '')
+  if (description.startsWith('[pricing-grid:cruise]')) return SERVICE_TO_DOC_TYPE.cruise
+  // A grid airport or hotel service saved under another type ('transfer',
+  // 'other') is still meet & assist, not the driver's transport.
+  if (/^\[pricing-grid:(airport_services|hotel_services)\]/.test(description)) return SERVICE_TO_DOC_TYPE.airport_service
   return service.service_type ? SERVICE_TO_DOC_TYPE[service.service_type] : undefined
 }
 
