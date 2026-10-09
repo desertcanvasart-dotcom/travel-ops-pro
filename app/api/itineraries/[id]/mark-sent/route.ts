@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
+/** The statuses a send moves to 'sent'; any later one is kept. */
+const PROMOTABLE_TO_SENT = ['draft', 'quoted']
+
 // Service-role key — anon key + RLS on itineraries silently filters out the
 // row before the app-layer org check below can run. Same fix as the days
 // route. The .eq('org_id', orgId) check below is the tenant boundary.
@@ -20,7 +23,10 @@ export async function POST(
     const { id } = await params
     const { sentVia, recipientEmail } = await request.json()
 
-    // Update itinerary status to 'sent'
+    // Only a trip still at the quote stage becomes 'sent'. The page calls
+    // this after every email and WhatsApp send, so re-sending a confirmed or
+    // cancelled trip set it back to 'sent' — undoing the guard the send
+    // routes themselves keep (send-quote only promotes a draft).
     const { data, error } = await supabase
       .from('itineraries')
       .update({
@@ -29,8 +35,9 @@ export async function POST(
       })
       .eq('id', id)
       .eq('org_id', orgId)
+      .or(`status.is.null,status.in.(${PROMOTABLE_TO_SENT.join(',')})`)
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) throw error
 
@@ -40,6 +47,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       data,
+      statusChanged: Boolean(data),
       message: `Quote sent via ${sentVia}`
     })
 

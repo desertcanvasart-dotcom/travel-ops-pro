@@ -7917,6 +7917,7 @@ export interface Database {
         Row: {
           id: string
           name: string
+          org_id: string | null
           description: string | null
           category: string
           subcategory: string | null
@@ -7924,6 +7925,7 @@ export interface Database {
           subject: string | null
           body: string
           placeholders: Json | null
+          source_template_id: string | null
           is_active: boolean | null
           usage_count: number | null
           last_used_at: string | null
@@ -7935,6 +7937,7 @@ export interface Database {
         Insert: {
           id?: string
           name: string
+          org_id?: string | null
           description?: string | null
           category?: string
           subcategory?: string | null
@@ -7942,6 +7945,7 @@ export interface Database {
           subject?: string | null
           body: string
           placeholders?: Json | null
+          source_template_id?: string | null
           is_active?: boolean | null
           usage_count?: number | null
           last_used_at?: string | null
@@ -7953,6 +7957,7 @@ export interface Database {
         Update: {
           id?: string
           name?: string
+          org_id?: string | null
           description?: string | null
           category?: string
           subcategory?: string | null
@@ -7960,6 +7965,7 @@ export interface Database {
           subject?: string | null
           body?: string
           placeholders?: Json | null
+          source_template_id?: string | null
           is_active?: boolean | null
           usage_count?: number | null
           last_used_at?: string | null
@@ -10739,6 +10745,7 @@ export interface Database {
           channel: string | null
           client_id: string | null
           itinerary_id: string | null
+          org_id: string | null
           recipient_email: string | null
           recipient_phone: string | null
           subject: string | null
@@ -10755,6 +10762,7 @@ export interface Database {
           channel?: string | null
           client_id?: string | null
           itinerary_id?: string | null
+          org_id?: string | null
           recipient_email?: string | null
           recipient_phone?: string | null
           subject?: string | null
@@ -10771,6 +10779,7 @@ export interface Database {
           channel?: string | null
           client_id?: string | null
           itinerary_id?: string | null
+          org_id?: string | null
           recipient_email?: string | null
           recipient_phone?: string | null
           subject?: string | null

@@ -3,6 +3,7 @@
 // File: lib/pdf-generator.ts
 // ============================================
 
+import { clientTotalOfDays, serviceClientPrice } from '@/lib/itinerary-client-price'
 import { overnightLabel, overnightProperty } from '@/lib/itineraries/overnight-property'
 import { jsPDF } from 'jspdf'
 import { loadJapaneseFont, pickFontFamily } from './pdf-fonts'
@@ -20,6 +21,8 @@ interface Service {
   rate_eur?: number
   rate_non_eur?: number
   total_cost: number
+  /** What the client is charged for the line (total_cost is the supplier's). */
+  client_price?: number | null
   notes?: string
   service_code?: string | null
   supplier_name?: string | null
@@ -518,7 +521,9 @@ export async function generateItineraryPDF(
         if (!day.services || !Array.isArray(day.services)) return
         
         day.services
-          .filter((s) => s && (s.total_cost || 0) > 0)
+          // Client prices, never total_cost (the supplier's cost): the
+          // breakdown sits under the client's total (lib/itinerary-client-price).
+          .filter((s) => s && serviceClientPrice(s) > 0)
           .forEach((service) => {
             const name = cleanServiceName(service.service_name, service.service_type)
             const key = `${service.service_type}-${name}`
@@ -526,10 +531,10 @@ export async function generateItineraryPDF(
             if (serviceMap.has(key)) {
               const existing = serviceMap.get(key)!
               existing.quantity += service.quantity || 0
-              existing.total += service.total_cost || 0
+              existing.total += serviceClientPrice(service)
             } else {
               const qty = service.quantity || 1
-              const total = service.total_cost || 0
+              const total = serviceClientPrice(service)
               serviceMap.set(key, {
                 name,
                 type: service.service_type,
@@ -571,7 +576,11 @@ export async function generateItineraryPDF(
     // ============================================
     
     yPos += 5
-    const totalPrice = itinerary.total_cost || 0
+    // The client total from the lines, as the page and the email body show
+    // it; itineraries.total_cost is a cache that can be 0 or stale, and the
+    // attachment disagreed with the email it came with.
+    const linesTotal = clientTotalOfDays(days)
+    const totalPrice = linesTotal > 0 ? linesTotal : (itinerary.total_cost || 0)
     const totalPax = (itinerary.num_adults || 0) + (itinerary.num_children || 0)
     
     doc.setFillColor(100, 124, 71)

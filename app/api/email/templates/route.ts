@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { visibleToOrg, withOrgCopies } from '@/lib/templates/template-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,8 +10,11 @@ const supabase = createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    // The signed-in user, never a ?userId= from the request.
+    const userId = await getCurrentUserId()
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
     const category = searchParams.get('category') // 'customer', 'partner', 'internal', or 'all'
 
     // Fetch from message_templates (new templates)
@@ -17,6 +22,7 @@ export async function GET(request: NextRequest) {
       .from('message_templates')
       .select('*')
       .eq('is_active', true)
+      .or(visibleToOrg(orgId))
       .order('category')
       .order('subcategory')
       .order('name')
@@ -35,10 +41,15 @@ export async function GET(request: NextRequest) {
     // Also fetch from email_templates (legacy templates) if table exists
     let legacyTemplates: any[] = []
     try {
-      const { data: legacy, error: legacyError } = await supabase
-        .from('email_templates')
-        .select('*')
-        .order('name')
+      // Legacy templates are per user (email_templates.user_id): only the
+      // signed-in user's own — this listed every user's, across orgs.
+      const { data: legacy, error: legacyError } = userId
+        ? await supabase
+            .from('email_templates')
+            .select('*')
+            .eq('user_id', userId)
+            .order('name')
+        : { data: [], error: null }
 
       if (!legacyError && legacy) {
         legacyTemplates = legacy
@@ -49,7 +60,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform message_templates to match the expected format
-    const transformedMessageTemplates = (messageTemplates || []).map(template => ({
+    const transformedMessageTemplates = withOrgCopies((messageTemplates || []) as any[], orgId).map(template => ({
       id: template.id,
       name: template.name,
       subject: template.subject || '',
@@ -90,8 +101,11 @@ export async function GET(request: NextRequest) {
 // POST - Create new template (saves to message_templates)
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const userId = await getCurrentUserId()
     const body = await request.json()
-    const { userId, name, subject, content, category } = body
+    const { name, subject, content, category } = body
 
     if (!name || !content) {
       return NextResponse.json({ 
@@ -115,6 +129,7 @@ export async function POST(request: NextRequest) {
         placeholders,
         is_active: true,
         created_by: userId,
+        org_id: orgId,
       })
       .select()
       .single()
