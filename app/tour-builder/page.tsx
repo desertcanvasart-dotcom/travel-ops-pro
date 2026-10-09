@@ -373,6 +373,9 @@ export default function TourBuilderPage() {
                             })
                           })
 
+                          // A failed export said nothing and downloaded the JSON
+                          // error as tour.html.
+                          if (!response.ok) throw new Error(`export failed: ${response.status}`)
                           const html = await response.text()
                           const blob = new Blob([html], { type: 'text/html' })
                           const url = window.URL.createObjectURL(blob)

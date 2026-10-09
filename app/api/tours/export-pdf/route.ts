@@ -17,6 +17,15 @@ const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, proces
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
 import { createClient } from '@supabase/supabase-js'
+import { escapeHtml } from '@/lib/html-escape'
+
+/** Request-body text in the exported page: escaped, and blank for null. */
+const esc = (v: unknown) => escapeHtml(v == null ? '' : String(v))
+
+function contentDisposition(code: string): string {
+  const ascii = code.replace(/[^\w.-]+/g, '_').slice(0, 80) || 'tour'
+  return `attachment; filename="${ascii}.html"; filename*=UTF-8''${encodeURIComponent(code)}.html`
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,7 +60,10 @@ export async function POST(request: NextRequest) {
     return new NextResponse(html, {
       headers: {
         'Content-Type': 'text/html',
-        'Content-Disposition': `attachment; filename="${tour.tour_code || 'tour'}.html"`
+        // An ASCII-safe filename plus the UTF-8 one: a quote or a non-Latin-1
+        // character in the tour code made the header invalid, and the export
+        // failed with a 500.
+        'Content-Disposition': contentDisposition(String(tour?.tour_code || 'tour'))
       }
     })
 
@@ -74,7 +86,8 @@ function generateTourHTML(
   fontFace: string,
   rateSym: string,
 ) {
-  const formatCurrency = (amount: number) => `${rateSym}${amount.toFixed(2)}`
+  // A missing total prints 0.00 rather than failing the whole export.
+  const formatCurrency = (amount: number) => `${rateSym}${(Number(amount) || 0).toFixed(2)}`
   const tag = locale === 'ja' ? 'ja-JP' : 'en-US'
   const generatedDate = new Date().toLocaleDateString(tag)
 
@@ -83,7 +96,7 @@ function generateTourHTML(
 <html lang="${locale}">
 <head>
   <meta charset="UTF-8">
-  <title>${tour.tour_name} - ${labels.itinerary}</title>
+  <title>${esc(tour.tour_name)} - ${labels.itinerary}</title>
   <style>
     ${fontFace}
     body {
@@ -165,43 +178,43 @@ function generateTourHTML(
 </head>
 <body>
   <div class="header">
-    <h1>🏛️ ${tour.tour_name}</h1>
-    <p>${labels.tourCode}: ${tour.tour_code}</p>
-    <p>${labels.daysCities.replace('{days}', String(tour.duration_days)).replace('{cities}', tour.cities.join(' → '))}</p>
-    <p style="text-transform: capitalize;">${tour.tour_type} ${labels.tourSuffix}</p>
+    <h1>🏛️ ${esc(tour.tour_name)}</h1>
+    <p>${labels.tourCode}: ${esc(tour.tour_code)}</p>
+    <p>${labels.daysCities.replace('{days}', esc(tour.duration_days ?? '')).replace('{cities}', esc((tour.cities || []).join(' → ')))}</p>
+    <p style="text-transform: capitalize;">${esc(tour.tour_type)} ${labels.tourSuffix}</p>
   </div>
 
   <div class="info-box">
     <strong>📋 ${labels.tourInformation}</strong><br>
-    👥 ${labels.passengers}: ${pax}<br>
+    👥 ${labels.passengers}: ${esc(pax)}<br>
     🛂 ${labels.passportType}: ${isEuro ? labels.passportEU : labels.passportNonEU}<br>
-    ${tour.description ? `📝 ${tour.description}<br>` : ''}
+    ${tour.description ? `📝 ${esc(tour.description)}<br>` : ''}
   </div>
 
-  ${tour.days.map((day: any) => `
+  ${(tour.days || []).map((day: any) => `
     <div class="day-section">
       <div class="day-header">
-        <strong>${labels.dayN.replace('{n}', String(day.day_number))}</strong> - ${day.city}
+        <strong>${labels.dayN.replace('{n}', String(day.day_number))}</strong> - ${esc(day.city)}
       </div>
 
       ${day.accommodation ? `
         <div class="service-item">
-          <strong>🏨 ${labels.accommodation}:</strong> ${day.accommodation.property_name}<br>
-          <small>${'⭐'.repeat(day.accommodation.star_rating)} ${day.accommodation.tier} • ${day.accommodation.board_basis} • ${day.accommodation.room_type}</small>
+          <strong>🏨 ${labels.accommodation}:</strong> ${esc(day.accommodation.property_name)}<br>
+          <small>${'⭐'.repeat(Math.max(0, Math.min(7, Number(day.accommodation.star_rating) || 0)))} ${esc(day.accommodation.tier)} • ${esc(day.accommodation.board_basis)} • ${esc(day.accommodation.room_type)}</small>
         </div>
       ` : ''}
 
       ${day.lunch_meal ? `
         <div class="service-item">
-          <strong>🥗 ${labels.lunch}:</strong> ${day.lunch_meal.restaurant_name}<br>
-          <small>${day.lunch_meal.cuisine_type} • ${day.lunch_meal.restaurant_type}</small>
+          <strong>🥗 ${labels.lunch}:</strong> ${esc(day.lunch_meal.restaurant_name)}<br>
+          <small>${esc(day.lunch_meal.cuisine_type)} • ${esc(day.lunch_meal.restaurant_type)}</small>
         </div>
       ` : ''}
 
       ${day.dinner_meal ? `
         <div class="service-item">
-          <strong>🍽️ ${labels.dinner}:</strong> ${day.dinner_meal.restaurant_name}<br>
-          <small>${day.dinner_meal.cuisine_type} • ${day.dinner_meal.restaurant_type}</small>
+          <strong>🍽️ ${labels.dinner}:</strong> ${esc(day.dinner_meal.restaurant_name)}<br>
+          <small>${esc(day.dinner_meal.cuisine_type)} • ${esc(day.dinner_meal.restaurant_type)}</small>
         </div>
       ` : ''}
 
@@ -213,7 +226,7 @@ function generateTourHTML(
 
       ${day.notes ? `
         <div class="service-item">
-          <strong>📝 ${labels.notes}:</strong> ${day.notes}
+          <strong>📝 ${labels.notes}:</strong> ${esc(day.notes)}
         </div>
       ` : ''}
     </div>
