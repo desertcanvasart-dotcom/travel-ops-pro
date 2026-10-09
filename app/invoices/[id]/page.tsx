@@ -1,5 +1,6 @@
 'use client'
 
+import { receiptNumberFor } from '@/lib/receipt-pdf-generator'
 import { todayLocal } from '@/lib/today'
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
@@ -346,7 +347,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const handlePreviewReceipt = async (payment: Payment) => {
     if (!invoice) return
 
-    const receiptNumber = `RCP-${invoice.invoice_number}-${payments.indexOf(payment) + 1}`
+    const receiptNumber = receiptNumberFor(payment)
     const receiptData = {
       receiptNumber,
       invoiceNumber: invoice.invoice_number,
@@ -361,8 +362,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
 
     try {
-      const { generateReceiptPDF } = await import('@/lib/receipt-pdf-generator')
-      const doc = generateReceiptPDF(receiptData, invoice)
+      const { generateReceiptPDF, receiptBrand } = await import('@/lib/receipt-pdf-generator')
+      const { japaneseFontData } = await import('@/lib/pdf-fonts')
+      // The operator's name on the receipt, and a font that draws Japanese.
+      const doc = generateReceiptPDF(receiptData, invoice, receiptBrand(await fetchCompanyInfo()), await japaneseFontData())
       const blob = doc.output('blob')
       setPdfPreviewBlob(blob)
       setPreviewTitle(`Receipt ${receiptNumber}`)

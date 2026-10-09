@@ -121,6 +121,13 @@ interface PDFOptions {
    * worse than one naming none.
    */
   companyFooter?: string
+  /**
+   * The organisation's payment terms, already in the PDF's language (Settings
+   * → Payment terms). Left out = no Payment Terms section: it printed a fixed
+   * "30% deposit … balance 14 days before arrival … bank transfer or credit
+   * card", in English, for every organisation.
+   */
+  paymentTerms?: { heading: string; lines: string[] } | null
 }
 
 const DEFAULT_OPTIONS: PDFOptions = {
@@ -614,31 +621,28 @@ export async function generateItineraryPDF(
     // PAYMENT TERMS
     // ============================================
     
-    if (yPos > pageHeight - 35) {
-      doc.addPage()
-      yPos = margin
+    if (opts.paymentTerms && opts.paymentTerms.lines.length > 0) {
+      if (yPos > pageHeight - 35) {
+        doc.addPage()
+        yPos = margin
+      }
+
+      doc.setFontSize(12)
+      doc.setFont(fontFamily, 'bold')
+      doc.setTextColor(100, 124, 71)
+      doc.text(opts.paymentTerms.heading, margin, yPos)
+      yPos += 6
+
+      doc.setFontSize(9)
+      doc.setFont(fontFamily, 'normal')
+      doc.setTextColor(60, 60, 60)
+
+      for (const term of opts.paymentTerms.lines) {
+        const wrapped = doc.splitTextToSize(`• ${term}`, pageWidth - margin * 2 - 3) as string[]
+        doc.text(wrapped, margin + 3, yPos)
+        yPos += wrapped.length * 5
+      }
     }
-    
-    doc.setFontSize(12)
-    doc.setFont(fontFamily, 'bold')
-    doc.setTextColor(100, 124, 71)
-    doc.text('PAYMENT TERMS', margin, yPos)
-    yPos += 6
-    
-    doc.setFontSize(9)
-    doc.setFont(fontFamily, 'normal')
-    doc.setTextColor(60, 60, 60)
-    
-    const terms = [
-      '30% deposit required to confirm booking',
-      'Remaining balance due 14 days before arrival',
-      'Payment accepted via bank transfer or credit card'
-    ]
-    
-    terms.forEach(term => {
-      doc.text(`• ${term}`, margin + 3, yPos)
-      yPos += 5
-    })
     
     // ============================================
     // FOOTER ON ALL PAGES

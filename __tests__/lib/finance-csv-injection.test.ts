@@ -30,7 +30,11 @@ describe('b2b quote PDF blocks SSRF and escapes fields', () => {
   it('escapes user-controlled fields (client, partner, notes, service)', () => {
     expect(code).toContain("import { escapeHtml as esc }")
     expect(code).toMatch(/esc\(quote\.client_name/)
-    expect(code).toMatch(/esc\(quote\.notes\)/)
+    // The notes are the language version's when it has them (quote.notes otherwise).
+    expect(code).toMatch(/esc\(notes\)/)
+    expect(code).toContain('const notes = version?.notes ?? quote.notes')
+    expect(code).toMatch(/esc\(version\.terms_conditions\)/)
+    expect(code).toMatch(/esc\(version\.special_requests\)/)
     expect(code).toMatch(/esc\(service\.service_name/)
   })
 })

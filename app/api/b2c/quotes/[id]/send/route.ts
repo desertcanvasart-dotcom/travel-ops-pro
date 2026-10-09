@@ -43,7 +43,7 @@ export async function POST(
     // its pricing and customer details — to a recipient of their choosing.
     const { data: quote, error } = await supabaseAdmin
       .from('b2c_quotes')
-      .select('*, itineraries (trip_name, client_name, client_email)')
+      .select('*, itineraries (trip_name, client_name, client_email, client_phone)')
       .eq('id', id)
       .eq('org_id', orgId)
       .single()
@@ -64,7 +64,8 @@ export async function POST(
       `Reference: ${quote.quote_number}`,
       `Travellers: ${quote.num_travelers}`,
       `Total: ${money(quote.selling_price, currency)}  (${money(quote.price_per_person, currency)} per person)`,
-      quote.valid_until ? `Valid until: ${quote.valid_until}` : '',
+      // "8 November 2026", never the raw "2026-11-08".
+      quote.valid_until ? `Valid until: ${new Date(`${String(quote.valid_until).slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}` : '',
       quote.client_notes ? `\n${quote.client_notes}` : '',
       '',
       'We look forward to welcoming you.',
@@ -76,8 +77,10 @@ export async function POST(
     const messageText = lines.join('\n')
 
     if (sendVia === 'whatsapp') {
-      const phone = body.to // WhatsApp number must be provided (itineraries carry no phone here)
-      if (!phone) return NextResponse.json({ success: false, error: 'A WhatsApp number (to) is required' }, { status: 400 })
+      // The number given, else the client's on the trip — the page asked for
+      // it in a browser prompt although the itinerary has it.
+      const phone = body.to || itin.client_phone
+      if (!phone) return NextResponse.json({ success: false, error: 'No WhatsApp number on the itinerary; enter one' }, { status: 400 })
       const result = await sendWhatsAppMessage({ to: phone, body: messageText })
       if (!result.success) {
         return NextResponse.json({ success: false, error: result.error || 'WhatsApp send failed' }, { status: 502 })

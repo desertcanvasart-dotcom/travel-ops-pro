@@ -793,16 +793,35 @@ export default function ViewItineraryPage() {
    * was the source's before, whatever the language), and headings in that
    * language.
    */
+  /** The organisation's payment terms in one language, or null when they cannot be read. */
+  const pdfPaymentTerms = async (tr: PdfTr): Promise<{ heading: string; lines: string[] } | null> => {
+    try {
+      const j = await (await fetch('/api/settings/payment-terms')).json()
+      if (!j?.success) return null
+      const rule = { ...(j.defaults ?? {}), ...Object.fromEntries(Object.entries(j.terms ?? {}).filter(([, v]) => v != null)) }
+      const percent = Number(rule.deposit_percent)
+      if (!Number.isFinite(percent)) return null
+      return {
+        heading: tr('paymentTermsHeading'),
+        lines: [tr('paymentTermsRule', { percent, dueDays: Number(rule.deposit_due_days), beforeDays: Number(rule.balance_due_days_before_departure) })],
+      }
+    } catch {
+      return null
+    }
+  }
+
   const buildQuotePdf = async (lang: Language, pdfDays: DayWithServices[], showBreakdown?: boolean) => {
     if (!itinerary) throw new Error('No itinerary')
     const content = getVersionedContent(lang)
+    const tr = await pdfTranslator(lang)
     return generateItineraryPDF(
       { ...itinerary, trip_name: content.trip_name },
       pdfDays,
       {
         ...(showBreakdown === undefined ? {} : { showPricingBreakdown: showBreakdown, showServiceDetails: showBreakdown }),
         locale: lang,
-        labels: buildPdfLabels(await pdfTranslator(lang)),
+        labels: buildPdfLabels(tr),
+        paymentTerms: await pdfPaymentTerms(tr),
       }
     )
   }

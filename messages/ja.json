@@ -1369,6 +1369,8 @@
     "tripNotifyFailed": "返信は保存されましたが、通知メールの送信に失敗しました。旅行者はリンクを再度開いた場合のみ確認できます。"
   },
   "pdf": {
+    "paymentTermsHeading": "お支払い条件",
+    "paymentTermsRule": "ご予約後{dueDays}日以内に{percent}%の申込金をお支払いください。残金は出発の{beforeDays}日前までにお支払いください。",
     "quote": "見積",
     "date": "日付",
     "client": "お客様",
@@ -1507,6 +1509,8 @@
       "notes": "備考",
       "termsConditions": "利用規約",
       "paymentTerms": "お支払い条件",
+      "paymentDepositRule": "ご予約確定後{dueDays}日以内に{percent}%の申込金",
+      "paymentBalanceRule": "残金は出発の{beforeDays}日前まで",
       "paymentDeposit": "確定時に30%のデポジット",
       "paymentBalance": "残額は出発14日前までにお支払い",
       "paymentMethods": "銀行振込またはクレジットカードでお支払い可能",
@@ -7473,6 +7477,7 @@
     "convertDescription": "この見積もりは承認されました。確認と予約に進むには、旅程に変換してください。",
     "converting": "変換中...",
     "convertToItinerary": "旅程に変換",
+    "convertNeedsDate": "この見積には旅行日がありません。旅行初日を入力してください（YYYY-MM-DD）：",
     "convertFailed": "見積もりの変換に失敗しました。もう一度お試しください。",
     "quoteConverted": "見積もり変換済み",
     "convertedDescription": "この見積もりは旅程に変換されました。旅程を確認して予約を作成してください。",

@@ -5,7 +5,7 @@ import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { createDocumentNumberer, supplierDocumentPrefix } from '@/lib/documents/numberer'
 import { requestedDocTypes } from '@/lib/documents/group-services'
-import { planDocuments, documentedKeys, missingDocuments, staleDocuments, type PlanGuide } from '@/lib/documents/plan-documents'
+import { planDocuments, documentedKeys, missingDocuments, staleDocuments, voucherMoney, type PlanGuide } from '@/lib/documents/plan-documents'
 
 /**
  * The trip's days, suppliers, assigned guides and planned documents, and what
@@ -166,6 +166,20 @@ export async function POST(
       return NextResponse.json({ error: 'Itinerary not found' }, { status: 404 })
     }
 
+    // The guests' nationality, for the hotel's registration: itineraries has
+    // no nationality column, so the voucher read one that does not exist and
+    // was always blank. It is the client's.
+    let clientNationality: string | null = null
+    if (itinerary.client_id) {
+      const { data: client } = await supabase
+        .from('clients')
+        .select('nationality')
+        .eq('id', itinerary.client_id)
+        .eq('org_id', orgId)
+        .maybeSingle()
+      clientNationality = (client?.nationality as string | null) ?? null
+    }
+
     // Output gate (harness Layer 2): don't generate operational paperwork for an
     // itinerary whose price isn't deliverable. Deliberately NOT the completeness
     // gate the customer sends use: these are supplier vouchers, and a hotel with
@@ -188,7 +202,9 @@ export async function POST(
     const documentsToCreate: any[] = []
     for (const plan of missingDocuments(plans, documented)) {
       if (document_types && !document_types.includes(plan.docType)) continue
-      const services = plan.services
+      const money = voucherMoney(plan.services, itinerary.currency || 'EUR')
+      // Each line's amount in the voucher's currency.
+      const services = plan.services.map((s, i) => ({ ...s, total_cost: money.lineAmounts[i] }))
 
       const supplier = plan.supplierId ? suppliersMap[plan.supplierId] : null
       const guide = plan.guide
@@ -212,7 +228,7 @@ export async function POST(
           ? [supplier.address, supplier.city, supplier.country].filter(Boolean).join(', ')
           : plan.city,
         client_name: itinerary.client_name,
-        client_nationality: itinerary.client_nationality,
+        client_nationality: clientNationality,
         num_adults: itinerary.num_adults || 1,
         num_children: itinerary.num_children || 0,
         services,
@@ -225,8 +241,9 @@ export async function POST(
         pickup_time: isTransport ? itinerary.pickup_time || null : null,
         pickup_location: isTransport ? itinerary.pickup_location || null : null,
         special_requests: plan.details,
-        currency: itinerary.currency || 'EUR',
-        total_cost: services.reduce((sum, s) => sum + (parseFloat(String(s.total_cost ?? 0)) || 0), 0),
+        // In the supplier's own currency when its lines carry it (voucherMoney).
+        currency: money.currency,
+        total_cost: money.total,
         payment_terms: supplier ? supplier.payment_terms || 'commission' : 'pay_direct',
         status: 'draft'
       })

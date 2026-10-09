@@ -920,6 +920,8 @@
     "tripNotifyFailed": "Reply saved, but the notification email failed. The traveller will only see it if they reopen their link."
   },
   "pdf": {
+    "paymentTermsHeading": "PAYMENT TERMS",
+    "paymentTermsRule": "A {percent}% deposit is due within {dueDays} days of booking. The balance is due {beforeDays} days before departure.",
     "quote": "Quote",
     "date": "Date",
     "client": "Client",
@@ -1058,6 +1060,8 @@
       "notes": "Notes",
       "termsConditions": "Terms & Conditions",
       "paymentTerms": "Payment Terms",
+      "paymentDepositRule": "{percent}% deposit within {dueDays} days of confirmation",
+      "paymentBalanceRule": "Balance due {beforeDays} days before travel",
       "paymentDeposit": "30% deposit on confirmation",
       "paymentBalance": "Balance due 14 days before travel",
       "paymentMethods": "Bank transfer or credit card accepted",
@@ -6888,6 +6892,7 @@
     "convertDescription": "This quote has been accepted. Convert it to an itinerary to proceed with confirmation and booking.",
     "converting": "Converting...",
     "convertToItinerary": "Convert to Itinerary",
+    "convertNeedsDate": "This quote has no travel date. Enter the first day of the trip (YYYY-MM-DD):",
     "convertFailed": "Failed to convert quote. Please try again.",
     "quoteConverted": "Quote Converted",
     "convertedDescription": "This quote has been converted to an itinerary. Review and confirm the itinerary to create a booking.",
