@@ -351,7 +351,8 @@ export async function POST(request: NextRequest) {
     // by email), so each reminder is written in the client's own language.
     const localeByEmail = await resolveClientLocalesByEmail(
       supabase,
-      invoices.map((i: any) => i.client_email)
+      invoices.map((i: any) => i.client_email),
+      orgId
     )
 
     for (const invoice of invoices) {

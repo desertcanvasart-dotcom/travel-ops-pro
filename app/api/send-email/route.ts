@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     const recipientLocale: RecipientLocale =
       bodyLocale === 'ja' || bodyLocale === 'en'
         ? bodyLocale
-        : await resolveClientLocaleByEmail(supabase, recipientEmail)
+        : await resolveClientLocaleByEmail(supabase, recipientEmail, await getCurrentOrgId())
 
     // Determine subject and body
     let emailSubject: string

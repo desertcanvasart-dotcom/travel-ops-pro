@@ -117,6 +117,21 @@ export async function GET(
 
     if (!itinerary?.template_id) return notFound()
 
+    // A traveller's own link: their copy, in their name — never the lead
+    // booker's (these links must not carry the lead's identity). Kanji first,
+    // as the 日程表 is addressed.
+    let customerName: string | null = (itinerary.client_name as string | null) ?? booking.client_name ?? null
+    if (link!.passenger_id) {
+      const { data: pax } = await supabase
+        .from('booking_passengers')
+        .select('full_name, family_name_kanji, given_name_kanji')
+        .eq('id', link!.passenger_id)
+        .eq('booking_id', link!.booking_id)
+        .maybeSingle()
+      const kanji = [pax?.family_name_kanji, pax?.given_name_kanji].filter(Boolean).join(' ')
+      customerName = kanji || (pax?.full_name as string | null) || null
+    }
+
     try {
       const built = await buildProgramItineraryHtml({
         supabase,
@@ -128,7 +143,7 @@ export async function GET(
           cairo_guide: null,
           south_guide: null,
           author: null,
-          customer_name: (itinerary.client_name as string | null) ?? booking.client_name ?? null,
+          customer_name: customerName,
         },
       })
       const pdf = await renderHtmlToPdf(built.html, built.page)

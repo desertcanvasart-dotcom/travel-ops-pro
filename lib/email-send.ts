@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { businessIdentity, orgIdentity } from '@/lib/org-identity'
-import { headerSafe, safeEmailAddress } from '@/lib/http/safe-header'
+import { headerSafe, safeEmailAddress, encodeEmailHeader } from '@/lib/http/safe-header'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { orgGmailSenderId } from '@/lib/email/org-gmail-sender'
 
@@ -125,13 +125,9 @@ export async function sendEmailInternal(
 // EMAIL BUILDING HELPERS
 // ============================================
 
-// RFC 2047 encoded-word for a header value (e.g. a Japanese Subject). Email
-// headers must be 7-bit ASCII; a raw non-ASCII Subject mojibakes in many
-// clients. ASCII subjects are passed through unchanged.
-export function encodeEmailHeader(value: string): string {
-  if (/^[\x00-\x7F]*$/.test(value)) return value
-  return `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`
-}
+// RFC 2047 encodeEmailHeader lives with the other header helpers
+// (lib/http/safe-header); re-exported for existing importers.
+export { encodeEmailHeader }
 
 /**
  * The platform's own mailbox, for mail no organization sends: the connected
@@ -195,6 +191,12 @@ function buildEmailWithAttachment(
   attachmentBase64: string
 ): string {
   const boundary = `boundary_${Date.now()}`
+  // Headers are 7-bit: a Japanese client's name in the file name arrived as
+  // mojibake or "noname", and a quote in it broke the header. An ASCII name
+  // plus the RFC 2231 UTF-8 one every current client reads.
+  const safeName = headerSafe(filename).replace(/"/g, '')
+  const asciiName = safeName.replace(/[^\x20-\x7E]/g, '_')
+  const utf8Name = encodeURIComponent(safeName)
 
   const emailParts = [
     from,
@@ -209,9 +211,9 @@ function buildEmailWithAttachment(
     '',
     Buffer.from(body).toString('base64'),
     `--${boundary}`,
-    `Content-Type: application/pdf; name="${filename}"`,
+    `Content-Type: application/pdf; name="${asciiName}"`,
     'Content-Transfer-Encoding: base64',
-    `Content-Disposition: attachment; filename="${filename}"`,
+    `Content-Disposition: attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`,
     '',
     attachmentBase64,
     `--${boundary}--`,
