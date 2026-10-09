@@ -107,7 +107,11 @@ export async function DELETE(
       }
     }
 
-    await admin().from('booking_passenger_documents').delete().eq('id', doc.id)
+    const { error: rowError } = await admin().from('booking_passenger_documents').delete().eq('id', doc.id)
+    if (rowError) {
+      console.error('Failed to delete traveller document row:', rowError.message)
+      return NextResponse.json({ error: 'Could not delete document' }, { status: 500 })
+    }
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error in passenger-documents DELETE:', error)

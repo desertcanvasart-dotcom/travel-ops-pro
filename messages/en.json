@@ -7980,7 +7980,9 @@
     "sending": "Sending…",
     "sent": "Sent",
     "thankYouForPayment": "Thank you for your payment",
-    "transactionReference": "Transaction reference"
+    "transactionReference": "Transaction reference",
+    "paymentNotReceived": "Payment {status} — not received, so there is no receipt to issue.",
+    "amount": "Amount"
   },
   "invoice": {
     "amount": "Amount",

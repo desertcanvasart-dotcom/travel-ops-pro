@@ -75,12 +75,17 @@ export async function GET(
   })
   if (!gate.ok) return NextResponse.json(gate.body, { status: gate.status })
 
-  const { data } = await db
+  const { data, error } = await db
     .from('booking_passenger_documents')
     .select('id, kind, label, original_filename, size_bytes, uploaded_at')
     .eq('passenger_id', id)
     .is('purged_at', null)
     .order('uploaded_at', { ascending: true })
+  // A failed read is not "nothing attached yet" — that invites a re-upload.
+  if (error) {
+    console.error('[portal] traveller documents list failed:', error.message)
+    return NextResponse.json({ error: '読み込みに失敗しました。ページを再読み込みしてください。' }, { status: 500 })
+  }
 
   return NextResponse.json({
     success: true,
@@ -111,6 +116,13 @@ export async function POST(
   const form = await request.formData().catch(() => null)
   const file = form?.get('file')
   if (!form || !(file instanceof File)) {
+    // A body at the cap arrives cut short (the middleware buffers at most
+    // 10 MiB, and the form adds its own bytes to the file's), so formData()
+    // fails: that is a file too large, not one missing.
+    const declared = Number(request.headers.get('content-length') ?? 0)
+    if (declared >= MAX_DOCUMENT_BYTES) {
+      return NextResponse.json({ error: REJECTION_MESSAGE_JA.too_large }, { status: 413 })
+    }
     return NextResponse.json({ error: 'ファイルが選択されていません。' }, { status: 400 })
   }
 
@@ -173,22 +185,30 @@ export async function POST(
     return NextResponse.json({ error: 'アップロードに失敗しました。時間をおいてお試しください。' }, { status: 500 })
   }
 
-  // The passport is one replaceable slot. Retire the previous row and its
-  // object AFTER the new one is safely stored, so a failed upload never leaves
-  // the traveller with nothing.
-  let replaced: string | null = null
+  // The passport is one replaceable slot, and the traveller must never be left
+  // with none. Stand the previous one aside (stamped, which frees the
+  // one-live-passport index) BEFORE the new row goes in; if the insert then
+  // fails, put it back. Its file goes only once the new row is in.
+  let prior: { id: string; storage_path: string } | null = null
   if (kind === 'passport') {
-    const { data: prior } = await db
+    const { data } = await db
       .from('booking_passenger_documents')
       .select('id, storage_path')
       .eq('passenger_id', id)
       .eq('kind', 'passport')
       .is('purged_at', null)
       .maybeSingle()
+    prior = data
     if (prior) {
-      await db.storage.from(TRAVELLER_DOCS_BUCKET).remove([prior.storage_path])
-      await db.from('booking_passenger_documents').delete().eq('id', prior.id)
-      replaced = prior.id
+      const { error: asideError } = await db
+        .from('booking_passenger_documents')
+        .update({ purged_at: new Date().toISOString() })
+        .eq('id', prior.id)
+      if (asideError) {
+        console.error('[portal] passport slot replacement failed:', asideError.message)
+        await db.storage.from(TRAVELLER_DOCS_BUCKET).remove([storagePath])
+        return NextResponse.json({ error: 'アップロードに失敗しました。時間をおいてお試しください。' }, { status: 500 })
+      }
     }
   }
 
@@ -217,8 +237,25 @@ export async function POST(
     // The object is stored but unreferenced — remove it rather than leave an
     // orphaned passport scan that no retention job knows about.
     await db.storage.from(TRAVELLER_DOCS_BUCKET).remove([storagePath])
+    // ...and give the traveller their previous passport back.
+    if (prior) {
+      await db.from('booking_passenger_documents').update({ purged_at: null }).eq('id', prior.id)
+    }
     console.error('[portal] traveller document row insert failed:', insertError?.message)
     return NextResponse.json({ error: 'アップロードに失敗しました。時間をおいてお試しください。' }, { status: 500 })
+  }
+
+  // The new passport is on file; now the old one's file goes. If that removal
+  // fails, its row stays (stamped) so the path is not lost.
+  let replaced: string | null = null
+  if (prior) {
+    const { error: priorObjErr } = await db.storage.from(TRAVELLER_DOCS_BUCKET).remove([prior.storage_path])
+    if (priorObjErr) {
+      console.error('[portal] old passport file not removed:', prior.id, priorObjErr.message)
+    } else {
+      await db.from('booking_passenger_documents').delete().eq('id', prior.id)
+    }
+    replaced = prior.id
   }
 
   return NextResponse.json({ success: true, document: publicShape(row), replaced })

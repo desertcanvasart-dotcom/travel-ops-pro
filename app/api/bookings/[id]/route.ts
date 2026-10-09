@@ -7,6 +7,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { supplierBacking } from '@/lib/bookings/supplier-backing'
+import { removeBookingDocumentFiles } from '@/lib/portal/traveller-documents'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -278,6 +279,17 @@ export async function DELETE(
         success: false,
         error: 'Cannot delete a booking that is in progress or completed'
       }, { status: 400 })
+    }
+
+    // The cascade takes the passport rows with it, but not the files: remove
+    // those first, and keep the booking if that fails, so nothing is orphaned.
+    const filesError = await removeBookingDocumentFiles(supabaseAdmin, id)
+    if (filesError) {
+      console.error('Error removing traveller documents:', filesError)
+      return NextResponse.json({
+        success: false,
+        error: 'Could not remove the travellers\' uploaded documents, so the booking was kept. Please try again.',
+      }, { status: 500 })
     }
 
     // Delete booking (cascades to suppliers and payments)

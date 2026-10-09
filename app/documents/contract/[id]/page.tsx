@@ -12,6 +12,7 @@ import { generateContractPDF } from '@/lib/contract-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import { BackLink, TripBreadcrumb } from '@/components/nav/TripNav'
+import { contractNumberFor, contractPrice, contractPricePerPerson, describeDestinations } from '@/lib/contract-facts'
 
 // The columns /api/itineraries/[id] actually returns. The prefill used to read
 // num_travelers, tour_name and parsed_data.duration — none of which exist on
@@ -30,7 +31,8 @@ interface Itinerary {
   start_date: string
   end_date: string
   total_days?: number | null
-  total_cost: number
+  total_cost: number | null
+  currency?: string | null
   trip_name?: string | null
   destinations?: string | string[] | null
   deposit_amount?: number | null
@@ -57,11 +59,6 @@ function countTravellers(itin: Itinerary): number {
   return n || Number(itin.num_travelers) || 0
 }
 
-/** Destinations as one line, whatever shape the column holds. */
-function describeDestinations(d: Itinerary['destinations']): string {
-  if (Array.isArray(d)) return d.filter(Boolean).join(', ')
-  return (d ?? '').toString().trim()
-}
 
 interface ContractData {
   contractNumber: string
@@ -77,7 +74,8 @@ interface ContractData {
   endDate: string
   duration: string
   destinations: string
-  totalCost: number
+  /** null = the trip has no price yet ("To be confirmed"), never NaN. */
+  totalCost: number | null
   depositPercentage: number
   paymentTerms: string
   inclusions: string[]
@@ -225,7 +223,7 @@ export default function ContractPage() {
         
         setContractData(prev => ({
           ...prev,
-          contractNumber: `TC-${new Date().getFullYear()}-${itin.itinerary_code || itin.id.slice(0, 8).toUpperCase()}`,
+          contractNumber: contractNumberFor(itin),
           clientName: itin.client_name,
           clientEmail: itin.client_email || '',
           numTravelers: countTravellers(itin) || prev.numTravelers,
@@ -237,7 +235,7 @@ export default function ContractPage() {
           // Cities from the record. Nothing invented: three cities the trip
           // may never visit is not a default, it is a wrong contract.
           destinations: describeDestinations(itin.destinations),
-          totalCost: itin.total_cost,
+          totalCost: typeof itin.total_cost === 'number' ? itin.total_cost : null,
           ...(itin.inclusions?.length > 0 && { inclusions: itin.inclusions }),
           ...(itin.exclusions?.length > 0 && { exclusions: itin.exclusions })
         }))
@@ -274,6 +272,10 @@ export default function ContractPage() {
     }))
   }
 
+  // The trip's own currency: every contract said USD, whatever it was priced in.
+  const currency = itinerary?.currency || 'USD'
+  const perPerson = contractPricePerPerson(contractData.totalCost, contractData.numTravelers)
+
   const buildContractPDFData = () => ({
     contractNumber: contractData.contractNumber,
     contractDate: contractData.contractDate,
@@ -285,7 +287,7 @@ export default function ContractPage() {
     endDate: contractData.endDate,
     destinations: contractData.destinations,
     totalCost: contractData.totalCost,
-    currency: 'USD',
+    currency,
     inclusions: contractData.inclusions,
     exclusions: contractData.exclusions,
   })
@@ -343,8 +345,8 @@ Destinations: ${contractData.destinations}
 
 FINANCIAL TERMS
 
-Total Package Price: USD $${contractData.totalCost.toLocaleString()}
-(USD $${(contractData.totalCost / contractData.numTravelers).toFixed(2)} per person × ${contractData.numTravelers} travelers)
+Total Package Price: ${contractPrice(contractData.totalCost, currency)}${perPerson !== null ? `
+(${currency} ${perPerson.toFixed(2)} per person × ${contractData.numTravelers} travelers)` : ''}
 
 Payment Terms:
 ${contractData.paymentTerms}
@@ -808,8 +810,11 @@ This contract is governed by the laws of Egypt.
                   <label className="text-xs text-gray-600">{t('totalPackagePrice')}</label>
                   <input
                     type="number"
-                    value={contractData.totalCost}
-                    onChange={(e) => handleChange('totalCost', parseFloat(e.target.value))}
+                    value={contractData.totalCost ?? ''}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value)
+                      handleChange('totalCost', Number.isFinite(v) ? v : null)
+                    }}
                     className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm"
                     step="0.01"
                   />
@@ -839,11 +844,13 @@ This contract is governed by the laws of Egypt.
               <>
                 <div className="bg-primary-50 border border-primary-200 rounded-md p-4 mb-3">
                   <p className="text-lg font-bold text-gray-900">
-                    {t('totalPackagePrice')}: <span className="text-primary-600">USD ${contractData.totalCost.toLocaleString()}</span>
+                    {t('totalPackagePrice')}: <span className="text-primary-600">{contractPrice(contractData.totalCost, currency)}</span>
                   </p>
-                  <p className="text-gray-600 text-xs mt-1">
-                    (USD ${(contractData.totalCost / contractData.numTravelers).toFixed(2)} {t('perPerson')} × {contractData.numTravelers} {contractData.numTravelers === 1 ? t('traveler') : t('travelers')})
-                  </p>
+                  {perPerson !== null && (
+                    <p className="text-gray-600 text-xs mt-1">
+                      ({currency} {perPerson.toFixed(2)} {t('perPerson')} × {contractData.numTravelers} {contractData.numTravelers === 1 ? t('traveler') : t('travelers')})
+                    </p>
+                  )}
                 </div>
 
                 <h3 className="font-semibold text-gray-900 mb-2 text-sm">{t('paymentSchedule')}</h3>

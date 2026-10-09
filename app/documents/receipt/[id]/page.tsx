@@ -3,10 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useCompanyInfo } from '@/lib/use-company-info'
 import { useTranslations } from 'next-intl'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ArrowLeft,
   Download,
   Loader2,
   Check,
@@ -23,6 +22,7 @@ import {
 import { generateReceiptPDF, downloadReceiptPDF } from '@/lib/receipt-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
+import { BackLink } from '@/components/nav/TripNav'
 import { formatMoney } from '@/lib/currency-totals'
 
 interface Payment {
@@ -48,7 +48,6 @@ export default function ReceiptPage() {
   const t = useTranslations('receipt')
   const dialog = useConfirmDialog()
   const params = useParams()
-  const router = useRouter()
   const [payment, setPayment] = useState<Payment | null>(null)
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
@@ -177,23 +176,24 @@ export default function ReceiptPage() {
   }
 
   const receiptNumber = payment.transaction_reference || `RCP-${payment.id.slice(0, 8).toUpperCase()}`
+  // Every payment links here, pending, failed and refunded ones included. Only
+  // a completed payment has been received; the rest get no receipt to send.
+  const received = payment.payment_status === 'completed'
+  // The org's own city (Settings), never a hard-coded one.
+  const place = [company?.city, company?.country].filter(Boolean).join(', ')
 
   return (
     <div className="p-4 lg:p-6 bg-gray-50 min-h-screen">
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <button
-            onClick={() => router.back()}
-            className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            {t('back')}
-          </button>
+          {/* Browser-history "back" left the app from a shared link or a new
+              tab: back goes to where it was opened from (?from=), else Receipts. */}
+          <BackLink fallbackHref="/receipts" fallbackLabel={t('backToReceipts')} />
 
           <div className="flex items-center gap-2">
             {/* WhatsApp Button */}
-            {payment.client_phone && (
+            {received && payment.client_phone && (
               <button
                 onClick={handleSendWhatsApp}
                 disabled={sending}
@@ -215,18 +215,20 @@ export default function ReceiptPage() {
             )}
 
             {/* Preview Button */}
-            <button
-              onClick={handlePreviewPDF}
-              disabled={downloading}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors disabled:opacity-50"
-            >
-              {downloading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Eye className="w-4 h-4" />
-              )}
-              {downloading ? t('generating') : t('previewPDF')}
-            </button>
+            {received && (
+              <button
+                onClick={handlePreviewPDF}
+                disabled={downloading}
+                className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors disabled:opacity-50"
+              >
+                {downloading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+                {downloading ? t('generating') : t('previewPDF')}
+              </button>
+            )}
           </div>
         </div>
 
@@ -241,16 +243,24 @@ export default function ReceiptPage() {
               </div>
               <div className="text-right">
                 {company?.name && <p className="text-primary-200 text-xs mb-1">{company.name}</p>}
-                <p className="text-xs opacity-75">Cairo, Egypt</p>
+                {place && <p className="text-xs opacity-75">{place}</p>}
               </div>
             </div>
           </div>
 
           {/* Status Badge */}
-          <div className="px-6 py-3 bg-green-50 border-b border-green-100 flex items-center justify-center gap-2">
-            <Check className="w-4 h-4 text-green-600" />
-            <span className="text-sm font-medium text-green-700">{t('paymentCompletedSuccessfully')}</span>
-          </div>
+          {received ? (
+            <div className="px-6 py-3 bg-green-50 border-b border-green-100 flex items-center justify-center gap-2">
+              <Check className="w-4 h-4 text-green-600" />
+              <span className="text-sm font-medium text-green-700">{t('paymentCompletedSuccessfully')}</span>
+            </div>
+          ) : (
+            <div className="px-6 py-3 bg-amber-50 border-b border-amber-100 text-center">
+              <span className="text-sm font-medium text-amber-800">
+                {t('paymentNotReceived', { status: (payment.payment_status || '—').replace('_', ' ') })}
+              </span>
+            </div>
+          )}
 
           {/* Receipt Body */}
           <div className="p-6">
@@ -341,7 +351,7 @@ export default function ReceiptPage() {
 
             {/* Amount */}
             <div className="bg-primary-600 text-white rounded-lg p-6 text-center mb-6">
-              <p className="text-primary-200 text-xs uppercase tracking-wider mb-2">{t('amountReceived')}</p>
+              <p className="text-primary-200 text-xs uppercase tracking-wider mb-2">{received ? t('amountReceived') : t('amount')}</p>
               <p className="text-4xl font-bold">
                 {formatCurrency(payment.amount, payment.currency)}
               </p>
@@ -356,17 +366,19 @@ export default function ReceiptPage() {
             )}
 
             {/* Footer */}
-            <div className="border-t border-gray-200 pt-6 text-center">
-              <p className="text-lg font-semibold text-gray-900 mb-1">
-                {t('thankYouForPayment')}
-              </p>
-              <p className="text-sm text-gray-600">
-                {t('receiptConfirmation')}
-              </p>
-              <p className="text-xs text-gray-500 mt-3">
-                {t('questionsContact')}
-              </p>
-            </div>
+            {received && (
+              <div className="border-t border-gray-200 pt-6 text-center">
+                <p className="text-lg font-semibold text-gray-900 mb-1">
+                  {t('thankYouForPayment')}
+                </p>
+                <p className="text-sm text-gray-600">
+                  {t('receiptConfirmation')}
+                </p>
+                <p className="text-xs text-gray-500 mt-3">
+                  {t('questionsContact')}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

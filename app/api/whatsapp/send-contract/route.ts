@@ -5,9 +5,18 @@ import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createServerClient } from '@/lib/supabase-server'
 import { generateContractPDF } from '@/lib/contract-pdf-generator'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { orgIdentity } from '@/lib/org-identity'
+import { contractNumberFor, contractPrice, describeDestinations } from '@/lib/contract-facts'
 
 export async function POST(request: NextRequest) {
   try {
+    // The service-role client below sees every org: the caller's org is the
+    // boundary. It read the itinerary by id alone, so anyone signed in could
+    // send another org's contract to that org's client.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const body = await request.json()
     const { itineraryId } = body
 
@@ -25,6 +34,7 @@ export async function POST(request: NextRequest) {
       .from('itineraries')
       .select('*')
       .eq('id', itineraryId)
+      .eq('org_id', orgId)
       .single()
 
     if (dbError || !itinerary) {
@@ -43,17 +53,22 @@ export async function POST(request: NextRequest) {
 
     // Generate contract PDF
     console.log('📄 Generating contract PDF...')
+    // No price yet = "To be confirmed": total_cost.toFixed threw here after
+    // the PDF had already been uploaded.
+    const totalCost: number | null = typeof itinerary.total_cost === 'number' ? itinerary.total_cost : null
+    const tourName = itinerary.trip_name || 'Your tour'
     const contractData = {
-      contractNumber: `TC-2025-${itineraryId.slice(0, 8).toUpperCase()}`,
+      contractNumber: contractNumberFor(itinerary),
       contractDate: new Date().toISOString(),
       clientName: itinerary.client_name || 'Valued Guest',
       clientEmail: itinerary.client_email,
       numTravelers: (itinerary.num_adults || 1) + (itinerary.num_children || 0),
-      tourName: itinerary.trip_name || 'Egypt Tour',
+      tourName,
       startDate: itinerary.start_date,
       endDate: itinerary.end_date,
-      destinations: 'Cairo, Luxor, Aswan',
-      totalCost: itinerary.total_cost || 0,
+      // The trip's own destinations — it printed "Cairo, Luxor, Aswan" for all.
+      destinations: describeDestinations(itinerary.destinations),
+      totalCost,
       currency: itinerary.currency || 'EUR',
       inclusions: itinerary.inclusions || undefined,
       exclusions: itinerary.exclusions || undefined,
@@ -71,18 +86,20 @@ export async function POST(request: NextRequest) {
     console.log('✅ PDF uploaded (private, signed link)')
 
     // Build message
-    const businessName = process.env.BUSINESS_NAME || ''
-    
-    const message = `📄 *${businessName}* 📄\n\n` +
+    // The org's own name and contacts (Settings), not one install-wide name.
+    const identity = await orgIdentity(orgId)
+    const businessName = identity.name
+
+    const message = (businessName ? `📄 *${businessName}* 📄\n\n` : '') +
       `Dear ${itinerary.client_name || 'Valued Guest'},\n\n` +
       `Your tour contract is ready! 🎉\n\n` +
       `📋 *Contract Details:*\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `🎯 *Tour:* ${itinerary.trip_name || 'Egypt Tour'}\n` +
+      `🎯 *Tour:* ${tourName}\n` +
       `📅 *Dates:* ${new Date(itinerary.start_date).toLocaleDateString()} - ${new Date(itinerary.end_date).toLocaleDateString()}\n` +
       `👥 *Travelers:* ${itinerary.num_adults} adult${itinerary.num_adults > 1 ? 's' : ''}` +
       `${itinerary.num_children > 0 ? `, ${itinerary.num_children} child${itinerary.num_children > 1 ? 'ren' : ''}` : ''}\n` +
-      `💰 *Total:* ${itinerary.currency} ${itinerary.total_cost.toFixed(2)}\n\n` +
+      `💰 *Total:* ${contractPrice(totalCost, itinerary.currency)}\n\n` +
       `📄 Please review the attached contract carefully.\n\n` +
       `✍️ *Next Steps:*\n` +
       `1. Review all terms and conditions\n` +
@@ -90,10 +107,10 @@ export async function POST(request: NextRequest) {
       `3. Return signed copy to us\n` +
       `4. Complete payment\n\n` +
       `If you have any questions, please don't hesitate to reach out!\n\n` +
-      `📧 ${process.env.BUSINESS_EMAIL || ''}\n` +
-      `🌐 ${process.env.BUSINESS_WEBSITE || ''}\n\n` +
-      `Looking forward to your adventure! 🐪✨\n\n` +
-      `Best regards,\n${businessName} Team`
+      (identity.email ? `📧 ${identity.email}\n` : '') +
+      (identity.website ? `🌐 ${identity.website}\n` : '') + '\n' +
+      `Looking forward to your adventure! ✨\n\n` +
+      (businessName ? `Best regards,\n${businessName} Team` : 'Best regards,')
 
     // Send via WhatsApp WITH PDF attachment
     const result = await sendWhatsAppMessage({

@@ -42,17 +42,24 @@ export async function GET(
       .maybeSingle()
     if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
 
-    const { data: passengers } = await supabase
+    const { data: passengers, error: passengersError } = await supabase
       .from('booking_passengers')
       .select('id, first_name, last_name, family_name_kanji, given_name_kanji, is_lead_passenger')
       .eq('booking_id', id)
       .order('is_lead_passenger', { ascending: false })
 
-    const { data: docs } = await supabase
+    const { data: docs, error: docsError } = await supabase
       .from('booking_passenger_documents')
       .select('id, passenger_id, kind, label, original_filename, size_bytes, uploaded_at, uploaded_via, purge_after, purged_at')
       .eq('booking_id', id)
       .order('uploaded_at', { ascending: true })
+    // A failed read is not "nothing uploaded": the panel hid itself and the
+    // operator concluded the travellers had sent nothing.
+    const failed = passengersError ?? docsError
+    if (failed) {
+      console.error('passenger-documents list failed:', failed.message)
+      return NextResponse.json({ error: 'Could not load traveller documents' }, { status: 500 })
+    }
 
     const byPassenger = new Map<string, any[]>()  // eslint-disable-line @typescript-eslint/no-explicit-any
     for (const d of docs ?? []) {

@@ -21,6 +21,8 @@ export async function GET(
         itineraries (
           itinerary_code,
           client_name,
+          client_phone,
+          client_email,
           total_cost
         )
       `)
@@ -34,6 +36,10 @@ export async function GET(
       ...payment,
       itinerary_code: payment.itineraries?.itinerary_code,
       client_name: payment.itineraries?.client_name,
+      // The receipt's WhatsApp button and the email on the invoice and
+      // receipt need these; the list route already returned them.
+      client_phone: payment.itineraries?.client_phone,
+      client_email: payment.itineraries?.client_email,
       total_cost: payment.itineraries?.total_cost
     }
 

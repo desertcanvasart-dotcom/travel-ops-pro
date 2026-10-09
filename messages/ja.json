@@ -8565,7 +8565,9 @@
     "sending": "送信中...",
     "sent": "送信済み",
     "thankYouForPayment": "お支払いいただきありがとうございます",
-    "transactionReference": "取引参照番号"
+    "transactionReference": "取引参照番号",
+    "paymentNotReceived": "お支払い状況：{status}。受領前のため、領収書は発行できません。",
+    "amount": "金額"
   },
   "invoice": {
     "amount": "金額",
