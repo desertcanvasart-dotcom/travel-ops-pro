@@ -82,16 +82,38 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // The target traveller must be on THIS booking.
   const { data: pax } = await admin
     .from('booking_passengers')
-    .select('id')
+    .select('id, details_submitted_at')
     .eq('id', passengerId)
     .eq('booking_id', c.bookingId)
     .maybeSingle()
   if (!pax) return NextResponse.json({ error: 'Traveller not found' }, { status: 404 })
 
   if (action === 'seed') {
+    // The lead pre-fills a friend's name and birth date for them to check —
+    // never after the office has locked the details (the manifest has gone
+    // to the ground team), and never over what the traveller submitted
+    // themselves. The traveller's own form already refused after the lock;
+    // this did not, so a name on the sent manifest could change silently.
+    const [{ data: link }, { data: booking }] = await Promise.all([
+      admin.from('booking_portal_links').select('details_locked_at').eq('token', token).maybeSingle(),
+      admin.from('bookings').select('details_locked_at').eq('id', c.bookingId).maybeSingle(),
+    ])
+    if (link?.details_locked_at || booking?.details_locked_at) {
+      return NextResponse.json({ error: 'The traveller details are locked.', code: 'PORTAL_LOCKED' }, { status: 409 })
+    }
+    if (pax.details_submitted_at) {
+      return NextResponse.json({ error: 'This traveller has already sent their own details.' }, { status: 409 })
+    }
     const fields = (body?.fields ?? {}) as Record<string, unknown>
     const updates: Record<string, unknown> = {}
-    for (const f of SEED_FIELDS) if (f in fields) updates[f] = fields[f] === '' ? null : fields[f]
+    for (const f of SEED_FIELDS) {
+      if (!(f in fields)) continue
+      const v = fields[f]
+      if (v === '' || v === null) { updates[f] = null; continue }
+      if (typeof v !== 'string') return NextResponse.json({ error: `Invalid ${f}` }, { status: 400 })
+      if (f === 'date_of_birth' && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return NextResponse.json({ error: 'Invalid date_of_birth' }, { status: 400 })
+      updates[f] = v.trim().slice(0, 200)
+    }
     if (Object.keys(updates).length === 0) return NextResponse.json({ error: 'No fields' }, { status: 400 })
     updates.updated_at = new Date().toISOString()
     await admin.from('booking_passengers').update(updates).eq('id', passengerId).eq('booking_id', c.bookingId)

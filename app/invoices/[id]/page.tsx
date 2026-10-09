@@ -299,7 +299,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     setGeneratingPDF(true)
     try {
       const { generateInvoicePDF } = await import('@/lib/invoice-pdf-generator')
-      const doc = generateInvoicePDF(invoice, await fetchCompanyInfo())
+      const { japaneseFontData } = await import('@/lib/pdf-fonts')
+      // Noto Sans JP: the built-in Helvetica has no Japanese glyphs, so a
+      // Japanese name or insurance line printed as garbage on the office copy.
+      const doc = generateInvoicePDF(invoice, await fetchCompanyInfo(), { font: await japaneseFontData() })
       const blob = doc.output('blob')
       setPdfPreviewBlob(blob)
       setPreviewTitle(`Invoice ${invoice.invoice_number}`)
