@@ -3,6 +3,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { blankToNull } from '@/lib/blank-to-null'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { paymentCurrencyFor } from '@/lib/payment-currency'
 
 export async function GET(request: NextRequest) {
   try {
@@ -81,6 +82,24 @@ export async function POST(request: NextRequest) {
       )
     }
     body.amount = amount
+
+    // The trip must be this org's, and the payment in its currency — the
+    // receipt prints it (lib/org-refs, lib/payment-currency).
+    if (body.itinerary_id) {
+      if (typeof body.itinerary_id !== 'string') {
+        return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
+      }
+      const { data: trip } = await supabase
+        .from('itineraries')
+        .select('id, currency')
+        .eq('id', body.itinerary_id)
+        .eq('org_id', orgId)
+        .maybeSingle()
+      if (!trip) return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
+      const paid = paymentCurrencyFor(body.currency, trip.currency)
+      if (!paid.ok) return NextResponse.json({ success: false, error: paid.error }, { status: 400 })
+      body.currency = paid.currency
+    }
 
     // M3 Phase 2A: stamp org_id from the session, overriding any value the
     // client might have tried to inject through the spread body.

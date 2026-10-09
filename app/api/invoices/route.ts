@@ -11,6 +11,7 @@ import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-number
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { currencyDecimals, roundToCurrency } from '@/lib/currency-totals'
 import { invoiceTotals } from '@/lib/invoices/totals'
+import { recordsInOrg } from '@/lib/org-refs'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -95,6 +96,12 @@ export async function POST(request: NextRequest) {
     if (!orgId) return noOrgResponse()
 
     const body = await request.json()
+
+    // The trip and client must be this org's (lib/org-refs): the list embeds
+    // the trip's client phone through this key.
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: body.itinerary_id, client_id: body.client_id }))) {
+      return NextResponse.json({ error: 'Itinerary or client not found' }, { status: 404 })
+    }
 
     // Validate required fields
     if (!body.client_name) {

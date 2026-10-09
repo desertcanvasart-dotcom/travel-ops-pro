@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { recordsInOrg } from '@/lib/org-refs'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -83,6 +84,10 @@ export async function PUT(
       if (body[field] !== undefined) {
         updateData[field] = body[field]
       }
+    }
+
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updateData.itinerary_id, client_id: updateData.client_id }))) {
+      return NextResponse.json({ error: 'Itinerary or client not found' }, { status: 404 })
     }
 
     // If total_amount is updated, recalculate balance_due

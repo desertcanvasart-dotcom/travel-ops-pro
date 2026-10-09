@@ -1059,6 +1059,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                   <select
                     value={paymentForm.currency}
                     onChange={(e) => setPaymentForm(prev => ({ ...prev, currency: e.target.value }))}
+                    // The invoice's own currency: its balance is in it (lib/payment-currency).
+                    disabled
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] bg-white"
                   >
                     {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c} ({currencySymbol(c)})</option>)}

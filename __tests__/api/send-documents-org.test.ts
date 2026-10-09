@@ -56,7 +56,7 @@ const orgFilters = (table: string) =>
 const payment = (payment_status: string) => ({
   id: 'pay-1', payment_status, amount: 500, currency: 'USD', payment_method: 'cash', payment_date: null,
   created_at: '2026-10-01T00:00:00Z', transaction_reference: null,
-  itineraries: { id: 'it-1', itinerary_code: 'IT-1', client_name: 'Jamie', client_phone: '+201000000000' },
+  itineraries: { id: 'it-1', itinerary_code: 'IT-1', client_name: 'Jamie', client_phone: '+201000000000', org_id: 'org-A' },
 })
 
 beforeEach(() => { h.calls.length = 0; h.sent.length = 0; h.rows = {} })
@@ -70,6 +70,12 @@ describe('POST /api/whatsapp/send-receipt', () => {
   it.each(['pending', 'failed', 'refunded'])('sends no receipt for a %s payment', async (status) => {
     h.rows.payments = payment(status)
     expect((await sendReceipt(post({ paymentId: 'pay-1' }))).status).toBe(409)
+    expect(h.sent).toHaveLength(0)
+  })
+
+  it("never sends to another org's trip the payment points at", async () => {
+    h.rows.payments = { ...payment('completed'), itineraries: { ...payment('completed').itineraries, org_id: 'org-B' } }
+    expect((await sendReceipt(post({ paymentId: 'pay-1' }))).status).not.toBe(200)
     expect(h.sent).toHaveLength(0)
   })
 
