@@ -8,6 +8,10 @@ import { allowsIncomplete } from '@/lib/pricing/quote-completeness'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { paymentRuleFrom } from '@/lib/payment-schedule'
 import { computeDeposit } from '@/lib/booking-creation'
+import { roundToCurrency } from '@/lib/currency-totals'
+import { fetchExchangeRates } from '@/lib/currency-service'
+import { parseFrozenFx, frozenToExchangeRates } from '@/lib/itinerary-fx'
+import { quoteAmountsInTripCurrency } from '@/lib/b2b/convert-money'
 import { templateDaysToItineraryDays, packageTypeForTemplate, serviceLineForItinerary } from '@/lib/itineraries/template-days'
 
 // ============================================
@@ -117,17 +121,44 @@ export async function POST(
       // Update the existing draft itinerary with B2B pricing
       const partnerInfo = quote.b2b_partners as { id: string; company_name: string; partner_code: string; commission_percent: number } | null
 
-      const { error: updateError } = await supabaseAdmin
+      // The trip must be ours too: quoteInOrg proves only the quote is, and
+      // its itinerary_id was stored as the caller gave it.
+      const { data: trip } = await supabaseAdmin
+        .from('itineraries')
+        .select('id, currency, fx_frozen')
+        .eq('id', quote.itinerary_id)
+        .eq('org_id', orgId)
+        .maybeSingle()
+      if (!trip) return NextResponse.json({ error: 'Itinerary not found' }, { status: 404 })
+
+      // The quote is priced in the org's rate currency; the trip and its
+      // service lines are in the trip's own (lib/b2b/convert-money).
+      const quoteCurrency = quote.currency || trip.currency || 'EUR'
+      const frozen = parseFrozenFx(trip.fx_frozen)
+      const rates = !trip.currency || trip.currency === quoteCurrency
+        ? null
+        : frozen ? frozenToExchangeRates(frozen) : await fetchExchangeRates(quoteCurrency)
+      const amounts = quoteAmountsInTripCurrency(quote, trip.currency, rates)
+      if (!amounts) {
+        return NextResponse.json(
+          { error: `No exchange rate from ${quoteCurrency} to ${trip.currency} — the quote cannot be put on this trip.` },
+          { status: 409 }
+        )
+      }
+      const sellingInTrip = amounts.selling_price
+      const depositInTrip = roundToCurrency(computeDeposit(Number(sellingInTrip) || 0, paymentRule.deposit_percent).depositAmount, amounts.currency)
+
+      const { data: updatedTrip, error: updateError } = await supabaseAdmin
         .from('itineraries')
         .update({
           status: 'quoted',
-          total_cost: quote.selling_price,
-          total_revenue: quote.selling_price,
-          supplier_cost: quote.total_cost,
-          profit: quote.margin_amount,
+          total_cost: sellingInTrip,
+          total_revenue: sellingInTrip,
+          supplier_cost: amounts.total_cost,
+          profit: amounts.margin_amount,
           margin_percent: quote.margin_percent,
-          deposit_amount: depositOf(quote.selling_price),
-          balance_due: Math.round(((quote.selling_price || 0) - depositOf(quote.selling_price)) * 100) / 100,
+          deposit_amount: depositInTrip,
+          balance_due: roundToCurrency((sellingInTrip || 0) - depositInTrip, amounts.currency),
           payment_status: 'not_paid',
           partner_id: quote.partner_id || null,
           partner_commission_percent: partnerInfo?.commission_percent || 0,
@@ -135,18 +166,16 @@ export async function POST(
           notes: `Converted from B2B quote ${quote.quote_number}`,
         })
         .eq('id', quote.itinerary_id)
+        .eq('org_id', orgId)
+        .select('itinerary_code')
+        .maybeSingle()
 
       if (updateError) {
         console.error('Failed to update itinerary:', updateError)
         return NextResponse.json({ error: 'Failed to update itinerary' }, { status: 500 })
       }
-
-      // Fetch itinerary code for response
-      const { data: existingItinerary } = await supabaseAdmin
-        .from('itineraries')
-        .select('itinerary_code')
-        .eq('id', quote.itinerary_id)
-        .single()
+      if (!updatedTrip) return NextResponse.json({ error: 'Itinerary not found' }, { status: 404 })
+      const existingItinerary = updatedTrip
 
       // Mark quote as converted
       await supabaseAdmin

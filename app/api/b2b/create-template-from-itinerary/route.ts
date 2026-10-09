@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { normalizeServiceType } from '@/lib/service-types'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // ============================================
 // B2B: Create Tour Template + Variation from WhatsApp Itinerary
@@ -27,12 +28,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // TENANT BOUNDARY — the service role reads any org's trip; only ours.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     // 1. Fetch the itinerary
     const { data: itinerary, error: itinError } = await supabaseAdmin
       .from('itineraries')
       .select('*')
       .eq('id', itinerary_id)
-      .single()
+      .eq('org_id', orgId)
+      .maybeSingle()
 
     if (itinError || !itinerary) {
       return NextResponse.json(

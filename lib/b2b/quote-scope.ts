@@ -46,3 +46,30 @@ export async function quoteInOrg(
 export function quoteNotFound() {
   return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
 }
+
+/**
+ * Are the trip and partner a quote points at this organisation's? A quote
+ * stored another org's itinerary_id or partner_id as given: the quote and its
+ * PDF then carried that org's client, supplier costs or partner contact, and
+ * converting it re-priced THEIR trip. An absent reference passes. Fails closed.
+ */
+export async function quoteRefsInOrg(
+  supabase: DbClient,
+  orgId: string,
+  refs: { itinerary_id?: unknown; partner_id?: unknown }
+): Promise<boolean> {
+  if (!orgId) return false
+  const checks: Array<[string, unknown]> = [['itineraries', refs.itinerary_id], ['b2b_partners', refs.partner_id]]
+  for (const [table, id] of checks) {
+    if (id === undefined || id === null || id === '') continue
+    if (typeof id !== 'string') return false
+    const { data } = await supabase.from(table).select('id').eq('id', id).eq('org_id', orgId).maybeSingle()
+    if (!data) return false
+  }
+  return true
+}
+
+/** The refusal for a trip or partner that is not the caller's — the same 404 as a missing one. */
+export function quoteRefNotFound() {
+  return NextResponse.json({ success: false, error: 'Itinerary or partner not found' }, { status: 404 })
+}
