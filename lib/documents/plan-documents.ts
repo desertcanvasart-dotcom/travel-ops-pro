@@ -391,3 +391,45 @@ export function serviceDocKeys(s: { service_id?: string | null; day_number?: num
   if (s.service_id) keys.unshift(`id:${s.service_id}`)
   return keys
 }
+
+/** Every key a document's lines are recognised by. */
+export function documentedKeys(docs: Array<{ services?: unknown }>): Set<string> {
+  const keys = new Set<string>()
+  for (const doc of docs) {
+    for (const s of (Array.isArray(doc.services) ? doc.services : []) as Array<Parameters<typeof serviceDocKeys>[0]>) {
+      for (const k of serviceDocKeys(s)) keys.add(k)
+    }
+  }
+  return keys
+}
+
+/** The planned documents with the lines no document holds yet: what
+ *  Generate would make. Plans whose lines are all on documents drop out. */
+export function missingDocuments(plans: PlannedDocument[], documented: Set<string>): PlannedDocument[] {
+  return plans.flatMap(plan => {
+    const services = plan.services.filter(s => !serviceDocKeys(s).some(k => documented.has(k)))
+    return services.length ? [{ ...plan, services }] : []
+  })
+}
+
+/**
+ * The trip's documents that no longer match it: lines on them the trip does
+ * not have any more (removed, renamed, moved to another day). Documents are a
+ * snapshot of the trip when Generate ran; an edit afterwards left them as
+ * they were, and nothing said so. A line that names no day and service (a
+ * document made by hand) is never counted.
+ */
+export function staleDocuments(
+  plans: PlannedDocument[],
+  docs: Array<{ id: string; document_number?: string | null; supplier_name?: string | null; services?: unknown }>,
+): Array<{ id: string; document_number: string | null; supplier_name: string | null; gone: number }> {
+  const current = new Set(plans.flatMap(p => p.services.flatMap(serviceDocKeys)))
+  return docs.flatMap(doc => {
+    const lines = (Array.isArray(doc.services) ? doc.services : []) as Array<Record<string, unknown>>
+    const gone = lines
+      .filter(l => l && l.day_number != null && clean(l.service_name))
+      .filter(l => !serviceDocKeys(l as Parameters<typeof serviceDocKeys>[0]).some(k => current.has(k)))
+      .length
+    return gone ? [{ id: doc.id, document_number: doc.document_number ?? null, supplier_name: doc.supplier_name ?? null, gone }] : []
+  })
+}

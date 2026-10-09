@@ -5,7 +5,129 @@ import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { createDocumentNumberer, supplierDocumentPrefix } from '@/lib/documents/numberer'
 import { requestedDocTypes } from '@/lib/documents/group-services'
-import { planDocuments, serviceDocKeys, type PlanGuide } from '@/lib/documents/plan-documents'
+import { planDocuments, documentedKeys, missingDocuments, staleDocuments, type PlanGuide } from '@/lib/documents/plan-documents'
+
+/**
+ * The trip's days, suppliers, assigned guides and planned documents, and what
+ * its documents already hold — shared by POST (create what is missing) and
+ * GET (list what is missing and what no longer matches).
+ */
+async function planTrip(supabase: ReturnType<typeof createServerClient>, itineraryId: string) {
+  // Fetch all days with services
+  const { data: days, error: daysError } = await supabase
+    .from('itinerary_days')
+    .select(`
+      *,
+      services:itinerary_services(*)
+    `)
+    .eq('itinerary_id', itineraryId)
+    .order('day_number', { ascending: true })
+  
+  if (daysError) {
+    console.error('❌ Days fetch error:', daysError)
+    return { error: NextResponse.json({ error: clientMessage(daysError, 'Internal server error') }, { status: 500 }) }
+  }
+  
+  console.log(`✅ Found ${days?.length || 0} days`)
+  
+  // Collect all supplier IDs from services
+  const supplierIds = new Set<string>()
+  for (const day of days || []) {
+    for (const service of day.services || []) {
+      if (service.supplier_id) supplierIds.add(service.supplier_id)
+    }
+  }
+
+  // Fetch all suppliers at once
+  let suppliersMap: Record<string, any> = {}
+  if (supplierIds.size > 0) {
+    const { data: suppliers } = await supabase
+      .from('suppliers')
+      .select('*')
+      .in('id', Array.from(supplierIds))
+    if (suppliers) suppliersMap = Object.fromEntries(suppliers.map(s => [s.id, s]))
+  }
+
+  // The guides assigned to the trip (Operations → Resources): guiding goes
+  // on ONE assignment per guide, addressed to that guide.
+  const { data: guideRows } = await supabase
+    .from('itinerary_resources')
+    .select('resource_id, resource_name, itinerary_day_id, start_date, end_date, status')
+    .eq('itinerary_id', itineraryId)
+    .eq('resource_type', 'guide')
+  const guideIds = [...new Set((guideRows ?? []).map(r => r.resource_id).filter(Boolean))]
+  const { data: guideRecords } = guideIds.length > 0
+    ? await supabase.from('guides').select('id, name, phone, email, whatsapp, languages').in('id', guideIds)
+    : { data: [] as any[] }
+  const guideById = new Map((guideRecords ?? []).map((g: any) => [g.id, g]))
+  const guides: PlanGuide[] = (guideRows ?? []).map(r => {
+    const g = guideById.get(r.resource_id)
+    return {
+      guide_id: r.resource_id,
+      name: g?.name || r.resource_name || 'Guide',
+      languages: g?.languages ?? null,
+      phone: g?.phone ?? null,
+      email: g?.email ?? null,
+      whatsapp: g?.whatsapp ?? null,
+      itinerary_day_id: r.itinerary_day_id,
+      start_date: r.start_date,
+      end_date: r.end_date,
+      status: r.status,
+    }
+  })
+
+  // One document per supplier, split only for a real reason: a hotel per
+  // stay, a cruise per sailing, transport per place (lib/documents/plan-documents).
+  const plans = planDocuments({ days: days || [], suppliers: suppliersMap, guides })
+
+  // A service already on a document (not cancelled) is not put on another:
+  // "Generate" again makes only what is missing — also for a trip whose
+  // documents were made before this grouping, whatever they were called.
+  const { data: existingDocs } = await supabase
+    .from('supplier_documents')
+    .select('id, document_number, supplier_name, services')
+    .eq('itinerary_id', itineraryId)
+    .neq('status', 'cancelled')
+  const documented = documentedKeys(existingDocs ?? [])
+
+  return { plans, suppliersMap, existingDocs: existingDocs ?? [], documented }
+}
+
+// GET: what Generate would make, and the documents the trip no longer
+// matches — for the trip's documents page. Creates nothing.
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const supabase = createServerClient()
+  const { id: itineraryId } = await params
+  try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const { data: itinerary } = await supabase
+      .from('itineraries')
+      .select('id')
+      .eq('id', itineraryId)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!itinerary) return NextResponse.json({ error: 'Itinerary not found' }, { status: 404 })
+
+    const planned = await planTrip(supabase, itineraryId)
+    if (planned.error) return planned.error
+    return NextResponse.json({
+      success: true,
+      missing: missingDocuments(planned.plans, planned.documented).map(p => ({
+        document_type: p.docType,
+        supplier_name: p.supplierName,
+        lines: p.services.length,
+      })),
+      stale: staleDocuments(planned.plans, planned.existingDocs),
+    })
+  } catch (error) {
+    console.error('❌ Error checking documents:', error)
+    return NextResponse.json({ success: false, error: 'Failed to check documents' }, { status: 500 })
+  }
+}
 
 export async function POST(
   request: NextRequest,
@@ -59,93 +181,14 @@ export async function POST(
 
     console.log('✅ Found itinerary:', itinerary.itinerary_code)
     
-    // Fetch all days with services
-    const { data: days, error: daysError } = await supabase
-      .from('itinerary_days')
-      .select(`
-        *,
-        services:itinerary_services(*)
-      `)
-      .eq('itinerary_id', itineraryId)
-      .order('day_number', { ascending: true })
-    
-    if (daysError) {
-      console.error('❌ Days fetch error:', daysError)
-      return NextResponse.json({ error: clientMessage(daysError, 'Internal server error') }, { status: 500 })
-    }
-    
-    console.log(`✅ Found ${days?.length || 0} days`)
-    
-    // Collect all supplier IDs from services
-    const supplierIds = new Set<string>()
-    for (const day of days || []) {
-      for (const service of day.services || []) {
-        if (service.supplier_id) supplierIds.add(service.supplier_id)
-      }
-    }
-
-    // Fetch all suppliers at once
-    let suppliersMap: Record<string, any> = {}
-    if (supplierIds.size > 0) {
-      const { data: suppliers } = await supabase
-        .from('suppliers')
-        .select('*')
-        .in('id', Array.from(supplierIds))
-      if (suppliers) suppliersMap = Object.fromEntries(suppliers.map(s => [s.id, s]))
-    }
-
-    // The guides assigned to the trip (Operations → Resources): guiding goes
-    // on ONE assignment per guide, addressed to that guide.
-    const { data: guideRows } = await supabase
-      .from('itinerary_resources')
-      .select('resource_id, resource_name, itinerary_day_id, start_date, end_date, status')
-      .eq('itinerary_id', itineraryId)
-      .eq('resource_type', 'guide')
-    const guideIds = [...new Set((guideRows ?? []).map(r => r.resource_id).filter(Boolean))]
-    const { data: guideRecords } = guideIds.length > 0
-      ? await supabase.from('guides').select('id, name, phone, email, whatsapp, languages').in('id', guideIds)
-      : { data: [] as any[] }
-    const guideById = new Map((guideRecords ?? []).map((g: any) => [g.id, g]))
-    const guides: PlanGuide[] = (guideRows ?? []).map(r => {
-      const g = guideById.get(r.resource_id)
-      return {
-        guide_id: r.resource_id,
-        name: g?.name || r.resource_name || 'Guide',
-        languages: g?.languages ?? null,
-        phone: g?.phone ?? null,
-        email: g?.email ?? null,
-        whatsapp: g?.whatsapp ?? null,
-        itinerary_day_id: r.itinerary_day_id,
-        start_date: r.start_date,
-        end_date: r.end_date,
-        status: r.status,
-      }
-    })
-
-    // One document per supplier, split only for a real reason: a hotel per
-    // stay, a cruise per sailing, transport per place (lib/documents/plan-documents).
-    const plans = planDocuments({ days: days || [], suppliers: suppliersMap, guides })
-
-    // A service already on a document (not cancelled) is not put on another:
-    // "Generate" again makes only what is missing — also for a trip whose
-    // documents were made before this grouping, whatever they were called.
-    const { data: existingDocs } = await supabase
-      .from('supplier_documents')
-      .select('services')
-      .eq('itinerary_id', itineraryId)
-      .neq('status', 'cancelled')
-    const documented = new Set<string>()
-    for (const doc of existingDocs || []) {
-      for (const s of (Array.isArray(doc.services) ? doc.services : []) as any[]) {
-        for (const k of serviceDocKeys(s)) documented.add(k)
-      }
-    }
+    const planned = await planTrip(supabase, itineraryId)
+    if (planned.error) return planned.error
+    const { plans, suppliersMap, documented } = planned
 
     const documentsToCreate: any[] = []
-    for (const plan of plans) {
+    for (const plan of missingDocuments(plans, documented)) {
       if (document_types && !document_types.includes(plan.docType)) continue
-      const services = plan.services.filter(s => !serviceDocKeys(s).some(k => documented.has(k)))
-      if (services.length === 0) continue
+      const services = plan.services
 
       const supplier = plan.supplierId ? suppliersMap[plan.supplierId] : null
       const guide = plan.guide

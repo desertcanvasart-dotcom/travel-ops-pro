@@ -2,7 +2,7 @@
 // reason (lib/documents/plan-documents.ts). An 8-day trip shaped like
 // ITN-26-009: Cairo arrival, a 4-night Nile cruise, Abu Simbel, Cairo again.
 import { describe, it, expect } from 'vitest'
-import { planDocuments, nextDay, serviceDocKeys, type PlanDay } from '@/lib/documents/plan-documents'
+import { planDocuments, nextDay, serviceDocKeys, documentedKeys, missingDocuments, staleDocuments, type PlanDay } from '@/lib/documents/plan-documents'
 
 const day = (n: number, city: string, overnight: string | null, services: PlanDay['services'], attractions: string[] = []): PlanDay => ({
   id: `d${n}`,
@@ -168,5 +168,39 @@ describe('planDocuments', () => {
   it('serviceDocKeys matches a stored line by id, or by day, type and name', () => {
     expect(serviceDocKeys({ service_id: 'x', day_number: 2, service_type: 'guide', service_name: 'Guide' })).toEqual(['id:x', 'n:2|guide|guide'])
     expect(serviceDocKeys({ day_number: 2, service_type: 'Guide', service_name: ' Guide ' })).toEqual(['n:2|guide|guide'])
+  })
+})
+
+describe('what the trip has that no document carries, and documents it no longer matches', () => {
+  // The documents Generate writes for TRIP, as stored.
+  const stored = plan().map((p, i) => ({ id: `doc${i}`, document_number: `D-${i}`, supplier_name: p.supplierName, services: p.services }))
+
+  it('a trip whose documents are all generated has nothing missing and nothing out of date', () => {
+    expect(missingDocuments(plan(), documentedKeys(stored))).toEqual([])
+    expect(staleDocuments(plan(), stored)).toEqual([])
+  })
+
+  it('a line added after Generate is missing; only that line', () => {
+    const days = structuredClone(TRIP)
+    days[1].services!.push({ id: 's99', service_type: 'meal', service_name: 'Abou El Sid dinner' })
+    const missing = missingDocuments(plan(days), documentedKeys(stored))
+    expect(missing.map(m => [m.supplierName, m.services.map(s => s.service_name)])).toEqual([
+      ['Cairo Restaurant & Meals', ['Abou El Sid dinner']],
+    ])
+  })
+
+  it('a line removed from the trip leaves its document out of date; a hand-made document never is', () => {
+    const days = structuredClone(TRIP)
+    days[1].services = days[1].services!.filter(s => s.id !== 's6')
+    const handMade = { id: 'manual', document_number: 'SO-9', supplier_name: 'Extra', services: [{ description: 'Felucca', quantity: 1 }] }
+    expect(staleDocuments(plan(days), [...stored, handMade])).toEqual([
+      { id: expect.any(String), document_number: expect.any(String), supplier_name: 'Entrance Fees', gone: 1 },
+    ])
+  })
+
+  it('the grid saving the trip again (new line ids, same lines) is not a change', () => {
+    const days = TRIP.map(d => ({ ...d, services: d.services!.map(s => ({ ...s, id: `new-${s.id}` })) }))
+    expect(staleDocuments(plan(days), stored)).toEqual([])
+    expect(missingDocuments(plan(days), documentedKeys(stored))).toEqual([])
   })
 })

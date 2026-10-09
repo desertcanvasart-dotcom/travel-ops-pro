@@ -53,7 +53,7 @@ function chain(table: string) {
 vi.mock('@/lib/supabase-server', () => ({ createServerClient: () => ({ from: (t: string) => chain(t) }) }))
 vi.mock('@/lib/auth/current-org', () => ({ getCurrentOrgId: async () => 'org-1', getCurrentUserId: async () => 'user-1', noOrgResponse: () => new Response(null, { status: 403 }) }))
 
-import { POST } from '@/app/api/itineraries/[id]/generate-documents/route'
+import { GET, POST } from '@/app/api/itineraries/[id]/generate-documents/route'
 
 const generate = async (body: Record<string, unknown> = {}) => {
   const res = await POST(new Request('http://x', { method: 'POST', body: JSON.stringify(body) }) as never, { params: Promise.resolve({ id: 'itn-1' }) } as never)
@@ -105,5 +105,22 @@ describe('a trip documented before the grouping changed', () => {
     // Only the transport, which no document carried yet.
     expect(out.count).toBe(1)
     expect(store.docs.slice(2).map(d => d.document_type)).toEqual(['transport_voucher'])
+  })
+})
+
+describe('the trip’s documents page asks what is missing', () => {
+  const check = async () => {
+    const res = await GET(new Request('http://x') as never, { params: Promise.resolve({ id: 'itn-1' }) } as never)
+    return res.json()
+  }
+  it('lists what Generate would make, then nothing once it has', async () => {
+    const before = await check()
+    expect(before.success).toBe(true)
+    expect(before.missing.length).toBeGreaterThan(0)
+    expect(store.docs).toEqual([])
+    await generate()
+    const after = await check()
+    expect(after.missing).toEqual([])
+    expect(after.stale).toEqual([])
   })
 })

@@ -6,7 +6,7 @@ import Link from 'next/link'
 import {
   FileText, Search, Send, Eye, Trash2, Pencil,
   Hotel, Car, Ship, MapPin, Users, CheckCircle,
-  Clock, RotateCcw
+  Clock, RotateCcw, AlertTriangle
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { BackLink, TripBreadcrumb } from '@/components/nav/TripNav'
@@ -78,6 +78,12 @@ export default function SupplierDocumentsPage() {
   // Where this list was opened from (a trip, its booking): ?from=, kept through
   // the list's own links so back from a document, then back again, gets there.
   const [returnTo, setReturnTo] = useState<string | null>(null)
+  // Documents are a snapshot of the trip when Generate ran. What the trip has
+  // that no document carries, and documents holding lines it no longer has
+  // (GET /api/itineraries/[id]/generate-documents) — both went unsaid.
+  const [missing, setMissing] = useState<Array<{ document_type: string; supplier_name: string; lines: number }>>([])
+  const [stale, setStale] = useState<Array<{ id: string; document_number: string | null; supplier_name: string | null; gone: number }>>([])
+  const [generatingMissing, setGeneratingMissing] = useState(false)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -95,6 +101,43 @@ export default function SupplierDocumentsPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, typeFilter, statusFilter, itineraryFilter])
+
+  const fetchTripCheck = async (id: string | null) => {
+    if (!id) { setMissing([]); setStale([]); return }
+    try {
+      const response = await fetch(`/api/itineraries/${encodeURIComponent(id)}/generate-documents`)
+      const result = response.ok ? await response.json() : null
+      setMissing(Array.isArray(result?.missing) ? result.missing : [])
+      setStale(Array.isArray(result?.stale) ? result.stale : [])
+    } catch {
+      setMissing([])
+      setStale([])
+    }
+  }
+
+  useEffect(() => {
+    if (mounted) fetchTripCheck(itineraryFilter)
+  }, [mounted, itineraryFilter])
+
+  const generateMissing = async () => {
+    if (!itineraryFilter) return
+    setGeneratingMissing(true)
+    try {
+      const response = await fetch(`/api/itineraries/${encodeURIComponent(itineraryFilter)}/generate-documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+      const result = await response.json().catch(() => null)
+      if (!response.ok || !result?.success) {
+        await dialog.alert(t('documentsNotGenerated'), result?.error || t('generateMissingFailed'), 'warning')
+      }
+    } finally {
+      setGeneratingMissing(false)
+      fetchDocuments()
+      fetchTripCheck(itineraryFilter)
+    }
+  }
 
   const showAllDocuments = () => {
     setItineraryFilter(null)
@@ -147,6 +190,7 @@ export default function SupplierDocumentsPage() {
       
       if (response.ok) {
         fetchDocuments()
+        fetchTripCheck(itineraryFilter)
       }
     } catch (error) {
       console.error('Error updating status:', error)
@@ -169,6 +213,7 @@ export default function SupplierDocumentsPage() {
 
       if (response.ok) {
         fetchDocuments()
+        fetchTripCheck(itineraryFilter)
       }
     } catch (error) {
       console.error('Error deleting document:', error)
@@ -238,6 +283,49 @@ export default function SupplierDocumentsPage() {
             >
               {t('tryAgain')}
             </button>
+          </div>
+        )}
+
+        {/* Services on the trip that no document carries yet. */}
+        {itineraryFilter && missing.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-900">{t('missingTitle', { count: missing.length })}</p>
+                <p className="text-sm text-amber-800">{missing.map(m => m.supplier_name).join(' · ')}</p>
+                <p className="text-xs text-amber-700 mt-1">{t('missingNote')}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={generateMissing}
+              disabled={generatingMissing}
+              className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50 whitespace-nowrap"
+            >
+              {generatingMissing ? t('generatingMissing') : t('generateMissing')}
+            </button>
+          </div>
+        )}
+
+        {/* Documents the trip has changed under. */}
+        {itineraryFilter && stale.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-amber-900">{t('staleTitle', { count: stale.length })}</p>
+              <ul className="text-sm text-amber-800 mt-1 space-y-0.5">
+                {stale.map(d => (
+                  <li key={d.id}>
+                    <Link href={fromList(`/documents/supplier/${d.id}`)} className="font-medium underline hover:text-amber-900">
+                      {d.document_number || d.supplier_name}
+                    </Link>
+                    {' '}· {d.supplier_name} — {t('staleLines', { count: d.gone })}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-amber-700 mt-1">{t('staleNote')}</p>
+            </div>
           </div>
         )}
 

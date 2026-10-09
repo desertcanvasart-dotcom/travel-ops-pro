@@ -7428,7 +7428,16 @@
     "revertToDraft": "Revert to Draft",
     "delete": "Delete",
     "deleteDocument": "Delete Document",
-    "confirmDeleteDocument": "Are you sure you want to delete this document?"
+    "confirmDeleteDocument": "Are you sure you want to delete this document?",
+    "missingTitle": "{count, plural, one {One document is} other {# documents are}} not generated yet",
+    "missingNote": "The trip has services no document carries, usually because it changed after documents were generated.",
+    "generateMissing": "Generate missing",
+    "generatingMissing": "Generating…",
+    "generateMissingFailed": "Could not generate the missing documents.",
+    "documentsNotGenerated": "Documents not generated",
+    "staleTitle": "{count, plural, one {One document no longer matches} other {# documents no longer match}} the trip",
+    "staleLines": "{count, plural, one {# line} other {# lines}} no longer on the trip",
+    "staleNote": "The trip changed after these were generated. Edit them, or cancel them and generate again; tell the supplier if one was already sent."
   },
   "supplierDocumentEdit": {
     "documentNotFound": "Document not found",
