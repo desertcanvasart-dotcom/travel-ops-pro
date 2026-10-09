@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { businessIdentity } from '@/lib/org-identity'
+import { templateSender, type TemplateSender } from '@/lib/template-sender'
+import { formatMoney } from '@/lib/currency-totals'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 
@@ -15,20 +17,20 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { id: clientId } = await params
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
     const itineraryId = searchParams.get('itineraryId') // Optional: specific itinerary
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
-    }
 
     // Fetch client data - using first_name, last_name instead of name
     const { data: client, error: clientError } = await supabase
       .from('clients')
-      .select('id, first_name, last_name, email, phone')
+      .select('id, first_name, last_name, email, phone, preferred_language')
       .eq('id', clientId)
+      // Service-role client: the organisation's own client only.
+      .eq('org_id', orgId)
       .single()
 
     if (clientError || !client) {
@@ -40,7 +42,8 @@ export async function GET(
       id: client.id,
       name: `${client.first_name || ''} ${client.last_name || ''}`.trim(),
       email: client.email,
-      phone: client.phone
+      phone: client.phone,
+      preferred_language: client.preferred_language ?? null,
     }
 
     // Fetch itinerary - either specific one or latest for this client
@@ -66,6 +69,7 @@ export async function GET(
         status
       `)
       .eq('client_id', clientId)
+      .eq('org_id', orgId)
 
     if (itineraryId) {
       itineraryQuery = itineraryQuery.eq('id', itineraryId)
@@ -80,16 +84,34 @@ export async function GET(
 
     const latestItinerary = itineraries && itineraries.length > 0 ? itineraries[0] : null
 
+    // The trip's real payment dates are on its booking; with no booking there
+    // are none yet (they were invented: deposit "today + 7", balance "start − 14").
+    let paymentDates: { deposit_due?: string | null; balance_due?: string | null } = {}
+    if (latestItinerary) {
+      const { data: booking } = await supabase
+        .from('bookings')
+        .select('payment_deadline, balance_due_date')
+        .eq('itinerary_id', latestItinerary.id)
+        .eq('org_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      paymentDates = { deposit_due: booking?.payment_deadline ?? null, balance_due: booking?.balance_due_date ?? null }
+    }
+
+    const sender = await templateSender(supabase, orgId, await getCurrentUserId())
+
     // Also fetch all itineraries for this client (for dropdown selection)
     const { data: allItineraries } = await supabase
       .from('itineraries')
       .select('id, itinerary_code, trip_name, start_date, status, total_cost')
       .eq('client_id', clientId)
+      .eq('org_id', orgId)
       .order('created_at', { ascending: false })
       .limit(10)
 
     // Build the placeholder data
-    const placeholderData = buildPlaceholderData(clientWithName, latestItinerary)
+    const placeholderData = buildPlaceholderData(clientWithName, latestItinerary, sender, paymentDates)
 
     return NextResponse.json({
       client: clientWithName,
@@ -97,7 +119,7 @@ export async function GET(
       allItineraries: allItineraries || [],
       placeholderData,
       // The language this client is written to in — the inbox picks templates in it.
-      clientLanguage: (clientWithName as { preferred_language?: string | null })?.preferred_language || null,
+      clientLanguage: clientWithName.preferred_language || null,
     })
 
   } catch (error: any) {
@@ -109,7 +131,9 @@ export async function GET(
 // Helper function to build placeholder data
 function buildPlaceholderData(
   client: { name: string; email: string; phone?: string | null },
-  itinerary?: any
+  itinerary: any,
+  sender: TemplateSender,
+  paymentDates: { deposit_due?: string | null; balance_due?: string | null } = {}
 ): Record<string, string> {
   const data: Record<string, string> = {}
   const currency = itinerary?.currency || 'EUR'
@@ -168,29 +192,15 @@ function buildPlaceholderData(
       data.payment_status = formatPaymentStatus(itinerary.payment_status)
     }
 
-    // Calculate final payment due date (14 days before trip)
-    if (itinerary.start_date) {
-      const startDate = new Date(itinerary.start_date)
-      const finalPaymentDue = new Date(startDate)
-      finalPaymentDue.setDate(finalPaymentDue.getDate() - 14)
-      data.final_payment_due = formatDate(finalPaymentDue)
-    }
+    if (paymentDates.balance_due) data.final_payment_due = formatDate(paymentDates.balance_due)
+    if (paymentDates.deposit_due) data.deposit_due_date = formatDate(paymentDates.deposit_due)
   }
 
-  // Company defaults (you can customize these)
-  // The operator's own identity — this feeds customer documents.
-  const brand = businessIdentity()
-  data.company_name = brand.name
-  data.agent_name = 'Islam'
-  data.company_email = brand.email
-  data.company_phone = '+20 123 456 7890'
+  // The sending organisation and agent (lib/template-sender).
+  Object.assign(data, sender)
 
   // Dynamic dates
   data.today = formatDate(new Date())
-  
-  const depositDue = new Date()
-  depositDue.setDate(depositDue.getDate() + 7)
-  data.deposit_due_date = formatDate(depositDue)
 
   return data
 }
@@ -199,16 +209,8 @@ function formatCurrency(amount: number | string | undefined, currency: string = 
   if (amount === undefined || amount === null) return ''
   const num = typeof amount === 'string' ? parseFloat(amount) : amount
   if (isNaN(num)) return ''
-  
-  const symbols: Record<string, string> = {
-    EUR: '€',
-    USD: '$',
-    GBP: '£',
-    EGP: 'EGP ',
-  }
-  
-  const symbol = symbols[currency] || `${currency} `
-  return `${symbol}${num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+  // The currency's own decimals and symbol (JPY has none; MAD is a code).
+  return formatMoney(num, currency)
 }
 
 function formatDate(date: string | Date | undefined): string {

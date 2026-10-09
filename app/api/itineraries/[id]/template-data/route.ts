@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { businessIdentity } from '@/lib/org-identity'
+import { formatMoney } from '@/lib/currency-totals'
+import { templateSender, type TemplateSender } from '@/lib/template-sender'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -69,7 +70,8 @@ export async function GET(
     const itineraryDays = days || []
 
     // Build the placeholder data
-    const placeholderData = buildItineraryPlaceholderData(itinerary, itineraryDays)
+    const sender = await templateSender(supabase, orgId, await getCurrentUserId())
+    const placeholderData = buildItineraryPlaceholderData(itinerary, itineraryDays, sender)
 
     return NextResponse.json({
       success: true,
@@ -87,7 +89,8 @@ export async function GET(
 // Helper function to build placeholder data from itinerary
 function buildItineraryPlaceholderData(
   itinerary: any,
-  days: any[]
+  days: any[],
+  sender: TemplateSender
 ): Record<string, string> {
   const data: Record<string, string> = {}
   const currency = itinerary?.currency || 'USD'
@@ -184,11 +187,12 @@ function buildItineraryPlaceholderData(
   // Dynamic dates
   data.Today = formatDate(new Date())
 
-  // Company defaults
-  data.AgentName = 'Islam'
-  // The operator's own identity — this feeds customer documents.
-  const brand = businessIdentity()
-  data.CompanyName = brand.name
+  // The sending organisation and agent (lib/template-sender) — the agent was
+  // "Islam" and the company the platform's, for every organisation.
+  data.AgentName = sender.agent_name
+  data.CompanyName = sender.company_name
+  data.CompanyEmail = sender.company_email
+  data.CompanyPhone = sender.company_phone
 
   return data
 }
@@ -197,16 +201,8 @@ function formatCurrency(amount: number | string | undefined, currency: string = 
   if (amount === undefined || amount === null) return ''
   const num = typeof amount === 'string' ? parseFloat(amount) : amount
   if (isNaN(num)) return ''
-
-  const symbols: Record<string, string> = {
-    EUR: '€',
-    USD: '$',
-    GBP: '£',
-    EGP: 'EGP ',
-  }
-
-  const symbol = symbols[currency] || `${currency} `
-  return `${symbol}${num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+  // The currency's own decimals and symbol (JPY has none; MAD is a code).
+  return formatMoney(num, currency)
 }
 
 function formatDate(date: string | Date | undefined): string {

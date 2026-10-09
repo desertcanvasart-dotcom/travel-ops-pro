@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
       // ONE static literal. supabase-js parses the select string at the type
       // level, and a concatenated or interpolated one degrades to
       // GenericStringError[] — see the lesson in PR #38.
-      .select('id, day_number, date, city, title, description, overnight_city, attractions, lunch_included, dinner_included, hotel_included, flight_from, hotel_check_in, hotel_check_out')
+      .select('id, day_number, date, city, title, description, overnight_city, attractions, lunch_included, dinner_included, hotel_included, is_cruise_day, flight_from, hotel_check_in, hotel_check_out')
       .eq('itinerary_id', itineraryId)
       .order('day_number', { ascending: true })
 

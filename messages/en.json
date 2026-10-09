@@ -1053,7 +1053,7 @@
       "pricingSummary": "Pricing Summary",
       "subtotalCost": "Subtotal (Cost)",
       "marginPercent": "Margin ({percent}%)",
-      "tourLeaderIncluded": "Tour Leader Cost (included in total)",
+      "tourLeaderIncluded": "Tour leader included in the price",
       "singleSupplement": "Single Supplement (for solo travelers)",
       "notes": "Notes",
       "termsConditions": "Terms & Conditions",

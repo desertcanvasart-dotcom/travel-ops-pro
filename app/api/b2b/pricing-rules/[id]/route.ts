@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // ============================================
 // B2B PRICING RULES API - Single Item
@@ -18,6 +19,8 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     const { data, error } = await supabaseAdmin
@@ -48,9 +51,13 @@ export async function PUT(
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
+      .eq('org_id', orgId) // service-role client: never another organisation's rule
       .select()
       .single()
 
+    if (error?.code === 'PGRST116') {
+      return NextResponse.json({ success: false, error: 'Pricing rule not found' }, { status: 404 })
+    }
     if (error) {
       console.error('Error updating pricing rule:', error)
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -69,11 +76,14 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
 
     const { error } = await supabaseAdmin
       .from('b2b_pricing_rules')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
 
     if (error) {
       console.error('Error deleting pricing rule:', error)

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { businessIdentity } from '@/lib/org-identity'
+import { templateSender } from '@/lib/template-sender'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 
@@ -14,6 +15,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     // Next.js 15: params is now a Promise
     const { id: partnerId } = await params
     const { searchParams } = new URL(request.url)
@@ -136,13 +140,9 @@ export async function GET(
         return NextResponse.json({ error: 'Invalid partner type' }, { status: 400 })
     }
 
-    // Add company defaults
-    // The operator's own identity — this feeds customer documents.
-    const brand = businessIdentity()
-    placeholderData.company_name = brand.name
-    placeholderData.agent_name = 'Islam'
-    placeholderData.company_email = brand.email
-    placeholderData.company_phone = '+20 115 801 1600'
+    // The sending organisation and agent (lib/template-sender): the agent was
+    // "Islam" and the phone one fixed number, for every organisation.
+    Object.assign(placeholderData, await templateSender(supabase, orgId, await getCurrentUserId()))
     placeholderData.today = formatDate(new Date())
 
     return NextResponse.json({
