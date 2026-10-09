@@ -371,9 +371,9 @@ export default function CommissionsPage() {
                 { key: 'commission_type', label: 'Type' },
                 { key: 'category', label: 'Category' },
                 { key: 'source_name', label: 'Source' },
-                { key: 'base_amount', label: 'Base Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'base_amount', label: 'Base Amount', align: 'right' as const, money: true },
                 { key: 'commission_rate', label: 'Rate %', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(1) + '%' : String(v ?? '') },
-                { key: 'commission_amount', label: 'Commission', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'commission_amount', label: 'Commission', align: 'right' as const, money: true },
                 { key: 'status', label: 'Status' },
               ]
               exportFinanceCSV(filteredCommissions as unknown as Record<string, unknown>[], cols, 'commissions')
@@ -389,9 +389,9 @@ export default function CommissionsPage() {
                 { key: 'commission_type', label: 'Type' },
                 { key: 'category', label: 'Category' },
                 { key: 'source_name', label: 'Source' },
-                { key: 'base_amount', label: 'Base Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'base_amount', label: 'Base Amount', align: 'right' as const, money: true },
                 { key: 'commission_rate', label: 'Rate %', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(1) + '%' : String(v ?? '') },
-                { key: 'commission_amount', label: 'Commission', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                { key: 'commission_amount', label: 'Commission', align: 'right' as const, money: true },
                 { key: 'status', label: 'Status' },
               ]
               exportFinancePDF({

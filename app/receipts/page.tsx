@@ -315,7 +315,7 @@ export default function ReceiptsPage() {
                   { key: 'receipt_number', label: 'Receipt #' },
                   { key: 'source_reference', label: 'Invoice #' },
                   { key: 'client_name', label: 'Client' },
-                  { key: 'amount', label: 'Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                  { key: 'amount', label: 'Amount', align: 'right' as const, money: true },
                   { key: 'payment_date', label: 'Date' },
                   { key: 'payment_method', label: 'Method' },
                 ]
@@ -340,7 +340,7 @@ export default function ReceiptsPage() {
                   { key: 'receipt_number', label: 'Receipt #' },
                   { key: 'source_reference', label: 'Invoice #' },
                   { key: 'client_name', label: 'Client' },
-                  { key: 'amount', label: 'Amount', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                  { key: 'amount', label: 'Amount', align: 'right' as const, money: true },
                   { key: 'payment_date', label: 'Date' },
                   { key: 'payment_method', label: 'Method' },
                 ]

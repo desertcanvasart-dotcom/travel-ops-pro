@@ -11,7 +11,7 @@
 
 import { NextResponse } from 'next/server'
 import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
-import { visibleToOrg } from '@/lib/templates/template-scope'
+import { visibleToOrg, withOrgCopies } from '@/lib/templates/template-scope'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -28,28 +28,37 @@ export async function GET() {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
-    // Top templates by usage
-    const { data: topTemplates } = await supabaseAdmin
+    // The templates this org sees: its own, and the shared defaults it has
+    // not replaced with a copy (lib/templates/template-scope).
+    const { data: visibleRows } = await supabaseAdmin
       .from('message_templates')
-      .select('id, name, channel, usage_count, last_used_at')
+      .select('id, name, channel, org_id, source_template_id')
       .eq('is_active', true)
       .or(visibleToOrg(orgId))
-      .order('usage_count', { ascending: false })
-      .limit(5)
+    const visible = withOrgCopies((visibleRows ?? []) as Array<{ id: string; name: string; channel: string; org_id: string | null; source_template_id: string | null }>, orgId)
+    const totalTemplates = visible.length
+    const allTemplates = visible
 
-    // Total active templates
-    const { count: totalTemplates } = await supabaseAdmin
-      .from('message_templates')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true)
-      .or(visibleToOrg(orgId))
-
-    // Channel distribution
-    const { data: allTemplates } = await supabaseAdmin
-      .from('message_templates')
-      .select('channel')
-      .eq('is_active', true)
-      .or(visibleToOrg(orgId))
+    // Top templates by THIS org's sends. usage_count / last_used_at sit on the
+    // template row, which a shared default shares with every org — each org's
+    // "top templates" counted the others' sends too.
+    const { data: orgSends } = await supabaseAdmin
+      .from('template_send_log')
+      .select('template_id, sent_at')
+      .eq('org_id', orgId)
+      .not('template_id', 'is', null)
+    const usage = new Map<string, { count: number; last: string | null }>()
+    for (const r of (orgSends ?? []) as Array<{ template_id: string; sent_at: string | null }>) {
+      const u = usage.get(r.template_id) ?? { count: 0, last: null }
+      u.count++
+      if (r.sent_at && (!u.last || r.sent_at > u.last)) u.last = r.sent_at
+      usage.set(r.template_id, u)
+    }
+    const topTemplates = visible
+      .map(t => ({ id: t.id, name: t.name, channel: t.channel, usage_count: usage.get(t.id)?.count ?? 0, last_used_at: usage.get(t.id)?.last ?? null }))
+      .filter(t => t.usage_count > 0)
+      .sort((a, b) => b.usage_count - a.usage_count)
+      .slice(0, 5)
 
     const channelCounts = { email: 0, whatsapp: 0, sms: 0, both: 0 }
     allTemplates?.forEach((t: any) => {

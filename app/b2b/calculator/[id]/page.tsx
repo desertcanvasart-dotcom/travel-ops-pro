@@ -17,7 +17,7 @@ import { useVocabLabel } from '@/hooks/useVocabLabel'
 import GuideLanguageSelect, { useGuideLanguageChoice } from '@/components/pricing/GuideLanguageSelect'
 import { ArrowLeft, Calculator, Download, Users, Calendar, Globe, Loader2, FileSpreadsheet, TrendingUp, AlertCircle, UserPlus, Save, X, CheckCircle2, Building2, User, Mail, Phone, FileText, ChevronDown, ChevronUp, Pencil, Plane, Ship, MapPin, Plus, RotateCcw, Tag, Star } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
-import { currencySymbol, formatMoney } from '@/lib/currency-totals'
+import { currencyDecimals, currencySymbol, formatMoney } from '@/lib/currency-totals'
 import AttractionPicker from '@/components/AttractionPicker'
 import TravelLegPicker, { storedRoadTransfers } from '@/components/TravelLegPicker'
 import { markServiceSetByHand, toEditableDay } from '@/lib/itineraries/editable-day'
@@ -867,13 +867,15 @@ function TourPriceCalculatorInner() {
     // The run's own currency — the headers said EUR whatever was priced.
     const cur = result?.currency || extrasRateCurrency
     const headers = ['Passengers', `Total Cost (${cur})`, `Margin (${cur})`, `Selling Price (${cur})`, `Per Person (${cur})`, `Single Supplement (${cur})`]
+    // In the currency's own decimals (no "15431.00" yen).
+    const dp = currencyDecimals(cur)
     const rows = rateSheet.map(row => [
       row.pax,
-      row.total_cost.toFixed(2),
-      row.margin_amount.toFixed(2),
-      row.selling_price.toFixed(2),
-      row.price_per_person.toFixed(2),
-      (row.single_supplement || 0).toFixed(2)
+      row.total_cost.toFixed(dp),
+      row.margin_amount.toFixed(dp),
+      row.selling_price.toFixed(dp),
+      row.price_per_person.toFixed(dp),
+      (row.single_supplement || 0).toFixed(dp)
     ])
     // A short rate sheet says so inside the file too — it travels without the screen.
     if (rateSheetGaps > 0) rows.push([`"${t('rateSheetIncompleteCsv', { count: rateSheetGaps })}"`, '', '', '', '', ''])
