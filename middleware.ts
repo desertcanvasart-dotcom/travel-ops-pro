@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import { canonicalRedirectOrigin } from '@/lib/http/canonical-host'
 import { clientIp } from '@/lib/client-ip'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
@@ -198,6 +199,16 @@ const STAFF_ONLY_API_PREFIXES = [
 ]
 
 export async function middleware(request: NextRequest, event: NextFetchEvent) {
+  // www.<domain> → <domain> before anything else (lib/http/canonical-host).
+  // 308 keeps the method and body, so a POST is redirected as a POST.
+  const canonical = canonicalRedirectOrigin(
+    request.headers.get('x-forwarded-host') || request.headers.get('host'),
+    process.env.NEXT_PUBLIC_APP_URL
+  )
+  if (canonical) {
+    return NextResponse.redirect(new URL(`${request.nextUrl.pathname}${request.nextUrl.search}`, canonical), 308)
+  }
+
   // The caller's role in their organisation — organization_members is the one
   // authority (see lib/auth/roles.ts). Resolved at most once per request and
   // shared by every gate below, since a request crosses two of them at most.
