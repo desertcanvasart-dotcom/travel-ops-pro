@@ -35,6 +35,10 @@ export interface GridConfig {
    *  entered), and the rate sheet sizes vehicles at pax+1. Meet/assist days
    *  stay manual: pick the "Meet & Assist day" guide row on those days. */
   guideMode?: 'spot' | 'throughout'
+  /** The trip's guide language (a guide rate's language, in the agency's
+   *  word). A parsed trip's guides follow it; '' or unset = taken from the
+   *  guides most days already have (lib/guide-language.ts). */
+  guideLanguage?: string
   currency: string
   marginPercent: number
   exchangeRate: number | null  // EUR → target currency
@@ -230,6 +234,10 @@ export interface RateOption {
   city?: string
   category?: string
   details?: string  // e.g., "4★", "Standard cabin", "Aswan → Luxor"
+  /** Guides: the language, in the agency's word (a dropdown filter). */
+  language?: string
+  /** Hotels: the board basis (BB, HB …) — a dropdown filter. */
+  board_basis?: string
   // Optional metadata used by the rich gate. Transport rates carry
   // service_type (airport_transfer / day_tour / intercity_transfer / etc.);
   // entrance fees carry pricing_class (mandatory / optional / free). Slot

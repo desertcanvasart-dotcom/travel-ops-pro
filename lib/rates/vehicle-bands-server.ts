@@ -12,7 +12,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { vehicleBandsForOrg, vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
-import type { VehicleBand } from '@/lib/vocabulary'
+import type { VehicleBand, VehicleTypeUsage } from '@/lib/vocabulary'
 import {
   allowedVehicleKeys, parseVehicles, sameVehicleBands, stampVocabularyBands, unknownVehicleKeys, vehicleBands, vehiclesFromBody,
   type VehicleBandRate,
@@ -88,4 +88,18 @@ export async function restampVehicleBands(supabase: SupabaseClient<any>, orgId: 
     }
   }
   return written
+}
+
+/** What a vehicle key is still filed under: transportation rates and
+ *  transport packages whose `vehicles` list holds it. Deleting the key in
+ *  Settings → Vocabulary leaves them naming a vehicle the list no longer has,
+ *  so the settings screen warns first (ported from autoura-saas #644).
+ *  transportation_rates has no org_id (one organisation per install). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function vehicleTypeUsage(supabase: SupabaseClient<any>, orgId: string, key: string): Promise<VehicleTypeUsage> {
+  const [rates, packages] = await Promise.all([
+    supabase.from('transportation_rates').select('id', { count: 'exact', head: true }).contains('vehicles', [{ key }]),
+    supabase.from('b2b_transport_packages').select('id', { count: 'exact', head: true }).eq('org_id', orgId).contains('vehicles', [{ key }]),
+  ])
+  return { transport_rates: rates.count ?? 0, transport_packages: packages.count ?? 0 }
 }
