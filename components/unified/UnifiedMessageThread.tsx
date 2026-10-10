@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { sanitizeHtml } from '@/lib/sanitize-html'
+import { escapeHtml } from '@/lib/html-escape'
 import { ChannelBadge } from './ChannelBadge'
 import { UnifiedConversation, UnifiedMessage, ConversationChannel, EmailAttachment } from '@/types/unified'
 
@@ -501,7 +502,10 @@ export function UnifiedMessageThread({
         body = {
           to: conversation.contact_info,
           subject: conversation.subject ? `Re: ${conversation.subject}` : 'New message',
-          body: messageToSend,
+          // The route sends text/html. This composer is a plain textarea, so
+          // what the agent typed is text: a "<" must arrive as "<", not as
+          // markup, and line breaks must survive.
+          body: escapeHtml(messageToSend).replace(/\r?\n/g, '<br>'),
           threadId: conversation.identifier, // thread_id for email
           userId: 'current', // Will be handled by the API
         }
@@ -590,7 +594,9 @@ export function UnifiedMessageThread({
         body: JSON.stringify(
           conversation.channel === 'whatsapp'
             ? { conversation_id: conversation.id, agent_id: agentId, action: agentId ? 'assign' : 'unassign' }
-            : { id: conversation.id, assigned_team_member_id: agentId }
+            // The email route reads conversation_id; `id` was ignored and every
+            // email assignment came back 400.
+            : { conversation_id: conversation.id, action: agentId ? 'assign' : 'unassign', assigned_team_member_id: agentId }
         ),
       })
 

@@ -59,7 +59,16 @@ export async function GET(
     // WhatsApp is simply absent — never listed unscoped.
     if (waError) console.error('[unified client] WhatsApp chats unavailable:', waError.message)
 
-    // Get Email conversations for this client
+    // Get Email conversations for this client — only those in a mailbox of one
+    // of this org's members. email_conversations has no org_id yet (G1), and
+    // the email link trigger used to match clients across organisations, so a
+    // conversation in another agency's mailbox could carry this client's id.
+    const { data: members } = await supabase
+      .from('organization_members')
+      .select('user_id')
+      .eq('org_id', orgId)
+    const memberIds = (members ?? []).map((m: { user_id: string }) => m.user_id)
+
     const { data: emailConversations, error: emailError } = await supabase
       .from('email_conversations')
       .select(`
@@ -73,6 +82,7 @@ export async function GET(
         )
       `)
       .eq('client_id', clientId)
+      .in('user_id', memberIds)
       .or('is_hidden.is.null,is_hidden.eq.false')
       .order('last_message_at', { ascending: false })
 

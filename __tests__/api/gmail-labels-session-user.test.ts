@@ -4,22 +4,15 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const tokenLookups: unknown[] = []
-vi.mock('@supabase/supabase-js', () => ({
-  createClient: () => ({
-    from: () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const b: any = {
-        select: () => b,
-        eq: (_k: string, v: unknown) => { tokenLookups.push(v); return b },
-        single: async () => ({ data: null, error: { message: 'none' } }),
-      }
-      return b
-    },
-  }),
-}))
-vi.mock('googleapis', () => ({ google: { auth: { OAuth2: class {} }, gmail: () => ({}) } }))
-vi.mock('@/lib/gmail', () => ({ refreshAccessToken: vi.fn() }))
-vi.mock('@/lib/crypto/token-cipher', () => ({ decryptToken: (v: string) => v, encryptToken: (v: string) => v }))
+// The route asks lib/gmail for the mailbox (one client per request, round 14);
+// record whose mailbox it asked for.
+vi.mock('@/lib/gmail', () => {
+  class GmailAuthError extends Error {}
+  return {
+    GmailAuthError,
+    getAuthenticatedGmail: async (userId: string) => { tokenLookups.push(userId); throw new GmailAuthError('none') },
+  }
+})
 let sessionUser: string | null = 'me'
 vi.mock('@/lib/auth/current-org', () => ({ getCurrentUserId: async () => sessionUser }))
 

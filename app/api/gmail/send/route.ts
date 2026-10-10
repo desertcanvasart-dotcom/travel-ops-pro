@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
-import { getCurrentUserId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId } from '@/lib/auth/current-org'
+import { storedReplyHeaders, type ThreadingHeaders } from '@/lib/email/reply-threading'
 import { headerSafe, encodeEmailHeader } from '@/lib/http/safe-header'
 import { claimSend, finishSend, replyBodyHash, threadConflict } from '@/lib/email/send-guard'
 
@@ -38,10 +39,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
+    // A reply in the shared inbox may be in a colleague's mailbox: the stored
+    // conversation for this Gmail thread belongs to whoever's Gmail synced it,
+    // and its thread id means nothing in the sender's own mailbox. Reply from
+    // that mailbox when its owner is a member of the sender's organisation and
+    // still connected (the rule lib/email/org-gmail-sender.ts applies to
+    // vouchers); otherwise send from the sender's own Gmail as a new thread,
+    // kept in the customer's conversation by In-Reply-To / References from the
+    // stored Message-IDs.
+    let mailboxUserId: string = userId
+    let gmailThreadId: string | undefined = threadId || undefined
+    let storedThreading: ThreadingHeaders | null = null
+    if (threadId) {
+      const { data: conv } = await supabase
+        .from('email_conversations')
+        .select('id, user_id')
+        .eq('thread_id', threadId)
+        .maybeSingle()
+      if (conv?.user_id && conv.user_id !== userId) {
+        const orgId = await getCurrentOrgId()
+        const { data: ownerMembership } = orgId
+          ? await supabase.from('organization_members').select('user_id').eq('org_id', orgId).eq('user_id', conv.user_id).limit(1)
+          : { data: null }
+        const { data: ownerToken } = (ownerMembership?.length ?? 0) > 0
+          ? await supabase.from('gmail_tokens').select('user_id').eq('user_id', conv.user_id).limit(1)
+          : { data: null }
+        if ((ownerToken?.length ?? 0) > 0) {
+          mailboxUserId = conv.user_id
+        } else {
+          gmailThreadId = undefined
+          storedThreading = await storedReplyHeaders(supabase, conv.id)
+        }
+      }
+    }
+
     // Get authenticated Gmail client (handles token fetch + refresh)
     let gmail, emailAddress: string
     try {
-      const auth = await getAuthenticatedGmail(userId)
+      const auth = await getAuthenticatedGmail(mailboxUserId)
       gmail = auth.gmail
       emailAddress = auth.emailAddress
     } catch (err) {
@@ -83,7 +118,7 @@ export async function POST(request: NextRequest) {
 
     // Answer the thread's latest message by its Message-ID, so the reply stays
     // in the customer's conversation in every mail client, not only in Gmail.
-    const threading = threadId ? await replyHeaders(gmail, threadId) : {}
+    const threading = storedThreading ?? (gmailThreadId ? await replyHeaders(gmail, gmailThreadId) : {})
 
     // Build email with or without attachments
     let rawEmail: string
@@ -101,7 +136,7 @@ export async function POST(request: NextRequest) {
         userId: 'me',
         requestBody: {
           raw: rawEmail,
-          threadId,
+          threadId: gmailThreadId,
         },
       })
     } catch (sendError) {
@@ -192,8 +227,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 500 })
   }
 }
-
-interface ThreadingHeaders { inReplyTo?: string; references?: string }
 
 /** In-Reply-To / References for a reply in `threadId`: its latest message's
  *  Message-ID. Empty when Gmail cannot say (the reply still threads in Gmail

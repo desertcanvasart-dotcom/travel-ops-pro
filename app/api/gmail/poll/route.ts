@@ -330,13 +330,15 @@ export async function GET(request: NextRequest) {
 
 // POST /api/gmail/poll
 // Get unread count
-export async function POST(request: NextRequest) {
+// The mailbox is the session user's. A userId in the body used to choose it,
+// so anyone signed in could read a colleague's unread count through their
+// stored Gmail token; the body is no longer read at all.
+export async function POST() {
   try {
-    const body = await request.json()
-    const { userId } = body
+    const userId = await getCurrentUserId()
 
     if (!userId) {
-      return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Get authenticated Gmail client (handles token fetch + refresh)

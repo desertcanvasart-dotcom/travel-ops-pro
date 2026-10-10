@@ -24,7 +24,6 @@
 import type Anthropic from '@anthropic-ai/sdk'
 import { createMessageWithRetry } from '@/lib/ai/anthropic-client'
 import { MODEL_PARSER } from '@/lib/ai/models'
-import { loadKnownContactEmails } from '@/lib/email-scoping'
 import { bareAddress, isOfficeAddress, type OfficeRule } from '@/lib/email/office-addresses'
 import { loadOfficeRule } from '@/lib/email/office-addresses-server'
 import { looksLikeTourUpOrder } from '@/lib/intake/tour-up-order'
@@ -140,7 +139,14 @@ export async function processNewEmailLeads(
   if (!pending || pending.length === 0) return []
 
   const rule: OfficeRule = await loadOfficeRule(db as never)
-  const known = await loadKnownContactEmails(db as never)
+  // Known contacts are the receiving organisation's own: another agency's
+  // client writing to this one is a new lead here, not a "known contact" to
+  // skip. Loaded once per organisation per run.
+  const knownByOrg = new Map<string, Promise<Set<string>>>()
+  const knownFor = (orgId: string) => {
+    if (!knownByOrg.has(orgId)) knownByOrg.set(orgId, knownContactEmailsForOrg(db, orgId))
+    return knownByOrg.get(orgId)!
+  }
   const results: Array<{ conversationId: string; outcome: Outcome; clientId?: string }> = []
 
   for (const conv of pending as { id: string; user_id: string | null; client_id: string | null; client_email: string | null; subject: string | null }[]) {
@@ -166,12 +172,12 @@ export async function processNewEmailLeads(
 
       const sender = bareAddress(msg.from_address)
       if (isOfficeAddress(rule, sender)) { await mark('office'); continue }
-      if (conv.client_id || known.has(sender)) { await mark('known_contact'); continue }
+      const orgId = await orgForMailbox(db, conv.user_id)
+      if (!orgId) { await mark('error'); continue }
+      if (conv.client_id || (await knownFor(orgId)).has(sender)) { await mark('known_contact'); continue }
       // A no-reply or service address asks for nothing: not worth a model call.
       if (isAutomatedSender(sender)) { await mark('skipped'); continue }
 
-      const orgId = await orgForMailbox(db, conv.user_id)
-      if (!orgId) { await mark('error'); continue }
       const { data: dismissed } = await db.from('email_lead_dismissals').select('email').eq('org_id', orgId).eq('email', sender).maybeSingle()
       if (dismissed) { await mark('dismissed'); continue }
 
@@ -223,4 +229,29 @@ export async function orgForMailbox(db: Db, userId: string | null): Promise<stri
   }
   const { data: orgs } = await db.from('organizations').select('id').limit(2)
   return (orgs ?? []).length === 1 ? (orgs[0].id as string) : null
+}
+
+/**
+ * The addresses one organisation knows: its clients and B2B partners, plus
+ * suppliers (shared across organisations — suppliers has no org_id yet).
+ * lib/email-scoping's loadKnownContactEmails is the platform-wide set the sync
+ * uses to decide what to store; a lead is judged against this narrower one.
+ */
+export async function knownContactEmailsForOrg(db: Db, orgId: string): Promise<Set<string>> {
+  const known = new Set<string>()
+  const collect = (rows: Array<Record<string, unknown>> | null | undefined, col: string) => {
+    for (const row of rows ?? []) {
+      const v = row[col]
+      if (typeof v === 'string' && v.includes('@')) known.add(v.trim().toLowerCase())
+    }
+  }
+  const [clients, suppliers, partners] = await Promise.all([
+    db.from('clients').select('email').eq('org_id', orgId),
+    db.from('suppliers').select('contact_email'),
+    db.from('b2b_partners').select('email').eq('org_id', orgId),
+  ])
+  collect(clients.data, 'email')
+  collect(suppliers.data, 'contact_email')
+  collect(partners.data, 'email')
+  return known
 }

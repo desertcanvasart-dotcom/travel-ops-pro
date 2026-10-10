@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentUserId, requireRole } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
+import { recordsInOrg } from '@/lib/org-refs'
+import { teamMemberInOrg } from '@/lib/whatsapp-org'
+import { pickConversationUpdates } from '@/lib/email/conversation-updates'
 import type { EmailConversation } from '@/types/unified'
 
 // Use service role for API routes to bypass RLS
@@ -227,11 +230,27 @@ export async function POST(request: NextRequest) {
 // PATCH /api/email/conversations - Update conversation status, assignment, etc.
 export async function PATCH(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
     const { conversation_id, action, agent_id, ...updates } = body
 
     if (!conversation_id) {
       return NextResponse.json({ error: 'Conversation ID required', success: false }, { status: 400 })
+    }
+
+    // A client or team member set here must be this organisation's own: the
+    // service-role update would otherwise link the conversation to another
+    // agency's client (and embed that client below) or hand it to another
+    // agency's agent. A plain 404, as for a missing id.
+    if (!(await recordsInOrg(supabase, orgId, { client_id: updates.client_id }))) {
+      return NextResponse.json({ error: 'Client not found', success: false }, { status: 404 })
+    }
+    const assignee = updates.assigned_team_member_id
+    if (assignee !== undefined && assignee !== null) {
+      if (typeof assignee !== 'string' || !(await teamMemberInOrg(supabase, assignee, orgId))) {
+        return NextResponse.json({ error: 'Team member not found', success: false }, { status: 404 })
+      }
     }
 
     let updateData: any = { updated_at: new Date().toISOString() }
@@ -255,7 +274,17 @@ export async function PATCH(request: NextRequest) {
       updateData.assigned_team_member_id = null
       updateData.assigned_at = null
     } else {
-      updateData = { ...updateData, ...updates }
+      // Only the fields a client of this route sets. The body was spread
+      // into the update whole, so a caller could rewrite user_id (moving the
+      // conversation into another mailbox), thread_id or anything else.
+      const picked = pickConversationUpdates(updates)
+      if (!picked) {
+        return NextResponse.json({ error: 'Invalid update', success: false }, { status: 400 })
+      }
+      updateData = { ...updateData, ...picked }
+      if ('assigned_team_member_id' in picked) {
+        updateData.assigned_at = picked.assigned_team_member_id ? new Date().toISOString() : null
+      }
     }
 
     const { data, error } = await supabase

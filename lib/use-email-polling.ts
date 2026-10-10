@@ -139,11 +139,8 @@ export function useEmailPolling({
     if (!userId) return
 
     try {
-      const response = await fetch('/api/gmail/poll', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId }),
-      })
+      // The route answers for the session user; no userId is sent.
+      const response = await fetch('/api/gmail/poll', { method: 'POST' })
 
       if (response.ok) {
         const data = await response.json()

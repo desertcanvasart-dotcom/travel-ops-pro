@@ -35,6 +35,7 @@ import type { gmail_v1 } from 'googleapis'
 import { getAuthenticatedGmail, getUserEmail } from '@/lib/gmail'
 import type { EmailSyncOptions, EmailSyncResult } from '@/types/unified'
 import { createCopilotInboxEntry } from '@/lib/copilot-intake'
+import { orgForMailbox } from '@/lib/email/email-leads'
 import { loadKnownContactEmails, looksAutomated } from '@/lib/email-scoping'
 
 const supabase = createClient(
@@ -207,6 +208,12 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
     console.log('[Email Sync] Using email:', userEmail)
     const loaded = await loadOfficeRule(supabase)
     const rule = officeRule([userEmail], [...loaded.addresses, ...loaded.domains])
+
+    // The organisation this mailbox receives for — resolved once, and only
+    // when an inbound message needs it. The copilot entry is filed under it
+    // (not "the default org") and the sender is matched to its clients only.
+    let mailboxOrg: Promise<string | null> | null = null
+    const mailboxOrgId = () => (mailboxOrg ??= orgForMailbox(supabase, user_id))
 
     // Where the last run got to. A read failure only costs the incremental
     // path this run — the listing below still syncs.
@@ -578,11 +585,17 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
             try {
               // Try to find client by email
               const senderEmail = extractEmailAddress(msgFrom)
-              const { data: matchedClient } = await supabase
-                .from('clients')
-                .select('id, first_name, last_name')
-                .eq('email', senderEmail)
-                .single()
+              const orgId = await mailboxOrgId()
+              // Another organisation's client with this address is not ours.
+              const { data: matchedClient } = orgId
+                ? await supabase
+                  .from('clients')
+                  .select('id, first_name, last_name')
+                  .eq('org_id', orgId)
+                  .eq('email', senderEmail)
+                  .limit(1)
+                  .maybeSingle()
+                : { data: null }
 
               const senderDisplayName = msgFrom.match(/^([^<]+)<?/)
                 ? msgFrom.match(/^([^<]+)<?/)![1].trim()
@@ -604,6 +617,7 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
                   clientName: matchedClient
                     ? `${matchedClient.first_name || ''} ${matchedClient.last_name || ''}`.trim()
                     : null,
+                  orgId,
                 },
                 supabase
               )
