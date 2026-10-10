@@ -146,3 +146,39 @@ describe('numbers on documents', () => {
     expect(page).not.toContain("Number((itinerary as any)?.margin_percent) || 25")
   })
 })
+
+describe('grid save keeps what hangs off the days', () => {
+  const m = src('migrations/20261126_pricing_grid_save_in_place.sql')
+  it('days and services are updated in place, only the removed ones deleted', () => {
+    expect(m).toContain('CREATE OR REPLACE FUNCTION public.save_pricing_grid_days(p_itinerary_id uuid, p_days jsonb)')
+    expect(m).toContain('update public.itinerary_days set')
+    expect(m).toContain('update public.itinerary_services set')
+    expect(m).toContain('and not (id = any(v_keep_svcs))')
+    expect(m).toContain('and not (id = any(v_keep_days))')
+    // never the old blanket wipe
+    expect(m).not.toMatch(/delete from public\.itinerary_days where itinerary_id = p_itinerary_id;/)
+  })
+  it('the grid loads and saves the trip’s own text, never a translation', () => {
+    expect(src('app/pricing-grid/page.tsx')).toContain('/days?language=source')
+    expect(src('app/pricing-grid/page.tsx')).not.toContain('/days?language=en')
+    expect(src('app/api/itineraries/[id]/days/route.ts')).toContain("const sourceOnly = language === 'source'")
+  })
+})
+
+describe('the ops sheet’s English follows the Japanese', () => {
+  it('reads status and fingerprint, and the source-language rows', () => {
+    const r = src('app/api/documents/operations-sheet/route.ts')
+    expect(r).toContain("status, source_hash')")
+    expect(r).toContain('ensureEnglishDayVersions(supabase, days ?? [], versions, sourceVersions)')
+    expect(src('lib/itineraries/english-day-text.ts')).toContain("source_hash: hashOf.get(row.itinerary_day_id)")
+  })
+})
+
+describe('services added after a language exists', () => {
+  it('Translate all translates them; copy-translate leaves no half-made language', () => {
+    expect(src('app/api/itineraries/[id]/day-translations/route.ts')).toContain('translateMissingServiceVersions(supabase, id, sourceLanguage, language, dayIds)')
+    const ct = src('app/api/itineraries/[id]/versions/copy-translate/route.ts')
+    expect(ct.match(/withVersionRollback\(newVersion\.id/g)).toHaveLength(2)
+    expect(ct).toContain(".from('itinerary_versions').delete().eq('id', versionId)")
+  })
+})

@@ -110,18 +110,21 @@ export async function GET(request: NextRequest) {
     // sheet against the original, and translates nothing.
     const language = params.get('language') || 'en'
     const dayIds = (days ?? []).map(d => d.id)
-    const { data: dayVersions } = dayIds.length > 0
+    // Every language's rows: the English ones to print, and the trip's own
+    // language (Japanese) to fingerprint the source the English came from.
+    const { data: allDayVersions } = dayIds.length > 0
       ? await supabase
           .from('itinerary_day_versions')
-          .select('itinerary_day_id, title, description, city, overnight_city')
+          .select('itinerary_day_id, language, title, description, city, overnight_city, status, source_hash')
           .in('itinerary_day_id', dayIds)
-          .eq('language', language)
       : { data: [] }
+    const dayVersions = (allDayVersions ?? []).filter((v: { language: string }) => v.language === language)
 
     let versions = (dayVersions ?? []) as DayLanguageVersion[]
     let englishAttractions = new Map<string, string[]>()
     if (language === 'en') {
-      const ensured = await ensureEnglishDayVersions(supabase, days ?? [], versions)
+      const sourceVersions = (allDayVersions ?? []).filter((v: { language: string }) => v.language === 'ja')
+      const ensured = await ensureEnglishDayVersions(supabase, days ?? [], versions, sourceVersions)
       versions = ensured.versions
       englishAttractions = ensured.attractions
       if (ensured.created > 0 || ensured.failed > 0) {

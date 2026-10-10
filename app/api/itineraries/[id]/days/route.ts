@@ -41,6 +41,10 @@ export async function GET(
     // Get language from query params (default to 'en')
     const { searchParams } = new URL(request.url)
     const language = searchParams.get('language') || 'en'
+    // 'source': the trip's own text, no translation merged in — what an editor
+    // that saves days back (the pricing grid) must load, or it writes a
+    // translation over the original.
+    const sourceOnly = language === 'source'
     console.log(`[days-api] Fetching days for itinerary ${id}, language=${language}`)
 
     // Fetch all days for this itinerary
@@ -67,7 +71,7 @@ export async function GET(
 
     const serviceIds = (allServices || []).map((s: any) => s.id)
 
-    const { data: allServiceVersions } = serviceIds.length > 0
+    const { data: allServiceVersions } = serviceIds.length > 0 && !sourceOnly
       ? await supabase
           .from('itinerary_service_versions')
           .select('itinerary_service_id, service_name, notes')
@@ -75,7 +79,7 @@ export async function GET(
           .eq('language', language)
       : { data: [] as any[] }
 
-    const { data: allDayVersions } = dayIds.length > 0
+    const { data: allDayVersions } = dayIds.length > 0 && !sourceOnly
       ? await supabase
           .from('itinerary_day_versions')
           .select('itinerary_day_id, title, description, city, overnight_city')
@@ -154,7 +158,7 @@ export async function GET(
     // Add diagnostic info for non-English languages (reuses the batched data
     // fetched above — no extra round-trips).
     let debug: any = undefined
-    if (language !== 'en') {
+    if (language !== 'en' && !sourceOnly) {
       debug = {
         language,
         totalDays: days?.length || 0,
