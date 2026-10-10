@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -14,6 +15,8 @@ export async function GET(
   { params }: { params: Promise<{ clientId: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { clientId } = await params
 
     if (!clientId) {
@@ -25,6 +28,7 @@ export async function GET(
       .from('clients')
       .select('id, client_code, first_name, last_name, email, phone')
       .eq('id', clientId)
+      .eq('org_id', orgId)
       .single()
 
     if (clientError) {
@@ -44,6 +48,8 @@ export async function GET(
           is_available
         )
       `)
+      // The org's threads only (migration 20261125), on top of its own client.
+      .eq('org_id', orgId)
       .eq('client_id', clientId)
       .or('is_hidden.is.null,is_hidden.eq.false')
       .order('last_message_at', { ascending: false })

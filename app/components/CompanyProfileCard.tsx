@@ -44,6 +44,8 @@ interface Profile {
   /** What travel contracts name (migration 20261115). */
   operating_country: string
   contract_governing_law: string
+  /** This org's WhatsApp sender, E.164 (migration 20261125). */
+  whatsapp_number: string
 }
 
 // Company-LEVEL contacts only. The カイロガイド / 南部ガイド header cells are
@@ -70,6 +72,7 @@ export default function CompanyProfileCard() {
     rate_change_alerts: 'in_app',
     operating_country: '',
     contract_governing_law: '',
+    whatsapp_number: '',
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -98,6 +101,7 @@ export default function CompanyProfileCard() {
         rate_change_alerts: data.data.rate_change_alerts ?? 'in_app',
         operating_country: data.data.operating_country ?? '',
         contract_governing_law: data.data.contract_governing_law ?? '',
+        whatsapp_number: data.data.whatsapp_number ?? '',
         offices: (Array.isArray(data.data.offices) ? data.data.offices : []).map((o: Partial<Office>) => ({
           ...EMPTY_OFFICE,
           ...o,
@@ -236,6 +240,12 @@ export default function CompanyProfileCard() {
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">{t('phone')}</label>
           <input className={inputClass} value={form.company_phone} onChange={e => set('company_phone', e.target.value)} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">{t('whatsappNumber')}</label>
+          <input className={inputClass} type="tel" value={form.whatsapp_number}
+            onChange={e => set('whatsapp_number', e.target.value)} placeholder="+81 90 1234 5678" />
+          <p className="text-xs text-gray-500 mt-1">{t('whatsappNumberHint')}</p>
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">{t('email')}</label>

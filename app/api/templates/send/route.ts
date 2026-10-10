@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     if (channel === 'email') {
       result = await sendEmail(recipient, subject, messageBody, sessionUserId!)
     } else if (channel === 'whatsapp') {
-      result = await sendWhatsApp(recipient, messageBody)
+      result = await sendWhatsApp(recipient, messageBody, orgId)
     } else {
       return NextResponse.json({
         success: false,
@@ -163,10 +163,11 @@ async function sendEmail(
 
 async function sendWhatsApp(
   to: string,
-  body: string
+  body: string,
+  orgId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const result = await sendWhatsAppMessage({ to, body })
+    const result = await sendWhatsAppMessage({ to, body, orgId })
     return { success: result.success, error: result.error }
   } catch (error: any) {
     console.error('WhatsApp send error:', error)

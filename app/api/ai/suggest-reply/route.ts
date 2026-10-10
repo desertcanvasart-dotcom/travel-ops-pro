@@ -12,17 +12,22 @@ import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { generateReplyOptions } from '@/lib/ai/reply-suggestions'
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-async function resolveThread(conversationId: string) {
+// The caller's org's thread only. Intake stamps the thread with the org whose
+// WhatsApp number the customer wrote to (lib/whatsapp-org); by conversation id
+// alone, another org's customer's messages were drafted from and listed here.
+async function resolveThread(conversationId: string, orgId: string) {
   const { data } = await supabase
     .from('communication_threads')
     .select('id')
     .eq('whatsapp_conversation_id', conversationId)
+    .eq('org_id', orgId)
     .maybeSingle()
   return data?.id ?? null
 }
@@ -40,6 +45,8 @@ async function latestInbox(threadId: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const limited = await guardAiRate()
     if (limited) return limited
 
@@ -52,7 +59,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const threadId = await resolveThread(conversationId)
+    const threadId = await resolveThread(conversationId, orgId)
     if (!threadId) {
       return NextResponse.json({ success: false, error: 'No thread for this conversation' }, { status: 404 })
     }
@@ -86,6 +93,8 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const conversationId = request.nextUrl.searchParams.get('whatsapp_conversation_id')
     if (!conversationId) {
       return NextResponse.json(
@@ -93,7 +102,7 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       )
     }
-    const threadId = await resolveThread(conversationId)
+    const threadId = await resolveThread(conversationId, orgId)
     if (!threadId) return NextResponse.json({ success: true, drafts: [] })
 
     const { data, error } = await supabase

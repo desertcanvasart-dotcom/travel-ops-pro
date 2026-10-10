@@ -8475,6 +8475,7 @@ export interface Database {
           rate_change_alerts: string
           support_hours: Json | null
           office_email_addresses: string[]
+          whatsapp_number: string | null
         }
         Insert: {
           id?: string
@@ -8504,6 +8505,7 @@ export interface Database {
           rate_change_alerts?: string
           support_hours?: Json | null
           office_email_addresses: string[]
+          whatsapp_number?: string | null
         }
         Update: {
           id?: string
@@ -8533,6 +8535,7 @@ export interface Database {
           rate_change_alerts?: string
           support_hours?: Json | null
           office_email_addresses?: string[]
+          whatsapp_number?: string | null
         }
         Relationships: []
       }
@@ -13495,6 +13498,7 @@ export interface Database {
           ai_draft_confidence: number | null
           ai_draft_escalate: boolean
           ai_draft_generated_at: string | null
+          org_id: string
         }
         Insert: {
           id?: string
@@ -13519,6 +13523,7 @@ export interface Database {
           ai_draft_confidence?: number | null
           ai_draft_escalate?: boolean
           ai_draft_generated_at?: string | null
+          org_id: string
         }
         Update: {
           id?: string
@@ -13543,6 +13548,7 @@ export interface Database {
           ai_draft_confidence?: number | null
           ai_draft_escalate?: boolean
           ai_draft_generated_at?: string | null
+          org_id?: string
         }
         Relationships: [
           {

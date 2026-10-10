@@ -68,11 +68,12 @@ export async function GET() {
         .neq('status', 'cancelled')
         .lte('start_date', todayDate)
         .gte('end_date', todayDate),
-      // NOT org-scoped, and cannot be: tasks, whatsapp_conversations,
-      // email_conversations and client_followups have NO org_id column at all
-      // (adding .eq('org_id', ...) to them returns a 400). They predate
-      // organisations; scoping them is the deferred G1 work. Called out here so
-      // the omission reads as known rather than missed.
+      // NOT org-scoped, and cannot be: tasks, email_conversations and
+      // client_followups have NO org_id column at all (adding
+      // .eq('org_id', ...) to them returns a 400). They predate organisations;
+      // scoping them is the deferred G1 work. Called out here so the omission
+      // reads as known rather than missed. (whatsapp_conversations has org_id
+      // since 20261125 and is scoped below.)
       // Open tasks with a due date (split due-today vs overdue in JS)
       supabase.from('tasks')
         .select('id, due_date, status')
@@ -81,6 +82,7 @@ export async function GET() {
       // Unread counts straight from the conversation tables (hidden rows excluded)
       supabase.from('whatsapp_conversations')
         .select('unread_count')
+        .eq('org_id', orgId)
         .or('is_hidden.is.null,is_hidden.eq.false')
         .gt('unread_count', 0),
       supabase.from('email_conversations')

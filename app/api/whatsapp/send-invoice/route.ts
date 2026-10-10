@@ -168,6 +168,7 @@ export async function POST(request: NextRequest) {
     console.log('📤 Sending to:', clientPhone)
 
     const result = await sendWhatsAppMessage({
+      orgId,
       to: clientPhone,
       body: message,
       mediaUrl: pdfUrl

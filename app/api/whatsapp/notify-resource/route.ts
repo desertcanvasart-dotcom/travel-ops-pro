@@ -232,6 +232,7 @@ export async function POST(request: NextRequest) {
     console.log('📤 Sending to:', resourcePhone)
 
     const result = await sendWhatsAppMessage({
+      orgId,
       to: resourcePhone,
       body: message
     })

@@ -137,6 +137,7 @@ export async function POST(request: NextRequest) {
 
     // Send via WhatsApp WITH PDF attachment
     const result = await sendWhatsAppMessage({
+      orgId,
       to: itinerary.client_phone,
       body: message,
       mediaUrl: pdfUrl

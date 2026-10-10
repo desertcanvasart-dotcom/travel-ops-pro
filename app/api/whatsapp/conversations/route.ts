@@ -3,10 +3,19 @@ import { toWhatsAppE164, PHONE_NEEDS_COUNTRY_CODE } from '@/lib/whatsapp-phone'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { teamMemberInOrg } from '@/lib/whatsapp-org'
 
-// GET /api/whatsapp/conversations - List all conversations
+// Every query here runs on the service role and filters on org_id itself:
+// each organization has its own WhatsApp number and only its own threads
+// (migration 20261125). Before that, every org's agents listed, opened,
+// archived and hid every other org's customers.
+
+// GET /api/whatsapp/conversations - List the org's conversations
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || 'active'
@@ -34,6 +43,7 @@ export async function GET(request: NextRequest) {
           is_available
         )
       `)
+      .eq('org_id', orgId)
       .eq('status', status)
       .order('last_message_at', { ascending: false, nullsFirst: false })
 
@@ -79,6 +89,8 @@ export async function GET(request: NextRequest) {
 // POST /api/whatsapp/conversations - Create or get conversation
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const body = await request.json()
     const { phone_number, client_name, client_id, auto_assign } = body
@@ -93,12 +105,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: PHONE_NEEDS_COUNTRY_CODE }, { status: 400 })
     }
 
-    // Check if conversation exists (including hidden ones - we'll unhide it)
+    // A client attached here must be one of the org's own — any other id
+    // would show another org's customer (email, trips) on this thread.
+    if (client_id) {
+      const { data: ownClient, error: clientError } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('id', client_id)
+        .eq('org_id', orgId)
+        .maybeSingle()
+      if (clientError) throw clientError
+      if (!ownClient) {
+        return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+      }
+    }
+
+    // Check if conversation exists (including hidden ones - we'll unhide it).
+    // Keyed (org, phone): the same customer may also be another org's.
     const { data: existing } = await supabase
       .from('whatsapp_conversations')
       .select('*')
+      .eq('org_id', orgId)
       .eq('phone_number', cleanPhone)
-      .single()
+      .maybeSingle()
 
     if (existing) {
       // If it was hidden, unhide it
@@ -120,6 +149,7 @@ export async function POST(request: NextRequest) {
           .from('whatsapp_conversations')
           .update(updates)
           .eq('id', existing.id)
+          .eq('org_id', orgId)
           .select(`
             *,
             assigned_agent:team_members!whatsapp_conversations_assigned_team_member_id_fkey (*)
@@ -135,26 +165,32 @@ export async function POST(request: NextRequest) {
     // Create new conversation
     let assignedTeamMemberId = null
 
-    // Auto-assign if requested
+    // Auto-assign if requested — to the next available member of THIS org.
+    // team_members carries no org_id, so the queue is filtered through each
+    // member's login (lib/whatsapp-org teamMemberInOrg); the first one in
+    // line used to be anyone in the deployment.
     if (auto_assign !== false) {
-      const { data: nextAgent } = await supabase
+      const { data: candidates } = await supabase
         .from('team_members')
         .select('id')
         .eq('is_active', true)
         .eq('is_available', true)
         .order('last_assigned_at', { ascending: true, nullsFirst: true })
         .order('created_at', { ascending: true })
-        .limit(1)
-        .single()
+        .limit(50)
 
-      if (nextAgent) {
-        assignedTeamMemberId = nextAgent.id
+      for (const candidate of candidates ?? []) {
+        if (await teamMemberInOrg(supabase, candidate.id, orgId)) {
+          assignedTeamMemberId = candidate.id
+          break
+        }
       }
     }
 
     const { data: newConversation, error } = await supabase
       .from('whatsapp_conversations')
       .insert({
+        org_id: orgId,
         phone_number: cleanPhone,
         client_name: client_name || null,
         client_id: client_id || null,
@@ -209,6 +245,8 @@ export async function POST(request: NextRequest) {
 // PATCH /api/whatsapp/conversations - Update conversation (archive, mark read, etc.)
 export async function PATCH(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const body = await request.json()
     const { conversation_id, action, agent_id, ...updates } = body
@@ -217,7 +255,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Conversation ID required' }, { status: 400 })
     }
 
-    let updateData: any = { updated_at: new Date().toISOString() }
+    const updateData: any = { updated_at: new Date().toISOString() }
 
     if (action === 'mark_read') {
       updateData.unread_count = 0
@@ -246,13 +284,17 @@ export async function PATCH(request: NextRequest) {
       .from('whatsapp_conversations')
       .update(updateData)
       .eq('id', conversation_id)
+      .eq('org_id', orgId)
       .select(`
         *,
         assigned_agent:team_members!whatsapp_conversations_assigned_team_member_id_fkey (*)
       `)
-      .single()
+      .maybeSingle()
 
     if (error) throw error
+    if (!data) {
+      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+    }
 
     // Log activity if agent provided
     if (agent_id && action) {
@@ -284,6 +326,8 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Conversation ID required' }, { status: 400 })
     }
 
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -298,6 +342,7 @@ export async function DELETE(request: NextRequest) {
         updated_at: new Date().toISOString()
       })
       .eq('id', conversationId)
+      .eq('org_id', orgId)
       .select()
       .maybeSingle()
 

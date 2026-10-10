@@ -1,10 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { teamMemberInOrg } from '@/lib/whatsapp-org'
+
+// Both the conversation and the assignee must be the caller's org's. The
+// conversation by org_id (migration 20261125); the assignee through their
+// login's organization membership, as team_members has no org_id of its own
+// (lib/whatsapp-org teamMemberInOrg). Otherwise any org could take over, or
+// hand to its own staff, another org's customer.
 
 // POST /api/whatsapp/conversations/assign - Assign or claim a conversation
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const body = await request.json()
     const { conversation_id, agent_id, team_member_id, action } = body
@@ -24,7 +34,8 @@ export async function POST(request: NextRequest) {
       .from('whatsapp_conversations')
       .select('*')
       .eq('id', conversation_id)
-      .single()
+      .eq('org_id', orgId)
+      .maybeSingle()
 
     if (convError || !conversation) {
       console.error('Conversation not found:', convError)
@@ -57,6 +68,10 @@ export async function POST(request: NextRequest) {
       actionType = assigneeId ? 'assigned' : 'unassigned'
     }
 
+    if (newAssigneeId && !(await teamMemberInOrg(supabase, newAssigneeId, orgId))) {
+      return NextResponse.json({ error: 'Team member not found in this organization' }, { status: 400 })
+    }
+
     // Update conversation - use new assigned_team_member_id column primarily
     const updateData: Record<string, any> = {
       assigned_team_member_id: newAssigneeId,
@@ -71,6 +86,7 @@ export async function POST(request: NextRequest) {
       .from('whatsapp_conversations')
       .update(updateData)
       .eq('id', conversation_id)
+      .eq('org_id', orgId)
 
     if (updateError) {
       console.error('Update error:', updateError)
@@ -157,6 +173,7 @@ export async function POST(request: NextRequest) {
       .from('whatsapp_conversations')
       .select('*')
       .eq('id', conversation_id)
+      .eq('org_id', orgId)
       .single()
 
     // Get assignee details
@@ -188,6 +205,8 @@ export async function POST(request: NextRequest) {
 // GET /api/whatsapp/conversations/assign - Get assignment info
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const conversationId = searchParams.get('conversation_id')
@@ -200,9 +219,13 @@ export async function GET(request: NextRequest) {
       .from('whatsapp_conversations')
       .select('*')
       .eq('id', conversationId)
-      .single()
+      .eq('org_id', orgId)
+      .maybeSingle()
 
     if (error) throw error
+    if (!conversation) {
+      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+    }
 
     const assigneeId = conversation?.assigned_team_member_id || conversation?.assigned_agent_id
 

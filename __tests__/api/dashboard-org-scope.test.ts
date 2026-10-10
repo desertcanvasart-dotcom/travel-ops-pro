@@ -31,11 +31,12 @@ const ROUTES = [
 /**
  * Tables that carry org_id and therefore MUST be filtered by it.
  *
- * tasks, whatsapp_conversations, email_conversations and client_followups are
- * deliberately absent: they have no org_id column at all, so `.eq('org_id')`
- * against them returns a 400. Scoping those is the deferred G1 work.
+ * tasks, email_conversations and client_followups are deliberately absent:
+ * they have no org_id column at all, so `.eq('org_id')` against them returns a
+ * 400. Scoping those is the deferred G1 work. whatsapp_conversations gained
+ * org_id in 20261125.
  */
-const ORG_SCOPED_TABLES = ['bookings', 'clients', 'itineraries', 'payments']
+const ORG_SCOPED_TABLES = ['bookings', 'clients', 'itineraries', 'payments', 'whatsapp_conversations']
 
 describe.each(ROUTES)('%s', route => {
   const code = stripComments(src(route))

@@ -7,13 +7,17 @@
 // ============================================
 
 import twilio from 'twilio'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { formatMoney } from '@/lib/currency-totals'
+import { senderForOrg, NO_WHATSAPP_SENDER } from '@/lib/whatsapp-org'
 
 // Types
 export interface WhatsAppMessage {
   to: string // Phone number in international format: +201234567890
   body: string
   mediaUrl?: string // Optional: PDF or image URL
+  /** The sending organization: its own number is the sender (lib/whatsapp-org). */
+  orgId: string
 }
 
 export interface QuoteMessage {
@@ -29,6 +33,7 @@ export interface QuoteMessage {
   children: number
   totalCost: number
   pdfUrl?: string
+  orgId: string
 }
 
 export interface StatusUpdate {
@@ -38,6 +43,7 @@ export interface StatusUpdate {
   tourName: string
   status: 'confirmed' | 'cancelled' | 'pending_payment' | 'paid' | 'completed'
   notes?: string
+  orgId: string
 }
 
 // ============================================
@@ -60,6 +66,15 @@ function getTwilioClient() {
   // Create client with API Key (more secure than Auth Token)
   twilioClient = twilio(apiKey, apiSecret, { accountSid })
   return twilioClient
+}
+
+// Service role: reads organizations.whatsapp_number for the sender only.
+let adminClient: SupabaseClient | null = null
+function getAdmin() {
+  if (!adminClient) {
+    adminClient = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+  }
+  return adminClient
 }
 
 // ============================================
@@ -116,14 +131,17 @@ function formatDate(dateString: string): string {
 export async function sendWhatsAppMessage({
   to,
   body,
-  mediaUrl
+  mediaUrl,
+  orgId
 }: WhatsAppMessage): Promise<{ success: boolean; messageId?: string; error?: string; warning?: string }> {
   try {
     const client = getTwilioClient()
-    const from = process.env.TWILIO_WHATSAPP_FROM
-
+    // The org's own number. One shared sender put every org's customers'
+    // replies in whichever inbox owned it; with no number of its own (and
+    // others configured) the org may not send at all.
+    const from = await senderForOrg(getAdmin(), orgId)
     if (!from) {
-      throw new Error('TWILIO_WHATSAPP_FROM not configured')
+      return { success: false, error: NO_WHATSAPP_SENDER }
     }
 
     const formattedTo = formatWhatsAppNumber(to)
@@ -183,7 +201,8 @@ export async function sendQuoteViaWhatsApp({
   children,
   totalCost,
   currency = 'EUR',
-  pdfUrl
+  pdfUrl,
+  orgId
 }: QuoteMessage): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
     const businessName = process.env.BUSINESS_NAME || ''
@@ -227,7 +246,8 @@ export async function sendQuoteViaWhatsApp({
     return await sendWhatsAppMessage({
       to: clientPhone,
       body: message,
-      mediaUrl: pdfUrl
+      mediaUrl: pdfUrl,
+      orgId
     })
   } catch (error: any) {
     console.error('❌ Failed to send quote:', error)
@@ -320,7 +340,8 @@ export async function sendStatusUpdate({
   itineraryId,
   tourName,
   status,
-  notes
+  notes,
+  orgId
 }: StatusUpdate): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
     // Check if auto-updates are enabled
@@ -338,7 +359,8 @@ export async function sendStatusUpdate({
 
     return await sendWhatsAppMessage({
       to: clientPhone,
-      body: message
+      body: message,
+      orgId
     })
   } catch (error: any) {
     console.error('❌ Failed to send status update:', error)
@@ -361,7 +383,8 @@ export async function sendTourReminder(
   clientPhone: string,
   tourName: string,
   pickupTime: string,
-  pickupLocation: string
+  pickupLocation: string,
+  orgId: string
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
     const businessName = process.env.BUSINESS_NAME || ''
@@ -383,7 +406,8 @@ export async function sendTourReminder(
 
     return await sendWhatsAppMessage({
       to: clientPhone,
-      body: message
+      body: message,
+      orgId
     })
   } catch (error: any) {
     console.error('❌ Failed to send reminder:', error)
@@ -407,6 +431,7 @@ export async function sendPaymentReminder(
   tourName: string,
   amountDue: number,
   dueDate: string,
+  orgId: string,
   currency: string = 'EUR'
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   try {
@@ -426,7 +451,8 @@ export async function sendPaymentReminder(
 
     return await sendWhatsAppMessage({
       to: clientPhone,
-      body: message
+      body: message,
+      orgId
     })
   } catch (error: any) {
     console.error('❌ Failed to send payment reminder:', error)
@@ -445,11 +471,13 @@ export async function sendPaymentReminder(
  * Test WhatsApp connection
  */
 export async function testWhatsAppConnection(
-  testPhone: string
+  testPhone: string,
+  orgId: string
 ): Promise<{ success: boolean; message: string }> {
   try {
     const result = await sendWhatsAppMessage({
       to: testPhone,
+      orgId,
       body: '✅ Success! Your WhatsApp integration is working correctly. This is a test message from Autoura.'
     })
 

@@ -102,7 +102,7 @@ async function getHandler(request: NextRequest): Promise<Response> {
     if (it.client_phone) {
       // sendWhatsAppMessage catches its own errors and returns { success } —
       // it never throws, so a try/catch here would count every failure as sent.
-      const r = await sendWhatsAppMessage({ to: it.client_phone, body: msg.text })
+      const r = await sendWhatsAppMessage({ orgId: it.org_id, to: it.client_phone, body: msg.text })
       sentWa = r.success
       if (sentWa) whatsapp++
     }

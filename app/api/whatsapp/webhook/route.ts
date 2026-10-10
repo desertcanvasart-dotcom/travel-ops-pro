@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createCopilotInboxEntry } from '@/lib/copilot-intake'
-import { getDefaultOrgId } from '@/lib/auth/default-org'
+import { orgForWhatsAppNumber } from '@/lib/whatsapp-org'
 import { verifyTwilioSignature, formDataToParams } from '@/lib/twilio-signature'
 
 // Use service role key to bypass RLS — webhooks have no user session
@@ -54,8 +54,22 @@ export async function POST(request: NextRequest) {
 
     // Extract phone number (remove "whatsapp:" prefix)
     const phoneNumber = from.replace('whatsapp:', '')
-    const toNumber = to.replace('whatsapp:', '')
-    
+
+    // ============================================
+    // STEP 0: Whose inbox — the org that owns the number written TO
+    // ============================================
+    // One shared number put every org's customers in one inbox that every
+    // org's agents could read and answer. Now the receiving number decides
+    // (lib/whatsapp-org). A number no organization owns is acknowledged and
+    // dropped: filing it under a guessed org is the leak this replaces, and a
+    // 5xx would have Twilio redeliver it forever. A lookup ERROR throws to the
+    // catch below and is retried — that one may succeed next time.
+    const inboxOrgId = await orgForWhatsAppNumber(supabase, to)
+    if (!inboxOrgId) {
+      console.warn('⚠️ WhatsApp message to a number no organization owns — not stored:', { to, messageSid })
+      return twilioAck()
+    }
+
     // ============================================
     // STEP 1: Find or create client
     // ============================================
@@ -71,17 +85,14 @@ export async function POST(request: NextRequest) {
     // copilot intake stamps): unscoped, a customer of ANOTHER org with the same
     // number was linked to the thread — their email and trips shown here — and
     // the same customer in two orgs failed maybeSingle and matched no one.
-    const inboxOrgId = await getDefaultOrgId(supabase)
-    const { data: clientRows, error: clientLookupError } = inboxOrgId
-      ? await supabase
-          .from('clients')
-          .select('id, first_name, last_name')
-          .eq('org_id', inboxOrgId)
-          // Twilio sends E.164; a client saved without the '+' matches too.
-          .in('phone', [phoneNumber, phoneNumber.replace(/^\+/, '')])
-          .order('created_at', { ascending: true })
-          .limit(1)
-      : { data: null, error: null }
+    const { data: clientRows, error: clientLookupError } = await supabase
+      .from('clients')
+      .select('id, first_name, last_name')
+      .eq('org_id', inboxOrgId)
+      // Twilio sends E.164; a client saved without the '+' matches too.
+      .in('phone', [phoneNumber, phoneNumber.replace(/^\+/, '')])
+      .order('created_at', { ascending: true })
+      .limit(1)
     const existingClient = clientRows?.[0] ?? null
 
     if (clientLookupError) {
@@ -100,11 +111,20 @@ export async function POST(request: NextRequest) {
     // ============================================
     let conversationId = null
     
-    const { data: existingConversation } = await supabase
+    // Keyed (org, phone): the same customer writing to two organizations has
+    // a thread in each, and neither org sees the other's.
+    const { data: existingConversation, error: convLookupError } = await supabase
       .from('whatsapp_conversations')
       .select('id')
+      .eq('org_id', inboxOrgId)
       .eq('phone_number', phoneNumber)
       .maybeSingle()
+    if (convLookupError) {
+      // Creating a thread blind would hit the (org, phone) unique key or, worse,
+      // file the message twice. Let Twilio redeliver.
+      console.error('❌ Conversation lookup failed:', convLookupError)
+      return retryable('could not look up conversation')
+    }
 
     if (existingConversation) {
       conversationId = existingConversation.id
@@ -119,6 +139,7 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString()
           })
           .eq('id', conversationId)
+          .eq('org_id', inboxOrgId)
           .is('client_id', null) // Only update if not already linked
       }
     } else {
@@ -126,6 +147,7 @@ export async function POST(request: NextRequest) {
       const { data: newConversation, error: convError } = await supabase
         .from('whatsapp_conversations')
         .insert({
+          org_id: inboxOrgId,
           phone_number: phoneNumber,
           client_id: clientId,
           client_name: clientName,
@@ -214,6 +236,7 @@ export async function POST(request: NextRequest) {
             receivedAt: new Date().toISOString(),
             clientId: clientId,
             clientName: clientName,
+            orgId: inboxOrgId,
           },
           supabase
         )
@@ -234,6 +257,7 @@ export async function POST(request: NextRequest) {
       let itineraryQuery = supabase
         .from('itineraries')
         .select('id, tour_name, start_date, status')
+        .eq('org_id', inboxOrgId)
         .order('created_at', { ascending: false })
         .limit(1)
 
@@ -376,7 +400,8 @@ export async function GET(request: NextRequest) {
 // 
 // whatsapp_conversations:
 //   - id UUID PRIMARY KEY
-//   - phone_number VARCHAR(50) UNIQUE
+//   - org_id UUID REFERENCES organizations(id) — whose number it came to
+//   - phone_number VARCHAR(50), UNIQUE (org_id, phone_number)
 //   - client_id UUID REFERENCES clients(id)
 //   - client_name VARCHAR(255)
 //   - last_message TEXT (auto-updated by trigger)

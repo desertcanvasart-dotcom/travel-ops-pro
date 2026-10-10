@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
 
     // Send via Twilio WhatsApp with PDF attachment
     const result = await sendWhatsAppMessage({
+      orgId,
       to: supplierPhone,
       body: message,
       mediaUrl: pdfUrl,

@@ -139,13 +139,24 @@ describe('generate-itinerary route — idempotency', () => {
 
   it('returns the existing itinerary for a thread resolved from whatsapp_conversation_id', async () => {
     seed({
-      communication_threads: [{ id: 'thread-1', whatsapp_conversation_id: 'wa-conv-9' }],
+      communication_threads: [{ id: 'thread-1', whatsapp_conversation_id: 'wa-conv-9', org_id: 'org-test-1' }],
       itineraries: [{ ...EXISTING, thread_id: 'thread-1' }],
     })
     const res = await POST(makeRequest({ ...VALID_BODY, whatsapp_conversation_id: 'wa-conv-9' }))
     const json = await res.json()
     expect(json.data.deduplicated).toBe(true)
     expect(json.data.id).toBe('itin-existing-1')
+  })
+
+  it("does not resolve another org's thread from its whatsapp_conversation_id", async () => {
+    seed({
+      communication_threads: [{ id: 'thread-x', whatsapp_conversation_id: 'wa-conv-x', org_id: 'org-other' }],
+      itineraries: [{ ...EXISTING, thread_id: 'thread-x' }],
+    })
+    const res = await POST(makeRequest({ ...VALID_BODY, whatsapp_conversation_id: 'wa-conv-x' }))
+    const json = await res.json()
+    expect(json.data?.deduplicated).not.toBe(true)
+    expect(json.data?.id).not.toBe('itin-existing-1')
   })
 })
 
@@ -203,7 +214,7 @@ describe('generate-itinerary route — land path end to end (mock DB, stubbed AI
   })
 
   it('stores the thread pointer on the created itinerary', async () => {
-    seed({ communication_threads: [{ id: 'thread-7', whatsapp_conversation_id: 'wa-77' }] })
+    seed({ communication_threads: [{ id: 'thread-7', whatsapp_conversation_id: 'wa-77', org_id: 'org-test-1' }] })
     const res = await POST(makeRequest({ ...VALID_BODY, whatsapp_conversation_id: 'wa-77' }))
     expect((await res.json()).success).toBe(true)
     const db = (await import('../_mock-supabase')).createMockClient()

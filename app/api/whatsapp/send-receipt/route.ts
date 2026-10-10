@@ -167,6 +167,7 @@ export async function POST(request: NextRequest) {
 
     // Send via WhatsApp
     const result = await sendWhatsAppMessage({
+      orgId,
       to: clientPhone,
       body: message
     })

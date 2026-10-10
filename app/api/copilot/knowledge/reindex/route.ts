@@ -21,10 +21,14 @@ export async function POST(_request: NextRequest) {
   const orgId = await getCurrentOrgId()
   if (!orgId) return noOrgResponse()
 
-  // 1. Pull candidate outbound messages that haven't been indexed yet.
+  // 1. Pull candidate outbound messages that haven't been indexed yet — the
+  // org's own, through their conversation (whatsapp_messages has no org_id;
+  // whatsapp_conversations has since 20261125). Unscoped, every org's replies
+  // to its customers were indexed into the caller's knowledge base.
   const { data: outbounds, error: outErr } = await supabase
     .from('whatsapp_messages')
-    .select('id, conversation_id, message_body, message_text, sent_at, metadata')
+    .select('id, conversation_id, message_body, message_text, sent_at, metadata, conversation:whatsapp_conversations!inner(org_id)')
+    .eq('conversation.org_id', orgId)
     .eq('direction', 'outbound')
     .order('sent_at', { ascending: false })
     .limit(MAX_MESSAGES_PER_RUN)

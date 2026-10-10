@@ -42,6 +42,10 @@ export async function GET(request: NextRequest) {
     // Query WhatsApp conversations
     const whatsappTask = (async () => {
     if (channel === 'all' || channel === 'whatsapp') {
+      // The org's own threads — the ones that came to its WhatsApp number
+      // (migration 20261125). This listed every org's.
+      const orgId = await getCurrentOrgId()
+      if (!orgId) return
       let waQuery = supabase
         .from('whatsapp_conversations')
         .select(`
@@ -64,6 +68,7 @@ export async function GET(request: NextRequest) {
             max_conversations
           )
         `)
+        .eq('org_id', orgId)
         .or('is_hidden.is.null,is_hidden.eq.false')
         .order('last_message_at', { ascending: false, nullsFirst: false })
 

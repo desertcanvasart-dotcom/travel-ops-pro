@@ -18,6 +18,13 @@ PROJECT_HANDOVER.md → Known Issues. Items in this file BLOCK something.
 **Owner:** Architecture / multi-tenancy.
 **Related code:** `lib/auth/current-org.ts`, `app/api/copilot/threads/[id]/commit-itinerary/route.ts`, `migrations/20260626_*concierge*.sql`, `migrations/20260627_itinerary_thread_id.sql`.
 
+**Progress (2026-10-10):** WhatsApp is per org. Each organization has its own
+sender (`organizations.whatsapp_number`, migration 20261125); the webhook
+resolves the org from the number written TO (`lib/whatsapp-org.ts`) and stamps
+it on the conversation and the copilot thread; `whatsapp_conversations.org_id`
+scopes every inbox route; sends go out from the org's own number. Still
+deferred: the commit authority flip below, and email intake's org resolution.
+
 ### What's broken (today, only in a multi-org world)
 
 `org_id` on every committed itinerary is currently stamped from

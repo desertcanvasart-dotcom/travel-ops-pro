@@ -122,6 +122,7 @@ export async function POST(request: NextRequest) {
 
     // Send message (text only - no PDF attachment)
     const result = await sendWhatsAppMessage({
+      orgId,
       to: clientPhone,
       body: message
     })
