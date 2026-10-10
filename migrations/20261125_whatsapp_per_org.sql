@@ -63,6 +63,25 @@ UPDATE public.whatsapp_conversations
    SET org_id = (SELECT id FROM public.organizations ORDER BY created_at ASC LIMIT 1)
  WHERE org_id IS NULL;
 
+-- Until the code that stamps org_id is deployed, the running code inserts
+-- threads without one; with org_id NOT NULL below, every new inbound chat
+-- would fail between this migration and the deploy. A missing org_id is
+-- filled the same way as the backfill above, so the migration can run first.
+CREATE OR REPLACE FUNCTION public.whatsapp_conversation_default_org() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $fn$
+BEGIN
+  IF NEW.org_id IS NULL THEN
+    NEW.org_id := (SELECT id FROM public.organizations ORDER BY created_at ASC LIMIT 1);
+  END IF;
+  RETURN NEW;
+END;
+$fn$;
+DROP TRIGGER IF EXISTS trigger_whatsapp_conversation_default_org ON public.whatsapp_conversations;
+CREATE TRIGGER trigger_whatsapp_conversation_default_org
+  BEFORE INSERT ON public.whatsapp_conversations
+  FOR EACH ROW EXECUTE FUNCTION public.whatsapp_conversation_default_org();
+
 ALTER TABLE public.whatsapp_conversations
   DROP CONSTRAINT IF EXISTS whatsapp_conversations_phone_number_key;
 

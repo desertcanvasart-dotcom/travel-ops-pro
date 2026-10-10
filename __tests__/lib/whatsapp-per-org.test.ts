@@ -350,3 +350,11 @@ describe('settings and schema', () => {
     expect(types).toContain('whatsapp_number: string | null')
   })
 })
+
+describe('20261125 can run before the code that stamps org_id', () => {
+  it('a thread inserted without org_id gets the same org as the backfill', () => {
+    const m = readFileSync(join(process.cwd(), 'migrations/20261125_whatsapp_per_org.sql'), 'utf8')
+    expect(m).toContain('BEFORE INSERT ON public.whatsapp_conversations')
+    expect(m).toContain('NEW.org_id := (SELECT id FROM public.organizations ORDER BY created_at ASC LIMIT 1)')
+  })
+})
