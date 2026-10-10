@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { orgAuth } from '@/lib/auth/org-auth'
+import { shiftDateISO, todayFromRequest } from '@/lib/today'
 
 // ============================================
 // TOUR DEPARTURES API
@@ -103,7 +104,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (upcoming === 'true') {
-      const today = new Date().toISOString().split('T')[0]
+      // The caller's own calendar date (?today=), else the business timezone's.
+      // The UTC date is still yesterday until 09:00 in Tokyo, so departures
+      // that had already left stayed on the "Upcoming" list all morning.
+      const today = todayFromRequest(request.url)
       query = query.gte('start_date', today)
     }
 
@@ -228,11 +232,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Calculate end_date
-    const startDateObj = new Date(start_date)
-    const endDateObj = new Date(startDateObj)
-    endDateObj.setDate(endDateObj.getDate() + finalDurationDays - 1)
-    const end_date = endDateObj.toISOString().split('T')[0]
+    if (typeof start_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(start_date)) {
+      return NextResponse.json(
+        { success: false, error: 'start_date must be YYYY-MM-DD' },
+        { status: 400 }
+      )
+    }
+
+    // Calculate end_date — calendar arithmetic on the date string. Parsing it
+    // as a UTC instant and adding days in the host's LOCAL time put the end a
+    // day early whenever the tour spanned a DST change east of UTC.
+    const end_date = shiftDateISO(start_date, Number(finalDurationDays) - 1)
 
     // Validate status
     const validStatuses = ['draft', 'open', 'limited', 'full', 'guaranteed', 'cancelled']

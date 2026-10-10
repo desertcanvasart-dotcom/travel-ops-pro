@@ -376,7 +376,7 @@ export default function ToursBrowsePage() {
             </div>
             <p className="text-xs text-gray-500 mb-1">{t('stats.startingFrom')}</p>
             <p className="text-2xl font-semibold text-gray-900">
-              {formatWithConversion(Math.min(...tours.filter(t => t.starting_from).map(t => t.starting_from as number)), 'EUR')}
+              {formatWithConversion(Math.min(...tours.filter(t => t.starting_from).map(t => t.starting_from as number)), rateCurrency)}
             </p>
           </div>
         )}

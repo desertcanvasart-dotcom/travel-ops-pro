@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { orgAuth } from '@/lib/auth/org-auth'
+import { mergeCapacityEntry } from '@/lib/capacity-availability'
 
 // ============================================
 // OPERATOR CAPACITY API
@@ -138,30 +139,45 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate and prepare entries
+    // Validate entries
     const validStatuses = ['available', 'limited', 'busy', 'blackout']
-    const preparedEntries = entries.map((entry: Partial<CapacityEntry>) => {
-      if (!entry.date) {
-        throw new Error('Each entry must have a date')
+    for (const entry of entries as Partial<CapacityEntry>[]) {
+      if (!entry?.date || !/^\d{4}-\d{2}-\d{2}$/.test(String(entry.date))) {
+        throw new Error('Each entry must have a date (YYYY-MM-DD)')
       }
       if (entry.status && !validStatuses.includes(entry.status)) {
         throw new Error(`Invalid status: ${entry.status}`)
       }
+    }
 
+    // The days as they stand, so a field the request leaves out keeps its
+    // value (lib/capacity-availability mergeCapacityEntry) — the editor sends
+    // only what the operator touched, and booked counts and internal notes
+    // were reset on every save.
+    const dates = [...new Set((entries as Partial<CapacityEntry>[]).map(e => String(e.date)))]
+    const { data: existingRows, error: existingErr } = await supabase
+      .from('operator_capacity')
+      .select('*')
+      .eq('org_id', org_id)
+      .in('date', dates)
+    if (existingErr) {
+      console.error('Error reading capacity before save:', existingErr)
+      return NextResponse.json(
+        { success: false, error: clientMessage(existingErr, 'Internal server error') },
+        { status: 500 }
+      )
+    }
+    const existingByDate = new Map<string, Record<string, unknown>>(
+      (existingRows || []).map((r: Record<string, unknown>) => [String(r.date), r])
+    )
+
+    const preparedEntries = (entries as Partial<CapacityEntry>[]).map(entry => {
+      const existing = existingByDate.get(String(entry.date))
       return {
         org_id,
         date: entry.date,
-        status: entry.status || 'available',
-        max_groups: entry.max_groups ?? 3,
-        booked_groups: entry.booked_groups ?? 0,
-        max_guides: entry.max_guides,
-        booked_guides: entry.booked_guides ?? 0,
-        max_vehicles: entry.max_vehicles,
-        booked_vehicles: entry.booked_vehicles ?? 0,
-        notes: entry.notes,
-        internal_notes: entry.internal_notes,
-        reason: entry.reason,
-        created_by: user?.id
+        ...mergeCapacityEntry(entry as Record<string, unknown>, existing),
+        created_by: (existing?.created_by as string | null | undefined) ?? user?.id ?? null
       }
     })
 

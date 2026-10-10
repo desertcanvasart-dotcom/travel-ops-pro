@@ -102,6 +102,9 @@ export default function DeparturesPage() {
     max_pax: 20,
     min_pax: 2,
     price_per_person: '',
+    // The price's currency. A clone keeps its source's — the create call used
+    // to leave it out, so a JPY departure cloned came back priced in EUR.
+    currency: 'EUR',
     status: 'open'
   })
 
@@ -125,7 +128,7 @@ export default function DeparturesPage() {
       // Load departures
       let url = '/api/departures?'
       if (statusFilter === 'upcoming') {
-        url += 'upcoming=true'
+        url += `upcoming=true&today=${todayLocal()}`
       } else if (statusFilter !== 'all') {
         url += `status=${statusFilter}`
       }
@@ -197,6 +200,7 @@ export default function DeparturesPage() {
         max_pax: 20,
         min_pax: 2,
         price_per_person: '',
+        currency: 'EUR',
         status: 'open'
       })
       loadData()
@@ -226,6 +230,7 @@ export default function DeparturesPage() {
       max_pax: departure.max_pax,
       min_pax: departure.min_pax,
       price_per_person: departure.price_per_person != null ? String(departure.price_per_person) : '',
+      currency: departure.currency || 'EUR',
       status: departure.status === 'cancelled' || departure.status === 'full' ? 'open' : departure.status,
     })
     setError(null)
@@ -696,7 +701,7 @@ export default function DeparturesPage() {
               {/* Price */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Price per Person (EUR)
+                  Price per Person ({newDeparture.currency})
                 </label>
                 <input
                   type="number"

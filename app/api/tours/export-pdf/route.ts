@@ -15,7 +15,7 @@ import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { orgIdentity } from '@/lib/org-identity'
 const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
-import { currencySymbol } from '@/lib/currency-totals'
+import { formatMoney } from '@/lib/currency-totals'
 import { createClient } from '@supabase/supabase-js'
 import { escapeHtml } from '@/lib/html-escape'
 
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   try {
     // Rate amounts in text carry the org's rate-currency symbol, never a hard-coded euro.
     const orgId = await getCurrentOrgId()
-    const rateSym = currencySymbol(await getOrgRateCurrency(supabaseAdmin, orgId))
+    const rateCurrency = await getOrgRateCurrency(supabaseAdmin, orgId)
     const { tour, pax, is_euro_passport, pricing } = await request.json()
 
     const locale = await getServerLocale()
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       : ''
     const fontFace = await getJapaneseFontFace()
 
-    const html = generateTourHTML(tour, pax, is_euro_passport, pricing, locale, labels, fontFace, rateSym)
+    const html = generateTourHTML(tour, pax, is_euro_passport, pricing, locale, labels, fontFace, rateCurrency)
 
     return new NextResponse(html, {
       headers: {
@@ -84,10 +84,11 @@ function generateTourHTML(
   locale: 'en' | 'ja',
   labels: Record<string, string>,
   fontFace: string,
-  rateSym: string,
+  rateCurrency: string,
 ) {
-  // A missing total prints 0.00 rather than failing the whole export.
-  const formatCurrency = (amount: number) => `${rateSym}${(Number(amount) || 0).toFixed(2)}`
+  // A missing total prints 0 rather than failing the whole export. In the
+  // currency's own units: toFixed(2) printed ¥12,345 as "¥12345.00".
+  const formatCurrency = (amount: number) => formatMoney(Number(amount) || 0, rateCurrency)
   const tag = locale === 'ja' ? 'ja-JP' : 'en-US'
   const generatedDate = new Date().toLocaleDateString(tag)
 
@@ -194,7 +195,7 @@ function generateTourHTML(
   ${(tour.days || []).map((day: any) => `
     <div class="day-section">
       <div class="day-header">
-        <strong>${labels.dayN.replace('{n}', String(day.day_number))}</strong> - ${esc(day.city)}
+        <strong>${labels.dayN.replace('{n}', esc(day.day_number))}</strong> - ${esc(day.city)}
       </div>
 
       ${day.accommodation ? `
@@ -263,7 +264,7 @@ function generateTourHTML(
           <span>${formatCurrency(pricing.totals.grand_total)}</span>
         </div>
         <div style="font-size: 0.7em; font-weight: normal; margin-top: 5px;">
-          ${labels.perPersonHint.replace('{rate}', formatCurrency(pricing.per_person)).replace('{pax}', String(pax))}
+          ${labels.perPersonHint.replace('{rate}', formatCurrency(pricing.per_person)).replace('{pax}', esc(pax))}
         </div>
       </div>
     </div>
@@ -277,7 +278,7 @@ function generateTourHTML(
   </div>
 
   <div style="text-align: center; color: #9ca3af; font-size: 12px; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
-    ${labels.generatedBy ? `${labels.generatedBy} • ` : ''}${generatedDate}
+    ${labels.generatedBy ? `${esc(labels.generatedBy)} • ` : ''}${generatedDate}
   </div>
 </body>
 </html>

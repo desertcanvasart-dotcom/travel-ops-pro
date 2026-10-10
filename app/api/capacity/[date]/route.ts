@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { orgAuth } from '@/lib/auth/org-auth'
+import { mergeCapacityEntry } from '@/lib/capacity-availability'
 
 // ============================================
 // SINGLE DATE CAPACITY API
@@ -136,21 +137,20 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // Prepare update data
+    // Prepare update data: what the body leaves out keeps the day's stored
+    // value. Built from the body alone, a PUT of { status } reset the day's
+    // booked groups to 0 and blanked its notes.
+    const { data: existing } = await supabase
+      .from('operator_capacity')
+      .select('*')
+      .eq('org_id', org_id)
+      .eq('date', date)
+      .maybeSingle()
     const updateData = {
       org_id,
       date,
-      status: body.status || 'available',
-      max_groups: body.max_groups ?? 3,
-      booked_groups: body.booked_groups ?? 0,
-      max_guides: body.max_guides,
-      booked_guides: body.booked_guides ?? 0,
-      max_vehicles: body.max_vehicles,
-      booked_vehicles: body.booked_vehicles ?? 0,
-      notes: body.notes,
-      internal_notes: body.internal_notes,
-      reason: body.reason,
-      created_by: user?.id
+      ...mergeCapacityEntry(body && typeof body === 'object' ? body : {}, existing),
+      created_by: existing?.created_by ?? user?.id ?? null
     }
 
     // Upsert (insert or update)

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { businessToday, shiftDateISO } from '@/lib/today'
 
 // ============================================
 // DEPARTURE AVAILABILITY CHECK API
@@ -49,7 +51,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const {
-      org_id,
       tour_name,
       template_id,
       start_date,
@@ -57,12 +58,12 @@ export async function POST(request: NextRequest) {
       num_travelers = 1
     } = body
 
-    if (!org_id) {
-      return NextResponse.json(
-        { success: false, error: 'org_id is required' },
-        { status: 400 }
-      )
-    }
+    // WHOSE departures are read comes from the SESSION, never the body. It
+    // took `org_id` from the request, so any signed-in user of any
+    // organisation could list another's departures — dates, seats sold and
+    // prices — by naming its id (the same hole capacity/check had).
+    const org_id = await getCurrentOrgId()
+    if (!org_id) return noOrgResponse()
 
     // Use admin client since this is called by AI agent
     const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -89,37 +90,37 @@ export async function POST(request: NextRequest) {
       query = query.eq('template_id', template_id)
     }
 
-    // Filter by date/month
-    const today = new Date().toISOString().split('T')[0]
+    // Filter by date/month — calendar arithmetic on YYYY-MM-DD strings, with
+    // "today" in the business timezone rather than UTC.
+    const today = businessToday()
 
-    if (start_date) {
+    if (start_date && /^\d{4}-\d{2}-\d{2}$/.test(String(start_date))) {
       // Search for departures within 2 weeks of requested date
-      const requestedDate = new Date(start_date)
-      const twoWeeksBefore = new Date(requestedDate)
-      twoWeeksBefore.setDate(twoWeeksBefore.getDate() - 14)
-      const twoWeeksAfter = new Date(requestedDate)
-      twoWeeksAfter.setDate(twoWeeksAfter.getDate() + 14)
+      const twoWeeksBefore = shiftDateISO(String(start_date), -14)
+      const twoWeeksAfter = shiftDateISO(String(start_date), 14)
 
       query = query
-        .gte('start_date', Math.max(new Date(today).getTime(), twoWeeksBefore.getTime()) === new Date(today).getTime() ? today : twoWeeksBefore.toISOString().split('T')[0])
-        .lte('start_date', twoWeeksAfter.toISOString().split('T')[0])
-    } else if (month) {
-      // Search for departures in specific month
-      const [year, monthNum] = month.split('-').map(Number)
-      const monthStart = new Date(year, monthNum - 1, 1).toISOString().split('T')[0]
-      const monthEnd = new Date(year, monthNum, 0).toISOString().split('T')[0]
+        .gte('start_date', twoWeeksBefore > today ? twoWeeksBefore : today)
+        .lte('start_date', twoWeeksAfter)
+    } else if (month && /^\d{4}-\d{2}$/.test(String(month))) {
+      // Search for departures in specific month. Built from local-time Date
+      // objects and printed in UTC, the month started on the last day of the
+      // previous month on any host east of UTC.
+      const [year, monthNum] = String(month).split('-').map(Number)
+      const monthStart = `${month}-01`
+      const monthEnd = new Date(Date.UTC(year, monthNum, 0)).toISOString().slice(0, 10)
 
       query = query
         .gte('start_date', monthStart > today ? monthStart : today)
         .lte('start_date', monthEnd)
     } else {
       // Default: next 3 months of upcoming departures
-      const threeMonths = new Date()
-      threeMonths.setMonth(threeMonths.getMonth() + 3)
+      const [y, m, d] = today.split('-').map(Number)
+      const threeMonths = new Date(Date.UTC(y, m - 1 + 3, d)).toISOString().slice(0, 10)
 
       query = query
         .gte('start_date', today)
-        .lte('start_date', threeMonths.toISOString().split('T')[0])
+        .lte('start_date', threeMonths)
         .limit(10)
     }
 
@@ -137,9 +138,10 @@ export async function POST(request: NextRequest) {
     const availableDepartures: DepartureAvailability[] = (departures || [])
       .map(dep => {
         const availableSpots = dep.max_pax - dep.booked_pax
-        const cutoffDate = new Date(dep.start_date)
-        cutoffDate.setDate(cutoffDate.getDate() - (dep.cutoff_days || 3))
-        const isBeforeCutoff = new Date() < cutoffDate
+        // Bookable until the cutoff day itself (business calendar). `?? 3`,
+        // not `|| 3`: a cutoff of 0 means "bookable up to departure day".
+        const cutoffDate = shiftDateISO(dep.start_date, -(dep.cutoff_days ?? 3))
+        const isBeforeCutoff = today < cutoffDate
 
         return {
           id: dep.id,
