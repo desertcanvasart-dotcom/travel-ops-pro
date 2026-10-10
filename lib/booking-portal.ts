@@ -433,7 +433,11 @@ export function portalVerifyCookieName(token: string): string {
 }
 
 export function portalVerifyCookieValue(token: string): string {
-  return createHmac('sha256', portalVerifySecret()).update(`portal-verify:${token}`).digest('hex')
+  // v2 (20261122): per-traveller links began asking for a one-time code.
+  // Cookies set before then — some by a lead who opened a friend's link with
+  // the name and DOB the coordinator showed them — no longer count; everyone
+  // passes the gate once more.
+  return createHmac('sha256', portalVerifySecret()).update(`portal-verify:v2:${token}`).digest('hex')
 }
 
 export function isPortalVerified(token: string, cookieValue: string | undefined | null): boolean {

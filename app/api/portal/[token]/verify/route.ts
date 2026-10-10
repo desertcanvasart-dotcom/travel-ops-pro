@@ -16,6 +16,7 @@ import {
   verifyAnswerMatches,
   verifyTravellerAnswer,
 } from '@/lib/booking-portal'
+import { consumeVerifyCode, travellerNeedsCode } from '@/lib/portal/verify-code'
 import { checkRateLimit, getClientIdentifier, rateLimitResponse } from '@/lib/rate-limit'
 
 const supabase = createClient(
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const { data: link } = await supabase
       .from('booking_portal_links')
-      .select('id, booking_id, passenger_id, revoked_at, expires_at')
+      .select('id, booking_id, passenger_id, revoked_at, expires_at, verify_code_hash, verify_code_expires_at, verify_code_attempts')
       .eq('token', token)
       .maybeSingle()
     if (!link || !portalLinkState(link).usable) return FAIL
@@ -58,10 +59,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     let ok = false
     if (link.passenger_id) {
-      // Private per-traveller link: THAT traveller's family name + DOB, both.
+      // Private per-traveller link: THAT traveller's family name + DOB, both —
+      // and, when they have an email, the one-time code sent there. The lead
+      // coordinator sees the name, DOB and link; never the code.
       const { data: pax } = await supabase
         .from('booking_passengers')
-        .select('last_name, family_name_kanji, family_name_kana, date_of_birth')
+        .select('last_name, family_name_kanji, family_name_kana, date_of_birth, email')
         .eq('id', link.passenger_id)
         .eq('booking_id', booking.id)
         .maybeSingle()
@@ -69,6 +72,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         names: [pax.last_name, pax.family_name_kanji, pax.family_name_kana],
         date_of_birth: pax.date_of_birth,
       })
+      if (ok && travellerNeedsCode(pax, link)) {
+        ok = await consumeVerifyCode(supabase, token, body?.code, link)
+      }
     } else {
       // Booking-level link: booking number or the lead's family name, as before.
       const { data: lead } = await supabase

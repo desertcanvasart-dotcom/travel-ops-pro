@@ -25,6 +25,9 @@ function admin() {
     },
   }
 }
+// The "sent" stamp — issuing the one-time code is an update too.
+const sentStamps = () => stamps.filter(x => 'last_sent_at' in ((x as { v: Record<string, unknown> }).v))
+const codeWrites = () => stamps.filter(x => 'verify_code_hash' in ((x as { v: Record<string, unknown> }).v))
 const opts = { token: 't', passengerId: 'p', orgId: 'o', url: 'https://x/portal/t' }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const run = () => markSentAndDeliver(admin() as any, opts)
@@ -35,12 +38,12 @@ describe('markSentAndDeliver', () => {
   it('a failed send (returned, not thrown) is NOT stamped as sent', async () => {
     sendEmailInternal.mockResolvedValue({ success: false, error: 'Gmail not connected' })
     expect(await run()).toEqual({ sent: false, error: 'Gmail not connected' })
-    expect(stamps).toEqual([])
+    expect(sentStamps()).toEqual([])
   })
   it('a thrown send is not stamped either', async () => {
     sendEmailInternal.mockRejectedValue(new Error('boom'))
     expect((await run()).sent).toBe(false)
-    expect(stamps).toEqual([])
+    expect(sentStamps()).toEqual([])
   })
   it('no email address: nothing sent, nothing stamped', async () => {
     pax = { email: null }
@@ -51,6 +54,13 @@ describe('markSentAndDeliver', () => {
   it('a successful send is stamped', async () => {
     sendEmailInternal.mockResolvedValue({ success: true })
     expect(await run()).toEqual({ sent: true })
-    expect(stamps).toHaveLength(1)
+    expect(sentStamps()).toHaveLength(1)
+  })
+  it('the email carries the one-time code the link asks for', async () => {
+    sendEmailInternal.mockResolvedValue({ success: true })
+    await run()
+    expect(codeWrites()).toHaveLength(1)
+    const html = sendEmailInternal.mock.calls[0][0].html as string
+    expect(html).toMatch(/確認コード：<strong[^>]*>\d{6}<\/strong>/)
   })
 })

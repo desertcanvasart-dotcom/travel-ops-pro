@@ -2322,6 +2322,10 @@ export interface Database {
           expires_at: string | null
           details_locked_at: string | null
           view_count: number
+          verify_code_hash: string | null
+          verify_code_expires_at: string | null
+          verify_code_issued_at: string | null
+          verify_code_attempts: number
           last_viewed_at: string | null
           passenger_id: string | null
           last_sent_at: string | null
@@ -2337,6 +2341,10 @@ export interface Database {
           expires_at?: string | null
           details_locked_at?: string | null
           view_count?: number
+          verify_code_hash?: string | null
+          verify_code_expires_at?: string | null
+          verify_code_issued_at?: string | null
+          verify_code_attempts?: number
           last_viewed_at?: string | null
           passenger_id?: string | null
           last_sent_at?: string | null
@@ -2352,6 +2360,10 @@ export interface Database {
           expires_at?: string | null
           details_locked_at?: string | null
           view_count?: number
+          verify_code_hash?: string | null
+          verify_code_expires_at?: string | null
+          verify_code_issued_at?: string | null
+          verify_code_attempts?: number
           last_viewed_at?: string | null
           passenger_id?: string | null
           last_sent_at?: string | null

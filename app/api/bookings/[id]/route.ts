@@ -240,7 +240,31 @@ export async function PUT(
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data: booking })
+    // Friends mode keeps each traveller's passport and health answers to
+    // themselves. The booking-level (family) link shows and edits every
+    // traveller, so it stops working on the switch — it stayed live, and the
+    // lead holding it kept reading the friends' forms.
+    let familyLinksRevoked = 0
+    if (updates.portal_mode === 'friends') {
+      const { data: revoked, error: revokeError } = await supabaseAdmin
+        .from('booking_portal_links')
+        .update({ revoked_at: new Date().toISOString() })
+        .eq('booking_id', id)
+        .eq('org_id', orgId)
+        .is('passenger_id', null)
+        .is('revoked_at', null)
+        .select('id')
+      if (revokeError) {
+        console.error('Error revoking the family portal link:', revokeError)
+        return NextResponse.json(
+          { success: false, error: 'Switched to friends mode, but the family link could not be revoked — revoke it by hand.' },
+          { status: 500 }
+        )
+      }
+      familyLinksRevoked = revoked?.length ?? 0
+    }
+
+    return NextResponse.json({ success: true, data: booking, family_links_revoked: familyLinksRevoked })
   } catch (error: unknown) {
     console.error('Booking PUT error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
