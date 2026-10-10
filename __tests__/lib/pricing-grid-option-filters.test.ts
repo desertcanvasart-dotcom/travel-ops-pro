@@ -83,7 +83,7 @@ describe('cruises narrow by port and cabin', () => {
     { id: 'c1', name: 'MS Nile Star (4N, Standard)', rateEur: 80, rateNonEur: 80, origin_city: 'Luxor', destination_city: 'Aswan', category: 'Standard' },
     { id: 'c2', name: 'MS Nile Star (4N, Suite)', rateEur: 140, rateNonEur: 140, origin_city: 'Luxor', destination_city: 'Aswan', category: 'Suite' },
     { id: 'c3', name: 'MS Sonesta (3N, Standard)', rateEur: 90, rateNonEur: 90, origin_city: 'Aswan', destination_city: 'Luxor', category: 'Standard' },
-  ] as RateOption[]
+  ] as unknown as RateOption[]
 
   it('the ports as cities, the cabin as category', () => {
     expect(citiesOf(cruises)).toEqual(['Aswan', 'Luxor'])
