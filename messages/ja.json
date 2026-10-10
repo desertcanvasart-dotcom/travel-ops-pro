@@ -3962,7 +3962,7 @@
       "governingLawPlaceholder": "例：エジプト法",
       "governingLawHint": "契約書の準拠法・紛争解決の基準として記載されます。空欄の場合、登録国の法律となります。",
       "whatsappNumber": "WhatsApp番号",
-      "whatsappNumberHint": "Twilioに登録した自社専用のWhatsApp送信番号（国番号から入力）。この番号宛てのメッセージが受信箱に届き、WhatsAppの送信もこの番号から行われます。",
+      "whatsappNumberHint": "Twilioに登録した自社専用のWhatsApp送信番号（国番号から入力）。この番号宛てのメッセージが受信箱に届き、WhatsAppの送信もこの番号から行われます。設定はAutouraチームが行います。",
       "contractTermsPending": "保存しました（契約書の営業国・準拠法を除く）。データベースが未更新です。最新のマイグレーションを適用後、もう一度保存してください。"
     }
   },

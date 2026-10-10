@@ -232,3 +232,15 @@ describe('English that no longer matches the Japanese (round 13)', () => {
     expect(db.upserts[0].title).toBe('EN(修正済みタイトル)')
   })
 })
+
+describe('an English trip is never back-translated', () => {
+  it('a Japanese translation over English source text is not translated back into English', async () => {
+    const writes: any[] = []
+    const db = { from() { return { upsert(rows: any[]) { writes.push(...rows); return Promise.resolve({ error: null }) }, update() { const q: any = { eq: () => q, then: (r: any) => r({ error: null }) }; return q } } } }
+    const english = { id: 'e1', title: 'Arrive in Cairo', description: 'Meet at the airport', city: 'Cairo', overnight_city: 'Cairo' }
+    const out = await ensureEnglishDayVersions(db as any, [english], [], [{ itinerary_day_id: 'e1', title: 'カイロ到着', description: '空港でお出迎え' }])
+    expect(writes).toHaveLength(0)
+    expect(translateText).not.toHaveBeenCalled()
+    expect(out.created).toBe(0)
+  })
+})

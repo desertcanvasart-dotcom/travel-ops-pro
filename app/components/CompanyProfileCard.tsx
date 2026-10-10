@@ -79,6 +79,7 @@ export default function CompanyProfileCard() {
   const [uploading, setUploading] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const loadedWhatsapp = useRef('')
   const fileRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
@@ -101,7 +102,7 @@ export default function CompanyProfileCard() {
         rate_change_alerts: data.data.rate_change_alerts ?? 'in_app',
         operating_country: data.data.operating_country ?? '',
         contract_governing_law: data.data.contract_governing_law ?? '',
-        whatsapp_number: data.data.whatsapp_number ?? '',
+        whatsapp_number: (loadedWhatsapp.current = data.data.whatsapp_number ?? ''),
         offices: (Array.isArray(data.data.offices) ? data.data.offices : []).map((o: Partial<Office>) => ({
           ...EMPTY_OFFICE,
           ...o,
@@ -122,10 +123,15 @@ export default function CompanyProfileCard() {
     setSaving(true)
     setError(null)
     try {
+      // The WhatsApp number is assigned by the platform team (the API refuses it
+      // from anyone else), so it is sent only when it was actually changed —
+      // otherwise every profile save by an org admin would be refused.
+      const { whatsapp_number, ...rest } = form
+      const body = whatsapp_number === loadedWhatsapp.current ? rest : form
       const res = await fetch('/api/organization/branding', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
