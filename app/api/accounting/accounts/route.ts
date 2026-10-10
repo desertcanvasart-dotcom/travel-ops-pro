@@ -13,7 +13,7 @@
 // something to be changed from a browser session.
 
 import { NextResponse } from 'next/server'
-import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { getAuthenticatedProvider } from '@/lib/accounting'
 import { checkAccountConfig, type AccountingProviderName } from '@/lib/accounting/account-config'
 import { clientMessage } from '@/lib/api-errors'
@@ -25,12 +25,9 @@ export async function GET() {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
-    const userId = await getCurrentUserId()
-    if (!userId) {
-      return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
-    }
-
-    const connection = await getAuthenticatedProvider(userId)
+    // The org's connection, not the caller's: the chart of accounts belongs to
+    // the company this org's sync posts into, whoever happened to connect it.
+    const connection = await getAuthenticatedProvider(orgId)
 
     // Config status is useful even with nothing connected — it is how an
     // operator learns what to set BEFORE wiring up QuickBooks or Xero.

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { syncInvoice, syncExpense, syncInvoicePayment, syncExpensePayment } from '@/lib/accounting'
+import { syncInvoice, syncExpense, syncInvoicePayment, syncExpensePayment, getOrgIdForEntity } from '@/lib/accounting'
+import type { SyncEntityType } from '@/lib/accounting/types'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export async function POST(request: NextRequest) {
@@ -34,6 +35,14 @@ export async function POST(request: NextRequest) {
     const results: Array<{ id: string; status: string; error?: string }> = []
 
     for (const id of entityIds) {
+      // Each id must belong to the caller's org — the sync helpers resolve
+      // the org from the entity, so a foreign id would sync into its owner's
+      // ledger on our say-so. Reported as not found, never synced.
+      const entityOrgId = await getOrgIdForEntity(entityType as SyncEntityType, id)
+      if (!entityOrgId || entityOrgId !== orgId) {
+        results.push({ id, status: 'failed', error: 'Not found' })
+        continue
+      }
       try {
         await syncFn(id)
         results.push({ id, status: 'synced' })

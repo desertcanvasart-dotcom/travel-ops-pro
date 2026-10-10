@@ -42,6 +42,19 @@ export async function DELETE(
       return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
     }
 
+    // Has this payment already been posted to QuickBooks/Xero? Deleting it here
+    // does not delete it there, so the ledger would keep a receipt that no
+    // longer exists in Autoura — and nothing said so. Looked up BEFORE the
+    // delete so the trail is not lost with the row.
+    const { data: syncedRows, error: syncLookupError } = await supabaseAdmin
+      .from('accounting_sync_log')
+      .select('id, provider')
+      .eq('org_id', orgId)
+      .eq('entity_type', 'invoice_payment')
+      .eq('entity_id', paymentId)
+      .eq('sync_status', 'synced')
+    if (syncLookupError) console.error('Payment delete: could not read accounting sync log', syncLookupError)
+
     // Delete the payment
     const { error } = await supabaseAdmin
       .from('invoice_payments')
@@ -52,6 +65,33 @@ export async function DELETE(
       console.error('Error deleting payment:', error)
       return NextResponse.json({ error: 'Failed to delete payment' }, { status: 500 })
     }
+
+    // The payment stays deleted — Autoura is right that it is gone — but the
+    // posted copy is flagged for a human to reverse. 'failed' because the
+    // sync_status CHECK allows nothing like 'orphaned'; retry_count is maxed so
+    // retrySyncErrors never re-runs it (the payment no longer exists, and a
+    // retry would overwrite this message with "not found").
+    const providerName = (p: string) => (p === 'quickbooks' ? 'QuickBooks' : p === 'xero' ? 'Xero' : p)
+    const flagged: string[] = []
+    for (const row of syncedRows ?? []) {
+      const provider = providerName(String(row.provider))
+      const { error: flagError } = await supabaseAdmin
+        .from('accounting_sync_log')
+        .update({
+          sync_status: 'failed',
+          last_error: `Deleted in Autoura — reverse this payment in ${provider}`,
+          retry_count: 5,
+          next_retry_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', row.id)
+        .eq('org_id', orgId)
+      if (flagError) console.error('Payment delete: could not flag accounting sync log', flagError)
+      flagged.push(provider)
+    }
+    const warning = flagged.length
+      ? `This payment was already posted to ${flagged.join(' and ')}. It has been deleted here but NOT there — reverse it in ${flagged.join(' and ')}.`
+      : undefined
 
     // Manually update invoice since trigger might not fire on delete
     const { data: payments } = await supabaseAdmin
@@ -99,7 +139,7 @@ export async function DELETE(
         .eq('org_id', orgId)
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json(warning ? { success: true, warning } : { success: true })
   } catch (error) {
     console.error('Error in payment DELETE:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

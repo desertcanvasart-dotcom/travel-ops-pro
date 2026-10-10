@@ -1,4 +1,5 @@
 import { InvoicePayload, BillPayload, PaymentPayload, ContactPayload, LineItemPayload } from './types'
+import { roundToCurrency } from '@/lib/currency-totals'
 
 // Map Autoura invoice DB record to provider-agnostic InvoicePayload
 export function mapInvoiceToPayload(invoice: Record<string, unknown>): InvoicePayload {
@@ -9,26 +10,44 @@ export function mapInvoiceToPayload(invoice: Record<string, unknown>): InvoicePa
     amount: Number(li.amount || 0),
   }))
 
-  // If no line items, create a single line from total
-  const finalLineItems: LineItemPayload[] = lineItems.length > 0
-    ? lineItems
-    : [{
-        description: `Invoice ${invoice.invoice_number}`,
-        quantity: 1,
-        unit_price: Number(invoice.total_amount || 0),
-        amount: Number(invoice.total_amount || 0),
-      }]
+  const currency = String(invoice.currency || 'EUR')
+  // What the lines must add up to. The same figure is sent as `subtotal`, which
+  // the providers compare with tax and total to decide exclusive/inclusive tax
+  // (lib/accounting/tax.ts), so lines and subtotal can never disagree.
+  const subtotal = Number(invoice.subtotal || invoice.total_amount || 0)
+
+  // A deposit invoice KEEPS the whole trip's itemisation (it doubles as the
+  // booking confirmation — see POST /api/invoices), so its lines add up to
+  // full_trip_cost while total_amount is only the deposit. QuickBooks and Xero
+  // build the document from the lines, which posted a ¥200,000 deposit as a
+  // ¥1,000,000 receivable. The ledger needs what is owed now, so a deposit —
+  // or any invoice whose lines don't add up to what it bills — goes over as
+  // ONE line for the billed amount. The itemisation stays on Autoura's PDF.
+  const linesSum = lineItems.reduce((sum, li) => sum + li.amount, 0)
+  const linesMatch = roundToCurrency(linesSum, currency) === roundToCurrency(subtotal, currency)
+  const isDeposit = invoice.invoice_type === 'deposit'
+
+  let finalLineItems: LineItemPayload[]
+  if (lineItems.length > 0 && !isDeposit && linesMatch) {
+    finalLineItems = lineItems
+  } else {
+    const amount = roundToCurrency(subtotal, currency)
+    const description = isDeposit
+      ? `Deposit ${Number(invoice.deposit_percent ?? 0)}% – ${invoice.invoice_number}`
+      : `Invoice ${invoice.invoice_number}`
+    finalLineItems = [{ description, quantity: 1, unit_price: amount, amount }]
+  }
 
   return {
     invoice_number: String(invoice.invoice_number || ''),
     contact_name: String(invoice.client_name || ''),
     contact_email: invoice.client_email as string | undefined,
     line_items: finalLineItems,
-    subtotal: Number(invoice.subtotal || invoice.total_amount || 0),
+    subtotal,
     tax_rate: Number(invoice.tax_rate || 0),
     tax_amount: Number(invoice.tax_amount || 0),
     total_amount: Number(invoice.total_amount || 0),
-    currency: String(invoice.currency || 'EUR'),
+    currency,
     issue_date: String(invoice.issue_date || new Date().toISOString().split('T')[0]),
     due_date: invoice.due_date as string | undefined,
     status: String(invoice.status || 'draft'),
