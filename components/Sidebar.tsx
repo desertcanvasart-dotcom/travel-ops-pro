@@ -122,6 +122,25 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'copilotAnalytics', href: '/copilot-analytics', icon: BarChart3, roles: ['admin', 'manager', 'agent'] },
     ]
   },
+  // The channels, and the library that feeds the words the Copilot and the
+  // itinerary writer use. Second, right after Home: the inbox is where the
+  // day starts (operator, 2026-10-10).
+  {
+    titleKey: 'communicate',
+    key: 'communication',
+    roles: ['admin', 'manager', 'agent'],
+    items: [
+      { labelKey: 'unifiedInbox', href: '/communications', icon: MessageSquare },
+      { labelKey: 'emailInbox', href: '/inbox', icon: Mail },
+      { labelKey: 'messageTemplates', href: '/templates', icon: FileText },
+      { labelKey: 'aiCopilot', href: '/copilot', icon: Sparkles },
+      { labelKey: 'copilotKnowledge', href: '/copilot-knowledge', icon: BookOpen },
+      { labelKey: 'contentLibrary', href: '/content-library', icon: Library, roles: ['admin', 'manager'] },
+      { labelKey: 'writingRules', href: '/content-library/rules', icon: BookOpen, roles: ['admin', 'manager'] },
+      // Concierge leads hidden while unused (2026-08-26); page + webhook live.
+      // { labelKey: 'conciergeLeads', href: '/concierge-briefs', icon: ConciergeBell },
+    ]
+  },
   // The sale's lifecycle in one place: price it, save it as a quote, it lands
   // in an itinerary, gets booked, shows on the calendar. Extras & Seasonal
   // Premiums are selling-side (what you CHARGE), so they live here, not with the
@@ -226,24 +245,6 @@ const navigationConfig: NavConfig[] = [
       { labelKey: 'departments', href: '/departments', icon: Building2, roles: ['admin', 'manager'] },
     ]
   },
-  // The channels, and the library that feeds the words the Copilot and the
-  // itinerary writer use.
-  {
-    titleKey: 'communicate',
-    key: 'communication',
-    roles: ['admin', 'manager', 'agent'],
-    items: [
-      { labelKey: 'unifiedInbox', href: '/communications', icon: MessageSquare },
-      { labelKey: 'emailInbox', href: '/inbox', icon: Mail },
-      { labelKey: 'messageTemplates', href: '/templates', icon: FileText },
-      { labelKey: 'aiCopilot', href: '/copilot', icon: Sparkles },
-      { labelKey: 'copilotKnowledge', href: '/copilot-knowledge', icon: BookOpen },
-      { labelKey: 'contentLibrary', href: '/content-library', icon: Library, roles: ['admin', 'manager'] },
-      { labelKey: 'writingRules', href: '/content-library/rules', icon: BookOpen, roles: ['admin', 'manager'] },
-      // Concierge leads hidden while unused (2026-08-26); page + webhook live.
-      // { labelKey: 'conciergeLeads', href: '/concierge-briefs', icon: ConciergeBell },
-    ]
-  },
   {
     titleKey: 'finance',
     key: 'finance',
@@ -320,7 +321,9 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
   })), [t])
   
   const [isMobileOpen, setIsMobileOpen] = useState(false)
-  const [expandedSections, setExpandedSections] = useState<string[]>(['home', 'clientsComms', 'sell'])
+  // Open at first: Home, Communicate (second — it was 'clientsComms', a key no
+  // section has) and Sell.
+  const [expandedSections, setExpandedSections] = useState<string[]>(['home', 'communication', 'sell'])
   const [expandedMenus, setExpandedMenus] = useState<string[]>(['Contacts'])
   const [currentUrl, setCurrentUrl] = useState('')
 
@@ -342,7 +345,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
     if (saved) {
       try {
         const parsed = JSON.parse(saved)
-        setExpandedSections(parsed.sections || ['home', 'clientsComms', 'sell'])
+        setExpandedSections(parsed.sections || ['home', 'communication', 'sell'])
         setExpandedMenus(parsed.menus || ['Contacts'])
       } catch {
         // Use defaults if parsing fails
