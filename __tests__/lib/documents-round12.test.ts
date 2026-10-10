@@ -116,7 +116,7 @@ describe('B2B quote revisions and bulk updates', () => {
   it('bulk-update sets only person statuses, never on converted quotes, with the actor', () => {
     const b = src('app/api/b2b/quotes/bulk-update/route.ts')
     expect(b).toContain("const SETTABLE = ['draft', 'sent', 'accepted', 'rejected', 'expired']")
-    expect(b).toContain(".neq('status', 'converted')")
+    expect(b).toContain(".or('status.is.null,status.neq.converted')")
     expect(b).toContain(".is('converted_to_itinerary_id', null)")
     expect(b).toContain('p_changed_by: actor')
   })
@@ -198,7 +198,15 @@ describe("friends mode: a friend's link asks for a code only they receive", () =
     const { hashVerifyCode, consumeVerifyCode, MAX_ATTEMPTS } = await import('@/lib/portal/verify-code')
     const token = 'k'.repeat(40)
     const writes: Array<Record<string, unknown>> = []
-    const admin = { from: () => ({ update: (v: Record<string, unknown>) => { writes.push(v); return { eq: async () => ({}) } } }) }
+    // A chainable update; a conditional one "moves" a row (the count matched).
+    const chain = (): Record<string, unknown> => {
+      const c: Record<string, unknown> = {}
+      c.eq = () => c
+      c.select = async () => ({ data: [{ token }] })
+      c.then = (r: (v: unknown) => void) => r({})
+      return c
+    }
+    const admin = { from: () => ({ update: (v: Record<string, unknown>) => { writes.push(v); return chain() } }) }
     const state = { verify_code_hash: hashVerifyCode(token, '111111'), verify_code_expires_at: new Date(Date.now() + 60_000).toISOString(), verify_code_attempts: MAX_ATTEMPTS - 1 }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     expect(await consumeVerifyCode(admin as any, token, '222222', state)).toBe(false)
@@ -232,7 +240,8 @@ describe("friends mode: a friend's link asks for a code only they receive", () =
   it('cookies from before the code are void; the lead cannot re-point a sent friend’s email', () => {
     expect(src('lib/booking-portal.ts')).toContain('`portal-verify:v2:${token}`')
     const co = src('app/api/portal/[token]/coordinator/route.ts')
-    expect(co).toContain("Their link has been sent — ask the office to change their email.")
+    expect(co).toContain('リンクを送信済みのため、メールアドレスは変更できません。')
+    expect(src('app/portal/[token]/LeadCoordinator.tsx')).toContain("alert(body.error || '保存できませんでした。')")
     expect(src('migrations/20261122_portal_verify_code.sql')).toContain('ADD COLUMN IF NOT EXISTS verify_code_hash text')
   })
 
@@ -254,5 +263,30 @@ describe('Gmail connect', () => {
     expect(src('app/settings/email/page.tsx')).toContain('missing_permissions:')
     expect(cb).toContain('/settings/email?error=connect_expired')
     expect(src('app/settings/email/page.tsx')).toContain('connect_expired:')
+  })
+})
+
+describe('round 12 follow-ups (regression pass)', () => {
+  it('the verify route builds a fresh failure response each time', () => {
+    const v = src('app/api/portal/[token]/verify/route.ts')
+    expect(v).toContain('const FAIL = () => NextResponse.json(')
+    expect(v).not.toMatch(/return FAIL\b(?!\()/)
+  })
+  it('a wrong code counts once even under parallel guesses', () => {
+    expect(src('lib/portal/verify-code.ts')).toContain(".eq('verify_code_attempts', seen)")
+  })
+  it('a manual reminder never escalates to second or final notice', () => {
+    const r = src('app/api/invoices/[id]/reminder/route.ts')
+    expect(r).toContain("< 0 ? 'overdue_7' : 'default'")
+  })
+  it('the Gmail permissions refusal clears the connect cookie', () => {
+    const cb = src('app/api/auth/google/callback/route.ts')
+    const at = cb.indexOf('error=missing_permissions')
+    expect(cb.slice(at, at + 200)).toContain('clearNonceCookie(res)')
+  })
+  it('an explicit invoice status stands; a bad total is refused', () => {
+    const u = src('app/api/invoices/[id]/route.ts')
+    expect(u).toContain('updateData.status === undefined && paid > 0')
+    expect(u).toContain('total_amount must be a non-negative number')
   })
 })

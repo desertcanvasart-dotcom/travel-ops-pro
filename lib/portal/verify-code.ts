@@ -97,13 +97,26 @@ export async function consumeVerifyCode(admin: Admin, token: string, given: unkn
     return true
   }
   if (state.verify_code_hash) {
-    const attempts = (state.verify_code_attempts ?? 0) + 1
-    await admin
+    // Conditional on the count this request read: parallel wrong guesses all
+    // read N, and only one of them may move it to N+1 — the others count as
+    // spent (the code is discarded), so MAX_ATTEMPTS holds under a burst.
+    const seen = state.verify_code_attempts ?? 0
+    const attempts = seen + 1
+    const { data: moved } = await admin
       .from('booking_portal_links')
       .update(attempts >= MAX_ATTEMPTS
         ? { verify_code_hash: null, verify_code_expires_at: null, verify_code_attempts: 0 }
         : { verify_code_attempts: attempts })
       .eq('token', token)
+      .eq('verify_code_attempts', seen)
+      .select('token')
+    if (!moved || moved.length === 0) {
+      await admin
+        .from('booking_portal_links')
+        .update({ verify_code_hash: null, verify_code_expires_at: null, verify_code_attempts: 0 })
+        .eq('token', token)
+        .eq('verify_code_hash', state.verify_code_hash)
+    }
   }
   return false
 }

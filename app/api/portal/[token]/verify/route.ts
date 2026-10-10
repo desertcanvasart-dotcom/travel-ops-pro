@@ -24,7 +24,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const FAIL = NextResponse.json(
+// A function, not one shared response: a body can be read once, so the
+// second failure on a warm instance answered 500 with no JSON.
+const FAIL = () => NextResponse.json(
   // One uniform failure body: not-found, revoked, and wrong-answer are
   // indistinguishable from outside.
   { success: false, error: '入力内容が予約情報と一致しません。' },
@@ -34,7 +36,7 @@ const FAIL = NextResponse.json(
 export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   try {
     const { token } = await params
-    if (!isValidPortalToken(token)) return FAIL
+    if (!isValidPortalToken(token)) return FAIL()
 
     // Tighter than the general portal limit: 10 guesses a minute per client.
     const limit = checkRateLimit(`${getClientIdentifier(request)}:${token.slice(0, 8)}`, 'auth')
@@ -48,14 +50,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .select('id, booking_id, passenger_id, revoked_at, expires_at')
       .eq('token', token)
       .maybeSingle()
-    if (!link || !portalLinkState(link).usable) return FAIL
+    if (!link || !portalLinkState(link).usable) return FAIL()
 
     const { data: booking } = await supabase
       .from('bookings')
       .select('id, booking_code, client_name')
       .eq('id', link.booking_id)
       .maybeSingle()
-    if (!booking) return FAIL
+    if (!booking) return FAIL()
 
     let ok = false
     if (link.passenger_id) {
@@ -92,7 +94,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         lead_names: lead ? [lead.last_name, lead.family_name_kanji, lead.family_name_kana] : [],
       })
     }
-    if (!ok) return FAIL
+    if (!ok) return FAIL()
 
     const res = NextResponse.json({ success: true })
     res.cookies.set(portalVerifyCookieName(token), portalVerifyCookieValue(token), {
@@ -106,6 +108,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
     return res
   } catch {
-    return FAIL
+    return FAIL()
   }
 }

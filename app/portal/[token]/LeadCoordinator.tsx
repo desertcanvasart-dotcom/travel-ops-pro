@@ -49,10 +49,17 @@ export default function LeadCoordinator({ token }: { token: string }) {
   }
 
   const seed = async (id: string, field: string, value: string) => {
-    await fetch(`/api/portal/${token}/coordinator`, {
+    const res = await fetch(`/api/portal/${token}/coordinator`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'seed', passenger_id: id, fields: { [field]: value } }),
     })
+    if (!res.ok) {
+      // A refused change (e.g. the email of a friend whose link has gone out)
+      // must not stay on screen as if saved: say why and show what is stored.
+      const body = await res.json().catch(() => ({}))
+      alert(body.error || '保存できませんでした。')
+      await load()
+    }
   }
 
   const copy = async (url: string, id: string) => {

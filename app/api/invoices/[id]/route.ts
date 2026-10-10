@@ -112,13 +112,17 @@ export async function PUT(
           )
         }
         if (updateData.total_amount !== undefined) {
-          const currency = updateData.currency ?? currentInvoice.currency
           const total = Number(updateData.total_amount)
+          if (updateData.total_amount === '' || updateData.total_amount === null || !Number.isFinite(total) || total < 0) {
+            return NextResponse.json({ error: 'total_amount must be a non-negative number' }, { status: 400 })
+          }
+          const currency = updateData.currency ?? currentInvoice.currency
           updateData.balance_due = roundToCurrency(total - paid, currency)
           // As the payment routes: a 'paid' invoice raised above its payments
           // is 'partial' again (and chased); one lowered to them is 'paid'.
+          // A status the caller set explicitly stands.
           const status = updateData.status ?? currentInvoice.status
-          if (paid > 0 && !['draft', 'cancelled'].includes(status)) {
+          if (updateData.status === undefined && paid > 0 && !['draft', 'cancelled'].includes(status)) {
             updateData.status = paid >= total ? 'paid' : 'partial'
             updateData.paid_at = updateData.status === 'paid' ? (currentInvoice.paid_at || new Date().toISOString()) : null
           }

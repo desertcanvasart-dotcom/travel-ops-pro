@@ -1,4 +1,4 @@
-import { reminderBlocker, reminderStage, daysUntilDue } from '@/lib/invoices/reminder-schedule'
+import { reminderBlocker, daysUntilDue } from '@/lib/invoices/reminder-schedule'
 import { generateReminderEmail } from '@/lib/invoices/reminder-email'
 import { NextRequest, NextResponse } from 'next/server'
 import { orgIdentity } from '@/lib/org-identity'
@@ -59,7 +59,9 @@ export async function POST(
 
     // The client's own language and the stage the bulk send would use.
     const locale = (await resolveClientLocalesByEmail(supabase, [invoice.client_email], orgId)).get(invoice.client_email) ?? 'en'
-    const stage = reminderStage(daysUntilDue(invoice.due_date, businessToday())) ?? 'default'
+    // A manual send is not a step in the schedule: no "second reminder" or
+    // "final notice" escalation on a first click — overdue or neutral copy.
+    const stage = daysUntilDue(invoice.due_date, businessToday()) < 0 ? 'overdue_7' : 'default'
     const { subject, html } = generateReminderEmail(invoice, stage, locale, await orgIdentity(orgId))
 
     // Send via the shared in-process helper.

@@ -52,7 +52,7 @@ export async function PUT(request: NextRequest) {
       .update({ status, updated_at: new Date().toISOString(), last_modified_by: actor })
       .in('id', quote_ids)
       .eq('org_id', orgId)
-      .neq('status', 'converted')
+      .or('status.is.null,status.neq.converted')
       .is('converted_to_itinerary_id', null)
       .select('id')
 

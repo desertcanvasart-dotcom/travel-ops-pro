@@ -87,9 +87,11 @@ export async function GET(request: NextRequest) {
     // failed every sync with a bare 403 — refuse it here and say why.
     const granted = new Set((tokens.scope || '').split(/\s+/).filter(Boolean))
     if (granted.size > 0 && GMAIL_SCOPES.filter(s => s.includes('/auth/gmail.')).some(s => !granted.has(s))) {
-      return NextResponse.redirect(
+      const res = NextResponse.redirect(
         new URL('/settings/email?error=missing_permissions', baseUrl)
       )
+      clearNonceCookie(res)
+      return res
     }
 
     // Get user's email

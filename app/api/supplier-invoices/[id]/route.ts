@@ -68,6 +68,10 @@ export async function PUT(
     // / match / dispute / upload routes; org_id would re-home the row.
     const updateData: Record<string, unknown> = {}
     for (const key of EDITABLE) if (key in body) updateData[key] = body[key]
+    // An emptied picker sends '' — a uuid column needs null.
+    for (const key of ['supplier_id', 'itinerary_id', 'client_invoice_id']) {
+      if (updateData[key] === '') updateData[key] = null
+    }
 
     if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updateData.itinerary_id, invoice_id: updateData.client_invoice_id }))) {
       return NextResponse.json({ error: 'Trip or client invoice not found' }, { status: 404 })
@@ -125,6 +129,10 @@ export async function PUT(
     if (amountChanges || currencyChanges) query = query.eq('status', current.status)
     const { data, error } = await query.select().single()
 
+    if (error?.code === 'PGRST116' && (amountChanges || currencyChanges)) {
+      // The status moved (approved, paid) between the read and this write.
+      return NextResponse.json({ error: 'The invoice changed meanwhile — reload and try again' }, { status: 409 })
+    }
     if (error) {
       console.error('Error updating supplier invoice:', error)
       return NextResponse.json({ error: 'Failed to update supplier invoice' }, { status: 500 })

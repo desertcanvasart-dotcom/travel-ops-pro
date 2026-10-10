@@ -203,4 +203,4 @@ export function generateReminderEmail(invoice: any, reminderType: string, locale
   return { subject, html }
 }
 
-// GET: Fetch invoices due for reminders (preview)
+

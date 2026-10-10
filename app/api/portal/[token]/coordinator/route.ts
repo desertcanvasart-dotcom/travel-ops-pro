@@ -120,7 +120,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .limit(1)
         .maybeSingle()
       if (sent) {
-        return NextResponse.json({ error: 'Their link has been sent — ask the office to change their email.' }, { status: 409 })
+        return NextResponse.json({ error: 'リンクを送信済みのため、メールアドレスは変更できません。担当者までご連絡ください。' }, { status: 409 })
       }
     }
     const updates: Record<string, unknown> = {}

@@ -109,6 +109,8 @@ export default function QuotesListPage() {
       })
       const data = await res.json()
       if (data.success) {
+        // Converted quotes keep their status; say so rather than look updated.
+        if (data.skipped_count > 0) alert(`${data.skipped_count} quote(s) skipped — converted quotes keep their status.`)
         setSelected(new Set())
         setBulkStatus('')
         await fetchQuotes()
