@@ -241,5 +241,7 @@ describe('Gmail connect', () => {
     expect(cb).toContain("GMAIL_SCOPES.filter(s => s.includes('/auth/gmail.')).some(s => !granted.has(s))")
     expect(cb).toContain('/settings/email?error=missing_permissions')
     expect(src('app/settings/email/page.tsx')).toContain('missing_permissions:')
+    expect(cb).toContain('/settings/email?error=connect_expired')
+    expect(src('app/settings/email/page.tsx')).toContain('connect_expired:')
   })
 })

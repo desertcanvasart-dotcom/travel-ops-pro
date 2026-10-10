@@ -66,7 +66,10 @@ export async function GET(request: NextRequest) {
   // browser started the flow. Without this, a signed state the attacker minted
   // could complete against a victim's Google consent.
   if (!nonceMatches(request, stateNonce)) {
-    const res = NextResponse.redirect(new URL('/settings/email?error=invalid_state', baseUrl))
+    // Told apart from a bad signature: this is the browser coming back without
+    // the connect cookie — over 10 minutes, a second Connect click since, or a
+    // flow started on another address than GOOGLE_REDIRECT_URI's.
+    const res = NextResponse.redirect(new URL('/settings/email?error=connect_expired', baseUrl))
     clearNonceCookie(res)
     return res
   }
