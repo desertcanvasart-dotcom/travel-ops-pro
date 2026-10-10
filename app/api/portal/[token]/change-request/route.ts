@@ -13,6 +13,7 @@ import {
   portalVerifyCookieName,
   isPortalVerified,
 } from '@/lib/booking-portal'
+import { PORTAL_LOCKED } from '@/lib/portal/traveller-gate'
 import { notifyOrgManagers } from '@/lib/notify-managers'
 import { checkRateLimit, getClientIdentifier, rateLimitResponse } from '@/lib/rate-limit'
 
@@ -38,10 +39,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const { data: link } = await admin
     .from('booking_portal_links')
-    .select('booking_id, org_id, passenger_id, revoked_at, expires_at')
+    .select('booking_id, org_id, passenger_id, revoked_at, expires_at, details_locked_at')
     .eq('token', token)
     .maybeSingle()
   if (!link || !portalLinkState(link).usable) return notFound()
+  // Once the office locks the manifest the page hides this form; a direct
+  // POST still rewrote the pending request and notified the managers.
+  if (link.details_locked_at) {
+    return NextResponse.json(PORTAL_LOCKED.body, { status: PORTAL_LOCKED.status })
+  }
   // A private per-traveller link is one person's; requesting party size is the
   // lead's action on the booking-level link.
   if (link.passenger_id) return NextResponse.json({ error: 'この操作はできません。' }, { status: 403 })

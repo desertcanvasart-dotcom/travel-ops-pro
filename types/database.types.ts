@@ -10245,6 +10245,7 @@ export interface Database {
           document_filename: string | null
           document_storage_path: string | null
           approved_by: string | null
+          client_invoice_id: string | null
           approved_at: string | null
           paid_at: string | null
           payment_method: string | null
@@ -10278,6 +10279,7 @@ export interface Database {
           document_filename?: string | null
           document_storage_path?: string | null
           approved_by?: string | null
+          client_invoice_id?: string | null
           approved_at?: string | null
           paid_at?: string | null
           payment_method?: string | null
@@ -10311,6 +10313,7 @@ export interface Database {
           document_filename?: string | null
           document_storage_path?: string | null
           approved_by?: string | null
+          client_invoice_id?: string | null
           approved_at?: string | null
           paid_at?: string | null
           payment_method?: string | null

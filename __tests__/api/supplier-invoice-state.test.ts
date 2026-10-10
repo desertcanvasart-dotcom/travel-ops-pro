@@ -39,8 +39,9 @@ describe('delete', () => {
 
 describe('match', () => {
   const code = src('app/api/supplier-invoices/[id]/match/route.ts')
-  it('refuses a settled (paid/cancelled) invoice', () => {
-    expect(code).toMatch(/status === ['"]paid['"] \|\| invoice\.status === ['"]cancelled['"]/)
+  it('refuses a settled or reviewed invoice (only received/matched can be matched)', () => {
+    expect(code).toContain("const MATCHABLE = ['received', 'matched']")
+    expect(code).toContain('if (!MATCHABLE.includes(invoice.status))')
   })
 })
 

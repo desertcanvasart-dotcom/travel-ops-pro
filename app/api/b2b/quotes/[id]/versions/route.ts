@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { quoteInOrg, quoteNotFound } from '@/lib/b2b/quote-scope'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseAdmin = createClient(
@@ -120,7 +120,8 @@ export async function POST(
         notes: content.notes || null,
         terms_conditions: content.terms_conditions || null,
         special_requests: content.special_requests || null,
-        created_by: content.created_by || null
+        // The signed-in user, never the request body.
+        created_by: await getCurrentUserId()
       })
       .select()
       .single()

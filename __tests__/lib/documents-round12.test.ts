@@ -56,3 +56,111 @@ describe('supplier invoices', () => {
     expect(page).toContain('=== invoiceCurrency')
   })
 })
+
+describe('invoice reminders and payments', () => {
+  it('the /reminders history is the org-scoped route, joined through the invoice', () => {
+    expect(src('app/api/reminders/history/route.ts')).toContain("export { GET } from '@/app/api/invoices/reminders/history/route'")
+    const h = src('app/api/invoices/reminders/history/route.ts')
+    expect(h).toContain(".eq('invoices.org_id', orgId)")
+    expect(h).toContain('invoices:invoice_id!inner')
+    expect(h).not.toContain(".in('invoice_id', allowedInvoiceIds)")
+  })
+
+  it('paused invoices stay in the reminder list so they can be resumed', () => {
+    const r = src('app/api/invoices/reminders/route.ts')
+    const get = r.slice(r.indexOf('export async function GET'), r.indexOf('export async function POST'))
+    expect(get).not.toContain(".eq('reminder_paused', false)")
+    expect(get).toContain('reminder_paused: !!invoice.reminder_paused')
+    // the send path still skips them
+    expect(r.slice(r.indexOf('export async function POST'))).toContain(".eq('reminder_paused', false)")
+  })
+
+  it('one reminder email builder, in the client’s language, brand escaped once', () => {
+    const lib = src('lib/invoices/reminder-email.ts')
+    expect(lib).toContain("t('team', { company: brand.name })")
+    expect(lib).not.toContain('escapeHtml(brand.name)')
+    const single = src('app/api/invoices/[id]/reminder/route.ts')
+    expect(single).toContain("from '@/lib/invoices/reminder-email'")
+    expect(single).toContain('resolveClientLocalesByEmail(supabase, [invoice.client_email], orgId)')
+    expect(single).not.toContain('function generateReminderEmail')
+  })
+
+  it('deleting a payment rounds to the currency and leaves draft/cancelled alone', () => {
+    const d = src('app/api/invoices/[id]/payments/[paymentId]/route.ts')
+    expect(d).toContain('roundToCurrency(')
+    expect(d).toContain("if (invoice.status === 'draft' || invoice.status === 'cancelled')")
+  })
+
+  it('editing the total re-derives the status; payments pin the currency', () => {
+    const u = src('app/api/invoices/[id]/route.ts')
+    expect(u).toContain("updateData.status = paid >= total ? 'paid' : 'partial'")
+    expect(u).toContain('An invoice with payments keeps its currency')
+  })
+})
+
+describe('B2B quote revisions and bulk updates', () => {
+  it('revert refuses converted or booked quotes and foreign refs in the revision', () => {
+    const r = src('app/api/b2b/quotes/[id]/revisions/revert/route.ts')
+    expect(r).toContain('A converted or booked quote cannot be reverted')
+    expect(r).toContain("live.status === 'converted' || live.converted_to_itinerary_id")
+    expect(r).toContain('quoteRefsInOrg(supabaseAdmin, orgId, { itinerary_id: snapshot.itinerary_id, partner_id: snapshot.partner_id })')
+  })
+
+  it('revert restores the season premium; compare shows it', () => {
+    const m = src('migrations/20261121_revert_quote_season_premium.sql')
+    expect(m).toContain('CREATE OR REPLACE FUNCTION public.revert_quote_to_revision(')
+    expect(m).toContain("season_uplift_amount = COALESCE(NULLIF(d->>'season_uplift_amount','')::numeric, 0)")
+    expect(src('app/api/b2b/quotes/[id]/revisions/compare/route.ts')).toContain("key: 'season_uplift_amount'")
+  })
+
+  it('bulk-update sets only person statuses, never on converted quotes, with the actor', () => {
+    const b = src('app/api/b2b/quotes/bulk-update/route.ts')
+    expect(b).toContain("const SETTABLE = ['draft', 'sent', 'accepted', 'rejected', 'expired']")
+    expect(b).toContain(".neq('status', 'converted')")
+    expect(b).toContain(".is('converted_to_itinerary_id', null)")
+    expect(b).toContain('p_changed_by: actor')
+  })
+
+  it('a language version is created by the signed-in user', () => {
+    const v = src('app/api/b2b/quotes/[id]/versions/route.ts')
+    expect(v).toContain('created_by: await getCurrentUserId()')
+    expect(v).not.toContain('content.created_by')
+  })
+})
+
+describe('traveller portal', () => {
+  const e = src('app/api/portal/[token]/extras/route.ts')
+
+  it('extras read the lock from the link (bookings has no such column)', () => {
+    expect(e).toContain(".select('booking_id, org_id, passenger_id, revoked_at, expires_at, details_locked_at')")
+    expect(e).toContain('canRequest: !link.details_locked_at')
+    expect(e).toContain('if (link.details_locked_at) {')
+    expect(e).not.toContain(".select('currency, details_locked_at')")
+    expect(e).not.toContain(".select('id, details_locked_at')")
+  })
+
+  it("one traveller's duplicate is not another's request", () => {
+    expect(e).toContain("dupQuery.eq('passenger_id', link.passenger_id)")
+    expect(e).toContain("dupQuery.is('passenger_id', null)")
+  })
+
+  it('a change request is refused once the link is locked', () => {
+    const c = src('app/api/portal/[token]/change-request/route.ts')
+    expect(c).toContain('if (link.details_locked_at) {')
+    expect(c).toContain('PORTAL_LOCKED.body')
+  })
+})
+
+describe('template placeholders', () => {
+  it('values are escaped into an HTML body, not into a subject', async () => {
+    const { replacePlaceholders } = await import('@/lib/template-placeholders')
+    const data = { client_name: 'Tanaka <Ken> & Co' }
+    expect(replacePlaceholders('<p>Dear {{client_name}}</p>', data, { html: true }))
+      .toBe('<p>Dear Tanaka &lt;Ken&gt; &amp; Co</p>')
+    expect(replacePlaceholders('For {{client_name}}', data)).toBe('For Tanaka <Ken> & Co')
+    expect(replacePlaceholders('{{missing}}', data, { html: true })).toBe('{{missing}}')
+    for (const p of ['app/inbox/page.tsx', 'components/unified/ComposeEmailModal.tsx']) {
+      expect(src(p)).toContain('replacePlaceholders(selectedTemplate.content, finalData, { html: true })')
+    }
+  })
+})

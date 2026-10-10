@@ -41,6 +41,7 @@ export interface PortalLink {
   booking_id: string
   org_id: string
   passenger_id: string | null
+  details_locked_at: string | null
 }
 
 /** Everything the two portal extras routes check before touching anything. */
@@ -58,7 +59,7 @@ export async function resolvePortalExtrasLink(
 
   const { data: link } = await admin
     .from('booking_portal_links')
-    .select('booking_id, org_id, passenger_id, revoked_at, expires_at')
+    .select('booking_id, org_id, passenger_id, revoked_at, expires_at, details_locked_at')
     .eq('token', token)
     .maybeSingle()
   if (!link || !portalLinkState(link).usable) return { error: notFound() }
@@ -91,15 +92,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const { data: booking } = await admin
     .from('bookings')
-    .select('currency, details_locked_at')
+    .select('currency')
     .eq('id', link.booking_id)
     .maybeSingle()
 
   return NextResponse.json({
     currency: booking?.currency || 'EUR',
     // Late in the day the office stops taking new requests, but an offer they
-    // have already made can still be answered.
-    canRequest: !booking?.details_locked_at,
+    // have already made can still be answered. The lock is the link's
+    // (bookings has no details_locked_at — reading it there failed the query,
+    // so the currency fell back to EUR and the form never closed).
+    canRequest: !link.details_locked_at,
     // portalExtraView, not the row: no unit price, no supplier, no cost — see
     // lib/portal/extras-scope.
     extras: (data ?? []).map(portalExtraView),
@@ -112,13 +115,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if ('error' in resolved) return resolved.error
   const { link } = resolved
 
-  const { data: booking } = await admin
-    .from('bookings')
-    .select('id, details_locked_at')
-    .eq('id', link.booking_id)
-    .maybeSingle()
-  if (!booking) return notFound()
-  if (booking.details_locked_at) {
+  // The lock is on the link. Reading it from bookings (no such column) failed
+  // the query, and every request answered "Not found".
+  if (link.details_locked_at) {
     return NextResponse.json(
       { error: 'ご出発が近づいているため、こちらからのご依頼は承れません。担当者までご連絡ください。' },
       { status: 409 }
@@ -136,13 +135,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // are: a traveller may genuinely want two different things, and each is
   // priced separately. What IS refused is the same title twice, which is a
   // double-tap rather than a second request.
-  const { data: existing } = await admin
+  const dupQuery = admin
     .from('booking_extras')
     .select('id')
     .eq('booking_id', link.booking_id)
     .eq('status', 'requested')
     .eq('title', title)
-    .maybeSingle()
+  // The same traveller's double-tap — not a friend asking for the same thing.
+  const { data: existing } = await (link.passenger_id
+    ? dupQuery.eq('passenger_id', link.passenger_id)
+    : dupQuery.is('passenger_id', null)
+  ).limit(1).maybeSingle()
   if (existing) {
     return NextResponse.json({ success: true, duplicate: true })
   }
