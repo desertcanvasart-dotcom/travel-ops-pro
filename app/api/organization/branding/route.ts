@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { normaliseMargin } from '@/lib/org-default-margin'
 import { createClient } from '@supabase/supabase-js'
 import { orgAuth } from '@/lib/auth/org-auth'
+import { currentUser, isPlatformAdmin } from '@/lib/blog/platform-admin'
 import { requireRole } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { toWhatsAppE164, PHONE_NEEDS_COUNTRY_CODE } from '@/lib/whatsapp-phone'
@@ -155,6 +156,18 @@ export async function PUT(request: NextRequest) {
     // `To` against; blank clears it. A number that is not international is
     // refused rather than stored where no message would ever match it.
     if ('whatsapp_number' in body) {
+      // Which org a WhatsApp number belongs to decides whose inbox a customer's
+      // messages land in and who may send as it. An org admin could type in
+      // another org's (or the shared) number and receive its customers, or
+      // switch every org without a number off. Only the platform's own admins
+      // (PLATFORM_ADMIN_EMAILS) assign numbers; the field reads as before.
+      const me = await currentUser()
+      if (!isPlatformAdmin(me?.email)) {
+        return NextResponse.json(
+          { success: false, error: 'The WhatsApp number is set by the Autoura team. Ask them to connect your number.' },
+          { status: 403 }
+        )
+      }
       const raw = typeof body.whatsapp_number === 'string' ? body.whatsapp_number.trim() : ''
       if (!raw) {
         update.whatsapp_number = null

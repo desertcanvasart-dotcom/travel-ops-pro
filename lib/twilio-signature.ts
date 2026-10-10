@@ -46,6 +46,10 @@ export function verifyTwilioSignature(
     process.env.NEXT_PUBLIC_APP_URL
       ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')}${pathname}${search}`
       : null,
+    // Twilio configured with the www address signs that one.
+    process.env.NEXT_PUBLIC_APP_URL
+      ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '').replace('://', '://www.')}${pathname}${search}`
+      : null,
   ].filter((u): u is string => !!u)
 
   const ok = candidateUrls.some(url => twilio.validateRequest(authToken, signature, url, params))

@@ -3199,7 +3199,7 @@
       "governingLawPlaceholder": "e.g. Egyptian law",
       "governingLawHint": "Contracts are governed by this law, and disputes are settled under it. Blank: the law of the country you are registered in.",
       "whatsappNumber": "WhatsApp number",
-      "whatsappNumberHint": "Your organization's own WhatsApp sender in Twilio, with its country code. Customers who write to it reach your inbox, and your WhatsApp messages are sent from it.",
+      "whatsappNumberHint": "Your organization's own WhatsApp sender in Twilio, with its country code. Customers who write to it reach your inbox, and your WhatsApp messages are sent from it. Set by the Autoura team.",
       "contractTermsPending": "Saved — except the contract country and governing law: the database has not been updated for them yet. Apply the latest migration, then save again."
     }
   },

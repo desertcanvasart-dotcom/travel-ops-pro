@@ -19,7 +19,7 @@ describe('www goes to the app’s own address', () => {
   it('the middleware applies it first, with a method-preserving 308', () => {
     const mw = readFileSync(join(process.cwd(), 'middleware.ts'), 'utf8')
     const start = mw.indexOf('export async function middleware')
-    expect(mw.slice(start, start + 600)).toContain('canonicalRedirectOrigin(')
+    expect(mw.slice(start, start + 1200)).toContain('canonicalRedirectOrigin(')
     expect(mw).toContain(', canonical), 308)')
   })
 })

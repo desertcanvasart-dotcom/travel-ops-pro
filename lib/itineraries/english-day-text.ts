@@ -148,12 +148,16 @@ export async function ensureEnglishDayVersions(
     hashOf.set(day.id, dayTextHash(merged))
   }
   const rowOf = new Map(existing.map(v => [v.itinerary_day_id, v]))
+  // Whether a day needs English is decided on the trip's OWN text: an
+  // English trip with a Japanese translation has nothing to translate, and
+  // laying the Japanese row over it made the sheet back-translate that
+  // translation into a new English row that then replaced the original.
   const missing = days
+    .filter(day => dayNeedsEnglish(day))
     .map(day => sourceOf.get(day.id)!)
     .filter(day => {
       const row = rowOf.get(day.id)
-      if (!row) return dayNeedsEnglish(day)
-      return dayNeedsEnglish(day) && englishIsStale(row, hashOf.get(day.id)!)
+      return !row || englishIsStale(row, hashOf.get(day.id)!)
     })
   // Attractions are checked on EVERY day, not only the ones missing a version:
   // itinerary_day_versions has no attractions column, so a day whose prose was

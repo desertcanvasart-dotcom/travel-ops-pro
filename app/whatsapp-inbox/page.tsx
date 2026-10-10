@@ -760,6 +760,11 @@ export default function WhatsAppInboxPage() {
             })
           })
         }
+      } else {
+        // e.g. no WhatsApp number for this organization yet — say so, rather
+        // than the message silently not going.
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'The message could not be sent')
       }
     } catch (error) {
       console.error('Error sending message:', error)
@@ -784,6 +789,10 @@ export default function WhatsAppInboxPage() {
         fetchConversations(false)
         setSelectedConversation(data.conversation)
         fetchMessages(data.conversation.id, true)
+      } else {
+        // e.g. a number without its country code.
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'The conversation could not be started')
       }
     } catch (error) {
       console.error('Error starting conversation:', error)

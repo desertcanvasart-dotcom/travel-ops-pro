@@ -201,7 +201,11 @@ const STAFF_ONLY_API_PREFIXES = [
 export async function middleware(request: NextRequest, event: NextFetchEvent) {
   // www.<domain> → <domain> before anything else (lib/http/canonical-host).
   // 308 keeps the method and body, so a POST is redirected as a POST.
-  const canonical = canonicalRedirectOrigin(
+  // Pages only: an API caller (Twilio's webhook and status callback, OAuth
+  // returns, cron) may be configured with the www address and signs that URL —
+  // a redirect is either not followed or re-POSTed to a URL whose signature no
+  // longer matches, and inbound WhatsApp stops.
+  const canonical = request.nextUrl.pathname.startsWith('/api/') ? null : canonicalRedirectOrigin(
     request.headers.get('x-forwarded-host') || request.headers.get('host'),
     process.env.NEXT_PUBLIC_APP_URL
   )
