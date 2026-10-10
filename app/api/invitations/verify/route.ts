@@ -58,6 +58,9 @@ export async function GET(request: NextRequest) {
         email: invitation.email,
         role: invitation.role,
         inviter: invitation.inviter,
+        // What the accept page renders ("Invited by …"); it read a field this
+        // route never sent, so every invitee saw the generic fallback.
+        invited_by_name: invitation.inviter?.full_name || invitation.inviter?.email || null,
         expires_at: invitation.expires_at
       }
     })

@@ -32,7 +32,7 @@ vi.mock('@/lib/support/job-runs', () => ({
 }))
 // The trip's organization signs the invitation (orgIdentity, from Settings).
 vi.mock('@/lib/org-identity', () => ({ businessIdentity: () => ({ name: 'ATS' }), orgIdentity: async () => ({ name: 'ATS' }) }))
-vi.mock('@/lib/today', () => ({ todayLocal: () => '2026-09-23' }))
+vi.mock('@/lib/today', () => ({ todayLocal: () => '2026-09-23', businessToday: () => '2026-09-23' }))
 vi.mock('@/lib/surveys/ensure-survey', () => ({
   ensureSurvey: vi.fn(async () => ({ id: 's1', token: 'tok', status: 'pending' })),
 }))

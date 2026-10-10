@@ -4,6 +4,7 @@ import { withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { createClient } from '@supabase/supabase-js'
 import { createNotification } from '@/lib/notifications'
+import { businessToday, shiftDateISO } from '@/lib/today'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,14 +34,11 @@ async function getHandler(request: NextRequest) {
       errors: [] as string[]
     }
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    
-    const todayStr = today.toISOString().split('T')[0]
-    const tomorrowStr = tomorrow.toISOString().split('T')[0]
+    // The business's calendar day (BUSINESS_TIMEZONE), not the host's: the
+    // container clock is UTC, so "due tomorrow" / "overdue" were a day off for
+    // any operator whose day had not yet turned over in UTC.
+    const todayStr = businessToday()
+    const tomorrowStr = shiftDateISO(todayStr, 1)
 
     // =========================================
     // 1. Find tasks due tomorrow (24h warning)
@@ -49,17 +47,20 @@ async function getHandler(request: NextRequest) {
       .from('tasks')
       .select(`
         *,
-        assigned_member:team_members(id, name, email, user_id)
+        assigned_member:team_members(id, name, email, user_id, is_active)
       `)
       .eq('due_date', tomorrowStr)
       .neq('status', 'done')
       .not('assigned_to', 'is', null)
+      // An archived task is off the board; it must not keep reminding anyone.
+      .or('archived.eq.false,archived.is.null')
 
     if (dueSoonError) {
       results.errors.push(`Due soon query error: ${dueSoonError.message}`)
     } else if (dueSoonTasks && dueSoonTasks.length > 0) {
       for (const task of dueSoonTasks) {
-        if (!task.assigned_member?.id) continue
+        // A removed (deactivated) team member is not reminded.
+        if (!task.assigned_member?.id || task.assigned_member.is_active === false) continue
 
         // Check if we already sent this notification today
         const { data: existing } = await supabase
@@ -97,17 +98,18 @@ async function getHandler(request: NextRequest) {
       .from('tasks')
       .select(`
         *,
-        assigned_member:team_members(id, name, email, user_id)
+        assigned_member:team_members(id, name, email, user_id, is_active)
       `)
       .lt('due_date', todayStr)
       .neq('status', 'done')
       .not('assigned_to', 'is', null)
+      .or('archived.eq.false,archived.is.null')
 
     if (overdueError) {
       results.errors.push(`Overdue query error: ${overdueError.message}`)
     } else if (overdueTasks && overdueTasks.length > 0) {
       for (const task of overdueTasks) {
-        if (!task.assigned_member?.id) continue
+        if (!task.assigned_member?.id || task.assigned_member.is_active === false) continue
 
         // Check if we already sent overdue notification in last 3 days
         const threeDaysAgo = new Date()
@@ -123,7 +125,8 @@ async function getHandler(request: NextRequest) {
 
         if (existing && existing.length > 0) continue // Already notified recently
 
-        const daysOverdue = Math.floor((today.getTime() - new Date(task.due_date).getTime()) / (1000 * 60 * 60 * 24))
+        // Whole calendar days between two YYYY-MM-DD dates.
+        const daysOverdue = Math.round((Date.parse(`${todayStr}T00:00:00Z`) - Date.parse(`${String(task.due_date).slice(0, 10)}T00:00:00Z`)) / 86_400_000)
 
         // Create notification
         await createNotification({
@@ -157,13 +160,18 @@ async function getHandler(request: NextRequest) {
 
 // Also support POST for some cron services
 async function postHandler(request: NextRequest) {
-  return GET(request)
+  // The unwrapped handler: POST is itself wrapped in withJobRun below, and
+  // calling the wrapped GET recorded every POST run twice.
+  return getHandler(request)
 }
 
 // Format date helper
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr)
-  return date.toLocaleDateString('en-US', { 
+  // A date-only string parses as UTC midnight; format it in UTC too, or a
+  // host west of Greenwich prints the day before.
+  return date.toLocaleDateString('en-US', {
+    timeZone: 'UTC',
     weekday: 'short', 
     month: 'short', 
     day: 'numeric' 

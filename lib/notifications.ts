@@ -92,7 +92,7 @@ export async function createNotification(
       is_read: false,
       email_sent: false,
     })
-    .select('*, team_member:team_members(id, name, email)')
+    .select('*, team_member:team_members(id, name, email, user_id)')
     .single()
 
   if (error || !notification) {
@@ -104,9 +104,14 @@ export async function createNotification(
   // email off in Settings; if they have, the in-app row still stands but no
   // email goes out. Roster-only recipients (team_member_id, no login) have no
   // preference row and fall through to the courtesy email as before.
+  // A roster address linked to a login (the task screen notifies by roster
+  // id) is that login's choice too — otherwise turning task emails off in
+  // Settings stopped none of the "task assigned" mail.
+  const prefsUserId =
+    user_id ?? (notification as { team_member?: { user_id?: string | null } }).team_member?.user_id ?? null
   let emailWanted = send_email
-  if (emailWanted && user_id) {
-    const prefs = await getNotificationPreferences(supabaseAdmin, user_id)
+  if (emailWanted && prefsUserId) {
+    const prefs = await getNotificationPreferences(supabaseAdmin, prefsUserId)
     emailWanted = shouldEmailForType(prefs, String(type))
   }
 

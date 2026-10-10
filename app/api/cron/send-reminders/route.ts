@@ -122,6 +122,11 @@ async function getHandler(request: NextRequest) {
       .eq('reminder_paused', false)
       .lte('next_reminder_date', today)
       .not('client_email', 'is', null)
+      // Longest-waiting first. With no order, the same 50 rows came back every
+      // run — and a failed send left its row due — so 50 invoices of an
+      // organization with no mailbox connected starved every other one.
+      .order('next_reminder_date', { ascending: true })
+      .order('id', { ascending: true })
       .limit(50) // Process max 50 per run
 
     if (error) throw error
@@ -188,6 +193,12 @@ async function getHandler(request: NextRequest) {
         sent++
         console.log(`✅ Sent reminder for ${invoice.invoice_number}`)
       } else {
+        // Retried tomorrow, behind everything that has waited longer.
+        await supabase
+          .from('invoices')
+          .update({ next_reminder_date: addDaysISO(today, 1) })
+          .eq('id', invoice.id)
+
         await supabase
           .from('invoice_reminders')
           .insert({

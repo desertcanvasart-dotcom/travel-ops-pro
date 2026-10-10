@@ -23,6 +23,7 @@ import { jobRunHeaders, withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { createClient } from '@supabase/supabase-js'
 import { sendEmailInternal } from '@/lib/email-send'
+import { escapeHtml } from '@/lib/html-escape'
 
 export const dynamic = 'force-dynamic'
 
@@ -204,7 +205,8 @@ async function getHandler(request: NextRequest) {
           to: process.env.BUSINESS_EMAIL,
           subject: `⚠️ Data invariants: ${violations.length} violation(s) found`,
           html: `<p>The nightly data-integrity sweep found ${violations.length} violation(s):</p><ul>${violations
-            .map((v) => `<li><b>${v.check}</b> (${v.table}${v.id ? ` ${v.id}` : ''}): ${v.detail}</li>`)
+            // detail carries stored text (invoice numbers, natural keys): escaped.
+            .map((v) => `<li><b>${escapeHtml(v.check)}</b> (${escapeHtml(v.table)}${v.id ? ` ${escapeHtml(v.id)}` : ''}): ${escapeHtml(v.detail)}</li>`)
             .join('')}</ul><p>Warnings: ${warnings.length}. Full report in the cron response/log.</p>`,
         })
       } catch (e) {

@@ -16,7 +16,7 @@ import { createServerClient } from '@/lib/supabase-server'
 import { sendEmailInternal } from '@/lib/email-send'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { orgIdentity } from '@/lib/org-identity'
-import { todayLocal } from '@/lib/today'
+import { businessToday } from '@/lib/today'
 import { ensureSurvey } from '@/lib/surveys/ensure-survey'
 
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://autoura.net').replace(/\/$/, '')
@@ -45,7 +45,9 @@ async function getHandler(request: NextRequest): Promise<Response> {
   }
 
   const db = createServerClient()
-  const today = todayLocal()
+  // The business's calendar day (BUSINESS_TIMEZONE). todayLocal() is the
+  // HOST's day — UTC on the server — not the day the trip ends for the office.
+  const today = businessToday()
   const identities = new Map<string, string>()
 
   // Itineraries that ended in the last RETRY_DAYS days (today included) and

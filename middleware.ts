@@ -500,13 +500,21 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
         path: request.nextUrl.pathname,
         ip: clientIp(request.headers),
         user_agent: request.headers.get('user-agent'),
+        // The workspace the request acts in (the same cookie the role gate
+        // and getCurrentOrgId() honour), not an arbitrary first membership.
+        active_org_id: request.cookies.get(ACTIVE_ORG_COOKIE)?.value ?? null,
       })
     )
 
     const matched = API_MUTATION_PERMISSIONS.find(p =>
       request.nextUrl.pathname.startsWith(p.prefix)
     )
-    if (matched) {
+    // Self-authenticating routes (token, signature) are not workspace acts:
+    // /api/invitations/accept falls under the admin-only '/api/invitations'
+    // prefix, so an invitee who happened to be signed in — an agent in another
+    // agency, or an account with no workspace yet — was refused 403 by this
+    // gate before the route could check the token.
+    if (matched && !isSelfAuthApi) {
       // (is_active was re-queried here; the check above already refused a
       // deactivated account for every API request, reads included.)
       // The ROLE comes from membership, via roleAllows — same authority as the

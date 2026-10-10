@@ -131,6 +131,23 @@ export async function PUT(
           { status: 403 }
         )
       }
+      // is_active is ACCOUNT-level (middleware refuses a deactivated account
+      // in every workspace). Deactivating someone who also belongs to another
+      // agency would lock them out of that agency too — its owner included —
+      // which is not this workspace's call, the same rule DELETE applies.
+      if (body.is_active === false) {
+        const { count: otherMemberships } = await supabase
+          .from('organization_members')
+          .select('user_id', { count: 'exact', head: true })
+          .eq('user_id', id)
+          .neq('org_id', caller.orgId)
+        if ((otherMemberships ?? 0) > 0) {
+          return NextResponse.json(
+            { success: false, error: 'This person also belongs to another workspace; remove them from this workspace instead of deactivating the account' },
+            { status: 409 }
+          )
+        }
+      }
     }
 
     // Block privilege escalation: only admins may set role / is_active.
