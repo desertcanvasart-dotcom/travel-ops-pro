@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
-import { formatMoney } from '@/lib/currency-totals'
+import { formatMoney, currencyDecimals, roundToCurrency } from '@/lib/currency-totals'
 
 interface MonthlyData {
   month: string
@@ -187,6 +187,15 @@ export default function FinancialReportsPage() {
     // Quote-wrap every cell (so commas/quotes in values don't break columns)
     // AND neutralise formula triggers: a value starting with = + - @ is executed
     // by Excel/Sheets when opened. Prefix those with a single quote.
+    // Amounts are in the report currency, rounded to its minor unit: these are
+    // raw converted sums (1234.5600000001), and yen have no decimals at all.
+    // Counts and percentages are not money and are left alone.
+    const NOT_MONEY = new Set(['year', 'month_num', 'margin', 'percentage', 'trip_count', 'invoice_count', 'expense_count', 'count'])
+    const dp = currencyDecimals(reportCurrency)
+    const value = (k: string, v: unknown) =>
+      typeof v === 'number' && Number.isFinite(v) && !NOT_MONEY.has(k)
+        ? roundToCurrency(v, reportCurrency).toFixed(dp)
+        : v
     const cell = (v: unknown) => {
       const s = String(v ?? '')
       const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s
@@ -194,7 +203,7 @@ export default function FinancialReportsPage() {
     }
     const keys = Object.keys(data[0] || {})
     const headers = keys.map(cell).join(',')
-    const rows = data.map(row => keys.map(k => cell((row as Record<string, unknown>)[k])).join(','))
+    const rows = data.map(row => keys.map(k => cell(value(k, (row as Record<string, unknown>)[k]))).join(','))
     const csv = ['\ufeff' + headers, ...rows].join('\r\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -262,12 +271,14 @@ export default function FinancialReportsPage() {
               onClick={() => {
                 const cols = [
                   { key: 'month', label: 'Month' },
-                  { key: 'revenue', label: 'Revenue', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                  { key: 'expenses', label: 'Expenses', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                  { key: 'net_profit', label: 'Net Profit', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                  { key: 'revenue', label: 'Revenue', align: 'right' as const, money: true },
+                  { key: 'expenses', label: 'Expenses', align: 'right' as const, money: true },
+                  { key: 'net_profit', label: 'Net Profit', align: 'right' as const, money: true },
                   { key: 'margin', label: 'Margin %', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(1) + '%' : String(v ?? '') },
                 ]
-                const data = monthly.map(m => ({ month: m.month, revenue: m.revenue, expenses: m.expenses, net_profit: m.net_profit, margin: m.revenue > 0 ? (m.net_profit / m.revenue) * 100 : 0 }))
+                // Every row is in the report currency: money:true rounds to ITS
+                // minor unit (no ¥1,200.00) and the export adds a Currency column.
+                const data = monthly.map(m => ({ month: m.month, revenue: m.revenue, expenses: m.expenses, net_profit: m.net_profit, margin: m.revenue > 0 ? (m.net_profit / m.revenue) * 100 : 0, currency: reportCurrency }))
                 exportFinanceCSV(data as Record<string, unknown>[], cols, `financial-report-${selectedYear}`)
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
@@ -279,13 +290,14 @@ export default function FinancialReportsPage() {
               onClick={() => {
                 const cols = [
                   { key: 'month', label: 'Month' },
-                  { key: 'revenue', label: 'Revenue', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                  { key: 'expenses', label: 'Expenses', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
-                  { key: 'net_profit', label: 'Net Profit', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(2) : String(v ?? '') },
+                  { key: 'revenue', label: 'Revenue', align: 'right' as const, money: true },
+                  { key: 'expenses', label: 'Expenses', align: 'right' as const, money: true },
+                  { key: 'net_profit', label: 'Net Profit', align: 'right' as const, money: true },
                   { key: 'margin', label: 'Margin %', align: 'right' as const, format: (v: unknown) => typeof v === 'number' ? v.toFixed(1) + '%' : String(v ?? '') },
                 ]
-                const data = monthly.map(m => ({ month: m.month, revenue: m.revenue, expenses: m.expenses, net_profit: m.net_profit, margin: m.revenue > 0 ? (m.net_profit / m.revenue) * 100 : 0 }))
-                const avgMargin = data.length > 0 ? data.reduce((s, d) => s + (d.margin as number), 0) / data.length : 0
+                // Every row is in the report currency: money:true rounds to ITS
+                // minor unit (no ¥1,200.00) and the export adds a Currency column.
+                const data = monthly.map(m => ({ month: m.month, revenue: m.revenue, expenses: m.expenses, net_profit: m.net_profit, margin: m.revenue > 0 ? (m.net_profit / m.revenue) * 100 : 0, currency: reportCurrency }))
                 exportFinancePDF({
                   title: `Financial Report ${selectedYear}`,
                   subtitle: `Annual financial overview for ${selectedYear}`,
@@ -293,7 +305,10 @@ export default function FinancialReportsPage() {
                     { label: 'Total Revenue', value: `${fmt(summary?.total_revenue ?? 0)}` },
                     { label: 'Total Expenses', value: `${fmt(summary?.total_expenses ?? 0)}` },
                     { label: 'Gross Profit', value: `${fmt(summary?.gross_profit ?? 0)}` },
-                    { label: 'Avg Margin', value: `${avgMargin.toFixed(1)}%` },
+                    // The YEAR's margin (profit ÷ revenue), not the mean of twelve
+                    // monthly margins — an empty month at 0% dragged that down,
+                    // and a small month weighed as much as a big one.
+                    { label: 'Profit Margin', value: `${(summary?.profit_margin ?? 0).toFixed(1)}%` },
                   ],
                   data: data as Record<string, unknown>[],
                   columns: cols,
