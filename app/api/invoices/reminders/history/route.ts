@@ -17,11 +17,10 @@ export async function GET(request: NextRequest) {
     const invoiceId = searchParams.get('invoiceId')
     const status = searchParams.get('status') // 'sent', 'failed', 'all'
 
-    // invoice_reminders is a child without org_id — gate every read on the
-    // set of invoice ids that belong to this org. If a specific invoiceId is
-    // requested, verify it belongs to the org; otherwise enumerate the org's
-    // invoice ids and scope all queries through .in('invoice_id', ...).
-    let allowedInvoiceIds: string[] | null = null
+    // invoice_reminders is a child without org_id — every read goes through an
+    // inner join on its invoice, filtered to this org. (The org's invoice ids
+    // used to be listed first: capped at 1000 rows, and a 1000-id .in() made
+    // a URL the gateway refuses.)
     if (invoiceId) {
       const { data: parent } = await supabase
         .from('invoices')
@@ -35,40 +34,30 @@ export async function GET(request: NextRequest) {
           { status: 404 }
         )
       }
-      allowedInvoiceIds = [invoiceId]
-    } else {
-      const { data: orgInvoices } = await supabase
-        .from('invoices')
-        .select('id')
-        .eq('org_id', orgId)
-      allowedInvoiceIds = (orgInvoices || []).map((r: any) => r.id)
     }
 
-    // If the org has no invoices at all, short-circuit with empty result.
-    if (allowedInvoiceIds.length === 0) {
-      return NextResponse.json({
-        success: true,
-        reminders: [],
-        pagination: { total: 0, limit, offset, hasMore: false },
-        stats: { total: 0, sent: 0, failed: 0 }
-      })
+    const scoped = (select: string, opts?: { count: 'exact'; head: true }) => {
+      let q = supabase
+        .from('invoice_reminders')
+        .select(select, opts)
+        .eq('invoices.org_id', orgId)
+      if (invoiceId) q = q.eq('invoice_id', invoiceId)
+      return q
     }
 
-    let query = supabase
-      .from('invoice_reminders')
-      .select(`
+    let query = scoped(`
         *,
-        invoices:invoice_id (
+        invoices:invoice_id!inner (
           invoice_number,
           client_name,
           client_email,
           total_amount,
           balance_due,
           currency,
-          status
+          status,
+          org_id
         )
       `)
-      .in('invoice_id', allowedInvoiceIds)
       .order('sent_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
@@ -80,26 +69,19 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error
 
-    // Get total count
-    let countQuery = supabase
-      .from('invoice_reminders')
-      .select('id', { count: 'exact', head: true })
-      .in('invoice_id', allowedInvoiceIds)
-
-    if (status && status !== 'all') {
-      countQuery = countQuery.eq('status', status)
+    const countOf = async (onlyStatus?: string) => {
+      let q = scoped('id, invoices:invoice_id!inner(org_id)', { count: 'exact', head: true })
+      if (onlyStatus) q = q.eq('status', onlyStatus)
+      const { count } = await q
+      return count || 0
     }
 
-    const { count: totalCount } = await countQuery
-
-    // Get stats
-    const { data: stats } = await supabase
-      .from('invoice_reminders')
-      .select('status')
-      .in('invoice_id', allowedInvoiceIds)
-
-    const sentCount = stats?.filter((r: any) => r.status === 'sent').length || 0
-    const failedCount = stats?.filter((r: any) => r.status === 'failed').length || 0
+    const [totalCount, allCount, sentCount, failedCount] = await Promise.all([
+      countOf(status && status !== 'all' ? status : undefined),
+      countOf(),
+      countOf('sent'),
+      countOf('failed'),
+    ])
 
     return NextResponse.json({
       success: true,
@@ -111,7 +93,7 @@ export async function GET(request: NextRequest) {
         hasMore: (offset + limit) < (totalCount || 0)
       },
       stats: {
-        total: stats?.length || 0,
+        total: allCount,
         sent: sentCount,
         failed: failedCount
       }

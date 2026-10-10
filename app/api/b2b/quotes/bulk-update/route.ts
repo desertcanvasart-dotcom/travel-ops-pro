@@ -8,7 +8,11 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentUserRole, getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+
+// The statuses a person sets. 'converted' is set by convert only (a bulk
+// 'converted' let from-quote book a quote that was never accepted).
+const SETTABLE = ['draft', 'sent', 'accepted', 'rejected', 'expired']
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,8 +34,8 @@ export async function PUT(request: NextRequest) {
     if (quote_ids.length > 500) {
       return NextResponse.json({ success: false, error: 'Too many quotes in one request (max 500)' }, { status: 400 })
     }
-    if (!status) {
-      return NextResponse.json({ success: false, error: 'status is required' }, { status: 400 })
+    if (!SETTABLE.includes(status)) {
+      return NextResponse.json({ success: false, error: `status must be one of ${SETTABLE.join(', ')}` }, { status: 400 })
     }
 
     // See bulk-delete: scoped inside the statement, so a list naming another
@@ -39,11 +43,17 @@ export async function PUT(request: NextRequest) {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
+    const actor = await getCurrentUserId()
+
+    // A converted quote keeps its status (its trip and booking hang off it);
+    // the detail page locks it, and a select-all here no longer unlocks it.
     const { data, error } = await supabaseAdmin
       .from('tour_quotes')
-      .update({ status, updated_at: new Date().toISOString() })
+      .update({ status, updated_at: new Date().toISOString(), last_modified_by: actor })
       .in('id', quote_ids)
       .eq('org_id', orgId)
+      .or('status.is.null,status.neq.converted')
+      .is('converted_to_itinerary_id', null)
       .select('id')
 
     if (error) {
@@ -56,7 +66,7 @@ export async function PUT(request: NextRequest) {
       (data || []).map((q: any) =>
         supabaseAdmin.rpc('create_quote_revision', {
           p_quote_id: q.id,
-          p_changed_by: null,
+          p_changed_by: actor,
           p_change_reason: `Bulk status update → ${status}`,
         })
       )
@@ -65,6 +75,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({
       success: true,
       updated_count: data?.length || 0,
+      skipped_count: quote_ids.length - (data?.length || 0),
       message: `Successfully updated ${data?.length || 0} quote(s)`,
     })
   } catch (error: any) {

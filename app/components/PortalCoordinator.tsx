@@ -49,14 +49,24 @@ export default function PortalCoordinator({ bookingId }: { bookingId: string }) 
 
   const setMode = async (mode: 'family' | 'friends') => {
     if (switching || data?.portalMode === mode) return
+    // The server revokes the family link on this switch (it shows everyone's
+    // passport); say so before it happens.
+    if (mode === 'friends' && !confirm('Switch to Friends? The family link stops working — anyone using it is locked out, and each traveller gets their own link instead.')) return
     setSwitching(true)
-    await fetch(`/api/bookings/${bookingId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ portal_mode: mode }),
-    })
-    await load()
-    setSwitching(false)
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ portal_mode: mode }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        alert(body.error || 'Switching the portal mode failed')
+      }
+      await load()
+    } finally {
+      setSwitching(false)
+    }
   }
 
   const saveField = async (id: string, field: string, value: string) => {

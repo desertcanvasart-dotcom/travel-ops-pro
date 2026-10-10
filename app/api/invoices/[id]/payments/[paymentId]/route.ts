@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { roundToCurrency } from '@/lib/currency-totals'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -58,21 +59,26 @@ export async function DELETE(
       .select('amount')
       .eq('invoice_id', id)
 
-    const totalPaid = (payments || []).reduce((sum, p) => sum + Number(p.amount), 0)
-
     const { data: invoice } = await supabaseAdmin
       .from('invoices')
-      .select('total_amount, status')
+      .select('total_amount, status, currency, paid_at')
       .eq('id', id)
       .eq('org_id', orgId)
       .single()
 
     if (invoice) {
-      const balanceDue = Number(invoice.total_amount) - totalPaid
+      // Summed in the invoice's currency decimals, as the insert trigger does
+      // in numeric: 28.40 + 35.80 + 35.80 in floats left €0.00000000000001
+      // due, 'partial', and a reminder for "€0.00".
+      const totalPaid = roundToCurrency((payments || []).reduce((sum, p) => sum + Number(p.amount), 0), invoice.currency)
+      const balanceDue = roundToCurrency(Number(invoice.total_amount) - totalPaid, invoice.currency)
       // Only payment-derived statuses should change here. Never clobber a
-      // 'draft' / 'cancelled' / 'overdue' invoice back to 'sent'.
+      // 'draft' / 'cancelled' / 'overdue' invoice back to 'sent', and never
+      // move a draft or cancelled one to 'partial' (a remindable status).
       let status = invoice.status
-      if (totalPaid > 0 && totalPaid >= Number(invoice.total_amount)) {
+      if (invoice.status === 'draft' || invoice.status === 'cancelled') {
+        status = invoice.status
+      } else if (totalPaid > 0 && totalPaid >= Number(invoice.total_amount)) {
         status = 'paid'
       } else if (totalPaid > 0) {
         status = 'partial'
@@ -86,7 +92,7 @@ export async function DELETE(
           amount_paid: totalPaid,
           balance_due: balanceDue,
           status: status,
-          paid_at: status === 'paid' ? new Date().toISOString() : null,
+          paid_at: status === 'paid' ? (invoice.paid_at || new Date().toISOString()) : null,
           updated_at: new Date().toISOString()
         })
         .eq('id', id)

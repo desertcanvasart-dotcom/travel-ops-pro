@@ -23,6 +23,7 @@ import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import VerifyGate from './VerifyGate'
+import { readCodeState, travellerNeedsCode } from '@/lib/portal/verify-code'
 import type { Metadata } from 'next'
 import {
   isValidPortalToken,
@@ -88,6 +89,7 @@ async function resolve(token: string): Promise<{
   tripDays: number | null
   scopedPassengerId: string | null
   isLeadCoordinator: boolean
+  requireCode: boolean
 } | null> {
   if (!isValidPortalToken(token)) return null
   const supabase = admin()
@@ -280,6 +282,9 @@ async function resolve(token: string): Promise<{
     tripDays: tripDays(booking.start_date, booking.end_date),
     scopedPassengerId,
     isLeadCoordinator,
+    // Same rule as the verify route: a traveller with an email gives the code.
+    requireCode: Boolean(scopedPassengerId) &&
+      travellerNeedsCode((passengers ?? [])[0] ?? null, await readCodeState(supabase, token)),
     booking: toPortalBooking({
       booking,
       passengers: passengers ?? [],
@@ -324,7 +329,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
   const resolved = await resolve(token)
   if (!resolved) notFound()
 
-  const { booking, operator, insuranceBands, tripDays: days, scopedPassengerId, isLeadCoordinator } = resolved
+  const { booking, operator, insuranceBands, tripDays: days, scopedPassengerId, isLeadCoordinator, requireCode } = resolved
 
   // CONFIRMATION GATE: the link alone shows nothing. One fact the traveller
   // knows (booking number or the lead family name) sets the cookie; until
@@ -343,7 +348,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
           <p className="sub">お客様の情報を守るため、ご予約の確認をお願いいたします。</p>
         </header>
         <section className="gate">
-          <VerifyGate token={token} requireDob={Boolean(scopedPassengerId)} />
+          <VerifyGate token={token} requireDob={Boolean(scopedPassengerId)} requireCode={requireCode} />
         </section>
       </main>
     )

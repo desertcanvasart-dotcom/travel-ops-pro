@@ -2322,6 +2322,10 @@ export interface Database {
           expires_at: string | null
           details_locked_at: string | null
           view_count: number
+          verify_code_hash: string | null
+          verify_code_expires_at: string | null
+          verify_code_issued_at: string | null
+          verify_code_attempts: number
           last_viewed_at: string | null
           passenger_id: string | null
           last_sent_at: string | null
@@ -2337,6 +2341,10 @@ export interface Database {
           expires_at?: string | null
           details_locked_at?: string | null
           view_count?: number
+          verify_code_hash?: string | null
+          verify_code_expires_at?: string | null
+          verify_code_issued_at?: string | null
+          verify_code_attempts?: number
           last_viewed_at?: string | null
           passenger_id?: string | null
           last_sent_at?: string | null
@@ -2352,6 +2360,10 @@ export interface Database {
           expires_at?: string | null
           details_locked_at?: string | null
           view_count?: number
+          verify_code_hash?: string | null
+          verify_code_expires_at?: string | null
+          verify_code_issued_at?: string | null
+          verify_code_attempts?: number
           last_viewed_at?: string | null
           passenger_id?: string | null
           last_sent_at?: string | null
@@ -10245,6 +10257,7 @@ export interface Database {
           document_filename: string | null
           document_storage_path: string | null
           approved_by: string | null
+          client_invoice_id: string | null
           approved_at: string | null
           paid_at: string | null
           payment_method: string | null
@@ -10278,6 +10291,7 @@ export interface Database {
           document_filename?: string | null
           document_storage_path?: string | null
           approved_by?: string | null
+          client_invoice_id?: string | null
           approved_at?: string | null
           paid_at?: string | null
           payment_method?: string | null
@@ -10311,6 +10325,7 @@ export interface Database {
           document_filename?: string | null
           document_storage_path?: string | null
           approved_by?: string | null
+          client_invoice_id?: string | null
           approved_at?: string | null
           paid_at?: string | null
           payment_method?: string | null

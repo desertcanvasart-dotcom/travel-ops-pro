@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
+// Matching is open only before review. A disputed invoice is contested and an
+// approved one is cleared for payment — re-matching or unlinking one flipped
+// it back to 'matched'/'received', dropping the dispute or the approval
+// without anyone resolving it (and a paid one could be approved and paid
+// again).
+const MATCHABLE = ['received', 'matched']
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -31,7 +38,7 @@ export async function POST(
     // matched against, and to verify the parent before touching the junction.
     const { data: invoice, error: invoiceError } = await supabaseAdmin
       .from('supplier_invoices')
-      .select('amount, status')
+      .select('amount, status, currency')
       .eq('id', id)
       .eq('org_id', orgId)
       .single()
@@ -40,9 +47,7 @@ export async function POST(
       return NextResponse.json({ error: 'Supplier invoice not found' }, { status: 404 })
     }
 
-    // A paid or cancelled invoice is settled — re-running the match would flip
-    // its match_status and let the approve/pay flow act on it again.
-    if (invoice.status === 'paid' || invoice.status === 'cancelled') {
+    if (!MATCHABLE.includes(invoice.status)) {
       return NextResponse.json(
         { error: `Cannot match an invoice with status '${invoice.status}'` },
         { status: 409 }
@@ -53,12 +58,23 @@ export async function POST(
     // from another org into this org's supplier invoice.
     const { data: expenses, error: expError } = await supabaseAdmin
       .from('expenses')
-      .select('id, amount')
+      .select('id, amount, currency')
       .in('id', expenseIds)
       .eq('org_id', orgId)
 
     if (expError || !expenses) {
       return NextResponse.json({ error: 'Failed to fetch expenses' }, { status: 500 })
+    }
+
+    // Amounts are compared as numbers: a €1,000 expense "matched" a $1,000
+    // bill, which was then approved and paid. Same currency only.
+    const invoiceCurrency = String(invoice.currency || 'EUR').toUpperCase()
+    const otherCurrency = expenses.filter(e => String(e.currency || 'EUR').toUpperCase() !== invoiceCurrency)
+    if (otherCurrency.length > 0) {
+      return NextResponse.json(
+        { error: `Expenses must be in the invoice currency (${invoiceCurrency})`, details: { expense_ids: otherCurrency.map(e => e.id) } },
+        { status: 400 }
+      )
     }
 
     // M30: an expense can be linked to multiple supplier_invoices via this
@@ -159,6 +175,7 @@ export async function POST(
       })
       .eq('id', id)
       .eq('org_id', orgId)
+      .in('status', MATCHABLE)
 
     return NextResponse.json({
       success: true,
@@ -193,12 +210,18 @@ export async function DELETE(
     // rows, otherwise a caller could delete another org's junction by id.
     const { data: parentInvoice } = await supabaseAdmin
       .from('supplier_invoices')
-      .select('id')
+      .select('id, status')
       .eq('id', id)
       .eq('org_id', orgId)
       .maybeSingle()
     if (!parentInvoice) {
       return NextResponse.json({ error: 'Supplier invoice not found' }, { status: 404 })
+    }
+    if (!MATCHABLE.includes(parentInvoice.status)) {
+      return NextResponse.json(
+        { error: `Cannot unmatch an invoice with status '${parentInvoice.status}'` },
+        { status: 409 }
+      )
     }
 
     await supabaseAdmin
@@ -232,7 +255,8 @@ export async function DELETE(
           ? 'partial'
           : 'discrepancy'
 
-    const status = matchedAmount === 0 ? 'received' : 'matched'
+    // As in POST (M28): only an exact match is 'matched'.
+    const status = matchStatus === 'matched' ? 'matched' : 'received'
 
     await supabaseAdmin
       .from('supplier_invoices')
@@ -245,6 +269,7 @@ export async function DELETE(
       })
       .eq('id', id)
       .eq('org_id', orgId)
+      .in('status', MATCHABLE)
 
     return NextResponse.json({ success: true, match_status: matchStatus })
   } catch (error) {

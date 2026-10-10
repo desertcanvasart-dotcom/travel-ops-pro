@@ -1,3 +1,5 @@
+import { escapeHtml } from '@/lib/html-escape'
+
 // lib/template-placeholders.ts
 // Utility functions for template placeholder replacement
 
@@ -19,14 +21,19 @@ export function getPlaceholders(text: string): string[] {
 }
 
 /**
- * Replace all {{placeholder}} with actual values
+ * Replace all {{placeholder}} with actual values. For a template's HTML body
+ * pass { html: true }: values (a client or trip name from a web order) are
+ * text, and spliced raw a "<…>" in one was parsed as markup and lost from the
+ * email. A subject stays plain text.
  */
 export function replacePlaceholders(
   text: string,
-  data: Record<string, string | undefined>
+  data: Record<string, string | undefined>,
+  opts: { html?: boolean } = {}
 ): string {
   return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => {
-    return data[key] !== undefined ? data[key]! : match
+    if (data[key] === undefined) return match
+    return opts.html ? escapeHtml(data[key]!) : data[key]!
   })
 }
 

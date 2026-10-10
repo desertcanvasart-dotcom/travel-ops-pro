@@ -1,142 +1,13 @@
-import { escapeHtml } from '@/lib/html-escape'
-import { reminderBlocker } from '@/lib/invoices/reminder-schedule'
+import { reminderBlocker, daysUntilDue } from '@/lib/invoices/reminder-schedule'
+import { generateReminderEmail } from '@/lib/invoices/reminder-email'
 import { NextRequest, NextResponse } from 'next/server'
-import { businessIdentity, htmlIdentity, orgIdentity, type OrgIdentity } from '@/lib/org-identity'
+import { orgIdentity } from '@/lib/org-identity'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { resolveClientLocalesByEmail } from '@/lib/i18n/recipient-locale'
 import { sendEmailInternal } from '@/lib/email-send'
-import { formatMoney } from '@/lib/currency-totals'
 import { businessToday } from '@/lib/today'
-import { daysUntilDue } from '@/lib/invoices/reminder-schedule'
-
-// Reuse the email generation from the main route
-function generateReminderEmail(invoice: any, reminderType: string, identity: OrgIdentity = businessIdentity()): { subject: string; html: string } {
-  // The operator's own name, never a literal — this goes to their customer.
-  const brand = htmlIdentity(identity)
-  // formatMoney knows each currency's symbol and decimals (¥110,000, not JPY110000.00).
-  const balanceDue = formatMoney(Number(invoice.balance_due), invoice.currency)
-  const totalAmount = formatMoney(Number(invoice.total_amount), invoice.currency)
-  const dueDate = new Date(invoice.due_date).toLocaleDateString('en-GB', { 
-    day: 'numeric', month: 'long', year: 'numeric' 
-  })
-  
-  // Whole calendar days: due today is 0, not "0 days overdue" (see reminder-schedule).
-  const daysOverdue = -daysUntilDue(invoice.due_date, businessToday())
-  
-  let subject = `Payment Reminder: Invoice ${invoice.invoice_number}`
-  let urgencyMessage = `This is a reminder about your outstanding invoice.`
-  let urgencyColor = '#f59e0b'
-
-  if (daysOverdue > 0) {
-    subject = `Payment Overdue: Invoice ${invoice.invoice_number}`
-    urgencyMessage = `Your payment is ${daysOverdue} days overdue. Please arrange payment as soon as possible.`
-    urgencyColor = '#ef4444'
-  }
-
-  const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background-color: #f3f4f6;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f3f4f6; padding: 40px 20px;">
-    <tr>
-      <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-          
-          <tr>
-            <td style="background-color: #647C47; padding: 30px 40px; text-align: center;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">${brand.name}</h1>
-            </td>
-          </tr>
-          
-          <tr>
-            <td style="background-color: ${urgencyColor}; padding: 15px 40px;">
-              <p style="margin: 0; color: #ffffff; font-size: 14px; text-align: center; font-weight: 500;">
-                ${urgencyMessage}
-              </p>
-            </td>
-          </tr>
-          
-          <tr>
-            <td style="padding: 40px;">
-              <p style="margin: 0 0 20px; color: #374151; font-size: 16px;">
-                Dear ${escapeHtml(invoice.client_name)},
-              </p>
-              
-              <p style="margin: 0 0 30px; color: #374151; font-size: 16px;">
-                We are writing regarding the following invoice:
-              </p>
-              
-              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9fafb; border-radius: 8px; margin-bottom: 30px;">
-                <tr>
-                  <td style="padding: 25px;">
-                    <table width="100%" cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td style="padding: 8px 0;"><span style="color: #6b7280; font-size: 14px;">Invoice Number:</span></td>
-                        <td style="padding: 8px 0; text-align: right;"><span style="color: #111827; font-size: 14px; font-weight: 600;">${escapeHtml(invoice.invoice_number)}</span></td>
-                      </tr>
-                      <tr>
-                        <td style="padding: 8px 0;"><span style="color: #6b7280; font-size: 14px;">Due Date:</span></td>
-                        <td style="padding: 8px 0; text-align: right;"><span style="color: ${daysOverdue > 0 ? '#ef4444' : '#111827'}; font-size: 14px;">${dueDate}</span></td>
-                      </tr>
-                      <tr>
-                        <td style="padding: 8px 0;"><span style="color: #6b7280; font-size: 14px;">Total Amount:</span></td>
-                        <td style="padding: 8px 0; text-align: right;"><span style="color: #111827; font-size: 14px;">${totalAmount}</span></td>
-                      </tr>
-                      <tr>
-                        <td colspan="2" style="padding-top: 15px; border-top: 1px solid #e5e7eb;">
-                          <table width="100%">
-                            <tr>
-                              <td style="padding-top: 10px;"><span style="color: #111827; font-size: 16px; font-weight: 600;">Balance Due:</span></td>
-                              <td style="padding-top: 10px; text-align: right;"><span style="color: #ef4444; font-size: 20px; font-weight: 700;">${balanceDue}</span></td>
-                            </tr>
-                          </table>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-              
-              <p style="margin: 0 0 30px; color: #374151; font-size: 16px;">
-                Please arrange payment at your earliest convenience. If you have already made this payment, please disregard this reminder.
-              </p>
-              
-              ${invoice.payment_instructions ? `
-              <div style="background-color: #f0fdf4; border-left: 4px solid #22c55e; padding: 15px 20px; margin-bottom: 30px;">
-                <p style="margin: 0 0 5px; color: #166534; font-size: 14px; font-weight: 600;">Payment Instructions</p>
-                <p style="margin: 0; color: #15803d; font-size: 14px; white-space: pre-line;">${escapeHtml(invoice.payment_instructions)}</p>
-              </div>
-              ` : ''}
-              
-              <p style="margin: 30px 0 0; color: #374151; font-size: 16px;">
-                Best regards,${brand.name ? `<br><strong>${brand.name}</strong>` : ''}
-              </p>
-            </td>
-          </tr>
-          
-          <tr>
-            <td style="background-color: #f9fafb; padding: 25px 40px; border-top: 1px solid #e5e7eb;">
-              <p style="margin: 0; color: #9ca3af; font-size: 12px; text-align: center;">
-                ${brand.name ? `This is an automated payment reminder from ${brand.name}.` : 'This is an automated payment reminder.'}
-              </p>
-            </td>
-          </tr>
-          
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
-  `
-
-  return { subject, html }
-}
 
 // POST: Send reminder for a specific invoice
 export async function POST(
@@ -186,7 +57,12 @@ export async function POST(
       return NextResponse.json({ success: false, error: blocked }, { status: 400 })
     }
 
-    const { subject, html } = generateReminderEmail(invoice, 'manual', await orgIdentity(orgId))
+    // The client's own language and the stage the bulk send would use.
+    const locale = (await resolveClientLocalesByEmail(supabase, [invoice.client_email], orgId)).get(invoice.client_email) ?? 'en'
+    // A manual send is not a step in the schedule: no "second reminder" or
+    // "final notice" escalation on a first click — overdue or neutral copy.
+    const stage = daysUntilDue(invoice.due_date, businessToday()) < 0 ? 'overdue_7' : 'default'
+    const { subject, html } = generateReminderEmail(invoice, stage, locale, await orgIdentity(orgId))
 
     // Send via the shared in-process helper.
     const emailResult = await sendEmailInternal({

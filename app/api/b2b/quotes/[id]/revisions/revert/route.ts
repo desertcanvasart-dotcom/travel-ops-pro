@@ -5,7 +5,7 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
-import { quoteInOrg, quoteNotFound } from '@/lib/b2b/quote-scope'
+import { quoteInOrg, quoteNotFound, quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
@@ -41,6 +41,46 @@ export async function POST(
     const versionNumber = body.version_number
     if (!versionNumber) {
       return NextResponse.json({ success: false, error: 'version_number is required' }, { status: 400 })
+    }
+
+    // A converted (or booked) quote is the price a trip and a booking were made
+    // at. Reverting brought back an older price and a draft/sent status while
+    // converted_to_itinerary_id stayed — it could then be accepted again and
+    // booked at the old figure against a trip priced at the new one.
+    const { data: live } = await supabaseAdmin
+      .from('tour_quotes')
+      .select('status, converted_to_itinerary_id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!live) return quoteNotFound()
+    const { count: bookings } = await supabaseAdmin
+      .from('bookings')
+      .select('id', { count: 'exact', head: true })
+      .eq('quote_id', id)
+      .eq('quote_type', 'b2b')
+    if (live.status === 'converted' || live.converted_to_itinerary_id || (bookings ?? 0) > 0) {
+      return NextResponse.json(
+        { success: false, error: 'A converted or booked quote cannot be reverted' },
+        { status: 409 }
+      )
+    }
+
+    // The revision restores its own itinerary_id and partner_id. One saved
+    // before those were checked can name another org's trip or partner.
+    const { data: revision } = await supabaseAdmin
+      .from('quote_revisions')
+      .select('quote_data')
+      .eq('quote_type', 'b2b')
+      .eq('quote_id', id)
+      .eq('version_number', versionNumber)
+      .maybeSingle()
+    if (!revision) {
+      return NextResponse.json({ success: false, error: 'Revision not found' }, { status: 404 })
+    }
+    const snapshot = (revision.quote_data ?? {}) as Record<string, unknown>
+    if (!(await quoteRefsInOrg(supabaseAdmin, orgId, { itinerary_id: snapshot.itinerary_id, partner_id: snapshot.partner_id }))) {
+      return quoteRefNotFound()
     }
 
     // Resolve the acting user for the revert revision's changed_by.

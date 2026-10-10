@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { recordsInOrg } from '@/lib/org-refs'
+
+const EDITABLE = [
+  'supplier_invoice_number', 'supplier_name', 'supplier_id', 'invoice_date', 'due_date',
+  'amount', 'currency', 'tax_amount', 'description', 'line_items', 'notes',
+  'itinerary_id', 'client_invoice_id',
+]
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -56,17 +63,61 @@ export async function PUT(
     const { id } = await params
     const body = await request.json()
 
-    // Remove immutable fields AND reconciliation/state fields — those are owned by
-    // the approve / pay / match / dispute routes, not this generic edit endpoint.
-    // org_id is also stripped to prevent a caller from re-homing a row.
-    const {
-      id: _, org_id: __, created_at, internal_reference, matched_expenses,
-      status, match_status, matched_amount, discrepancy_amount, discrepancy_notes,
-      paid_at, payment_date, payment_method, payment_reference, approved_at, approved_by,
-      ...updateData
-    } = body
+    // Only the bill's own details are editable here. Reconciliation and state
+    // (status, match, approval, payment, document) belong to the approve / pay
+    // / match / dispute / upload routes; org_id would re-home the row.
+    const updateData: Record<string, unknown> = {}
+    for (const key of EDITABLE) if (key in body) updateData[key] = body[key]
+    // An emptied picker sends '' — a uuid column needs null.
+    for (const key of ['supplier_id', 'itinerary_id', 'client_invoice_id']) {
+      if (updateData[key] === '') updateData[key] = null
+    }
 
-    const { data, error } = await supabaseAdmin
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updateData.itinerary_id, invoice_id: updateData.client_invoice_id }))) {
+      return NextResponse.json({ error: 'Trip or client invoice not found' }, { status: 404 })
+    }
+
+    const { data: current } = await supabaseAdmin
+      .from('supplier_invoices')
+      .select('status, amount, currency, matched_amount')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!current) {
+      return NextResponse.json({ error: 'Supplier invoice not found' }, { status: 404 })
+    }
+
+    // The amount and currency are what was matched and approved: changing them
+    // on an approved bill had it paid at a figure nobody matched or approved.
+    const amountChanges = 'amount' in updateData && Number(updateData.amount) !== Number(current.amount)
+    const currencyChanges = 'currency' in updateData &&
+      String(updateData.currency || 'EUR').toUpperCase() !== String(current.currency || 'EUR').toUpperCase()
+    if ((amountChanges || currencyChanges) && !['received', 'matched'].includes(current.status)) {
+      return NextResponse.json(
+        { error: `Cannot change the amount of an invoice with status '${current.status}'` },
+        { status: 409 }
+      )
+    }
+    const matched = Number(current.matched_amount || 0)
+    if (currencyChanges && matched > 0) {
+      return NextResponse.json(
+        { error: 'Unmatch its expenses before changing the invoice currency' },
+        { status: 409 }
+      )
+    }
+    if (amountChanges) {
+      // Re-derive the match against the new amount, as the match route does.
+      const amount = Number(updateData.amount)
+      const discrepancy = amount - matched
+      const matchStatus = matched === 0 ? 'unmatched'
+        : Math.abs(discrepancy) <= 0.01 ? 'matched'
+        : matched < amount ? 'partial' : 'discrepancy'
+      updateData.discrepancy_amount = discrepancy
+      updateData.match_status = matchStatus
+      updateData.status = matchStatus === 'matched' ? 'matched' : 'received'
+    }
+
+    let query = supabaseAdmin
       .from('supplier_invoices')
       .update({
         ...updateData,
@@ -74,9 +125,14 @@ export async function PUT(
       })
       .eq('id', id)
       .eq('org_id', orgId)
-      .select()
-      .single()
+    // A money change applies only if nothing approved it meanwhile.
+    if (amountChanges || currencyChanges) query = query.eq('status', current.status)
+    const { data, error } = await query.select().single()
 
+    if (error?.code === 'PGRST116' && (amountChanges || currencyChanges)) {
+      // The status moved (approved, paid) between the read and this write.
+      return NextResponse.json({ error: 'The invoice changed meanwhile — reload and try again' }, { status: 409 })
+    }
     if (error) {
       console.error('Error updating supplier invoice:', error)
       return NextResponse.json({ error: 'Failed to update supplier invoice' }, { status: 500 })

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { recordsInOrg } from '@/lib/org-refs'
+import { roundToCurrency } from '@/lib/currency-totals'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -90,17 +91,42 @@ export async function PUT(
       return NextResponse.json({ error: 'Itinerary or client not found' }, { status: 404 })
     }
 
-    // If total_amount is updated, recalculate balance_due
-    if (updateData.total_amount !== undefined) {
+    // A new total or currency re-derives what the payments leave owing.
+    if (updateData.total_amount !== undefined || updateData.currency !== undefined) {
       const { data: currentInvoice } = await supabaseAdmin
         .from('invoices')
-        .select('amount_paid')
+        .select('amount_paid, currency, status, paid_at')
         .eq('id', id)
         .eq('org_id', orgId)
         .single()
 
       if (currentInvoice) {
-        updateData.balance_due = updateData.total_amount - (currentInvoice.amount_paid || 0)
+        const paid = Number(currentInvoice.amount_paid || 0)
+        // amount_paid is the sum of payments made in the invoice's currency;
+        // relabelling it would state ¥ payments as €.
+        if (updateData.currency !== undefined && paid > 0 &&
+            String(updateData.currency || '').toUpperCase() !== String(currentInvoice.currency || '').toUpperCase()) {
+          return NextResponse.json(
+            { error: 'An invoice with payments keeps its currency' },
+            { status: 409 }
+          )
+        }
+        if (updateData.total_amount !== undefined) {
+          const total = Number(updateData.total_amount)
+          if (updateData.total_amount === '' || updateData.total_amount === null || !Number.isFinite(total) || total < 0) {
+            return NextResponse.json({ error: 'total_amount must be a non-negative number' }, { status: 400 })
+          }
+          const currency = updateData.currency ?? currentInvoice.currency
+          updateData.balance_due = roundToCurrency(total - paid, currency)
+          // As the payment routes: a 'paid' invoice raised above its payments
+          // is 'partial' again (and chased); one lowered to them is 'paid'.
+          // A status the caller set explicitly stands.
+          const status = updateData.status ?? currentInvoice.status
+          if (updateData.status === undefined && paid > 0 && !['draft', 'cancelled'].includes(status)) {
+            updateData.status = paid >= total ? 'paid' : 'partial'
+            updateData.paid_at = updateData.status === 'paid' ? (currentInvoice.paid_at || new Date().toISOString()) : null
+          }
+        }
       }
     }
 

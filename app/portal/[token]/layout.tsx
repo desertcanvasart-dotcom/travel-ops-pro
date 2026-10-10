@@ -84,6 +84,11 @@ const CSS = `
 .portal .extras .exactions .exdecline{background:none;border:1px solid var(--line);color:var(--soft);font-weight:400}
 .portal .extras .crtoggle{margin-top:14px}
 .portal .gateerr{font-size:13px;color:#c0392b;margin:0}
+.portal .gatenote{font-size:13px;color:var(--soft);margin:0}
+/* The resend control reads as a link, not a second primary button. */
+.portal .gateform .gatelink{align-self:flex-start;padding:0;border:none;background:none;color:var(--brand);
+  font-size:13px;font-weight:400;text-decoration:underline;cursor:pointer}
+.portal .gateform .gatelink:disabled{opacity:.5}
 .portal .op{font-size:12px;letter-spacing:.08em;color:var(--soft);margin:0 0 8px}
 .portal .optag{font-size:11px;color:var(--soft);margin:-4px 0 8px}
 /* globals.css colours every h1-h6 with --gray-900, a near-black. That is an

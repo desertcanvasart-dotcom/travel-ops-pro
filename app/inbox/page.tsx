@@ -1940,7 +1940,7 @@ function ComposeModal({
     }
 
     const processedSubject = replacePlaceholders(selectedTemplate.subject, finalData)
-    const processedContent = replacePlaceholders(selectedTemplate.content, finalData)
+    const processedContent = replacePlaceholders(selectedTemplate.content, finalData, { html: true })
 
     setSubject(processedSubject)
     setBody(processedContent)

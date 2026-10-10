@@ -16,6 +16,7 @@ import {
   verifyAnswerMatches,
   verifyTravellerAnswer,
 } from '@/lib/booking-portal'
+import { consumeVerifyCode, readCodeState, travellerNeedsCode } from '@/lib/portal/verify-code'
 import { checkRateLimit, getClientIdentifier, rateLimitResponse } from '@/lib/rate-limit'
 
 const supabase = createClient(
@@ -23,7 +24,9 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const FAIL = NextResponse.json(
+// A function, not one shared response: a body can be read once, so the
+// second failure on a warm instance answered 500 with no JSON.
+const FAIL = () => NextResponse.json(
   // One uniform failure body: not-found, revoked, and wrong-answer are
   // indistinguishable from outside.
   { success: false, error: '入力内容が予約情報と一致しません。' },
@@ -33,7 +36,7 @@ const FAIL = NextResponse.json(
 export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   try {
     const { token } = await params
-    if (!isValidPortalToken(token)) return FAIL
+    if (!isValidPortalToken(token)) return FAIL()
 
     // Tighter than the general portal limit: 10 guesses a minute per client.
     const limit = checkRateLimit(`${getClientIdentifier(request)}:${token.slice(0, 8)}`, 'auth')
@@ -47,21 +50,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .select('id, booking_id, passenger_id, revoked_at, expires_at')
       .eq('token', token)
       .maybeSingle()
-    if (!link || !portalLinkState(link).usable) return FAIL
+    if (!link || !portalLinkState(link).usable) return FAIL()
 
     const { data: booking } = await supabase
       .from('bookings')
       .select('id, booking_code, client_name')
       .eq('id', link.booking_id)
       .maybeSingle()
-    if (!booking) return FAIL
+    if (!booking) return FAIL()
 
     let ok = false
     if (link.passenger_id) {
-      // Private per-traveller link: THAT traveller's family name + DOB, both.
+      // Private per-traveller link: THAT traveller's family name + DOB, both —
+      // and, when they have an email, the one-time code sent there. The lead
+      // coordinator sees the name, DOB and link; never the code.
       const { data: pax } = await supabase
         .from('booking_passengers')
-        .select('last_name, family_name_kanji, family_name_kana, date_of_birth')
+        .select('last_name, family_name_kanji, family_name_kana, date_of_birth, email')
         .eq('id', link.passenger_id)
         .eq('booking_id', booking.id)
         .maybeSingle()
@@ -69,6 +74,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         names: [pax.last_name, pax.family_name_kanji, pax.family_name_kana],
         date_of_birth: pax.date_of_birth,
       })
+      if (ok) {
+        const codeState = await readCodeState(supabase, token)
+        if (travellerNeedsCode(pax, codeState)) {
+          ok = await consumeVerifyCode(supabase, token, body?.code, codeState)
+        }
+      }
     } else {
       // Booking-level link: booking number or the lead's family name, as before.
       const { data: lead } = await supabase
@@ -83,7 +94,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         lead_names: lead ? [lead.last_name, lead.family_name_kanji, lead.family_name_kana] : [],
       })
     }
-    if (!ok) return FAIL
+    if (!ok) return FAIL()
 
     const res = NextResponse.json({ success: true })
     res.cookies.set(portalVerifyCookieName(token), portalVerifyCookieValue(token), {
@@ -97,6 +108,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
     return res
   } catch {
-    return FAIL
+    return FAIL()
   }
 }

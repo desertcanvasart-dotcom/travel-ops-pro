@@ -2,7 +2,8 @@
 // The LEAD coordinator, inside the portal
 // ============================================
 // GET  — the roster + link status (names/DOB/contact + submitted?, NO passport
-//        or medical data — the lead coordinates, the friend keeps their fields)
+//        or medical data — the lead coordinates, the friend keeps their fields;
+//        the friend's link also asks for a code emailed only to them)
 // POST — { action: 'seed' | 'send' | 'revoke', passenger_id, fields? }
 // Every call gates via leadCoordinatorContext: lead's link, friends mode only.
 
@@ -105,6 +106,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'This traveller has already sent their own details.' }, { status: 409 })
     }
     const fields = (body?.fields ?? {}) as Record<string, unknown>
+    // The friend's link and its one-time code go to this address. Once a link
+    // has been sent there, the lead re-pointing it would send the next code to
+    // themselves — and the friend may already have saved a draft. The office
+    // can still correct it.
+    if ('email' in fields) {
+      const { data: sent } = await admin
+        .from('booking_portal_links')
+        .select('id')
+        .eq('booking_id', c.bookingId)
+        .eq('passenger_id', passengerId)
+        .not('last_sent_at', 'is', null)
+        .limit(1)
+        .maybeSingle()
+      if (sent) {
+        return NextResponse.json({ error: 'リンクを送信済みのため、メールアドレスは変更できません。担当者までご連絡ください。' }, { status: 409 })
+      }
+    }
     const updates: Record<string, unknown> = {}
     for (const f of SEED_FIELDS) {
       if (!(f in fields)) continue

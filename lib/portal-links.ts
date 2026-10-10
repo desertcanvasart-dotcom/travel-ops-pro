@@ -9,6 +9,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { generatePortalToken } from '@/lib/booking-portal'
 import { sendEmailInternal } from '@/lib/email-send'
+import { issueVerifyCode, LINK_EMAIL_CODE_TTL_MS, codeEmailHtml } from '@/lib/portal/verify-code'
 
 type Admin = SupabaseClient<any, any, any, any, any>
 
@@ -72,6 +73,11 @@ export async function markSentAndDeliver(
     .maybeSingle()
   if (!pax?.email) return { sent: false, error: 'This traveller has no email address' }
 
+  // The link's gate asks for this code too (lib/portal/verify-code): whoever
+  // else holds the URL — the lead coordinator sees it — does not get the code.
+  const code = await issueVerifyCode(admin, opts.token, LINK_EMAIL_CODE_TTL_MS)
+  if (!code) return { sent: false, error: 'Could not issue a verification code' }
+
   let result: { success: boolean; error?: string }
   try {
     result = await sendEmailInternal({
@@ -82,7 +88,9 @@ export async function markSentAndDeliver(
         `<p>${pax.first_name ? pax.first_name + ' 様' : 'お客様'}</p>` +
         `<p>ご旅行の参加者情報をご登録ください。下記のリンクからお進みいただけます。</p>` +
         `<p><a href="${opts.url}">${opts.url}</a></p>` +
-        `<p>ご本人確認のため、姓と生年月日の入力をお願いいたします。</p>`,
+        `<p>ご本人確認のため、姓と生年月日、下記の確認コードの入力をお願いいたします。</p>` +
+        codeEmailHtml(code, '7日間') +
+        `<p>期限が切れた場合は、ページの「確認コードを再送する」から新しいコードをお受け取りください。</p>`,
     })
   } catch (e) {
     result = { success: false, error: e instanceof Error ? e.message : String(e) }
