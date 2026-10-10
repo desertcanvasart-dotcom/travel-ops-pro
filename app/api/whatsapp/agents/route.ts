@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
+import { requireRole, getCurrentUserRole, getCurrentUserId } from '@/lib/auth/current-org'
+import { roleAllows } from '@/lib/auth/roles'
+
+// team_members is the same table /api/team-members manages behind the
+// admin/manager gate; /api/whatsapp/* only requires an agent, so an agent
+// could create, rewrite (role, user_id, email) or deactivate colleagues here —
+// deactivating also unassigns their conversations. Managers edit these
+// fields; an agent may only switch their OWN availability.
+const MANAGERS = ['admin', 'manager']
+const MANAGER_EDITABLE = ['name', 'email', 'phone', 'avatar_url', 'max_conversations', 'is_available', 'role']
 
 // GET /api/whatsapp/agents - List all team members (for WhatsApp assignment)
 export async function GET(request: NextRequest) {
@@ -41,6 +51,8 @@ export async function GET(request: NextRequest) {
 // POST /api/whatsapp/agents - Create new team member / agent
 export async function POST(request: NextRequest) {
   try {
+    const denied = await requireRole(MANAGERS)
+    if (denied) return denied
     const supabase = createServerClient()
     const body = await request.json()
 
@@ -97,19 +109,33 @@ export async function PATCH(request: NextRequest) {
   try {
     const supabase = createServerClient()
     const body = await request.json()
-    const { id, ...updates } = body
+    const { id } = body
 
     if (!id) {
       return NextResponse.json({ error: 'Agent ID is required' }, { status: 400 })
     }
 
-    const { data, error } = await supabase
+    const isManager = roleAllows(await getCurrentUserRole(), MANAGERS)
+    const editable = isManager ? MANAGER_EDITABLE : ['is_available']
+    const updates: Record<string, unknown> = {}
+    for (const key of editable) if (key in body) updates[key] = body[key]
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: 'Nothing you may change' }, { status: 403 })
+    }
+
+    let query = supabase
       .from('team_members')
       .update({
         ...updates,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
+    if (!isManager) {
+      const userId = await getCurrentUserId()
+      if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      query = query.eq('user_id', userId)
+    }
+    const { data, error } = await query
       .select()
       .single()
 
@@ -129,6 +155,8 @@ export async function PATCH(request: NextRequest) {
 // DELETE /api/whatsapp/agents - Deactivate agent (soft delete)
 export async function DELETE(request: NextRequest) {
   try {
+    const denied = await requireRole(MANAGERS)
+    if (denied) return denied
     const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')

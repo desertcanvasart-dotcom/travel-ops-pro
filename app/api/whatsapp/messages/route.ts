@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { toWhatsAppE164, PHONE_NEEDS_COUNTRY_CODE } from '@/lib/whatsapp-phone'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import twilio from 'twilio'
@@ -80,7 +81,10 @@ export async function POST(request: NextRequest) {
 
     if (!conversation_id && phone_number) {
       // Create conversation if needed
-      const cleanPhone = phone_number.replace(/[^\d+]/g, '')
+      const cleanPhone = toWhatsAppE164(phone_number)
+      if (!cleanPhone) {
+        return NextResponse.json({ error: PHONE_NEEDS_COUNTRY_CODE }, { status: 400 })
+      }
       const { data: existing } = await supabase
         .from('whatsapp_conversations')
         .select('id')

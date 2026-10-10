@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { toWhatsAppE164, PHONE_NEEDS_COUNTRY_CODE } from '@/lib/whatsapp-phone'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createServerClient } from '@/lib/supabase-server'
@@ -86,8 +87,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Phone number required' }, { status: 400 })
     }
 
-    // Clean phone number
-    const cleanPhone = phone_number.replace(/[^\d+]/g, '')
+    // E.164, as the webhook stores the customer's replies (lib/whatsapp-phone).
+    const cleanPhone = toWhatsAppE164(phone_number)
+    if (!cleanPhone) {
+      return NextResponse.json({ error: PHONE_NEEDS_COUNTRY_CODE }, { status: 400 })
+    }
 
     // Check if conversation exists (including hidden ones - we'll unhide it)
     const { data: existing } = await supabase
@@ -226,7 +230,16 @@ export async function PATCH(request: NextRequest) {
       updateData.hidden_at = null
       updateData.hidden_by = null
     } else {
-      updateData = { ...updateData, ...updates }
+      // A plain update may rename the thread or move it between active and
+      // archived — nothing else. Spreading the body let a caller re-point
+      // phone_number (the next replies, with the customer's details, went to
+      // the new number), attach any org's client_id, or rewrite assignment,
+      // unread and AI-draft state.
+      if (typeof updates.client_name === 'string') updateData.client_name = updates.client_name.slice(0, 200)
+      if (updates.status === 'active' || updates.status === 'archived') updateData.status = updates.status
+      if (Object.keys(updateData).length === 1) {
+        return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
+      }
     }
 
     const { data, error } = await supabase

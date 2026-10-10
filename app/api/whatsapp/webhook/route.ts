@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createCopilotInboxEntry } from '@/lib/copilot-intake'
+import { getDefaultOrgId } from '@/lib/auth/default-org'
 import { verifyTwilioSignature, formDataToParams } from '@/lib/twilio-signature'
 
 // Use service role key to bypass RLS — webhooks have no user session
@@ -66,11 +67,22 @@ export async function POST(request: NextRequest) {
     // existingClient was permanently null: NO inbound WhatsApp message has ever
     // been matched to the customer who sent it. Found while fixing the swallowed
     // errors below — the same failure mode, one step earlier in the handler.
-    const { data: existingClient, error: clientLookupError } = await supabase
-      .from('clients')
-      .select('id, first_name, last_name')
-      .eq('phone', phoneNumber)
-      .maybeSingle()
+    // Only the clients of the org this WhatsApp number belongs to (the one
+    // copilot intake stamps): unscoped, a customer of ANOTHER org with the same
+    // number was linked to the thread — their email and trips shown here — and
+    // the same customer in two orgs failed maybeSingle and matched no one.
+    const inboxOrgId = await getDefaultOrgId(supabase)
+    const { data: clientRows, error: clientLookupError } = inboxOrgId
+      ? await supabase
+          .from('clients')
+          .select('id, first_name, last_name')
+          .eq('org_id', inboxOrgId)
+          // Twilio sends E.164; a client saved without the '+' matches too.
+          .in('phone', [phoneNumber, phoneNumber.replace(/^\+/, '')])
+          .order('created_at', { ascending: true })
+          .limit(1)
+      : { data: null, error: null }
+    const existingClient = clientRows?.[0] ?? null
 
     if (clientLookupError) {
       // Not fatal: an unmatched message is still worth storing, and the inbox

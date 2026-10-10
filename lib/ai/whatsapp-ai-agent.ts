@@ -28,6 +28,8 @@ import { determineCapacityResult, type CapacityDayDetail } from '@/lib/capacity-
 // ============================================================
 
 export interface ConversationContext {
+  /** The org the draft is written for — every read below is scoped to it. */
+  orgId: string
   clientId: string | null
   clientName: string | null
   phoneNumber: string
@@ -135,9 +137,13 @@ class ToolExecutor {
   escalated = false
   escalationReason: string | null = null
 
+  // The client is the service role (the draft route), so nothing is scoped
+  // unless these queries say so: an inbound "look up itinerary <uuid>" read
+  // another org's trip and costs, and availability merged every org's calendar.
   constructor(
     private supabase: SupabaseClient,
-    private clientId: string | null
+    private clientId: string | null,
+    private orgId: string
   ) {}
 
   async execute(toolName: string, toolInput: any): Promise<ToolResult> {
@@ -163,6 +169,7 @@ class ToolExecutor {
       let q = this.supabase
         .from('itineraries')
         .select('id, trip_name, start_date, end_date, status, total_days, currency, total_cost')
+        .eq('org_id', this.orgId)
         .eq('client_id', this.clientId)
         .order('start_date', { ascending: false })
         .limit(5)
@@ -182,6 +189,7 @@ class ToolExecutor {
         .from('itineraries')
         .select('id, trip_name, start_date, end_date, status, total_days, currency, total_cost, itinerary_days(day_number, city, title)')
         .eq('id', input.itinerary_id)
+        .eq('org_id', this.orgId)
         .single()
       if (error) return { success: false, error: error.message }
       return { success: true, data }
@@ -204,10 +212,11 @@ class ToolExecutor {
     const groupSize = Math.max(1, Number(input?.group_size) || 1)
 
     try {
-      // Capacity rows for the range (RLS scopes operator_capacity to the org).
+      // Capacity rows for the range — this org's calendar only.
       const { data: rows } = await this.supabase
         .from('operator_capacity')
         .select('date, status, max_groups, booked_groups, reason')
+        .eq('org_id', this.orgId)
         .gte('date', start)
         .lte('date', end)
         .order('date', { ascending: true })
@@ -238,6 +247,7 @@ class ToolExecutor {
         const { data: deps } = await this.supabase
           .from('tour_departures')
           .select('id, tour_name, tour_code, start_date, end_date, max_pax, booked_pax, min_pax, status, is_guaranteed, price_per_person, currency')
+          .eq('org_id', this.orgId)
           .gte('start_date', start)
           .lte('start_date', end)
           .in('status', ['open', 'limited', 'guaranteed'])
@@ -280,9 +290,11 @@ export class WhatsAppAIAgent {
     supabase: SupabaseClient,
     conversationId: string,
     clientId: string | null,
-    phoneNumber: string
+    phoneNumber: string,
+    orgId: string
   ): Promise<ConversationContext> {
     const context: ConversationContext = {
+      orgId,
       clientId,
       clientName: null,
       phoneNumber,
@@ -310,13 +322,15 @@ export class WhatsAppAIAgent {
     if (clientId) {
       const { data: client } = await supabase
         .from('clients')
-        .select('full_name, first_name, last_name, email, nationality, preferred_language')
+        // No full_name column on clients — selecting it failed the query, so the
+        // draft never knew the customer's name or language.
+        .select('first_name, last_name, email, nationality, preferred_language')
         .eq('id', clientId)
-        .single()
+        .eq('org_id', orgId)
+        .maybeSingle()
 
       if (client) {
         const name =
-          (client as any).full_name ||
           [(client as any).first_name, (client as any).last_name].filter(Boolean).join(' ').trim() ||
           null
         context.clientName = name
@@ -331,6 +345,7 @@ export class WhatsAppAIAgent {
       const { data: itineraries } = await supabase
         .from('itineraries')
         .select('id, trip_name, start_date, end_date, status, total_days')
+        .eq('org_id', orgId)
         .eq('client_id', clientId)
         .in('status', ['draft', 'confirmed', 'in_progress'])
         .order('start_date', { ascending: true })
@@ -421,7 +436,7 @@ GUIDELINES:
       }
       messages.push({ role: 'user', content: incomingMessage })
 
-      const toolExecutor = new ToolExecutor(supabase, context.clientId)
+      const toolExecutor = new ToolExecutor(supabase, context.clientId, context.orgId)
       const toolsUsed: string[] = []
       const currentMessages = [...messages]
       let iterations = 0

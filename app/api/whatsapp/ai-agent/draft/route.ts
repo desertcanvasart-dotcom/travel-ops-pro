@@ -71,7 +71,8 @@ export async function POST(request: NextRequest) {
     supabase,
     conversationId,
     (conversation as any).client_id ?? null,
-    (conversation as any).phone_number ?? ''
+    (conversation as any).phone_number ?? '',
+    orgId
   )
   const result = await agent.generateResponse(incoming, context, supabase)
 
