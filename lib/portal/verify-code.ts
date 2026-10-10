@@ -50,10 +50,29 @@ export async function issueVerifyCode(admin: Admin, token: string, ttlMs: number
   return error ? null : code
 }
 
-type CodeState = {
+export type CodeState = {
   verify_code_hash?: string | null
   verify_code_expires_at?: string | null
   verify_code_attempts?: number | null
+}
+
+/** The link's code state, read on its own: before 20261122 is applied the
+ *  columns do not exist, and selecting them with the link failed the whole
+ *  read — every portal gate, family links included, answered "not found".
+ *  A failed read is "no code issued" (a traveller with an email then cannot
+ *  pass until the migration is applied — closed, not open). */
+export async function readCodeState(admin: Admin, token: string): Promise<CodeState> {
+  try {
+    const { data, error } = await admin
+      .from('booking_portal_links')
+      .select('verify_code_hash, verify_code_expires_at, verify_code_attempts')
+      .eq('token', token)
+      .maybeSingle()
+    if (error || !data) return {}
+    return data as CodeState
+  } catch {
+    return {}
+  }
 }
 
 /** Pure check of a code against the stored state. */

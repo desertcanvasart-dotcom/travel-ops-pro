@@ -16,7 +16,7 @@ import {
   verifyAnswerMatches,
   verifyTravellerAnswer,
 } from '@/lib/booking-portal'
-import { consumeVerifyCode, travellerNeedsCode } from '@/lib/portal/verify-code'
+import { consumeVerifyCode, readCodeState, travellerNeedsCode } from '@/lib/portal/verify-code'
 import { checkRateLimit, getClientIdentifier, rateLimitResponse } from '@/lib/rate-limit'
 
 const supabase = createClient(
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const { data: link } = await supabase
       .from('booking_portal_links')
-      .select('id, booking_id, passenger_id, revoked_at, expires_at, verify_code_hash, verify_code_expires_at, verify_code_attempts')
+      .select('id, booking_id, passenger_id, revoked_at, expires_at')
       .eq('token', token)
       .maybeSingle()
     if (!link || !portalLinkState(link).usable) return FAIL
@@ -72,8 +72,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         names: [pax.last_name, pax.family_name_kanji, pax.family_name_kana],
         date_of_birth: pax.date_of_birth,
       })
-      if (ok && travellerNeedsCode(pax, link)) {
-        ok = await consumeVerifyCode(supabase, token, body?.code, link)
+      if (ok) {
+        const codeState = await readCodeState(supabase, token)
+        if (travellerNeedsCode(pax, codeState)) {
+          ok = await consumeVerifyCode(supabase, token, body?.code, codeState)
+        }
       }
     } else {
       // Booking-level link: booking number or the lead's family name, as before.

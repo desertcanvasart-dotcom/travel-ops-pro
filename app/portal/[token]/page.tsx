@@ -23,7 +23,7 @@ import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
 import { cookies } from 'next/headers'
 import VerifyGate from './VerifyGate'
-import { travellerNeedsCode } from '@/lib/portal/verify-code'
+import { readCodeState, travellerNeedsCode } from '@/lib/portal/verify-code'
 import type { Metadata } from 'next'
 import {
   isValidPortalToken,
@@ -96,7 +96,7 @@ async function resolve(token: string): Promise<{
 
   const { data: link } = await supabase
     .from('booking_portal_links')
-    .select('id, org_id, booking_id, passenger_id, revoked_at, expires_at, details_locked_at, view_count, verify_code_hash')
+    .select('id, org_id, booking_id, passenger_id, revoked_at, expires_at, details_locked_at, view_count')
     .eq('token', token)
     .maybeSingle()
 
@@ -283,7 +283,8 @@ async function resolve(token: string): Promise<{
     scopedPassengerId,
     isLeadCoordinator,
     // Same rule as the verify route: a traveller with an email gives the code.
-    requireCode: Boolean(scopedPassengerId) && travellerNeedsCode((passengers ?? [])[0] ?? null, link!),
+    requireCode: Boolean(scopedPassengerId) &&
+      travellerNeedsCode((passengers ?? [])[0] ?? null, await readCodeState(supabase, token)),
     booking: toPortalBooking({
       booking,
       passengers: passengers ?? [],

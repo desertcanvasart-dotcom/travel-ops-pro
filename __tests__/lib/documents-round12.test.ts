@@ -180,6 +180,13 @@ describe("friends mode: a friend's link asks for a code only they receive", () =
     expect(codeMatches(token, '', { ...state, verify_code_hash: null })).toBe(false)
   })
 
+  it('a failed code-state read is "no code", not an error', async () => {
+    const { readCodeState } = await import('@/lib/portal/verify-code')
+    const failing = { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { code: '42703' } }) }) }) }) }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(await readCodeState(failing as any, 't')).toEqual({})
+  })
+
   it('a traveller with an email (or an issued code) must give it', async () => {
     const { travellerNeedsCode } = await import('@/lib/portal/verify-code')
     expect(travellerNeedsCode({ email: 'a@b.jp' }, {})).toBe(true)
@@ -203,8 +210,12 @@ describe("friends mode: a friend's link asks for a code only they receive", () =
 
   it('the gate, the link email and the resend route use it; the code never goes back to the browser', () => {
     const v = src('app/api/portal/[token]/verify/route.ts')
-    expect(v).toContain('if (ok && travellerNeedsCode(pax, link))')
-    expect(v).toContain('consumeVerifyCode(supabase, token, body?.code, link)')
+    expect(v).toContain('const codeState = await readCodeState(supabase, token)')
+    expect(v).toContain('consumeVerifyCode(supabase, token, body?.code, codeState)')
+    // The link read never names the code columns: before 20261122 that failed
+    // every gate, family links included (the E2E database migrates on merge).
+    expect(v).toContain(".select('id, booking_id, passenger_id, revoked_at, expires_at')")
+    expect(src('app/portal/[token]/page.tsx')).not.toMatch(/select\('[^']*verify_code/)
     const links = src('lib/portal-links.ts')
     expect(links).toContain('issueVerifyCode(admin, opts.token, LINK_EMAIL_CODE_TTL_MS)')
     expect(links).toContain("codeEmailHtml(code, '7日間')")
