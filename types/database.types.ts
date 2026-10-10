@@ -6797,6 +6797,7 @@ export interface Database {
           num_children: number | null
           currency: string | null
           total_cost: number | null
+          season_uplift_amount: number
           status: string | null
           notes: string | null
           created_at: string | null
@@ -6864,6 +6865,7 @@ export interface Database {
           num_children?: number | null
           currency?: string | null
           total_cost?: number | null
+          season_uplift_amount?: number
           status?: string | null
           notes?: string | null
           created_at?: string | null
@@ -6931,6 +6933,7 @@ export interface Database {
           num_children?: number | null
           currency?: string | null
           total_cost?: number | null
+          season_uplift_amount?: number
           status?: string | null
           notes?: string | null
           created_at?: string | null

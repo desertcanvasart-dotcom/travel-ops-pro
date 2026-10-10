@@ -1528,7 +1528,13 @@
       "excludesFlights": "国際航空券",
       "excludesPersonal": "個人費用とチップ",
       "excludesInsurance": "旅行保険"
-    }
+    },
+    "totalPrice": "合計金額",
+    "perPersonParen": "（お一人様 {amount}）",
+    "seasonSupplement": "シーズン追加料金",
+    "packageIncludes": "旅程に記載のすべてのサービスを含みます。",
+    "noServicesYet": "料金はまだ計算されていません",
+    "pageOf": "{page} / {pages} ページ"
   },
   "itineraries": {
     "title": "旅程",
@@ -3063,7 +3069,7 @@
       "confirmDeletePayment": "この支払いを削除してもよろしいですか？",
       "confirmCreateFinalInvoice": "残額の最終請求書を作成しますか？",
       "finalBalanceDescription": "最終残高 - {description}",
-      "balancePaymentTerms": "残高は到着時に現金で、またはサービス初日までにお支払いください。",
+      "balancePaymentTerms": "残金は本請求書記載の期日までにお支払いください。",
       "relatedDepositInvoice": "関連デポジット請求書: {invoiceNumber}",
       "failedToCreateFinalInvoice": "最終請求書の作成に失敗しました",
       "invoiceNotFound": "請求書が見つかりません",
@@ -3084,7 +3090,7 @@
       "fullTripCost": "旅行総費用",
       "depositWithPercent": "デポジット ({percent}%)",
       "paid": "支払済み",
-      "balanceDueOnArrival": "到着時支払残高",
+      "balanceDueOnArrival": "残金",
       "billTo": "請求先",
       "issueDate": "発行日",
       "dueDate": "支払期日",

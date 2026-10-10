@@ -122,7 +122,9 @@ describe('contract facts', () => {
   it('price "To be confirmed" with no total, never NaN; no per-person without travellers', () => {
     expect(contractPrice(null, 'EUR')).toBe('To be confirmed')
     expect(contractPrice(Number.NaN, 'EUR')).toBe('To be confirmed')
-    expect(contractPrice(1500, 'EUR')).toBe('EUR 1,500')
+    expect(contractPrice(1500, 'EUR')).toBe('EUR 1,500.00')
+    expect(contractPrice(1150001.25, 'JPY')).toBe('JPY 1,150,001')
+    expect(contractPrice(2812.5, 'EUR')).toBe('EUR 2,812.50')
     expect(contractPricePerPerson(1500, 0)).toBeNull()
     expect(contractPricePerPerson(1500, 3)).toBe(500)
     expect(describeDestinations(['Cairo', '', 'Siwa'])).toBe('Cairo, Siwa')

@@ -26,7 +26,9 @@ describe('client quote PDF', () => {
     expect(pdf).toContain('serviceClientPrice(service)')
   })
   it('totals from the lines, not the cached header', () => {
-    expect(pdf).toContain('clientTotalOfDays(days)')
+    // Still the lines (each rounded as printed) — plus the season premium (round 13).
+    expect(pdf).toContain('roundedLinesTotal += roundToCurrency(p, currency)')
+    expect(pdf).toContain('linesTotal > 0 ? linesTotal + supplement : (itinerary.total_cost || 0)')
   })
 })
 

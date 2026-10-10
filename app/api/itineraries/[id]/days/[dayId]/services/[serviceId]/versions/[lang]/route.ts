@@ -10,7 +10,7 @@ const supabase = createClient(supabaseUrl, supabaseKey)
 
 // Confirm the itinerary belongs to the caller's org. Service versions are
 // a grandchild of itineraries, so we gate access via the top-level parent.
-async function assertItineraryInOrg(id: string, orgId: string) {
+async function assertItineraryInOrg(id: string, orgId: string, dayId: string, serviceId: string) {
   const { data: parent } = await supabase
     .from('itineraries')
     .select('id')
@@ -20,6 +20,22 @@ async function assertItineraryInOrg(id: string, orgId: string) {
   if (!parent) {
     return NextResponse.json(
       { success: false, error: 'Itinerary not found' },
+      { status: 404 }
+    )
+  }
+  // The service must be on THIS trip's day. Only the trip was checked, so the
+  // org's own trip id in the URL opened another org's service by id — read
+  // its name and notes, or overwrite the text on their Japanese quote.
+  const { data: service } = await supabase
+    .from('itinerary_services')
+    .select('id, itinerary_days!inner(itinerary_id)')
+    .eq('id', serviceId)
+    .eq('itinerary_day_id', dayId)
+    .eq('itinerary_days.itinerary_id', id)
+    .maybeSingle()
+  if (!service) {
+    return NextResponse.json(
+      { success: false, error: 'Service not found' },
       { status: 404 }
     )
   }
@@ -35,7 +51,7 @@ export async function GET(
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
-    const { id, serviceId, lang } = await params
+    const { id, dayId, serviceId, lang } = await params
 
     if (!['en', 'ja'].includes(lang)) {
       return NextResponse.json(
@@ -44,7 +60,7 @@ export async function GET(
       )
     }
 
-    const parentCheck = await assertItineraryInOrg(id, orgId)
+    const parentCheck = await assertItineraryInOrg(id, orgId, dayId, serviceId)
     if (parentCheck) return parentCheck
 
     const { data, error } = await supabase
@@ -81,7 +97,7 @@ export async function PUT(
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
-    const { id, serviceId, lang } = await params
+    const { id, dayId, serviceId, lang } = await params
     const body = await request.json()
 
     if (!['en', 'ja'].includes(lang)) {
@@ -91,7 +107,7 @@ export async function PUT(
       )
     }
 
-    const parentCheck = await assertItineraryInOrg(id, orgId)
+    const parentCheck = await assertItineraryInOrg(id, orgId, dayId, serviceId)
     if (parentCheck) return parentCheck
 
     // Check if version already exists

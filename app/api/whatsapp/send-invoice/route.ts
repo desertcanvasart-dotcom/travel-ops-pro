@@ -138,11 +138,13 @@ export async function POST(request: NextRequest) {
     const issueDate = new Date(invoice.issue_date).toLocaleDateString('en-GB', {
       day: 'numeric', month: 'long', year: 'numeric'
     })
-    const dueDate = invoice.due_date 
-      ? new Date(invoice.due_date).toLocaleDateString('en-GB', {
+    // As the PDF: a final invoice is due on the booking's balance date.
+    const dueOn = invoice.due_date || (invoice.invoice_type === 'final' ? balanceDueDate : null)
+    const dueDate = dueOn
+      ? new Date(dueOn).toLocaleDateString('en-GB', {
           day: 'numeric', month: 'long', year: 'numeric'
         })
-      : 'On Arrival'
+      : '-'
 
     const typeLabel = invoice.invoice_type === 'deposit' 
       ? `Deposit Invoice (${invoice.deposit_percent}%)`

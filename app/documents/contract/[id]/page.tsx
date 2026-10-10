@@ -13,7 +13,7 @@ import { generateContractPDF } from '@/lib/contract-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import { BackLink, TripBreadcrumb } from '@/components/nav/TripNav'
-import { contractNumberFor, contractPrice, contractPricePerPerson, describeDestinations } from '@/lib/contract-facts'
+import { contractAmount, contractNumberFor, contractPrice, contractPricePerPerson, describeDestinations } from '@/lib/contract-facts'
 import type { ContractDocument, ContractTermsSection } from '@/lib/contract-document'
 import { japaneseFontData } from '@/lib/pdf-fonts'
 
@@ -945,7 +945,7 @@ ${governingNote}
                   </p>
                   {perPerson !== null && (
                     <p className="text-gray-600 text-xs mt-1">
-                      ({currency} {perPerson.toFixed(2)} {t('perPerson')} × {contractData.numTravelers} {contractData.numTravelers === 1 ? t('traveler') : t('travelers')})
+                      ({contractAmount(perPerson, currency)} {t('perPerson')} × {contractData.numTravelers} {contractData.numTravelers === 1 ? t('traveler') : t('travelers')})
                     </p>
                   )}
                 </div>

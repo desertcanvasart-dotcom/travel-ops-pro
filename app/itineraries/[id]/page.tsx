@@ -1,6 +1,7 @@
 'use client'
 
-import { clientTotalOfDays } from '@/lib/itinerary-client-price'
+import { clientTotalOfDays, seasonSupplementOf, tripClientTotal } from '@/lib/itinerary-client-price'
+import { addDays } from '@/lib/payment-schedule'
 import { overnightLabel, overnightProperty } from '@/lib/itineraries/overnight-property'
 import { todayLocal } from '@/lib/today'
 import { useEffect, useState, useMemo } from 'react'
@@ -238,8 +239,10 @@ export default function ViewItineraryPage() {
   // mirroring the Profit & Loss card, and use that whenever services exist.
   const computedClientTotal = useMemo(() => clientTotalOfDays(days as never), [days])
 
+  // Plus the season premium the grid charged on top of the lines — the figure
+  // the contract and the booking read.
   const effectiveTotalCost = computedClientTotal > 0
-    ? computedClientTotal
+    ? tripClientTotal(itinerary as never, days as never)
     : (Number(itinerary?.total_cost) || 0)
   const [error, setError] = useState<string | null>(null)
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set([1]))
@@ -570,17 +573,15 @@ export default function ViewItineraryPage() {
         return day
       }))
 
-      // Sum the (supplier) service costs, then store the CLIENT/selling total in
-      // total_cost — consistent with the grid save and how the header/invoice/PDF
-      // consume the field (previously this persisted the raw supplier sum).
-      let supplierSum = 0
-      days.forEach(day => {
-        day.services.forEach(s => {
-          supplierSum += s.id === serviceId ? newCost : s.total_cost
-        })
-      })
-      const margin = Number((itinerary as any)?.margin_percent) || 25
-      const newTotalCost = Math.round(supplierSum * (1 + margin / 100) * 100) / 100
+      // The CLIENT total, as the header, PDF and invoice compute it: each line's
+      // client price (a line without one at the default margin) plus the
+      // season premium. It was supplier sum × (1 + margin), which dropped every
+      // per-line client price and the premium, and turned a 0% margin into 25%.
+      const updatedDays = days.map(day => ({
+        ...day,
+        services: day.services.map(s => (s.id === serviceId ? { ...s, total_cost: newCost } : s)),
+      }))
+      const newTotalCost = tripClientTotal(itinerary as never, updatedDays as never)
 
       await supabase
         .from('itineraries')
@@ -689,12 +690,20 @@ export default function ViewItineraryPage() {
         }
       }
   
+      // The season premium is its own line, so the invoice shows what it is.
+      const supplement = computedClientTotal > 0 ? seasonSupplementOf(itinerary as never) : 0
+      const tripAmount = Math.round((effectiveTotalCost - supplement) * 100) / 100
       const lineItems = [{
         description: `${itinerary.trip_name} - ${itinerary.itinerary_code}`,
         quantity: 1,
-        unit_price: effectiveTotalCost,
-        amount: effectiveTotalCost
-      }]
+        unit_price: tripAmount,
+        amount: tripAmount
+      }, ...(supplement > 0 ? [{
+        description: tPdf('seasonSupplement'),
+        quantity: 1,
+        unit_price: supplement,
+        amount: supplement
+      }] : [])]
   
       const response = await fetch('/api/invoices', {
         method: 'POST',
@@ -712,7 +721,9 @@ export default function ViewItineraryPage() {
           total_amount: effectiveTotalCost,
           currency: itinerary.currency || 'EUR',
           issue_date: todayLocal(),
-          due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          // Fourteen days from the office's today — toISOString is UTC, a day
+          // early before 09:00 in Japan.
+          due_date: addDays(todayLocal(), 14),
           payment_terms: t('paymentDueWithin14Days'),
           notes: t('tripDatesNote', {
             startDate: new Date(itinerary.start_date).toLocaleDateString(),
@@ -777,6 +788,12 @@ export default function ViewItineraryPage() {
     inclusions: tr('inclusions'),
     exclusions: tr('exclusions'),
     notes: tr('notes'),
+    totalPrice: tr('totalPrice'),
+    perPersonParen: (amount: string) => tr('perPersonParen', { amount }),
+    seasonSupplement: tr('seasonSupplement'),
+    packageIncludes: tr('packageIncludes'),
+    noServicesYet: tr('noServicesYet'),
+    pageOf: (page: number, pages: number) => tr('pageOf', { page, pages }),
   })
 
   /** The days in one language — the loaded ones when that is on screen. */

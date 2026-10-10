@@ -6,6 +6,8 @@
 // "Cairo, Luxor, Aswan" for every trip, "Egypt Tour" for an unnamed one and a
 // 2025 contract number forever, and both crashed on a trip with no price.
 
+import { currencyDecimals, roundToCurrency } from '@/lib/currency-totals'
+
 /** Destinations as one line, whatever shape the column holds. */
 export function describeDestinations(d: string | string[] | null | undefined): string {
   if (Array.isArray(d)) return d.filter(Boolean).join(', ')
@@ -20,7 +22,18 @@ export function contractNumberFor(itin: { id: string; itinerary_code?: string | 
 /** "To be confirmed" for a trip with no price — never a crash, "NaN" or 0.00. */
 export function contractPrice(total: number | null | undefined, currency: string | null | undefined): string {
   if (typeof total !== 'number' || !Number.isFinite(total)) return 'To be confirmed'
-  return `${currency ? `${currency} ` : ''}${total.toLocaleString()}`
+  return contractAmount(total, currency)
+}
+
+/** "JPY 1,150,001" / "EUR 2,812.50": the currency's own decimals, as the
+ *  invoice prints it (toLocaleString gave "JPY 1,150,001.25", "EUR 2,812.5"). */
+export function contractAmount(amount: number, currency: string | null | undefined): string {
+  const decimals = currencyDecimals(currency || 'EUR')
+  const n = roundToCurrency(amount, currency || 'EUR').toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
+  return `${currency ? `${currency} ` : ''}${n}`
 }
 
 /** Per person, or null when there is no price or nobody to divide by. */

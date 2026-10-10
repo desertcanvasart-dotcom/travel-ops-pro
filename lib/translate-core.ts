@@ -78,6 +78,22 @@ export type TranslateAction = 'toEnglish' | 'fromEnglish' | 'translate'
  * .status/.code intact so the route can keep its localized error mapping and
  * server callers get a diagnosable reason instead of a silent original.
  */
+// A long description translated into Japanese can need more output tokens
+// than characters in; a fixed 1000 cut it off, and the cut text was saved as a
+// finished translation that ended mid-sentence on the client's document.
+export function outputBudget(inputChars: number, floor: number): number {
+  return Math.min(16000, Math.max(floor, Math.ceil(inputChars * 3)))
+}
+
+/** A response stopped by the token limit is not a translation. */
+export function assertNotCutOff(finishReason: string | null | undefined): void {
+  if (finishReason === 'length') {
+    const err = new Error('Translation was cut off before it finished')
+    ;(err as { code?: string }).code = 'truncated'
+    throw err
+  }
+}
+
 export async function translateSingle(input: {
   text: string
   action?: TranslateAction | string
@@ -108,9 +124,10 @@ export async function translateSingle(input: {
       { role: 'user', content: prompt }
     ],
     temperature: 0.3,
-    max_tokens: 1000
+    max_tokens: outputBudget(text.length, 1000)
   })
 
+  assertNotCutOff(response.choices[0]?.finish_reason)
   const translatedText = response.choices[0]?.message?.content?.trim()
   if (!translatedText) {
     const err = new Error('Translation returned empty')
@@ -148,10 +165,11 @@ ${numberedItems}`
       { role: 'user', content: prompt }
     ],
     temperature: 0.2,
-    max_tokens: 2000,
+    max_tokens: outputBudget(texts.join('').length, 2000),
     response_format: { type: 'json_object' }
   })
 
+  assertNotCutOff(response.choices[0]?.finish_reason)
   const content = response.choices[0]?.message?.content?.trim()
   if (!content) {
     const err = new Error('Translation returned empty')

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { businessToday } from '@/lib/today'
 import { uploadOutboundPdf } from '@/lib/storage/outbound-documents'
 import { safeKeySegment } from '@/lib/storage-key'
 import { clientMessage } from '@/lib/api-errors'
@@ -74,7 +75,9 @@ export async function POST(request: NextRequest) {
     const contractData = {
       provider: { name: identity.name, website: identity.website, email: identity.email, location: identity.address },
       contractNumber: contractNumberFor(itinerary),
-      contractDate: new Date().toISOString(),
+      // Noon UTC on the business's date: formatted anywhere, it stays that date
+      // (the UTC instant read as the previous day before 09:00 in Japan).
+      contractDate: `${businessToday()}T12:00:00Z`,
       clientName: itinerary.client_name || 'Valued Guest',
       clientEmail: itinerary.client_email,
       numTravelers: (itinerary.num_adults || 1) + (itinerary.num_children || 0),
