@@ -11,6 +11,7 @@ import { WhatsAppAIAgent, AGENT_TOOLS } from '@/lib/ai/whatsapp-ai-agent'
 import type { ConversationContext } from '@/lib/ai/whatsapp-ai-agent'
 
 const ctx: ConversationContext = {
+  orgId: 'org-1',
   clientId: 'client-1',
   clientName: 'Acme',
   phoneNumber: '+201234567890',

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -14,6 +15,8 @@ export async function GET(
   { params }: { params: Promise<{ clientId: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { clientId } = await params
 
     if (!clientId) {
@@ -25,6 +28,7 @@ export async function GET(
       .from('clients')
       .select('id, client_code, first_name, last_name, email, phone')
       .eq('id', clientId)
+      .eq('org_id', orgId)
       .single()
 
     if (clientError) {
@@ -44,11 +48,16 @@ export async function GET(
           is_available
         )
       `)
+      // The org's threads only (migration 20261125), on top of its own client.
+      .eq('org_id', orgId)
       .eq('client_id', clientId)
       .or('is_hidden.is.null,is_hidden.eq.false')
       .order('last_message_at', { ascending: false })
 
-    if (waError) throw waError
+    // One channel failing must not blank the client's history: before
+    // 20261125 (whatsapp_conversations.org_id) the scoped read fails and
+    // WhatsApp is simply absent — never listed unscoped.
+    if (waError) console.error('[unified client] WhatsApp chats unavailable:', waError.message)
 
     // Get Email conversations for this client
     const { data: emailConversations, error: emailError } = await supabase
@@ -70,7 +79,7 @@ export async function GET(
     if (emailError) throw emailError
 
     // Transform to unified format
-    const whatsappUnified = (waConversations || []).map((conv: any) => ({
+    const whatsappUnified = ((waError ? [] : waConversations) || []).map((conv: any) => ({
       id: conv.id,
       channel: 'whatsapp',
       identifier: conv.phone_number,

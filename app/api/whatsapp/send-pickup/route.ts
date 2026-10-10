@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
   if (!message?.trim()) return NextResponse.json({ success: false, error: 'The message is empty' }, { status: 400 })
   if (!itinerary.client_phone) return NextResponse.json({ success: false, error: 'This itinerary has no client phone number' }, { status: 400 })
 
-  const result = await sendWhatsAppMessage({ to: itinerary.client_phone, body: message.trim() })
+  const result = await sendWhatsAppMessage({ orgId: org_id, to: itinerary.client_phone, body: message.trim() })
   if (!result.success) return NextResponse.json({ success: false, error: result.error || 'Could not send the WhatsApp message' }, { status: 502 })
   return NextResponse.json({ success: true, sent: true, messageId: result.messageId })
 }

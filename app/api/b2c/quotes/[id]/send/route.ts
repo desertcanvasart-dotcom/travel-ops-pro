@@ -81,7 +81,7 @@ export async function POST(
       // it in a browser prompt although the itinerary has it.
       const phone = body.to || itin.client_phone
       if (!phone) return NextResponse.json({ success: false, error: 'No WhatsApp number on the itinerary; enter one' }, { status: 400 })
-      const result = await sendWhatsAppMessage({ to: phone, body: messageText })
+      const result = await sendWhatsAppMessage({ orgId, to: phone, body: messageText })
       if (!result.success) {
         return NextResponse.json({ success: false, error: result.error || 'WhatsApp send failed' }, { status: 502 })
       }

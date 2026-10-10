@@ -1,4 +1,5 @@
 import { supplierLinesFromServices, type ServiceForSupplier } from '@/lib/bookings/supplier-lines'
+import { businessToday } from '@/lib/today'
 import {
   DEFAULT_PAYMENT_RULE,
   computePaymentSchedule,
@@ -251,7 +252,9 @@ export function buildBookingRow(input: BuildBookingRowInput): Record<string, unk
   const schedule = computePaymentSchedule({
     total,
     currency,
-    booked_on: input.bookedOn ?? new Date().toISOString().slice(0, 10),
+    // The business's date, not UTC's — a booking at 07:30 in Tokyo was
+    // booked "yesterday" and its deposit fell due a day early.
+    booked_on: input.bookedOn ?? businessToday(),
     departure_date: itinerary.start_date ?? null,
     // The caller's percentage always wins — it has been validated and may be a
     // deliberate choice for this booking. Building the rule unconditionally

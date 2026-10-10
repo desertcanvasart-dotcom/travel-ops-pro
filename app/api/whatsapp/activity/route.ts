@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+
+// conversation_activity has no org_id; it is the org's through its
+// conversation (whatsapp_conversations.org_id, migration 20261125). Without
+// that filter the history — who handled which customer, and notes — was every
+// org's.
 
 // GET /api/whatsapp/activity - Get activity history for a conversation
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const conversationId = searchParams.get('conversation_id')
@@ -16,8 +24,10 @@ export async function GET(request: NextRequest) {
       .from('conversation_activity')
       .select(`
         *,
-        agent:sales_agents(id, name, email, avatar_url)
+        agent:sales_agents(id, name, email, avatar_url),
+        conversation:whatsapp_conversations!inner(org_id)
       `)
+      .eq('conversation.org_id', orgId)
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -51,6 +61,8 @@ export async function GET(request: NextRequest) {
 // POST /api/whatsapp/activity - Log a new activity
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const body = await request.json()
     const { conversation_id, agent_id, action_type, action_details } = body
@@ -70,6 +82,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         error: `Invalid action type. Must be one of: ${validActionTypes.join(', ')}` 
       }, { status: 400 })
+    }
+
+    const { data: conv, error: convError } = await supabase
+      .from('whatsapp_conversations')
+      .select('id')
+      .eq('id', conversation_id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (convError) throw convError
+    if (!conv) {
+      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
     }
 
     const { data, error } = await supabase
@@ -97,6 +120,7 @@ export async function POST(request: NextRequest) {
           last_agent_reply_at: new Date().toISOString()
         })
         .eq('id', conversation_id)
+        .eq('org_id', orgId)
     }
 
     return NextResponse.json({ 

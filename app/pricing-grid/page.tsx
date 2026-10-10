@@ -588,7 +588,10 @@ function PricingGridContent() {
       }))
 
       // Fetch days with services
-      const daysRes = await fetch(`/api/itineraries/${itineraryId}/days?language=en`)
+      // The trip's own text: the grid saves these days back, and loading the
+      // English translation of a Japanese trip wrote English over the
+      // original 日程表 on the next save.
+      const daysRes = await fetch(`/api/itineraries/${itineraryId}/days?language=source`)
       const daysData = await daysRes.json()
 
       if (daysData.success && daysData.data) {

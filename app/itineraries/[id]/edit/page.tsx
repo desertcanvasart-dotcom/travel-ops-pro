@@ -1,5 +1,6 @@
 'use client'
 import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
+import { addDays } from '@/lib/payment-schedule'
 
 import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
@@ -1334,7 +1335,7 @@ export default function ItineraryEditorPage() {
                           total_amount: itinerary.total_cost,
                           currency: itinerary.currency || 'EUR',
                           issue_date: todayLocal(),
-                          due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+                          due_date: addDays(todayLocal(), 14)
                         })
                       })
                       if (response.ok) {

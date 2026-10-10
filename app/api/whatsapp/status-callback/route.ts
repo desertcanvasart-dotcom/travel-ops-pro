@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { statusesBelow } from '@/lib/whatsapp-status'
 import { createClient } from '@supabase/supabase-js'
 import { verifyTwilioSignature, formDataToParams } from '@/lib/twilio-signature'
 
@@ -39,6 +40,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing MessageSid' }, { status: 400 })
     }
 
+    // Only forward (lib/whatsapp-status): a late "sent" must not undo "read".
+    const replaceable = statusesBelow(String(messageStatus || ''))
+    if (replaceable.length === 0) {
+      return new NextResponse('OK', { status: 200 })
+    }
     const { data, error } = await supabaseAdmin
       .from('whatsapp_messages')
       .update({
@@ -47,6 +53,7 @@ export async function POST(request: NextRequest) {
         error_message: errorCode ? `[${errorCode}] ${errorMessage ?? ''}` : errorMessage,
       })
       .eq('message_sid', messageSid)
+      .or(`status.is.null,status.in.(${replaceable.join(',')})`)
       .select('id')
       .maybeSingle()
 
@@ -61,7 +68,8 @@ export async function POST(request: NextRequest) {
 
     if (!data) {
       // A status for a message we never stored (e.g. sent from another system
-      // on the same Twilio number). Nothing to do, and nothing wrong.
+      // on the same Twilio number), or one older than what we already hold.
+      // Nothing to do, and nothing wrong.
       console.warn('⚠️ Status callback for unknown MessageSid:', messageSid)
       return new NextResponse('OK', { status: 200 })
     }

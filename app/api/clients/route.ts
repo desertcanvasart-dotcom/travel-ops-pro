@@ -188,6 +188,9 @@ export async function POST(request: NextRequest) {
             client_id: newClient.id,
             client_name: `${clientData.first_name} ${clientData.last_name}`.trim()
           })
+          // The org's own thread with that number — the same customer may also
+          // be writing to another org, whose thread is not ours to relabel.
+          .eq('org_id', orgId)
           .eq('phone_number', body.link_whatsapp_phone)
       )
     }

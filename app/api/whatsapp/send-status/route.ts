@@ -137,6 +137,7 @@ export async function POST(request: NextRequest) {
 
     // Send via WhatsApp
     const result = await sendWhatsAppMessage({
+      orgId,
       to: itinerary.client_phone,
       body: message
     })

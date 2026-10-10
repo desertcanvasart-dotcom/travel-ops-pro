@@ -240,6 +240,9 @@ export async function POST(request: NextRequest) {
         .from('communication_threads')
         .select('id')
         .eq('whatsapp_conversation_id', whatsapp_conversation_id)
+        // The caller's org's thread only (intake stamps it with the org whose
+        // WhatsApp number was written to); another org's would be linked here.
+        .eq('org_id', orgId)
         .maybeSingle()
       resolvedThreadId = threadRow?.id || null
     }

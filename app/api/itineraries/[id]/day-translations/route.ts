@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { translateMissingServiceVersions } from '@/lib/itineraries/translate-services'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { translateFields, ITINERARY_DAY_TRANSLATION_FIELDS } from '@/lib/translation-utils'
@@ -24,8 +25,9 @@ import { SUPPORTED_LANGUAGES } from '@/types/multilingual'
 // PUT   a person's text for one day in one language. Stamped 'reviewed' with
 //       the CURRENT source fingerprint: saving is the review.
 //
-// Services are not here. They are shared across languages and edited on the
-// itinerary editor; only their names are translated (copy-translate).
+// POST also translates the service lines that have no text in that language
+// yet (lib/itineraries/translate-services) — those added after the language
+// was first made. Existing service versions are never overwritten here.
 
 const supabase = createServerClient()
 
@@ -198,7 +200,13 @@ export async function POST(
       if (error) throw error
     }
 
-    return NextResponse.json({ success: true, data: { translated: rows.length } })
+    // And the service lines with no text in this language — those added after
+    // the language was first made were never translated, and the quote PDF
+    // printed them in the source language among translated ones. Existing
+    // service versions are left as they are.
+    const services = await translateMissingServiceVersions(supabase, id, sourceLanguage, language, dayIds)
+
+    return NextResponse.json({ success: true, data: { translated: rows.length, translated_services: services.length } })
   } catch (error) {
     console.error('[day-translations] POST failed:', error)
     return NextResponse.json(

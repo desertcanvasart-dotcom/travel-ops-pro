@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { createServerClient } from '@/lib/supabase-server'
+import { senderForOrg } from '@/lib/whatsapp-org'
 
 export async function GET() {
+  const orgId = await getCurrentOrgId()
+  if (!orgId) return noOrgResponse()
   try {
     const accountSid = process.env.TWILIO_ACCOUNT_SID
     const authToken = process.env.TWILIO_AUTH_TOKEN
     const apiKey = process.env.TWILIO_API_KEY
     const apiSecret = process.env.TWILIO_API_SECRET
-    const whatsappFrom = process.env.TWILIO_WHATSAPP_FROM || process.env.TWILIO_WHATSAPP_NUMBER
+    // The number THIS org sends from (lib/whatsapp-org), not the deployment's.
+    const whatsappFrom = await senderForOrg(createServerClient(), orgId)
 
     const hasCredentials = !!(accountSid && (authToken || (apiKey && apiSecret)))
     const hasNumber = !!whatsappFrom

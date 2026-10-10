@@ -1,6 +1,7 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
+import { addDays } from '@/lib/payment-schedule'
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
@@ -116,7 +117,7 @@ const initialFormData: FormData = {
   total_amount: 0,
   currency: '',
   issue_date: todayLocal(),
-  due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+  due_date: addDays(todayLocal(), 14),
   notes: '',
   payment_terms: '', // Will be set dynamically with t()
   payment_instructions: ''

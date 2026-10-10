@@ -115,6 +115,26 @@ export async function POST(request: NextRequest) {
     const isUpdate = !!config.itineraryId
     const now = new Date().toISOString()
 
+    // An update rewrites the trip and deletes and re-creates its days, on the
+    // service role. It was addressed by id alone, so a manager in one org could
+    // overwrite another org's trip. Refuse anything not this org's, before any
+    // write.
+    const callerOrgId = await getCurrentOrgId()
+    if (!callerOrgId) {
+      return NextResponse.json({ success: false, error: 'No organization' }, { status: 403 })
+    }
+    if (isUpdate) {
+      const { data: owned } = await supabase
+        .from('itineraries')
+        .select('id')
+        .eq('id', config.itineraryId)
+        .eq('org_id', callerOrgId)
+        .maybeSingle()
+      if (!owned) {
+        return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
+      }
+    }
+
     // Server-authoritative pricing total. Sum the exact services we're about to
     // write (the source of truth) so total_cost is never persisted as 0 while the
     // services hold real prices. Prefer the grid's exact client total when sent.
@@ -211,6 +231,7 @@ export async function POST(request: NextRequest) {
         .from('itineraries')
         .update(itineraryData)
         .eq('id', config.itineraryId)
+        .eq('org_id', callerOrgId)
         .select('id, itinerary_code')
         .single()
 
@@ -499,6 +520,17 @@ export async function POST(request: NextRequest) {
     const authoritativeTotal = actualClientTotal > 0
       ? Math.round((actualClientTotal + seasonUplift) * 100) / 100
       : Math.round(actualSupplierTotal * 100) / 100
+    // The premium on its own (20261124), so documents built from the lines can
+    // add it back. A separate write: before the migration the column does not
+    // exist, and that must not fail the save.
+    {
+      const { error: upliftErr } = await supabase
+        .from('itineraries')
+        .update({ season_uplift_amount: actualClientTotal > 0 ? Math.round(seasonUplift * 100) / 100 : 0 })
+        .eq('id', itineraryId)
+        .eq('org_id', callerOrgId)
+      if (upliftErr) console.warn('[pricing-grid save] season_uplift_amount not stored:', upliftErr.message)
+    }
     if (authoritativeTotal !== itineraryData.total_cost) {
       const { error: updErr } = await supabase
         .from('itineraries')

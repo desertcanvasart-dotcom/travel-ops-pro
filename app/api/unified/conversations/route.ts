@@ -42,6 +42,10 @@ export async function GET(request: NextRequest) {
     // Query WhatsApp conversations
     const whatsappTask = (async () => {
     if (channel === 'all' || channel === 'whatsapp') {
+      // The org's own threads — the ones that came to its WhatsApp number
+      // (migration 20261125). This listed every org's.
+      const orgId = await getCurrentOrgId()
+      if (!orgId) return
       let waQuery = supabase
         .from('whatsapp_conversations')
         .select(`
@@ -64,6 +68,7 @@ export async function GET(request: NextRequest) {
             max_conversations
           )
         `)
+        .eq('org_id', orgId)
         .or('is_hidden.is.null,is_hidden.eq.false')
         .order('last_message_at', { ascending: false, nullsFirst: false })
 
@@ -82,10 +87,14 @@ export async function GET(request: NextRequest) {
 
       const { data: waData, error: waError } = await waQuery.limit(limit)
 
-      if (waError) throw waError
+      // As trip chats below: one channel failing must not take the inbox down.
+      // Before 20261125 has run (whatsapp_conversations.org_id) the scoped
+      // read fails; WhatsApp is then absent — never listed unscoped — and the
+      // other channels still load.
+      if (waError) console.error('[unified conversations] WhatsApp chats unavailable:', waError.message)
 
       // Transform WhatsApp data to unified format
-      for (const conv of waData || []) {
+      for (const conv of waError ? [] : waData || []) {
         conversations.push({
           id: conv.id,
           channel: 'whatsapp',

@@ -22,6 +22,9 @@ interface CopilotIntakeParams {
   receivedAt: string
   clientId: string | null
   clientName: string | null
+  /** The org the message came in for, when the channel knows it (WhatsApp:
+   *  the receiving number's org). Without it, the default-org placeholder. */
+  orgId?: string | null
 }
 
 interface CopilotIntakeResult {
@@ -159,10 +162,11 @@ async function findOrCreateThread(
     }
   }
 
-  // Phase 2 — stamp org_id at intake. Webhook context (no operator session)
-  // so we use the default-org placeholder. Per-channel resolution comes with
-  // the G1 gate flip (see DEFERRED_GATES.md).
-  const orgId = await getDefaultOrgId(supabase)
+  // Phase 2 — stamp org_id at intake. Webhook context (no operator session).
+  // WhatsApp resolves it from the number the customer wrote to
+  // (lib/whatsapp-org); email still uses the default-org placeholder until
+  // its own per-org resolution (DEFERRED_GATES.md G1).
+  const orgId = params.orgId ?? await getDefaultOrgId(supabase)
 
   // Create new thread
   const { data: newThread, error } = await supabase

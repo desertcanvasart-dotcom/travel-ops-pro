@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
-import { translateFields, ITINERARY_TRANSLATION_FIELDS, ITINERARY_DAY_TRANSLATION_FIELDS, SERVICE_TRANSLATION_FIELDS } from '@/lib/translation-utils'
+import { translateFields, ITINERARY_TRANSLATION_FIELDS, ITINERARY_DAY_TRANSLATION_FIELDS } from '@/lib/translation-utils'
+import { translateMissingServiceVersions } from '@/lib/itineraries/translate-services'
 import type { Language } from '@/types/multilingual'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
@@ -79,73 +80,9 @@ async function translateItineraryDays(
   return insertRows('itinerary_day_versions', rows)
 }
 
-// Helper function to translate itinerary services
-async function translateItineraryServices(
-  itineraryId: string,
-  sourceLanguage: Language,
-  targetLanguage: Language
-) {
-  // Fetch all days for this itinerary to get their services
-  const { data: days, error: daysError } = await supabase
-    .from('itinerary_days')
-    .select('id')
-    .eq('itinerary_id', itineraryId)
-    .order('day_number', { ascending: true })
-
-  if (daysError || !days || days.length === 0) {
-    console.log('No days found for itinerary:', itineraryId)
-    return []
-  }
-
-  // Fetch all services across all days
-  const dayIds = days.map((d: any) => d.id)
-  const { data: services, error: servicesError } = await supabase
-    .from('itinerary_services')
-    .select('id, service_name, notes')
-    .in('itinerary_day_id', dayIds)
-
-  if (servicesError || !services || services.length === 0) {
-    console.log('No services found for itinerary:', itineraryId)
-    return []
-  }
-
-  // ONE query for both languages, not two SELECTs per service — the dominant
-  // cost of the old shape, since services outnumber days severalfold.
-  const { data: versions } = await supabase
-    .from('itinerary_service_versions')
-    .select('*')
-    .in('itinerary_service_id', services.map(s => s.id))
-    .in('language', [targetLanguage, sourceLanguage])
-
-  const existingTarget = new Set(
-    (versions ?? []).filter(v => v.language === targetLanguage).map(v => v.itinerary_service_id)
-  )
-  const sourceById = new Map(
-    (versions ?? []).filter(v => v.language === sourceLanguage).map(v => [v.itinerary_service_id, v])
-  )
-
-  const rows = []
-  for (const service of services) {
-    if (existingTarget.has(service.id)) {
-      console.log(`Service version already exists for service ${service.id} in ${targetLanguage}`)
-      continue
-    }
-    const sourceContent = sourceById.get(service.id) || service
-    const translatedContent = await translateFields(
-      sourceContent,
-      SERVICE_TRANSLATION_FIELDS,
-      sourceLanguage,
-      targetLanguage
-    )
-    rows.push({
-      itinerary_service_id: service.id,
-      language: targetLanguage,
-      service_name: translatedContent.service_name || sourceContent.service_name || null,
-      notes: translatedContent.notes || sourceContent.notes || null,
-    })
-  }
-
-  return insertRows('itinerary_service_versions', rows)
+// Services: lib/itineraries/translate-services (shared with Translate all).
+function translateItineraryServices(itineraryId: string, sourceLanguage: Language, targetLanguage: Language) {
+  return translateMissingServiceVersions(supabase, itineraryId, sourceLanguage, targetLanguage)
 }
 
 /**
@@ -170,6 +107,19 @@ async function insertRows(table: string, rows: Record<string, unknown>[]) {
     else created.push(one)
   }
   return created
+}
+
+/** Run the day/service translation; on failure delete the version row just
+ *  made (days and services already saved stay — they are correct, and the
+ *  retry skips them). */
+async function withVersionRollback<T>(versionId: string, work: () => Promise<T>): Promise<T> {
+  try {
+    return await work()
+  } catch (error) {
+    const { error: deleteError } = await supabase.from('itinerary_versions').delete().eq('id', versionId)
+    if (deleteError) console.error('[copy-translate] Could not remove the half-made version:', deleteError)
+    throw error
+  }
 }
 
 // POST - Copy existing version and translate to target language
@@ -355,18 +305,13 @@ export async function POST(
         trip_name: newVersion.trip_name
       })
 
-      // Also translate itinerary days and services
-      const translatedDays = await translateItineraryDays(
-        id,
-        baseLanguage,
-        targetLanguage as Language
-      )
-
-      const translatedServices = await translateItineraryServices(
-        id,
-        baseLanguage,
-        targetLanguage as Language
-      )
+      // Also translate itinerary days and services. A failure here must not
+      // leave the version row behind: it makes the language "exist", so the
+      // next attempt answered 409 and the services were never translated.
+      const { translatedDays, translatedServices } = await withVersionRollback(newVersion.id, async () => ({
+        translatedDays: await translateItineraryDays(id, baseLanguage, targetLanguage as Language),
+        translatedServices: await translateItineraryServices(id, baseLanguage, targetLanguage as Language),
+      }))
 
       return NextResponse.json({
         success: true,
@@ -437,18 +382,11 @@ export async function POST(
 
     if (createError) throw createError
 
-    // Also translate itinerary days and services
-    const translatedDays = await translateItineraryDays(
-      id,
-      sourceLanguage,
-      targetLanguage as Language
-    )
-
-    const translatedServices = await translateItineraryServices(
-      id,
-      sourceLanguage,
-      targetLanguage as Language
-    )
+    // Also translate itinerary days and services (rolled back as above).
+    const { translatedDays, translatedServices } = await withVersionRollback(newVersion.id, async () => ({
+      translatedDays: await translateItineraryDays(id, sourceLanguage, targetLanguage as Language),
+      translatedServices: await translateItineraryServices(id, sourceLanguage, targetLanguage as Language),
+    }))
 
     return NextResponse.json({
       success: true,

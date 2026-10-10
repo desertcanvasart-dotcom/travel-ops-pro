@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export async function POST(request: NextRequest) {
   try {
+    // Sent from the caller's org number — the test proves THAT number works.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { phone } = await request.json()
 
     if (!phone) {
@@ -13,6 +18,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await sendWhatsAppMessage({
+      orgId,
       to: phone,
       body: `✅ Test message from Autoura\n\nYour WhatsApp integration is working correctly.\n\nSent at: ${new Date().toLocaleString()}`,
     })

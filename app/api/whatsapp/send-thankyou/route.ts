@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
     console.log('📤 Sending thank you to:', itinerary.client_phone)
 
     const result = await sendWhatsAppMessage({
+      orgId,
       to: itinerary.client_phone,
       body: message
     })

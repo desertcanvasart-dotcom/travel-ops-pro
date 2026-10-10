@@ -103,7 +103,7 @@ export async function POST(
     const messageText = lines.join('\n')
 
     if (sendVia === 'whatsapp') {
-      const result = await sendWhatsAppMessage({ to: booking.client_phone, body: messageText })
+      const result = await sendWhatsAppMessage({ orgId, to: booking.client_phone, body: messageText })
       if (!result.success) {
         return NextResponse.json({ success: false, error: result.error || 'WhatsApp send failed' }, { status: 502 })
       }

@@ -19,6 +19,28 @@ export function serviceClientPrice(service: { total_cost?: unknown; client_price
   return cost * (1 + DEFAULT_CLIENT_MARGIN_PERCENT / 100)
 }
 
+/**
+ * The season premium the pricing grid charged on top of the lines
+ * (itineraries.season_uplift_amount, 20261124). It is not a service line, so a
+ * total built from the lines alone dropped it: the quote PDF and the trip-page
+ * invoice said ¥1,000,000 while the contract and the booking said ¥1,150,000.
+ */
+export function seasonSupplementOf(itinerary: { season_uplift_amount?: unknown } | null | undefined): number {
+  const n = Number(itinerary?.season_uplift_amount)
+  return Number.isFinite(n) && n > 0 ? n : 0
+}
+
+/** What the client pays for the trip: its lines plus the season premium, or the
+ *  stored total when there are no priced lines. To the cent. */
+export function tripClientTotal(
+  itinerary: { total_cost?: unknown; season_uplift_amount?: unknown } | null | undefined,
+  days: Array<{ services?: Array<{ total_cost?: unknown; client_price?: unknown }> | null }>
+): number {
+  const lines = clientTotalOfDays(days)
+  if (lines <= 0) return Number(itinerary?.total_cost) || 0
+  return Math.round((lines + seasonSupplementOf(itinerary)) * 100) / 100
+}
+
 /** The client total of a trip's services, to the cent. */
 export function clientTotalOfDays(days: Array<{ services?: Array<{ total_cost?: unknown; client_price?: unknown }> | null }>): number {
   let total = 0

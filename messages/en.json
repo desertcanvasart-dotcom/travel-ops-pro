@@ -1079,7 +1079,13 @@
       "excludesFlights": "International flights",
       "excludesPersonal": "Personal expenses & tips",
       "excludesInsurance": "Travel insurance"
-    }
+    },
+    "totalPrice": "TOTAL PRICE",
+    "perPersonParen": "({amount} per person)",
+    "seasonSupplement": "Season supplement",
+    "packageIncludes": "Package includes all services as per itinerary.",
+    "noServicesYet": "No services calculated yet",
+    "pageOf": "Page {page} of {pages}"
   },
   "itineraries": {
     "title": "Itineraries",
@@ -2247,14 +2253,14 @@
       "failedToSendError": "Failed to send: {error}",
       "invoiceSentWhatsApp": "Invoice sent via WhatsApp!",
       "finalBalanceDescription": "Final Balance - {description}",
-      "balancePaymentTerms": "Balance due on arrival in cash or by first day of service.",
+      "balancePaymentTerms": "Balance due by the date shown on this invoice.",
       "relatedDepositInvoice": "Related deposit invoice: {invoiceNumber}",
       "failedToCreateFinalInvoice": "Failed to create final invoice",
       "tripCostBreakdown": "Trip Cost Breakdown",
       "fullTripCost": "Full Trip Cost",
       "depositWithPercent": "Deposit ({percent}%)",
       "paid": "Paid",
-      "balanceDueOnArrival": "Balance Due on Arrival",
+      "balanceDueOnArrival": "Balance Due",
       "depositInvoice": "Deposit Invoice",
       "finalInvoice": "Final Invoice",
       "view": "View",
@@ -3192,6 +3198,8 @@
       "governingLaw": "Governing law (contracts)",
       "governingLawPlaceholder": "e.g. Egyptian law",
       "governingLawHint": "Contracts are governed by this law, and disputes are settled under it. Blank: the law of the country you are registered in.",
+      "whatsappNumber": "WhatsApp number",
+      "whatsappNumberHint": "Your organization's own WhatsApp sender in Twilio, with its country code. Customers who write to it reach your inbox, and your WhatsApp messages are sent from it.",
       "contractTermsPending": "Saved — except the contract country and governing law: the database has not been updated for them yet. Apply the latest migration, then save again."
     }
   },

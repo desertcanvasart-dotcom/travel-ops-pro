@@ -51,3 +51,15 @@ describe('connect + callback routes are wired to the nonce', () => {
     }
   })
 })
+
+describe('Gmail connect from the wrong address', () => {
+  it('names the address Google returns to when the page is elsewhere', async () => {
+    const { wrongAddressFor } = await import('@/lib/oauth/redirect-address')
+    const back = 'https://autoura.net/api/auth/google/callback'
+    expect(wrongAddressFor('https://www.autoura.net', back)).toBe('https://autoura.net')
+    expect(wrongAddressFor('https://travel-ops.up.railway.app', back)).toBe('https://autoura.net')
+    expect(wrongAddressFor('https://AUTOURA.net', back)).toBeNull()
+    expect(wrongAddressFor(null, back)).toBeNull()
+    expect(wrongAddressFor('https://autoura.net', undefined)).toBeNull()
+  })
+})

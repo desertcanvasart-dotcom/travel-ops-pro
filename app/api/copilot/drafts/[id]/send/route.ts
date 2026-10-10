@@ -152,6 +152,7 @@ export async function POST(
     // 6. Send via the appropriate channel
     if (thread.channel === 'whatsapp') {
       sendResult = await sendWhatsAppMessage({
+        orgId,
         to: thread.contact_info,
         body: messageBody,
       })

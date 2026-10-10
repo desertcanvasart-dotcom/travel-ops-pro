@@ -38,12 +38,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'conversationId is required' }, { status: 400 })
   }
 
-  // Conversation → client + phone.
+  // Conversation → client + phone. The org's own thread only: by id alone,
+  // another org's customer's messages were fed to the model and the draft
+  // written onto their thread.
   const { data: conversation, error: convErr } = await supabase
     .from('whatsapp_conversations')
     .select('id, client_id, phone_number')
     .eq('id', conversationId)
-    .single()
+    .eq('org_id', orgId)
+    .maybeSingle()
   if (convErr || !conversation) {
     return NextResponse.json({ success: false, error: 'Conversation not found' }, { status: 404 })
   }
@@ -71,7 +74,8 @@ export async function POST(request: NextRequest) {
     supabase,
     conversationId,
     (conversation as any).client_id ?? null,
-    (conversation as any).phone_number ?? ''
+    (conversation as any).phone_number ?? '',
+    orgId
   )
   const result = await agent.generateResponse(incoming, context, supabase)
 
@@ -89,6 +93,7 @@ export async function POST(request: NextRequest) {
       ai_draft_generated_at: new Date().toISOString(),
     })
     .eq('id', conversationId)
+    .eq('org_id', orgId)
 
   return NextResponse.json({
     success: true,

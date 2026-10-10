@@ -3,11 +3,11 @@
 // File: lib/pdf-generator.ts
 // ============================================
 
-import { clientTotalOfDays, serviceClientPrice } from '@/lib/itinerary-client-price'
+import { seasonSupplementOf, serviceClientPrice } from '@/lib/itinerary-client-price'
 import { overnightLabel, overnightProperty } from '@/lib/itineraries/overnight-property'
 import { jsPDF } from 'jspdf'
 import { loadJapaneseFont, pickFontFamily } from './pdf-fonts'
-import { formatMoney } from '@/lib/currency-totals'
+import { formatMoney, roundToCurrency } from '@/lib/currency-totals'
 
 // ============================================
 // TYPES
@@ -53,6 +53,8 @@ interface Itinerary {
   num_children: number
   currency: string
   total_cost: number
+  /** The grid's season premium, charged on top of the lines. */
+  season_uplift_amount?: number | null
   status: string
   notes?: string
   tier?: string
@@ -101,6 +103,13 @@ export interface PdfLabels {
   inclusions: string
   exclusions: string
   notes: string
+  // Optional for older callers; English fallbacks below.
+  totalPrice?: string
+  perPersonParen?: (amount: string) => string
+  seasonSupplement?: string
+  packageIncludes?: string
+  noServicesYet?: string
+  pageOf?: (page: number, pages: number) => string
 }
 
 interface PDFOptions {
@@ -169,6 +178,12 @@ const FALLBACK_LABELS_EN: PdfLabels = {
   inclusions: 'Inclusions',
   exclusions: 'Exclusions',
   notes: 'Notes',
+  totalPrice: 'TOTAL PRICE',
+  perPersonParen: (amount) => `(${amount} per person)`,
+  seasonSupplement: 'Season supplement',
+  packageIncludes: 'Package includes all services as per itinerary.',
+  noServicesYet: 'No services calculated yet',
+  pageOf: (page, pages) => `Page ${page} of ${pages}`,
 }
 
 // ============================================
@@ -518,6 +533,13 @@ export async function generateItineraryPDF(
     doc.text(labels.pricingSummary, margin, yPos)
     
     yPos += 8
+
+    const supplement = roundToCurrency(seasonSupplementOf(itinerary), currency)
+    let roundedLinesTotal = 0
+    for (const day of days) for (const s of day.services ?? []) {
+      const p = serviceClientPrice(s)
+      if (p > 0) roundedLinesTotal += roundToCurrency(p, currency)
+    }
     
     // Show service breakdown only if enabled
     if (opts.showPricingBreakdown && opts.showServiceDetails) {
@@ -534,14 +556,18 @@ export async function generateItineraryPDF(
           .forEach((service) => {
             const name = cleanServiceName(service.service_name, service.service_type)
             const key = `${service.service_type}-${name}`
+            // Each line in the currency's own units before it is added up, so
+            // the printed rows sum to the printed total (¥12,502.5 twice
+            // printed ¥12,503 + ¥12,503 under a total of ¥25,005).
+            const price = roundToCurrency(serviceClientPrice(service), currency)
             
             if (serviceMap.has(key)) {
               const existing = serviceMap.get(key)!
               existing.quantity += service.quantity || 0
-              existing.total += serviceClientPrice(service)
+              existing.total += price
             } else {
               const qty = service.quantity || 1
-              const total = serviceClientPrice(service)
+              const total = price
               serviceMap.set(key, {
                 name,
                 type: service.service_type,
@@ -559,6 +585,11 @@ export async function generateItineraryPDF(
         formatCurrency(s.rate, currency),
         formatCurrency(s.total, currency)
       ])
+      // The season premium is part of the price, so it is a row of its own —
+      // the rows then add up to the total below.
+      if (serviceRows.length > 0 && supplement > 0) {
+        serviceRows.push([labels.seasonSupplement ?? FALLBACK_LABELS_EN.seasonSupplement!, '', '', formatCurrency(supplement, currency)])
+      }
       
       if (serviceRows.length > 0) {
         yPos = drawTable(doc, yPos, [labels.service, labels.quantity, labels.rate, labels.total], serviceRows, [85, 20, 35, 40], margin, fontFamily)
@@ -566,7 +597,7 @@ export async function generateItineraryPDF(
         doc.setFontSize(10)
         doc.setFont(fontFamily, 'italic')
         doc.setTextColor(150, 150, 150)
-        doc.text('No services calculated yet', margin, yPos)
+        doc.text(labels.noServicesYet ?? FALLBACK_LABELS_EN.noServicesYet!, margin, yPos)
         yPos += 10
       }
     } else {
@@ -574,7 +605,7 @@ export async function generateItineraryPDF(
       doc.setFontSize(10)
       doc.setFont(fontFamily, 'normal')
       doc.setTextColor(80, 80, 80)
-      doc.text('Package includes all services as per itinerary.', margin, yPos)
+      doc.text(labels.packageIncludes ?? FALLBACK_LABELS_EN.packageIncludes!, margin, yPos)
       yPos += 10
     }
     
@@ -586,8 +617,9 @@ export async function generateItineraryPDF(
     // The client total from the lines, as the page and the email body show
     // it; itineraries.total_cost is a cache that can be 0 or stale, and the
     // attachment disagreed with the email it came with.
-    const linesTotal = clientTotalOfDays(days)
-    const totalPrice = linesTotal > 0 ? linesTotal : (itinerary.total_cost || 0)
+    // Lines (each in the currency's units, as printed) plus the season premium.
+    const linesTotal = roundedLinesTotal
+    const totalPrice = linesTotal > 0 ? linesTotal + supplement : (itinerary.total_cost || 0)
     const totalPax = (itinerary.num_adults || 0) + (itinerary.num_children || 0)
     
     doc.setFillColor(100, 124, 71)
@@ -596,7 +628,7 @@ export async function generateItineraryPDF(
     doc.setFontSize(9)
     doc.setFont(fontFamily, 'normal')
     doc.setTextColor(255, 255, 255)
-    doc.text('TOTAL PRICE', pageWidth - margin - 75, yPos + 7)
+    doc.text(labels.totalPrice ?? FALLBACK_LABELS_EN.totalPrice!, pageWidth - margin - 75, yPos + 7)
     
     doc.setFontSize(16)
     doc.setFont(fontFamily, 'bold')
@@ -610,7 +642,7 @@ export async function generateItineraryPDF(
       doc.setFont(fontFamily, 'normal')
       doc.setTextColor(100, 100, 100)
       const perPerson = totalPrice / totalPax
-      doc.text(`(${formatCurrency(perPerson, currency)} per person)`, pageWidth - margin, yPos, { align: 'right' })
+      doc.text((labels.perPersonParen ?? FALLBACK_LABELS_EN.perPersonParen!)(formatCurrency(perPerson, currency)), pageWidth - margin, yPos, { align: 'right' })
       yPos += 10
     }
     
@@ -663,7 +695,7 @@ export async function generateItineraryPDF(
       if (opts.companyFooter) {
         doc.text(opts.companyFooter, pageWidth / 2, footerY, { align: 'center' })
       }
-      doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, footerY, { align: 'right' })
+      doc.text((labels.pageOf ?? FALLBACK_LABELS_EN.pageOf!)(i, totalPages), pageWidth - margin, footerY, { align: 'right' })
     }
     
     console.log('📄 PDF generation complete!')

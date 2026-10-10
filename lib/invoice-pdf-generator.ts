@@ -39,6 +39,45 @@ interface Invoice {
 
 /** One office as the company profile stores it, and as the 日程表 letterhead
  *  prints it. */
+
+/**
+ * Full trip cost, deposit and balance for a deposit or final invoice — one
+ * computation for the PDF and the office page, which disagreed (the page
+ * divided the deposit back out, losing what rounding removed and every
+ * addition, and printed yen to two decimals).
+ */
+export function tripCostBreakdown(
+  invoice: { total_amount: number | string; deposit_percent?: number | null; full_trip_cost?: number | string | null },
+  invoiceType: string | null | undefined
+): { fullTripCost: number; depositAmount: number; balanceAmount: number } {
+  // Prefer the STORED trip cost. Reconstructing it by dividing the deposit
+  // back out cannot recover what rounding removed — a ¥370,873 deposit
+  // reconstructs a ¥1,854,365 trip that actually costs ¥1,854,367 — so the
+  // reconstruction is a fallback for rows written before full_trip_cost
+  // existed, not the normal path.
+  const total = Number(invoice.total_amount)
+  const pct = Number(invoice.deposit_percent) || 0
+  const reconstructed = invoiceType === 'deposit'
+    ? (pct > 0 ? (total * 100) / pct : total)
+    : total + (pct > 0 && pct < 100 ? (total * pct) / (100 - pct) : 0)
+  const fullTripCost = invoice.full_trip_cost != null && invoice.full_trip_cost !== ''
+    ? Number(invoice.full_trip_cost)
+    : reconstructed
+  // Both parts are taken from the same total so they add back up to it. The
+  // deposit is what THIS invoice charges when it is the deposit invoice.
+  const depositAmount = invoiceType === 'deposit' ? total : fullTripCost - total
+  return { fullTripCost, depositAmount, balanceAmount: fullTripCost - depositAmount }
+}
+
+/** The invoice's own due date; a final invoice without one is due on the
+ *  booking's balance date. */
+export function effectiveDueDate(
+  invoice: { due_date?: string | null; balance_due_date?: string | null },
+  invoiceType: string | null | undefined
+): string | null {
+  return invoice.due_date || (invoiceType === 'final' ? invoice.balance_due_date || null : null)
+}
+
 export interface CompanyOffice {
   label?: string
   postal_code?: string
@@ -268,19 +307,7 @@ export function generateInvoicePDF(
     // reconstructs a ¥1,854,365 trip that actually costs ¥1,854,367 — so the
     // reconstruction is a fallback for rows written before full_trip_cost
     // existed, not the normal path.
-    const reconstructed = invoiceType === 'deposit'
-      ? (Number(invoice.total_amount) * 100) / invoice.deposit_percent
-      : Number(invoice.total_amount) + (Number(invoice.total_amount) * invoice.deposit_percent) / (100 - invoice.deposit_percent)
-    const fullTripCost = invoice.full_trip_cost != null
-      ? Number(invoice.full_trip_cost)
-      : reconstructed
-
-    // Both parts are taken from the same total so they add back up to it. The
-    // deposit is what THIS invoice charges when it is the deposit invoice.
-    const depositAmount = invoiceType === 'deposit'
-      ? Number(invoice.total_amount)
-      : fullTripCost - Number(invoice.total_amount)
-    const balanceAmount = fullTripCost - depositAmount
+    const { fullTripCost, depositAmount, balanceAmount } = tripCostBreakdown(invoice, invoiceType)
 
     // Background box
     doc.setFillColor(250, 250, 250)
@@ -372,7 +399,11 @@ export function generateInvoicePDF(
   doc.text('Due Date:', leftColX, y)
   doc.setFont(FONT, 'normal')
   doc.setTextColor(...darkGray)
-  const dueDateText = invoice.due_date ? formatDate(invoice.due_date) : (invoiceType === 'final' ? 'On Arrival' : '-')
+  // A final invoice is created without a due date; its balance falls due on
+  // the booking's balance date, which the same page states further down. It
+  // printed "On Arrival" here — three different answers on one page.
+  const dueDate = effectiveDueDate(invoice, invoiceType)
+  const dueDateText = dueDate ? formatDate(dueDate) : '-'
   doc.text(dueDateText, leftColX + 35, y)
 
   // Client email
@@ -554,7 +585,8 @@ export function generateInvoicePDF(
   if (invoiceType === 'deposit') {
     totalLabel = invoice.due_date ? `Deposit due ${formatDate(invoice.due_date)}:` : 'Deposit due now:'
   } else if (invoiceType === 'final') {
-    totalLabel = invoice.due_date ? `Balance due ${formatDate(invoice.due_date)}:` : 'Balance due:'
+    const balanceDate = effectiveDueDate(invoice, invoiceType)
+    totalLabel = balanceDate ? `Balance due ${formatDate(balanceDate)}:` : 'Balance due:'
   }
   
   doc.text(totalLabel, totalsX, y)

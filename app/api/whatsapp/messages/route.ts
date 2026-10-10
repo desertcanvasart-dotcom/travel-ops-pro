@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { toWhatsAppE164, PHONE_NEEDS_COUNTRY_CODE } from '@/lib/whatsapp-phone'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { senderForOrg, NO_WHATSAPP_SENDER } from '@/lib/whatsapp-org'
 import twilio from 'twilio'
 
 const twilioClient = twilio(
@@ -8,11 +11,19 @@ const twilioClient = twilio(
   process.env.TWILIO_AUTH_TOKEN
 )
 
-const TWILIO_WHATSAPP_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886'
+// No deployment-wide sender any more: each org replies from its own number
+// (lib/whatsapp-org senderForOrg) — the customer's answer comes back to that
+// number, and so to that org's inbox. The Twilio sandbox number this used to
+// fall back to is never right for a real customer.
+//
+// whatsapp_messages has no org_id: a message is reached only through a
+// conversation this route has already found in the caller's org.
 
 // GET /api/whatsapp/messages - Get messages for a conversation
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const conversationId = searchParams.get('conversation_id')
@@ -21,6 +32,17 @@ export async function GET(request: NextRequest) {
 
     if (!conversationId) {
       return NextResponse.json({ error: 'Conversation ID required' }, { status: 400 })
+    }
+
+    const { data: conv, error: convError } = await supabase
+      .from('whatsapp_conversations')
+      .select('id')
+      .eq('id', conversationId)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (convError) throw convError
+    if (!conv) {
+      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
     }
 
     let query = supabase
@@ -51,6 +73,8 @@ export async function GET(request: NextRequest) {
 // POST /api/whatsapp/messages - Send a new message
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const body = await request.json()
     const { conversation_id, phone_number, message } = body
@@ -61,17 +85,27 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    // Before any thread is created: an org that may not send stops here.
+    const from = await senderForOrg(supabase, orgId)
+    if (!from) {
+      return NextResponse.json({ error: NO_WHATSAPP_SENDER }, { status: 400 })
+    }
+
     // Get or create conversation
     let convId = conversation_id
     let toPhone = phone_number
 
-    if (conversation_id && !phone_number) {
+    // A conversation_id is always the thread's number — a phone_number sent
+    // with it used to be trusted, writing another number's message into
+    // whichever thread the id named.
+    if (conversation_id) {
       const { data: conv } = await supabase
         .from('whatsapp_conversations')
         .select('phone_number')
         .eq('id', conversation_id)
-        .single()
-      
+        .eq('org_id', orgId)
+        .maybeSingle()
+
       if (!conv) {
         return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
       }
@@ -80,19 +114,23 @@ export async function POST(request: NextRequest) {
 
     if (!conversation_id && phone_number) {
       // Create conversation if needed
-      const cleanPhone = phone_number.replace(/[^\d+]/g, '')
+      const cleanPhone = toWhatsAppE164(phone_number)
+      if (!cleanPhone) {
+        return NextResponse.json({ error: PHONE_NEEDS_COUNTRY_CODE }, { status: 400 })
+      }
       const { data: existing } = await supabase
         .from('whatsapp_conversations')
         .select('id')
+        .eq('org_id', orgId)
         .eq('phone_number', cleanPhone)
-        .single()
+        .maybeSingle()
 
       if (existing) {
         convId = existing.id
       } else {
         const { data: newConv, error: convError } = await supabase
           .from('whatsapp_conversations')
-          .insert({ phone_number: cleanPhone })
+          .insert({ org_id: orgId, phone_number: cleanPhone })
           .select()
           .single()
         
@@ -108,7 +146,7 @@ export async function POST(request: NextRequest) {
     // Send via Twilio
     const twilioMessage = await twilioClient.messages.create({
       body: message,
-      from: TWILIO_WHATSAPP_NUMBER,
+      from,
       to: `whatsapp:${formattedPhone}`,
       statusCallback: `${process.env.NEXT_PUBLIC_APP_URL || "https://autoura.net"}/api/whatsapp/status-callback`
     })
