@@ -9,6 +9,9 @@
 // recompute and takes the money back out.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { convertCurrency } from '@/lib/currency-service'
+import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
+import { roundToCurrency } from '@/lib/currency-totals'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
@@ -227,12 +230,31 @@ async function addToSupplierManifest(bookingId: string, extra: Record<string, un
     ? await admin.from('suppliers').select('name').eq('id', extra.supplier_id).maybeSingle()
     : { data: null }
 
+  // booking_supplier_status.quoted_cost has no currency of its own: it is read
+  // (and expensed, lib/bookings/supplier-expense) in the BOOKING's currency. A
+  // catalogue fee of EGP 150 on a yen booking went in as ¥150. Convert at
+  // today's run rates; with no rate, leave the cost blank and say what it was
+  // rather than state a wrong figure.
+  const { data: booking } = await admin.from('bookings').select('currency').eq('id', bookingId).maybeSingle()
+  const bookingCurrency = String(booking?.currency || 'EUR').toUpperCase()
+  const cost = extra.supplier_cost == null || extra.supplier_cost === '' ? null : Number(extra.supplier_cost)
+  const costCurrency = String(extra.supplier_currency || extra.currency || bookingCurrency).toUpperCase()
+  let quotedCost: number | null = cost
+  let note = ''
+  if (cost != null && Number.isFinite(cost) && costCurrency !== bookingCurrency) {
+    const converted = convertCurrency(cost, costCurrency, bookingCurrency, await fetchRunExchangeRates())
+    quotedCost = converted == null ? null : roundToCurrency(converted, bookingCurrency)
+    note = converted == null
+      ? ` (supplier cost ${costCurrency} ${cost} — no ${bookingCurrency} rate, enter it by hand)`
+      : ` (supplier cost ${costCurrency} ${cost})`
+  }
+
   const { error } = await admin.from('booking_supplier_status').insert({
     booking_id: bookingId,
     supplier_type: 'other',
     supplier_name: supplier?.name || String(extra.title),
-    service_description: `Extra: ${String(extra.title)}`,
-    quoted_cost: extra.supplier_cost ?? null,
+    service_description: `Extra: ${String(extra.title)}${note}`,
+    quoted_cost: quotedCost,
     status: 'pending',
   })
   if (error) console.error('extras: could not add to supplier manifest', error)

@@ -63,7 +63,7 @@ describe('the OAuth callbacks and readers go through the cipher', () => {
     'app/api/auth/google/callback/route.ts',
     'app/api/auth/accounting/callback/route.ts',
     'lib/gmail.ts',
-    'app/api/gmail/labels/route.ts',
+    // app/api/gmail/labels reads tokens only through lib/gmail (round 14).
     'app/api/gmail/attachments/route.ts',
     'lib/accounting/sync-service.ts',
   ]

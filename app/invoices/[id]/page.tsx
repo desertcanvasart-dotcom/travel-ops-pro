@@ -388,6 +388,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       if (response.ok) {
         fetchInvoice()
         fetchPayments()
+        // Already posted to QuickBooks/Xero: deleted here, not there. Say so
+        // now — otherwise the ledger quietly keeps a receipt Autoura no longer has.
+        const result = await response.json().catch(() => null)
+        if (result?.warning) dialog.alert(tCommon('success'), result.warning, 'warning')
       }
     } catch (error) {
       console.error('Error deleting payment:', error)

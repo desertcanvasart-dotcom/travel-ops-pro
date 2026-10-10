@@ -59,9 +59,13 @@ export async function PUT(
 
     // Strip computed/immutable fields — the commission amount, rate, base value
     // and entity links are derived at generation time and must not be editable here.
+    // org_id and client_id too: the row is filtered by org below, but nothing
+    // stopped the body MOVING it to another org, or pointing it at another
+    // org's client.
     const {
       id: _, created_at, itinerary_id, supplier_id, service_id,
       base_amount, commission_rate, commission_amount,
+      org_id: _org, client_id: _client,
       ...updateData
     } = body
 

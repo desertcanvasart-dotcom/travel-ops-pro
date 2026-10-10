@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { emptyTotals, addToTotals, sumByCurrency, type CurrencyTotals } from '@/lib/currency-totals'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -51,36 +52,38 @@ export async function GET(request: NextRequest) {
     const receivable = (data || []).filter(c => c.commission_type === 'receivable')
     const payable = (data || []).filter(c => c.commission_type === 'payable')
 
+    // Every figure is PER CURRENCY. A commission is stored in its own
+    // currency (an EGP guide tip, a JPY agent fee), and these used to be summed
+    // raw into one number the page then labelled €. Nothing here converts.
+    type Row = { commission_amount: unknown; currency?: unknown }
+    const amount = (c: Row) => c.commission_amount
+    const cur = (c: Row) => c.currency
+    const net = emptyTotals()
+    for (const c of receivable) addToTotals(net, Number(c.commission_amount) || 0, c.currency)
+    for (const c of payable) addToTotals(net, -(Number(c.commission_amount) || 0), c.currency)
+
     const summary = {
-      total_receivable: receivable.reduce((sum, c) => sum + Number(c.commission_amount), 0),
-      total_payable: payable.reduce((sum, c) => sum + Number(c.commission_amount), 0),
-      pending_receivable: receivable
-        .filter(c => c.status === 'pending' || c.status === 'invoiced')
-        .reduce((sum, c) => sum + Number(c.commission_amount), 0),
-      pending_payable: payable
-        .filter(c => c.status === 'pending')
-        .reduce((sum, c) => sum + Number(c.commission_amount), 0),
-      received: receivable
-        .filter(c => c.status === 'received')
-        .reduce((sum, c) => sum + Number(c.commission_amount), 0),
-      paid: payable
-        .filter(c => c.status === 'paid')
-        .reduce((sum, c) => sum + Number(c.commission_amount), 0),
-      net_commission: receivable.reduce((sum, c) => sum + Number(c.commission_amount), 0) -
-                      payable.reduce((sum, c) => sum + Number(c.commission_amount), 0),
-      by_category: {} as Record<string, { receivable: number; payable: number; count: number }>
+      total_receivable: sumByCurrency(receivable, amount, cur),
+      total_payable: sumByCurrency(payable, amount, cur),
+      pending_receivable: sumByCurrency(
+        receivable.filter(c => c.status === 'pending' || c.status === 'invoiced'), amount, cur),
+      pending_payable: sumByCurrency(payable.filter(c => c.status === 'pending'), amount, cur),
+      received: sumByCurrency(receivable.filter(c => c.status === 'received'), amount, cur),
+      paid: sumByCurrency(payable.filter(c => c.status === 'paid'), amount, cur),
+      net_commission: net,
+      by_category: {} as Record<string, { receivable: CurrencyTotals; payable: CurrencyTotals; count: number }>
     }
 
     // Group by category
     ;(data || []).forEach(c => {
       if (!summary.by_category[c.category]) {
-        summary.by_category[c.category] = { receivable: 0, payable: 0, count: 0 }
+        summary.by_category[c.category] = { receivable: emptyTotals(), payable: emptyTotals(), count: 0 }
       }
       summary.by_category[c.category].count++
       if (c.commission_type === 'receivable') {
-        summary.by_category[c.category].receivable += Number(c.commission_amount)
+        addToTotals(summary.by_category[c.category].receivable, c.commission_amount, c.currency)
       } else {
-        summary.by_category[c.category].payable += Number(c.commission_amount)
+        addToTotals(summary.by_category[c.category].payable, c.commission_amount, c.currency)
       }
     })
 

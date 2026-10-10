@@ -1,67 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { decryptToken, encryptToken } from '@/lib/crypto/token-cipher'
 import { clientMessage } from '@/lib/api-errors'
-import { createClient } from '@supabase/supabase-js'
-import { google } from 'googleapis'
-import { refreshAccessToken } from '@/lib/gmail'
+import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { getCurrentUserId } from '@/lib/auth/current-org'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
-)
-
-// GET - Fetch all labels
-export async function GET(request: NextRequest) {
+// One Gmail client per request, for the session user's own mailbox. This route
+// used to keep a single module-level OAuth2 client and setCredentials() on it
+// per request: two users' requests in flight at once shared it, so one could
+// list, create or delete labels in the other's Gmail. getAuthenticatedGmail
+// also stores a refreshed token (DELETE and POST refreshed it and threw the
+// new one away).
+async function mailbox(): Promise<{ gmail: Awaited<ReturnType<typeof getAuthenticatedGmail>>['gmail'] } | NextResponse> {
+  const userId = await getCurrentUserId()
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
   try {
-    // Derive the user from the session, never a client-supplied userId (IDOR).
-    const userId = await getCurrentUserId()
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { data: tokenData, error: tokenError } = await supabase
-      .from('gmail_tokens')
-      .select('*')
-      .eq('user_id', userId)
-      .single()
-
-    if (tokenError || !tokenData) {
+    const { gmail } = await getAuthenticatedGmail(userId)
+    return { gmail }
+  } catch (err) {
+    if (err instanceof GmailAuthError) {
       return NextResponse.json({ error: 'Gmail not connected' }, { status: 401 })
     }
+    throw err
+  }
+}
 
-    let access_token = decryptToken(tokenData.access_token)
-    const refresh_token = decryptToken(tokenData.refresh_token) as string
-    const token_expiry = tokenData.token_expiry
-
-    if (new Date(token_expiry) <= new Date()) {
-      const newTokens = await refreshAccessToken(refresh_token)
-      access_token = newTokens.access_token!
-      
-      await supabase
-        .from('gmail_tokens')
-        .update({
-          access_token: encryptToken(newTokens.access_token),
-          token_expiry: new Date(newTokens.expiry_date || Date.now() + 3600000).toISOString(),
-        })
-        .eq('user_id', userId)
-    }
-
-    oauth2Client.setCredentials({ access_token, refresh_token })
-    const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
+// GET - Fetch all labels
+export async function GET() {
+  try {
+    // Derive the user from the session, never a client-supplied userId (IDOR).
+    const auth = await mailbox()
+    if (auth instanceof NextResponse) return auth
+    const { gmail } = auth
 
     const response = await gmail.users.labels.list({ userId: 'me' })
-    
+
     // Filter to show only user-created labels and some system labels
-    const labels = response.data.labels?.filter(label => 
-      label.type === 'user' || 
+    const labels = response.data.labels?.filter(label =>
+      label.type === 'user' ||
       ['INBOX', 'SENT', 'DRAFT', 'TRASH', 'SPAM', 'STARRED', 'IMPORTANT'].includes(label.id || '')
     ) || []
 
@@ -77,37 +53,14 @@ export async function POST(request: NextRequest) {
   try {
     // The mailbox is the SESSION user's. A userId from the body let any
     // signed-in user create or delete labels in someone else's Gmail.
-    const userId = await getCurrentUserId()
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const auth = await mailbox()
+    if (auth instanceof NextResponse) return auth
+    const { gmail } = auth
     const { name, backgroundColor, textColor } = await request.json()
 
     if (!name) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
-
-    const { data: tokenData, error: tokenError } = await supabase
-      .from('gmail_tokens')
-      .select('*')
-      .eq('user_id', userId)
-      .single()
-
-    if (tokenError || !tokenData) {
-      return NextResponse.json({ error: 'Gmail not connected' }, { status: 401 })
-    }
-
-    let access_token = decryptToken(tokenData.access_token)
-    const refresh_token = decryptToken(tokenData.refresh_token) as string
-    const token_expiry = tokenData.token_expiry
-
-    if (new Date(token_expiry) <= new Date()) {
-      const newTokens = await refreshAccessToken(refresh_token)
-      access_token = newTokens.access_token!
-    }
-
-    oauth2Client.setCredentials({ access_token, refresh_token })
-    const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
 
     const response = await gmail.users.labels.create({
       userId: 'me',
@@ -134,37 +87,14 @@ export async function DELETE(request: NextRequest) {
   try {
     // The mailbox is the SESSION user's. A userId from the body let any
     // signed-in user create or delete labels in someone else's Gmail.
-    const userId = await getCurrentUserId()
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const auth = await mailbox()
+    if (auth instanceof NextResponse) return auth
+    const { gmail } = auth
     const { labelId } = await request.json()
 
     if (!labelId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
-
-    const { data: tokenData } = await supabase
-      .from('gmail_tokens')
-      .select('*')
-      .eq('user_id', userId)
-      .single()
-
-    if (!tokenData) {
-      return NextResponse.json({ error: 'Gmail not connected' }, { status: 401 })
-    }
-
-    let access_token = decryptToken(tokenData.access_token)
-    const refresh_token = decryptToken(tokenData.refresh_token) as string
-    const token_expiry = tokenData.token_expiry
-
-    if (new Date(token_expiry) <= new Date()) {
-      const newTokens = await refreshAccessToken(refresh_token)
-      access_token = newTokens.access_token!
-    }
-
-    oauth2Client.setCredentials({ access_token, refresh_token })
-    const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
 
     await gmail.users.labels.delete({
       userId: 'me',

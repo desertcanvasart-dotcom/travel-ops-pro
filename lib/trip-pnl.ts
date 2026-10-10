@@ -188,8 +188,12 @@ export function computeTripPnL(fxIndex: FxIndex, inputs: TripPnLInputs): TripPnL
   // Invoice totals are not converted: they are raised in the trip's currency,
   // and amount_paid is a running total with no date to convert on. The realized
   // layer below uses the payment rows instead, which DO carry a date.
-  const totalRevenue = invoices.reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0)
-  const totalPaid = invoices.reduce((sum, inv) => sum + Number(inv.amount_paid || 0), 0)
+  //
+  // A cancelled invoice bills nothing, so it is not revenue. Payments against
+  // one are left to the realized layer: if money moved, it moved.
+  const liveInvoices = invoices.filter(inv => inv.status !== 'cancelled')
+  const totalRevenue = liveInvoices.reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0)
+  const totalPaid = liveInvoices.reduce((sum, inv) => sum + Number(inv.amount_paid || 0), 0)
 
   // ---- Expenses ---------------------------------------------------------
   let manualExpenses = 0
@@ -198,6 +202,9 @@ export function computeTripPnL(fxIndex: FxIndex, inputs: TripPnLInputs): TripPnL
   const expenseBreakdown: Record<string, number> = {}
 
   for (const exp of expenses) {
+    // A rejected or cancelled expense is not a cost of the trip. Skipped before
+    // conversion so it cannot raise an FX hole either.
+    if (exp.status === 'rejected' || exp.status === 'cancelled') continue
     const { amount, hole } = convertLine(fxIndex, fx, {
       amount: exp.amount,
       fromCurrency: exp.currency,
@@ -214,8 +221,7 @@ export function computeTripPnL(fxIndex: FxIndex, inputs: TripPnLInputs): TripPnL
 
     const value = amount ?? 0
     if (exp.status === 'paid') expensesPaid += value
-    // 'rejected' is excluded from pending: a rejected expense is not owed.
-    if (exp.status !== 'paid' && exp.status !== 'rejected') expensesPending += value
+    if (exp.status !== 'paid') expensesPending += value
 
     // A booking supplier's confirmed cost is recorded as an expense too, but it
     // is the same money supplier_cost already counts. Paying it is still cash
@@ -332,8 +338,11 @@ export function computeTripPnL(fxIndex: FxIndex, inputs: TripPnLInputs): TripPnL
 
   // ---- Accrued ----------------------------------------------------------
   // Falls back to the quote when nothing has been invoiced yet, so a trip in
-  // progress still reports a margin rather than a 100% loss.
-  const revenueForCalc = totalRevenue > 0 ? totalRevenue : Number(itinerary.total_cost || 0)
+  // progress still reports a margin rather than a 100% loss. The quote here is
+  // quoted_amount (total_cost + extras): the cost side already carries the
+  // extras' supplier cost, so leaving their price out booked every uninvoiced
+  // extra as a pure loss.
+  const revenueForCalc = totalRevenue > 0 ? totalRevenue : Number(itinerary.total_cost || 0) + extrasRevenue
   const grossProfit = revenueForCalc - totalExpenses
   const netProfit = grossProfit - agentCommissions
 

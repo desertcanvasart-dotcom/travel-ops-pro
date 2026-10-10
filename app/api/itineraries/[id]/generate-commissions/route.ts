@@ -35,6 +35,15 @@ export async function POST(
       return NextResponse.json({ error: 'Itinerary not found' }, { status: 404 })
     }
 
+    // A cancelled trip earns and owes no commission. Generating them anyway
+    // put receivables and agent payables on the books for a trip that never ran.
+    if (itinerary.status === 'cancelled') {
+      return NextResponse.json(
+        { error: 'This trip is cancelled — commissions are not generated for cancelled trips.' },
+        { status: 409 }
+      )
+    }
+
     // Get all services with suppliers for this itinerary
     const { data: days, error: daysError } = await supabaseAdmin
       .from('itinerary_days')

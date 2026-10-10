@@ -8,7 +8,8 @@
 // money figure, because "30%" and "€1,746.62" are not equally reviewable — the
 // operator is about to put the second number in front of a client.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { roundToCurrency } from '@/lib/currency-totals'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useConfirm } from '@/components/ConfirmDialog'
@@ -53,7 +54,24 @@ export default function ConvertToBookingCard({
   const t = useTranslations('bookings.fromQuote')
   const confirmDialog = useConfirm()
   const router = useRouter()
+  // The organisation's own deposit (Settings → Payment terms), not a fixed 30%:
+  // the card always sent its 30, which overrode the org's rule on every booking
+  // made from the UI. Until the operator changes the field, no percentage is
+  // sent and the server applies the org's rule itself.
   const [depositPercent, setDepositPercent] = useState(30)
+  const [depositEdited, setDepositEdited] = useState(false)
+  useEffect(() => {
+    let live = true
+    fetch('/api/settings/payment-terms')
+      .then(r => r.json())
+      .then(j => {
+        if (!live || !j?.success) return
+        const pct = Number(j.terms?.deposit_percent ?? j.defaults?.deposit_percent)
+        if (Number.isFinite(pct)) setDepositPercent(pct)
+      })
+      .catch(() => {})
+    return () => { live = false }
+  }, [])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [booked, setBooked] = useState(existingBooking)
@@ -61,7 +79,7 @@ export default function ConvertToBookingCard({
   const total = Number(sellingPrice ?? 0)
   const code = (currency || 'EUR').toUpperCase()
   // Rounded the same way the server does, so the preview matches what is stored.
-  const depositAmount = Math.round(((total * depositPercent) / 100) * 100) / 100
+  const depositAmount = roundToCurrency((total * depositPercent) / 100, code)
 
   const convert = async (allowIncomplete = false) => {
     setBusy(true)
@@ -73,7 +91,7 @@ export default function ConvertToBookingCard({
         body: JSON.stringify({
           quote_id: quoteId,
           quote_type: quoteType,
-          deposit_percent: depositPercent,
+          ...(depositEdited ? { deposit_percent: depositPercent } : {}),
           ...(allowIncomplete ? { allow_incomplete: true } : {}),
         }),
       })
@@ -155,6 +173,7 @@ export default function ConvertToBookingCard({
             const next = Number(e.target.value)
             if (!Number.isFinite(next)) return
             setDepositPercent(Math.min(100, Math.max(0, next)))
+            setDepositEdited(true)
           }}
           className="w-20 px-2 py-1.5 text-sm border border-blue-200 rounded-md bg-white"
         />

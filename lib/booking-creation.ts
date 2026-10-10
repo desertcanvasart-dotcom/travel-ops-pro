@@ -1,4 +1,5 @@
 import { supplierLinesFromServices, type ServiceForSupplier } from '@/lib/bookings/supplier-lines'
+import { roundToCurrency } from '@/lib/currency-totals'
 import { businessToday } from '@/lib/today'
 import {
   DEFAULT_PAYMENT_RULE,
@@ -242,9 +243,12 @@ export const BOOKING_ROW_BUILDER = 'schedule-2026-09-02'
 
 export function buildBookingRow(input: BuildBookingRowInput): Record<string, unknown> {
   const { orgId, bookingCode, itinerary, depositPercent, quote } = input
-  const total = Number(input.total ?? itinerary.total_cost ?? 0)
-  const { balanceDue } = computeDeposit(total, depositPercent)
   const currency = input.currency || itinerary.currency || 'EUR'
+  // In the currency's own units before anything is derived from it: a yen
+  // total of ¥123,456.25 was shown and paid as ¥123,456, and the booking never
+  // reached 'paid' over the 25 sen left owing.
+  const total = roundToCurrency(Number(input.total ?? itinerary.total_cost ?? 0), currency)
+  const { balanceDue } = computeDeposit(total, depositPercent)
 
   // WHEN the money is due, not just how much. A booking taken inside the
   // balance window collapses to one payment rather than carrying a balance
@@ -278,7 +282,7 @@ export function buildBookingRow(input: BuildBookingRowInput): Record<string, unk
     end_date: itinerary.end_date,
     num_adults: itinerary.num_adults || 1,
     num_children: itinerary.num_children || 0,
-    total_cost: roundMoney(total),
+    total_cost: total,
     // Paired with `total` above, never sourced independently — see the comment
     // on BuildBookingRowInput.currency.
     currency,

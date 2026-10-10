@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
 
     const { data: invoices, error: invError } = await supabaseAdmin
       .from('invoices')
-      .select('invoice_number, issue_date, total_amount, amount_paid, balance_due, currency')
+      .select('invoice_number, issue_date, total_amount, amount_paid, balance_due, currency, status')
       .eq('org_id', orgId)
       .gte('issue_date', rangeStart)
       .lte('issue_date', rangeEnd)
@@ -157,7 +157,12 @@ export async function GET(request: NextRequest) {
     const fx = emptyFxSummary()
     const fxHoles: FxHole[] = []
 
+    // A cancelled invoice is not revenue and a rejected or cancelled expense is
+    // not a cost — counting them inflated both sides of the P&L. Dropped BEFORE
+    // conversion so a document that no longer counts can't raise an fx_hole
+    // and mark the whole report incomplete either.
     const allInvoices = (invoices || [])
+      .filter(inv => inv.status !== 'cancelled')
       .map(inv => {
         const total = convertLine(fxIndex, fx, {
           amount: inv.total_amount,
@@ -182,6 +187,8 @@ export async function GET(request: NextRequest) {
           kind: 'invoice',
           reference: inv.invoice_number || 'invoice',
         })
+        // balance_due is left in the invoice's own currency — never sum it;
+        // pendingReceivables derives the balance from the converted pair.
         return {
           ...inv,
           total_amount: total.amount ?? 0,
@@ -191,6 +198,7 @@ export async function GET(request: NextRequest) {
       .filter((inv): inv is NonNullable<typeof inv> => inv !== null)
 
     const allExpenses = (expenses || [])
+      .filter(exp => exp.status !== 'rejected' && exp.status !== 'cancelled')
       .map(exp => {
         const converted = convertLine(fxIndex, fx, {
           amount: exp.amount,
@@ -335,11 +343,14 @@ export async function GET(request: NextRequest) {
       .filter(exp => exp.status === 'paid')
       .reduce((sum, exp) => sum + Number(exp.amount || 0), 0)
 
+    // From the CONVERTED total and paid figures: balance_due is still in the
+    // invoice's own currency, so summing it added yen to euros as if equal.
     const pendingReceivables = yearInvoices
-      .reduce((sum, inv) => sum + Number(inv.balance_due || 0), 0)
+      .reduce((sum, inv) => sum + Math.max(0, Number(inv.total_amount || 0) - Number(inv.amount_paid || 0)), 0)
 
+    // Rejected and cancelled expenses were already dropped above.
     const pendingPayables = yearExpenses
-      .filter(exp => exp.status !== 'paid' && exp.status !== 'rejected')
+      .filter(exp => exp.status !== 'paid')
       .reduce((sum, exp) => sum + Number(exp.amount || 0), 0)
 
     const cashFlow = {

@@ -7,6 +7,7 @@
 // existing pricing flow; the response flags that a re-price is due.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { isSinglePayment } from '@/lib/booking-extras'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
@@ -75,6 +76,8 @@ export async function POST(
     addedPax: req.requested_count,
     depositPercent: booking.deposit_percent,
     oldBalanceDue: booking.balance_due,
+    currency: booking.currency,
+    singlePayment: isSinglePayment(booking),
   })
 
   const bookingUpdate: Record<string, unknown> = {

@@ -11,6 +11,8 @@ import { createClient } from '@supabase/supabase-js'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { getAuthenticatedGmail } from '@/lib/gmail'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { headerSafe, encodeEmailHeader } from '@/lib/http/safe-header'
+import { storedReplyHeaders, threadingLines } from '@/lib/email/reply-threading'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -184,16 +186,35 @@ export async function POST(
           ? (inboxMessage.subject.startsWith('Re:') ? inboxMessage.subject : `Re: ${inboxMessage.subject}`)
           : 'Re: Your inquiry'
 
-        // Build raw email message
+        // The conversation this draft answers: its Gmail thread (only usable
+        // from the mailbox that owns it) and the stored Message-IDs that thread
+        // the reply in every other mail client. The old In-Reply-To carried our
+        // own email_conversations row id, which is not a Message-ID at all.
+        let gmailThreadId: string | undefined
+        if (thread.email_conversation_id) {
+          const { data: conv } = await supabase
+            .from('email_conversations')
+            .select('thread_id, user_id')
+            .eq('id', thread.email_conversation_id)
+            .maybeSingle()
+          if (conv?.thread_id && conv.user_id === userId) gmailThreadId = conv.thread_id
+        }
+        const threading = await storedReplyHeaders(supabase, thread.email_conversation_id)
+
+        // Built like /api/gmail/send: header values cleaned of CR/LF (the
+        // address and subject came from inbound mail), the subject an RFC 2047
+        // encoded-word so a Japanese subject is not mojibake, the body base64.
         const emailContent = [
-          `To: ${thread.contact_info}`,
-          `From: ${emailAddress}`,
-          `Subject: ${subject}`,
-          thread.email_conversation_id ? `In-Reply-To: ${thread.email_conversation_id}` : '',
+          `To: ${headerSafe(thread.contact_info)}`,
+          `From: ${headerSafe(emailAddress)}`,
+          `Subject: ${encodeEmailHeader(headerSafe(subject))}`,
+          ...threadingLines(threading),
+          'MIME-Version: 1.0',
           'Content-Type: text/plain; charset=utf-8',
+          'Content-Transfer-Encoding: base64',
           '',
-          messageBody,
-        ].filter(Boolean).join('\r\n')
+          Buffer.from(messageBody, 'utf8').toString('base64'),
+        ].join('\r\n')
 
         const encodedMessage = Buffer.from(emailContent)
           .toString('base64')
@@ -203,7 +224,7 @@ export async function POST(
 
         const sent = await gmail.users.messages.send({
           userId: 'me',
-          requestBody: { raw: encodedMessage },
+          requestBody: { raw: encodedMessage, threadId: gmailThreadId },
         })
 
         sendResult = { success: true, messageId: sent.data.id || undefined }
