@@ -2,6 +2,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { parentQuoteInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -41,6 +43,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    // quote_revisions has no org_id; its quote does. Without this any signed-in
+    // user read another org's cost, margin and internal notes by quote id.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await parentQuoteInOrg(supabaseAdmin, 'b2c', id, orgId))) return notFoundInOrg('Quote')
     const { searchParams } = new URL(request.url)
     const fromVersion = parseInt(searchParams.get('from') || '0', 10)
     const toVersion = parseInt(searchParams.get('to') || '0', 10)

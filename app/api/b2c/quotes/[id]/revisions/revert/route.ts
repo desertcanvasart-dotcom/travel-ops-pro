@@ -2,7 +2,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUserRole } from '@/lib/auth/current-org'
+import { getCurrentUserRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { parentQuoteInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,6 +16,10 @@ export async function POST(
 ) {
   try {
     const { id } = await params
+    // The revert SQL updates by quote id alone: the quote must be this org's.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await parentQuoteInOrg(supabaseAdmin, 'b2c', id, orgId))) return notFoundInOrg('Quote')
     const role = await getCurrentUserRole()
     if (!role || !['owner', 'admin', 'manager'].includes(role)) {
       return NextResponse.json({ success: false, error: 'Insufficient permissions. Requires manager role or higher.' }, { status: 403 })
@@ -24,6 +29,17 @@ export async function POST(
     const versionNumber = body.version_number
     if (!versionNumber) {
       return NextResponse.json({ success: false, error: 'version_number is required' }, { status: 400 })
+    }
+
+    // A booked quote is the price the booking was made at; reverting brought
+    // back an older price the booking (and any re-send) then disagreed with.
+    const { count: bookings } = await supabaseAdmin
+      .from('bookings')
+      .select('id', { count: 'exact', head: true })
+      .eq('quote_id', id)
+      .eq('quote_type', 'b2c')
+    if ((bookings ?? 0) > 0) {
+      return NextResponse.json({ success: false, error: 'A booked quote cannot be reverted' }, { status: 409 })
     }
 
     let userId: string | null = null
@@ -42,7 +58,7 @@ export async function POST(
 
     if (error) return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
 
-    const { data: updatedQuote } = await supabaseAdmin.from('b2c_quotes').select('*').eq('id', id).single()
+    const { data: updatedQuote } = await supabaseAdmin.from('b2c_quotes').select('*').eq('id', id).eq('org_id', orgId).single()
 
     return NextResponse.json({ success: true, message: `Quote reverted to version ${versionNumber}`, new_revision_id: newRevisionId, updated_quote: updatedQuote })
   } catch (error: any) {

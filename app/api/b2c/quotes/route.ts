@@ -7,9 +7,11 @@
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
+import { priceB2cQuote } from '@/lib/b2c/quote-price'
 import { clientMessage } from '@/lib/api-errors'
 import { loadSeasonWindows } from '@/lib/auto-pricing-service'
-import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
+import { seasonForDate } from '@/lib/pricing/season-uplift'
+import { recordsInOrg } from '@/lib/org-refs'
 import { NextRequest, NextResponse } from 'next/server'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
@@ -91,6 +93,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
     }
 
+    // The client must be this org's: the quote is sent to and booked for them.
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { client_id }))) {
+      return NextResponse.json({ success: false, error: 'Client not found' }, { status: 404 })
+    }
+
     const travelers = Math.max(1, Number(num_travelers) || 1)
     // Margin must be applied to the SUPPLIER cost. itineraries.total_cost is
     // the CLIENT price (margin already included — both generate-itinerary and
@@ -99,8 +106,7 @@ export async function POST(request: NextRequest) {
     // only for legacy rows that never had supplier_cost populated.
     const totalCost = Number(itinerary.supplier_cost) || Number(itinerary.total_cost) || 0
     const marginPct = Number(margin_percent) || 0
-    const marginAmount = totalCost * (marginPct / 100)
-    const baseSellingPrice = totalCost + marginAmount
+    const quoteCurrency = currency || itinerary.currency || 'EUR'
 
     // The operator's own high dates, on the DEPARTURE — the same calendar and
     // the same rule the B2B paths follow, because a trip leaving in Golden Week
@@ -113,9 +119,16 @@ export async function POST(request: NextRequest) {
       await loadSeasonWindows(itinerary.org_id ?? undefined, departureDate ?? undefined),
       departureDate
     )
-    const seasonUplift = Math.round(computeUplift({ sellingPrice: baseSellingPrice, season }).amount * 100) / 100
-    const sellingPrice = Math.round((baseSellingPrice + seasonUplift) * 100) / 100
-    const pricePerPerson = travelers > 0 ? Math.round((sellingPrice / travelers) * 100) / 100 : 0
+    // One computation with the re-price on edit (lib/b2c/quote-price), in the
+    // quote currency's own units.
+    const priced = priceB2cQuote({
+      totalCost, marginPercent: marginPct, travelers,
+      seasonUpliftPercent: season?.upliftPercent ?? 0, currency: quoteCurrency,
+    })
+    const marginAmount = priced.margin_amount
+    const seasonUplift = priced.season_uplift_amount
+    const sellingPrice = priced.selling_price
+    const pricePerPerson = priced.price_per_person
 
     const validUntil = new Date()
     validUntil.setDate(validUntil.getDate() + (Number(valid_days) || 30))
@@ -137,7 +150,7 @@ export async function POST(request: NextRequest) {
         season_name: season?.name ?? null,
         season_uplift_percent: season?.upliftPercent ?? 0,
         season_uplift_amount: seasonUplift,
-        currency: currency || itinerary.currency || 'EUR',
+        currency: quoteCurrency,
         status: 'draft',
         valid_until: validUntil.toISOString().split('T')[0],
         internal_notes,

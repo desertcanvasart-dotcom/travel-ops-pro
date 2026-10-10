@@ -9,6 +9,8 @@ import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
+import { recordsInOrg } from '@/lib/org-refs'
+import { priceB2cQuote } from '@/lib/b2c/quote-price'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabaseAdmin = createClient(
@@ -56,22 +58,34 @@ export async function PUT(
     const { id: _drop, org_id: _dropOrg, change_reason, changed_by: _dropActor, ...updates } = body
     const actor = await getCurrentUserId()
 
+    // A trip or client of another org on the quote put that org's client
+    // contact and trip cost in our quote (the GET joins them) and sent our
+    // offer to their client.
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updates.itinerary_id, client_id: updates.client_id }))) {
+      return NextResponse.json({ success: false, error: 'Itinerary or client not found' }, { status: 404 })
+    }
+    // Derived prices are computed here, never taken from the body.
+    delete updates.margin_amount
+    delete updates.selling_price
+    delete updates.price_per_person
+    delete updates.season_uplift_amount
+
     // If margin/travelers/total_cost change, recompute the derived prices so the
-    // offer stays internally consistent.
+    // offer stays internally consistent — season premium included, as on create.
     if (updates.total_cost != null || updates.margin_percent != null || updates.num_travelers != null) {
       const { data: existing } = await supabaseAdmin
         .from('b2c_quotes')
-        .select('total_cost, margin_percent, num_travelers')
+        .select('total_cost, margin_percent, num_travelers, season_uplift_percent, currency')
         .eq('id', id)
+        .eq('org_id', orgId)
         .single()
-      const totalCost = Number(updates.total_cost ?? existing?.total_cost ?? 0)
-      const marginPct = Number(updates.margin_percent ?? existing?.margin_percent ?? 0)
-      const travelers = Math.max(1, Number(updates.num_travelers ?? existing?.num_travelers ?? 1))
-      const marginAmount = totalCost * (marginPct / 100)
-      const sellingPrice = totalCost + marginAmount
-      updates.margin_amount = marginAmount
-      updates.selling_price = sellingPrice
-      updates.price_per_person = sellingPrice / travelers
+      Object.assign(updates, priceB2cQuote({
+        totalCost: Number(updates.total_cost ?? existing?.total_cost ?? 0),
+        marginPercent: Number(updates.margin_percent ?? existing?.margin_percent ?? 0),
+        travelers: Number(updates.num_travelers ?? existing?.num_travelers ?? 1),
+        seasonUpliftPercent: Number(updates.season_uplift_percent ?? existing?.season_uplift_percent ?? 0),
+        currency: updates.currency ?? existing?.currency,
+      }))
     }
 
     updates.updated_at = new Date().toISOString()
