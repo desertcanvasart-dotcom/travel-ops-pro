@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-numbering'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { recordsInOrg } from '@/lib/org-refs'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -81,6 +82,11 @@ export async function POST(request: NextRequest) {
         { error: 'supplier_invoice_number, supplier_name, invoice_date, and amount are required' },
         { status: 400 }
       )
+    }
+
+    // The trip and the client invoice a bill is tied to must be this org's.
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: body.itinerary_id, invoice_id: body.client_invoice_id }))) {
+      return NextResponse.json({ error: 'Trip or client invoice not found' }, { status: 404 })
     }
 
     // M31: internal_reference generation now uses nextDocumentNumber

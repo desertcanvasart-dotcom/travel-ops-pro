@@ -138,7 +138,10 @@ export async function POST(
       .eq('org_id', orgId)
 
     if (updateError) {
+      // The file is stored but the invoice doesn't point at it — the page
+      // refreshed as if attached and the document link 404'd.
       console.error('Failed to update supplier invoice with document:', updateError)
+      return NextResponse.json({ error: 'Failed to attach the document' }, { status: 500 })
     }
 
     return NextResponse.json({

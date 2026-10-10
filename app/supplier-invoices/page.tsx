@@ -427,6 +427,10 @@ export default function SupplierInvoicesPage() {
         setShowCreateModal(false)
         resetForm()
         fetchInvoices()
+      } else {
+        // Keep the modal open with what was typed, and say why.
+        const data = await res.json().catch(() => ({}))
+        alert(`Creating the supplier invoice failed: ${data.error || res.statusText || res.status}`)
       }
     } catch (error) {
       console.error('Error creating supplier invoice:', error)

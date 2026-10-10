@@ -188,6 +188,7 @@ export async function GET(request: NextRequest) {
     const { data: paidExpenses } = await supabaseAdmin
       .from('expenses')
       .select('*')
+      .eq('org_id', orgId)
       .eq('status', 'paid')
       .order('payment_date', { ascending: false })
       .limit(50)

@@ -17,10 +17,14 @@ type DbClient = {
 export async function recordsInOrg(
   supabase: DbClient,
   orgId: string,
-  refs: { itinerary_id?: unknown; client_id?: unknown }
+  refs: { itinerary_id?: unknown; client_id?: unknown; invoice_id?: unknown }
 ): Promise<boolean> {
   if (!orgId) return false
-  const checks: Array<[string, unknown]> = [['itineraries', refs.itinerary_id], ['clients', refs.client_id]]
+  const checks: Array<[string, unknown]> = [
+    ['itineraries', refs.itinerary_id],
+    ['clients', refs.client_id],
+    ['invoices', refs.invoice_id],
+  ]
   for (const [table, id] of checks) {
     if (id === undefined || id === null || id === '') continue
     if (typeof id !== 'string') return false

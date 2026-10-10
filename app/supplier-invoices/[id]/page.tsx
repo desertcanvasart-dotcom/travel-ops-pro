@@ -190,9 +190,12 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
     try {
       const res = await fetch('/api/expenses?status=pending')
       const data = await res.json()
-      // Filter by supplier name if possible
+      // Only expenses in the invoice's currency can match it; supplier's first.
       const supplierName = invoice?.supplier_name as string
-      const filtered = Array.isArray(data) ? data : []
+      const invoiceCurrency = String(invoice?.currency || 'EUR').toUpperCase()
+      const filtered = (Array.isArray(data) ? data : []).filter((e: Record<string, unknown>) =>
+        String(e.currency || 'EUR').toUpperCase() === invoiceCurrency
+      )
       setAvailableExpenses(
         supplierName
           ? filtered.filter((e: Record<string, unknown>) =>
@@ -242,6 +245,8 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
     )
   }
 
+  // Matching is open before review only (the match route refuses the rest).
+  const matchable = invoice.status === 'received' || invoice.status === 'matched'
   const curr = CURRENCIES[invoice.currency as string] || (invoice.currency as string) || ''
   const statusStyle = STATUS_STYLES[invoice.status as string] || STATUS_STYLES.received
   const matchStyle = MATCH_STYLES[invoice.match_status as string] || MATCH_STYLES.unmatched
@@ -368,7 +373,7 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
               <h3 className="text-sm font-semibold text-gray-900">
                 Matched Expenses ({matchedExpenses.length})
               </h3>
-              {invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
+              {matchable && (
                 <button
                   onClick={openMatchModal}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#647C47] bg-[#647C47]/10 rounded-lg hover:bg-[#647C47]/20"
@@ -395,7 +400,7 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
                       <span className="text-sm font-medium">
                         {CURRENCIES[match.expense.currency] || match.expense.currency}{Number(match.matched_amount).toFixed(2)}
                       </span>
-                      {invoice.status !== 'paid' && (
+                      {matchable && (
                         <button
                           onClick={() => handleRemoveExpense(match.expense_id)}
                           className="p-1 text-gray-400 hover:text-red-500"
