@@ -24,6 +24,7 @@
 // Balance preserves whatever has been paid: new_balance = old_balance + delta.
 
 import { roundMoney } from '@/lib/fx-conversion'
+import { roundToCurrency } from '@/lib/currency-totals'
 import { computeDeposit } from '@/lib/booking-creation'
 
 export type AddTravellerReprice =
@@ -50,7 +51,14 @@ export function computeAddTravellerReprice(input: {
   addedPax: number
   depositPercent: number | null | undefined
   oldBalanceDue: number | null | undefined
+  /** The booking's currency: amounts are rounded in its own units (¥100,000
+   *  over 3 travellers is ¥33,333 a head, not ¥33,333.33). */
+  currency?: string | null
+  /** One single payment (lib/booking-extras isSinglePayment): the deposit
+   *  follows the total instead of falling back to a percentage. */
+  singlePayment?: boolean
 }): AddTravellerReprice {
+  const round = (v: number) => (input.currency ? roundToCurrency(v, input.currency) : roundMoney(v))
   const oldTotal = Number(input.oldTotal)
   const oldPax = Math.floor(input.oldPax)
   const addedPax = Math.floor(input.addedPax)
@@ -67,23 +75,26 @@ export function computeAddTravellerReprice(input: {
   const oldBase = Number.isFinite(rawBase) && rawBase > 0 ? rawBase : oldTotal
 
   const perPerson = oldBase / oldPax
-  const delta = roundMoney(perPerson * addedPax)
+  const delta = round(perPerson * addedPax)
   // The extras stay in the total exactly as they were — added, never scaled.
-  const newTotal = roundMoney(oldTotal + delta)
-  const newBaseTotalCost = roundMoney(oldBase + delta)
+  const newTotal = round(oldTotal + delta)
+  const newBaseTotalCost = round(oldBase + delta)
   const depositPercent = Number(input.depositPercent) || 0
-  // On the base, like every other deposit since extras landed.
-  const newDepositAmount = computeDeposit(newBaseTotalCost, depositPercent).depositAmount
+  // On the base, like every other deposit since extras landed — or the whole
+  // total for a single-payment booking.
+  const newDepositAmount = input.singlePayment
+    ? newTotal
+    : (input.currency ? round((newBaseTotalCost * depositPercent) / 100) : computeDeposit(newBaseTotalCost, depositPercent).depositAmount)
   const oldBalance = Number(input.oldBalanceDue)
   // Preserve payments: the outstanding balance rises by exactly the delta.
-  const newBalanceDue = roundMoney(
+  const newBalanceDue = round(
     (Number.isFinite(oldBalance) ? oldBalance : oldTotal) + delta
   )
 
   return {
     method: 'per_person',
-    perPerson: roundMoney(perPerson),
-    oldTotal: roundMoney(oldTotal),
+    perPerson: round(perPerson),
+    oldTotal: round(oldTotal),
     newTotal,
     delta,
     newBaseTotalCost,

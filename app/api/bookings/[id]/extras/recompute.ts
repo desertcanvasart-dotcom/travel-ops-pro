@@ -16,6 +16,7 @@ import {
   applyExtras,
   paymentStandingFor,
   totalPaidFrom,
+  isSinglePayment,
   type BookingExtraLine,
 } from '@/lib/booking-extras'
 
@@ -98,6 +99,7 @@ export async function recomputeBookingExtras(
     depositPercent: booking.deposit_percent,
     totalPaid,
     currency,
+    singlePayment: isSinglePayment(booking),
   })
 
   const standing = paymentStandingFor({

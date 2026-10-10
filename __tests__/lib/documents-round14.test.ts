@@ -45,3 +45,31 @@ describe('B2C quotes', () => {
     expect(src('app/api/b2c/quotes/[id]/route.ts')).toContain('seasonUpliftPercent: Number(updates.season_uplift_percent ?? existing?.season_uplift_percent ?? 0)')
   })
 })
+
+describe('bookings', () => {
+  it('a single-payment booking keeps the whole total as its deposit through extras and added travellers', async () => {
+    const { applyExtras, isSinglePayment } = await import('@/lib/booking-extras')
+    const { computeAddTravellerReprice } = await import('@/lib/reprice-add-traveller')
+    const single = { balance_due_date: null, deposit_amount: 500000, total_cost: 500000 }
+    expect(isSinglePayment(single)).toBe(true)
+    expect(isSinglePayment({ ...single, balance_due_date: '2026-12-01' })).toBe(false)
+    expect(isSinglePayment({ ...single, deposit_amount: 100000 })).toBe(false)
+    const applied = applyExtras({ baseTotalCost: null, totalCost: 500000, extrasTotal: 20000, depositPercent: 20, currency: 'JPY', singlePayment: true })
+    expect(applied.deposit_amount).toBe(520000)
+    const r = computeAddTravellerReprice({ oldTotal: 100000, oldPax: 3, addedPax: 1, depositPercent: 20, oldBalanceDue: 100000, currency: 'JPY', singlePayment: true })
+    if (r.method !== 'per_person') throw new Error('expected per_person')
+    expect(r.perPerson).toBe(33333)
+    expect(r.newDepositAmount).toBe(r.newTotal)
+    expect(Number.isInteger(r.newTotal)).toBe(true)
+  })
+  it('the convert card leaves the deposit to the org’s rule unless the operator changes it', () => {
+    const c = src('app/components/ConvertToBookingCard.tsx')
+    expect(c).toContain('...(depositEdited ? { deposit_percent: depositPercent } : {})')
+    expect(c).toContain("fetch('/api/settings/payment-terms')")
+  })
+  it('a booking total is in its currency’s units; an extra’s supplier cost is converted to it', () => {
+    expect(src('lib/booking-creation.ts')).toContain('const total = roundToCurrency(Number(input.total ?? itinerary.total_cost ?? 0), currency)')
+    const e = src('app/api/bookings/[id]/extras/[eid]/route.ts')
+    expect(e).toContain('convertCurrency(cost, costCurrency, bookingCurrency, await fetchRunExchangeRates())')
+  })
+})

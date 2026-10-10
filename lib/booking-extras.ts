@@ -130,6 +130,27 @@ export interface ApplyExtrasInput {
   /** Money actually received. Defaults to none. */
   totalPaid?: number | null | undefined
   currency: string
+  /** The booking is ONE payment (see isSinglePayment): its deposit is the whole
+   *  total and stays the whole total. */
+  singlePayment?: boolean
+}
+
+/**
+ * A booking made inside the balance window has no separate balance: the
+ * payment schedule stored deposit_amount = total and balance_due_date = null
+ * (lib/payment-schedule single_payment), while deposit_percent stays the
+ * org's 20. Recomputing "percent of base" turned a ¥500,000 single payment
+ * into a ¥100,000 deposit with no balance date at all.
+ */
+export function isSinglePayment(booking: {
+  balance_due_date?: string | null
+  deposit_amount?: unknown
+  total_cost?: unknown
+}): boolean {
+  const total = Number(booking.total_cost)
+  const deposit = Number(booking.deposit_amount)
+  return !booking.balance_due_date && Number.isFinite(total) && total > 0 &&
+    Number.isFinite(deposit) && deposit >= total - 0.005
 }
 
 export interface ApplyExtrasResult {
@@ -172,8 +193,9 @@ export function applyExtras(input: ApplyExtrasInput): ApplyExtrasResult {
     base_total_cost: base,
     extras_total: extras,
     total_cost: total,
-    // Percentage of the base — see rule 2.
-    deposit_amount: roundToCurrency((base * percent) / 100, currency),
+    // Percentage of the base — see rule 2 — unless the booking is one single
+    // payment, which stays the whole (new) total.
+    deposit_amount: input.singlePayment ? total : roundToCurrency((base * percent) / 100, currency),
     // The database's own formula — see rule 1.
     balance_due: Math.max(0, roundToCurrency(total - paid, currency)),
   }
