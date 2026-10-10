@@ -1,8 +1,11 @@
 // ============================================
 // /api/vocabulary/[id] — one entry
 // ============================================
+// GET    — what still uses the entry (vehicle types: transport rates and
+//          packages), so the settings screen can warn before a delete
 // PATCH  — { label?, label_ja?, description?, behavior?, meta?, is_active?, rank? }
-// DELETE — remove the entry (a kind never drops below its minimum)
+// DELETE — remove the entry (a kind never drops below its minimum; a vehicle
+//          rows still use needs ?confirm_in_use=1)
 // Owner/admin only; every query is scoped by org_id (service-role client).
 
 import { NextResponse } from 'next/server'
@@ -12,13 +15,32 @@ import {
   validateVocabularyItem,
   wouldBreakMinimum,
   VOCABULARY_KIND_INFO,
+  vehicleInUseWarning,
 } from '@/lib/vocabulary'
 import { COLS, vocabAuth } from '../route'
-import { restampVehicleBands } from '@/lib/rates/vehicle-bands-server'
+import { restampVehicleBands, vehicleTypeUsage } from '@/lib/rates/vehicle-bands-server'
 
 export const dynamic = 'force-dynamic'
 
 type Params = { params: Promise<{ id: string }> }
+
+export async function GET(_request: NextRequest, { params }: Params) {
+  try {
+    const auth = await vocabAuth(false)
+    if (auth instanceof NextResponse) return auth
+    const { supabase, orgId } = auth
+
+    const { id } = await params
+    const { data: current } = await supabase.from('org_vocabularies').select('id, kind, key, label').eq('id', id).eq('org_id', orgId).maybeSingle()
+    if (!current || !isVocabularyKind(current.kind)) return NextResponse.json({ success: false, error: 'Entry not found' }, { status: 404 })
+
+    const usage = current.kind === 'vehicle_type' ? await vehicleTypeUsage(supabase, orgId, current.key) : null
+    return NextResponse.json({ success: true, data: { usage, warning: usage ? vehicleInUseWarning(current.label, usage) : null } })
+  } catch (error) {
+    console.error('GET vocabulary usage error:', error)
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Internal server error' }, { status: 500 })
+  }
+}
 
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
@@ -76,15 +98,23 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: Params) {
+export async function DELETE(request: NextRequest, { params }: Params) {
   try {
     const auth = await vocabAuth(true)
     if (auth instanceof NextResponse) return auth
     const { supabase, orgId } = auth
 
     const { id } = await params
-    const { data: current } = await supabase.from('org_vocabularies').select('id, kind').eq('id', id).eq('org_id', orgId).maybeSingle()
+    const { data: current } = await supabase.from('org_vocabularies').select('id, kind, key, label').eq('id', id).eq('org_id', orgId).maybeSingle()
     if (!current || !isVocabularyKind(current.kind)) return NextResponse.json({ success: false, error: 'Entry not found' }, { status: 404 })
+
+    // A vehicle rates still use: deleting it orphans them, so only on an
+    // explicit go-ahead.
+    if (current.kind === 'vehicle_type' && new URL(request.url).searchParams.get('confirm_in_use') !== '1') {
+      const usage = await vehicleTypeUsage(supabase, orgId, current.key)
+      const warning = vehicleInUseWarning(current.label, usage)
+      if (warning) return NextResponse.json({ success: false, error: warning, usage }, { status: 409 })
+    }
 
     const { data: siblings } = await supabase.from('org_vocabularies').select('id, is_active').eq('org_id', orgId).eq('kind', current.kind)
     if (wouldBreakMinimum(current.kind, siblings ?? [], id)) {

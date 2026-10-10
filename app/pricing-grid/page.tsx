@@ -198,13 +198,23 @@ function PricingGridContent() {
   }, [])
 
   // Fetch rates
+  // A tier change starts a new request while an older one may still be in
+  // flight; only the latest may land — a late answer for the old tier put
+  // that tier's hotels in the list (autoura-saas, 2026-10-10: a budget hotel
+  // missing on one device). The tier travels with the rates, so the hotel
+  // swap below never reads another tier's list.
+  const ratesRequestRef = useRef(0)
+  const [ratesTier, setRatesTier] = useState<string | null>(null)
   const fetchRates = useCallback(async (tier: string) => {
+    const requestId = ++ratesRequestRef.current
     try {
       setLoading(true)
-      const res = await fetch(`/api/pricing-grid/rates?tier=${tier}`)
+      const res = await fetch(`/api/pricing-grid/rates?tier=${encodeURIComponent(tier)}`)
       const data = await res.json()
+      if (requestId !== ratesRequestRef.current) return
       if (data.success) {
         setRates(data.data)
+        setRatesTier(tier)
         // A draft restored from this browser: items take their rate's
         // pricing basis (per group / person / unit — attach-basis.ts).
         setDays(prev => attachPricingBasis(prev, data.data).days)
@@ -212,7 +222,7 @@ function PricingGridContent() {
     } catch (err) {
       console.error('Failed to fetch rates:', err)
     } finally {
-      setLoading(false)
+      if (requestId === ratesRequestRef.current) setLoading(false)
     }
   }, [])
 
@@ -220,13 +230,17 @@ function PricingGridContent() {
     fetchRates(config.tier)
   }, [config.tier, fetchRates])
 
-  // Auto-swap accommodation and cruise when tier changes
+  // Auto-swap accommodation and cruise when tier changes — on the rates OF
+  // the new tier (ratesTier), never a list still held from the old one. A
+  // tier set by opening a saved itinerary is not a change: its hotels are
+  // its own (the load sets the ref).
   const prevTierRef = useRef(config.tier)
   useEffect(() => {
-    if (!rates || days.length === 0) return
+    if (!rates || !ratesTier || ratesTier !== config.tier) return
     // Only run when tier actually changed (not on initial load)
-    if (prevTierRef.current === config.tier) return
-    prevTierRef.current = config.tier
+    if (prevTierRef.current === ratesTier) return
+    prevTierRef.current = ratesTier
+    if (days.length === 0) return
 
     setDays(prevDays => prevDays.map(day => ({
       ...day,
@@ -273,7 +287,7 @@ function PricingGridContent() {
       }),
     })))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rates])
+  }, [rates, ratesTier])
 
   // Pre-fetch all exchange rates once on mount, then currency switching is instant
   const exchangeRatesCache = useRef<Record<string, number> | null>(null)
@@ -565,6 +579,8 @@ function PricingGridContent() {
       }
 
       const itn = headerData.data
+      // The itinerary's tier comes with its own hotels: not a change to swap for.
+      prevTierRef.current = itn.tier || 'standard'
 
       // Update config from itinerary
       setConfig(prev => ({
