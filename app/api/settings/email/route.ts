@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedUser } from '@/lib/supabase-secure'
+import { resolveMailbox } from '@/lib/gmail-mailbox'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,10 +9,8 @@ const supabase = createClient(
 )
 
 // GET - Fetch email settings
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
-    const userId = request.nextUrl.searchParams.get('userId')
-
     // Email settings live on the current user's user_settings row, keyed on
     // user_id. The old code did an unfiltered .single(), which returns the
     // wrong user's row (or errors) once more than one user has settings.
@@ -26,37 +25,19 @@ export async function GET(request: NextRequest) {
       emailSettings = settingsData?.email_settings || {}
     }
 
-    // Check actual Gmail connection from gmail_tokens table
-    // Try user-specific token first, then fall back to any token
-    let tokenData: Record<string, unknown> | null = null
-
-    if (userId) {
-      const { data, error } = await supabase
-        .from('gmail_tokens')
-        .select('*')
-        .eq('user_id', userId)
-        .single()
-      if (!error && data) tokenData = data
-    }
-
-    // Fallback: check for any connected Gmail account
-    if (!tokenData) {
-      const { data, error } = await supabase
-        .from('gmail_tokens')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .single()
-      if (!error && data) tokenData = data
-    }
-
-    // The column might be 'email', 'email_address', or 'email_address' — check all
-    const gmailEmail = String(tokenData?.email || tokenData?.email_address || '')
-    const gmailConnected = !!gmailEmail
+    // The mailbox this user actually works in (lib/gmail-mailbox): their own
+    // connection, else the organisation's shared one. This used to fall back
+    // to ANY stored token, so it said "Connected" to a user whose inbox and
+    // Email Settings had no mailbox at all (operator, 2026-10-10).
+    const mailbox = user ? await resolveMailbox(user.id) : null
+    const gmailEmail = mailbox?.email || ''
+    const gmailConnected = !!mailbox
 
     return NextResponse.json({
       gmail_connected: gmailConnected,
       gmail_email: gmailEmail,
+      // A colleague's connection: the company mailbox, not this user's to disconnect.
+      gmail_shared: mailbox?.shared ?? false,
       signature: emailSettings.signature || '',
       auto_reply_enabled: emailSettings.auto_reply_enabled || false,
       auto_reply_message: emailSettings.auto_reply_message || ''

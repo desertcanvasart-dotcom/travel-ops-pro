@@ -48,6 +48,8 @@ function EmailSettingsContent() {
   const [connecting, setConnecting] = useState(false)
   const [gmailConnected, setGmailConnected] = useState(false)
   const [connectedEmail, setConnectedEmail] = useState<string | null>(null)
+  // The organisation's shared mailbox, connected by a colleague (lib/gmail-mailbox).
+  const [gmailShared, setGmailShared] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   
   const [activeTab, setActiveTab] = useState<'connection' | 'signatures' | 'templates'>('connection')
@@ -88,15 +90,20 @@ function EmailSettingsContent() {
 
   const checkGmailConnection = async () => {
     try {
-      const { data, error } = await supabase
-        .from('gmail_tokens')
-        .select('email')
-        .eq('user_id', user?.id)
-        .single()
-
-      if (data && !error) {
+      // The mailbox this user works in — their own connection, else the
+      // organisation's shared one. Reading only their own token here said
+      // "Connect Gmail" to an owner whose team mailbox was connected
+      // (operator, 2026-10-10).
+      const res = await fetch('/api/settings/email')
+      const data = res.ok ? await res.json() : null
+      if (data?.gmail_connected) {
         setGmailConnected(true)
-        setConnectedEmail(data.email)
+        setConnectedEmail(data.gmail_email || null)
+        setGmailShared(Boolean(data.gmail_shared))
+      } else {
+        setGmailConnected(false)
+        setConnectedEmail(null)
+        setGmailShared(false)
       }
     } catch (err) {
       // Not connected
@@ -166,8 +173,8 @@ function EmailSettingsContent() {
 
       if (error) throw error
 
-      setGmailConnected(false)
-      setConnectedEmail(null)
+      // Without your own, the team's shared mailbox (if any) is the one you use.
+      await checkGmailConnection()
       setMessage({ type: 'success', text: 'Gmail disconnected successfully' })
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message })
@@ -292,6 +299,36 @@ function EmailSettingsContent() {
                     <div className="flex items-center gap-2 text-xs text-gray-500">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Checking connection...
+                    </div>
+                  ) : gmailConnected && gmailShared ? (
+                    <div className="space-y-3">
+                      <div className="px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <Check className="w-4 h-4 text-green-600" />
+                          <span className="text-sm text-green-700">
+                            Shared company mailbox: <strong>{connectedEmail}</strong>
+                          </span>
+                        </div>
+                        <p className="text-xs text-green-700/80 mt-1 ml-6">
+                          Connected by a colleague — the whole team works in it. Connect your own Gmail to use yours instead.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href="/communications"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 transition-colors"
+                        >
+                          <Mail className="w-3.5 h-3.5" />
+                          Open Unified Inbox
+                        </Link>
+                        <button
+                          onClick={handleConnectGmail}
+                          disabled={connecting}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors disabled:opacity-50"
+                        >
+                          Connect your own Gmail
+                        </button>
+                      </div>
                     </div>
                   ) : gmailConnected ? (
                     <div className="space-y-3">

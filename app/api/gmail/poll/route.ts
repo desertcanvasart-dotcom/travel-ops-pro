@@ -3,7 +3,8 @@ import { isOfficeAddress, officeRule } from '@/lib/email/office-addresses'
 import { loadOfficeRule } from '@/lib/email/office-addresses-server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
-import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
+import { GmailAuthError } from '@/lib/gmail'
+import { getMailboxGmail } from '@/lib/gmail-mailbox'
 import { getCurrentUserId } from '@/lib/auth/current-org'
 import { loadKnownContactEmails, looksAutomated } from '@/lib/email-scoping'
 
@@ -28,7 +29,8 @@ export async function GET(request: NextRequest) {
     // Get authenticated Gmail client (handles token fetch + refresh)
     let auth
     try {
-      auth = await getAuthenticatedGmail(userId)
+      // Your own mailbox, else the organisation's shared one (lib/gmail-mailbox).
+      auth = await getMailboxGmail(userId)
     } catch (err) {
       if (err instanceof GmailAuthError) {
         return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 401 })
@@ -233,7 +235,9 @@ export async function GET(request: NextRequest) {
                   .from('email_conversations')
                   .insert({
                     thread_id: threadId,
-                    user_id: userId,
+                    // The mailbox's owner, not the viewer: a shared mailbox's
+                    // threads stay one owner's (gmail/send replies from it).
+                    user_id: auth.mailboxUserId,
                     client_email: clientEmail,
                     subject,
                     last_message_snippet: message.data.snippet,
@@ -344,7 +348,7 @@ export async function POST() {
     // Get authenticated Gmail client (handles token fetch + refresh)
     let gmail
     try {
-      const auth = await getAuthenticatedGmail(userId)
+      const auth = await getMailboxGmail(userId)
       gmail = auth.gmail
     } catch (err) {
       if (err instanceof GmailAuthError) {

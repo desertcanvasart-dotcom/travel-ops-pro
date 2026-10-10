@@ -3081,6 +3081,8 @@
     "configureEmail": "Configure your email integration and preferences.",
     "gmailIntegration": "Gmail Integration",
     "connectedAs": "Connected as {email}",
+    "sharedMailbox": "Shared company mailbox",
+    "sharedMailboxHint": "Connected by a colleague — the whole team works in it. Connect your own Gmail to use yours instead.",
     "notConnected": "Not connected",
     "connected": "Connected",
     "connectGmail": "Connect Gmail",

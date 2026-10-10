@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
+import { GmailAuthError } from '@/lib/gmail'
+import { getMailboxGmail } from '@/lib/gmail-mailbox'
 import { getCurrentUserId } from '@/lib/auth/current-org'
 
 export async function POST(request: NextRequest) {
@@ -46,7 +47,8 @@ export async function POST(request: NextRequest) {
     // server error" while the inbox listing (which goes through this helper)
     // worked fine. getAuthenticatedGmail decrypts at the boundary and handles
     // the expiry refresh, and is the ONE way this codebase talks to Gmail.
-    const { gmail } = await getAuthenticatedGmail(userId)
+    // Your own mailbox, else the organisation's shared one (lib/gmail-mailbox).
+    const { gmail } = await getMailboxGmail(userId)
 
     // Delete is Gmail's own trash call, not a label edit: it is what Gmail's
     // trash button does, and the message leaves the inbox for certain.

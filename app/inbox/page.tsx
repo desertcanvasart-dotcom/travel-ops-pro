@@ -53,7 +53,6 @@ import {
   Sparkles,
   ChevronDown,
 } from 'lucide-react'
-import { createClient } from '@/app/supabase'
 import { useLocale } from 'next-intl'
 
 // Email body formatter - converts ■ bullets to styled lists
@@ -225,8 +224,7 @@ export default function InboxPage() {
   const [nextPageToken, setNextPageToken] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
-  
-  const supabase = createClient()
+
 
   // NEW: Email polling hook for real-time updates
   const {
@@ -298,20 +296,21 @@ export default function InboxPage() {
 
   const checkConnectionAndFetchEmails = async () => {
     try {
-      const { data } = await supabase
-        .from('gmail_tokens')
-        .select('email')
-        .eq('user_id', user?.id)
-        .single()
+      // The mailbox this user works in: their own connection, else the
+      // organisation's shared one (lib/gmail-mailbox). Reading only their own
+      // token showed an owner "Connect Your Gmail" while the team's mailbox
+      // was connected (operator, 2026-10-10).
+      const res = await fetch('/api/settings/email')
+      const data = res.ok ? await res.json() : null
 
-      if (!data) {
+      if (!data?.gmail_connected) {
         setIsConnected(false)
         setLoading(false)
         return
       }
 
       setIsConnected(true)
-      setConnectedEmail(data.email || '')
+      setConnectedEmail(data.gmail_email || '')
       await fetchEmails()
     } catch (err) {
       setIsConnected(false)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
+import { GmailAuthError } from '@/lib/gmail'
+import { getMailboxGmail } from '@/lib/gmail-mailbox'
 import { getCurrentUserId } from '@/lib/auth/current-org'
 
 // One Gmail client per request, for the session user's own mailbox. This route
@@ -9,13 +10,14 @@ import { getCurrentUserId } from '@/lib/auth/current-org'
 // list, create or delete labels in the other's Gmail. getAuthenticatedGmail
 // also stores a refreshed token (DELETE and POST refreshed it and threw the
 // new one away).
-async function mailbox(): Promise<{ gmail: Awaited<ReturnType<typeof getAuthenticatedGmail>>['gmail'] } | NextResponse> {
+async function mailbox(): Promise<{ gmail: Awaited<ReturnType<typeof getMailboxGmail>>['gmail'] } | NextResponse> {
   const userId = await getCurrentUserId()
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   try {
-    const { gmail } = await getAuthenticatedGmail(userId)
+    // Your own mailbox, else the organisation's shared one (lib/gmail-mailbox).
+    const { gmail } = await getMailboxGmail(userId)
     return { gmail }
   } catch (err) {
     if (err instanceof GmailAuthError) {

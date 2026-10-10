@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { fetchEmails, getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
+import { fetchEmails, GmailAuthError } from '@/lib/gmail'
+import { getMailboxGmail } from '@/lib/gmail-mailbox'
 import { getCurrentUserId } from '@/lib/auth/current-org'
 
 export async function GET(request: NextRequest) {
@@ -20,8 +21,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Get authenticated Gmail client (handles token fetch + refresh)
-    const { accessToken, refreshToken } = await getAuthenticatedGmail(userId)
+    // Your own mailbox, else the organisation's shared one (lib/gmail-mailbox).
+    const { accessToken, refreshToken } = await getMailboxGmail(userId)
 
     // Fetch emails
     const { messages, nextPageToken } = await fetchEmails(
