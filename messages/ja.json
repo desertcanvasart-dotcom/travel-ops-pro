@@ -3844,6 +3844,8 @@
     "configureEmail": "メール連携と設定を構成してください。",
     "gmailIntegration": "Gmail連携",
     "connectedAs": "{email}として接続済み",
+    "sharedMailbox": "共有の会社メールボックス",
+    "sharedMailboxHint": "同僚が接続したメールボックスで、チーム全員が利用します。自分のGmailを使う場合は、ご自身のGmailを接続してください。",
     "notConnected": "未接続",
     "connected": "接続済み",
     "connectGmail": "Gmailに接続",

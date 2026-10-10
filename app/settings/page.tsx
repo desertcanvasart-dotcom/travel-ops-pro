@@ -64,6 +64,8 @@ interface Profile {
 interface EmailSettings {
   gmail_connected: boolean
   gmail_email?: string
+  /** The organisation's shared mailbox, connected by a colleague (lib/gmail-mailbox). */
+  gmail_shared?: boolean
   signature?: string
   auto_reply_enabled: boolean
   auto_reply_message?: string
@@ -765,11 +767,29 @@ function SettingsContent() {
                   ? t('connectedAs', { email: String(emailSettings?.gmail_email ?? '') })
                   : t('notConnected')}
               </p>
+              {emailSettings?.gmail_shared && (
+                <p className="text-xs text-gray-500 mt-0.5">{t('sharedMailboxHint')}</p>
+              )}
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {emailSettings?.gmail_connected ? (
+            {emailSettings?.gmail_connected && emailSettings?.gmail_shared ? (
+              <>
+                {/* A colleague's connection is the company's mailbox: not this
+                    user's to disconnect, and their own can be added. */}
+                <span className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
+                  <CheckCircle className="w-3 h-3" />
+                  {t('sharedMailbox')}
+                </span>
+                <button
+                  onClick={handleConnectGmail}
+                  className="px-3 py-1.5 text-xs font-medium text-[#647C47] hover:bg-[#647C47]/10 rounded-lg transition-colors"
+                >
+                  {t('connectGmail')}
+                </button>
+              </>
+            ) : emailSettings?.gmail_connected ? (
               <>
                 <span className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
                   <CheckCircle className="w-3 h-3" />

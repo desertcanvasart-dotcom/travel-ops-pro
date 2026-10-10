@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
+import { resolveMailbox } from '@/lib/gmail-mailbox'
 import { getCurrentOrgId, getCurrentUserId } from '@/lib/auth/current-org'
 import { storedReplyHeaders, type ThreadingHeaders } from '@/lib/email/reply-threading'
 import { headerSafe, encodeEmailHeader } from '@/lib/http/safe-header'
@@ -47,7 +48,8 @@ export async function POST(request: NextRequest) {
     // vouchers); otherwise send from the sender's own Gmail as a new thread,
     // kept in the customer's conversation by In-Reply-To / References from the
     // stored Message-IDs.
-    let mailboxUserId: string = userId
+    // Your own mailbox, else the organisation's shared one (lib/gmail-mailbox).
+    let mailboxUserId: string = (await resolveMailbox(userId))?.mailboxUserId ?? userId
     let gmailThreadId: string | undefined = threadId || undefined
     let storedThreading: ThreadingHeaders | null = null
     if (threadId) {
@@ -56,7 +58,7 @@ export async function POST(request: NextRequest) {
         .select('id, user_id')
         .eq('thread_id', threadId)
         .maybeSingle()
-      if (conv?.user_id && conv.user_id !== userId) {
+      if (conv?.user_id && conv.user_id !== mailboxUserId) {
         const orgId = await getCurrentOrgId()
         const { data: ownerMembership } = orgId
           ? await supabase.from('organization_members').select('user_id').eq('org_id', orgId).eq('user_id', conv.user_id).limit(1)
@@ -166,7 +168,8 @@ export async function POST(request: NextRequest) {
             .from('email_conversations')
             .insert({
               thread_id: sentThreadId,
-              user_id: userId,
+              // The mailbox's owner — the shared mailbox's threads stay its own.
+              user_id: mailboxUserId,
               client_email: to,
               subject: subject,
               last_message_snippet: body.substring(0, 200).replace(/<[^>]*>/g, ''),

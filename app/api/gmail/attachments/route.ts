@@ -1,14 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { decryptToken, encryptToken } from '@/lib/crypto/token-cipher'
 import { clientMessage } from '@/lib/api-errors'
-import { google } from 'googleapis'
-import { createClient } from '@supabase/supabase-js'
 import { getCurrentUserId } from '@/lib/auth/current-org'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { GmailAuthError } from '@/lib/gmail'
+import { getMailboxGmail } from '@/lib/gmail-mailbox'
 
 // GET /api/gmail/attachments?messageId=xxx&attachmentId=xxx&filename=xxx
 export async function GET(request: NextRequest) {
@@ -31,49 +25,17 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get user's Gmail tokens
-    const { data: tokenData, error: tokenError } = await supabase
-      .from('gmail_tokens')
-      .select('*')
-      .eq('user_id', userId)
-      .single()
-
-    if (tokenError || !tokenData) {
-      return NextResponse.json(
-        { error: 'Gmail not connected' },
-        { status: 401 }
-      )
+    // Your own mailbox, else the organisation's shared one (lib/gmail-mailbox);
+    // getAuthenticatedGmail underneath refreshes and stores the token.
+    let gmail
+    try {
+      gmail = (await getMailboxGmail(userId)).gmail
+    } catch (err) {
+      if (err instanceof GmailAuthError) {
+        return NextResponse.json({ error: 'Gmail not connected' }, { status: 401 })
+      }
+      throw err
     }
-
-    // Set up OAuth2 client
-    const oauth2Client = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI
-    )
-
-    oauth2Client.setCredentials({
-      access_token: decryptToken(tokenData.access_token),
-      refresh_token: decryptToken(tokenData.refresh_token),
-    })
-
-    // Check if token needs refresh
-    if (new Date(tokenData.token_expiry) < new Date()) {
-      const { credentials } = await oauth2Client.refreshAccessToken()
-      
-      await supabase
-        .from('gmail_tokens')
-        .update({
-          access_token: encryptToken(credentials.access_token),
-          token_expiry: new Date(credentials.expiry_date!).toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', userId)
-
-      oauth2Client.setCredentials(credentials)
-    }
-
-    const gmail = google.gmail({ version: 'v1', auth: oauth2Client })
 
     // Get the attachment
     const attachment = await gmail.users.messages.attachments.get({

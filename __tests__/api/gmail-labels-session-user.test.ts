@@ -16,6 +16,16 @@ vi.mock('@/lib/gmail', () => {
 let sessionUser: string | null = 'me'
 vi.mock('@/lib/auth/current-org', () => ({ getCurrentUserId: async () => sessionUser }))
 
+vi.mock('@/lib/gmail-mailbox', async () => {
+  // The mailbox resolver (own, else shared) is tested on its own; here the
+  // session user's mailbox is their own.
+  const g = await import('@/lib/gmail')
+  return {
+    getMailboxGmail: (id: string) => g.getAuthenticatedGmail(id),
+    resolveMailbox: async (id: string) => ({ mailboxUserId: id, shared: false, email: '' }),
+  }
+})
+
 import { POST, DELETE } from '@/app/api/gmail/labels/route'
 
 const req = (method: string, body: unknown) =>

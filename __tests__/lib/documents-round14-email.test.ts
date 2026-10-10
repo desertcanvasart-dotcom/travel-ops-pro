@@ -103,7 +103,9 @@ describe('Gmail poll and labels act on the session user', () => {
     const r = src('app/api/gmail/labels/route.ts')
     expect(r).not.toContain('new google.auth.OAuth2')
     expect(r).not.toContain('setCredentials({')
-    expect(r).toContain('getAuthenticatedGmail(userId)')
+    // The session user's mailbox — their own, else the organisation's shared
+    // one (lib/gmail-mailbox) — never one named in the request.
+    expect(r).toContain('getMailboxGmail(userId)')
   })
 })
 
