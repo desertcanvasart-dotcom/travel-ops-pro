@@ -6,8 +6,10 @@ import { NextRequest } from 'next/server'
 const threadsModify = vi.fn(async () => ({}))
 const batchModify = vi.fn(async () => ({}))
 const messagesDelete = vi.fn(async () => ({}))
+const messagesTrash = vi.fn(async () => ({}))
+const threadsTrash = vi.fn(async () => ({}))
 vi.mock('@/lib/gmail', () => ({
-  getAuthenticatedGmail: async () => ({ gmail: { users: { threads: { modify: threadsModify }, messages: { batchModify, delete: messagesDelete } } } }),
+  getAuthenticatedGmail: async () => ({ gmail: { users: { threads: { modify: threadsModify, trash: threadsTrash }, messages: { batchModify, delete: messagesDelete, trash: messagesTrash } } } }),
   GmailAuthError: class extends Error {},
 }))
 vi.mock('@/lib/auth/current-org', () => ({ getCurrentUserId: async () => 'me' }))
@@ -15,7 +17,7 @@ vi.mock('@/lib/auth/current-org', () => ({ getCurrentUserId: async () => 'me' })
 import { POST } from '@/app/api/gmail/actions/route'
 const post = (body: unknown) => POST(new NextRequest('http://x/api/gmail/actions', { method: 'POST', body: JSON.stringify(body) }))
 
-beforeEach(() => { threadsModify.mockClear(); batchModify.mockClear(); messagesDelete.mockClear() })
+beforeEach(() => { threadsModify.mockClear(); batchModify.mockClear(); messagesDelete.mockClear(); messagesTrash.mockClear(); threadsTrash.mockClear() })
 
 describe('Gmail actions', () => {
   it.each([
@@ -34,6 +36,20 @@ describe('Gmail actions', () => {
   it('permanent delete is never applied to thread ids', async () => {
     expect((await post({ threadIds: ['t1'], action: 'permanentDelete' })).status).toBe(400)
     expect(messagesDelete).not.toHaveBeenCalled()
+  })
+  // "Deleted, not deleted" (operator, 2026-10-10): delete is Gmail's own
+  // trash call — never a label edit, never a permanent delete.
+  it('delete trashes each message', async () => {
+    expect((await post({ messageIds: ['m1', 'm2'], action: 'delete' })).status).toBe(200)
+    expect(messagesTrash).toHaveBeenCalledTimes(2)
+    expect(messagesTrash).toHaveBeenCalledWith({ userId: 'me', id: 'm1' })
+    expect(batchModify).not.toHaveBeenCalled()
+    expect(messagesDelete).not.toHaveBeenCalled()
+  })
+  it('delete on a thread trashes the whole thread', async () => {
+    expect((await post({ threadIds: ['t1'], action: 'delete' })).status).toBe(200)
+    expect(threadsTrash).toHaveBeenCalledWith({ userId: 'me', id: 't1' })
+    expect(threadsModify).not.toHaveBeenCalled()
   })
   it('move without a label is refused', async () => {
     expect((await post({ messageIds: ['m1'], action: 'move' })).status).toBe(400)

@@ -48,6 +48,21 @@ export async function POST(request: NextRequest) {
     // the expiry refresh, and is the ONE way this codebase talks to Gmail.
     const { gmail } = await getAuthenticatedGmail(userId)
 
+    // Delete is Gmail's own trash call, not a label edit: it is what Gmail's
+    // trash button does, and the message leaves the inbox for certain.
+    if (action === 'delete') {
+      if (threadIds) {
+        for (const id of Array.isArray(threadIds) ? threadIds : [threadIds]) {
+          await gmail.users.threads.trash({ userId: 'me', id })
+        }
+      } else {
+        for (const id of Array.isArray(messageIds) ? messageIds : [messageIds]) {
+          await gmail.users.messages.trash({ userId: 'me', id })
+        }
+      }
+      return NextResponse.json({ success: true })
+    }
+
     if (action === 'permanentDelete') {
       // Permanently delete (use with caution)
       for (const id of Array.isArray(messageIds) ? messageIds : [messageIds]) {

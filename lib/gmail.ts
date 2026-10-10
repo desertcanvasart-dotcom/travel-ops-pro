@@ -152,15 +152,20 @@ export async function getUserEmail(accessToken: string) {
 export async function fetchEmails(
   accessToken: string,
   refreshToken: string,
-  options: { maxResults?: number; query?: string; pageToken?: string } = {}
+  options: { maxResults?: number; query?: string; pageToken?: string; labelIds?: string[] } = {}
 ) {
   const gmail = getGmailClient(accessToken, refreshToken)
-  const { maxResults = 20, query = '', pageToken } = options
+  const { maxResults = 20, query = '', pageToken, labelIds } = options
 
+  // A folder is listed by its LABEL, not a search: Gmail's search index lags
+  // behind label changes, so a message just trashed came back on the next
+  // `in:inbox` search ("deleted, not deleted", operator 2026-10-10) and one
+  // just received could be missing. labelIds reads the mailbox itself.
   const response = await gmail.users.messages.list({
     userId: 'me',
     maxResults,
-    q: query,
+    ...(query ? { q: query } : {}),
+    ...(labelIds?.length ? { labelIds } : {}),
     pageToken,
   })
 

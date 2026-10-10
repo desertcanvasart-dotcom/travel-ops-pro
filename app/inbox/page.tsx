@@ -174,6 +174,18 @@ interface Client {
 type FilterType = 'all' | 'unread' | 'starred'
 type FolderType = 'inbox' | 'sent' | 'drafts'
 
+/** A folder is its Gmail label, listed from the mailbox itself — not the
+ *  search index, which lags behind changes: a trashed email came back on the
+ *  next `in:inbox` search, and a just-received one could be missing
+ *  (operator, 2026-10-10). The inbox is Gmail's own inbox: its old
+ *  `-from:me` also hid mail from the account's "send as" addresses. A
+ *  search typed by the operator stays a search, within the folder. */
+const FOLDER_LABEL: Record<FolderType, string> = { inbox: 'INBOX', sent: 'SENT', drafts: 'DRAFT' }
+function folderListParams(folder: FolderType, query: string | undefined, params: URLSearchParams) {
+  params.append('labelIds', FOLDER_LABEL[folder])
+  if (query && query.trim()) params.append('query', query.trim())
+}
+
 export default function InboxPage() {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
@@ -233,12 +245,14 @@ export default function InboxPage() {
       setNewEmailCount(prev => prev + newEmails.length)
       setShowNewEmailBanner(true)
       
-      // Add new emails to the list if we're in inbox
-      if (folder === 'inbox') {
+      // Add new emails to the list if we're in inbox — those Gmail put IN
+      // the inbox; a message just sent, or filed straight to spam, is not.
+      const arrived = newEmails.filter(e => e.labelIds?.includes('INBOX'))
+      if (folder === 'inbox' && arrived.length > 0) {
         setEmails(prev => {
-          const newIds = new Set(newEmails.map(e => e.id))
+          const newIds = new Set(arrived.map(e => e.id))
           const filtered = prev.filter(e => !newIds.has(e.id))
-          return [...newEmails.map(e => ({
+          return [...arrived.map(e => ({
             ...e,
             body: '',
             attachments: []
@@ -251,6 +265,20 @@ export default function InboxPage() {
       if (selectedEmail && deletedIds.includes(selectedEmail.id)) {
         setSelectedEmail(null)
       }
+    },
+    // A message moved out of the inbox (trashed, archived, spam — here or in
+    // Gmail) leaves the list; one moved in (out of spam, a filter) brings a
+    // refresh. These come as label changes, never as new or deleted mail.
+    onLabelChanges: (changes) => {
+      if (folder !== 'inbox') return
+      const gone = changes
+        .filter(c => c.labelsRemoved?.includes('INBOX') || c.labelsAdded?.some(l => l === 'TRASH' || l === 'SPAM'))
+        .map(c => c.messageId)
+      if (gone.length > 0) {
+        setEmails(prev => prev.filter(e => !gone.includes(e.id)))
+        if (selectedEmail && gone.includes(selectedEmail.id)) setSelectedEmail(null)
+      }
+      if (changes.some(c => c.labelsAdded?.includes('INBOX'))) fetchEmails()
     },
     onNeedRefresh: () => {
       fetchEmails()
@@ -379,17 +407,7 @@ export default function InboxPage() {
       }
       
       const folderToUse = currentFolder || folder
-      let folderQuery = query || ''
-
-      if (folderToUse === 'sent') {
-        folderQuery = 'from:me ' + folderQuery
-      } else if (folderToUse === 'drafts') {
-        folderQuery = 'in:drafts ' + folderQuery
-      } else {
-        folderQuery = 'in:inbox -from:me ' + folderQuery
-      }
-      
-      if (folderQuery) params.append('query', folderQuery.trim())
+      folderListParams(folderToUse, query, params)
 
       const response = await fetch(`/api/gmail/emails?${params}`)
       const data = await response.json()
@@ -453,17 +471,7 @@ export default function InboxPage() {
         pageToken: nextPageToken,
       })
       
-      let folderQuery = searchQuery || ''
-
-      if (folder === 'sent') {
-        folderQuery = 'from:me ' + folderQuery
-      } else if (folder === 'drafts') {
-        folderQuery = 'in:drafts ' + folderQuery
-      } else {
-        folderQuery = 'in:inbox -from:me ' + folderQuery
-      }
-      
-      if (folderQuery) params.append('query', folderQuery.trim())
+      folderListParams(folder, searchQuery, params)
 
       const response = await fetch(`/api/gmail/emails?${params}`)
       const data = await response.json()
@@ -659,11 +667,16 @@ ${bodyText}`
       })
   
       const data = await response.json()
-      if (data.error) throw new Error(data.error)
+      if (!response.ok || data.error) throw new Error(data.error || `The action failed (${response.status})`)
+
+      // Out of this folder now: off the list at once, not on the next fetch.
+      if (action === 'delete' || action === 'archive' || action === 'move') {
+        setEmails(prev => prev.filter(e => !ids.includes(e.id)))
+      }
 
       // UPDATE CACHE after action
       if (isCacheReady) {
-        if (action === 'delete' || action === 'archive') {
+        if (action === 'delete' || action === 'archive' || action === 'move') {
           await removeCached(ids)
         } else if (action === 'markRead') {
           for (const id of ids) {

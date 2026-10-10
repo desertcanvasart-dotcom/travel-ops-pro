@@ -10,6 +10,10 @@ export async function GET(request: NextRequest) {
   const query = searchParams.get('query') || ''
   const pageToken = searchParams.get('pageToken') || undefined
   const maxResults = parseInt(searchParams.get('maxResults') || '20')
+  // The folder as Gmail labels (INBOX, SENT, DRAFT …): listed from the
+  // mailbox, not the lagging search index (lib/gmail fetchEmails).
+  const labelIds = (searchParams.get('labelIds') || '')
+    .split(',').map(s => s.trim()).filter(s => /^[A-Za-z0-9_-]{1,100}$/.test(s))
 
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -23,7 +27,7 @@ export async function GET(request: NextRequest) {
     const { messages, nextPageToken } = await fetchEmails(
       accessToken,
       refreshToken,
-      { maxResults, query, pageToken }
+      { maxResults, query, pageToken, labelIds }
     )
 
     return NextResponse.json({ messages, nextPageToken })
