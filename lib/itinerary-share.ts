@@ -17,6 +17,7 @@
 //    assert none of it survives.
 
 import { overnightProperty } from '@/lib/itineraries/overnight-property'
+import { roundToCurrency } from '@/lib/currency-totals'
 
 /** itinerary_days.day_type — the CHECK-constrained vocabulary (see 20260627). */
 export type ShareDayType = 'arrival' | 'tour' | 'transfer' | 'cruise' | 'free' | 'departure'
@@ -154,6 +155,41 @@ export function toClientItinerary(
         }
       }),
   }
+}
+
+// ============================================
+// THE SHARED TOTAL — the trip price plus confirmed extras
+// ============================================
+// An extra (lib/booking-extras) is agreed after the trip was priced and moves
+// money only on the BOOKING: bookings.extras_total, kept by the single writer
+// in app/api/bookings/[id]/extras/recompute.ts. itineraries.total_cost never
+// includes it, so the share page used to show the traveller the trip as first
+// priced — a confirmed ¥80,000 upgrade simply missing from "Total".
+//
+// Added only from live (not cancelled) bookings in the itinerary's own
+// currency: an extras_total in another currency is never summed into this one.
+// A booking row without the column (migration not applied) contributes 0.
+
+const normCode = (c: unknown): string => {
+  const s = typeof c === 'string' ? c.trim().toUpperCase() : ''
+  return /^[A-Z]{3}$/.test(s) ? s : 'EUR'
+}
+
+export function shareTotalWithExtras(
+  totalPrice: number | null,
+  currency: string | null,
+  bookings: ReadonlyArray<Record<string, unknown>> | null | undefined
+): number | null {
+  if (totalPrice === null) return null
+  const want = normCode(currency)
+  let extras = 0
+  for (const b of bookings ?? []) {
+    if (!b || b.status === 'cancelled') continue
+    if (normCode(b.currency) !== want) continue
+    const e = num(b.extras_total)
+    if (e !== null && e > 0) extras += e
+  }
+  return extras > 0 ? roundToCurrency(totalPrice + extras, want) : totalPrice
 }
 
 // ============================================

@@ -1,11 +1,17 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+/** A literal string for a LIKE/ILIKE pattern: its wildcards matched as themselves. */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, ch => `\\${ch}`)
+}
 
 // GET - Get itineraries for a client (bypasses RLS)
 export async function GET(
@@ -14,6 +20,12 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    // TENANT BOUNDARY. Service-role client: the client and every trip listed
+    // must be this organisation's. The email match below used to search every
+    // organisation's itineraries, so a customer who had also booked with
+    // another operator showed that operator's trips and prices here.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
 
     // A trip belongs to a client by client_id — except that NO itinerary in this
     // system has ever had one set. They carry the client's name and email as
@@ -24,7 +36,11 @@ export async function GET(
       .from('clients')
       .select('email')
       .eq('id', id)
+      .eq('org_id', orgId)
       .maybeSingle()
+    if (!client) {
+      return NextResponse.json({ data: [], error: 'Client not found' }, { status: 404 })
+    }
 
     const email = (client as { email?: string } | null)?.email?.trim()
 
@@ -34,6 +50,7 @@ export async function GET(
       // currency travels with total_cost: the amount is meaningless without it,
       // and this operator prices in yen.
       .select(COLUMNS)
+      .eq('org_id', orgId)
       .order('created_at', { ascending: false })
 
     // Two queries rather than one .or() with the email interpolated into it:
@@ -42,7 +59,13 @@ export async function GET(
     const [byId, byEmail] = await Promise.all([
       query.eq('client_id', id),
       email
-        ? supabaseAdmin.from('itineraries').select(COLUMNS).ilike('client_email', email)
+        ? supabaseAdmin
+            .from('itineraries')
+            .select(COLUMNS)
+            .eq('org_id', orgId)
+            // An exact (case-insensitive) match: `_` and `%` are legal in an
+            // address but are LIKE wildcards, so they are escaped.
+            .ilike('client_email', escapeLike(email))
         : Promise.resolve({ data: [], error: null }),
     ])
 

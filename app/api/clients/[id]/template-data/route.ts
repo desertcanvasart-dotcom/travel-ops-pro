@@ -3,6 +3,7 @@ import { templateSender, type TemplateSender } from '@/lib/template-sender'
 import { formatMoney } from '@/lib/currency-totals'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
+import { businessToday } from '@/lib/today'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -200,7 +201,9 @@ function buildPlaceholderData(
   Object.assign(data, sender)
 
   // Dynamic dates
-  data.today = formatDate(new Date())
+  // The business's calendar day, not the UTC host's: in Tokyo every email
+  // merged before 09:00 was dated yesterday.
+  data.today = formatDate(businessToday())
 
   return data
 }
@@ -217,10 +220,13 @@ function formatDate(date: string | Date | undefined): string {
   if (!date) return ''
   const d = new Date(date)
   if (isNaN(d.getTime())) return ''
-  return d.toLocaleDateString('en-US', { 
-    month: 'long', 
-    day: 'numeric', 
-    year: 'numeric' 
+  // Stored dates are calendar days (YYYY-MM-DD → UTC midnight): format them
+  // in UTC so no host timezone can move them a day.
+  return d.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
   })
 }
 
@@ -228,8 +234,8 @@ function formatDateRange(startDate: string, endDate: string): string {
   const start = new Date(startDate)
   const end = new Date(endDate)
   
-  const startMonth = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  const endFormatted = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const startMonth = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+  const endFormatted = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
   
   return `${startMonth} - ${endFormatted}`
 }

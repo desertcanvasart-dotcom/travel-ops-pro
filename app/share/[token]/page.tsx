@@ -24,6 +24,7 @@ import {
   isValidShareToken,
   toClientItinerary,
   toClientTripMessages,
+  shareTotalWithExtras,
   type ClientItinerary,
   type ClientTripMessage,
   type ShareDayType,
@@ -74,8 +75,9 @@ const loadShare = cache(async function loadShare(
     .maybeSingle()
   if (!share || share.revoked_at) return null
 
-  const [{ data: itinerary }, { data: days }, { data: org }, lines] = await Promise.all([
-    supabase.from('itineraries').select('*').eq('id', share.itinerary_id).maybeSingle(),
+  const [{ data: itinerary }, { data: days }, { data: org }, lines, { data: bookings }] = await Promise.all([
+    // The share's own organisation, explicitly: service-role reads.
+    supabase.from('itineraries').select('*').eq('id', share.itinerary_id).eq('org_id', share.org_id).maybeSingle(),
     // The day's service lines ride along ONLY so toClientItinerary can name
     // the night's hotel or ship; it copies the name and nothing else.
     supabase.from('itinerary_days').select('*, services:itinerary_services(service_type, service_code, service_name, supplier_name)').eq('itinerary_id', share.itinerary_id),
@@ -85,6 +87,11 @@ const loadShare = cache(async function loadShare(
       .eq('id', share.org_id)
       .maybeSingle(),
     loadItineraryServiceLines(supabase, share.itinerary_id, share.org_id),
+    // Confirmed extras live on the booking (extras_total), never on the
+    // itinerary — read so the total shown includes them. '*' so a database
+    // without the extras migration still loads the page. Server-side only:
+    // shareTotalWithExtras reads status, currency and extras_total, nothing else.
+    supabase.from('bookings').select('*').eq('itinerary_id', share.itinerary_id).eq('org_id', share.org_id),
   ])
   // The thread with the office, through its allowlist. Best-effort: before
   // the table exists, or on a failed read, the page shows an empty chat.
@@ -92,6 +99,7 @@ const loadShare = cache(async function loadShare(
     .from('trip_messages')
     .select('direction, content, sender_name, created_at')
     .eq('itinerary_id', share.itinerary_id)
+    .eq('org_id', share.org_id)
     .order('created_at', { ascending: false })
     .limit(50)
   if (!itinerary) return null
@@ -120,8 +128,15 @@ const loadShare = cache(async function loadShare(
     ? org!.primary_color!
     : DEFAULT_BRAND
 
+  const clientItinerary = toClientItinerary(itinerary, days ?? [])
+  clientItinerary.totalPrice = shareTotalWithExtras(
+    clientItinerary.totalPrice,
+    clientItinerary.currency,
+    (bookings ?? []) as Array<Record<string, unknown>>
+  )
+
   return {
-    itinerary: toClientItinerary(itinerary, days ?? []),
+    itinerary: clientItinerary,
     priceWithheld: !price.show,
     messages: toClientTripMessages((messageRows ?? []) as Array<Record<string, unknown>>),
     operator: {
@@ -138,7 +153,9 @@ const loadShare = cache(async function loadShare(
 function fmtDate(d: string | null): string {
   if (!d) return ''
   try {
-    return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    // A calendar date (YYYY-MM-DD) parses as UTC midnight; formatted in the
+    // host's zone it would read as the day before anywhere west of UTC.
+    return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
   } catch {
     return d
   }

@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { bearerToken, hashApiKey } from '@/lib/integrations/credentials'
 import type { AvailabilityDay } from '@/lib/integrations/types'
+import { businessToday } from '@/lib/today'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -66,10 +67,17 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = new URL(request.url)
-  const from = searchParams.get('from') || todayIso()
+  const from = searchParams.get('from') || businessToday()
+  // Checked before addDays: a malformed `from` made it throw (a 500, not a 400).
+  if (!isRealDate(from)) {
+    return NextResponse.json(
+      { success: false, error: 'from and to must be YYYY-MM-DD dates' },
+      { status: 400 }
+    )
+  }
   const to = searchParams.get('to') || addDays(from, 90)
 
-  if (!ISO_DATE.test(from) || !ISO_DATE.test(to)) {
+  if (!isRealDate(from) || !isRealDate(to)) {
     return NextResponse.json(
       { success: false, error: 'from and to must be YYYY-MM-DD dates' },
       { status: 400 }
@@ -151,8 +159,11 @@ function numberOrNull(value: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
+/** YYYY-MM-DD and an actual calendar day (2026-02-30 is not one). */
+function isRealDate(value: string): boolean {
+  if (!ISO_DATE.test(value)) return false
+  const d = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value
 }
 
 function addDays(date: string, days: number): string {

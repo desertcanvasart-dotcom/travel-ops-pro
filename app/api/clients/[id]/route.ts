@@ -26,6 +26,13 @@ async function ownedClientId(id: string, orgId: string): Promise<boolean> {
   return !!data
 }
 
+/** null/absent clears or leaves it; any id given must be a client of this org. */
+async function referrerInOrg(ref: unknown, orgId: string): Promise<boolean> {
+  if (ref === undefined || ref === null || ref === '') return true
+  if (typeof ref !== 'string') return false
+  return ownedClientId(ref, orgId)
+}
+
 function notFound() {
   return NextResponse.json({ error: 'Client not found' }, { status: 404 })
 }
@@ -79,6 +86,11 @@ export async function PUT(
     // hand their customer to another organisation, or claim one from it.
     const { id: _, org_id: __, ...updateData } = body
 
+    // A referrer is another client by id — it must be one of ours.
+    if (!(await referrerInOrg(updateData.referred_by_client_id, orgId))) {
+      return NextResponse.json({ error: 'Referring client not found' }, { status: 400 })
+    }
+
     const { data, error } = await supabaseAdmin
       .from('clients')
       .update(updateData)
@@ -118,6 +130,11 @@ export async function PATCH(
     // Drop `id` (update conflicts) and `org_id` — a caller must not be able to
     // hand their customer to another organisation, or claim one from it.
     const { id: _, org_id: __, ...updateData } = body
+
+    // A referrer is another client by id — it must be one of ours.
+    if (!(await referrerInOrg(updateData.referred_by_client_id, orgId))) {
+      return NextResponse.json({ error: 'Referring client not found' }, { status: 400 })
+    }
 
     const { data, error } = await supabaseAdmin
       .from('clients')
@@ -194,11 +211,30 @@ export async function DELETE(
     const { searchParams } = new URL(request.url)
     const force = searchParams.get('force') === 'true'
 
+    // Invoices block the delete, and are checked BEFORE anything is removed.
+    // This check used to run after the force cascade below, so a client with
+    // an invoice lost every trip (and its bookings) and was then reported as
+    // "cannot delete" — the client survived, its trips did not.
+    const { data: invoices } = await supabaseAdmin
+      .from('invoices')
+      .select('id')
+      .eq('client_id', id)
+      .eq('org_id', orgId)
+      .limit(1)
+
+    if (invoices && invoices.length > 0) {
+      return NextResponse.json(
+        { error: 'Cannot delete client with existing invoices. Please delete or reassign invoices first.', blocking: 'invoices' },
+        { status: 400 }
+      )
+    }
+
     // Check for itineraries
     const { data: itineraries } = await supabaseAdmin
       .from('itineraries')
       .select('id, itinerary_code, trip_name')
       .eq('client_id', id)
+      .eq('org_id', orgId)
 
     if (itineraries && itineraries.length > 0) {
       if (!force) {
@@ -208,6 +244,25 @@ export async function DELETE(
             blocking: 'itineraries',
             count: itineraries.length,
             items: itineraries.map(i => ({ id: i.id, code: i.itinerary_code, name: i.trip_name }))
+          },
+          { status: 400 }
+        )
+      }
+
+      // A booking is a money record — payments received, suppliers committed —
+      // and deleting its itinerary deletes it (FK ON DELETE CASCADE), payments
+      // and all. Force-deleting a client must never erase that ledger silently.
+      const { data: bookings } = await supabaseAdmin
+        .from('bookings')
+        .select('id, booking_code')
+        .in('itinerary_id', itineraries.map(i => i.id))
+        .eq('org_id', orgId)
+      if (bookings && bookings.length > 0) {
+        return NextResponse.json(
+          {
+            error: `Cannot delete client: ${bookings.length} booking(s) exist for their trips (${bookings.map(b => b.booking_code).filter(Boolean).join(', ')}). Cancel or remove the bookings first.`,
+            blocking: 'bookings',
+            count: bookings.length,
           },
           { status: 400 }
         )
@@ -238,9 +293,6 @@ export async function DELETE(
         await step('trip days', supabaseAdmin.from('itinerary_days').delete().eq('itinerary_id', itin.id))
         await step('trip versions', supabaseAdmin.from('itinerary_versions').delete().eq('itinerary_id', itin.id))
 
-        // Detach bookings from this itinerary
-        await supabaseAdmin.from('bookings').delete().eq('itinerary_id', itin.id)
-
         // Detach quotes
         await supabaseAdmin
           .from('tour_quotes')
@@ -253,22 +305,8 @@ export async function DELETE(
         await supabaseAdmin.from('tour_quotes').delete().eq('itinerary_id', itin.id).eq('org_id', orgId)
 
         // Delete the itinerary itself
-        await step('trip', supabaseAdmin.from('itineraries').delete().eq('id', itin.id))
+        await step('trip', supabaseAdmin.from('itineraries').delete().eq('id', itin.id).eq('org_id', orgId))
       }
-    }
-
-    // Check for invoices
-    const { data: invoices } = await supabaseAdmin
-      .from('invoices')
-      .select('id')
-      .eq('client_id', id)
-      .limit(1)
-
-    if (invoices && invoices.length > 0) {
-      return NextResponse.json(
-        { error: 'Cannot delete client with existing invoices. Please delete or reassign invoices first.', blocking: 'invoices' },
-        { status: 400 }
-      )
     }
 
     // Clean up WhatsApp: delete messages first, then conversations
