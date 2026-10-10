@@ -57,6 +57,9 @@ export async function GET(request: NextRequest) {
   // The signed payload is `${userId}:${nonce}` since P4b-2.
   const [userId, stateNonce] = (verifyState(state) || '').split(':')
   if (!userId) {
+    // The signature did not verify: a different OAUTH_STATE_SECRET (or service
+    // key) signed it — another instance or a deploy mid-flow.
+    console.warn('[gmail callback] invalid_state: state signature did not verify')
     return NextResponse.redirect(
       new URL('/settings/email?error=invalid_state', baseUrl)
     )
@@ -66,6 +69,10 @@ export async function GET(request: NextRequest) {
   // browser started the flow. Without this, a signed state the attacker minted
   // could complete against a victim's Google consent.
   if (!nonceMatches(request, stateNonce)) {
+    console.warn('[gmail callback] connect_expired:', {
+      cookiePresent: Boolean(request.cookies.get('oauth_state_nonce')?.value),
+      host: request.headers.get('x-forwarded-host') || request.headers.get('host'),
+    })
     // Told apart from a bad signature: this is the browser coming back without
     // the connect cookie — over 10 minutes, a second Connect click since, or a
     // flow started on another address than GOOGLE_REDIRECT_URI's.
