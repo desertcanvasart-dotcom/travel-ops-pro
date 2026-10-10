@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { SUPPLIER_REFERENCE_CHECKS, describeBlockers } from '@/lib/suppliers/delete-guard'
 
 export async function GET(
   request: NextRequest,
@@ -157,13 +158,14 @@ export async function DELETE(
     const supabase = createServerClient()
     const { id } = await params
 
-    // Check if guide has any assigned bookings
-    const { data: bookings, error: bookingsError } = await supabase
+    // Check if guide has any assigned bookings. A guide is a supplier shared
+    // by the whole install, so ANY organisation's trip counts — scoped to this
+    // org, deleting the guide quietly took them off another agency's trips.
+    // Only a count is read: nothing about the other trip is returned.
+    const { count: tripCount, error: bookingsError } = await supabase
       .from('itineraries')
-      .select('id')
+      .select('id', { count: 'exact', head: true })
       .eq('assigned_guide_id', id)
-      .eq('org_id', orgId)
-      .limit(1)
     
     if (bookingsError) {
       return NextResponse.json(
@@ -173,7 +175,7 @@ export async function DELETE(
     }
     
     // If guide has bookings, don't allow deletion (or unassign first)
-    if (bookings && bookings.length > 0) {
+    if ((tripCount ?? 0) > 0) {
       return NextResponse.json(
         { 
           success: false, 
@@ -181,6 +183,20 @@ export async function DELETE(
         },
         { status: 409 }
       )
+    }
+
+    // The same money-and-records guard as DELETE /api/suppliers/[id]: a guide
+    // with invoices, expenses, priced trip services or documents must not
+    // vanish from under them.
+    const counts = await Promise.all(
+      SUPPLIER_REFERENCE_CHECKS.map(async ({ table, column, label }) => {
+        const { count } = await supabase.from(table).select('*', { count: 'exact', head: true }).eq(column, id)
+        return { label, count: count ?? 0 }
+      })
+    )
+    const blocked = describeBlockers(counts)
+    if (blocked) {
+      return NextResponse.json({ success: false, error: blocked, blocked: true }, { status: 409 })
     }
     
     // Delete guide

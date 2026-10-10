@@ -118,6 +118,14 @@ export async function POST(request: NextRequest) {
     // whose sheet carries supplier_name. Now it never reaches the resolver,
     // and no resolver added later can trip over it either.
     const uniqueKeyColumn = config.uniqueKey[0] // 'service_code' | 'cruise_code' | 'cost_type'
+    // The spreadsheet row each parsed row came from. An index among the VALID
+    // rows (idx + 2) named the wrong line as soon as one row above it failed
+    // validation or was the example row.
+    const sheetRowOf = new Map<Record<string, any>, number>()
+    ;(preview.parsedValidRows ?? []).forEach((r, i) => {
+      const n = preview.parsedValidRowNumbers?.[i]
+      if (n !== undefined) sheetRowOf.set(r, n)
+    })
     let exampleRowsSkipped = 0
     const parsedRows = (preview.parsedValidRows ?? []).filter(r => {
       if (!isExampleRow(r[uniqueKeyColumn])) return true
@@ -137,7 +145,7 @@ export async function POST(request: NextRequest) {
     const locale = await getServerLocale()
 
     parsedRows.forEach((row, idx) => {
-      const rowNum = idx + 2
+      const rowNum = sheetRowOf.get(row) ?? idx + 2
       const idValue = typeof row.supplier_id === 'string' ? row.supplier_id.trim() : ''
       const nameValue = typeof row.supplier_name === 'string' ? row.supplier_name : ''
       const codeValue = typeof row.supplier_code === 'string' ? row.supplier_code.trim() : ''
@@ -204,7 +212,7 @@ export async function POST(request: NextRequest) {
     // dry-run response — only the sampleData (first 5) is part of the
     // public preview contract.
     if (dryRun) {
-      const { parsedValidRows: _drop, ...publicPreview } = preview
+      const { parsedValidRows: _drop, parsedValidRowNumbers: _rows, ...publicPreview } = preview
       return NextResponse.json({
         success: true,
         dryRun: true,
@@ -214,7 +222,7 @@ export async function POST(request: NextRequest) {
 
     // If validation failed, don't proceed
     if (preview.invalidRows > 0) {
-      const { parsedValidRows: _drop, ...publicPreview } = preview
+      const { parsedValidRows: _drop, parsedValidRowNumbers: _rows, ...publicPreview } = preview
       return NextResponse.json({
         success: false,
         error: `${preview.invalidRows} row(s) have validation errors. Fix errors or use dry run to see details.`,
@@ -255,7 +263,7 @@ export async function POST(request: NextRequest) {
     const rateViolations: any[] = []
     rowsToUpsert.forEach((record, idx) => {
       const check = validateRatePayload(record)
-      if (!check.ok) rateViolations.push({ row: idx + 1, errors: check.errors })
+      if (!check.ok) rateViolations.push({ row: sheetRowOf.get(record) ?? idx + 2, errors: check.errors })
     })
     if (rateViolations.length > 0) {
       return NextResponse.json(

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { selectAllRows } from '@/lib/db/select-all-rows'
 
 export type SupplierMatch =
   | { match: 'exact'; supplier_id: string; canonical_name: string }
@@ -13,7 +14,10 @@ export async function resolveSupplierByName(
 ): Promise<SupplierMatch> {
   const key = norm(name)
   if (!key) return { match: 'none' }
-  const { data, error } = await supabase.from('suppliers').select('id, name')
+  // The whole roster, not the first 1000 rows (lib/db/select-all-rows).
+  const { data, error } = await selectAllRows<{ id: string; name: string }>(
+    () => supabase.from('suppliers').select('id, name'),
+  )
   if (error || !data) return { match: 'none' }
   const matches = data.filter((r) => norm(r.name) === key)
   if (matches.length === 0) return { match: 'none' }
@@ -46,7 +50,11 @@ export async function batchResolveSuppliers(
     unknownCodes: new Set(),
   }
 
-  const { data: suppliers, error } = await supabase.from('suppliers').select('id, name, supplier_code')
+  // The whole roster: a supplier past PostgREST's 1000-row cap used to read
+  // as "not found" and fail every rate row naming it.
+  const { data: suppliers, error } = await selectAllRows<{ id: string; name: string; supplier_code: string | null }>(
+    () => supabase.from('suppliers').select('id, name, supplier_code'),
+  )
   if (error || !suppliers) return result
 
   const canonicalById = new Map(suppliers.map((s) => [s.id, s]))

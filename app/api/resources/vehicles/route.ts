@@ -7,6 +7,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { supplierTypeKeysMatching } from '@/lib/supplier-types'
+import { supplierTypesForCurrentOrg } from '@/lib/vocabulary-server'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,7 +24,10 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('suppliers')
       .select('*')
-      .in('type', ['transport', 'local_operator', 'driver'])
+      // By role (`types`), not the primary `type` alone: a guide who also
+      // drives, or an agency's own transport-like type, is a transport
+      // supplier too — the same rule as /api/suppliers?type=.
+      .overlaps('types', supplierTypeKeysMatching(['transport', 'local_operator', 'driver'], await supplierTypesForCurrentOrg()))
       .order('name', { ascending: true })
 
     if (isActive === 'true') {

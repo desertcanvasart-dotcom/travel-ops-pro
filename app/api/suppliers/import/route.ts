@@ -9,6 +9,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { prepareSupplierRows, supplierCsvTemplate, type SupplierCsvRow } from '@/lib/suppliers/import-csv'
 import { allowedSupplierTypeKeys } from '@/lib/supplier-types'
 import { supplierTypesForCurrentOrg } from '@/lib/vocabulary-server'
+import { selectAllRows } from '@/lib/db/select-all-rows'
 
 export async function GET(request: NextRequest) {
   if (request.nextUrl.searchParams.get('template') !== '1') {
@@ -41,7 +42,12 @@ export async function POST(request: NextRequest) {
     const names = preview.ready.map(r => r.name.toLowerCase())
     const existing = new Set<string>()
     if (names.length > 0) {
-      const { data } = await supabase.from('suppliers').select('name')
+      // Every supplier, not the first 1000 (lib/db/select-all-rows): past the
+      // cap an existing supplier read as new and was inserted a second time.
+      const { data, error } = await selectAllRows<{ name: string }>(
+        () => supabase.from('suppliers').select('id, name'),
+      )
+      if (error) throw error
       for (const s of data ?? []) if (names.includes(String(s.name).toLowerCase())) existing.add(String(s.name).toLowerCase())
     }
     const toInsert = preview.ready.filter(r => !existing.has(r.name.toLowerCase()))

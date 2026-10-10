@@ -78,3 +78,47 @@ export function determineCapacityResult(
     details,
   }
 }
+
+// ============================================
+// Saving a day: what the request left out is KEPT
+// ============================================
+// The capacity editor sends only the fields the operator touched (status,
+// max_groups, reason, notes …). The save routes built every row from the
+// request alone — `booked_groups: entry.booked_groups ?? 0`, internal_notes
+// straight from the body — and upserted it, so each save of a day reset its
+// booked groups/guides/vehicles to 0 and blanked its internal notes. The
+// availability check then reported a fully booked day as open.
+
+export const CAPACITY_FIELDS = [
+  'status', 'max_groups', 'booked_groups', 'max_guides', 'booked_guides',
+  'max_vehicles', 'booked_vehicles', 'notes', 'internal_notes', 'reason',
+] as const
+export type CapacityField = (typeof CAPACITY_FIELDS)[number]
+
+const CAPACITY_DEFAULTS: Record<CapacityField, unknown> = {
+  status: 'available',
+  max_groups: 3,
+  booked_groups: 0,
+  max_guides: null,
+  booked_guides: 0,
+  max_vehicles: null,
+  booked_vehicles: 0,
+  notes: null,
+  internal_notes: null,
+  reason: null,
+}
+
+/** A day's row to write: each field from the request when it was given, else
+ *  the day's stored value, else the default for a new day. Pure. */
+export function mergeCapacityEntry(
+  input: Partial<Record<CapacityField, unknown>>,
+  existing: Partial<Record<CapacityField, unknown>> | null | undefined,
+): Record<CapacityField, unknown> {
+  const out = {} as Record<CapacityField, unknown>
+  for (const f of CAPACITY_FIELDS) {
+    if (input[f] !== undefined) out[f] = input[f]
+    else if (existing && existing[f] !== undefined && existing[f] !== null) out[f] = existing[f]
+    else out[f] = CAPACITY_DEFAULTS[f]
+  }
+  return out
+}

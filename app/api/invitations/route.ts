@@ -63,7 +63,11 @@ export async function POST(request: NextRequest) {
     if (!orgId) return noOrgResponse()
 
     const body = await request.json()
-    const { role = 'agent', invited_by } = body
+    const { role = 'agent' } = body
+    // The inviter is whoever is signed in — never the body's say-so. A
+    // client-supplied invited_by named any account as the inviter, and the
+    // public verify route then showed that person's name to the invitee.
+    const invited_by = await getCurrentUserId()
     // Resend = a fresh invitation that REPLACES this one. The old one is removed
     // only after the new one exists: the page used to delete first and then
     // POST, unchecked, so a failed POST left the person with no invitation.

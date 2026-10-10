@@ -28,7 +28,9 @@ export async function GET(request: NextRequest) {
       .order('meal_type')
 
     if (supplierId) query = query.eq('supplier_id', supplierId)
-    if (city) query = query.eq('restaurant_city', city)
+    // meal_rates has `city`; there is no restaurant_city column, so the
+    // filter failed the whole request.
+    if (city) query = query.eq('city', city)
     if (cuisineType) query = query.eq('cuisine_type', cuisineType)
     if (mealType) query = query.eq('meal_type', mealType)
     if (activeOnly) query = query.eq('is_active', true)

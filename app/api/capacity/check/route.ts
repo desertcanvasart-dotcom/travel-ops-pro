@@ -3,6 +3,7 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { determineCapacityResult } from '@/lib/capacity-availability'
+import { shiftDateISO } from '@/lib/today'
 
 // ============================================
 // CAPACITY CHECK API (server-to-server, e.g. WhatsApp AI agent)
@@ -111,13 +112,11 @@ export async function POST(request: NextRequest) {
     })
 
     // Generate all dates in range
+    // Calendar arithmetic on the date strings: a UTC parse stepped with local
+    // setDate() repeated or skipped a day across a DST change on a non-UTC host.
     const dates: string[] = []
-    const current = new Date(start_date)
-    const end = new Date(effectiveEndDate)
-
-    while (current <= end) {
-      dates.push(current.toISOString().split('T')[0])
-      current.setDate(current.getDate() + 1)
+    for (let d = start_date; d <= effectiveEndDate; d = shiftDateISO(d, 1)) {
+      dates.push(d)
     }
 
     // Check availability for each date
@@ -129,7 +128,10 @@ export async function POST(request: NextRequest) {
         return {
           date,
           status: 'available' as const,
-          available_slots: 3 - group_size // Default 3 max groups
+          // Default 3 max groups, none booked. Slots LEFT on the day, as for a
+          // stored row — subtracting the group here as well reported 2 for a
+          // 1-group enquiry and -2 for a group of 5.
+          available_slots: 3
         }
       }
 

@@ -48,6 +48,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       .from('trip_messages')
       .select('direction, content, sender_name, created_at')
       .eq('itinerary_id', share.itinerary_id)
+      .eq('org_id', share.org_id)
       .order('created_at', { ascending: false })
       .limit(50)
     return NextResponse.json({ success: true, messages: toClientTripMessages((rows ?? []) as Array<Record<string, unknown>>) })
@@ -80,6 +81,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .from('trip_messages')
       .select('id', { count: 'exact', head: true })
       .eq('itinerary_id', share.itinerary_id)
+      .eq('org_id', share.org_id)
       .eq('direction', 'inbound')
       .gte('created_at', hourAgo)
     if ((count ?? 0) >= MAX_MESSAGES_PER_HOUR) {
@@ -87,7 +89,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const { data: itinerary } = await supabase
-      .from('itineraries').select('trip_name, client_name').eq('id', share.itinerary_id).maybeSingle()
+      .from('itineraries').select('trip_name, client_name').eq('id', share.itinerary_id).eq('org_id', share.org_id).maybeSingle()
 
     const { data: inserted, error } = await supabase
       .from('trip_messages')

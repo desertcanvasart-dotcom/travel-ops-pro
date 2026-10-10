@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { orgAuth } from '@/lib/auth/org-auth'
+import { shiftDateISO } from '@/lib/today'
 
 // ============================================
 // SINGLE TOUR DEPARTURE API
@@ -43,8 +44,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         *,
         tour_template:tour_templates(id, template_name, template_code, duration_days, short_description),
         bookings:departure_bookings(
-          id, client_id, booking_name, num_adults, num_children, status,
-          total_price, deposit_paid, special_requests, booked_at
+          id, client_id, itinerary_id, client_name, pax, status, notes, created_at
         )
       `)
       .eq('id', id)
@@ -137,6 +137,51 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    if (updateData.start_date !== undefined &&
+        (typeof updateData.start_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(updateData.start_date))) {
+      return NextResponse.json(
+        { success: false, error: 'start_date must be YYYY-MM-DD' },
+        { status: 400 }
+      )
+    }
+
+    // Seats. The grid refused seats below what is already sold, but only in
+    // the browser — any other PUT could set max_pax under booked_pax: an
+    // oversold date whose available seats went negative.
+    for (const f of ['max_pax', 'min_pax', 'booked_pax']) {
+      if (updateData[f] === undefined || (f === 'min_pax' && updateData[f] === null)) continue
+      const n = Number(updateData[f])
+      if (updateData[f] === null || !Number.isInteger(n) || n < 0 || (f === 'max_pax' && n < 1)) {
+        return NextResponse.json(
+          { success: false, error: `${f} must be a whole number${f === 'max_pax' ? ' of at least 1' : ''}` },
+          { status: 400 }
+        )
+      }
+      updateData[f] = n
+    }
+    if (updateData.max_pax !== undefined || updateData.booked_pax !== undefined) {
+      const { data: seats } = await supabase
+        .from('tour_departures')
+        .select('max_pax, booked_pax')
+        .eq('id', id)
+        .eq('org_id', org_id)
+        .maybeSingle()
+      if (!seats) {
+        return NextResponse.json(
+          { success: false, error: 'Departure not found' },
+          { status: 404 }
+        )
+      }
+      const maxPax = Number(updateData.max_pax ?? seats.max_pax)
+      const bookedPax = Number(updateData.booked_pax ?? seats.booked_pax ?? 0)
+      if (bookedPax > maxPax) {
+        return NextResponse.json(
+          { success: false, error: `This date already has ${bookedPax} booked — seats cannot go below that` },
+          { status: 400 }
+        )
+      }
+    }
+
     // Recalculate end_date if start_date or duration_days changed
     if (updateData.start_date || updateData.duration_days) {
       // Fetch current departure to get existing values
@@ -149,12 +194,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
       if (current) {
         const startDate = (updateData.start_date as string) || current.start_date
-        const durationDays = (updateData.duration_days as number) || current.duration_days
+        const durationDays = Number(updateData.duration_days) || current.duration_days
 
-        const startDateObj = new Date(startDate)
-        const endDateObj = new Date(startDateObj)
-        endDateObj.setDate(endDateObj.getDate() + durationDays - 1)
-        updateData.end_date = endDateObj.toISOString().split('T')[0]
+        // Calendar arithmetic on the date string: a UTC parse plus local
+        // setDate() lost a day across a DST change on a host east of UTC.
+        updateData.end_date = shiftDateISO(String(startDate), durationDays - 1)
       }
     }
 
@@ -235,6 +279,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       .from('departure_bookings')
       .select('*', { count: 'exact', head: true })
       .eq('departure_id', id)
+      .eq('org_id', org_id)
       .in('status', ['pending', 'confirmed'])
 
     if (count && count > 0) {

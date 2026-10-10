@@ -95,7 +95,9 @@ export async function processTourUpOrder(
       .from('clients')
       .select('id, first_name, last_name')
       .eq('org_id', orgId)
-      .ilike('email', order.email)
+      // Escaped: `_` (and `%`) are legal in an address but LIKE wildcards —
+      // unescaped, "j_hn@x.com" attached the order to john@x.com's record.
+      .ilike('email', order.email.replace(/[\\%_]/g, ch => `\\${ch}`))
       .limit(1)
       .maybeSingle()
     : { data: null }

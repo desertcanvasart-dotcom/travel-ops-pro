@@ -5,6 +5,7 @@
 // File: app/tours/[code]/page.tsx
 // ============================================
 
+import { shiftDateISO } from '@/lib/today'
 import { DayBandBlock } from '@/components/pricing/DayBand'
 import GuideLanguageSelect, { useGuideLanguageChoice } from '@/components/pricing/GuideLanguageSelect'
 import { groupLinesByDay } from '@/lib/pricing/group-by-day'
@@ -183,11 +184,9 @@ export default function TourDetailPage() {
 
   // Pricing state
   const [selectedPax, setSelectedPax] = useState(2)
-  const [travelDate, setTravelDate] = useState(() => {
-    const date = new Date()
-    date.setDate(date.getDate() + 14)
-    return date.toISOString().split('T')[0]
-  })
+  // Two weeks from the operator's own today — toISOString() is UTC, which
+  // made it 13 days (and a different season band) every Tokyo morning.
+  const [travelDate, setTravelDate] = useState(() => shiftDateISO(todayLocalISO(), 14))
   const [isEurPassport, setIsEurPassport] = useState(true)
   // The guide language priced — the calculator's own picker; English asked
   // for when the office has only Japanese guide rates priced every guide day

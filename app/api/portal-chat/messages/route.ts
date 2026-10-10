@@ -53,7 +53,11 @@ export async function GET(request: NextRequest) {
       .from('portal_messages')
       .select('id, sender, sender_name, body, created_at')
       .eq('thread_id', thread.id)
-      .order('created_at', { ascending: true })
+      .eq('org_id', orgId)
+      // The NEWEST 500, put back in reading order below. Ascending with a
+      // limit kept the oldest 500, so on a long thread the traveller's latest
+      // messages never reached the inbox.
+      .order('created_at', { ascending: false })
       .limit(500)
 
     // Opening a conversation is reading it.
@@ -65,7 +69,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       // Mapped into the shape the inbox already speaks: the traveller is
       // inbound, the office is outbound.
-      messages: (data ?? []).map(m => ({
+      messages: (data ?? []).slice().reverse().map(m => ({
         id: m.id,
         direction: m.sender === 'customer' ? 'inbound' : 'outbound',
         message_body: m.body,

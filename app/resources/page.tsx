@@ -158,12 +158,15 @@ export default function ResourcesPage() {
         airportStaffRes,
         hotelStaffRes
       ] = await Promise.all([
-        fetch('/api/resources?type=guides'),
+        // Each list from its own endpoint. /api/resources ignores ?type= and
+        // returns the transportation rates as a bare array, so every tab but
+        // Vehicles read `success` off an array and showed nothing.
+        fetch('/api/guides'),
         fetch('/api/resources/vehicles'),
-        fetch('/api/resources?type=hotels'),
-        fetch('/api/resources?type=restaurants'),
-        fetch('/api/resources?type=airport_staff'),
-        fetch('/api/resources?type=hotel_staff')
+        fetch('/api/resources/hotels'),
+        fetch('/api/resources/restaurants'),
+        fetch('/api/resources/airport-staff'),
+        fetch('/api/resources/hotel-staff')
       ])
 
       const [
@@ -183,7 +186,8 @@ export default function ResourcesPage() {
       ])
 
       const combinedData: ResourcesData = {
-        guides: guidesData.success ? guidesData.data : [],
+        // /api/guides answers with a bare array (its assignment-picker shape).
+        guides: Array.isArray(guidesData) ? guidesData : guidesData.success ? guidesData.data : [],
         vehicles: vehiclesData.success ? vehiclesData.data : [],
         hotels: hotelsData.success ? hotelsData.data : [],
         restaurants: restaurantsData.success ? restaurantsData.data : [],
@@ -231,7 +235,13 @@ export default function ResourcesPage() {
         ? 'hotel-staff'
         : `${deleteModal.type}s`
 
-      const response = await fetch(`/api/resources/${endpoint}/${deleteModal.id}`, {
+      // The restaurants tab lists meal_rates rows (/api/resources/restaurants);
+      // /api/resources/restaurants/[id] deletes from restaurant_contacts, where
+      // that id matches nothing — a "deleted" that deleted nothing.
+      const url = deleteModal.type === 'restaurant'
+        ? `/api/rates/meals/${deleteModal.id}`
+        : `/api/resources/${endpoint}/${deleteModal.id}`
+      const response = await fetch(url, {
         method: 'DELETE'
       })
 

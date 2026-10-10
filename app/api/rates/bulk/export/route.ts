@@ -10,6 +10,7 @@ import Papa from 'papaparse'
 import { transportationConfigFor, vehicleColumnSpecsFor } from '@/lib/bulk-rate-service'
 import { flattenVehicles } from '@/lib/rates/vehicle-bands'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
+import { selectAllRows } from '@/lib/db/select-all-rows'
 
 const supabase = createServerClient()
 
@@ -65,10 +66,13 @@ export async function GET(request: NextRequest) {
     // exactly how the hotels/cruises Currency column broke this export on the
     // unmigrated CI project. A column the table does not have yet simply
     // exports blank; the headers keep the sheet's full shape.
-    const { data, error } = await supabase
-      .from(config.tableName)
-      .select('*')
-      .order('created_at', { ascending: false })
+    // Every row, page by page: one request stops at PostgREST's 1000-row cap,
+    // and an export that silently drops rows is lost data after a
+    // delete-and-re-import. `id` breaks created_at ties so pages never overlap.
+    const { data, error } = await selectAllRows<Record<string, any>>(
+      () => supabase.from(config.tableName).select('*'),
+      { order: [{ column: 'created_at', ascending: false }, { column: 'id' }] },
+    )
 
     if (error) {
       console.error(`[bulk-export] Error fetching ${table}:`, error)

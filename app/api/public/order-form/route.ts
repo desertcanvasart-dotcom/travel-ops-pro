@@ -63,7 +63,7 @@ function gender(v: unknown): 'male' | 'female' | undefined {
   return v === 'male' || v === 'female' ? v : undefined
 }
 
-const EMAIL_RE = /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/
+const EMAIL_RE = /^[A-Za-z0-9._+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/
 
 function person(v: unknown): OrderPerson | null {
   if (!v || typeof v !== 'object') return null
