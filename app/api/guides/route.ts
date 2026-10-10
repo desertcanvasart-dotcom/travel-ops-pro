@@ -8,6 +8,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createServiceClient } from '@/lib/supabase/service-client'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { supplierTypeKeysMatching } from '@/lib/supplier-types'
+import { supplierTypesForCurrentOrg } from '@/lib/vocabulary-server'
+import { emptyTotals, addToTotals } from '@/lib/currency-totals'
 
 function getSupabase() {
   return createServiceClient()
@@ -15,6 +19,8 @@ function getSupabase() {
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = getSupabase()
     const searchParams = request.nextUrl.searchParams
     
@@ -26,11 +32,15 @@ export async function GET(request: NextRequest) {
     const exclude_itinerary_id = searchParams.get('exclude_itinerary_id')
     const with_stats = searchParams.get('with_stats') === 'true'
     
-    // Build query - fetch from suppliers table with type='guide'
+    // Every supplier who GUIDES — matched on `types`, the full set of roles,
+    // like /api/suppliers and the `guides` view. `type` is only the primary
+    // role, so a driver who also guides (type 'driver', types
+    // {driver,guide}) or an agency's own guide-like type never appeared in
+    // the trip's guide picker.
     let query = supabase
       .from('suppliers')
       .select('*')
-      .eq('type', 'guide')
+      .overlaps('types', supplierTypeKeysMatching(['guide'], await supplierTypesForCurrentOrg()))
       .order('name', { ascending: true })
     
     // Apply filters
@@ -90,14 +100,18 @@ export async function GET(request: NextRequest) {
       guides = guides.filter(g => !bookedGuideIds.includes(g.id))
     }
     
-    // Add statistics if requested
+    // Add statistics if requested. Only this organisation's trips: the guide
+    // is shared by the install, another agency's bookings and revenue are not.
+    // Revenue is per currency — trips are priced in different currencies and
+    // a sum across them is no amount at all.
     if (with_stats && guides.length > 0) {
       const guidesWithStats = await Promise.all(
         guides.map(async (guide) => {
           const { data: bookings } = await supabase
             .from('itineraries')
-            .select('id, start_date, end_date, total_cost')
+            .select('id, start_date, end_date, total_cost, currency')
             .eq('assigned_guide_id', guide.id)
+            .eq('org_id', orgId)
           
           const now = new Date()
           const activeBookings = bookings?.filter(b => 
@@ -108,13 +122,17 @@ export async function GET(request: NextRequest) {
             new Date(b.start_date) > now
           ).length || 0
           
-          const totalRevenue = bookings?.reduce((sum, b) => sum + (b.total_cost || 0), 0) || 0
+          const revenueByCurrency = emptyTotals()
+          for (const b of bookings ?? []) addToTotals(revenueByCurrency, b.total_cost, b.currency)
+          const currencies = Object.keys(revenueByCurrency)
           
           return {
             ...guide,
             active_bookings: activeBookings,
             upcoming_bookings: upcomingBookings,
-            total_revenue: totalRevenue,
+            // A single number only when there is a single currency.
+            total_revenue: currencies.length === 1 ? revenueByCurrency[currencies[0]] : currencies.length === 0 ? 0 : null,
+            revenue_by_currency: revenueByCurrency,
           }
         })
       )
@@ -147,8 +165,12 @@ export async function POST(request: NextRequest) {
     }
     
     // Create guide as a supplier with type='guide'
+    // `types` too: suppliers_type_in_types_check requires the primary type
+    // to be one of the roles, and the column defaults to '{}' — without it
+    // every guide created here was refused by the database.
     const guideData = {
       type: 'guide',
+      types: ['guide'],
       name: body.name,
       contact_email: body.email || null,
       contact_phone: body.phone || body.contact_phone || null,

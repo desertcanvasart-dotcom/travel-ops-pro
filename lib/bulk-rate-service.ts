@@ -116,6 +116,10 @@ export interface ImportPreview {
   // record at write time. Not serialized in the dry-run response — only
   // exposed to in-process callers.
   parsedValidRows?: Record<string, any>[]
+  /** The sheet row number (header = 1) of each parsedValidRows entry, in the
+   *  same order — so a later check (supplier resolution) can name the row
+   *  the operator sees, not its index among the valid rows. */
+  parsedValidRowNumbers?: number[]
 }
 
 // ============================================
@@ -631,6 +635,14 @@ for (const cfg of Object.values(RATE_TABLE_CONFIGS)) {
 /**
  * Parse a cell value based on the column type.
  */
+/** A YYYY-MM-DD that names a day on the calendar (no 2026-02-30, no month 13). */
+export function isCalendarDate(iso: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
+  if (!m) return false
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])))
+  return d.getUTCFullYear() === Number(m[1]) && d.getUTCMonth() === Number(m[2]) - 1 && d.getUTCDate() === Number(m[3])
+}
+
 function parseCell(value: string | undefined | null, colDef: ColumnDef): { parsed: any; error: string | null } {
   const raw = (value ?? '').trim()
 
@@ -659,6 +671,7 @@ function parseCell(value: string | undefined | null, colDef: ColumnDef): { parse
     case 'date': {
       // ISO YYYY-MM-DD or ISO timestamp — pass through
       if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+        if (!isCalendarDate(raw.slice(0, 10))) return { parsed: null, error: `${colDef.label} is not a real date (got "${raw}")` }
         return { parsed: raw, error: null }
       }
       // DD/MM/YYYY (Excel/Numbers reformats ISO dates to the user's locale on
@@ -666,7 +679,12 @@ function parseCell(value: string | undefined | null, colDef: ColumnDef): { parse
       // "23/06/2026" as an invalid date). Normalize to ISO for the DB.
       const dmy = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
       if (dmy) {
-        return { parsed: `${dmy[3]}-${dmy[2].padStart(2,'0')}-${dmy[1].padStart(2,'0')}`, error: null }
+        const iso = `${dmy[3]}-${dmy[2].padStart(2,'0')}-${dmy[1].padStart(2,'0')}`
+        // A US-locale sheet writes 06/23/2026: read as DD/MM that is month 23.
+        // Refused here, by row and column, rather than by the database for
+        // the whole batch of fifty rows it travels with.
+        if (!isCalendarDate(iso)) return { parsed: null, error: `${colDef.label} must be DD/MM/YYYY or YYYY-MM-DD (got "${raw}")` }
+        return { parsed: iso, error: null }
       }
       return { parsed: raw, error: null } // Be lenient with other date formats
     }
@@ -710,6 +728,7 @@ export function validateImportData(
 ): ImportPreview {
   const errors: ValidationError[] = []
   const validRows: Record<string, any>[] = []
+  const validRowNumbers: number[] = []
 
   // Build a lookup of column defs by name
   const colMap = new Map<string, ColumnDef>()
@@ -757,6 +776,7 @@ export function validateImportData(
 
     if (rowValid) {
       validRows.push(parsedRow)
+      validRowNumbers.push(rowNum)
     }
   }
 
@@ -767,6 +787,7 @@ export function validateImportData(
     errors: errors.slice(0, 100), // Cap at 100 errors
     sampleData: validRows.slice(0, 5),
     parsedValidRows: validRows, // L7: single source of truth for the import path
+    parsedValidRowNumbers: validRowNumbers,
   }
 }
 

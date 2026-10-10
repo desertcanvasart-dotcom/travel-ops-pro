@@ -221,10 +221,19 @@ export function parseSheetDate(raw: unknown): string | null {
   const value = String(raw ?? '').trim()
   if (!value) return null
   const iso = value.match(/^(\d{4}-\d{2}-\d{2})/)
-  if (iso) return iso[1]
+  if (iso) return realDay(iso[1])
   const dmy = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`
+  // A US-locale 06/23/2026 read as DD/MM is month 23: refused by row here,
+  // not by the database for the whole rate.
+  if (dmy) return realDay(`${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`)
   return null
+}
+
+/** The date when it names a real calendar day (no 2026-02-30), else null. */
+function realDay(iso: string): string | null {
+  const [y, m, d] = iso.split('-').map(Number)
+  const t = new Date(Date.UTC(y, m - 1, d))
+  return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d ? iso : null
 }
 
 export interface PeriodRowError {
@@ -247,11 +256,23 @@ export interface ParsedPeriodSheet {
   supplementsByKey: Map<string, RateSupplement[]>
 }
 
-const num = (raw: unknown): number => {
+/** A rate cell as a number: blank is 0 (an unpriced hole, by design), and
+ *  null means the cell is not a usable amount — a row error.
+ *
+ *  Rate sheets arrive with thousands separators and currency symbols, which
+ *  are stripped. But a comma is only a thousands separator when it is
+ *  followed by exactly three digits: "1,5" (a decimal comma) used to become
+ *  15 and "1.250,00" became 1.25 — a tenfold or thousandfold wrong rate,
+ *  loaded silently. Text, negatives and those shapes used to read as 0, an
+ *  unpriced hole nobody was told about. All are refused now, by row. */
+export function parseRateCell(raw: unknown): number | null {
   if (raw === null || raw === undefined || String(raw).trim() === '') return 0
-  // Rate sheets arrive with thousands separators and currency symbols.
-  const n = Number(String(raw).replace(/[,\s$€£¥]/g, ''))
-  return Number.isFinite(n) && n >= 0 ? n : 0
+  const cleaned = String(raw).replace(/[\s$€£¥]/g, '')
+  if (cleaned.includes(',')) {
+    if (!/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(cleaned)) return null
+  }
+  const n = Number(cleaned.replace(/,/g, ''))
+  return Number.isFinite(n) && n >= 0 ? n : null
 }
 
 /**
@@ -315,20 +336,29 @@ export function parsePeriodRows(
     }
 
     const rates: Record<string, number> = {}
+    const badCells: string[] = []
     for (const field of RATE_FIELDS[config.entity]) {
       const col = config.columns.find(c => c.field === field)
-      rates[field] = num(col ? raw[col.label] : 0)
+      const value = parseRateCell(col ? raw[col.label] : 0)
+      if (value === null) { badCells.push(col!.label); continue }
+      rates[field] = value
     }
     for (const [header, meta] of supplementColumns) {
       const field = supplementField(meta.key, meta.suffix)
       if (!SUPPLEMENT_FIELD.test(field)) continue
-      const value = num(raw[header])
+      const value = parseRateCell(raw[header])
+      if (value === null) { badCells.push(header); continue }
       rates[field] = value
       if (value > 0) {
         const carried = supplementsByKey.get(key) ?? []
         if (!carried.some(c => c.key === meta.key)) carried.push({ key: meta.key, name: meta.label.slice(0, 80) })
         supplementsByKey.set(key, carried)
       }
+    }
+
+    if (badCells.length > 0) {
+      errors.push({ row: line, key, message: `Not an amount: ${badCells.join(', ')}. Use plain numbers such as 1250 or 1250.50 (no decimal comma).` })
+      return
     }
 
     // An older sheet has no Season column: the period simply has no word.

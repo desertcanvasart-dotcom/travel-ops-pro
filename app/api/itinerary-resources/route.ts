@@ -78,10 +78,37 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Same date rule as PATCH: a reversed range (end before start) is a
+    // booking the conflict check can never find — `start <= other.end AND
+    // end >= other.start` is false for it against every other assignment,
+    // so the resource could be double-booked over those days unnoticed.
+    // A timestamp's date part is accepted, as it always was.
+    const isDay = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)
+    if (!isDay(start_date) || (end_date && !isDay(end_date))) {
+      return NextResponse.json({ success: false, error: 'start_date and end_date must be dates (YYYY-MM-DD)' }, { status: 400 })
+    }
+    if (end_date && String(end_date).slice(0, 10) < start_date.slice(0, 10)) {
+      return NextResponse.json({ success: false, error: 'The end date is before the start date' }, { status: 400 })
+    }
+
     if (!(await itineraryInOrg(supabase, itinerary_id, orgId))) {
       return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
     }
-    
+
+    // The day, when given, must be a day of THIS trip — not another trip's,
+    // and never another organisation's.
+    if (itinerary_day_id) {
+      const { data: day } = await supabase
+        .from('itinerary_days')
+        .select('id')
+        .eq('id', itinerary_day_id)
+        .eq('itinerary_id', itinerary_id)
+        .maybeSingle()
+      if (!day) {
+        return NextResponse.json({ success: false, error: 'Itinerary day not found' }, { status: 404 })
+      }
+    }
+
     const { data, error } = await supabase
       .from('itinerary_resources')
       .insert({

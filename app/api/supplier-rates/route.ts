@@ -23,6 +23,13 @@ const SUPPLIER_RATE_TABLES: Record<string, string[]> = {
   attraction: ['activity_rates'],
   restaurant: ['meal_rates'],
   tour_operator: ['train_rates', 'sleeping_train_rates'],
+  // Every rate table that carries supplier_id. These four were missing, so an
+  // airline's, a rail operator's or an airport/hotel assistant's rates never
+  // came back — the supplier-invoice form showed them as having none.
+  train_operator: ['train_rates', 'sleeping_train_rates'],
+  air_carrier: ['flight_rates'],
+  airport_assistant: ['airport_staff_rates'],
+  hotel_assistant: ['hotel_staff_rates'],
 }
 
 export async function GET(request: NextRequest) {
