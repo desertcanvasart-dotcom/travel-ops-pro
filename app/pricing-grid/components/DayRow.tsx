@@ -243,6 +243,16 @@ export default function DayRow({ day, allDays, config, rates, onToggleExpand, on
       return matched.length > 0 ? matched : allOptions
     }
 
+    // Guides: the day's cities (and guides with no city), the chosen one
+    // kept; every guide when none is local. The dropdown's own city filter
+    // reaches the rest (ported from autoura-saas #644).
+    if (slotId === 'guide') {
+      const selectedIds = new Set(getSlotItems('guide').map(i => i.rateId))
+      const here = new Set([city, overnightCity].filter(Boolean))
+      const local = allOptions.filter(o => selectedIds.has(o.id) || !o.city || here.has(o.city.toLowerCase().trim()))
+      return local.length > 0 ? local : allOptions
+    }
+
     if (slotId === 'cruise') return allOptions
 
     return allOptions
@@ -258,6 +268,7 @@ export default function DayRow({ day, allDays, config, rates, onToggleExpand, on
       options={getFilteredOptions(def.slotId)}
       allOptions={getAllOptions(def.slotId)}
       passport={config.passport}
+      pax={config.pax}
       onChange={(val) => onUpdateSlot(def.slotId, val)}
       onApplyToAllDays={onApplyToAllDays && APPLY_TO_ALL_SLOTS.has(def.slotId) && allDays.length > 1
         ? () => onApplyToAllDays(def.slotId, getSlotValue(def.slotId))

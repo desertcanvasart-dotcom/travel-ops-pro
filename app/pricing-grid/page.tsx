@@ -3,7 +3,7 @@
 import { readHandoffText, decodeTextParam } from '@/lib/text-handoff'
 
 import { todayLocal } from '@/lib/today'
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import type { GridConfig, GridDay, AllRates, SlotValue, GridTotals } from './types'
 import { SLOT_DEFINITIONS } from './types'
@@ -13,6 +13,7 @@ import { gridCompleteness } from './lib/grid-completeness'
 import type { SeasonWindow } from '@/lib/pricing/season-uplift'
 import { mapServicesToSlots } from './lib/slot-mapping'
 import { attachPricingBasis } from './lib/attach-basis'
+import { alignGuideLanguage, guideLanguages, majorityGuideLanguage } from './lib/guide-language'
 import GridHeader from './components/GridHeader'
 import ClientInfoBar from './components/ClientInfoBar'
 import InputPanel from './components/InputPanel'
@@ -113,6 +114,7 @@ function PricingGridContent() {
     loadFromStorage(STORAGE_KEY_DAYS, [])
   )
   const [rates, setRates] = useState<AllRates | null>(null)
+  const guideLanguageList = useMemo(() => guideLanguages(rates?.guide ?? []), [rates])
   // The operator's own high dates, loaded once. The grid is the other screen
   // that quotes a departure, so it reads the same calendar the B2B engine does.
   const [seasonWindows, setSeasonWindows] = useState<SeasonWindow[]>([])
@@ -198,6 +200,20 @@ function PricingGridContent() {
   }, [])
 
   // Fetch rates
+  // The header's guide language changed: every day's guide moves to it.
+  const changeConfig = (next: GridConfig) => {
+    if (rates && next.guideLanguage && next.guideLanguage !== config.guideLanguage) {
+      const { days: aligned, changed, unmatched } = alignGuideLanguage(days, rates.guide, next.guideLanguage)
+      if (changed.length) setDays(aligned)
+      if (unmatched.length) {
+        setSaveMessage(`No ${next.guideLanguage} guide in the city of day ${unmatched.join(', ')} — those days keep their guide.`)
+      } else if (changed.length) {
+        setSaveMessage(`${next.guideLanguage} guide on day ${changed.join(', ')}`)
+      }
+    }
+    setConfig(next)
+  }
+
   // A tier change starts a new request while an older one may still be in
   // flight; only the latest may land — a late answer for the old tier put
   // that tier's hotels in the list (autoura-saas, 2026-10-10: a budget hotel
@@ -535,7 +551,15 @@ function PricingGridContent() {
             }
           }),
         }))
-        setDays(rates ? attachPricingBasis(parsedDays, rates).days : parsedDays)
+        let ready = rates ? attachPricingBasis(parsedDays, rates).days : parsedDays
+        // One guide language for the trip: the one set in the header, else
+        // the one most days came back with (guide-language.ts).
+        const guideLanguage = rates ? (config.guideLanguage || majorityGuideLanguage(ready, rates.guide)) : null
+        if (rates && guideLanguage) {
+          ready = alignGuideLanguage(ready, rates.guide, guideLanguage).days
+          if (!config.guideLanguage) setConfig(prev => ({ ...prev, guideLanguage }))
+        }
+        setDays(ready)
         // Show indicator if itinerary was AI-generated (not parsed from detailed text)
         if (data.generationMode === 'generated') {
           setSaveMessage('✨ AI-suggested itinerary based on inquiry — review and adjust as needed')
@@ -581,6 +605,9 @@ function PricingGridContent() {
       const itn = headerData.data
       // The itinerary's tier comes with its own hotels: not a change to swap for.
       prevTierRef.current = itn.tier || 'standard'
+      // A saved trip's guides are its own; the language follows them
+      // (guide-language.ts), not the last trip's choice.
+      setConfig(prev => ({ ...prev, guideLanguage: '' }))
 
       // Update config from itinerary
       setConfig(prev => ({
@@ -789,7 +816,7 @@ function PricingGridContent() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-8 bg-gray-50 min-h-screen">
       {/* Sticky Header */}
       <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-3 pb-2 bg-gray-50">
-        <GridHeader config={config} onChange={setConfig} totals={totals} />
+        <GridHeader config={config} onChange={changeConfig} totals={totals} guideLanguages={guideLanguageList} />
       </div>
 
       {/* Client Info */}

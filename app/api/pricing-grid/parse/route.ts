@@ -282,7 +282,7 @@ Use the ID format as shown (e.g., "a1b2c3d4-..." UUID format).
 ### Touring Day (ANY day with sightseeing, visits, temples, museums, pyramids, bazaar, old city, etc.)
 - vehicle: day-tour vehicle matching pax and city (from the VEHICLE catalog)
 - route: EMPTY [] unless transferring between cities (then use intercity or intercity_with_sightseeing from ROUTE catalog)
-- guide: ALWAYS add a guide for touring days — pick the guide matching the requested language
+- guide: ALWAYS add a guide for touring days — pick the guide matching the requested language; ONE language for the whole trip — the language the text asks for, else the same language on every day
 - entrance_fees: match EVERY attraction/site mentioned by name
 - meals: ALWAYS add lunch AND dinner for the day's city. Pick restaurant meals matching city.
 - water: ALWAYS add water
