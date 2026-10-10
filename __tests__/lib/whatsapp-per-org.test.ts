@@ -358,3 +358,14 @@ describe('20261125 can run before the code that stamps org_id', () => {
     expect(m).toContain('NEW.org_id := (SELECT id FROM public.organizations ORDER BY created_at ASC LIMIT 1)')
   })
 })
+
+describe('before 20261125 runs, the inbox still loads', () => {
+  it('a failed WhatsApp read leaves WhatsApp out instead of failing the inbox', () => {
+    const list = readFileSync(join(process.cwd(), 'app/api/unified/conversations/route.ts'), 'utf8')
+    expect(list).not.toContain('if (waError) throw waError')
+    expect(list).toContain('for (const conv of waError ? [] : waData || [])')
+    const client = readFileSync(join(process.cwd(), 'app/api/unified/client/[clientId]/route.ts'), 'utf8')
+    expect(client).not.toContain('if (waError) throw waError')
+    expect(client).toContain('(waError ? [] : waConversations)')
+  })
+})

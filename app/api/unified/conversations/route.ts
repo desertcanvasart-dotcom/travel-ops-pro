@@ -87,10 +87,14 @@ export async function GET(request: NextRequest) {
 
       const { data: waData, error: waError } = await waQuery.limit(limit)
 
-      if (waError) throw waError
+      // As trip chats below: one channel failing must not take the inbox down.
+      // Before 20261125 has run (whatsapp_conversations.org_id) the scoped
+      // read fails; WhatsApp is then absent — never listed unscoped — and the
+      // other channels still load.
+      if (waError) console.error('[unified conversations] WhatsApp chats unavailable:', waError.message)
 
       // Transform WhatsApp data to unified format
-      for (const conv of waData || []) {
+      for (const conv of waError ? [] : waData || []) {
         conversations.push({
           id: conv.id,
           channel: 'whatsapp',

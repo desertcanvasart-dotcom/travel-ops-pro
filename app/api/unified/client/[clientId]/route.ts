@@ -54,7 +54,10 @@ export async function GET(
       .or('is_hidden.is.null,is_hidden.eq.false')
       .order('last_message_at', { ascending: false })
 
-    if (waError) throw waError
+    // One channel failing must not blank the client's history: before
+    // 20261125 (whatsapp_conversations.org_id) the scoped read fails and
+    // WhatsApp is simply absent — never listed unscoped.
+    if (waError) console.error('[unified client] WhatsApp chats unavailable:', waError.message)
 
     // Get Email conversations for this client
     const { data: emailConversations, error: emailError } = await supabase
@@ -76,7 +79,7 @@ export async function GET(
     if (emailError) throw emailError
 
     // Transform to unified format
-    const whatsappUnified = (waConversations || []).map((conv: any) => ({
+    const whatsappUnified = ((waError ? [] : waConversations) || []).map((conv: any) => ({
       id: conv.id,
       channel: 'whatsapp',
       identifier: conv.phone_number,
