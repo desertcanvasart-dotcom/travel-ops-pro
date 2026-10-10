@@ -67,7 +67,12 @@ function EmailSettingsContent() {
     if (success) {
       setMessage({ type: 'success', text: 'Gmail connected successfully!' })
     } else if (error) {
-      setMessage({ type: 'error', text: `Connection failed: ${error}` })
+      const reasons: Record<string, string> = {
+        missing_permissions: 'Connection failed: on Google\'s screen, tick every permission (read, send and manage email), then connect again.',
+        org_internal: 'Connection failed: the Google app only accepts accounts from its own organization (OAuth audience is Internal).',
+        access_denied: 'Connection cancelled on Google\'s screen. If this account is not a test user of the Google app, add it first.',
+      }
+      setMessage({ type: 'error', text: reasons[error] || `Connection failed: ${error}` })
     }
   }, [searchParams])
 

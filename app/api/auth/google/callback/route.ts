@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { nonceMatches, clearNonceCookie } from '@/lib/oauth/csrf-nonce'
 import { encryptToken } from '@/lib/crypto/token-cipher'
 import { createClient } from '@supabase/supabase-js'
-import { getTokensFromCode, getUserEmail } from '@/lib/gmail'
+import { getTokensFromCode, getUserEmail, GMAIL_SCOPES } from '@/lib/gmail'
 import { verifyState } from '@/lib/oauth-state'
 
 // Create admin client for server-side operations
@@ -77,6 +77,16 @@ export async function GET(request: NextRequest) {
 
     if (!tokens.access_token || !tokens.refresh_token) {
       throw new Error('No tokens received')
+    }
+
+    // Google's consent screen lets each permission be unticked. A mailbox
+    // connected without read/modify/send was saved as "connected" and then
+    // failed every sync with a bare 403 — refuse it here and say why.
+    const granted = new Set((tokens.scope || '').split(/\s+/).filter(Boolean))
+    if (granted.size > 0 && GMAIL_SCOPES.filter(s => s.includes('/auth/gmail.')).some(s => !granted.has(s))) {
+      return NextResponse.redirect(
+        new URL('/settings/email?error=missing_permissions', baseUrl)
+      )
     }
 
     // Get user's email

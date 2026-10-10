@@ -234,3 +234,12 @@ describe("friends mode: a friend's link asks for a code only they receive", () =
     expect(src('app/components/PortalCoordinator.tsx')).toContain('The family link stops working')
   })
 })
+
+describe('Gmail connect', () => {
+  it('refuses a consent with Gmail permissions unticked, and says why', () => {
+    const cb = src('app/api/auth/google/callback/route.ts')
+    expect(cb).toContain("GMAIL_SCOPES.filter(s => s.includes('/auth/gmail.')).some(s => !granted.has(s))")
+    expect(cb).toContain('/settings/email?error=missing_permissions')
+    expect(src('app/settings/email/page.tsx')).toContain('missing_permissions:')
+  })
+})
