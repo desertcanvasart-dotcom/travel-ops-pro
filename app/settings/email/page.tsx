@@ -163,7 +163,14 @@ function EmailSettingsContent() {
   }
 
   const handleDisconnectGmail = async () => {
-    if (!user || !(await confirmDialog('Are you sure you want to disconnect Gmail?'))) return
+    // What disconnecting does (lib/email/connected-mailboxes): the address's
+    // emails leave Communicate, client pages and the dashboard — kept, not
+    // deleted — and come back if the same address is connected again.
+    if (!user || !(await confirmDialog(
+      'Disconnect Gmail? Emails from this address will no longer show in Communicate, on client pages or on the dashboard. ' +
+      'They are kept, not deleted: connect the same address again to bring them back. ' +
+      'Colleagues who use this mailbox as the company inbox lose it too.'
+    ))) return
 
     try {
       const { error } = await supabase

@@ -4866,6 +4866,7 @@ export interface Database {
           awaiting_reply_since: string | null
           lead_checked_at: string | null
           lead_check: string | null
+          mailbox_email: string | null
         }
         Insert: {
           id?: string
@@ -4893,6 +4894,7 @@ export interface Database {
           awaiting_reply_since?: string | null
           lead_checked_at?: string | null
           lead_check?: string | null
+          mailbox_email?: string | null
         }
         Update: {
           id?: string
@@ -4920,6 +4922,7 @@ export interface Database {
           awaiting_reply_since?: string | null
           lead_checked_at?: string | null
           lead_check?: string | null
+          mailbox_email?: string | null
         }
         Relationships: [
           {

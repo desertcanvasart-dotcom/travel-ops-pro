@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -69,22 +70,26 @@ export async function GET(
       .eq('org_id', orgId)
     const memberIds = (members ?? []).map((m: { user_id: string }) => m.user_id)
 
-    const { data: emailConversations, error: emailError } = await supabase
-      .from('email_conversations')
-      .select(`
-        *,
-        assigned_agent:team_members!email_conversations_assigned_team_member_id_fkey (
-          id,
-          name,
-          email,
-          avatar_url,
-          is_available
-        )
-      `)
-      .eq('client_id', clientId)
-      .in('user_id', memberIds)
-      .or('is_hidden.is.null,is_hidden.eq.false')
-      .order('last_message_at', { ascending: false })
+    // And only a connected address's (lib/email/connected-mailboxes).
+    const { data: emailConversations, error: emailError } = await scopedToConnectedMailboxes(supabase, (mailboxFilter) => {
+      let q = supabase
+        .from('email_conversations')
+        .select(`
+          *,
+          assigned_agent:team_members!email_conversations_assigned_team_member_id_fkey (
+            id,
+            name,
+            email,
+            avatar_url,
+            is_available
+          )
+        `)
+        .eq('client_id', clientId)
+        .in('user_id', memberIds)
+        .or('is_hidden.is.null,is_hidden.eq.false')
+      if (mailboxFilter) q = q.or(mailboxFilter)
+      return q.order('last_message_at', { ascending: false })
+    })
 
     if (emailError) throw emailError
 

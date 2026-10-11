@@ -92,17 +92,25 @@ describe('Communicate: Trash', () => {
 
   it('Trash lists only deleted email conversations', () => {
     const r = src('app/api/unified/conversations/route.ts')
-    expect(r).toContain("? emailQuery.eq('is_hidden', true)")
+    // Deleted in Communicate (status 'trashed'), never mail hidden to keep it
+    // private (is_hidden alone — scripts/scope-inbox).
+    expect(r).toContain("? emailQuery.eq('is_hidden', true).eq('status', 'trashed')")
+    const conv = src('app/api/email/conversations/route.ts')
+    expect(conv).toContain("status: 'trashed',")
+    expect(conv).toContain("updateData.status = 'active' // out of Trash (see DELETE)")
     for (const ch of ['whatsapp', 'portal', 'trip']) expect(r).toContain(`if (!trash && (channel === 'all' || channel === '${ch}'))`)
   })
 
   it('new mail from a person brings a deleted conversation back — in the sync and the poll', () => {
     const sync = src('lib/email/sync-mailbox.ts')
-    expect(sync).toContain("...(revive ? { is_hidden: false } : {}),")
+    expect(sync).toContain("...(revive ? { is_hidden: false, status: 'active' } : {}),")
+    // Only conversations deleted in Communicate — never mail hidden as private.
+    expect(sync).toContain("if (r.is_hidden && r.status === 'trashed') deletedConversations.add(r.id)")
     expect(sync).toContain("revive = msgDirection === 'outbound' || !looksAutomated({")
     const poll = src('app/api/gmail/poll/route.ts')
     expect(poll).toContain('if (!msgInsertError && existingConv?.id) {')
-    expect(poll).toContain(".update({ is_hidden: false })")
+    expect(poll).toContain(".update({ is_hidden: false, status: 'active' })")
+    expect(poll).toContain(".eq('status', 'trashed')")
   })
 
   it('the screen restores, and says when a delete fails', () => {

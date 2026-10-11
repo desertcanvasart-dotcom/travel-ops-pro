@@ -7,6 +7,7 @@ import { GmailAuthError } from '@/lib/gmail'
 import { getMailboxGmail } from '@/lib/gmail-mailbox'
 import { getCurrentUserId } from '@/lib/auth/current-org'
 import { loadKnownContactEmails, looksAutomated } from '@/lib/email-scoping'
+import { isMissingMailboxColumn } from '@/lib/email/connected-mailboxes'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -231,24 +232,34 @@ export async function GET(request: NextRequest) {
               }
 
               if (!conversationId) {
-                const { data: newConv } = await supabase
+                const conversationRow = {
+                  thread_id: threadId,
+                  // The mailbox's owner, not the viewer: a shared mailbox's
+                  // threads stay one owner's (gmail/send replies from it).
+                  user_id: auth.mailboxUserId,
+                  client_email: clientEmail,
+                  subject,
+                  last_message_snippet: message.data.snippet,
+                  last_message_at: new Date(date || Date.now()).toISOString(),
+                  unread_count: direction === 'inbound' ? 1 : 0,
+                  status: 'active',
+                  is_hidden: false,
+                  last_sync_at: new Date().toISOString()
+                }
+                // The address it came from (lib/email/connected-mailboxes);
+                // without the column (before migration 20261128), stored as before.
+                let { data: newConv, error: newConvError } = await supabase
                   .from('email_conversations')
-                  .insert({
-                    thread_id: threadId,
-                    // The mailbox's owner, not the viewer: a shared mailbox's
-                    // threads stay one owner's (gmail/send replies from it).
-                    user_id: auth.mailboxUserId,
-                    client_email: clientEmail,
-                    subject,
-                    last_message_snippet: message.data.snippet,
-                    last_message_at: new Date(date || Date.now()).toISOString(),
-                    unread_count: direction === 'inbound' ? 1 : 0,
-                    status: 'active',
-                    is_hidden: false,
-                    last_sync_at: new Date().toISOString()
-                  })
+                  .insert({ ...conversationRow, mailbox_email: String(auth.email || '').toLowerCase() || null })
                   .select()
                   .single()
+                if (newConvError && isMissingMailboxColumn(newConvError)) {
+                  ;({ data: newConv, error: newConvError } = await supabase
+                    .from('email_conversations')
+                    .insert(conversationRow)
+                    .select()
+                    .single())
+                }
                 conversationId = newConv?.id
               } else {
                 // Update conversation
@@ -307,9 +318,10 @@ export async function GET(request: NextRequest) {
                   if (human) {
                     await supabase
                       .from('email_conversations')
-                      .update({ is_hidden: false })
+                      .update({ is_hidden: false, status: 'active' })
                       .eq('id', existingConv.id)
                       .eq('is_hidden', true)
+                      .eq('status', 'trashed')
                   }
                 }
               }
