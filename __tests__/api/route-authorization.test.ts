@@ -324,3 +324,41 @@ describe('staff-only API prefixes (reads included)', () => {
     expect(roleAllows('viewer', ['admin', 'manager', 'agent'])).toBe(false)
   })
 })
+
+// Rates are supplier costs (operator, 2026-10-11): the Rates screens are
+// manager-and-above, so are their APIs — reads included. The pickers agents
+// price trips with stay agent-readable; a viewer reads no rates at all.
+describe('rate reads', () => {
+  const list = (name: string) => {
+    const block = source.match(new RegExp(`const ${name} = \\[([\\s\\S]*?)\\n\\]`))
+    expect(block, `${name} not found`).toBeTruthy()
+    const code = block![1].split('\n').filter(l => !l.trim().startsWith('//')).join('\n')
+    return [...code.matchAll(/'([^']+)'/g)].map(m => m[1])
+  }
+  const managerOnly = (path: string) => list('FINANCIAL_API_PREFIXES').some(p => path.startsWith(p))
+  const staffOnly = (path: string) => list('STAFF_ONLY_API_PREFIXES').some(p => path.startsWith(p))
+
+  it.each([
+    '/api/supplier-rates', '/api/rates/audit-log', '/api/rates/bulk/export', '/api/rates/bulk/periods/import',
+    '/api/rates/hotels', '/api/rates/hotels/abc', '/api/rates/hotel-services', '/api/rates/airport-services',
+    '/api/rates/cruises', '/api/rates/fixed-costs', '/api/rates/tipping', '/api/suppliers/export',
+  ])('%s is manager-and-above, reads included', path => {
+    expect(managerOnly(path)).toBe(true)
+  })
+
+  it.each([
+    '/api/rates', '/api/rates/activities', '/api/rates/attractions', '/api/rates/guides', '/api/rates/meals',
+    '/api/rates/transportation', '/api/rates/flights', '/api/rates/trains', '/api/rates/sleeping-trains',
+    '/api/rates/entrance-fees', '/api/suppliers', '/api/resources/hotels', '/api/cruises/assignable',
+  ])('%s — a picker agents build trips with — stays agent-readable, never viewer', path => {
+    expect(managerOnly(path)).toBe(false)
+    expect(staffOnly(path)).toBe(true)
+  })
+
+  it('the calendar’s guide and vehicle lists stay open to a viewer', () => {
+    for (const path of ['/api/guides', '/api/vehicles']) {
+      expect(managerOnly(path)).toBe(false)
+      expect(staffOnly(path)).toBe(false)
+    }
+  })
+})

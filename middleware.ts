@@ -179,6 +179,24 @@ const FINANCIAL_API_PREFIXES = [
   // The accounting integration's chart of accounts and sync status are
   // financial data — manager and above, reads included.
   '/api/accounting',
+  // Rate management — supplier costs. The Rates pages are manager-and-above,
+  // but their APIs answered any signed-in account (operator, 2026-10-11).
+  // Only what the Rates screens use: the pickers agents need to build a trip
+  // (/api/rates?type=…, /api/rates/{activities,attractions,guides,meals,
+  // transportation,flights,trains,sleeping-trains,entrance-fees}, suppliers,
+  // resources) stay staff-readable below.
+  '/api/supplier-rates',
+  '/api/rates/audit-log',
+  '/api/rates/bulk',
+  '/api/rates/available',
+  '/api/rates/fixed-costs',
+  '/api/rates/tipping',
+  '/api/rates/hotels',
+  '/api/rates/hotel-services',
+  '/api/rates/airport-services',
+  '/api/rates/cruises',
+  '/api/suppliers/export',
+  '/api/suppliers/import',
 ]
 
 // Staff-only, READS INCLUDED (agent and above). Customer conversations are
@@ -196,6 +214,15 @@ const STAFF_ONLY_API_PREFIXES = [
   '/api/gmail',
   '/api/ai',
   '/api/translate',
+  // Rates, suppliers and pricing: costs. Agents price trips with them; a
+  // viewer's pages (dashboard, calendar, notifications) use none of them.
+  // (/api/guides and /api/vehicles stay open: the calendar lists them.)
+  '/api/rates',
+  '/api/pricing',
+  '/api/pricing-grid',
+  '/api/suppliers',
+  '/api/resources',
+  '/api/cruises',
 ]
 
 export async function middleware(request: NextRequest, event: NextFetchEvent) {
