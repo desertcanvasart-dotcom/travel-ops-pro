@@ -166,6 +166,9 @@ export async function fetchEmails(
     maxResults,
     ...(query ? { q: query } : {}),
     ...(labelIds?.length ? { labelIds } : {}),
+    // Gmail leaves Trash and Spam out of every list unless asked: the Trash
+    // and Spam folders came back empty.
+    ...(labelIds?.some(l => l === 'TRASH' || l === 'SPAM') ? { includeSpamTrash: true } : {}),
     pageToken,
   })
 

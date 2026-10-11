@@ -6,6 +6,7 @@ import { getCurrentOrgId, getCurrentUserId, noOrgResponse, requireRole } from '@
 import { recordsInOrg } from '@/lib/org-refs'
 import { teamMemberInOrg } from '@/lib/whatsapp-org'
 import { pickConversationUpdates } from '@/lib/email/conversation-updates'
+import { moveThreadInGmail } from '@/lib/email/conversation-trash'
 import type { EmailConversation } from '@/types/unified'
 
 // Use service role for API routes to bypass RLS
@@ -306,6 +307,13 @@ export async function PATCH(request: NextRequest) {
 
     if (error) throw error
 
+    // Restored from Trash: back out of Gmail's Trash too (see DELETE).
+    let warning: string | undefined
+    if (action === 'unhide' && data) {
+      const gmail = await moveThreadInGmail(data.user_id, data.thread_id, 'untrash')
+      if (!gmail.ok) warning = 'Restored here, but the email could not be taken out of Trash in Gmail. Reconnect Gmail in Settings and try again.'
+    }
+
     // Log activity if agent provided
     if (agent_id && action) {
       await supabase
@@ -319,16 +327,22 @@ export async function PATCH(request: NextRequest) {
         })
     }
 
-    return NextResponse.json({ conversation: data, success: true })
+    return NextResponse.json({ conversation: data, success: true, ...(warning ? { warning } : {}) })
   } catch (error: any) {
     console.error('Error updating email conversation:', error)
     return NextResponse.json({ error: clientMessage(error, 'Internal server error'), success: false }, { status: 500 })
   }
 }
 
-// DELETE /api/email/conversations - Hide (soft delete) a conversation
+// DELETE /api/email/conversations - Move a conversation to Communicate's Trash
+// (is_hidden) and its thread to Gmail's Trash. Restore: PATCH action 'unhide'.
 export async function DELETE(request: NextRequest) {
   try {
+    // The same roles as reading the inbox (GET): this was open to any
+    // signed-in account.
+    const forbidden = await requireRole(['admin', 'manager', 'agent'])
+    if (forbidden) return forbidden
+
     const { searchParams } = new URL(request.url)
     const conversationId = searchParams.get('id')
 
@@ -336,10 +350,10 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Conversation ID required', success: false }, { status: 400 })
     }
 
-    // Soft delete — hide the conversation. NOTE: email_conversations has only an
-    // is_hidden column (no hidden_at/hidden_by, unlike whatsapp_conversations).
-    // Writing those non-existent columns made PostgREST reject the whole UPDATE
-    // with PGRST204, so this endpoint always 500'd and the delete did nothing.
+    // NOTE: email_conversations has only an is_hidden column (no
+    // hidden_at/hidden_by, unlike whatsapp_conversations). Writing those
+    // non-existent columns made PostgREST reject the whole UPDATE with
+    // PGRST204, so this endpoint always 500'd and the delete did nothing.
     const { data, error } = await supabase
       .from('email_conversations')
       .update({
@@ -355,13 +369,18 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Conversation not found', success: false }, { status: 404 })
     }
 
+    // The thread follows it into Gmail's Trash. Moved here regardless: a
+    // mailbox that needs reconnecting must not stop the delete — it says so.
+    const gmail = await moveThreadInGmail(data.user_id, data.thread_id, 'trash')
+
     return NextResponse.json({
       success: true,
-      message: 'Email conversation hidden successfully',
+      message: 'Moved to Trash',
+      ...(gmail.ok ? {} : { warning: 'Moved to Trash here, but the email could not be moved to Trash in Gmail. Reconnect Gmail in Settings and try again.' }),
       conversation: data
     })
   } catch (error: any) {
-    console.error('Error hiding email conversation:', error)
+    console.error('Error deleting email conversation:', error)
     return NextResponse.json({ error: clientMessage(error, 'Internal server error'), success: false }, { status: 500 })
   }
 }

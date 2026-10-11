@@ -13,7 +13,7 @@ import {
   Send, User, Clock, Loader2, CheckCheck, Check,
   AlertCircle, Plus, History, Paperclip, Download,
   MessageSquare, Mail, UserPlus, UserX, ChevronDown,
-  ExternalLink, Languages, Sparkles, Trash2, Archive, MailOpen, X, Plane, Route
+  ExternalLink, Languages, Sparkles, Trash2, Archive, MailOpen, X, Plane, Route, RotateCcw
 } from 'lucide-react'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { sanitizeHtml } from '@/lib/sanitize-html'
@@ -255,7 +255,8 @@ export function UnifiedMessageThread({
   // One key per email reply (lib/email/send-with-guard): kept until it is sent.
   const replyKeyRef = useRef<string>(newRequestKey())
   const confirmSendConflict = useSendConflictConfirm()
-  const { confirm: confirmDialog } = useConfirmDialog()
+  const { confirm: confirmDialog, alert: alertDialog } = useConfirmDialog()
+  const dialog = { alert: alertDialog }
   const [dismissingLead, setDismissingLead] = useState(false)
   // Portal replies: the message stored fine, but the traveller may not have
   // been told (no address, mail not connected, no live link). The booking
@@ -614,32 +615,55 @@ export function UnifiedMessageThread({
     }
   }
 
-  // Delete conversation (WhatsApp: hide, Email: trash)
+  // Delete conversation (WhatsApp: hide; Email: Communicate's Trash + Gmail's
+  // Trash, restorable — /api/email/conversations DELETE). A failed delete
+  // said nothing and left the conversation where it was.
   const handleDeleteConversation = async () => {
     if (!conversation) return
     setActionLoading(true)
     try {
-      if (conversation.channel === 'whatsapp') {
-        // WhatsApp: DELETE to hide conversation
-        const res = await fetch(`/api/whatsapp/conversations?id=${conversation.id}`, { method: 'DELETE' })
-        if (res.ok && onConversationDeleted) {
-          onConversationDeleted(conversation.id)
-        }
-      } else {
-        // Email: soft-hide from the unified inbox (mirrors the WhatsApp path).
-        // This removes it from the box without touching the actual Gmail mailbox.
-        // The previous Gmail-trash call never removed the row from our DB (so the
-        // conversation kept reappearing) and passed a thread_id to a messages API.
-        const res = await fetch(`/api/email/conversations?id=${conversation.id}`, { method: 'DELETE' })
-        if (res.ok && onConversationDeleted) {
-          onConversationDeleted(conversation.id)
-        }
+      const res = conversation.channel === 'whatsapp'
+        ? await fetch(`/api/whatsapp/conversations?id=${conversation.id}`, { method: 'DELETE' })
+        : await fetch(`/api/email/conversations?id=${conversation.id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.success === false) {
+        await dialog.alert(t('deleteFailedTitle'), data.error || t('deleteFailed'), 'warning')
+        return
       }
+      if (data.warning) await dialog.alert(t('deleteConversationTitle'), data.warning, 'warning')
+      onConversationDeleted?.(conversation.id)
     } catch (error) {
       console.error('Error deleting conversation:', error)
+      await dialog.alert(t('deleteFailedTitle'), t('deleteFailed'), 'warning')
     } finally {
       setActionLoading(false)
       setShowDeleteModal(false)
+    }
+  }
+
+  // Restore an email conversation from Communicate's Trash (and Gmail's).
+  const handleRestoreConversation = async () => {
+    if (!conversation || conversation.channel !== 'email') return
+    setActionLoading(true)
+    try {
+      const res = await fetch('/api/email/conversations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversation_id: conversation.id, action: 'unhide' }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.success === false) {
+        await dialog.alert(t('restoreFailedTitle'), data.error || t('restoreFailed'), 'warning')
+        return
+      }
+      if (data.warning) await dialog.alert(t('restore'), data.warning, 'warning')
+      // Off the Trash list, like a delete takes it off the inbox.
+      onConversationDeleted?.(conversation.id)
+    } catch (error) {
+      console.error('Error restoring conversation:', error)
+      await dialog.alert(t('restoreFailedTitle'), t('restoreFailed'), 'warning')
+    } finally {
+      setActionLoading(false)
     }
   }
 
@@ -1127,8 +1151,23 @@ export function UnifiedMessageThread({
               </button>
             )}
 
-            {/* Delete — not for portal: see isPortal above. */}
-            {!isPortal && (
+            {/* In Trash: Restore instead of Delete. */}
+            {conversation.channel === 'email' && conversation.is_hidden && (
+              <button
+                type="button"
+                onClick={handleRestoreConversation}
+                disabled={actionLoading}
+                className="px-2 py-1 text-xs font-semibold text-primary-700 bg-primary-50 hover:bg-primary-100 rounded transition-colors disabled:opacity-50 flex items-center gap-1"
+                title={t('restore')}
+                data-testid="restore-conversation"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                {t('restore')}
+              </button>
+            )}
+
+            {/* Delete — not for portal: see isPortal above; not again in Trash. */}
+            {!isPortal && !conversation.is_hidden && (
               <button
                 type="button"
                 onClick={() => setShowDeleteModal(true)}

@@ -1345,7 +1345,7 @@
     "moveToTrash": "ゴミ箱に移動",
     "hideFromInbox": "受信トレイから非表示",
     "deleteConfirmMessage": "以下の会話を削除してもよろしいですか:",
-    "deleteNoteEmail": "メールスレッドはGmailのゴミ箱に移動されます。",
+    "deleteNoteEmail": "会話はここと Gmail の両方でゴミ箱に移動します。ゴミ箱から復元でき、この相手から新しいメールが届くと自動的に戻ります。",
     "deleteNoteWhatsApp": "会話は受信トレイから非表示になります。顧客が新しいメッセージを送信すると再表示されます。",
     "note": "注意:",
     "deleting": "削除中...",
@@ -1366,7 +1366,17 @@
     "openTrip": "旅程を開く",
     "tripNotifyNoRecipient": "返信は保存されましたが、メールは送信されていません。この旅程にお客様のメールアドレスがありません。旅程で追加してください。",
     "tripNotifyNoLink": "返信は保存されましたが、メールは送信されていません。この旅程には共有リンクがありません。旅程のメッセージタブで作成してください。",
-    "tripNotifyFailed": "返信は保存されましたが、通知メールの送信に失敗しました。旅行者はリンクを再度開いた場合のみ確認できます。"
+    "tripNotifyFailed": "返信は保存されましたが、通知メールの送信に失敗しました。旅行者はリンクを再度開いた場合のみ確認できます。",
+    "trash": "ゴミ箱",
+    "trashTitle": "ゴミ箱",
+    "trashHint": "削除したメールの会話です。復元すると、ここと Gmail の両方に戻ります。",
+    "trashEmpty": "ゴミ箱は空です",
+    "backToInbox": "受信トレイに戻る",
+    "restore": "復元",
+    "deleteFailedTitle": "削除できませんでした",
+    "deleteFailed": "会話を削除できませんでした。もう一度お試しください。",
+    "restoreFailedTitle": "復元できませんでした",
+    "restoreFailed": "会話を復元できませんでした。もう一度お試しください。"
   },
   "pdf": {
     "paymentTermsHeading": "お支払い条件",

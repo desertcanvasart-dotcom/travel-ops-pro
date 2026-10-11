@@ -32,6 +32,9 @@ import {
   File,
   Trash2,
   Archive,
+  RotateCcw,
+  ShieldAlert,
+  ShieldCheck,
   MoreHorizontal,
   Minus,
   Image,
@@ -171,7 +174,7 @@ interface Client {
 }
 
 type FilterType = 'all' | 'unread' | 'starred'
-type FolderType = 'inbox' | 'sent' | 'drafts'
+type FolderType = 'inbox' | 'sent' | 'drafts' | 'spam' | 'trash'
 
 /** A folder is its Gmail label, listed from the mailbox itself — not the
  *  search index, which lags behind changes: a trashed email came back on the
@@ -179,7 +182,10 @@ type FolderType = 'inbox' | 'sent' | 'drafts'
  *  (operator, 2026-10-10). The inbox is Gmail's own inbox: its old
  *  `-from:me` also hid mail from the account's "send as" addresses. A
  *  search typed by the operator stays a search, within the folder. */
-const FOLDER_LABEL: Record<FolderType, string> = { inbox: 'INBOX', sent: 'SENT', drafts: 'DRAFT' }
+// Spam and Trash are listed too: a deleted email had nowhere to be seen or
+// restored from, and one Gmail filed as spam never showed in the system at
+// all (operator, 2026-10-11).
+const FOLDER_LABEL: Record<FolderType, string> = { inbox: 'INBOX', sent: 'SENT', drafts: 'DRAFT', spam: 'SPAM', trash: 'TRASH' }
 function folderListParams(folder: FolderType, query: string | undefined, params: URLSearchParams) {
   params.append('labelIds', FOLDER_LABEL[folder])
   if (query && query.trim()) params.append('query', query.trim())
@@ -669,13 +675,14 @@ ${bodyText}`
       if (!response.ok || data.error) throw new Error(data.error || `The action failed (${response.status})`)
 
       // Out of this folder now: off the list at once, not on the next fetch.
-      if (action === 'delete' || action === 'archive' || action === 'move') {
+      const leavesFolder = ['delete', 'archive', 'move', 'restore', 'notSpam', 'permanentDelete'].includes(action)
+      if (leavesFolder) {
         setEmails(prev => prev.filter(e => !ids.includes(e.id)))
       }
 
       // UPDATE CACHE after action
       if (isCacheReady) {
-        if (action === 'delete' || action === 'archive' || action === 'move') {
+        if (leavesFolder) {
           await removeCached(ids)
         } else if (action === 'markRead') {
           for (const id of ids) {
@@ -699,8 +706,20 @@ ${bodyText}`
     }
   }
   
-  const handleDelete = () => handleEmailAction('delete')
-  const handleArchive = () => handleEmailAction('archive')
+  // In Trash, Delete is for good (Gmail's own permanent delete, after asking)
+  // and the archive button restores; in Spam, it is "Not spam".
+  const handleDelete = () => {
+    if (folder === 'trash') {
+      if (!window.confirm('Delete forever? This cannot be undone.')) return
+      return handleEmailAction('permanentDelete')
+    }
+    return handleEmailAction('delete')
+  }
+  const handleArchive = () =>
+    handleEmailAction(folder === 'trash' ? 'restore' : folder === 'spam' ? 'notSpam' : 'archive')
+  const archiveLabel = folder === 'trash' ? 'Restore' : folder === 'spam' ? 'Not spam' : 'Archive'
+  const ArchiveIcon = folder === 'trash' ? RotateCcw : folder === 'spam' ? ShieldCheck : Archive
+  const deleteLabel = folder === 'trash' ? 'Delete forever' : 'Delete'
   const handleMarkRead = () => handleEmailAction('markRead')
   const handleMarkUnread = () => handleEmailAction('markUnread')
   const handleStarEmail = () => handleEmailAction('star')
@@ -966,6 +985,8 @@ ${bodyText}`
                 { id: 'inbox' as FolderType, label: 'Inbox', icon: Inbox, count: unreadCount },
                 { id: 'sent' as FolderType, label: 'Sent', icon: Send, count: 0 },
                 { id: 'drafts' as FolderType, label: 'Drafts', icon: File, count: 0 },
+                { id: 'spam' as FolderType, label: 'Spam', icon: ShieldAlert, count: 0 },
+                { id: 'trash' as FolderType, label: 'Trash', icon: Trash2, count: 0 },
               ].map((item) => (
                 <button
                   key={item.id}
@@ -1079,15 +1100,15 @@ ${bodyText}`
                       onClick={handleArchive}
                       disabled={actionLoading}
                       className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
-                      title="Archive"
+                      title={archiveLabel}
                     >
-                      <Archive className="w-4 h-4 text-gray-500" />
+                      <ArchiveIcon className="w-4 h-4 text-gray-500" />
                     </button>
                     <button
                       onClick={handleDelete}
                       disabled={actionLoading}
                       className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
-                      title="Delete"
+                      title={deleteLabel}
                     >
                       <Trash2 className="w-4 h-4 text-gray-500" />
                     </button>
@@ -1147,10 +1168,16 @@ ${bodyText}`
                   <Inbox className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                 )}
                 <p className="text-sm font-medium text-gray-600">
-                  {folder === 'sent' ? 'No sent emails' : 'No emails found'}
+                  {folder === 'sent' ? 'No sent emails' : folder === 'trash' ? 'Trash is empty' : folder === 'spam' ? 'No spam' : 'No emails found'}
                 </p>
                 <p className="text-xs text-gray-400 mt-1">
-                  {folder === 'sent' ? 'Emails you send will appear here' : 'Try adjusting your search or filters'}
+                  {folder === 'sent'
+                    ? 'Emails you send will appear here'
+                    : folder === 'trash'
+                      ? 'Deleted emails stay here for 30 days and can be restored'
+                      : folder === 'spam'
+                        ? 'Emails Gmail marks as spam appear here'
+                        : 'Try adjusting your search or filters'}
                 </p>
               </div>
             </div>
@@ -1290,15 +1317,15 @@ ${bodyText}`
                     onClick={handleArchive}
                     disabled={actionLoading}
                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" 
-                    title="Archive"
+                    title={archiveLabel}
                   >
-                    <Archive className="w-4 h-4 text-gray-500" />
+                    <ArchiveIcon className="w-4 h-4 text-gray-500" />
                   </button>
                   <button 
                     onClick={handleDelete}
                     disabled={actionLoading}
                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" 
-                    title="Delete"
+                    title={deleteLabel}
                   >
                     <Trash2 className="w-4 h-4 text-gray-500" />
                   </button>
@@ -1543,15 +1570,15 @@ ${bodyText}`
             onClick={handleArchive}
             disabled={actionLoading}
             className="p-2 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50" 
-            title="Archive"
+            title={archiveLabel}
           >
-            <Archive className="w-4 h-4 text-gray-500" />
+            <ArchiveIcon className="w-4 h-4 text-gray-500" />
           </button>
           <button 
             onClick={handleDelete}
             disabled={actionLoading}
             className="p-2 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50" 
-            title="Delete"
+            title={deleteLabel}
           >
             <Trash2 className="w-4 h-4 text-gray-500" />
           </button>

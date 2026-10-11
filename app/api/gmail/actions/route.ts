@@ -28,13 +28,15 @@ export async function POST(request: NextRequest) {
       markRead: { remove: ['UNREAD'] },
       markUnread: { add: ['UNREAD'] },
       move: labelId ? { add: [labelId], remove: ['INBOX'] } : undefined,
+      // Out of Spam, back to the inbox — Gmail's "Not spam".
+      notSpam: { add: ['INBOX'], remove: ['SPAM'] },
       addLabel: labelId ? { add: [labelId] } : undefined,
       removeLabel: labelId ? { remove: [labelId] } : undefined,
     }
     if (['move', 'addLabel', 'removeLabel'].includes(action) && !labelId) {
       return NextResponse.json({ error: action === 'move' ? 'Label ID required for move action' : 'Label ID required' }, { status: 400 })
     }
-    if (action !== 'permanentDelete' && !(action in LABEL_CHANGES)) {
+    if (action !== 'permanentDelete' && action !== 'restore' && !(action in LABEL_CHANGES)) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
     if (action === 'permanentDelete' && threadIds) {
@@ -60,6 +62,20 @@ export async function POST(request: NextRequest) {
       } else {
         for (const id of Array.isArray(messageIds) ? messageIds : [messageIds]) {
           await gmail.users.messages.trash({ userId: 'me', id })
+        }
+      }
+      return NextResponse.json({ success: true })
+    }
+
+    // Out of Trash, back where it was — Gmail's own untrash.
+    if (action === 'restore') {
+      if (threadIds) {
+        for (const id of Array.isArray(threadIds) ? threadIds : [threadIds]) {
+          await gmail.users.threads.untrash({ userId: 'me', id })
+        }
+      } else {
+        for (const id of Array.isArray(messageIds) ? messageIds : [messageIds]) {
+          await gmail.users.messages.untrash({ userId: 'me', id })
         }
       }
       return NextResponse.json({ success: true })

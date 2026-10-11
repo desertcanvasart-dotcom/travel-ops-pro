@@ -896,7 +896,7 @@
     "moveToTrash": "Move to trash",
     "hideFromInbox": "Hide from inbox",
     "deleteConfirmMessage": "Are you sure you want to delete the conversation with:",
-    "deleteNoteEmail": "The email thread will be moved to trash in Gmail.",
+    "deleteNoteEmail": "The conversation moves to Trash here and in Gmail. You can restore it from Trash, and a new email from this person brings it back automatically.",
     "deleteNoteWhatsApp": "The conversation will be hidden from your inbox. Messages will reappear if the customer sends a new message.",
     "note": "Note:",
     "deleting": "Deleting...",
@@ -917,7 +917,17 @@
     "openTrip": "Open the trip",
     "tripNotifyNoRecipient": "Reply saved, but no email went out: this trip has no client email address. Add one on the trip.",
     "tripNotifyNoLink": "Reply saved, but no email went out: this trip has no share link. Create one on the trip's Messages tab.",
-    "tripNotifyFailed": "Reply saved, but the notification email failed. The traveller will only see it if they reopen their link."
+    "tripNotifyFailed": "Reply saved, but the notification email failed. The traveller will only see it if they reopen their link.",
+    "trash": "Trash",
+    "trashTitle": "Trash",
+    "trashHint": "Deleted email conversations. Restore one to bring it back here and in Gmail.",
+    "trashEmpty": "Trash is empty",
+    "backToInbox": "Back to inbox",
+    "restore": "Restore",
+    "deleteFailedTitle": "Could not delete",
+    "deleteFailed": "The conversation could not be deleted. Please try again.",
+    "restoreFailedTitle": "Could not restore",
+    "restoreFailed": "The conversation could not be restored. Please try again."
   },
   "pdf": {
     "paymentTermsHeading": "PAYMENT TERMS",

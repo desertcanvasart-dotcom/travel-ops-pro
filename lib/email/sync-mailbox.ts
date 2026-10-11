@@ -326,11 +326,17 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
 
     // Conversations for those threads, in one query.
     const existingByThread = new Map<string, string>()
+    // Conversations in Communicate's Trash (is_hidden). New mail brings one
+    // back, as Gmail brings a trashed thread back to the inbox: a customer's
+    // reply to a deleted conversation was synced and never seen (operator,
+    // 2026-10-11).
+    const deletedConversations = new Set<string>()
     for (const chunk of chunks([...missingByThread.keys()], IN_CHUNK)) {
-      const { data, error } = await supabase.from('email_conversations').select('id, thread_id').in('thread_id', chunk)
+      const { data, error } = await supabase.from('email_conversations').select('id, thread_id, is_hidden').in('thread_id', chunk)
       if (error) throw new Error(`Could not read conversations: ${error.message}`)
-      for (const r of (data ?? []) as { id: string; thread_id: string }[]) {
+      for (const r of (data ?? []) as { id: string; thread_id: string; is_hidden: boolean | null }[]) {
         if (!existingByThread.has(r.thread_id)) existingByThread.set(r.thread_id, r.id)
+        if (r.is_hidden) deletedConversations.add(r.id)
       }
     }
 
@@ -488,6 +494,7 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
 
         // Store messages
         let insertedHere = 0
+        let revive = false
         for (const message of messages) {
           const msgHeaders = message.payload?.headers || []
           const getMsgHeader = (name: string) =>
@@ -580,6 +587,21 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
           result.messages_created++
           insertedHere++
 
+          // A person writing (or the office replying) brings a deleted
+          // conversation back; machine mail in it does not — the inbox
+          // clean-up (scripts/scope-inbox) hid those threads on purpose.
+          if (!revive && deletedConversations.has(conversationId)) {
+            const hdrs: Record<string, string> = {}
+            for (const h of msgHeaders) if (h.name && typeof h.value === 'string') hdrs[h.name] = h.value
+            revive = msgDirection === 'outbound' || !looksAutomated({
+              counterpartyEmail: extractEmailAddress(msgFrom),
+              headers: hdrs,
+              labelIds: message.labelIds || [],
+              subject: msgSubject,
+              snippet: message.snippet ?? '',
+            })
+          }
+
           // Create copilot inbox entry for inbound emails
           if (msgDirection === 'inbound' && message.id) {
             try {
@@ -637,7 +659,10 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
         if (existingConvId && insertedHere > 0) {
           await supabase
             .from('email_conversations')
-            .update({ last_sync_at: new Date().toISOString() })
+            .update({
+              last_sync_at: new Date().toISOString(),
+              ...(revive ? { is_hidden: false } : {}),
+            })
             .eq('id', existingConvId)
           result.conversations_updated++
         }
