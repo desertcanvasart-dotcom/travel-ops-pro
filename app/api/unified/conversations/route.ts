@@ -33,6 +33,8 @@ export async function GET(request: NextRequest) {
     // Customers still waiting for an answer (email; lib/email/reply-status).
     const awaitingReply = searchParams.get('awaiting_reply') === 'true'
     const search = sanitizeSearchTerm(searchParams.get('search')) || ''
+    // Communicate's Trash: the deleted email conversations only (is_hidden).
+    const trash = searchParams.get('trash') === 'true'
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
 
@@ -41,7 +43,7 @@ export async function GET(request: NextRequest) {
 
     // Query WhatsApp conversations
     const whatsappTask = (async () => {
-    if (channel === 'all' || channel === 'whatsapp') {
+    if (!trash && (channel === 'all' || channel === 'whatsapp')) {
       // The org's own threads — the ones that came to its WhatsApp number
       // (migration 20261125). This listed every org's.
       const orgId = await getCurrentOrgId()
@@ -128,7 +130,7 @@ export async function GET(request: NextRequest) {
     // than a phone number or an address, so the same person's portal thread and
     // WhatsApp chat stay separate. That is deliberate: one is tied to a trip.
     const portalTask = (async () => {
-    if (channel === 'all' || channel === 'portal') {
+    if (!trash && (channel === 'all' || channel === 'portal')) {
       let portalQuery = supabase
         .from('portal_message_threads')
         .select(`
@@ -230,7 +232,7 @@ export async function GET(request: NextRequest) {
     // has written in among the latest TRIP_WINDOW messages is old enough to
     // drop off the list (it is still on its trip page).
     const tripTask = (async () => {
-    if (channel === 'all' || channel === 'trip') {
+    if (!trash && (channel === 'all' || channel === 'trip')) {
       // Like portal threads, a trip thread has no client_id to filter on.
       if (clientId) return
       const orgId = await getCurrentOrgId()
@@ -320,8 +322,10 @@ export async function GET(request: NextRequest) {
             max_conversations
           )
         `)
-        .or('is_hidden.is.null,is_hidden.eq.false')
         .order('last_message_at', { ascending: false, nullsFirst: false })
+      emailQuery = trash
+        ? emailQuery.eq('is_hidden', true)
+        : emailQuery.or('is_hidden.is.null,is_hidden.eq.false')
 
       // Only filter by status if not 'all'
       if (status !== 'all') {

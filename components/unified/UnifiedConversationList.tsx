@@ -27,6 +27,8 @@ interface FilterState {
   hasUnread: boolean
   awaitingReply: boolean
   unassignedOnly: boolean
+  /** Communicate's Trash: deleted email conversations, restorable. */
+  trash?: boolean
 }
 
 interface SalesAgent {
@@ -320,6 +322,7 @@ export function UnifiedConversationList({
       if (filters.hasUnread) params.set('has_unread', 'true')
       if (filters.awaitingReply) params.set('awaiting_reply', 'true')
       if (filters.unassignedOnly) params.set('unassigned_only', 'true')
+      if (filters.trash) params.set('trash', 'true')
       if (clientId) params.set('client_id', clientId)
 
       const url = `/api/unified/conversations?${params.toString()}`
@@ -447,7 +450,7 @@ export function UnifiedConversationList({
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-lg font-bold text-gray-900">
-              {clientId ? t('title') : t('unifiedInbox')}
+              {filters.trash ? t('trashTitle') : clientId ? t('title') : t('unifiedInbox')}
             </h1>
             <p className="text-xs text-gray-500 mt-0.5">
               {conversations.length} {conversations.length !== 1 ? t('conversations') : t('conversation')}
@@ -455,6 +458,18 @@ export function UnifiedConversationList({
             </p>
           </div>
           <div className="flex items-center gap-1">
+            {!clientId && (
+              <button
+                type="button"
+                onClick={() => setFilters(f => ({ ...f, trash: !f.trash, channel: 'all' }))}
+                className={`p-2 rounded-lg transition-colors ${filters.trash ? 'bg-red-50 text-red-600' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'}`}
+                title={filters.trash ? t('backToInbox') : t('trash')}
+                aria-pressed={!!filters.trash}
+                data-testid="communicate-trash-toggle"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setShowAgentsModal(true)}
@@ -503,6 +518,15 @@ export function UnifiedConversationList({
               : 'bg-blue-50 text-blue-700'
           }`}>
             {syncMessage}
+          </div>
+        )}
+
+        {filters.trash && (
+          <div className="mb-3 px-3 py-2 rounded-lg text-xs bg-red-50 text-red-700 flex items-center justify-between gap-2">
+            <span>{t('trashHint')}</span>
+            <button type="button" onClick={() => setFilters(f => ({ ...f, trash: false }))} className="font-semibold hover:underline shrink-0">
+              {t('backToInbox')}
+            </button>
           </div>
         )}
 
@@ -646,10 +670,12 @@ export function UnifiedConversationList({
         ) : conversations.length === 0 ? (
           <div className="p-6 text-center text-gray-500">
             <MessageSquare className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-            <p className="text-sm">{t('noConversations')}</p>
-            <p className="text-xs text-gray-400 mt-1">
-              {t('clickToSyncEmails')}
-            </p>
+            <p className="text-sm">{filters.trash ? t('trashEmpty') : t('noConversations')}</p>
+            {!filters.trash && (
+              <p className="text-xs text-gray-400 mt-1">
+                {t('clickToSyncEmails')}
+              </p>
+            )}
             {(filters.search || filters.channel !== 'all' || filters.hasUnread || filters.awaitingReply || filters.unassignedOnly) && (
               <button
                 type="button"

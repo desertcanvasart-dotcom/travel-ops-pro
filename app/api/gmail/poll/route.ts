@@ -270,7 +270,7 @@ export async function GET(request: NextRequest) {
                 .single()
 
               if (!existingMsg) {
-                await supabase
+                const { error: msgInsertError } = await supabase
                   .from('email_messages')
                   .insert({
                     conversation_id: conversationId,
@@ -289,6 +289,29 @@ export async function GET(request: NextRequest) {
                     labels: message.data.labelIds,
                     sent_at: new Date(date || Date.now()).toISOString()
                   })
+                // New mail from a person (or the office) brings a conversation
+                // back out of Communicate's Trash, as in lib/email/sync-mailbox.
+                // Only a message stored now: a repeat poll must not undo a delete.
+                if (!msgInsertError && existingConv?.id) {
+                  const hdrs: Record<string, string> = {}
+                  for (const h of headers) {
+                    if (h.name && typeof h.value === 'string') hdrs[h.name] = h.value
+                  }
+                  const human = direction !== 'inbound' || !looksAutomated({
+                    counterpartyEmail: clientEmail,
+                    headers: hdrs,
+                    labelIds: (message.data.labelIds || []) as string[],
+                    subject: hdrs['Subject'] ?? hdrs['subject'] ?? '',
+                    snippet: message.data.snippet ?? '',
+                  })
+                  if (human) {
+                    await supabase
+                      .from('email_conversations')
+                      .update({ is_hidden: false })
+                      .eq('id', existingConv.id)
+                      .eq('is_hidden', true)
+                  }
+                }
               }
             } catch (storeError) {
               console.error('Error storing polled message:', storeError)
