@@ -6,6 +6,7 @@ import { getCurrentOrgId, requireRole } from '@/lib/auth/current-org'
 import type { UnifiedConversation, UnifiedConversationFilters } from '@/types/unified'
 import { waitingSince } from '@/lib/email/automated-senders'
 import { tripThreads } from '@/lib/unified/trip-threads'
+import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -298,50 +299,58 @@ export async function GET(request: NextRequest) {
     // Query Email conversations
     const emailTask = (async () => {
     if (channel === 'all' || channel === 'email') {
-      let emailQuery = supabase
-        .from('email_conversations')
-        .select(`
-          *,
-          client:clients (
-            id,
-            first_name,
-            last_name,
-            email,
-            client_code,
-            phone,
-            status,
-            lead_source
-          ),
-          assigned_agent:team_members!email_conversations_assigned_team_member_id_fkey (
-            id,
-            name,
-            email,
-            avatar_url,
-            is_available,
-            current_conversations,
-            max_conversations
-          )
-        `)
-        .order('last_message_at', { ascending: false, nullsFirst: false })
-      emailQuery = trash
-        ? emailQuery.eq('is_hidden', true)
-        : emailQuery.or('is_hidden.is.null,is_hidden.eq.false')
+      // Only mail of the Gmail addresses connected now: a disconnected
+      // address's conversations stay stored but out of the inbox until it is
+      // connected again (lib/email/connected-mailboxes).
+      const buildEmailQuery = (mailboxFilter: string | null) => {
+        let emailQuery = supabase
+          .from('email_conversations')
+          .select(`
+            *,
+            client:clients (
+              id,
+              first_name,
+              last_name,
+              email,
+              client_code,
+              phone,
+              status,
+              lead_source
+            ),
+            assigned_agent:team_members!email_conversations_assigned_team_member_id_fkey (
+              id,
+              name,
+              email,
+              avatar_url,
+              is_available,
+              current_conversations,
+              max_conversations
+            )
+          `)
+          .order('last_message_at', { ascending: false, nullsFirst: false })
+        // Trash: conversations deleted in Communicate (status 'trashed'),
+        // never mail hidden to keep it private (is_hidden alone).
+        emailQuery = trash
+          ? emailQuery.eq('is_hidden', true).eq('status', 'trashed')
+          : emailQuery.or('is_hidden.is.null,is_hidden.eq.false')
 
-      // Only filter by status if not 'all'
-      if (status !== 'all') {
-        emailQuery = emailQuery.eq('status', status)
+        // Only filter by status if not 'all'
+        if (status !== 'all' && !trash) {
+          emailQuery = emailQuery.eq('status', status)
+        }
+
+        if (clientId) emailQuery = emailQuery.eq('client_id', clientId)
+        if (agentId) emailQuery = emailQuery.eq('assigned_team_member_id', agentId)
+        if (unassignedOnly) emailQuery = emailQuery.is('assigned_team_member_id', null)
+        if (hasUnread) emailQuery = emailQuery.gt('unread_count', 0)
+        if (awaitingReply) emailQuery = emailQuery.not('awaiting_reply_since', 'is', null)
+        if (search) {
+          emailQuery = emailQuery.or(`client_email.ilike.%${search}%,client_name.ilike.%${search}%,subject.ilike.%${search}%`)
+        }
+        if (mailboxFilter) emailQuery = emailQuery.or(mailboxFilter)
+        return emailQuery.limit(limit)
       }
-
-      if (clientId) emailQuery = emailQuery.eq('client_id', clientId)
-      if (agentId) emailQuery = emailQuery.eq('assigned_team_member_id', agentId)
-      if (unassignedOnly) emailQuery = emailQuery.is('assigned_team_member_id', null)
-      if (hasUnread) emailQuery = emailQuery.gt('unread_count', 0)
-      if (awaitingReply) emailQuery = emailQuery.not('awaiting_reply_since', 'is', null)
-      if (search) {
-        emailQuery = emailQuery.or(`client_email.ilike.%${search}%,client_name.ilike.%${search}%,subject.ilike.%${search}%`)
-      }
-
-      const { data: emailData, error: emailError } = await emailQuery.limit(limit)
+      const { data: emailData, error: emailError } = await scopedToConnectedMailboxes(supabase, buildEmailQuery)
 
       if (emailError) throw emailError
 

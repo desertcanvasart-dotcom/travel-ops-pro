@@ -7,6 +7,7 @@ import { recordsInOrg } from '@/lib/org-refs'
 import { teamMemberInOrg } from '@/lib/whatsapp-org'
 import { pickConversationUpdates } from '@/lib/email/conversation-updates'
 import { moveThreadInGmail } from '@/lib/email/conversation-trash'
+import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
 import type { EmailConversation } from '@/types/unified'
 
 // Use service role for API routes to bypass RLS
@@ -99,7 +100,10 @@ export async function GET(request: NextRequest) {
       query = query.or(`client_email.ilike.%${search}%,client_name.ilike.%${search}%,subject.ilike.%${search}%`)
     }
 
-    const { data, error } = await query.limit(50)
+    // Only mail of the Gmail addresses connected now (lib/email/connected-mailboxes).
+    const { data, error } = await scopedToConnectedMailboxes(supabase, (mailboxFilter) =>
+      (mailboxFilter ? query.or(mailboxFilter) : query).limit(50)
+    )
 
     if (error) throw error
 
@@ -268,6 +272,7 @@ export async function PATCH(request: NextRequest) {
       // explicit un-hide has never actually worked. See the DELETE handler's
       // note; #193 fixed the hide half of this same defect.
       updateData.is_hidden = false
+      updateData.status = 'active' // out of Trash (see DELETE)
     } else if (action === 'assign') {
       updateData.assigned_team_member_id = updates.assigned_team_member_id
       updateData.assigned_at = new Date().toISOString()
@@ -358,6 +363,10 @@ export async function DELETE(request: NextRequest) {
       .from('email_conversations')
       .update({
         is_hidden: true,
+        // In Communicate's Trash — not the same as hidden: is_hidden alone is
+        // also how personal and machine mail is kept out of the shared inbox
+        // (scripts/scope-inbox), and the Trash must never list that.
+        status: 'trashed',
         updated_at: new Date().toISOString()
       })
       .eq('id', conversationId)

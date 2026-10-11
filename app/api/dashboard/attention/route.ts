@@ -6,6 +6,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { attentionFingerprint, attentionKey, withoutDismissed, type AttentionDismissal } from '@/lib/dashboard/attention-dismissals'
+import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
 
 // ============================================
 // NEEDS ATTENTION — the dashboard's exceptions list
@@ -223,16 +224,21 @@ export async function GET(request: NextRequest) {
     // Customers waiting too long for an email answer. email_conversations has
     // no org_id (one organisation per install — DEFERRED_GATES G1).
     const overdueBefore = new Date(Date.now() - REPLY_OVERDUE_HOURS * 3_600_000).toISOString()
-    const { data: waiting } = await supabase
-      .from('email_conversations')
-      .select('id, client_name, client_email, subject, awaiting_reply_since, last_message_at')
-      .not('awaiting_reply_since', 'is', null)
-      .lte('awaiting_reply_since', overdueBefore)
-      .or('is_hidden.is.null,is_hidden.eq.false')
-      .order('awaiting_reply_since', { ascending: true })
-      // Read past the robots: the oldest rows were no-reply and ticket-system
-      // mail, which would fill a list of 20 before any customer.
-      .limit(100)
+    // Only a connected address's mail (lib/email/connected-mailboxes).
+    const { data: waiting } = await scopedToConnectedMailboxes(supabase, (mailboxFilter) => {
+      let q = supabase
+        .from('email_conversations')
+        .select('id, client_name, client_email, subject, awaiting_reply_since, last_message_at')
+        .not('awaiting_reply_since', 'is', null)
+        .lte('awaiting_reply_since', overdueBefore)
+        .or('is_hidden.is.null,is_hidden.eq.false')
+      if (mailboxFilter) q = q.or(mailboxFilter)
+      return q
+        .order('awaiting_reply_since', { ascending: true })
+        // Read past the robots: the oldest rows were no-reply and ticket-system
+        // mail, which would fill a list of 20 before any customer.
+        .limit(100)
+    })
     const customers = ((waiting ?? []) as { id: string; client_name: string | null; client_email: string | null; subject: string | null; awaiting_reply_since: string; last_message_at: string | null }[])
       .filter(c => waitingSince(c.client_email, c.awaiting_reply_since))
       .slice(0, 20)

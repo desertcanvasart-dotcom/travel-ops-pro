@@ -37,6 +37,7 @@ import type { EmailSyncOptions, EmailSyncResult } from '@/types/unified'
 import { createCopilotInboxEntry } from '@/lib/copilot-intake'
 import { orgForMailbox } from '@/lib/email/email-leads'
 import { loadKnownContactEmails, looksAutomated } from '@/lib/email-scoping'
+import { isMissingMailboxColumn } from '@/lib/email/connected-mailboxes'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -326,17 +327,18 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
 
     // Conversations for those threads, in one query.
     const existingByThread = new Map<string, string>()
-    // Conversations in Communicate's Trash (is_hidden). New mail brings one
+    // Conversations in Communicate's Trash (status 'trashed'). New mail brings one
     // back, as Gmail brings a trashed thread back to the inbox: a customer's
     // reply to a deleted conversation was synced and never seen (operator,
     // 2026-10-11).
     const deletedConversations = new Set<string>()
     for (const chunk of chunks([...missingByThread.keys()], IN_CHUNK)) {
-      const { data, error } = await supabase.from('email_conversations').select('id, thread_id, is_hidden').in('thread_id', chunk)
+      const { data, error } = await supabase.from('email_conversations').select('id, thread_id, is_hidden, status').in('thread_id', chunk)
       if (error) throw new Error(`Could not read conversations: ${error.message}`)
-      for (const r of (data ?? []) as { id: string; thread_id: string; is_hidden: boolean | null }[]) {
+      for (const r of (data ?? []) as { id: string; thread_id: string; is_hidden: boolean | null; status: string | null }[]) {
         if (!existingByThread.has(r.thread_id)) existingByThread.set(r.thread_id, r.id)
-        if (r.is_hidden) deletedConversations.add(r.id)
+        // Deleted in Communicate — not hidden as personal mail, which stays hidden.
+        if (r.is_hidden && r.status === 'trashed') deletedConversations.add(r.id)
       }
     }
 
@@ -470,22 +472,33 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
           // Create new conversation. message_count starts at 0: the message
           // insert trigger counts each message as it is stored (20261019) —
           // starting from messages.length counted every message twice.
-          const { data: newConv, error: convError } = await supabase
+          // The address it came from (mailbox_email, migration 20261128), so
+          // it can be left out while that address is disconnected. Before
+          // the migration the column is not there: stored without it.
+          const conversationRow = {
+            thread_id: threadId,
+            user_id,
+            client_email: clientEmail,
+            subject,
+            last_message_snippet: lastMessage.snippet,
+            last_message_at: lastMessageDate,
+            message_count: 0,
+            status: 'active',
+            is_hidden: false,
+            last_sync_at: new Date().toISOString()
+          }
+          let { data: newConv, error: convError } = await supabase
             .from('email_conversations')
-            .insert({
-              thread_id: threadId,
-              user_id,
-              client_email: clientEmail,
-              subject,
-              last_message_snippet: lastMessage.snippet,
-              last_message_at: lastMessageDate,
-              message_count: 0,
-              status: 'active',
-              is_hidden: false,
-              last_sync_at: new Date().toISOString()
-            })
+            .insert({ ...conversationRow, mailbox_email: userEmail.toLowerCase() })
             .select()
             .single()
+          if (convError && isMissingMailboxColumn(convError)) {
+            ;({ data: newConv, error: convError } = await supabase
+              .from('email_conversations')
+              .insert(conversationRow)
+              .select()
+              .single())
+          }
 
           if (convError) throw convError
           conversationId = newConv.id
@@ -661,7 +674,7 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
             .from('email_conversations')
             .update({
               last_sync_at: new Date().toISOString(),
-              ...(revive ? { is_hidden: false } : {}),
+              ...(revive ? { is_hidden: false, status: 'active' } : {}),
             })
             .eq('id', existingConvId)
           result.conversations_updated++

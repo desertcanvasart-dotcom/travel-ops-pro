@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
 
 // ============================================
 // DASHBOARD SUMMARY — one round trip for the operator's morning view
@@ -85,10 +86,15 @@ export async function GET() {
         .eq('org_id', orgId)
         .or('is_hidden.is.null,is_hidden.eq.false')
         .gt('unread_count', 0),
-      supabase.from('email_conversations')
-        .select('unread_count')
-        .or('is_hidden.is.null,is_hidden.eq.false')
-        .gt('unread_count', 0),
+      // Only a connected address's mail (lib/email/connected-mailboxes).
+      scopedToConnectedMailboxes(supabase, (mailboxFilter) => {
+        let q = supabase.from('email_conversations')
+          .select('unread_count')
+          .or('is_hidden.is.null,is_hidden.eq.false')
+          .gt('unread_count', 0)
+        if (mailboxFilter) q = q.or(mailboxFilter)
+        return q
+      }),
       supabase.from('client_followups')
         .select('id, due_date')
         .eq('status', 'pending'),
