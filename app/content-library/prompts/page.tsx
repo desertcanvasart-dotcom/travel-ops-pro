@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/app/supabase'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -86,6 +86,8 @@ const DEFAULT_FORM: PromptFormData = {
 
 export default function AIPromptsPage() {
   const t = useTranslations('aiPrompts')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const [prompts, setPrompts] = useState<PromptTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -97,23 +99,23 @@ export default function AIPromptsPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [viewPromptId, setViewPromptId] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetchPrompts()
-  }, [])
-
-  async function fetchPrompts() {
+  const fetchPrompts = useCallback(async () => {
     try {
       const response = await fetch('/api/content-library/prompts')
-      if (!response.ok) throw new Error(t('failedToFetch'))
+      if (!response.ok) throw new Error(tRef.current('failedToFetch'))
       const data = await response.json()
       setPrompts(data)
     } catch (err) {
       console.error('Error fetching prompts:', err)
-      setError(t('failedToLoad'))
+      setError(tRef.current('failedToLoad'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    fetchPrompts()
+  }, [fetchPrompts])
 
   function handleEdit(prompt: PromptTemplate) {
     setFormData({

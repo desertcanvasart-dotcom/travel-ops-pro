@@ -67,6 +67,24 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
 }
 
   useEffect(() => {
+    const filterItineraries = () => {
+      let filtered = itineraries
+
+      if (statusFilter !== 'all') {
+        filtered = filtered.filter(it => it.status === statusFilter)
+      }
+
+      if (searchQuery) {
+        filtered = filtered.filter(it =>
+          it.client_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          it.trip_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          it.itinerary_code?.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      }
+
+      setFilteredItineraries(filtered)
+    }
+
     filterItineraries()
   }, [itineraries, searchQuery, statusFilter])
 
@@ -95,24 +113,6 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
       setLoading(false)
       setLoadingMore(false)
     }
-  }
-
-  const filterItineraries = () => {
-    let filtered = itineraries
-
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(it => it.status === statusFilter)
-    }
-
-    if (searchQuery) {
-      filtered = filtered.filter(it =>
-        it.client_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        it.trip_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        it.itinerary_code?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    }
-
-    setFilteredItineraries(filtered)
   }
 
   const deleteItinerary = async (id: string) => {

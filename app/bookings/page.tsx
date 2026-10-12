@@ -38,30 +38,30 @@ export default function BookingsPage() {
   })
 
   useEffect(() => {
+    const fetchBookings = async () => {
+      setLoading(true)
+      try {
+        const params = new URLSearchParams()
+        if (statusFilter !== 'all') {
+          params.append('status', statusFilter)
+        }
+
+        const response = await fetch(`/api/bookings?${params.toString()}`)
+        const data = await response.json()
+
+        if (data.success) {
+          setBookings(data.data || [])
+          setSummary(prev => data.summary || prev)
+        }
+      } catch (error) {
+        console.error('Error fetching bookings:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
     fetchBookings()
   }, [statusFilter])
-
-  const fetchBookings = async () => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams()
-      if (statusFilter !== 'all') {
-        params.append('status', statusFilter)
-      }
-
-      const response = await fetch(`/api/bookings?${params.toString()}`)
-      const data = await response.json()
-
-      if (data.success) {
-        setBookings(data.data || [])
-        setSummary(data.summary || summary)
-      }
-    } catch (error) {
-      console.error('Error fetching bookings:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const filteredBookings = bookings.filter(booking => {
     if (!searchQuery) return true

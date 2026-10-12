@@ -1,7 +1,7 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, useCallback, use } from 'react'
 import { useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -120,11 +120,19 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
 
-  useEffect(() => {
-    fetchExpense()
-  }, [resolvedParams.id])
+  const fetchItinerary = useCallback(async (id: string) => {
+    try {
+      const response = await fetch(`/api/itineraries/${id}`)
+      if (response.ok) {
+        const data = await response.json()
+        setItinerary(data.success ? data.data : data)
+      }
+    } catch (error) {
+      console.error('Error fetching itinerary:', error)
+    }
+  }, [])
 
-  const fetchExpense = async () => {
+  const fetchExpense = useCallback(async () => {
     try {
       const response = await fetch(`/api/expenses/${resolvedParams.id}`)
       if (response.ok) {
@@ -143,19 +151,11 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
     } finally {
       setLoading(false)
     }
-  }
+  }, [resolvedParams.id, router, fetchItinerary])
 
-  const fetchItinerary = async (id: string) => {
-    try {
-      const response = await fetch(`/api/itineraries/${id}`)
-      if (response.ok) {
-        const data = await response.json()
-        setItinerary(data.success ? data.data : data)
-      }
-    } catch (error) {
-      console.error('Error fetching itinerary:', error)
-    }
-  }
+  useEffect(() => {
+    fetchExpense()
+  }, [fetchExpense])
 
   const handleStatusChange = async (newStatus: string) => {
     if (!expense) return

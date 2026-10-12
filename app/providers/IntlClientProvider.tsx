@@ -2,7 +2,7 @@
 
 import { NextIntlClientProvider, AbstractIntlMessages } from 'next-intl'
 import { ReactNode, useEffect, useState } from 'react'
-import { defaultLocale, type Locale, locales } from '@/i18n/config'
+import { type Locale } from '@/i18n/config'
 
 // Import messages statically
 import enMessages from '@/messages/en.json'
@@ -15,30 +15,18 @@ const messages: Record<Locale, AbstractIntlMessages> = {
 
 interface IntlClientProviderProps {
   children: ReactNode
+  /** Read from the preferred_language cookie on the server (app/layout.tsx),
+   *  so the server render and the first client render agree. */
+  locale: Locale
 }
 
-// Get locale from cookie
-function getLocaleFromCookie(): Locale {
-  if (typeof document === 'undefined') return defaultLocale
-
-  const match = document.cookie.match(/preferred_language=([^;]+)/)
-  const locale = match?.[1] as Locale | undefined
-
-  if (locale && locales.includes(locale)) {
-    return locale
-  }
-
-  return defaultLocale
-}
-
-export function IntlClientProvider({ children }: IntlClientProviderProps) {
-  const [locale, setLocale] = useState<Locale>(defaultLocale)
-  const [mounted, setMounted] = useState(false)
+export function IntlClientProvider({ children, locale: initialLocale }: IntlClientProviderProps) {
+  // Starts in the request's locale. It used to start in the default locale and
+  // switch to the cookie's after mount, so a Japanese user saw English first
+  // and every effect depending on `t` ran twice.
+  const [locale, setLocale] = useState<Locale>(initialLocale)
 
   useEffect(() => {
-    setLocale(getLocaleFromCookie())
-    setMounted(true)
-
     // Listen for locale changes via custom event
     const handleLocaleChange = (event: CustomEvent<Locale>) => {
       setLocale(event.detail)
@@ -50,13 +38,10 @@ export function IntlClientProvider({ children }: IntlClientProviderProps) {
     }
   }, [])
 
-  // Use default locale for SSR, actual locale after mount
-  const currentLocale = mounted ? locale : defaultLocale
-
   return (
     <NextIntlClientProvider
-      locale={currentLocale}
-      messages={messages[currentLocale]}
+      locale={locale}
+      messages={messages[locale]}
       timeZone="UTC"
     >
       {children}

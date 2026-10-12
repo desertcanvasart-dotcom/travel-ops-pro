@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { History, ChevronDown, ChevronUp, ArrowRight, Clock, User } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
@@ -56,13 +56,7 @@ export default function RateAuditLog({ tableName, recordId }: RateAuditLogProps)
   const [expanded, setExpanded] = useState(false)
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set())
 
-  useEffect(() => {
-    if (expanded && entries.length === 0) {
-      fetchAuditLog()
-    }
-  }, [expanded])
-
-  const fetchAuditLog = async () => {
+  const fetchAuditLog = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetch(
@@ -77,7 +71,13 @@ export default function RateAuditLog({ tableName, recordId }: RateAuditLogProps)
     } finally {
       setLoading(false)
     }
-  }
+  }, [tableName, recordId])
+
+  useEffect(() => {
+    if (expanded && entries.length === 0) {
+      fetchAuditLog()
+    }
+  }, [expanded, entries.length, fetchAuditLog])
 
   const toggleEntry = (id: string) => {
     setExpandedEntries(prev => {

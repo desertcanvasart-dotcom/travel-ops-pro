@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
@@ -359,6 +359,8 @@ function Pagination({
 
 export default function CruisesPage() {
   const t = useTranslations('rates.cruises')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const tCommon = useTranslations('rates.common')
   const tierOptions = useTierOptions(key => t(`tiers.${key}`))
   // A new rate starts on the ladder's own "standard" rung — 'standard' itself
@@ -462,13 +464,13 @@ export default function CruisesPage() {
   const [formData, setFormData] = useState<CruiseFormData>(getDefaultFormData())
   const [ships, setShips] = useState<{ id: string; name: string; category: string | null }[]>([])
 
-  const showToast = (type: 'success' | 'error', message: string) => {
+  const showToast = useCallback((type: 'success' | 'error', message: string) => {
     const id = Date.now().toString()
     setToasts(prev => [...prev, { id, type, message }])
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
-  }
+  }, [])
 
-  const fetchCruises = async () => {
+  const fetchCruises = useCallback(async () => {
     try {
       const response = await fetch('/api/rates/cruises')
       const data = await response.json()
@@ -477,11 +479,11 @@ export default function CruisesPage() {
       }
     } catch (error) {
       console.error('Error fetching cruises:', error)
-      showToast('error', t('notifications.failedToLoad'))
+      showToast('error', tRef.current('notifications.failedToLoad'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [showToast])
 
   const fetchSuppliers = async () => {
     try {
@@ -498,7 +500,7 @@ export default function CruisesPage() {
   useEffect(() => {
     fetchCruises()
     fetchSuppliers()
-  }, [])
+  }, [fetchCruises])
 
   useEffect(() => {
     setCurrentPage(1)

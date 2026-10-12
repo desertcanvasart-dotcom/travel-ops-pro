@@ -206,7 +206,7 @@ export default function InvoicesContent() {
     }
   }, [statusFilter, typeFilter])
 
-  const fetchClients = async () => {
+  const fetchClients = useCallback(async () => {
     try {
       // Dropdown picker: request the API's max page (200) rather than the
       // default 50 so existing clients stay selectable.
@@ -247,7 +247,7 @@ export default function InvoicesContent() {
       console.error('Error fetching clients:', error)
       setClients([])
     }
-  }
+  }, [t])
 
   const fetchItineraries = async () => {
     try {
@@ -269,7 +269,7 @@ export default function InvoicesContent() {
     fetchInvoices()
     fetchClients()
     fetchItineraries()
-  }, [fetchInvoices])
+  }, [fetchInvoices, fetchClients])
 
   const handleClientChange = (clientId: string) => {
     const client = clients.find(c => c.id === clientId)

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import SupplierPicker from '@/components/rates/SupplierPicker'
@@ -198,6 +198,8 @@ function Pagination({
 
 export default function AirportServicesPage() {
   const t = useTranslations('rates.airportServices')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const airportServiceLabel = useVocabLabel('airport_service_type')
   const directionLabel = useVocabLabel('airport_direction')
   // The pickers list the agency's vocabulary; the built-in lists stand in until it loads.
@@ -238,25 +240,25 @@ export default function AirportServicesPage() {
     max_capacity: '' as number | ''
   })
 
-  const showToast = (type: 'success' | 'error', message: string) => {
+  const showToast = useCallback((type: 'success' | 'error', message: string) => {
     const id = Date.now().toString()
     setToasts(prev => [...prev, { id, type, message }])
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
-  }
+  }, [])
 
-  const fetchRates = async () => {
+  const fetchRates = useCallback(async () => {
     try {
       const response = await fetch('/api/rates/airport-services')
       const data = await response.json()
       if (data.success) setRates(data.data)
     } catch (error) {
-      showToast('error', t('errors.failedToLoad'))
+      showToast('error', tRef.current('errors.failedToLoad'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [showToast])
 
-  useEffect(() => { fetchRates() }, [])
+  useEffect(() => { fetchRates() }, [fetchRates])
 
   // Reset to first page when filters change
   useEffect(() => {

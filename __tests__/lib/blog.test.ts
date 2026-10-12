@@ -121,7 +121,7 @@ describe('wiring', () => {
 
   it('the public pages are public, and show no sidebar', () => {
     expect(read('middleware.ts')).toMatch(/const publicRoutes = \[[^\]]*'\/blog'/)
-    const layout = read('app/layout.tsx')
+    const layout = read('app/AppShell.tsx')
     expect(layout).toMatch(/const publicPages = \[[^\]]*'\/blog'/)
     expect(layout).toContain("const marketingPrefixes = ['/blog/']")
   })

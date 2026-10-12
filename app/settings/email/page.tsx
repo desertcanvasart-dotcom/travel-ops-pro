@@ -1,7 +1,7 @@
 'use client'
 
 import OfficeAddressesCard from '@/components/settings/OfficeAddressesCard'
-import { useState, useEffect, Suspense } from 'react'
+import { useCallback, useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { sanitizeHtml } from '@/lib/sanitize-html'
@@ -80,14 +80,6 @@ function EmailSettingsContent() {
     }
   }, [searchParams])
 
-  useEffect(() => {
-    if (user) {
-      checkGmailConnection()
-      fetchSignatures()
-      fetchTemplates()
-    }
-  }, [user])
-
   const checkGmailConnection = async () => {
     try {
       // The mailbox this user works in — their own connection, else the
@@ -112,7 +104,7 @@ function EmailSettingsContent() {
     }
   }
 
-  const fetchSignatures = async () => {
+  const fetchSignatures = useCallback(async () => {
     if (!user) return
     try {
       const response = await fetch(`/api/email/signatures?userId=${user.id}`)
@@ -123,9 +115,9 @@ function EmailSettingsContent() {
     } catch (err) {
       console.error('Error fetching signatures:', err)
     }
-  }
+  }, [user])
 
-  const fetchTemplates = async () => {
+  const fetchTemplates = useCallback(async () => {
     if (!user) return
     try {
       const response = await fetch(`/api/email/templates?userId=${user.id}`)
@@ -136,7 +128,15 @@ function EmailSettingsContent() {
     } catch (err) {
       console.error('Error fetching templates:', err)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (user) {
+      checkGmailConnection()
+      fetchSignatures()
+      fetchTemplates()
+    }
+  }, [user, fetchSignatures, fetchTemplates])
 
   const handleConnectGmail = async () => {
     if (!user) return

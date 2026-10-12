@@ -47,38 +47,38 @@ export default function ResourceSummaryCard({
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    const fetchResourceDetails = async () => {
+      try {
+        setLoading(true)
+
+        // Fetch guide details
+        if (guideId) {
+          const guideResponse = await fetch(`/api/guides/${guideId}`)
+          const guideData = await guideResponse.json()
+          if (guideData.success) {
+            setGuide(guideData.data)
+          }
+        }
+
+        // Fetch vehicle/transport supplier details
+        if (vehicleId) {
+          const vehicleResponse = await fetch(`/api/suppliers/${vehicleId}`)
+          const vehicleData = await vehicleResponse.json()
+          if (vehicleData.success) {
+            setVehicle(vehicleData.data)
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching resource details:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
     if (guideId || vehicleId) {
       fetchResourceDetails()
     }
   }, [guideId, vehicleId])
-
-  const fetchResourceDetails = async () => {
-    try {
-      setLoading(true)
-
-      // Fetch guide details
-      if (guideId) {
-        const guideResponse = await fetch(`/api/guides/${guideId}`)
-        const guideData = await guideResponse.json()
-        if (guideData.success) {
-          setGuide(guideData.data)
-        }
-      }
-
-      // Fetch vehicle/transport supplier details
-      if (vehicleId) {
-        const vehicleResponse = await fetch(`/api/suppliers/${vehicleId}`)
-        const vehicleData = await vehicleResponse.json()
-        if (vehicleData.success) {
-          setVehicle(vehicleData.data)
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching resource details:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // If no resources assigned, show empty state
   if (!guideId && !vehicleId && !pickupLocation && !pickupTime) {

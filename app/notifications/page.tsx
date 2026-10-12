@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useConfirm } from '@/components/ConfirmDialog'
@@ -43,7 +43,7 @@ export default function NotificationsPage() {
   const [typeFilter, setTypeFilter] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState('')
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     try {
       const params = new URLSearchParams()
       params.append('limit', '100')
@@ -61,11 +61,11 @@ export default function NotificationsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filter])
 
   useEffect(() => {
     fetchNotifications()
-  }, [filter])
+  }, [fetchNotifications])
 
   const markAsRead = async (id: string) => {
     try {

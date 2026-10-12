@@ -123,8 +123,24 @@ function QuickSendModal({ client, itinerary, category, onClose }: QuickSendModal
 
   // Fetch templates
   useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const url = category 
+          ? `/api/templates?category=${category}`
+          : '/api/templates'
+        const response = await fetch(url)
+        if (response.ok) {
+          const data = await response.json()
+          setTemplates(data.data || [])
+        }
+      } catch (error) {
+        console.error('Error fetching templates:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
     fetchTemplates()
-  }, [])
+  }, [category])
 
   // Auto-fill values from context
   useEffect(() => {
@@ -167,23 +183,6 @@ function QuickSendModal({ client, itinerary, category, onClose }: QuickSendModal
     })
     setPreview(text)
   }, [selectedTemplate, filledValues])
-
-  const fetchTemplates = async () => {
-    try {
-      const url = category 
-        ? `/api/templates?category=${category}`
-        : '/api/templates'
-      const response = await fetch(url)
-      if (response.ok) {
-        const data = await response.json()
-        setTemplates(data.data || [])
-      }
-    } catch (error) {
-      console.error('Error fetching templates:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleSend = async () => {
     if (!selectedTemplate || !client) return

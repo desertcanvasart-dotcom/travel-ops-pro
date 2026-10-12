@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, useCallback, use } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
@@ -129,11 +129,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
     quoted_cost: ''
   })
 
-  useEffect(() => {
-    fetchBooking()
-  }, [resolvedParams.id])
-
-  const fetchBooking = async () => {
+  const fetchBooking = useCallback(async () => {
     try {
       const response = await fetch(`/api/bookings/${resolvedParams.id}`)
       const data = await response.json()
@@ -160,7 +156,11 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
     } finally {
       setLoading(false)
     }
-  }
+  }, [resolvedParams.id])
+
+  useEffect(() => {
+    fetchBooking()
+  }, [fetchBooking])
 
   // One supplier row at a time: status, confirmation number, confirmed
   // cost. The row (and its expense, recorded when it is confirmed) comes

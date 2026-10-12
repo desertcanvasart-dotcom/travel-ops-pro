@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@supabase/ssr'
 import { useTranslations } from 'next-intl'
@@ -9,10 +9,12 @@ import { Eye, EyeOff, Lock, CheckCircle, AlertCircle, Loader2 } from 'lucide-rea
 export default function ResetPasswordPage() {
   const router = useRouter()
   const t = useTranslations('auth')
-  const supabase = createBrowserClient(
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
+  const [supabase] = useState(() => createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
+  ))
   
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -41,7 +43,7 @@ export default function ResetPasswordPage() {
         })
 
         if (error) {
-          setError(t('invalidOrExpiredLink'))
+          setError(tRef.current('invalidOrExpiredLink'))
           setHasValidSession(false)
         } else if (data.session) {
           setHasValidSession(true)
@@ -52,7 +54,7 @@ export default function ResetPasswordPage() {
         if (session) {
           setHasValidSession(true)
         } else {
-          setError(t('invalidOrExpiredLink'))
+          setError(tRef.current('invalidOrExpiredLink'))
           setHasValidSession(false)
         }
       }
@@ -61,7 +63,7 @@ export default function ResetPasswordPage() {
     }
 
     checkSession()
-  }, [])
+  }, [supabase])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

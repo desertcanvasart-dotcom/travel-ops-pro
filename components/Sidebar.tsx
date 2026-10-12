@@ -374,8 +374,8 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }: SidebarProps) {
         (item.href !== '/dashboard' && pathname.startsWith(item.href)) ||
         item.children?.some(child => pathname === child.href || currentUrl.includes(child.href))
       )
-      if (hasActiveItem && !expandedSections.includes(section.key)) {
-        setExpandedSections(prev => [...prev, section.key])
+      if (hasActiveItem) {
+        setExpandedSections(prev => prev.includes(section.key) ? prev : [...prev, section.key])
       }
     })
   }, [pathname, currentUrl, filteredNavigation])

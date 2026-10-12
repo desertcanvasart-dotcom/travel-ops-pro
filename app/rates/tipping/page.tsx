@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import Link from 'next/link'
@@ -178,6 +178,8 @@ function Pagination({
 
 export default function TippingPage() {
   const t = useTranslations('rates.tipping')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const tippingRoleLabel = useVocabLabel('tipping_role')
   const tippingContextLabel = useVocabLabel('tipping_context')
   const tippingUnitLabel = useVocabLabel('tipping_unit')
@@ -217,25 +219,25 @@ export default function TippingPage() {
     is_active: true
   })
 
-  const showToast = (type: 'success' | 'error', message: string) => {
+  const showToast = useCallback((type: 'success' | 'error', message: string) => {
     const id = Date.now().toString()
     setToasts(prev => [...prev, { id, type, message }])
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
-  }
+  }, [])
 
-  const fetchRates = async () => {
+  const fetchRates = useCallback(async () => {
     try {
       const response = await fetch('/api/rates/tipping')
       const data = await response.json()
       if (data.success) setRates(data.data)
     } catch (error) {
-      showToast('error', t('errors.failedToLoad'))
+      showToast('error', tRef.current('errors.failedToLoad'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [showToast])
 
-  useEffect(() => { fetchRates() }, [])
+  useEffect(() => { fetchRates() }, [fetchRates])
 
   // Reset to first page when filters change
   useEffect(() => {

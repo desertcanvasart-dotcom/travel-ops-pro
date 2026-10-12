@@ -48,29 +48,28 @@ export default function AdditionalServices({
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    const fetchServices = async () => {
+      setLoading(true)
+      try {
+        const response = await fetch(`/api/rates?type=service_fee&city=${city}&in_org_currency=true`)
+        const data = await response.json()
+      
+        if (data.success) {
+          setServices(data.data || [])
+        }
+      } catch (error) {
+        console.error('Failed to fetch services:', error)
+        setServices([])
+      } finally {
+        setLoading(false)
+      }
+    }
     if (!city) {
       setServices([])
       return
     }
     fetchServices()
   }, [city])
-
-  const fetchServices = async () => {
-    setLoading(true)
-    try {
-      const response = await fetch(`/api/rates?type=service_fee&city=${city}&in_org_currency=true`)
-      const data = await response.json()
-      
-      if (data.success) {
-        setServices(data.data || [])
-      }
-    } catch (error) {
-      console.error('Failed to fetch services:', error)
-      setServices([])
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const isServiceSelected = (serviceId: string) => {
     return selectedServices.some(s => s.service.id === serviceId)

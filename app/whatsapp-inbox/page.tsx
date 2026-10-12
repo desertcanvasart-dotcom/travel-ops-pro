@@ -589,6 +589,9 @@ export default function WhatsAppInboxPage() {
       if (showLoader) setLoading(false)
     }
   }, [searchQuery, filterMode, currentAgentId])
+  // Mount-time load only; the debounced effect below handles search/filter changes.
+  const fetchConversationsRef = useRef(fetchConversations)
+  useEffect(() => { fetchConversationsRef.current = fetchConversations })
 
   // Fetch messages
   const fetchMessages = useCallback(async (conversationId: string, showLoader = true) => {
@@ -726,6 +729,10 @@ export default function WhatsAppInboxPage() {
     if (translation) setIncomingTranslations(prev => ({ ...prev, [messageId]: translation }))
     setTranslatingMessageIds(prev => { const s = new Set(prev); s.delete(messageId); return s })
   }
+  // Auto-translate reads the latest handler via a ref: as a dep it would re-run
+  // (and loop) every time it stores a translation.
+  const handleTranslateMessageRef = useRef(handleTranslateMessage)
+  useEffect(() => { handleTranslateMessageRef.current = handleTranslateMessage })
 
   // Send message
   const sendMessage = async (e: React.FormEvent) => {
@@ -843,8 +850,8 @@ export default function WhatsAppInboxPage() {
 
   // Effects
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
-  useEffect(() => { fetchConversations(true); fetchAgents() }, [])
-  useEffect(() => { const t = setTimeout(() => fetchConversations(false), 300); return () => clearTimeout(t) }, [searchQuery, filterMode])
+  useEffect(() => { fetchConversationsRef.current(true); fetchAgents() }, [fetchAgents])
+  useEffect(() => { const t = setTimeout(() => fetchConversations(false), 300); return () => clearTimeout(t) }, [fetchConversations])
   useEffect(() => {
     if (!translationEnabled || !newMessage.trim()) { setTranslatedMessage(''); setIsTranslating(false); return }
     setIsTranslating(true)
@@ -857,7 +864,8 @@ export default function WhatsAppInboxPage() {
   }, [newMessage, customerLanguage, translationEnabled])
   useEffect(() => {
     if (translationEnabled && messages.length > 0) {
-      messages.forEach(msg => { if (msg.direction === 'inbound' && !incomingTranslations[msg.id]) handleTranslateMessage(msg.id, msg.message_body) })
+      // The handler skips messages already translated or in flight.
+      messages.forEach(msg => { if (msg.direction === 'inbound') handleTranslateMessageRef.current(msg.id, msg.message_body) })
     }
   }, [translationEnabled, messages])
   useEffect(() => {

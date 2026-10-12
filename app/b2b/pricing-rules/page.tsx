@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import Link from 'next/link'
@@ -84,6 +84,8 @@ export default function B2BPricingRulesPage() {
   const pkgRate = (amount: number | null | undefined, pkg: { rate_currency?: string | null }) =>
     formatRateInRowCurrency(amount, pkg, formatRate)
   const t = useTranslations('b2bPricingRules')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const tDup = useTranslations('common')
   const [transportPackages, setTransportPackages] = useState<TransportPackage[]>([])
   const [loading, setLoading] = useState(true)
@@ -101,13 +103,13 @@ export default function B2BPricingRulesPage() {
   const { options: vehicleOptions, vehicleName } = useVehicleOptions()
   const { confirmDelete } = useConfirmDialog()
 
-  const showToast = (type: 'success' | 'error', message: string) => {
+  const showToast = useCallback((type: 'success' | 'error', message: string) => {
     const id = Date.now().toString()
     setToasts(prev => [...prev, { id, type, message }])
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
-  }
+  }, [])
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true)
     try {
       const packagesRes = await fetch('/api/b2b/transport-packages')
@@ -117,15 +119,15 @@ export default function B2BPricingRulesPage() {
       }
     } catch (error) {
       console.error('Error fetching data:', error)
-      showToast('error', t('failedToLoadRules'))
+      showToast('error', tRef.current('failedToLoadRules'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [showToast])
 
   useEffect(() => {
     fetchData()
-  }, [])
+  }, [fetchData])
 
   // ============================================
   // TRANSPORT PACKAGES HANDLERS

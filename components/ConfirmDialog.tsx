@@ -110,6 +110,15 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
     }
   }, [state.isOpen, state.type])
 
+  const handleCancel = useCallback(() => {
+    if (state.type === 'prompt') {
+      state.resolve?.(null)
+    } else {
+      state.resolve?.(false)
+    }
+    setState(prev => ({ ...prev, isOpen: false, resolve: null }))
+  }, [state])
+
   // ESC key handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -120,7 +129,7 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [state.isOpen, state.type])
+  }, [state.isOpen, handleCancel])
 
   // ============================================
   // HANDLERS
@@ -131,15 +140,6 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
       state.resolve?.(inputValue)
     } else {
       state.resolve?.(true)
-    }
-    setState(prev => ({ ...prev, isOpen: false, resolve: null }))
-  }
-
-  const handleCancel = () => {
-    if (state.type === 'prompt') {
-      state.resolve?.(null)
-    } else {
-      state.resolve?.(false)
     }
     setState(prev => ({ ...prev, isOpen: false, resolve: null }))
   }

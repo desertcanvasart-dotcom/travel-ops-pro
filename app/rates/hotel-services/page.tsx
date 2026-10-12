@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
@@ -184,6 +184,8 @@ function Pagination({
 
 export default function HotelServicesPage() {
   const t = useTranslations('rates.hotelServices')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const hotelServiceLabel = useVocabLabel('hotel_service_type')
   // The picker lists the agency's vocabulary; the built-in list stands in until it loads.
   const serviceOptions = useVocabOptions('hotel_service_type', SERVICE_TYPES.map(s => ({ value: s, label: t(`serviceTypes.${s}`) })))
@@ -223,25 +225,25 @@ export default function HotelServicesPage() {
     max_capacity: '' as number | ''
   })
 
-  const showToast = (type: 'success' | 'error', message: string) => {
+  const showToast = useCallback((type: 'success' | 'error', message: string) => {
     const id = Date.now().toString()
     setToasts(prev => [...prev, { id, type, message }])
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
-  }
+  }, [])
 
-  const fetchRates = async () => {
+  const fetchRates = useCallback(async () => {
     try {
       const response = await fetch('/api/rates/hotel-services')
       const data = await response.json()
       if (data.success) setRates(data.data)
     } catch (error) {
-      showToast('error', t('errors.failedToLoad'))
+      showToast('error', tRef.current('errors.failedToLoad'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [showToast])
 
-  useEffect(() => { fetchRates() }, [])
+  useEffect(() => { fetchRates() }, [fetchRates])
 
   // Reset to first page when filters change
   useEffect(() => {

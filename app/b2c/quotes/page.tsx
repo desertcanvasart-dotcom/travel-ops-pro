@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { FileText, Loader2, Plus, Eye, Trash2, X, Users, Clock, Send, CheckCircle2, XCircle } from 'lucide-react'
 import { useConfirm } from '@/components/ConfirmDialog'
@@ -36,7 +36,7 @@ export default function B2CQuotesPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
 
-  const fetchQuotes = async () => {
+  const fetchQuotes = useCallback(async () => {
     setLoading(true)
     try {
       let url = '/api/b2c/quotes?limit=100'
@@ -47,9 +47,9 @@ export default function B2CQuotesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [statusFilter])
 
-  useEffect(() => { fetchQuotes() }, [statusFilter])
+  useEffect(() => { fetchQuotes() }, [fetchQuotes])
 
   const remove = async (id: string) => {
     if (!(await confirmDialog('Delete this offer? This cannot be undone.'))) return

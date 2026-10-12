@@ -1,5 +1,6 @@
 import { getRequestConfig } from 'next-intl/server'
 import { cookies } from 'next/headers'
+import { unstable_rethrow } from 'next/navigation'
 import { defaultLocale, locales, type Locale } from './config'
 
 export default getRequestConfig(async () => {
@@ -14,6 +15,10 @@ export default getRequestConfig(async () => {
       locale = localeCookie as Locale
     }
   } catch (error) {
+    // Next signals "this route reads the request" by throwing from cookies()
+    // during prerender. That must reach Next, not this log — the root layout
+    // reads the locale, so it fired once per route on every build.
+    unstable_rethrow(error)
     // Cookie access may fail in some contexts, use default
     console.error('Error reading locale cookie:', error)
   }

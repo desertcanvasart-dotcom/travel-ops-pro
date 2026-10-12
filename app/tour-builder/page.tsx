@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import { Tour, TourDay, TourPricingBreakdown } from './types'
 import TourSetup from './components/TourSetup'
@@ -77,11 +77,18 @@ export default function TourBuilderPage() {
     }
   }
 
+  // Latest-ref so the debounced effect below only re-arms on days/pax/passport
+  // changes (not on unrelated tour fields) yet still posts the current tour.
+  const calculatePricingRef = useRef(calculatePricing)
+  useEffect(() => {
+    calculatePricingRef.current = calculatePricing
+  })
+
   // Auto-calculate when relevant data changes (debounced)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (tour.days && tour.days.length > 0) {
-        calculatePricing()
+        calculatePricingRef.current()
       }
     }, 500) // 500ms debounce
 
@@ -91,17 +98,18 @@ export default function TourBuilderPage() {
   // Initialize days when duration changes or when days are empty
   useEffect(() => {
     if (tour.duration_days > 0) {
-      // If we have no days, or wrong number of days, reinitialize
-      if (!tour.days || tour.days.length !== tour.duration_days) {
-        const newDays: TourDay[] = Array.from({ length: tour.duration_days }, (_, i) => ({
+      setTour(prev => {
+        // If we have no days, or wrong number of days, reinitialize
+        if (prev.days && prev.days.length === prev.duration_days) return prev
+        const newDays: TourDay[] = Array.from({ length: prev.duration_days }, (_, i) => ({
           day_number: i + 1,
-          city: tour.cities[0] || '',
+          city: prev.cities[0] || '',
           breakfast_included: true,
           guide_required: true,
           activities: []
         }))
-        setTour(prev => ({ ...prev, days: newDays }))
-      }
+        return { ...prev, days: newDays }
+      })
     }
   }, [tour.duration_days])
 

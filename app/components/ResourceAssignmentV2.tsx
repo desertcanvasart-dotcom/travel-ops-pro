@@ -323,26 +323,7 @@ export default function ResourceAssignmentV2({
     setModalAirportFilter('all')
   }
 
-  // Fetch all data on mount
-  useEffect(() => {
-    fetchAllData()
-  }, [itineraryId, startDate, endDate])
-
-  const fetchAllData = async () => {
-    setLoading(true)
-    try {
-      await Promise.all([
-        fetchAvailableResources(),
-        fetchAssignedResources(),
-        fetchConflicts()
-      ])
-    } catch (error) {
-      console.error('Error fetching data:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-  const fetchAvailableResources = async () => {
+  const fetchAvailableResources = useCallback(async () => {
     // Fetch every resource type in PARALLEL (was a serial await-in-loop = 7
     // sequential round-trips on mount). Each still degrades to [] on its own
     // error, independent of the others.
@@ -369,9 +350,9 @@ export default function ResourceAssignmentV2({
     )
 
     setAvailableResources(Object.fromEntries(entries))
-  }
+  }, [])
 
-  const fetchAssignedResources = async () => {
+  const fetchAssignedResources = useCallback(async () => {
     try {
       const response = await fetch(`/api/itinerary-resources?itinerary_id=${itineraryId}`)
       const data = await response.json()
@@ -382,9 +363,9 @@ export default function ResourceAssignmentV2({
     } catch (error) {
       console.error('Error fetching assigned resources:', error)
     }
-  }
+  }, [itineraryId])
 
-  const fetchConflicts = async () => {
+  const fetchConflicts = useCallback(async () => {
     try {
       const response = await fetch(`/api/itinerary-resources/conflicts?itinerary_id=${itineraryId}`)
       const data = await response.json()
@@ -395,7 +376,27 @@ export default function ResourceAssignmentV2({
     } catch (error) {
       console.error('Error fetching conflicts:', error)
     }
-  }
+  }, [itineraryId])
+
+  const fetchAllData = useCallback(async () => {
+    setLoading(true)
+    try {
+      await Promise.all([
+        fetchAvailableResources(),
+        fetchAssignedResources(),
+        fetchConflicts()
+      ])
+    } catch (error) {
+      console.error('Error fetching data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [fetchAvailableResources, fetchAssignedResources, fetchConflicts])
+
+  // Fetch all data on mount
+  useEffect(() => {
+    fetchAllData()
+  }, [itineraryId, startDate, endDate, fetchAllData])
 
   // Get filtered resources for the modal dropdown
   const getFilteredResourcesForModal = (): Resource[] => {

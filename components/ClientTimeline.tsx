@@ -33,152 +33,157 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
   const [filter, setFilter] = useState<string>('all')
 
   useEffect(() => {
-    loadTimeline()
-  }, [clientId])
+    // Titles are translated at fetch time, so this also reruns when the locale
+    // (and with it `t`) changes; `cancelled` drops a superseded response.
+    let cancelled = false
+    const loadTimeline = async () => {
+      setIsLoading(true)
 
-  const loadTimeline = async () => {
-    setIsLoading(true)
+      try {
+        // Fetch client creation
+        const { data: client } = await supabase
+          .from('clients')
+          .select('created_at, first_name, last_name')
+          .eq('id', clientId)
+          .single()
 
-    try {
-      // Fetch client creation
-      const { data: client } = await supabase
-        .from('clients')
-        .select('created_at, first_name, last_name')
-        .eq('id', clientId)
-        .single()
+        // Fetch communications
+        const { data: communications } = await supabase
+          .from('communication_history')
+          .select('*')
+          .eq('client_id', clientId)
+          .order('communication_date', { ascending: false })
 
-      // Fetch communications
-      const { data: communications } = await supabase
-        .from('communication_history')
-        .select('*')
-        .eq('client_id', clientId)
-        .order('communication_date', { ascending: false })
+        // Fetch bookings/itineraries
+        const { data: bookings } = await supabase
+          .from('itineraries')
+          .select('*')
+          .eq('client_id', clientId)
+          .order('created_at', { ascending: false })
 
-      // Fetch bookings/itineraries
-      const { data: bookings } = await supabase
-        .from('itineraries')
-        .select('*')
-        .eq('client_id', clientId)
-        .order('created_at', { ascending: false })
+        // Fetch notes
+        const { data: notes } = await supabase
+          .from('client_notes')
+          .select('*')
+          .eq('client_id', clientId)
+          .order('created_at', { ascending: false })
 
-      // Fetch notes
-      const { data: notes } = await supabase
-        .from('client_notes')
-        .select('*')
-        .eq('client_id', clientId)
-        .order('created_at', { ascending: false })
+        // Fetch follow-ups
+        const { data: followups } = await supabase
+          .from('client_followups')
+          .select('*')
+          .eq('client_id', clientId)
+          .order('due_date', { ascending: false })
 
-      // Fetch follow-ups
-      const { data: followups } = await supabase
-        .from('client_followups')
-        .select('*')
-        .eq('client_id', clientId)
-        .order('due_date', { ascending: false })
+        // Combine all events
+        const allEvents: TimelineEvent[] = []
 
-      // Combine all events
-      const allEvents: TimelineEvent[] = []
+        // Client created event
+        if (client) {
+          allEvents.push({
+            id: 'created',
+            type: 'created',
+            date: client.created_at,
+            title: t('eventTypes.clientCreated'),
+            description: t('eventTypes.addedToSystem', { name: `${client.first_name} ${client.last_name}` }),
+            icon: Users,
+            color: 'blue'
+          })
+        }
 
-      // Client created event
-      if (client) {
-        allEvents.push({
-          id: 'created',
-          type: 'created',
-          date: client.created_at,
-          title: t('eventTypes.clientCreated'),
-          description: t('eventTypes.addedToSystem', { name: `${client.first_name} ${client.last_name}` }),
-          icon: Users,
-          color: 'blue'
+        // Communication events
+        communications?.forEach((comm) => {
+          const iconMap: any = {
+            'whatsapp': MessageSquare,
+            'email': Mail,
+            'phone': Phone,
+            'meeting': Users
+          }
+
+          allEvents.push({
+            id: comm.id,
+            type: 'communication',
+            date: comm.communication_date,
+            title: `${comm.communication_type.toUpperCase()} - ${comm.direction}`,
+            description: comm.subject || comm.content?.substring(0, 100) || '',
+            icon: iconMap[comm.communication_type] || MessageSquare,
+            color: comm.direction === 'inbound' ? 'green' : 'purple',
+            details: comm
+          })
         })
+
+        // Booking events
+        bookings?.forEach((booking) => {
+          const statusColor: any = {
+            'draft': 'gray',
+            'sent': 'blue',
+            'confirmed': 'green',
+            'completed': 'emerald',
+            'cancelled': 'red'
+          }
+
+          allEvents.push({
+            id: booking.id,
+            type: 'booking',
+            date: booking.created_at,
+            title: t('eventTypes.booking', { name: booking.trip_name }),
+            description: `${booking.itinerary_code} • ${formatMoney(Number(booking.total_cost) || 0, booking.currency || 'EUR')} • ${booking.status}`,
+            icon: MapPin,
+            color: statusColor[booking.status] || 'gray',
+            details: booking
+          })
+        })
+
+        // Note events
+        notes?.forEach((note) => {
+          allEvents.push({
+            id: note.id,
+            type: 'note',
+            date: note.created_at,
+            title: note.note_type === 'internal' ? t('eventTypes.internalNote') : t('eventTypes.note'),
+            description: note.content?.substring(0, 100) || '',
+            icon: FileText,
+            color: note.is_important ? 'orange' : 'yellow',
+            details: note
+          })
+        })
+
+        // Follow-up events
+        followups?.forEach((followup) => {
+          const statusIcon: any = {
+            'pending': Clock,
+            'completed': CheckCircle,
+            'cancelled': AlertCircle
+          }
+
+          allEvents.push({
+            id: followup.id,
+            type: 'followup',
+            date: followup.due_date,
+            title: t('eventTypes.followup', { type: followup.followup_type }),
+            description: followup.notes || t('eventTypes.noNotes'),
+            icon: statusIcon[followup.status] || Clock,
+            color: followup.status === 'completed' ? 'green' :
+                   followup.status === 'cancelled' ? 'red' : 'yellow',
+            details: followup
+          })
+        })
+
+        // Sort by date (newest first)
+        allEvents.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+        if (!cancelled) setEvents(allEvents)
+      } catch (error) {
+        console.error('Error loading timeline:', error)
+      } finally {
+        if (!cancelled) setIsLoading(false)
       }
-
-      // Communication events
-      communications?.forEach((comm) => {
-        const iconMap: any = {
-          'whatsapp': MessageSquare,
-          'email': Mail,
-          'phone': Phone,
-          'meeting': Users
-        }
-
-        allEvents.push({
-          id: comm.id,
-          type: 'communication',
-          date: comm.communication_date,
-          title: `${comm.communication_type.toUpperCase()} - ${comm.direction}`,
-          description: comm.subject || comm.content?.substring(0, 100) || '',
-          icon: iconMap[comm.communication_type] || MessageSquare,
-          color: comm.direction === 'inbound' ? 'green' : 'purple',
-          details: comm
-        })
-      })
-
-      // Booking events
-      bookings?.forEach((booking) => {
-        const statusColor: any = {
-          'draft': 'gray',
-          'sent': 'blue',
-          'confirmed': 'green',
-          'completed': 'emerald',
-          'cancelled': 'red'
-        }
-
-        allEvents.push({
-          id: booking.id,
-          type: 'booking',
-          date: booking.created_at,
-          title: t('eventTypes.booking', { name: booking.trip_name }),
-          description: `${booking.itinerary_code} • ${formatMoney(Number(booking.total_cost) || 0, booking.currency || 'EUR')} • ${booking.status}`,
-          icon: MapPin,
-          color: statusColor[booking.status] || 'gray',
-          details: booking
-        })
-      })
-
-      // Note events
-      notes?.forEach((note) => {
-        allEvents.push({
-          id: note.id,
-          type: 'note',
-          date: note.created_at,
-          title: note.note_type === 'internal' ? t('eventTypes.internalNote') : t('eventTypes.note'),
-          description: note.content?.substring(0, 100) || '',
-          icon: FileText,
-          color: note.is_important ? 'orange' : 'yellow',
-          details: note
-        })
-      })
-
-      // Follow-up events
-      followups?.forEach((followup) => {
-        const statusIcon: any = {
-          'pending': Clock,
-          'completed': CheckCircle,
-          'cancelled': AlertCircle
-        }
-
-        allEvents.push({
-          id: followup.id,
-          type: 'followup',
-          date: followup.due_date,
-          title: t('eventTypes.followup', { type: followup.followup_type }),
-          description: followup.notes || t('eventTypes.noNotes'),
-          icon: statusIcon[followup.status] || Clock,
-          color: followup.status === 'completed' ? 'green' :
-                 followup.status === 'cancelled' ? 'red' : 'yellow',
-          details: followup
-        })
-      })
-
-      // Sort by date (newest first)
-      allEvents.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-
-      setEvents(allEvents)
-    } catch (error) {
-      console.error('Error loading timeline:', error)
-    } finally {
-      setIsLoading(false)
     }
-  }
+    loadTimeline()
+    return () => {
+      cancelled = true
+    }
+  }, [clientId, t])
 
   const filteredEvents = filter === 'all' 
     ? events 

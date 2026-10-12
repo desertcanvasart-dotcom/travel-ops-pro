@@ -217,17 +217,75 @@ export default function TourDetailPage() {
     }
   }, [params.code])
 
+  // Each change of pax/date/passport/language fires a new price request, and
+  // they can come back out of order: an older, slower answer used to overwrite
+  // the newer one, so the page showed a price for settings no longer selected.
+  // Only the latest request may write.
+  const priceRequestId = useRef(0)
+  const priceAbort = useRef<AbortController | null>(null)
+  const variationId = tour?.variation_id
+  const templateId = tour?.template_id
+  const tier = tour?.tier
+
   // Calculate price when tour loads or params change. Programmes without
   // variations (imported catalogue) price template-direct at the default tier.
   useEffect(() => {
+    const calculatePrice = async () => {
+      if (!variationId && !templateId) return
+
+      const requestId = ++priceRequestId.current
+      const isLatest = () => requestId === priceRequestId.current
+      // Cancel the request this one supersedes: its answer would be discarded
+      // anyway, and the server need not finish pricing it.
+      priceAbort.current?.abort()
+      const controller = new AbortController()
+      priceAbort.current = controller
+      setPricingLoading(true)
+      setPricingError(null)
+
+      try {
+        const response = await fetch('/api/b2b/calculate-price', {
+          signal: controller.signal,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...(variationId
+              ? { variation_id: variationId }
+              : { template_id: templateId, tier: tier || 'standard' }),
+            num_pax: selectedPax,
+            travel_date: travelDate,
+            is_eur_passport: isEurPassport,
+            language: guideLanguage,
+            margin_percent: 0,
+            include_optionals: false
+          })
+        })
+
+        const data = await response.json()
+        if (!isLatest()) return
+
+        if (data.success) {
+          setPricing(data.data)
+        } else {
+          setPricingError(data.error || 'Failed to calculate price')
+        }
+      } catch (err) {
+        if (!isLatest()) return
+        setPricingError('Error calculating price')
+        console.error(err)
+      } finally {
+        if (isLatest()) setPricingLoading(false)
+      }
+    }
+
     // Wait for the guide language, or the first price asks for English.
-    if ((tour?.variation_id || tour?.template_id) && guideLanguage) {
+    if ((variationId || templateId) && guideLanguage) {
       // Debounced: clicking through pax 2 → 3 → 4 fired a full pricing run
       // per click. Only the settled choice is priced.
       const t = setTimeout(() => { calculatePrice() }, 300)
       return () => clearTimeout(t)
     }
-  }, [tour?.variation_id, tour?.template_id, selectedPax, travelDate, isEurPassport, guideLanguage])
+  }, [variationId, templateId, tier, selectedPax, travelDate, isEurPassport, guideLanguage])
 
   const fetchTourDetail = async (code: string) => {
     try {
@@ -256,60 +314,6 @@ export default function TourDetailPage() {
       }
     } catch (err) {
       console.error('Error fetching versions:', err)
-    }
-  }
-
-  // Each change of pax/date/passport/language fires a new price request, and
-  // they can come back out of order: an older, slower answer used to overwrite
-  // the newer one, so the page showed a price for settings no longer selected.
-  // Only the latest request may write.
-  const priceRequestId = useRef(0)
-  const priceAbort = useRef<AbortController | null>(null)
-  const calculatePrice = async () => {
-    if (!tour?.variation_id && !tour?.template_id) return
-
-    const requestId = ++priceRequestId.current
-    const isLatest = () => requestId === priceRequestId.current
-    // Cancel the request this one supersedes: its answer would be discarded
-    // anyway, and the server need not finish pricing it.
-    priceAbort.current?.abort()
-    const controller = new AbortController()
-    priceAbort.current = controller
-    setPricingLoading(true)
-    setPricingError(null)
-
-    try {
-      const response = await fetch('/api/b2b/calculate-price', {
-        signal: controller.signal,
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...(tour.variation_id
-            ? { variation_id: tour.variation_id }
-            : { template_id: tour.template_id, tier: tour.tier || 'standard' }),
-          num_pax: selectedPax,
-          travel_date: travelDate,
-          is_eur_passport: isEurPassport,
-          language: guideLanguage,
-          margin_percent: 0,
-          include_optionals: false
-        })
-      })
-
-      const data = await response.json()
-      if (!isLatest()) return
-
-      if (data.success) {
-        setPricing(data.data)
-      } else {
-        setPricingError(data.error || 'Failed to calculate price')
-      }
-    } catch (err) {
-      if (!isLatest()) return
-      setPricingError('Error calculating price')
-      console.error(err)
-    } finally {
-      if (isLatest()) setPricingLoading(false)
     }
   }
 

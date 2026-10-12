@@ -112,39 +112,39 @@ export default function TripPnLDetailPage({ params }: { params: Promise<{ id: st
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch P&L data for this itinerary
+        const pnlResponse = await fetch(`/api/profit-loss?itineraryId=${resolvedParams.id}`)
+        if (pnlResponse.ok) {
+          const pnlResult = await pnlResponse.json()
+          if (pnlResult.success && pnlResult.data.length > 0) {
+            setPnlData(pnlResult.data[0])
+          }
+        }
+
+        // Fetch invoices for this itinerary
+        const invoicesResponse = await fetch(`/api/invoices?itineraryId=${resolvedParams.id}`)
+        if (invoicesResponse.ok) {
+          const invoicesData = await invoicesResponse.json()
+          setInvoices(Array.isArray(invoicesData) ? invoicesData : [])
+        }
+
+        // Fetch expenses for this itinerary
+        const expensesResponse = await fetch(`/api/expenses?itineraryId=${resolvedParams.id}`)
+        if (expensesResponse.ok) {
+          const expensesData = await expensesResponse.json()
+          setExpenses(Array.isArray(expensesData) ? expensesData : [])
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
     fetchData()
   }, [resolvedParams.id])
-
-  const fetchData = async () => {
-    try {
-      // Fetch P&L data for this itinerary
-      const pnlResponse = await fetch(`/api/profit-loss?itineraryId=${resolvedParams.id}`)
-      if (pnlResponse.ok) {
-        const pnlResult = await pnlResponse.json()
-        if (pnlResult.success && pnlResult.data.length > 0) {
-          setPnlData(pnlResult.data[0])
-        }
-      }
-
-      // Fetch invoices for this itinerary
-      const invoicesResponse = await fetch(`/api/invoices?itineraryId=${resolvedParams.id}`)
-      if (invoicesResponse.ok) {
-        const invoicesData = await invoicesResponse.json()
-        setInvoices(Array.isArray(invoicesData) ? invoicesData : [])
-      }
-
-      // Fetch expenses for this itinerary
-      const expensesResponse = await fetch(`/api/expenses?itineraryId=${resolvedParams.id}`)
-      if (expensesResponse.ok) {
-        const expensesData = await expensesResponse.json()
-        setExpenses(Array.isArray(expensesData) ? expensesData : [])
-      }
-    } catch (error) {
-      console.error('Error fetching data:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const getCurrencySymbol = (currency: string) => {
     const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }

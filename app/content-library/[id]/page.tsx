@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState, useEffect, useMemo, use } from 'react'
+import { useState, useEffect, useMemo, useRef, use } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -553,6 +553,12 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
   const tierOptions = useTierOptions(key => t(`tiers.${key}`))
   const tierKeyList = tierOptions.map(o => o.value).join('|')
   const tierKeys = useMemo(() => tierKeyList.split('|'), [tierKeyList])
+  // Read by the content load, which must not refetch (and overwrite edits)
+  // when the vocabulary arrives; the slot-filling effect below handles that.
+  const tierKeysRef = useRef(tierKeys)
+  useEffect(() => {
+    tierKeysRef.current = tierKeys
+  }, [tierKeys])
   const [activeTier, setActiveTier] = useState<Tier>('budget')
   const [categorySchema, setCategorySchema] = useState<CategorySchema | null>(null)
 
@@ -610,7 +616,7 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
           // Ensure every tier on the agency's ladder has a slot — and keep any
           // saved variation whose tier is no longer on it, rather than drop it.
           const saved: ContentVariation[] = data.variations ?? []
-          const keys = Array.from(new Set([...tierKeys, ...saved.map(v => v.tier)]))
+          const keys = Array.from(new Set([...tierKeysRef.current, ...saved.map(v => v.tier)]))
           const variations = keys.map(tier => saved.find(v => v.tier === tier) || emptyVariation(tier))
 
           setFormData({
@@ -643,11 +649,10 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
         setCategorySchema(schema)
         
         // Initialize default metadata if switching category
-        if (schema && Object.keys(formData.metadata).length === 0) {
-          setFormData(prev => ({
-            ...prev,
-            metadata: getDefaultMetadata(schema.slug)
-          }))
+        if (schema) {
+          setFormData(prev => Object.keys(prev.metadata).length === 0
+            ? { ...prev, metadata: getDefaultMetadata(schema.slug) }
+            : prev)
         }
       }
     }

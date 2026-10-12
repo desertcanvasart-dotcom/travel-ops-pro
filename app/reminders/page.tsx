@@ -115,10 +115,15 @@ export default function PaymentRemindersPage() {
     }
   }, [])
 
-  const fetchReminderHistory = useCallback(async (reset = false) => {
+  // `page` is the page to load: 0 replaces the list, anything higher appends.
+  // It is passed in rather than read from state so "load more" asks for the
+  // NEXT page — reading historyPage here got the value from before the click
+  // and re-fetched rows already shown.
+  const fetchReminderHistory = useCallback(async (page = 0) => {
+    const reset = page === 0
     setHistoryLoading(true)
     try {
-      const offset = reset ? 0 : historyPage * 50
+      const offset = page * 50
       const status = historyFilter === 'all' ? '' : `&status=${historyFilter}`
       
       const historyRes = await fetch(`/api/reminders/history?limit=50&offset=${offset}${status}`)
@@ -127,10 +132,10 @@ export default function PaymentRemindersPage() {
         
         if (reset) {
           setReminderHistory(data.reminders || [])
-          setHistoryPage(0)
         } else {
           setReminderHistory(prev => [...prev, ...(data.reminders || [])])
         }
+        setHistoryPage(page)
         
         setHistoryStats(data.stats || { total: 0, sent: 0, failed: 0 })
         setHasMoreHistory(data.pagination?.hasMore || false)
@@ -140,7 +145,7 @@ export default function PaymentRemindersPage() {
     } finally {
       setHistoryLoading(false)
     }
-  }, [historyFilter, historyPage])
+  }, [historyFilter])
 
   useEffect(() => {
     const loadData = async () => {
@@ -153,9 +158,9 @@ export default function PaymentRemindersPage() {
 
   useEffect(() => {
     if (activeTab === 'history') {
-      fetchReminderHistory(true)
+      fetchReminderHistory(0)
     }
-  }, [activeTab, historyFilter])
+  }, [activeTab, historyFilter, fetchReminderHistory])
 
   const handleSendSingle = async (invoiceId: string) => {
     setSendingId(invoiceId)
@@ -285,8 +290,7 @@ export default function PaymentRemindersPage() {
   }
 
   const loadMoreHistory = () => {
-    setHistoryPage(prev => prev + 1)
-    fetchReminderHistory(false)
+    fetchReminderHistory(historyPage + 1)
   }
 
   const getCurrencySymbol = (currency: string) => {
@@ -336,7 +340,7 @@ export default function PaymentRemindersPage() {
           <button
             onClick={() => {
               fetchPendingReminders()
-              if (activeTab === 'history') fetchReminderHistory(true)
+              if (activeTab === 'history') fetchReminderHistory(0)
             }}
             className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             title="Refresh"

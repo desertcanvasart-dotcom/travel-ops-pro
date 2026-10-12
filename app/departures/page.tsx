@@ -1,7 +1,7 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { buildProgrammeGroups, shortDate, summarise } from '@/lib/departures/programme-groups'
@@ -116,11 +116,7 @@ export default function DeparturesPage() {
   // DATA LOADING
   // ============================================
 
-  useEffect(() => {
-    loadData()
-  }, [statusFilter])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
 
@@ -153,7 +149,11 @@ export default function DeparturesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [statusFilter])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   // ============================================
   // CREATE DEPARTURE

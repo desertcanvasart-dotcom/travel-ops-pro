@@ -1,7 +1,7 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { formatMoney, formatTotals } from '@/lib/currency-totals'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
@@ -157,13 +157,7 @@ export default function ClientProfilePage() {
     }
   }
 
-  useEffect(() => {
-    if (clientId) {
-      fetchClientData()
-    }
-  }, [clientId])
-
-  const fetchClientData = async () => {
+  const fetchClientData = useCallback(async () => {
     try {
       setLoading(true)
 
@@ -216,7 +210,13 @@ export default function ClientProfilePage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [clientId])
+
+  useEffect(() => {
+    if (clientId) {
+      fetchClientData()
+    }
+  }, [clientId, fetchClientData])
 
   if (loading) {
     return (

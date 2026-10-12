@@ -321,7 +321,7 @@ export default function ItineraryEditorPage() {
   const router = useRouter()
   const params = useParams()
   const itineraryId = params?.id as string
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const currentLocale = useLocale() // 'en' or 'ja'
   const [activeLanguage, setActiveLanguage] = useState(currentLocale)
 
@@ -390,13 +390,6 @@ export default function ItineraryEditorPage() {
     setActiveLanguage(currentLocale)
   }, [currentLocale])
 
-  useEffect(() => {
-    loadItinerary()
-    loadAttractions()
-    loadSuppliers()
-    loadProgrammes()
-  }, [itineraryId, activeLanguage])
-
   // The confirmed banner's "Go to booking" opens this trip's booking. It used
   // to link to the bookings list with a search for the itinerary code, which the list
   // never reads — it opened the whole list. Looked up by itinerary id, as
@@ -416,7 +409,7 @@ export default function ItineraryEditorPage() {
     return () => { live = false }
   }, [itineraryId, isConfirmed])
 
-  const loadItinerary = async () => {
+  const loadItinerary = useCallback(async () => {
     if (!itineraryId) return
 
     try {
@@ -533,7 +526,7 @@ export default function ItineraryEditorPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [itineraryId, supabase, activeLanguage])
 
   const loadProgrammes = async () => {
     try {
@@ -550,7 +543,7 @@ export default function ItineraryEditorPage() {
     }
   }
 
-  const loadAttractions = async () => {
+  const loadAttractions = useCallback(async () => {
     try {
       // Load both entrance fees and activities in parallel
       const [entranceRes, activityRes] = await Promise.all([
@@ -597,11 +590,11 @@ export default function ItineraryEditorPage() {
     } catch (error) {
       console.error('Error loading attractions:', error)
     }
-  }
+  }, [supabase])
 
   // The "Sold by" guide list. Each line's own supplier list is
   // ServiceSupplierSelect: its kind, in its city.
-  const loadSuppliers = async () => {
+  const loadSuppliers = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('suppliers')
@@ -617,7 +610,14 @@ export default function ItineraryEditorPage() {
     } catch (error) {
       console.error('Error loading suppliers:', error)
     }
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    loadItinerary()
+    loadAttractions()
+    loadSuppliers()
+    loadProgrammes()
+  }, [itineraryId, activeLanguage, loadItinerary, loadAttractions, loadSuppliers])
 
   /** The programme this trip is linked to, for the length check below. */
   const linkedProgramme = useMemo(
@@ -625,7 +625,7 @@ export default function ItineraryEditorPage() {
     [programmes, itinerary?.template_id]
   )
 
-  const checkExistingInvoice = async () => {
+  const checkExistingInvoice = useCallback(async () => {
     try {
       const response = await fetch(`/api/invoices?itineraryId=${itineraryId}`)
       if (response.ok) {
@@ -637,7 +637,7 @@ export default function ItineraryEditorPage() {
     } catch (error) {
       console.error('Error checking existing invoice:', error)
     }
-  }
+  }, [itineraryId])
 
   const updateStatus = async (newStatus: string) => {
     if (!itinerary) return
@@ -670,7 +670,7 @@ export default function ItineraryEditorPage() {
     if (itineraryId) {
       checkExistingInvoice()
     }
-  }, [itineraryId])
+  }, [itineraryId, checkExistingInvoice])
 
   // ============================================
   // DAY MANAGEMENT

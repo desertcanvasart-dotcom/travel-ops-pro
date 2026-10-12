@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   Users, Plus, Search, Edit, Trash2, X, Check, Building2,
@@ -49,6 +49,8 @@ const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'AUD', 'CAD', 'JPY']
 
 export default function B2BPartnersPage() {
   const t = useTranslations('b2bPartners')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const confirmDialog = useConfirm()
   const [partners, setPartners] = useState<B2BPartner[]>([])
   const [loading, setLoading] = useState(true)
@@ -64,25 +66,25 @@ export default function B2BPartnersPage() {
     credit_limit: null as number | null, payment_terms: '', notes: ''
   })
 
-  useEffect(() => { fetchPartners() }, [showInactive])
+  const showToast = useCallback((type: 'success' | 'error', message: string) => {
+    const id = Date.now().toString()
+    setToasts(prev => [...prev, { id, type, message }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
+  }, [])
 
-  const fetchPartners = async () => {
+  const fetchPartners = useCallback(async () => {
     try {
       const res = await fetch(`/api/b2b/partners?active_only=${!showInactive}`)
       const data = await res.json()
       if (data.success) setPartners(data.data)
     } catch (err) {
-      showToast('error', t('failedToLoad'))
+      showToast('error', tRef.current('failedToLoad'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [showInactive, showToast])
 
-  const showToast = (type: 'success' | 'error', message: string) => {
-    const id = Date.now().toString()
-    setToasts(prev => [...prev, { id, type, message }])
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
-  }
+  useEffect(() => { fetchPartners() }, [fetchPartners])
 
   const handleAddNew = () => {
     setEditingPartner(null)

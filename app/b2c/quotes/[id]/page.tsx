@@ -1,7 +1,7 @@
 'use client'
 
 import { formatMoney } from '@/lib/currency-totals'
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, useCallback, use } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Loader2, Send, CheckCircle2, XCircle, Eye, Save, MessageCircle, Mail } from 'lucide-react'
 import QuoteRevisions from '@/components/QuoteRevisions'
@@ -48,7 +48,7 @@ export default function B2CQuoteDetail({ params }: { params: Promise<{ id: strin
   const [travelers, setTravelers] = useState(2)
   const [msg, setMsg] = useState<string | null>(null)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetch(`/api/b2c/quotes/${id}`)
@@ -61,8 +61,8 @@ export default function B2CQuoteDetail({ params }: { params: Promise<{ id: strin
     } finally {
       setLoading(false)
     }
-  }
-  useEffect(() => { load() }, [id])
+  }, [id])
+  useEffect(() => { load() }, [load])
 
   const patch = async (body: any, reason: string) => {
     setBusy(true)

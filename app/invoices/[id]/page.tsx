@@ -2,7 +2,7 @@
 
 import { receiptNumberFor } from '@/lib/receipt-pdf-generator'
 import { todayLocal } from '@/lib/today'
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, useCallback, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
@@ -175,13 +175,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     notes: ''
   })
 
-  useEffect(() => {
-    fetchInvoice()
-    fetchPayments()
-    fetchReminders()
-  }, [resolvedParams.id])
-
-  const fetchInvoice = async () => {
+  const fetchInvoice = useCallback(async () => {
     try {
       const response = await fetch(`/api/invoices/${resolvedParams.id}`)
       if (response.ok) {
@@ -219,9 +213,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     } finally {
       setLoading(false)
     }
-  }
+  }, [resolvedParams.id])
 
-  const fetchPayments = async () => {
+  const fetchPayments = useCallback(async () => {
     try {
       const response = await fetch(`/api/invoices/${resolvedParams.id}/payments`)
       if (response.ok) {
@@ -231,9 +225,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     } catch (error) {
       console.error('Error fetching payments:', error)
     }
-  }
+  }, [resolvedParams.id])
 
-  const fetchReminders = async () => {
+  const fetchReminders = useCallback(async () => {
     try {
       const response = await fetch(`/api/invoices/${resolvedParams.id}/reminder`)
       if (response.ok) {
@@ -243,7 +237,13 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     } catch (error) {
       console.error('Error fetching reminders:', error)
     }
-  }
+  }, [resolvedParams.id])
+
+  useEffect(() => {
+    fetchInvoice()
+    fetchPayments()
+    fetchReminders()
+  }, [fetchInvoice, fetchPayments, fetchReminders])
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault()

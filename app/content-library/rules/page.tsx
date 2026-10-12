@@ -6,7 +6,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/app/supabase'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -95,6 +95,8 @@ const DEFAULT_FORM: RuleFormData = {
 
 export default function WritingRulesPage() {
   const t = useTranslations('writingRules')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const [rules, setRules] = useState<WritingRule[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -106,23 +108,23 @@ export default function WritingRulesPage() {
   const [filterCategory, setFilterCategory] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetchRules()
-  }, [])
-
-  async function fetchRules() {
+  const fetchRules = useCallback(async () => {
     try {
       const response = await fetch('/api/content-library/writing-rules')
-      if (!response.ok) throw new Error(t('failedToFetch'))
+      if (!response.ok) throw new Error(tRef.current('failedToFetch'))
       const data = await response.json()
       setRules(data)
     } catch (err) {
       console.error('Error fetching rules:', err)
-      setError(t('failedToLoad'))
+      setError(tRef.current('failedToLoad'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    fetchRules()
+  }, [fetchRules])
 
   function toggleExpanded(id: string) {
     const newExpanded = new Set(expandedRules)
