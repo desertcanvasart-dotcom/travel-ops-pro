@@ -166,7 +166,7 @@ export const CATEGORIES: DocCategory[] = [
     menuSection: 'tours',
     items: [
       { href: '/docs/tour-programs', icon: ClipboardList, title: 'Tour Templates', description: 'Create tour templates one at a time or bulk-create them from a Sample CSV, manage variations, and feed the template into pricing.', covers: ['/tours/manage'] },
-      { href: '/docs/tour-inventory', icon: Package, title: 'Tour Inventory', description: 'TODO', covers: ['/tours'] },
+      { href: '/docs/tour-inventory', icon: Package, title: 'Tour Inventory', description: 'Browse active tours with cached "from" prices, refresh them, open a tour\'s itinerary, price it live and print its 日程表.', covers: ['/tours'] },
       { href: '/docs/transport-packages', icon: Bus, title: 'Transport Packages', description: 'Set flat per-vehicle prices for bundled transport such as cruise sightseeing, used to price cruise days, the Pricing Grid and the B2B calculator.', covers: ['/b2b/pricing-rules'] },
     ],
   },
