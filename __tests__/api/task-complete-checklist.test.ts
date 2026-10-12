@@ -15,7 +15,10 @@ vi.mock('@supabase/supabase-js', () => ({
         select: () => q,
         update: (p: Row) => ((patch = p), q),
         eq: () => q,
-        maybeSingle: async () => ({ data: { ...task }, error: null }),
+        maybeSingle: async () => {
+          if (patch) Object.assign(task, patch)
+          return { data: { ...task }, error: null }
+        },
         single: async () => {
           if (patch) Object.assign(task, patch)
           return { data: { ...task }, error: null }
@@ -24,6 +27,11 @@ vi.mock('@supabase/supabase-js', () => ({
       return q
     },
   }),
+}))
+
+vi.mock('@/lib/auth/current-org', () => ({
+  getCurrentOrgId: async () => 'org-a',
+  noOrgResponse: () => new Response(null, { status: 403 }),
 }))
 
 const { PUT } = await import('@/app/api/tasks/[id]/route')

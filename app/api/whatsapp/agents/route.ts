@@ -3,7 +3,8 @@ import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { requireRole, getCurrentUserRole, getCurrentUserId, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { roleAllows } from '@/lib/auth/roles'
-import { teamMemberInOrg, teamMembersInOrg } from '@/lib/whatsapp-org'
+import { teamMemberInOrg } from '@/lib/whatsapp-org'
+import { isOrgMember } from '@/lib/auth/org-members'
 
 // team_members is the same table /api/team-members manages behind the
 // admin/manager gate; /api/whatsapp/* only requires an agent, so an agent
@@ -13,11 +14,9 @@ import { teamMemberInOrg, teamMembersInOrg } from '@/lib/whatsapp-org'
 const MANAGERS = ['admin', 'manager']
 const MANAGER_EDITABLE = ['name', 'email', 'phone', 'avatar_url', 'max_conversations', 'is_available', 'role']
 
-// team_members has no org_id: a member is an organisation's when their login
-// (user_id) is a member of it (teamMemberInOrg, lib/whatsapp-org.ts). This
-// listed, edited and deactivated every company's team. A member with no login
-// belongs to no org once there are two — listed and editable by nobody until
-// a login is linked (or team_members gets an org_id).
+// A team member is one organisation's (team_members.org_id, migration
+// 20261203): listed, created, edited and deactivated only by that org. A
+// member may have no login; one that has must be a login of the same org.
 
 // GET /api/whatsapp/agents - List all team members (for WhatsApp assignment)
 export async function GET(request: NextRequest) {
@@ -32,7 +31,8 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('team_members')
-      .select('id, user_id, name, email, phone, avatar_url, role, is_active, is_available, max_conversations, current_conversations, last_assigned_at, created_at, updated_at')
+      .select('id, name, email, phone, avatar_url, role, is_active, is_available, max_conversations, current_conversations, last_assigned_at, created_at, updated_at')
+      .eq('org_id', orgId)
       .order('name', { ascending: true })
 
     if (activeOnly) {
@@ -46,10 +46,7 @@ export async function GET(request: NextRequest) {
     const { data: rows, error } = await query
 
     if (error) throw error
-
-    // The org's own team only; user_id was read to decide that, not to show.
-    const data = (await teamMembersInOrg(supabase, rows ?? [], orgId))
-      .map(({ user_id: _userId, ...agent }) => agent)
+    const data = rows ?? []
 
     return NextResponse.json({ 
       success: true, 
@@ -68,6 +65,8 @@ export async function POST(request: NextRequest) {
     const denied = await requireRole(MANAGERS)
     if (denied) return denied
     const supabase = createServerClient()
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     const { name, email, phone, user_id, avatar_url, max_conversations, role } = body
@@ -76,12 +75,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Agent name is required' }, { status: 400 })
     }
 
+    // A login, when given, must be one of this org's: another company's login
+    // linked here would see this org's conversations as theirs. No login is
+    // fine — the member is still this org's.
+    if (user_id && (typeof user_id !== 'string' || !(await isOrgMember(supabase, orgId, user_id)))) {
+      return NextResponse.json({ error: 'That login is not a member of this organization' }, { status: 400 })
+    }
+    // One row per login per organisation (team_members_org_user_key).
+    if (user_id) {
+      const { data: linked } = await supabase
+        .from('team_members')
+        .select('id')
+        .eq('org_id', orgId)
+        .eq('user_id', user_id)
+        .limit(1)
+        .maybeSingle()
+      if (linked) {
+        return NextResponse.json({ error: 'That login already has a team member' }, { status: 400 })
+      }
+    }
+
     if (email) {
       const { data: existing } = await supabase
         .from('team_members')
         .select('id')
+        .eq('org_id', orgId)
         .eq('email', email)
-        .single()
+        .limit(1)
+        .maybeSingle()
 
       if (existing) {
         return NextResponse.json({ error: 'Team member with this email already exists' }, { status: 400 })
@@ -91,6 +112,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('team_members')
       .insert({
+        org_id: orgId,
         name,
         email: email || null,
         phone: phone || null,
@@ -150,6 +172,7 @@ export async function PATCH(request: NextRequest) {
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
+      .eq('org_id', orgId)
     if (!isManager) {
       const userId = await getCurrentUserId()
       if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -199,6 +222,7 @@ export async function DELETE(request: NextRequest) {
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
       .single()
 

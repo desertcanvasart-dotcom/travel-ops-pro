@@ -8,16 +8,20 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-/** A service type may belong to ONE active department — routing is a lookup,
- *  and two owners would make task assignment ambiguous. Returns a description
- *  of the conflicting claim, or null. */
+/** A service type may belong to ONE active department of an organisation —
+ *  routing is a lookup, and two owners would make task assignment ambiguous.
+ *  Each company routes its own work (departments.org_id, migration 20261203),
+ *  so another company's departments never conflict. Returns a description of
+ *  the conflicting claim, or null. */
 export async function findServiceTypeConflict(
   serviceTypes: string[],
-  excludeId: string | null
+  excludeId: string | null,
+  orgId: string
 ): Promise<string | null> {
   const { data } = await supabaseAdmin
     .from('departments')
     .select('id, name, service_types')
+    .eq('org_id', orgId)
     .eq('is_active', true)
   for (const dept of data ?? []) {
     if (excludeId && dept.id === excludeId) continue
@@ -70,12 +74,16 @@ export type DeleteDepartmentResult =
 export async function deleteDepartment(
   db: Db,
   id: string,
-  reassignTo: string | null
+  reassignTo: string | null,
+  orgId: string
 ): Promise<DeleteDepartmentResult> {
+  // Everything below is the organisation's own: the department, its target,
+  // and the members and tasks that move (each carries org_id since 20261203).
   const { data: source, error: sourceError } = await db
     .from('departments')
     .select('id, name, service_types, is_active')
     .eq('id', id)
+    .eq('org_id', orgId)
     .maybeSingle()
   if (sourceError) throw sourceError
   if (!source) return { ok: false, status: 404, error: 'Department not found' }
@@ -89,6 +97,7 @@ export async function deleteDepartment(
       .from('departments')
       .select('id, service_types, is_active')
       .eq('id', reassignTo)
+      .eq('org_id', orgId)
       .maybeSingle()
     if (error) throw error
     if (!data) return { ok: false, status: 404, error: 'Target department not found' }
@@ -100,8 +109,8 @@ export async function deleteDepartment(
 
   const moveTo = { department_id: target?.id ?? null }
   const [membersRes, tasksRes] = await Promise.all([
-    db.from('team_members').update(moveTo).eq('department_id', id).select('id'),
-    db.from('tasks').update(moveTo).eq('department_id', id).select('id'),
+    db.from('team_members').update(moveTo).eq('department_id', id).eq('org_id', orgId).select('id'),
+    db.from('tasks').update(moveTo).eq('department_id', id).eq('org_id', orgId).select('id'),
   ])
   if (membersRes.error) throw membersRes.error
   if (tasksRes.error) throw tasksRes.error
@@ -117,13 +126,14 @@ export async function deleteDepartment(
         .from('departments')
         .update({ service_types: merged, updated_at: new Date().toISOString() })
         .eq('id', target.id)
+        .eq('org_id', orgId)
       if (error) throw error
     } else {
       unrouted = [...ownedTypes]
     }
   }
 
-  const { error: deleteError } = await db.from('departments').delete().eq('id', id)
+  const { error: deleteError } = await db.from('departments').delete().eq('id', id).eq('org_id', orgId)
   if (deleteError) throw deleteError
 
   return {

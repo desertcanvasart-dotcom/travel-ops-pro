@@ -86,6 +86,8 @@ export async function sendStaffReply(
     .from('team_members')
     .select('name')
     .eq('user_id', args.userId)
+    // The name they go by in this company (a person in both has a row in each).
+    .eq('org_id', args.orgId)
     .maybeSingle()
 
   const { data: message, error } = await db

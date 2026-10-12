@@ -13,7 +13,6 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createNotification } from '@/lib/notifications'
 import { clientMessage } from '@/lib/api-errors'
-import { teamMemberInOrg } from '@/lib/whatsapp-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -106,15 +105,16 @@ export async function PUT(
     // false) — a trip owned by a deactivated account is an invisible orphan.
     let assignee: { id: string; name: string; email: string | null } | null = null
     if (assignedTo) {
+      // And the org's own: another company's member would be told — and
+      // emailed — this trip and its client.
       const { data: member } = await supabaseAdmin
         .from('team_members')
         .select('id, name, email, is_active')
         .eq('id', assignedTo)
+        .eq('org_id', orgId)
         .maybeSingle()
 
-      // And the org's own: team_members has no org_id, and another company's
-      // member would be told — and emailed — this trip and its client.
-      if (!member || !(await teamMemberInOrg(supabaseAdmin, assignedTo, orgId))) {
+      if (!member) {
         return NextResponse.json({ success: false, error: 'Team member not found' }, { status: 404 })
       }
       if (member.is_active === false) {
@@ -165,6 +165,7 @@ export async function PUT(
         : ''
 
       const result = await createNotification({
+        org_id: orgId,
         team_member_id: assignee.id,
         type: 'trip_assigned',
         title: `You now own ${trip.itinerary_code || label}`,

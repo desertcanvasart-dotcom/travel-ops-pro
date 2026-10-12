@@ -1,28 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createNotification } from '@/lib/notifications'
-import { getCurrentOrgId, getCurrentUserId, requireRole } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 import { linkedTeamMemberIds, notificationScopeFilter } from '@/lib/notifications-scope'
 import { teamMemberInOrg } from '@/lib/whatsapp-org'
+import { rowInOrg } from '@/lib/api/org-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET - the signed-in user's own notifications (+ their unread count).
-// Rows are addressed to a login (user_id) or, for legacy rows, to a
-// team_members entry linked to that login. Nothing else is visible.
+// GET - the signed-in user's own notifications (+ their unread count), in
+// the organisation they are working in. Rows are addressed to a login
+// (user_id) or, for legacy rows, to a team_members entry linked to that
+// login. Nothing else is visible — a person in both companies sees only the
+// active company's bell.
 export async function GET(request: NextRequest) {
   try {
     const userId = await getCurrentUserId()
     if (!userId) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
     }
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { searchParams } = new URL(request.url)
     const unreadOnly = searchParams.get('unreadOnly') === 'true'
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '20') || 20, 1), 200)
-    const scope = notificationScopeFilter(userId, await linkedTeamMemberIds(supabase, userId))
+    const scope = notificationScopeFilter(userId, await linkedTeamMemberIds(supabase, userId, orgId))
 
     let query = supabase
       .from('notifications')
@@ -30,6 +35,7 @@ export async function GET(request: NextRequest) {
         *,
         team_member:team_members(id, name, email)
       `)
+      .eq('org_id', orgId)
       .or(scope)
       .order('created_at', { ascending: false })
       .limit(limit)
@@ -42,6 +48,7 @@ export async function GET(request: NextRequest) {
       supabase
         .from('notifications')
         .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
         .or(scope)
         .eq('is_read', false),
     ])
@@ -84,6 +91,8 @@ export async function POST(request: NextRequest) {
     const denied = await requireRole(['admin', 'manager', 'agent'])
     if (denied) return denied
 
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     const link = inAppLink(body.link)
@@ -95,30 +104,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'title or message missing or too long' }, { status: 400 })
     }
     if (body.user_id) {
-      const orgId = await getCurrentOrgId()
-      const { data: member } = orgId
-        ? await supabase
-            .from('organization_members')
-            .select('user_id')
-            .eq('org_id', orgId)
-            .eq('user_id', body.user_id)
-            .maybeSingle()
-        : { data: null }
+      const { data: member } = await supabase
+        .from('organization_members')
+        .select('user_id')
+        .eq('org_id', orgId)
+        .eq('user_id', body.user_id)
+        .maybeSingle()
       if (!member) {
         return NextResponse.json({ success: false, error: 'Recipient not found' }, { status: 404 })
       }
     }
-    // The same for a team member: team_members has no org_id, and an agent
-    // could notify — and email — another company's staff (teamMemberInOrg).
+    // The same for a team member: an agent could notify — and email —
+    // another company's staff (teamMemberInOrg).
     if (body.team_member_id != null) {
-      const orgId = await getCurrentOrgId()
-      if (!orgId || typeof body.team_member_id !== 'string' ||
+      if (typeof body.team_member_id !== 'string' ||
           !(await teamMemberInOrg(supabase, body.team_member_id, orgId))) {
         return NextResponse.json({ success: false, error: 'Recipient not found' }, { status: 404 })
       }
     }
 
+    // A task or trip it names must be this organisation's too.
+    if ((body.related_task_id != null && (typeof body.related_task_id !== 'string' ||
+          !(await rowInOrg(supabase, 'tasks', body.related_task_id, orgId)))) ||
+        (body.related_itinerary_id != null && (typeof body.related_itinerary_id !== 'string' ||
+          !(await rowInOrg(supabase, 'itineraries', body.related_itinerary_id, orgId))))) {
+      return NextResponse.json({ success: false, error: 'Related record not found' }, { status: 404 })
+    }
+
     const result = await createNotification({
+      org_id: orgId,
       user_id: body.user_id ?? null,
       team_member_id: body.team_member_id ?? null,
       type: body.type,

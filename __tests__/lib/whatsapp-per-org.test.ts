@@ -155,21 +155,19 @@ describe('senderForOrg', () => {
 })
 
 describe('teamMemberInOrg', () => {
-  it("a linked member belongs to their login's org only", async () => {
+  it("a member belongs to the org on its own row (team_members.org_id) only", async () => {
     twoOrgs()
-    db.tables.team_members = [{ id: 'tm-1', user_id: 'u-1' }]
-    db.tables.organization_members = [{ org_id: 'org-a', user_id: 'u-1' }]
+    db.tables.team_members = [{ id: 'tm-1', user_id: 'u-1', org_id: 'org-a' }]
     expect(await teamMemberInOrg(supabase, 'tm-1', 'org-a')).toBe(true)
     expect(await teamMemberInOrg(supabase, 'tm-1', 'org-b')).toBe(false)
     expect(await teamMemberInOrg(supabase, 'tm-missing', 'org-a')).toBe(false)
   })
 
-  it('an unlinked member is accepted only while there is a single organization', async () => {
-    db.tables.team_members = [{ id: 'tm-2', user_id: null }]
-    db.tables.organizations = [{ id: 'org-a' }]
-    expect(await teamMemberInOrg(supabase, 'tm-2', 'org-a')).toBe(true)
+  it('a member without a login is the org that created them, with two orgs too', async () => {
     twoOrgs()
-    expect(await teamMemberInOrg(supabase, 'tm-2', 'org-a')).toBe(false)
+    db.tables.team_members = [{ id: 'tm-2', user_id: null, org_id: 'org-a' }]
+    expect(await teamMemberInOrg(supabase, 'tm-2', 'org-a')).toBe(true)
+    expect(await teamMemberInOrg(supabase, 'tm-2', 'org-b')).toBe(false)
   })
 })
 
@@ -277,12 +275,13 @@ describe('inbox routes are scoped to the caller org', () => {
     expect(c.match(/\.eq\('org_id', orgId\)/g)!.length).toBeGreaterThanOrEqual(6)
     expect(c).toContain('org_id: orgId,')
     expect(c).toMatch(/\.eq\('org_id', orgId\)\s*\n\s*\.eq\('phone_number', cleanPhone\)/)
-    expect(c).toContain('await teamMemberInOrg(supabase, candidate.id, orgId)')
+    // The auto-assign queue is the org's own team (team_members.org_id).
+    expect(c).toMatch(/from\('team_members'\)\s*\n\s*\.select\('id'\)\s*\n\s*\.eq\('org_id', orgId\)/)
   })
 
   it('assign: conversation and assignee are the org own', () => {
     const c = scoped('app/api/whatsapp/conversations/assign/route.ts')
-    expect(c.match(/\.eq\('org_id', orgId\)/g)!.length).toBe(4)
+    expect(c.match(/\.eq\('org_id', orgId\)/g)!.length).toBeGreaterThanOrEqual(4)
     expect(c).toContain('await teamMemberInOrg(supabase, newAssigneeId, orgId)')
   })
 

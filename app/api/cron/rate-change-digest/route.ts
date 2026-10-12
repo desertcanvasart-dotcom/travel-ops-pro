@@ -90,6 +90,8 @@ async function getHandler(request: NextRequest) {
             // The person who made the change does not need telling.
             .filter(user_id => user_id !== g.actorId)
             .map(user_id => ({
+              // This organisation's bell and mailbox, not the recipient's other company's.
+              org_id: org.id,
               user_id,
               type: 'rate_changed',
               title: n.title,

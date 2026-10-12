@@ -11,6 +11,19 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+const TASK_FIELDS = `
+  id, title, due_date, org_id,
+  assigned_member:team_members!tasks_assigned_to_fkey(id, name, email, user_id, is_active, org_id)
+`
+
+interface ReminderTask {
+  id: string
+  title: string
+  due_date: string
+  org_id: string
+  assigned_member: { id: string; name: string; email: string | null; user_id: string | null; is_active: boolean | null; org_id: string } | null
+}
+
 // This endpoint should be called by a cron job (Railway cron, Vercel cron, or external service)
 // Recommended: Run daily at 8:00 AM local time
 // 
@@ -39,107 +52,106 @@ async function getHandler(request: NextRequest) {
     // any operator whose day had not yet turned over in UTC.
     const todayStr = businessToday()
     const tomorrowStr = shiftDateISO(todayStr, 1)
+    const threeDaysAgo = new Date()
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
 
-    // =========================================
-    // 1. Find tasks due tomorrow (24h warning)
-    // =========================================
-    const { data: dueSoonTasks, error: dueSoonError } = await supabase
-      .from('tasks')
-      .select(`
-        *,
-        assigned_member:team_members(id, name, email, user_id, is_active)
-      `)
-      .eq('due_date', tomorrowStr)
-      .neq('status', 'done')
-      .not('assigned_to', 'is', null)
-      // An archived task is off the board; it must not keep reminding anyone.
-      .or('archived.eq.false,archived.is.null')
+    // One organisation at a time (tasks.org_id, migration 20261203): each
+    // reminder is that organisation's notification, about its task, to its
+    // own team member, emailed from its own mailbox (lib/notifications) —
+    // never another company's.
+    const { data: orgs, error: orgsError } = await supabase.from('organizations').select('id')
+    if (orgsError) throw orgsError
 
-    if (dueSoonError) {
-      results.errors.push(`Due soon query error: ${dueSoonError.message}`)
-    } else if (dueSoonTasks && dueSoonTasks.length > 0) {
-      for (const task of dueSoonTasks) {
-        // A removed (deactivated) team member is not reminded.
-        if (!task.assigned_member?.id || task.assigned_member.is_active === false) continue
-
-        // Check if we already sent this notification today
+    for (const { id: orgId } of (orgs ?? []) as Array<{ id: string }>) {
+      // A reminder is sent at most once a day (due soon) or every three days
+      // (overdue) per task.
+      const alreadySent = async (taskId: string, type: string, since: string) => {
         const { data: existing } = await supabase
           .from('notifications')
           .select('id')
-          .eq('related_task_id', task.id)
-          .eq('type', 'task_due_soon')
-          .gte('created_at', todayStr)
+          .eq('org_id', orgId)
+          .eq('related_task_id', taskId)
+          .eq('type', type)
+          .gte('created_at', since)
           .limit(1)
-
-        if (existing && existing.length > 0) continue // Already notified
-
-        // Create notification
-        await createNotification({
-          // user_id makes the recipient's email opt-out apply (lib gates on it);
-          // team_member_id keeps the in-app row on the roster address too. A
-          // member with no login (user_id null) still gets the courtesy email.
-          user_id: task.assigned_member.user_id ?? null,
-          team_member_id: task.assigned_member.id,
-          type: 'task_due_soon',
-          title: `Task due tomorrow: ${task.title}`,
-          message: `Your task "${task.title}" is due tomorrow (${formatDate(task.due_date)}). Please complete it soon.`,
-          link: `/tasks`,
-          related_task_id: task.id,
-        })
-        
-        results.dueSoon++
+        return !!existing?.length
       }
-    }
+      // A removed (deactivated) team member is not reminded, nor one that is
+      // not this organisation's.
+      const reachable = (task: ReminderTask) =>
+        !!task.assigned_member?.id && task.assigned_member.is_active !== false && task.assigned_member.org_id === orgId
 
-    // =========================================
-    // 2. Find overdue tasks
-    // =========================================
-    const { data: overdueTasks, error: overdueError } = await supabase
-      .from('tasks')
-      .select(`
-        *,
-        assigned_member:team_members(id, name, email, user_id, is_active)
-      `)
-      .lt('due_date', todayStr)
-      .neq('status', 'done')
-      .not('assigned_to', 'is', null)
-      .or('archived.eq.false,archived.is.null')
+      // =========================================
+      // 1. Tasks due tomorrow (24h warning)
+      // =========================================
+      const { data: dueSoonTasks, error: dueSoonError } = await supabase
+        .from('tasks')
+        .select(TASK_FIELDS)
+        .eq('org_id', orgId)
+        .eq('due_date', tomorrowStr)
+        .neq('status', 'done')
+        .not('assigned_to', 'is', null)
+        // An archived task is off the board; it must not keep reminding anyone.
+        .or('archived.eq.false,archived.is.null')
 
-    if (overdueError) {
-      results.errors.push(`Overdue query error: ${overdueError.message}`)
-    } else if (overdueTasks && overdueTasks.length > 0) {
-      for (const task of overdueTasks) {
-        if (!task.assigned_member?.id || task.assigned_member.is_active === false) continue
+      if (dueSoonError) {
+        results.errors.push(`Due soon query error (${orgId}): ${dueSoonError.message}`)
+      } else {
+        for (const task of (dueSoonTasks ?? []) as unknown as ReminderTask[]) {
+          if (!reachable(task)) continue
+          if (await alreadySent(task.id, 'task_due_soon', todayStr)) continue
 
-        // Check if we already sent overdue notification in last 3 days
-        const threeDaysAgo = new Date()
-        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
-        
-        const { data: existing } = await supabase
-          .from('notifications')
-          .select('id')
-          .eq('related_task_id', task.id)
-          .eq('type', 'task_overdue')
-          .gte('created_at', threeDaysAgo.toISOString())
-          .limit(1)
+          await createNotification({
+            org_id: orgId,
+            // user_id makes the recipient's email opt-out apply (lib gates on it);
+            // team_member_id keeps the in-app row on the roster address too. A
+            // member with no login (user_id null) still gets the courtesy email.
+            user_id: task.assigned_member!.user_id ?? null,
+            team_member_id: task.assigned_member!.id,
+            type: 'task_due_soon',
+            title: `Task due tomorrow: ${task.title}`,
+            message: `Your task "${task.title}" is due tomorrow (${formatDate(task.due_date)}). Please complete it soon.`,
+            link: `/tasks`,
+            related_task_id: task.id,
+          })
+          results.dueSoon++
+        }
+      }
 
-        if (existing && existing.length > 0) continue // Already notified recently
+      // =========================================
+      // 2. Overdue tasks
+      // =========================================
+      const { data: overdueTasks, error: overdueError } = await supabase
+        .from('tasks')
+        .select(TASK_FIELDS)
+        .eq('org_id', orgId)
+        .lt('due_date', todayStr)
+        .neq('status', 'done')
+        .not('assigned_to', 'is', null)
+        .or('archived.eq.false,archived.is.null')
 
-        // Whole calendar days between two YYYY-MM-DD dates.
-        const daysOverdue = Math.round((Date.parse(`${todayStr}T00:00:00Z`) - Date.parse(`${String(task.due_date).slice(0, 10)}T00:00:00Z`)) / 86_400_000)
+      if (overdueError) {
+        results.errors.push(`Overdue query error (${orgId}): ${overdueError.message}`)
+      } else {
+        for (const task of (overdueTasks ?? []) as unknown as ReminderTask[]) {
+          if (!reachable(task)) continue
+          if (await alreadySent(task.id, 'task_overdue', threeDaysAgo.toISOString())) continue
 
-        // Create notification
-        await createNotification({
-          user_id: task.assigned_member.user_id ?? null,
-          team_member_id: task.assigned_member.id,
-          type: 'task_overdue',
-          title: `Overdue task: ${task.title}`,
-          message: `Your task "${task.title}" is ${daysOverdue} day${daysOverdue > 1 ? 's' : ''} overdue (was due ${formatDate(task.due_date)}). Please complete it as soon as possible.`,
-          link: `/tasks`,
-          related_task_id: task.id,
-        })
-        
-        results.overdue++
+          // Whole calendar days between two YYYY-MM-DD dates.
+          const daysOverdue = Math.round((Date.parse(`${todayStr}T00:00:00Z`) - Date.parse(`${String(task.due_date).slice(0, 10)}T00:00:00Z`)) / 86_400_000)
+
+          await createNotification({
+            org_id: orgId,
+            user_id: task.assigned_member!.user_id ?? null,
+            team_member_id: task.assigned_member!.id,
+            type: 'task_overdue',
+            title: `Overdue task: ${task.title}`,
+            message: `Your task "${task.title}" is ${daysOverdue} day${daysOverdue > 1 ? 's' : ''} overdue (was due ${formatDate(task.due_date)}). Please complete it as soon as possible.`,
+            link: `/tasks`,
+            related_task_id: task.id,
+          })
+          results.overdue++
+        }
       }
     }
 

@@ -69,15 +69,11 @@ export async function GET() {
         .neq('status', 'cancelled')
         .lte('start_date', todayDate)
         .gte('end_date', todayDate),
-      // NOT org-scoped, and cannot be: tasks have NO org_id column at all
-      // (adding .eq('org_id', ...) returns a 400). They predate organisations;
-      // scoping them is the deferred G1 work. Called out here so the omission
-      // reads as known rather than missed. (whatsapp_conversations has org_id
-      // since 20261125; email_conversations is scoped to the org's mailboxes,
-      // client_followups through their client — both below.)
-      // Open tasks with a due date (split due-today vs overdue in JS)
+      // Open tasks with a due date (split due-today vs overdue in JS) — this
+      // organisation's (tasks.org_id since 20261203).
       supabase.from('tasks')
         .select('id, due_date, status')
+        .eq('org_id', orgId)
         .not('status', 'in', `(${OPEN_TASK.join(',')})`)
         .not('due_date', 'is', null),
       // Unread counts straight from the conversation tables (hidden rows excluded)

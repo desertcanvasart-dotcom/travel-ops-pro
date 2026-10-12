@@ -72,10 +72,11 @@ function tables(extra: Record<string, Record<string, unknown>[]> = {}) {
       { id: 'ma', conversation_id: 'ca', thread_id: 'ta', sent_at: '1', body_text: 'A mail' },
       { id: 'mb', conversation_id: 'cb', thread_id: 'tb', sent_at: '1', body_text: 'B private mail' },
     ],
+    // Each team member is one company's (team_members.org_id, 20261203).
     team_members: [
-      { id: 'tm-a', user_id: 'ua2', name: 'A agent', is_active: true, is_available: true },
-      { id: 'tm-b', user_id: 'ub1', name: 'B agent', is_active: true, is_available: true },
-      { id: 'tm-none', user_id: null, name: 'No login', is_active: true, is_available: true },
+      { id: 'tm-a', org_id: 'org-a', user_id: 'ua2', name: 'A agent', is_active: true, is_available: true },
+      { id: 'tm-b', org_id: 'org-b', user_id: 'ub1', name: 'B agent', is_active: true, is_available: true },
+      { id: 'tm-none', org_id: 'org-b', user_id: null, name: 'B, no login', is_active: true, is_available: true },
     ],
     whatsapp_conversations: [
       { id: 'wa', org_id: 'org-a', assigned_team_member_id: 'tm-a' },
@@ -199,7 +200,8 @@ describe('WhatsApp team members (fix 6)', () => {
   it("GET lists only the org's team — never another company's", async () => {
     const r = await (await agents.GET(req('/api/whatsapp/agents'))).json()
     expect(r.agents.map((a: { id: string }) => a.id)).toEqual(['tm-a'])
-    expect(r.agents[0]).not.toHaveProperty('user_id')
+    // The login is not shown (the mock returns whole rows, so read the select).
+    expect(src('app/api/whatsapp/agents/route.ts')).toMatch(/\.select\('id, name, email, phone, avatar_url, role, is_active/)
   })
 
   it("PATCH and DELETE of another company's member are 404 and change nothing", async () => {
@@ -209,9 +211,13 @@ describe('WhatsApp team members (fix 6)', () => {
     expect(d.status).toBe(404)
   })
 
-  it('a member without a login belongs to no org once there are two', async () => {
+  it("a member without a login is the company's that created it — another company's is 404", async () => {
     const p = await agents.PATCH(req('/api/whatsapp/agents', { method: 'PATCH', body: { id: 'tm-none', is_available: false } }))
     expect(p.status).toBe(404)
+    ctx.orgId = 'org-b'
+    ctx.userId = 'ub1'
+    const own = await agents.PATCH(req('/api/whatsapp/agents', { method: 'PATCH', body: { id: 'tm-none', is_available: false } }))
+    expect(own.status).toBe(200)
   })
 
   it("deactivating the org's member unassigns only the org's conversations", async () => {

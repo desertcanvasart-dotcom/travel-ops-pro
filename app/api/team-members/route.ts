@@ -1,14 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg } from '@/lib/api/org-scope'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// The organisation's own team only (team_members.org_id, migration 20261203):
+// this listed, created and edited every company's staff.
+
 // GET - Fetch all team members
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const activeOnly = searchParams.get('active') === 'true'
     const role = searchParams.get('role')
@@ -16,6 +23,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('team_members')
       .select('*, department:departments(id, name)')
+      .eq('org_id', orgId)
       .order('name', { ascending: true })
 
     const departmentId = searchParams.get('departmentId')
@@ -48,17 +56,23 @@ export async function GET(request: NextRequest) {
 // POST - Create new team member
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
-    
+
     const { name, email, phone, role, notes, department_id } = body
 
     if (!name) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 })
     }
+    if (department_id && (typeof department_id !== 'string' || !(await rowInOrg(supabaseAdmin, 'departments', department_id, orgId)))) {
+      return NextResponse.json({ error: 'Department not found' }, { status: 404 })
+    }
 
     const { data, error } = await supabaseAdmin
       .from('team_members')
       .insert({
+        org_id: orgId,
         name,
         email: email || null,
         phone: phone || null,

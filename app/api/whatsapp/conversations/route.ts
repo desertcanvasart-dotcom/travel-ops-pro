@@ -4,7 +4,6 @@ import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
-import { teamMemberInOrg } from '@/lib/whatsapp-org'
 
 // Every query here runs on the service role and filters on org_id itself:
 // each organization has its own WhatsApp number and only its own threads
@@ -165,26 +164,21 @@ export async function POST(request: NextRequest) {
     // Create new conversation
     let assignedTeamMemberId = null
 
-    // Auto-assign if requested — to the next available member of THIS org.
-    // team_members carries no org_id, so the queue is filtered through each
-    // member's login (lib/whatsapp-org teamMemberInOrg); the first one in
-    // line used to be anyone in the deployment.
+    // Auto-assign if requested — to the next available member of THIS org
+    // (team_members.org_id); the first one in line used to be anyone in the
+    // deployment.
     if (auto_assign !== false) {
-      const { data: candidates } = await supabase
+      const { data: candidate } = await supabase
         .from('team_members')
         .select('id')
+        .eq('org_id', orgId)
         .eq('is_active', true)
         .eq('is_available', true)
         .order('last_assigned_at', { ascending: true, nullsFirst: true })
         .order('created_at', { ascending: true })
-        .limit(50)
-
-      for (const candidate of candidates ?? []) {
-        if (await teamMemberInOrg(supabase, candidate.id, orgId)) {
-          assignedTeamMemberId = candidate.id
-          break
-        }
-      }
+        .limit(1)
+        .maybeSingle()
+      assignedTeamMemberId = candidate?.id ?? null
     }
 
     const { data: newConversation, error } = await supabase
@@ -213,6 +207,7 @@ export async function POST(request: NextRequest) {
         .from('team_members')
         .select('current_conversations')
         .eq('id', assignedTeamMemberId)
+        .eq('org_id', orgId)
         .single()
 
       await supabase
@@ -222,6 +217,7 @@ export async function POST(request: NextRequest) {
           last_assigned_at: new Date().toISOString()
         })
         .eq('id', assignedTeamMemberId)
+        .eq('org_id', orgId)
 
       // Log activity
       await supabase
