@@ -8194,6 +8194,41 @@ export interface Database {
           },
         ]
       }
+      org_backfill_review: {
+        Row: {
+          assigned_org: string | null
+          created_at: string
+          id: number
+          reason: string
+          row_id: string
+          table_name: string
+        }
+        Insert: {
+          assigned_org?: string | null
+          created_at?: string
+          id?: number
+          reason: string
+          row_id: string
+          table_name: string
+        }
+        Update: {
+          assigned_org?: string | null
+          created_at?: string
+          id?: number
+          reason?: string
+          row_id?: string
+          table_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_backfill_review_assigned_org_fkey"
+            columns: ["assigned_org"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_vocabularies: {
         Row: {
           id: string
@@ -8306,6 +8341,7 @@ export interface Database {
           rate_currency: string
           default_margin_percent: number | null
           rate_change_alerts: string
+          slug: string | null
           support_hours: Json | null
           office_email_addresses: string[]
           whatsapp_number: string | null
@@ -8336,6 +8372,7 @@ export interface Database {
           rate_currency?: string
           default_margin_percent?: number | null
           rate_change_alerts?: string
+          slug?: string | null
           support_hours?: Json | null
           office_email_addresses: string[]
           whatsapp_number?: string | null
@@ -8366,6 +8403,7 @@ export interface Database {
           rate_currency?: string
           default_margin_percent?: number | null
           rate_change_alerts?: string
+          slug?: string | null
           support_hours?: Json | null
           office_email_addresses?: string[]
           whatsapp_number?: string | null
