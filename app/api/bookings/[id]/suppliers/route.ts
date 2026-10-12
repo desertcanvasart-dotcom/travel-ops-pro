@@ -7,6 +7,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { syncSupplierExpense } from '@/lib/bookings/supplier-expense'
+import { recordsInOrg } from '@/lib/org-refs'
 import { supplierBacking } from '@/lib/bookings/supplier-backing'
 
 const SUPPLIER_STATUSES = ['pending', 'requested', 'confirmed', 'waitlist', 'rejected', 'cancelled']
@@ -163,6 +164,11 @@ export async function POST(
         success: false,
         error: 'supplier_type and supplier_name are required'
       }, { status: 400 })
+    }
+
+    // A linked supplier is this company's (suppliers.org_id, 20261205).
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { supplier_id: body.supplier_id }))) {
+      return NextResponse.json({ success: false, error: 'Supplier not found' }, { status: 404 })
     }
 
     const { data: supplier, error } = await supabaseAdmin

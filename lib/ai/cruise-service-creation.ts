@@ -32,7 +32,10 @@ import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, getExchangeR
 export async function fetchGuideRate(
   supabase: any,
   tier: string,
-  language: string
+  language: string,
+  /** The company pricing: the guides fallback reads ITS guides only
+   *  (suppliers.org_id, 20261205). No company = no guides fallback. */
+  orgId: string | null = null
 ): Promise<{
   guidePerDay: number
   guideName: string | null
@@ -67,27 +70,30 @@ export async function fetchGuideRate(
   // PRIORITY 2: Fall back to guides table (supplier contacts)
   // Tier + language → any tier + language → tier only → any active guide
   let guide: any = null
+  if (!orgId) {
+    return { guidePerDay: 0, guideName: null, guideId: null, guideSupplierId: null }
+  }
 
   const { data: tierLangGuides } = await supabase
-    .from('guides').select('*').eq('is_active', true).eq('tier', tier).contains('languages', [language]).limit(1)
+    .from('guides').select('*').eq('org_id', orgId).eq('is_active', true).eq('tier', tier).contains('languages', [language]).limit(1)
   guide = tierLangGuides?.[0]
 
   if (!guide) {
     const { data: langGuides } = await supabase
-      .from('guides').select('*').eq('is_active', true).contains('languages', [language]).limit(1)
+      .from('guides').select('*').eq('org_id', orgId).eq('is_active', true).contains('languages', [language]).limit(1)
     guide = langGuides?.[0]
   }
 
   if (!guide) {
     const { data: tierGuides } = await supabase
-      .from('guides').select('*').eq('is_active', true).eq('tier', tier).limit(1)
+      .from('guides').select('*').eq('org_id', orgId).eq('is_active', true).eq('tier', tier).limit(1)
     guide = tierGuides?.[0]
     if (guide) console.warn(`⚠️ No ${language}-speaking guide found — using ${guide.name || 'generic'} guide rate`)
   }
 
   if (!guide) {
     const { data: anyGuides } = await supabase
-      .from('guides').select('*').eq('is_active', true).limit(1)
+      .from('guides').select('*').eq('org_id', orgId).eq('is_active', true).limit(1)
     guide = anyGuides?.[0]
     if (guide) console.warn(`⚠️ No guide for ${language}/${tier} — using ${guide.name || 'generic'} as last resort`)
   }
@@ -225,7 +231,7 @@ export async function createCruiseItineraryServices(
   }
 
   // 2. Guide rate (guide_rates table → guides table fallback)
-  const guideResult = await fetchGuideRate(supabase, tier, guideLanguage)
+  const guideResult = await fetchGuideRate(supabase, tier, guideLanguage, orgId)
   if (!guideResult.guidePerDay) {
     warnings.push(`No guide rate found for ${guideLanguage} (${tier} tier) — guide will be €0`)
   }

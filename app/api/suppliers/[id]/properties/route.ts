@@ -7,10 +7,14 @@
 // A property is the supplier-HAS-properties model (2026-08-31): the ship /
 // hotel / train as a sub-entity of the company, with its own contact. Rate
 // forms pick a property instead of typing its name into the rate row.
+//
+// Per company: a property carries its supplier's org_id (20261205), and only
+// the caller's company's supplier's properties are listed or added.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { PROPERTY_TYPES, type PropertyType } from '@/lib/supplier-properties'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createServerClient()
 
@@ -25,12 +29,15 @@ function pickWritable(body: Record<string, unknown>): Record<string, unknown> {
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
     const sp = request.nextUrl.searchParams
     let query = supabaseAdmin
       .from('supplier_properties')
       .select('*')
       .eq('supplier_id', id)
+      .eq('org_id', orgId)
       .order('property_type')
       .order('name')
     const type = sp.get('type')
@@ -48,6 +55,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
     const body = await request.json()
     const record = pickWritable(body)
@@ -60,15 +69,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: false, error: `property_type must be one of: ${PROPERTY_TYPES.join(', ')}` }, { status: 400 })
     }
 
-    // The supplier must exist — a property cannot be orphaned at birth.
-    const { data: supplier } = await supabaseAdmin.from('suppliers').select('id').eq('id', id).maybeSingle()
+    // The supplier must exist in the caller's company — a property cannot be
+    // orphaned at birth, nor added to another company's supplier.
+    const { data: supplier } = await supabaseAdmin.from('suppliers').select('id').eq('id', id).eq('org_id', orgId).maybeSingle()
     if (!supplier) {
       return NextResponse.json({ success: false, error: 'Supplier not found' }, { status: 404 })
     }
 
     const { data, error } = await supabaseAdmin
       .from('supplier_properties')
-      .insert({ ...record, name, supplier_id: id })
+      .insert({ ...record, name, supplier_id: id, org_id: orgId })
       .select('*')
       .single()
     if (error) {

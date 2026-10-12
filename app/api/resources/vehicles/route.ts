@@ -2,13 +2,15 @@
 // API Route: /api/resources/vehicles
 // ============================================
 // Fetches transport suppliers from suppliers table
-// (type = 'transport', 'local_operator', or 'driver')
+// (type = 'transport', 'local_operator', or 'driver') — the caller's
+// company's (suppliers.org_id, 20261205)
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { supplierTypeKeysMatching } from '@/lib/supplier-types'
 import { supplierTypesForCurrentOrg } from '@/lib/vocabulary-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,6 +19,8 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const isActive = searchParams.get('is_active')
     const city = searchParams.get('city')
@@ -24,6 +28,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('suppliers')
       .select('*')
+      .eq('org_id', orgId)
       // By role (`types`), not the primary `type` alone: a guide who also
       // drives, or an agency's own transport-like type, is a transport
       // supplier too — the same rule as /api/suppliers?type=.

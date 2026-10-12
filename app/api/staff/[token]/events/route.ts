@@ -32,7 +32,8 @@ function admin() {
  */
 async function resolveActorId(
   supabase: ReturnType<typeof admin>,
-  resource: { resource_type?: string | null; resource_id?: string | null } | null
+  resource: { resource_type?: string | null; resource_id?: string | null } | null,
+  orgId: string
 ): Promise<string | null> {
   try {
     const type = resource?.resource_type
@@ -49,7 +50,8 @@ async function resolveActorId(
       : type === 'hotel_staff' ? 'hotel_staff'
       : null
     if (!table) return null
-    const { data } = await supabase.from(table).select('*').eq('id', rid).maybeSingle()
+    // The link's company's supplier only (suppliers.org_id, 20261205).
+    const { data } = await supabase.from(table).select('*').eq('id', rid).eq('org_id', orgId).maybeSingle()
     const tm = data?.team_member_id
     return typeof tm === 'string' ? tm : null
   } catch {
@@ -117,7 +119,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         org_id: link.org_id,
         itinerary_id: link.itinerary_id,
         itinerary_resource_id: link.itinerary_resource_id,
-        actor_team_member_id: await resolveActorId(supabase, resource),
+        actor_team_member_id: await resolveActorId(supabase, resource, link.org_id),
         event_kind,
         occurred_at: new Date().toISOString(),
         lat: hasLat ? Number(lat) : null,

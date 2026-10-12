@@ -34,10 +34,13 @@ const supabaseAdmin = createServerClient()
 // HELPER FUNCTIONS (same as calculate-price/route.ts)
 // ============================================
 
-async function selectGuideFromB2CTable(language: string = 'English', tier: string = 'standard'): Promise<{ rate: number; name: string; id: string } | null> {
+// The quoting company's guides only (suppliers.org_id, 20261205).
+async function selectGuideFromB2CTable(orgId: string | null, language: string = 'English', tier: string = 'standard'): Promise<{ rate: number; name: string; id: string } | null> {
+  if (!orgId) return null
   const { data: guides, error } = await supabaseAdmin
     .from('guides')
     .select('id, name, daily_rate, languages, tier, is_preferred')
+    .eq('org_id', orgId)
     .eq('is_active', true)
     .contains('languages', [language])
     .order('is_preferred', { ascending: false })
@@ -46,6 +49,7 @@ async function selectGuideFromB2CTable(language: string = 'English', tier: strin
     const { data: anyGuide } = await supabaseAdmin
       .from('guides')
       .select('id, name, daily_rate, tier')
+      .eq('org_id', orgId)
       .eq('is_active', true)
       .order('is_preferred', { ascending: false })
       .limit(1)
@@ -411,7 +415,7 @@ export async function POST(request: NextRequest) {
 
         // Guide
         if (serviceType === 'guide') {
-          const guide = await selectGuideFromB2CTable(language, tier)
+          const guide = await selectGuideFromB2CTable(orgId, language, tier)
           if (guide) {
             unitCost = guide.rate
             lineTotal = guide.rate
@@ -474,7 +478,7 @@ export async function POST(request: NextRequest) {
     // 5. Calculate tour leader cost
     let tourLeaderCost = 0
     if (tour_leader_included) {
-      const guide = await selectGuideFromB2CTable(language, tier)
+      const guide = await selectGuideFromB2CTable(orgId, language, tier)
       const leaderCity = (days || [])[0]?.city || (days || [])[0]?.overnight_location || ''
       const vehicle = await findDayTourVehicle(leaderCity, numPax + 1, is_eur_passport)
       const guideRate = guide?.rate || 0

@@ -249,9 +249,13 @@ export async function fetchAllPricingRates(
      *  see lib/rates/rate-currency.ts. Optional so existing callers keep the
      *  pre-migration behaviour verbatim. */
     rateCurrency?: string
+    /** The company pricing: the guides fallback reads ITS guides only
+     *  (suppliers.org_id, 20261205). No company = no guides fallback. */
+    orgId?: string | null
   }
 ): Promise<PricingRates> {
   const { tier, effectiveCity, totalPax, isEuroPassport, language, hotelName, includeAccommodation } = params
+  const orgId = params.orgId ?? null
   const rateNormalizer = createRateNormalizer(params.rateCurrency ?? DEFAULT_RATE_CURRENCY)
 
   // All of these top-level lookups are mutually independent — run them in one
@@ -362,21 +366,22 @@ export async function fetchAllPricingRates(
     console.log(`✅ Guide rate from guide_rates: €${guidePerDay}/day (${language})`)
   }
 
-  // PRIORITY 2: Fall back to guides table (supplier contacts)
-  if (!guidePerDay) {
-    const { data: guides } = await supabase.from('guides').select('*').eq('is_active', true).eq('tier', tier).contains('languages', [language]).limit(5)
+  // PRIORITY 2: Fall back to guides table (supplier contacts) — the pricing
+  // company's guides only.
+  if (!guidePerDay && orgId) {
+    const { data: guides } = await supabase.from('guides').select('*').eq('org_id', orgId).eq('is_active', true).eq('tier', tier).contains('languages', [language]).limit(5)
     selectedGuide = guides?.[0]
     if (!selectedGuide) {
-      const { data: fallbackGuides } = await supabase.from('guides').select('*').eq('is_active', true).contains('languages', [language]).limit(1)
+      const { data: fallbackGuides } = await supabase.from('guides').select('*').eq('org_id', orgId).eq('is_active', true).contains('languages', [language]).limit(1)
       selectedGuide = fallbackGuides?.[0]
     }
     if (!selectedGuide) {
-      const { data: anyTierGuides } = await supabase.from('guides').select('*').eq('is_active', true).eq('tier', tier).limit(1)
+      const { data: anyTierGuides } = await supabase.from('guides').select('*').eq('org_id', orgId).eq('is_active', true).eq('tier', tier).limit(1)
       selectedGuide = anyTierGuides?.[0]
       if (selectedGuide) console.warn(`⚠️ No ${language}-speaking guide found — using ${selectedGuide.name || 'generic'} guide rate`)
     }
     if (!selectedGuide) {
-      const { data: anyGuides } = await supabase.from('guides').select('*').eq('is_active', true).limit(1)
+      const { data: anyGuides } = await supabase.from('guides').select('*').eq('org_id', orgId).eq('is_active', true).limit(1)
       selectedGuide = anyGuides?.[0]
       if (selectedGuide) console.warn(`⚠️ No guide found for ${language}/${tier} — using ${selectedGuide.name || 'generic'} as last resort`)
     }

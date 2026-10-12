@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg } from '@/lib/api/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,6 +81,12 @@ export async function POST(request: NextRequest) {
     }
     if (record.unit !== undefined && !['per_person', 'per_booking'].includes(String(record.unit))) {
       return NextResponse.json({ success: false, error: 'Unit must be per_person or per_booking' }, { status: 400 })
+    }
+
+    // One of this company's suppliers (suppliers.org_id, 20261205).
+    if (typeof record.supplier_id === 'string' && record.supplier_id &&
+        !(await rowInOrg(supabase, 'suppliers', record.supplier_id, orgId))) {
+      return NextResponse.json({ success: false, error: 'Supplier not found' }, { status: 404 })
     }
 
     const { data, error } = await supabase

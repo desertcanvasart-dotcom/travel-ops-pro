@@ -2054,7 +2054,14 @@ export async function getGuideRate(
   /** Converts rows entered in another currency into the run currency —
    *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
   normalizer?: RateNormalizer,
-  opts?: { grade?: GuideGrade; duration?: 'full_day' | 'meet_greet'; mode?: 'spot' | 'throughout' }
+  opts?: {
+    grade?: GuideGrade
+    duration?: 'full_day' | 'meet_greet'
+    mode?: 'spot' | 'throughout'
+    /** The company pricing: the legacy guides fallback reads ITS guides only
+     *  (suppliers.org_id, 20261205). No company = no fallback. */
+    orgId?: string | null
+  }
 ): Promise<{ id: string; name: string; dailyRate: number } | null> {
   const grade = opts?.grade ?? 'egyptologist'
   const duration = opts?.duration ?? 'full_day'
@@ -2102,13 +2109,14 @@ export async function getGuideRate(
     // 3. Legacy fallback to the guides supplier view — default ask only: a
     //    'senior' or 'meet_greet' ask must never be silently priced from a
     //    supplier's generic daily_rate.
-    if (grade !== 'egyptologist' || duration !== 'full_day' || mode !== 'spot') {
+    if (grade !== 'egyptologist' || duration !== 'full_day' || mode !== 'spot' || !opts?.orgId) {
       console.warn(`⚠️ No ${mode} guide rate for ${language} ${grade}/${duration} — flagging hole (no fabrication)`)
       return null
     }
     const { data: guides, error } = await supabaseAdmin
       .from('guides')
       .select('id, name, daily_rate, languages, tier')
+      .eq('org_id', opts.orgId)
       .eq('is_active', true)
       .contains('languages', [language])
       .order('is_preferred', { ascending: false })
@@ -2807,7 +2815,7 @@ export async function calculateDayBasedPricing(
     Promise.all(hotelCities.map(city => resolveHotelStay(city, tier, isEurPassport, params.travelDate, rateNormalizer, propertyChoices.hotelByCity.get(city.toLowerCase())))),
     fetchTicketRates(ticketLegs, rateNormalizer),
     fetchAirports(params.orgId),
-    getGuideRate(language, tier, rateNormalizer, { grade: guideGrade, mode: guideMode }),
+    getGuideRate(language, tier, rateNormalizer, { grade: guideGrade, mode: guideMode, orgId: params.orgId }),
     getMealRates(tier, rateNormalizer),
     getItemizedTips(tier, rateNormalizer),
     // Water cost from DB (fixed_daily_costs table) instead of hardcoding
@@ -2951,7 +2959,7 @@ export async function calculateDayBasedPricing(
   // sightseeing bill at it, not at the full guiding day (operator, 2026-09-04).
   const hasSightseeingDay = (d: (typeof itinerary)[number]) => d.services.guide_required || d.attractions.length > 0
   const meetGreetGuideRate = guideMode === 'throughout'
-    ? await getGuideRate(language, tier, rateNormalizer, { grade: guideGrade, duration: 'meet_greet', mode: 'throughout' })
+    ? await getGuideRate(language, tier, rateNormalizer, { grade: guideGrade, duration: 'meet_greet', mode: 'throughout', orgId: params.orgId })
     : null
 
   // Flag missing rates that the itinerary actually needs (no fabrication).

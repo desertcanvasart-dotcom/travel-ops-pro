@@ -119,11 +119,11 @@ describe('an email links only to the receiving organisation\'s client', () => {
     expect(m).toMatch(/UPDATE public\.email_conversations ec\s+SET client_id = NULL/)
   })
 
-  it('known contacts are the org\'s clients and partners, plus the shared suppliers', async () => {
+  it('known contacts are the org\'s clients, suppliers and partners (suppliers per company since 20261205)', async () => {
     const db = fakeDb({
       clients: [{ org_id: 'A', email: 'a@x.com' }, { org_id: 'B', email: 'b@x.com' }],
       b2b_partners: [{ org_id: 'A', email: 'pa@x.com' }, { org_id: 'B', email: 'pb@x.com' }],
-      suppliers: [{ contact_email: 'Hotel@x.com' }],
+      suppliers: [{ org_id: 'A', contact_email: 'Hotel@x.com' }, { org_id: 'B', contact_email: 'other-hotel@x.com' }],
     })
     expect([...await knownContactEmailsForOrg(db, 'A')].sort()).toEqual(['a@x.com', 'hotel@x.com', 'pa@x.com'])
   })

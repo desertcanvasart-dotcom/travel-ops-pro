@@ -8,6 +8,7 @@ import { needsDestination } from '@/lib/vocabulary'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
 import { PRESET_VEHICLE_KEYS, bodyTouchesVehicles } from '@/lib/rates/vehicle-bands'
 import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
+import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
 
 // ============================================
 // TRANSPORTATION RATES API - Full CRUD
@@ -104,7 +105,8 @@ export async function GET(request: NextRequest) {
     if (area) query = query.eq('area', area)
     if (originCity) query = query.ilike('origin_city', `%${originCity}%`)
     if (destinationCity) query = query.ilike('destination_city', `%${destinationCity}%`)
-    if (supplierId) query = query.eq('supplier_id', supplierId)
+    // Only one of the caller's company's suppliers (lib/suppliers/supplier-org).
+    if (supplierId) query = query.eq('supplier_id', await ownSupplierFilterId(supabaseAdmin, supplierId))
     if (activeOnly) query = query.eq('is_active', true)
 
     const { data, error } = await query

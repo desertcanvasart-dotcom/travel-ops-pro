@@ -6,6 +6,7 @@ import { validateRatePayload } from '@/lib/rate-validation'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { operatorNameForSupplier } from '@/lib/suppliers/operator-name'
+import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
@@ -24,7 +25,8 @@ export async function GET(request: NextRequest) {
       .select('*, supplier_properties(name)')
       .order('origin_city')
 
-    if (supplierId) query = query.eq('supplier_id', supplierId)
+    // Only one of the caller's company's suppliers (lib/suppliers/supplier-org).
+    if (supplierId) query = query.eq('supplier_id', await ownSupplierFilterId(supabaseAdmin, supplierId))
     if (originCity) query = query.eq('origin_city', originCity)
     if (destinationCity) query = query.eq('destination_city', destinationCity)
     if (cabinType) query = query.eq('cabin_type', cabinType)

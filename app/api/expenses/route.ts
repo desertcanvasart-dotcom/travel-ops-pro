@@ -89,13 +89,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // A picked supplier must exist (the picker sends its id; a stale or
-    // forged one would otherwise land as a dangling reference or 500).
+    // A picked supplier must exist in this company (the picker sends its id;
+    // a stale, forged or other company's one would otherwise land as a
+    // dangling or foreign reference — suppliers.org_id, 20261205).
     if (body.supplier_id) {
       const { data: supplier } = await supabaseAdmin
         .from('suppliers')
         .select('id')
         .eq('id', body.supplier_id)
+        .eq('org_id', orgId)
         .maybeSingle()
       if (!supplier) {
         return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })

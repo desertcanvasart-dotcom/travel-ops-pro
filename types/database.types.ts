@@ -772,6 +772,7 @@ export interface Database {
       }
       airport_staff: {
         Row: {
+          org_id: string
           id: string | null
           name: string | null
           role: string | null
@@ -790,6 +791,7 @@ export interface Database {
           is_preferred: boolean | null
         }
         Insert: {
+          org_id: string
           id?: string | null
           name?: string | null
           role?: string | null
@@ -808,6 +810,7 @@ export interface Database {
           is_preferred?: boolean | null
         }
         Update: {
+          org_id?: string
           id?: string | null
           name?: string | null
           role?: string | null
@@ -5639,6 +5642,7 @@ export interface Database {
       }
       guides: {
         Row: {
+          org_id: string
           id: string | null
           name: string | null
           email: string | null
@@ -5664,6 +5668,7 @@ export interface Database {
           whatsapp: string | null
         }
         Insert: {
+          org_id: string
           id?: string | null
           name?: string | null
           email?: string | null
@@ -5689,6 +5694,7 @@ export interface Database {
           whatsapp?: string | null
         }
         Update: {
+          org_id?: string
           id?: string | null
           name?: string | null
           email?: string | null
@@ -6025,6 +6031,7 @@ export interface Database {
       }
       hotel_staff: {
         Row: {
+          org_id: string
           id: string | null
           name: string | null
           role: string | null
@@ -6042,6 +6049,7 @@ export interface Database {
           is_preferred: boolean | null
         }
         Insert: {
+          org_id: string
           id?: string | null
           name?: string | null
           role?: string | null
@@ -6059,6 +6067,7 @@ export interface Database {
           is_preferred?: boolean | null
         }
         Update: {
+          org_id?: string
           id?: string | null
           name?: string | null
           role?: string | null
@@ -8241,6 +8250,92 @@ export interface Database {
           },
         ]
       }
+      org_backfill_property_copies: {
+        Row: {
+          copy_id: string
+          created_at: string
+          org_id: string
+          original_id: string
+        }
+        Insert: {
+          copy_id: string
+          created_at?: string
+          org_id: string
+          original_id: string
+        }
+        Update: {
+          copy_id?: string
+          created_at?: string
+          org_id?: string
+          original_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_backfill_property_copies_copy_id_fkey"
+            columns: ["copy_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_backfill_property_copies_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_backfill_property_copies_original_id_fkey"
+            columns: ["original_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_backfill_supplier_copies: {
+        Row: {
+          copy_id: string
+          created_at: string
+          org_id: string
+          original_id: string
+        }
+        Insert: {
+          copy_id: string
+          created_at?: string
+          org_id: string
+          original_id: string
+        }
+        Update: {
+          copy_id?: string
+          created_at?: string
+          org_id?: string
+          original_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_backfill_supplier_copies_copy_id_fkey"
+            columns: ["copy_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_backfill_supplier_copies_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_backfill_supplier_copies_original_id_fkey"
+            columns: ["original_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_vocabularies: {
         Row: {
           id: string
@@ -10222,6 +10317,7 @@ export interface Database {
       }
       supplier_properties: {
         Row: {
+          org_id: string
           id: string
           supplier_id: string
           property_type: string
@@ -10239,6 +10335,7 @@ export interface Database {
           address: string | null
         }
         Insert: {
+          org_id?: string
           id?: string
           supplier_id: string
           property_type: string
@@ -10256,6 +10353,7 @@ export interface Database {
           address?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           supplier_id?: string
           property_type?: string
@@ -10284,6 +10382,7 @@ export interface Database {
       }
       suppliers: {
         Row: {
+          org_id: string
           id: string
           name: string
           type: string
@@ -10330,6 +10429,7 @@ export interface Database {
           supplier_code: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           name: string
           type: string
@@ -10376,6 +10476,7 @@ export interface Database {
           supplier_code?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           name?: string
           type?: string

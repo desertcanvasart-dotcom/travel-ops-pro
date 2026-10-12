@@ -4,14 +4,18 @@ import { buildSupplierInsert } from '@/lib/suppliers/create-payload'
 import { allowedSupplierTypeKeys, supplierTypeKeysMatching, unknownSupplierTypeError, unknownSupplierTypes } from '@/lib/supplier-types'
 import { supplierTypesForCurrentOrg } from '@/lib/vocabulary-server'
 import { uniqueViolationMessage } from '@/lib/db/unique-violation'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// The caller's company's suppliers only (suppliers.org_id, 20261205).
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const type = searchParams.get('type')
     const status = searchParams.get('status')
@@ -19,6 +23,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('suppliers')
       .select('*')
+      .eq('org_id', orgId)
       .order('name', { ascending: true })
 
     // Support comma-separated types (e.g., type=transport,local_operator,driver).
@@ -47,6 +52,7 @@ export async function GET(request: NextRequest) {
       const { data: props, error: propErr } = await supabaseAdmin
         .from('supplier_properties')
         .select('supplier_id')
+        .eq('org_id', orgId)
         .ilike('city', city)
         .eq('is_active', true)
       if (propErr) console.error('Error fetching supplier properties by city:', propErr.message)
@@ -77,6 +83,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     const built = buildSupplierInsert(body)
@@ -94,7 +102,7 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabaseAdmin
       .from('suppliers')
-      .insert([built.row])
+      .insert([{ ...built.row, org_id: orgId }])
       .select()
       .single()
 

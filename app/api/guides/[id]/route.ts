@@ -23,10 +23,13 @@ export async function GET(
     const supabase = createServerClient()
     const { id } = await params
 
+    // The caller's company's guide only (suppliers.org_id, 20261205): another
+    // company's id is a plain 404.
     const { data: guide, error } = await supabase
       .from('guides')
       .select('*')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (error || !guide) {
@@ -66,6 +69,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const supabase = createServerClient()
     const { id } = await params
     const body = await request.json()
@@ -104,8 +110,9 @@ export async function PUT(
       .from('guides')
       .update(updateData)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
-      .single()
+      .maybeSingle()
     
     if (error) {
       console.error('❌ Supabase error updating guide:', error)
@@ -158,10 +165,19 @@ export async function DELETE(
     const supabase = createServerClient()
     const { id } = await params
 
-    // Check if guide has any assigned bookings. A guide is a supplier shared
-    // by the whole install, so ANY organisation's trip counts — scoped to this
-    // org, deleting the guide quietly took them off another agency's trips.
-    // Only a count is read: nothing about the other trip is returned.
+    const { data: own } = await supabase
+      .from('guides')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!own) {
+      return NextResponse.json({ success: false, error: 'Guide not found' }, { status: 404 })
+    }
+
+    // Check if guide has any assigned bookings. A guide belongs to one company
+    // now (20261205), so only its trips can name it; the count stays unscoped
+    // as a second wall. Only a count is read.
     const { count: tripCount, error: bookingsError } = await supabase
       .from('itineraries')
       .select('id', { count: 'exact', head: true })
@@ -204,6 +220,7 @@ export async function DELETE(
       .from('guides')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
     
     if (error) {
       console.error('Error deleting guide:', error)

@@ -238,8 +238,8 @@ export async function orgForMailbox(db: Db, userId: string | null): Promise<stri
 }
 
 /**
- * The addresses one organisation knows: its clients and B2B partners, plus
- * suppliers (shared across organisations — suppliers has no org_id yet).
+ * The addresses one organisation knows: its clients, suppliers and B2B
+ * partners (each per company — suppliers since migration 20261205).
  * The same set the sync uses (lib/email-scoping loadKnownContactEmails).
  */
 export async function knownContactEmailsForOrg(db: Db, orgId: string): Promise<Set<string>> {

@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
   const contact = async (type: string): Promise<{ person: PickupPerson | null; name: string | null }> => {
     const r = onDay.find(x => x.resource_type === type)
     if (!r) return { person: null, name: null }
-    const c = await resolveAssigneeContact(supabase as unknown as ContactClient, r)
+    const c = await resolveAssigneeContact(supabase as unknown as ContactClient, r, org_id)
     const name = (c?.name ?? r.resource_name ?? '').trim()
     return { person: name ? { name, phone: c?.phone ?? null } : null, name: r.resource_name ?? null }
   }

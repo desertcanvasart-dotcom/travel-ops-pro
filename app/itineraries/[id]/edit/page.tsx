@@ -601,19 +601,21 @@ export default function ItineraryEditorPage() {
 
   // The "Sold by" guide list. Each line's own supplier list is
   // ServiceSupplierSelect: its kind, in its city.
+  // Through /api/suppliers, not the browser client: the server reads the
+  // ACTIVE workspace's suppliers (suppliers.org_id, 20261205). RLS alone would
+  // hand someone in both companies both companies' guides.
   const loadSuppliers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('suppliers')
-        .select('id, name, type, types, city, contact_phone')
-        .order('type')
-        .order('name')
-
-      if (error) {
-        console.error('Error loading suppliers:', error)
+      const res = await fetch('/api/suppliers')
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.success) {
+        console.error('Error loading suppliers:', json?.error ?? res.status)
         return
       }
-      setSuppliers(data || [])
+      const data = ((json.data ?? []) as Supplier[])
+        .slice()
+        .sort((a, b) => String(a.type ?? '').localeCompare(String(b.type ?? '')) || String(a.name ?? '').localeCompare(String(b.name ?? '')))
+      setSuppliers(data)
     } catch (error) {
       console.error('Error loading suppliers:', error)
     }

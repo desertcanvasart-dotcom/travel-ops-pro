@@ -6,10 +6,17 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+
+// The caller's company's staff (the view carries suppliers.org_id, 20261205);
+// a new one is stamped with it — the view's INSTEAD OF INSERT trigger writes
+// the supplier row with the org_id given.
 
 // GET - List all hotel staff with hotel info
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
 
     const { searchParams } = new URL(request.url)
@@ -25,6 +32,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('hotel_staff')
       .select('*')
+      .eq('org_id', orgId)
       .order('name', { ascending: true })
 
     if (hotelId) {
@@ -65,6 +73,8 @@ export async function GET(request: NextRequest) {
 // POST - Create new hotel staff
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const body = await request.json()
 
@@ -76,6 +86,7 @@ export async function POST(request: NextRequest) {
     }
 
     const staffData = {
+      org_id: orgId,
       name: body.name,
       role: body.role || null,
       phone: body.phone,

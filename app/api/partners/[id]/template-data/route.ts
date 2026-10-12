@@ -63,6 +63,7 @@ export async function GET(
           .from('guides')
           .select('*')
           .eq('id', partnerId)
+          .eq('org_id', orgId)
           .single()
         
         if (guideError || !guide) {
@@ -115,6 +116,7 @@ export async function GET(
           .from('airport_staff')
           .select('*')
           .eq('id', partnerId)
+          .eq('org_id', orgId)
           .single()
         
         if (staffError || !staff) {

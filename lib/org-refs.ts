@@ -13,17 +13,19 @@ type DbClient = {
   from: (table: string) => any
 }
 
-/** Each id given must be a row of this org's. Absent ids pass. Fails closed. */
+/** Each id given must be a row of this org's. Absent ids pass. Fails closed.
+ *  supplier_id: suppliers carry org_id since migration 20261205. */
 export async function recordsInOrg(
   supabase: DbClient,
   orgId: string,
-  refs: { itinerary_id?: unknown; client_id?: unknown; invoice_id?: unknown }
+  refs: { itinerary_id?: unknown; client_id?: unknown; invoice_id?: unknown; supplier_id?: unknown }
 ): Promise<boolean> {
   if (!orgId) return false
   const checks: Array<[string, unknown]> = [
     ['itineraries', refs.itinerary_id],
     ['clients', refs.client_id],
     ['invoices', refs.invoice_id],
+    ['suppliers', refs.supplier_id],
   ]
   for (const [table, id] of checks) {
     if (id === undefined || id === null || id === '') continue

@@ -1,8 +1,11 @@
 // PUT/DELETE one supplier property. Scoped by BOTH ids so a property can
-// never be edited through the wrong supplier's URL.
+// never be edited through the wrong supplier's URL — and by the caller's
+// company (supplier_properties.org_id, 20261205): another company's property
+// is a plain 404.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createServerClient()
 
@@ -10,6 +13,8 @@ const WRITABLE = ['property_type', 'name', 'city', 'category', 'contact_name', '
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string; propertyId: string }> }) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id, propertyId } = await params
     const body = await request.json()
     const record: Record<string, unknown> = {}
@@ -25,6 +30,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       .update(record)
       .eq('id', propertyId)
       .eq('supplier_id', id)
+      .eq('org_id', orgId)
       .select('*')
       .maybeSingle()
     if (error) {
@@ -54,7 +60,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string; propertyId: string }> }) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id, propertyId } = await params
+
+    const { data: own } = await supabaseAdmin
+      .from('supplier_properties')
+      .select('id')
+      .eq('id', propertyId)
+      .eq('supplier_id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!own) return NextResponse.json({ success: false, error: 'Property not found' }, { status: 404 })
 
     // Refuse while rates still reference it: deleting the ship under priced
     // rows would strand them (property_id would null out and the link is lost
@@ -78,6 +95,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       .delete()
       .eq('id', propertyId)
       .eq('supplier_id', id)
+      .eq('org_id', orgId)
       .select('id')
       .maybeSingle()
     if (error) throw error

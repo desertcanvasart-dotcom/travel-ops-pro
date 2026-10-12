@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
           .from('suppliers')
           .select('*')
           .eq('id', resourceId)
+          .eq('org_id', orgId)
           .single()
 
         if (supplierData) {
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
           resource = { name: contact.name }
           resourcePhone = contact.whatsapp || contact.phone || null
         } else {
-          const { data: supplierData } = await supabase.from('suppliers').select('*').eq('id', resourceId).maybeSingle()
+          const { data: supplierData } = await supabase.from('suppliers').select('*').eq('id', resourceId).eq('org_id', orgId).maybeSingle()
           if (supplierData) {
             resource = supplierData
             resourcePhone = supplierData.contact_phone || supplierData.whatsapp || supplierData.phone2
@@ -111,6 +112,7 @@ export async function POST(request: NextRequest) {
         .from('suppliers')
         .select('*')
         .eq('id', resourceId)
+        .eq('org_id', orgId) // the caller's company's (suppliers.org_id, 20261205)
         .single()
 
       if (resourceError || !supplierData) {

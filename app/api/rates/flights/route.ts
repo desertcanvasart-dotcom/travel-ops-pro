@@ -4,6 +4,7 @@ import { validateRatePayload } from '@/lib/rate-validation'
 import { sanitizeSeasons, legacyColumnMirror, datedPeriodCount, tooManyPeriodsMessage } from '@/lib/rates/rate-seasons'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { AIRLINE_CODES, knownAirlineCode } from '@/lib/airline-codes'
+import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
 
 // ============================================
 // FLIGHT RATES API - Full CRUD
@@ -58,7 +59,8 @@ export async function GET(request: NextRequest) {
     if (airline) query = query.ilike('airline', `%${airline}%`)
     if (flightType) query = query.eq('flight_type', flightType)
     if (cabinClass) query = query.eq('cabin_class', cabinClass)
-    if (supplierId) query = query.eq('supplier_id', supplierId)
+    // Only one of the caller's company's suppliers (lib/suppliers/supplier-org).
+    if (supplierId) query = query.eq('supplier_id', await ownSupplierFilterId(supabaseAdmin, supplierId))
     if (activeOnly) query = query.eq('is_active', true)
 
     const { data, error } = await query
