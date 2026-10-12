@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useParams, useRouter } from 'next/navigation'
@@ -134,6 +134,8 @@ export default function EditSupplierDocumentPage() {
   const mealTypeLabel = useVocabLabel('meal_type')
   const { rateCurrency } = useCurrency()
   const t = useTranslations('supplierDocumentEdit')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const params = useParams()
   const router = useRouter()
   const [document, setDocument] = useState<any>(null)
@@ -182,54 +184,54 @@ export default function EditSupplierDocumentPage() {
   const [guideCityFilter, setGuideCityFilter] = useState('')
 
   useEffect(() => {
+    const fetchDocument = async () => {
+      try {
+        const response = await fetch(`/api/supplier-documents/${params.id}`)
+        const result = await response.json()
+        if (result.success) {
+          setDocument(result.data)
+          // Load existing selected attractions if present
+          if (result.data.selected_attractions) {
+            setSelectedAttractions(result.data.selected_attractions)
+          }
+          // Load existing selected routes if present
+          if (result.data.selected_routes) {
+            setSelectedRoutes(result.data.selected_routes)
+          }
+          // Load existing selected meals if present
+          if (result.data.selected_meals) {
+            setSelectedMeals(result.data.selected_meals)
+          }
+          // Load existing selected guides if present
+          if (result.data.selected_guides) {
+            setSelectedGuides(result.data.selected_guides)
+          }
+          // Fetch transport rates if this is a transport voucher
+          if (result.data.document_type === 'transport_voucher') {
+            fetchTransportRates()
+          }
+          // Fetch meal rates if this is a service order
+          if (result.data.document_type === 'service_order') {
+            fetchMealRates()
+          }
+          // Fetch guide rates if this is a guide assignment
+          if (result.data.document_type === 'guide_assignment') {
+            fetchGuideRates()
+          }
+        } else {
+          setError(tRef.current('documentNotFound'))
+        }
+      } catch (err) {
+        setError(tRef.current('errorLoadingDocument'))
+      } finally {
+        setLoading(false)
+      }
+    }
+
     fetchDocument()
     fetchEntranceFees()
     fetchSuppliers()
   }, [params.id])
-
-  const fetchDocument = async () => {
-    try {
-      const response = await fetch(`/api/supplier-documents/${params.id}`)
-      const result = await response.json()
-      if (result.success) {
-        setDocument(result.data)
-        // Load existing selected attractions if present
-        if (result.data.selected_attractions) {
-          setSelectedAttractions(result.data.selected_attractions)
-        }
-        // Load existing selected routes if present
-        if (result.data.selected_routes) {
-          setSelectedRoutes(result.data.selected_routes)
-        }
-        // Load existing selected meals if present
-        if (result.data.selected_meals) {
-          setSelectedMeals(result.data.selected_meals)
-        }
-        // Load existing selected guides if present
-        if (result.data.selected_guides) {
-          setSelectedGuides(result.data.selected_guides)
-        }
-        // Fetch transport rates if this is a transport voucher
-        if (result.data.document_type === 'transport_voucher') {
-          fetchTransportRates()
-        }
-        // Fetch meal rates if this is a service order
-        if (result.data.document_type === 'service_order') {
-          fetchMealRates()
-        }
-        // Fetch guide rates if this is a guide assignment
-        if (result.data.document_type === 'guide_assignment') {
-          fetchGuideRates()
-        }
-      } else {
-        setError(t('documentNotFound'))
-      }
-    } catch (err) {
-      setError(t('errorLoadingDocument'))
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const fetchTransportRates = async () => {
     setLoadingRoutes(true)
@@ -519,19 +521,21 @@ export default function EditSupplierDocumentPage() {
   }
 
   // Calculate total for selected attractions
-  const calculateAttractionsTotal = () => {
+  const calculateAttractionsTotal = useCallback(() => {
     return selectedAttractions.reduce((sum, a) => sum + (a.eur_rate * a.quantity), 0)
-  }
-
-  // Auto-update document total when attractions change (activity vouchers only)
-  useEffect(() => {
-    if (document && document.document_type === 'activity_voucher') {
-      const attractionsTotal = calculateAttractionsTotal()
-      if (attractionsTotal > 0) {
-        setDocument((prev: any) => ({ ...prev, total_cost: attractionsTotal }))
-      }
-    }
   }, [selectedAttractions])
+
+  // Auto-update document total when attractions change (activity vouchers only).
+  // The document check reads the latest state in the updater, so editing the
+  // document (e.g. typing a total by hand) does not re-run this.
+  useEffect(() => {
+    const attractionsTotal = calculateAttractionsTotal()
+    if (attractionsTotal > 0) {
+      setDocument((prev: any) =>
+        prev && prev.document_type === 'activity_voucher' ? { ...prev, total_cost: attractionsTotal } : prev
+      )
+    }
+  }, [calculateAttractionsTotal])
 
   // Get the rate for the current vehicle type from a transport rate record:
   // the row's vehicles list by key ('luxury_sedan' reads as 'sedan'), else
@@ -576,12 +580,21 @@ export default function EditSupplierDocumentPage() {
     return selectedRoutes.some(r => r.rate_id === rateId)
   }
 
-  const calculateRoutesTotal = () => {
+  const calculateRoutesTotal = useCallback(() => {
     return selectedRoutes.reduce((sum, r) => sum + r.total_cost, 0)
-  }
+  }, [selectedRoutes])
+
+  // Latest values for the effect below, read through a ref so it re-prices
+  // routes only when the vehicle type changes — not when the rates finish
+  // loading (that would overwrite the saved unit rates) or the routes change.
+  const vehicleRecalcRef = useRef({ document, selectedRoutes, transportRates, getRateForVehicle })
+  useEffect(() => {
+    vehicleRecalcRef.current = { document, selectedRoutes, transportRates, getRateForVehicle }
+  })
 
   // Recalculate rates when vehicle type changes
   useEffect(() => {
+    const { document, selectedRoutes, transportRates, getRateForVehicle } = vehicleRecalcRef.current
     if (document && document.document_type === 'transport_voucher' && selectedRoutes.length > 0 && transportRates.length > 0) {
       setSelectedRoutes(prev => prev.map(r => {
         const rate = transportRates.find(tr => tr.id === r.rate_id)
@@ -594,11 +607,13 @@ export default function EditSupplierDocumentPage() {
 
   // Auto-update document total when selected routes change
   useEffect(() => {
-    if (document && document.document_type === 'transport_voucher' && selectedRoutes.length > 0) {
+    if (selectedRoutes.length > 0) {
       const routesTotal = calculateRoutesTotal()
-      setDocument((prev: any) => ({ ...prev, total_cost: routesTotal }))
+      setDocument((prev: any) =>
+        prev && prev.document_type === 'transport_voucher' ? { ...prev, total_cost: routesTotal } : prev
+      )
     }
-  }, [selectedRoutes])
+  }, [calculateRoutesTotal, selectedRoutes.length])
 
   // Add a meal
   const addMeal = (rate: MealRate) => {
@@ -628,17 +643,19 @@ export default function EditSupplierDocumentPage() {
     ))
   }
 
-  const calculateMealsTotal = () => {
+  const calculateMealsTotal = useCallback(() => {
     return selectedMeals.reduce((sum, m) => sum + m.total_cost, 0)
-  }
+  }, [selectedMeals])
 
   // Auto-update document total when selected meals change
   useEffect(() => {
-    if (document && document.document_type === 'service_order' && selectedMeals.length > 0) {
+    if (selectedMeals.length > 0) {
       const mealsTotal = calculateMealsTotal()
-      setDocument((prev: any) => ({ ...prev, total_cost: mealsTotal }))
+      setDocument((prev: any) =>
+        prev && prev.document_type === 'service_order' ? { ...prev, total_cost: mealsTotal } : prev
+      )
     }
-  }, [selectedMeals])
+  }, [calculateMealsTotal, selectedMeals.length])
 
   // Add a guide (rate is per day, not per person — default quantity to 1 day)
   const addGuide = (rate: GuideRate) => {
@@ -668,17 +685,19 @@ export default function EditSupplierDocumentPage() {
     ))
   }
 
-  const calculateGuidesTotal = () => {
+  const calculateGuidesTotal = useCallback(() => {
     return selectedGuides.reduce((sum, g) => sum + g.total_cost, 0)
-  }
+  }, [selectedGuides])
 
   // Auto-update document total when selected guides change
   useEffect(() => {
-    if (document && document.document_type === 'guide_assignment' && selectedGuides.length > 0) {
+    if (selectedGuides.length > 0) {
       const guidesTotal = calculateGuidesTotal()
-      setDocument((prev: any) => ({ ...prev, total_cost: guidesTotal }))
+      setDocument((prev: any) =>
+        prev && prev.document_type === 'guide_assignment' ? { ...prev, total_cost: guidesTotal } : prev
+      )
     }
-  }, [selectedGuides])
+  }, [calculateGuidesTotal, selectedGuides.length])
 
   // Guide type display labels
   const GUIDE_TYPE_LABELS: Record<string, string> = {

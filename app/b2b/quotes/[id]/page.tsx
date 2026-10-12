@@ -3,7 +3,7 @@
 import { Fragment } from 'react'
 import { DayBandRow, DAY_LINE_EDGE } from '@/components/pricing/DayBand'
 import { groupLinesByDay } from '@/lib/pricing/group-by-day'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -107,6 +107,8 @@ export default function QuoteDetailPage() {
   const params = useParams()
   const quoteId = params?.id as string
   const t = useTranslations('b2bQuotes')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const confirmDialog = useConfirm()
 
   const [quote, setQuote] = useState<Quote | null>(null)
@@ -117,25 +119,25 @@ export default function QuoteDetailPage() {
   const [activeLanguage, setActiveLanguage] = useState<Language>('en')
   const router = useRouter()
 
-  useEffect(() => {
-    if (quoteId) fetchQuote()
-  }, [quoteId])
-
-  const fetchQuote = async () => {
+  const fetchQuote = useCallback(async () => {
     try {
       const res = await fetch(`/api/b2b/quotes/${quoteId}`)
       const data = await res.json()
       if (data.success) {
         setQuote(data.data)
       } else {
-        setError(data.error || t('quoteNotFound'))
+        setError(data.error || tRef.current('quoteNotFound'))
       }
     } catch (err) {
-      setError(t('failedToLoad'))
+      setError(tRef.current('failedToLoad'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [quoteId])
+
+  useEffect(() => {
+    if (quoteId) fetchQuote()
+  }, [quoteId, fetchQuote])
 
   const updateStatus = async (newStatus: string) => {
     if (!quote) return

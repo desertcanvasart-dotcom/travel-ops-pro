@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { SkeletonPageHeader, SkeletonStatCards, SkeletonCalendarGrid } from '@/components/Skeleton'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
@@ -176,21 +176,6 @@ export default function CalendarPage() {
     fetchData()
   }, [])
 
-  // Conflicts depend only on the bookings; filters only on bookings + filters.
-  // They shared one effect, so the whole conflict scan re-ran on every search
-  // keystroke.
-  useEffect(() => {
-    if (bookings.length > 0) detectConflicts()
-  }, [bookings])
-
-  useEffect(() => {
-    if (bookings.length > 0) applyFilters()
-  }, [bookings, filters])
-
-  useEffect(() => {
-    calculateStats()
-  }, [filteredBookings, conflicts])
-
   const fetchData = async () => {
     try {
       // Walk every page — the calendar needs every date-ranged trip, and a
@@ -224,7 +209,7 @@ export default function CalendarPage() {
     }
   }
 
-  const detectConflicts = () => {
+  const detectConflicts = useCallback(() => {
     const conflictIds = new Set<string>()
     const details: ConflictDetail[] = []
 
@@ -292,9 +277,9 @@ export default function CalendarPage() {
 
     setConflicts([...conflictIds])
     setConflictDetails(details)
-  }
+  }, [bookings])
 
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
     let filtered = [...bookings]
 
     if (filters.paymentStatus.length > 0) {
@@ -345,9 +330,9 @@ export default function CalendarPage() {
     }
 
     setFilteredBookings(filtered)
-  }
+  }, [bookings, filters, conflicts])
 
-  const calculateStats = () => {
+  const calculateStats = useCallback(() => {
     const totalBookings = filteredBookings.length
     const totalRevenue = emptyTotals()
     for (const b of filteredBookings) addToTotals(totalRevenue, b.total_cost || 0, b.currency || 'EUR')
@@ -372,7 +357,22 @@ export default function CalendarPage() {
       upcomingBookings,
       conflictCount: conflicts.length
     })
-  }
+  }, [filteredBookings, conflicts])
+
+  // Conflicts depend only on the bookings; filters only on bookings + filters.
+  // They shared one effect, so the whole conflict scan re-ran on every search
+  // keystroke.
+  useEffect(() => {
+    if (bookings.length > 0) detectConflicts()
+  }, [bookings, detectConflicts])
+
+  useEffect(() => {
+    if (bookings.length > 0) applyFilters()
+  }, [bookings, applyFilters])
+
+  useEffect(() => {
+    calculateStats()
+  }, [calculateStats])
 
   const clearFilters = () => {
     setFilters({

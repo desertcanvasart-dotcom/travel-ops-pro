@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { CheckCircle, AlertCircle, Loader2, CloudOff, RefreshCw } from 'lucide-react'
 
 interface SyncStatusBadgeProps {
@@ -14,11 +14,7 @@ export function SyncStatusBadge({ entityType, entityId, className = '' }: SyncSt
   const [error, setError] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
 
-  useEffect(() => {
-    fetchStatus()
-  }, [entityType, entityId])
-
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch(`/api/accounting/sync/status?entityType=${entityType}&entityId=${entityId}`)
       const data = await res.json()
@@ -34,7 +30,11 @@ export function SyncStatusBadge({ entityType, entityId, className = '' }: SyncSt
     } catch {
       setStatus('none')
     }
-  }
+  }, [entityType, entityId])
+
+  useEffect(() => {
+    fetchStatus()
+  }, [fetchStatus])
 
   const handleRetry = async () => {
     setSyncing(true)

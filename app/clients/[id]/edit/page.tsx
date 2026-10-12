@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -31,10 +31,12 @@ export default function EditClientPage() {
   const params = useParams()
   const router = useRouter()
   const clientId = params?.id as string
-  const supabase = createClient()
+  const [supabase] = useState(() => createClient())
 
   // i18n hooks
   const t = useTranslations('clients')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const tCommon = useTranslations('common')
   const tValidation = useTranslations('validation')
   const { validate, validateForm, getFieldName } = useLocalizedValidation()
@@ -66,13 +68,7 @@ export default function EditClientPage() {
   const [newInterest, setNewInterest] = useState('')
   const [newTag, setNewTag] = useState('')
 
-  useEffect(() => {
-    if (clientId) {
-      fetchClient()
-    }
-  }, [clientId])
-
-  const fetchClient = async () => {
+  const fetchClient = useCallback(async () => {
     try {
       setLoading(true)
       const { data, error } = await supabase
@@ -105,11 +101,17 @@ export default function EditClientPage() {
       }
     } catch (err) {
       console.error('Error fetching client:', err)
-      setError(t('failedToLoad'))
+      setError(tRef.current('failedToLoad'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [clientId, supabase])
+
+  useEffect(() => {
+    if (clientId) {
+      fetchClient()
+    }
+  }, [clientId, fetchClient])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target

@@ -65,6 +65,31 @@ export default function ActivityBuilder({
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    const fetchOptions = async () => {
+      setLoading(true)
+      try {
+        const [entrancesRes, transportsRes] = await Promise.all([
+          fetch(`/api/rates?type=entrance&city=${city}&in_org_currency=true`),
+          fetch(`/api/rates?type=transportation&city=${city}&in_org_currency=true`)
+        ])
+
+        const [entrancesData, transportsData] = await Promise.all([
+          entrancesRes.json(),
+          transportsRes.json()
+        ])
+
+        if (entrancesData.success) {
+          setEntrances(entrancesData.data || [])
+        }
+        if (transportsData.success) {
+          setTransportations(transportsData.data || [])
+        }
+      } catch (error) {
+        console.error('Failed to fetch activity options:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
     if (!city) {
       setEntrances([])
       setTransportations([])
@@ -72,32 +97,6 @@ export default function ActivityBuilder({
     }
     fetchOptions()
   }, [city])
-
-  const fetchOptions = async () => {
-    setLoading(true)
-    try {
-      const [entrancesRes, transportsRes] = await Promise.all([
-        fetch(`/api/rates?type=entrance&city=${city}&in_org_currency=true`),
-        fetch(`/api/rates?type=transportation&city=${city}&in_org_currency=true`)
-      ])
-
-      const [entrancesData, transportsData] = await Promise.all([
-        entrancesRes.json(),
-        transportsRes.json()
-      ])
-
-      if (entrancesData.success) {
-        setEntrances(entrancesData.data || [])
-      }
-      if (transportsData.success) {
-        setTransportations(transportsData.data || [])
-      }
-    } catch (error) {
-      console.error('Failed to fetch activity options:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const addActivity = () => {
     const newActivity: Activity = {

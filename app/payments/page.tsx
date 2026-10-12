@@ -66,7 +66,26 @@ export default function PaymentsPage() {
   }, [])
 
   useEffect(() => {
-    filterPayments()
+    let filtered = payments
+
+    if (methodFilter !== 'all') {
+      filtered = filtered.filter(p => p.payment_method === methodFilter)
+    }
+
+    if (sourceFilter !== 'all') {
+      filtered = filtered.filter(p => p.source === sourceFilter)
+    }
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter(p =>
+        p.client_name?.toLowerCase().includes(query) ||
+        p.source_reference?.toLowerCase().includes(query) ||
+        p.transaction_reference?.toLowerCase().includes(query)
+      )
+    }
+
+    setFilteredPayments(filtered)
   }, [payments, methodFilter, sourceFilter, searchQuery])
 
   const fetchAllPayments = async () => {
@@ -184,29 +203,6 @@ export default function PaymentsPage() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const filterPayments = () => {
-    let filtered = payments
-
-    if (methodFilter !== 'all') {
-      filtered = filtered.filter(p => p.payment_method === methodFilter)
-    }
-
-    if (sourceFilter !== 'all') {
-      filtered = filtered.filter(p => p.source === sourceFilter)
-    }
-
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(p =>
-        p.client_name?.toLowerCase().includes(query) ||
-        p.source_reference?.toLowerCase().includes(query) ||
-        p.transaction_reference?.toLowerCase().includes(query)
-      )
-    }
-
-    setFilteredPayments(filtered)
   }
 
   const getMethodLabel = (method: string) => {

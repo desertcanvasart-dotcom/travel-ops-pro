@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   Search,
@@ -151,10 +151,29 @@ export default function TeamMembersPage() {
     return 'none'
   }
 
+  const fetchMembers = useCallback(async () => {
+    try {
+      const params = new URLSearchParams()
+      if (!showInactive) params.append('active', 'true')
+      
+      const response = await fetch(`/api/team-members?${params}`)
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success) {
+          setMembers(result.data)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching team members:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [showInactive])
+
   useEffect(() => {
     fetchMembers()
     fetchDepartments()
-  }, [showInactive])
+  }, [fetchMembers])
 
   useEffect(() => {
     fetchAccessStatus()
@@ -171,25 +190,6 @@ export default function TeamMembersPage() {
       }
     } catch (error) {
       console.error('Error fetching departments:', error)
-    }
-  }
-
-  const fetchMembers = async () => {
-    try {
-      const params = new URLSearchParams()
-      if (!showInactive) params.append('active', 'true')
-      
-      const response = await fetch(`/api/team-members?${params}`)
-      if (response.ok) {
-        const result = await response.json()
-        if (result.success) {
-          setMembers(result.data)
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching team members:', error)
-    } finally {
-      setLoading(false)
     }
   }
 

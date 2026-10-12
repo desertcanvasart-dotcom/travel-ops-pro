@@ -1,7 +1,7 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
@@ -129,6 +129,10 @@ export default function SupplierInvoicesPage() {
   // Itinerary and invoice lists for dropdowns
   const [itineraries, setItineraries] = useState<Array<{ id: string; code: string; client_name: string }>>([])
   const [clientInvoices, setClientInvoices] = useState<Array<{ id: string; invoice_number: string; client_name: string; total_amount: number }>>([])
+  // The lazy-load effect below checks these only when the modal opens; as deps
+  // they would re-run it when the first list lands and re-request the others.
+  const lookupCountsRef = useRef({ suppliers: 0, itineraries: 0, clientInvoices: 0 })
+  lookupCountsRef.current = { suppliers: suppliers.length, itineraries: itineraries.length, clientInvoices: clientInvoices.length }
 
   // Create form state
   const [formData, setFormData] = useState({
@@ -152,7 +156,8 @@ export default function SupplierInvoicesPage() {
   // Fetch suppliers, itineraries, and invoices when modal opens
   useEffect(() => {
     if (showCreateModal) {
-      if (suppliers.length === 0) {
+      const counts = lookupCountsRef.current
+      if (counts.suppliers === 0) {
         fetch('/api/suppliers?status=active')
           .then(r => r.json())
           .then(res => {
@@ -161,7 +166,7 @@ export default function SupplierInvoicesPage() {
           })
           .catch(() => {})
       }
-      if (itineraries.length === 0) {
+      if (counts.itineraries === 0) {
         // Dropdown picker: request the API's max page (1000; default is 100)
         fetch('/api/itineraries?limit=1000')
           .then(r => r.json())
@@ -175,7 +180,7 @@ export default function SupplierInvoicesPage() {
           })
           .catch(() => {})
       }
-      if (clientInvoices.length === 0) {
+      if (counts.clientInvoices === 0) {
         // Dropdown picker: request the API's max page (1000; default is 100)
         fetch('/api/invoices?limit=1000')
           .then(r => r.json())
@@ -379,11 +384,7 @@ export default function SupplierInvoicesPage() {
     }
   }
 
-  useEffect(() => {
-    fetchInvoices()
-  }, [statusFilter, matchFilter])
-
-  const fetchInvoices = async () => {
+  const fetchInvoices = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
@@ -399,7 +400,11 @@ export default function SupplierInvoicesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [statusFilter, matchFilter])
+
+  useEffect(() => {
+    fetchInvoices()
+  }, [fetchInvoices])
 
   const handleCreate = async () => {
     if (!formData.supplier_invoice_number || !formData.supplier_name || computedTotal <= 0) return

@@ -337,6 +337,9 @@ export function UnifiedConversationList({
       if (showLoader) setLoading(false)
     }
   }, [filters, clientId])
+  // For the mount and refreshKey effects, which must not also fire on filter changes.
+  const fetchConversationsRef = useRef(fetchConversations)
+  useEffect(() => { fetchConversationsRef.current = fetchConversations })
 
   // Sync emails
   const syncEmails = async () => {
@@ -377,9 +380,9 @@ export function UnifiedConversationList({
 
   // Initial fetch and filter change
   useEffect(() => {
-    fetchConversations(true)
+    fetchConversationsRef.current(true)
     fetchAgents()
-  }, [])
+  }, [fetchAgents])
 
   // Debounced search
   useEffect(() => {
@@ -387,7 +390,7 @@ export function UnifiedConversationList({
       fetchConversations(false)
     }, 300)
     return () => clearTimeout(timer)
-  }, [filters])
+  }, [fetchConversations])
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -405,7 +408,7 @@ export function UnifiedConversationList({
       didMountRef.current = true
       return
     }
-    fetchConversations(false)
+    fetchConversationsRef.current(false)
   }, [refreshKey])
 
   const formatTime = (dateString: string | null) => {

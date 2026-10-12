@@ -74,66 +74,65 @@ export default function ItineraryPL({
   })
 
   useEffect(() => {
-    calculatePL()
-  }, [days])
+    const calculatePL = () => {
+      const byType: Record<string, PLBreakdown> = {}
+      let totalSupplierCost = 0
+      let totalClientPrice = 0
 
-  const calculatePL = () => {
-    const byType: Record<string, PLBreakdown> = {}
-    let totalSupplierCost = 0
-    let totalClientPrice = 0
+      days.forEach(day => {
+        (day.services || []).forEach(service => {
+          const supplierCost = Number(service.total_cost) || 0
+          // If client_price exists, use it; otherwise calculate from margin
+          const clientPrice = service.client_price 
+            ? Number(service.client_price) 
+            : supplierCost * (1 + marginPercent / 100)
 
-    days.forEach(day => {
-      (day.services || []).forEach(service => {
-        const supplierCost = Number(service.total_cost) || 0
-        // If client_price exists, use it; otherwise calculate from margin
-        const clientPrice = service.client_price 
-          ? Number(service.client_price) 
-          : supplierCost * (1 + marginPercent / 100)
+          totalSupplierCost += supplierCost
+          totalClientPrice += clientPrice
 
-        totalSupplierCost += supplierCost
-        totalClientPrice += clientPrice
-
-        if (!byType[service.service_type]) {
-          byType[service.service_type] = {
-            service_type: service.service_type,
-            supplier_cost: 0,
-            client_price: 0,
-            margin: 0,
-            margin_percent: 0,
-            count: 0
+          if (!byType[service.service_type]) {
+            byType[service.service_type] = {
+              service_type: service.service_type,
+              supplier_cost: 0,
+              client_price: 0,
+              margin: 0,
+              margin_percent: 0,
+              count: 0
+            }
           }
-        }
 
-        byType[service.service_type].supplier_cost += supplierCost
-        byType[service.service_type].client_price += clientPrice
-        byType[service.service_type].count += 1
+          byType[service.service_type].supplier_cost += supplierCost
+          byType[service.service_type].client_price += clientPrice
+          byType[service.service_type].count += 1
+        })
       })
-    })
 
-    // Calculate margins per type
-    Object.values(byType).forEach(item => {
-      item.margin = item.client_price - item.supplier_cost
-      item.margin_percent = item.supplier_cost > 0 
-        ? (item.margin / item.supplier_cost) * 100 
+      // Calculate margins per type
+      Object.values(byType).forEach(item => {
+        item.margin = item.client_price - item.supplier_cost
+        item.margin_percent = item.supplier_cost > 0 
+          ? (item.margin / item.supplier_cost) * 100 
+          : 0
+      })
+
+      // Sort by margin descending
+      const sortedBreakdown = Object.values(byType).sort((a, b) => b.margin - a.margin)
+
+      const totalMargin = totalClientPrice - totalSupplierCost
+      const overallMarginPercent = totalSupplierCost > 0 
+        ? (totalMargin / totalSupplierCost) * 100 
         : 0
-    })
 
-    // Sort by margin descending
-    const sortedBreakdown = Object.values(byType).sort((a, b) => b.margin - a.margin)
-
-    const totalMargin = totalClientPrice - totalSupplierCost
-    const overallMarginPercent = totalSupplierCost > 0 
-      ? (totalMargin / totalSupplierCost) * 100 
-      : 0
-
-    setBreakdown(sortedBreakdown)
-    setTotals({
-      supplierCost: totalSupplierCost,
-      clientPrice: totalClientPrice,
-      margin: totalMargin,
-      marginPercent: overallMarginPercent
-    })
-  }
+      setBreakdown(sortedBreakdown)
+      setTotals({
+        supplierCost: totalSupplierCost,
+        clientPrice: totalClientPrice,
+        margin: totalMargin,
+        marginPercent: overallMarginPercent
+      })
+    }
+    calculatePL()
+  }, [days, marginPercent])
 
   const getCurrencySymbol = (curr: string) => {
     return { EUR: '€', USD: '$', GBP: '£' }[curr] || curr

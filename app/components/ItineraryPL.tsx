@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   TrendingUp,
   DollarSign,
@@ -87,14 +87,10 @@ export default function ItineraryPL({
     marginPercent: 0
   })
 
-  useEffect(() => {
-    calculatePL()
-  }, [days, extraExpenses, totalCost, supplierCost])
-
   // True when the numbers came from the trip rather than from priced services.
   const [fromTripTotals, setFromTripTotals] = useState(false)
 
-  const calculatePL = () => {
+  const calculatePL = useCallback(() => {
     const byType: Record<string, PLBreakdown> = {}
     let totalSupplierCost = 0
     let totalClientPrice = 0
@@ -204,7 +200,11 @@ export default function ItineraryPL({
       margin: totalMargin,
       marginPercent: overallMarginPercent
     })
-  }
+  }, [days, extraExpenses, totalCost, supplierCost, marginPercent, currency])
+
+  useEffect(() => {
+    calculatePL()
+  }, [calculatePL])
 
   // One formatter for money everywhere, so ¥1,099,897 does not render with the
   // two decimal places the yen does not have.

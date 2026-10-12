@@ -2,7 +2,7 @@
 
 import { todayLocal } from '@/lib/today'
 import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
@@ -214,6 +214,8 @@ function getLanguageFromCookie(): string {
 
 export default function AttractionsContent() {
   const t = useTranslations('rates.attractions')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const attractionCategoryLabel = useVocabLabel('attraction_category')
   const attractionFeeLabel = useVocabLabel('attraction_fee_type')
   // The form's pickers list the agency's vocabulary; these built-in lists
@@ -244,6 +246,9 @@ export default function AttractionsContent() {
   const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
   
   const [attractions, setAttractions] = useState<Attraction[]>([])
+  // Read by the ?edit= effect without making it re-run on every refetch.
+  const attractionsRef = useRef(attractions)
+  attractionsRef.current = attractions
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -287,14 +292,14 @@ export default function AttractionsContent() {
   })
 
   // Toast helper
-  const showToast = (type: 'success' | 'error', message: string) => {
+  const showToast = useCallback((type: 'success' | 'error', message: string) => {
     const id = Date.now().toString()
     setToasts(prev => [...prev, { id, type, message }])
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
-  }
+  }, [])
 
   // Fetch attractions
-  const fetchAttractions = async () => {
+  const fetchAttractions = useCallback(async () => {
     try {
       const langParam = `?language=${activeLanguage || 'en'}`
       console.log('📥 Fetching attractions: lang=' + activeLanguage + ' url=/api/rates/attractions' + langParam)
@@ -306,10 +311,10 @@ export default function AttractionsContent() {
       setLoading(false)
     } catch (error) {
       console.error('Error fetching attractions:', error)
-      showToast('error', t('notifications.failedToLoad'))
+      showToast('error', tRef.current('notifications.failedToLoad'))
       setLoading(false)
     }
-  }
+  }, [activeLanguage, showToast])
 
   // Fetch suppliers
   const fetchSuppliers = async () => {
@@ -343,12 +348,12 @@ export default function AttractionsContent() {
 
     const editId = searchParams.get('edit')
     if (editId) {
-      const attraction = attractions.find(a => a.id === editId)
+      const attraction = attractionsRef.current.find(a => a.id === editId)
       if (attraction) {
         handleEdit(attraction)
       }
     }
-  }, [searchParams, activeLanguage])
+  }, [searchParams, activeLanguage, fetchAttractions])
 
   // Reset to first page when filters change
   useEffect(() => {

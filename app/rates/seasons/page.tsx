@@ -1,7 +1,7 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
@@ -43,6 +43,8 @@ const formatPercent = (value: number) => String(Number(value))
 
 export default function PricingSeasonsPage() {
   const t = useTranslations('rates.seasons')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const tDialog = useTranslations('confirmDialog')
   const dialog = useConfirmDialog()
   const tCommon = useTranslations('rates.common')
@@ -72,25 +74,25 @@ export default function PricingSeasonsPage() {
   const [newEnd, setNewEnd] = useState('')
   const [newLabel, setNewLabel] = useState('')
 
-  const showNotice = (type: 'success' | 'error', message: string) => {
+  const showNotice = useCallback((type: 'success' | 'error', message: string) => {
     setNotice({ type, message })
     setTimeout(() => setNotice(null), 4000)
-  }
+  }, [])
 
-  const fetchSeasons = async () => {
+  const fetchSeasons = useCallback(async () => {
     try {
       const res = await fetch('/api/pricing/seasons')
       const data = await res.json()
       if (data.success) setSeasons(data.data)
-      else showNotice('error', data.error || t('failedToLoad'))
+      else showNotice('error', data.error || tRef.current('failedToLoad'))
     } catch {
-      showNotice('error', t('failedToLoad'))
+      showNotice('error', tRef.current('failedToLoad'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [showNotice])
 
-  useEffect(() => { fetchSeasons() }, [])
+  useEffect(() => { fetchSeasons() }, [fetchSeasons])
 
   const handleAddSeason = async () => {
     if (!newName.trim()) return

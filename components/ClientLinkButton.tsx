@@ -84,28 +84,34 @@ export default function ClientLinkButton({
   const [searching, setSearching] = useState(false)
   const [linking, setLinking] = useState(false)
 
+  // Parents pass onLinkChange inline; read the latest one without making it
+  // re-trigger the link check below.
+  const onLinkChangeRef = useRef(onLinkChange)
+  useEffect(() => {
+    onLinkChangeRef.current = onLinkChange
+  })
+
   // Check for existing link on mount
   useEffect(() => {
+    const checkExistingLink = async () => {
+      try {
+        const params = new URLSearchParams({ userId, messageId })
+        const response = await fetch(`/api/email/links?${params}`)
+        const data = await response.json()
+
+        if (data.link) {
+          setLinkedClient(data.link.client)
+          setLinkId(data.link.id)
+          onLinkChangeRef.current?.(data.link)
+        }
+      } catch (error) {
+        console.error('Error checking link:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
     checkExistingLink()
   }, [messageId, userId])
-
-  const checkExistingLink = async () => {
-    try {
-      const params = new URLSearchParams({ userId, messageId })
-      const response = await fetch(`/api/email/links?${params}`)
-      const data = await response.json()
-
-      if (data.link) {
-        setLinkedClient(data.link.client)
-        setLinkId(data.link.id)
-        onLinkChange?.(data.link)
-      }
-    } catch (error) {
-      console.error('Error checking link:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // Search clients
   useEffect(() => {

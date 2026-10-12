@@ -823,7 +823,7 @@ export default function WhatsAppParserPage() {
 
 function WhatsAppParserContent() {
   const t = useTranslations('whatsappParser')
-  const supabase = createClient()
+  const [supabase] = useState(() => createClient())
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -948,7 +948,7 @@ function WhatsAppParserContent() {
       }
     }
     loadUserPreferences()
-  }, [])
+  }, [supabase])
 
   useEffect(() => {
     if (conversationKeyParam) {
@@ -995,8 +995,12 @@ function WhatsAppParserContent() {
     if (emailParam) setSenderEmail(emailParam)
   }, [conversationParam, conversationKeyParam, phoneParam, emailParam])
 
+  // Read via a ref: the preselect applies when the URL's clientId changes, not
+  // again when the operator clears their selection.
+  const selectedClientIdRef = useRef(selectedClientId)
+  useEffect(() => { selectedClientIdRef.current = selectedClientId })
   useEffect(() => {
-    if (preSelectedClientId && !selectedClientId) {
+    if (preSelectedClientId && !selectedClientIdRef.current) {
       setSelectedClientId(preSelectedClientId)
       setClientStep('existing-selected')
     }
@@ -1029,7 +1033,7 @@ function WhatsAppParserContent() {
       }
       fetchPartners()
     }
-  }, [isB2BMode])
+  }, [isB2BMode, b2bPartners.length])
 
   // ============================================
   // HANDLERS

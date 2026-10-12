@@ -1,7 +1,7 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
@@ -162,7 +162,7 @@ export default function TrainRatesContent() {
   })
 
   // Fetch rates
-  const fetchRates = async () => {
+  const fetchRates = useCallback(async () => {
     try {
       const params = new URLSearchParams()
       if (!showInactive) params.append('active_only', 'true')
@@ -178,12 +178,12 @@ export default function TrainRatesContent() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [showInactive])
 
   useEffect(() => {
     setMounted(true)
     fetchRates()
-  }, [])
+  }, [fetchRates])
 
   useEffect(() => {
     setCurrentPage(1)

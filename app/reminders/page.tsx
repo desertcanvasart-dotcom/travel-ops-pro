@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import {
   Bell,
@@ -101,6 +101,9 @@ export default function PaymentRemindersPage() {
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending')
   const [historyFilter, setHistoryFilter] = useState<'all' | 'sent' | 'failed'>('all')
   const [historyPage, setHistoryPage] = useState(0)
+  // Read through a ref so a page change (load more) doesn't re-run the reset effect below.
+  const historyPageRef = useRef(historyPage)
+  historyPageRef.current = historyPage
   const [hasMoreHistory, setHasMoreHistory] = useState(false)
 
   const fetchPendingReminders = useCallback(async () => {
@@ -118,7 +121,7 @@ export default function PaymentRemindersPage() {
   const fetchReminderHistory = useCallback(async (reset = false) => {
     setHistoryLoading(true)
     try {
-      const offset = reset ? 0 : historyPage * 50
+      const offset = reset ? 0 : historyPageRef.current * 50
       const status = historyFilter === 'all' ? '' : `&status=${historyFilter}`
       
       const historyRes = await fetch(`/api/reminders/history?limit=50&offset=${offset}${status}`)
@@ -140,7 +143,7 @@ export default function PaymentRemindersPage() {
     } finally {
       setHistoryLoading(false)
     }
-  }, [historyFilter, historyPage])
+  }, [historyFilter])
 
   useEffect(() => {
     const loadData = async () => {
@@ -155,7 +158,7 @@ export default function PaymentRemindersPage() {
     if (activeTab === 'history') {
       fetchReminderHistory(true)
     }
-  }, [activeTab, historyFilter])
+  }, [activeTab, historyFilter, fetchReminderHistory])
 
   const handleSendSingle = async (invoiceId: string) => {
     setSendingId(invoiceId)

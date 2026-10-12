@@ -4,7 +4,7 @@ import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 export const dynamic = 'force-dynamic'
 
 import { todayLocal } from '@/lib/today'
-import { useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { useTierLabel } from '@/hooks/useTierLabel'
@@ -221,17 +221,17 @@ export default function RestaurantsContent() {
   })
 
   // Toast helpers
-  const showToast = (type: 'success' | 'error' | 'info', message: string) => {
+  const showToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     const id = Date.now().toString()
     setToasts(prev => [...prev, { id, type, message }])
-  }
+  }, [])
 
   const removeToast = (id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id))
   }
 
   // Fetch restaurants
-  const fetchRestaurants = async () => {
+  const fetchRestaurants = useCallback(async () => {
     try {
       const response = await fetch('/api/resources/restaurants')
       const data = await response.json()
@@ -244,11 +244,11 @@ export default function RestaurantsContent() {
       showToast('error', 'Failed to load restaurants')
       setLoading(false)
     }
-  }
+  }, [showToast])
 
   useEffect(() => {
     fetchRestaurants()
-  }, [])
+  }, [fetchRestaurants])
 
   // Handle form changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {

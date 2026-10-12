@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { PartnerIntegrationsPanel } from '@/components/settings/PartnerIntegrationsPanel'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -134,6 +134,7 @@ function SettingsContent() {
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
   const { user } = useAuth()
+  const userId = user?.id
   const t = useTranslations('settings')
   // The agency's tiers (Settings → Vocabulary), presets falling back to the i18n words.
   const tierOptions = useTierOptions(key => t(TIER_LABEL_KEYS[key]))
@@ -185,42 +186,6 @@ function SettingsContent() {
     router.push(`/settings?tab=${tabId}`, { scroll: false })
   }
 
-  // Load data based on active tab
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true)
-      setError(null)
-      
-      try {
-        switch (activeTab) {
-          case 'profile':
-            await fetchProfile()
-            break
-          case 'email':
-            await fetchEmailSettings()
-            break
-          case 'notifications':
-            await fetchNotificationPrefs()
-            break
-          case 'preferences':
-            await fetchPreferences()
-            break
-          case 'integrations':
-            await fetchAccountingStatus()
-            await fetchWhatsappStatus()
-            break
-        }
-      } catch (err) {
-        console.error('Error loading data:', err)
-        setError('Failed to load settings')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadData()
-  }, [activeTab])
-
   // ============================================
   // DATA FETCHING
   // ============================================
@@ -266,10 +231,10 @@ function SettingsContent() {
     }
   }
 
-  const fetchAccountingStatus = async () => {
+  const fetchAccountingStatus = useCallback(async () => {
     try {
-      if (!user) return
-      const response = await fetch(`/api/auth/accounting/status?userId=${user.id}`)
+      if (!userId) return
+      const response = await fetch(`/api/auth/accounting/status?userId=${userId}`)
       if (response.ok) {
         const data = await response.json()
         setAccountingStatus(data)
@@ -277,7 +242,7 @@ function SettingsContent() {
     } catch (error) {
       console.error('Error fetching accounting status:', error)
     }
-  }
+  }, [userId])
 
   const connectAccounting = async (provider: 'xero' | 'quickbooks') => {
     if (!user) return
@@ -351,9 +316,9 @@ function SettingsContent() {
     }
   }
 
-  const fetchEmailSettings = async () => {
+  const fetchEmailSettings = useCallback(async () => {
     try {
-      const response = await fetch(`/api/settings/email${user?.id ? `?userId=${user.id}` : ''}`)
+      const response = await fetch(`/api/settings/email${userId ? `?userId=${userId}` : ''}`)
       if (response.ok) {
         const data = await response.json()
         setEmailSettings(data)
@@ -377,7 +342,7 @@ function SettingsContent() {
         auto_reply_message: ''
       })
     }
-  }
+  }, [userId])
 
   const fetchNotificationPrefs = async () => {
     try {
@@ -390,6 +355,42 @@ function SettingsContent() {
       console.error('Error fetching notification prefs:', error)
     }
   }
+
+  // Load data based on active tab
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true)
+      setError(null)
+      
+      try {
+        switch (activeTab) {
+          case 'profile':
+            await fetchProfile()
+            break
+          case 'email':
+            await fetchEmailSettings()
+            break
+          case 'notifications':
+            await fetchNotificationPrefs()
+            break
+          case 'preferences':
+            await fetchPreferences()
+            break
+          case 'integrations':
+            await fetchAccountingStatus()
+            await fetchWhatsappStatus()
+            break
+        }
+      } catch (err) {
+        console.error('Error loading data:', err)
+        setError('Failed to load settings')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [activeTab, fetchEmailSettings, fetchAccountingStatus])
 
   const savePreferences = async () => {
     setSaving(true)

@@ -295,6 +295,11 @@ export function UnifiedMessageThread({
   // cancel a slow response that would otherwise overwrite the current thread.
   const messagesAbortRef = useRef<AbortController | null>(null)
 
+  // Parents may pass an inline callback; read the latest one without making
+  // fetchMessages (and the poll interval) change identity with it.
+  const onConversationUpdateRef = useRef(onConversationUpdate)
+  useEffect(() => { onConversationUpdateRef.current = onConversationUpdate })
+
   // Fetch messages based on channel
   const fetchMessages = useCallback(async (showLoader = true) => {
     if (!conversation) return
@@ -346,7 +351,7 @@ export function UnifiedMessageThread({
         // Opening a trip chat is reading it, as for portal threads.
         if (conversation.channel === 'trip' && msgs.some((m: { direction: string; is_read?: boolean }) => m.direction === 'inbound' && !m.is_read)) {
           fetch(`/api/itineraries/${conversation.id}/messages`, { method: 'PATCH' })
-            .then(() => onConversationUpdate?.({ ...conversation, unread_count: 0 }))
+            .then(() => onConversationUpdateRef.current?.({ ...conversation, unread_count: 0 }))
             .catch(() => undefined)
         }
       }
@@ -374,13 +379,19 @@ export function UnifiedMessageThread({
     }
   }, [])
 
+  // The load effect below is keyed on the conversation id only; a refreshed
+  // conversation object must not reload the thread or reset translations.
+  const conversationId = conversation?.id
+  const fetchMessagesRef = useRef(fetchMessages)
+  useEffect(() => { fetchMessagesRef.current = fetchMessages })
+
   // Abort any in-flight messages fetch on unmount.
   useEffect(() => () => messagesAbortRef.current?.abort(), [])
 
   // Load messages when conversation changes
   useEffect(() => {
-    if (conversation) {
-      fetchMessages(true)
+    if (conversationId) {
+      fetchMessagesRef.current(true)
       fetchAgents()
       // Reset translation state
       setIncomingTranslations({})
@@ -390,7 +401,7 @@ export function UnifiedMessageThread({
     } else {
       setMessages([])
     }
-  }, [conversation?.id])
+  }, [conversationId, fetchAgents])
 
   // Scroll to bottom when messages change (container-based to avoid page scroll)
   useEffect(() => {
@@ -402,12 +413,12 @@ export function UnifiedMessageThread({
 
   // Auto-refresh messages
   useEffect(() => {
-    if (!conversation) return
+    if (!conversationId) return
     const interval = setInterval(() => {
       fetchMessages(false)
     }, 15000)
     return () => clearInterval(interval)
-  }, [conversation?.id, fetchMessages])
+  }, [conversationId, fetchMessages])
 
   // Translation functions
   const translateOutgoing = async (text: string, targetLang: string): Promise<string | null> => {
@@ -441,6 +452,10 @@ export function UnifiedMessageThread({
     if (translation) setIncomingTranslations(prev => ({ ...prev, [messageId]: translation }))
     setTranslatingMessageIds(prev => { const s = new Set(prev); s.delete(messageId); return s })
   }
+  // Auto-translate reads the latest handler via a ref: as a dep it would re-run
+  // (and loop) every time it stores a translation.
+  const handleTranslateMessageRef = useRef(handleTranslateMessage)
+  useEffect(() => { handleTranslateMessageRef.current = handleTranslateMessage })
 
   // Auto-translate outgoing message
   useEffect(() => {
@@ -462,8 +477,9 @@ export function UnifiedMessageThread({
   useEffect(() => {
     if (translationEnabled && messages.length > 0) {
       messages.forEach(msg => {
-        if (msg.direction === 'inbound' && !incomingTranslations[msg.id]) {
-          handleTranslateMessage(msg.id, msg.content)
+        // The handler skips messages already translated or in flight.
+        if (msg.direction === 'inbound') {
+          handleTranslateMessageRef.current(msg.id, msg.content)
         }
       })
     }

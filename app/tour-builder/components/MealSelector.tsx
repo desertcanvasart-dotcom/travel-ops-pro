@@ -35,6 +35,26 @@ export default function MealSelector({
 
   // Fetch meals when city changes
   useEffect(() => {
+    const fetchMeals = async () => {
+      setLoading(true)
+      try {
+        const response = await fetch(`/api/rates?type=meal&city=${city}&meal_type=${mealType}&in_org_currency=true`)
+        const data = await response.json()
+      
+        if (data.success) {
+          // Ensure data.data is an array
+          const mealsData = Array.isArray(data.data) ? data.data : []
+          setMeals(mealsData)
+        } else {
+          setMeals([])
+        }
+      } catch (error) {
+        console.error('Failed to fetch meals:', error)
+        setMeals([])
+      } finally {
+        setLoading(false)
+      }
+    }
     if (!city) {
       setMeals([])
       return
@@ -42,27 +62,6 @@ export default function MealSelector({
 
     fetchMeals()
   }, [city, mealType])
-
-  const fetchMeals = async () => {
-    setLoading(true)
-    try {
-      const response = await fetch(`/api/rates?type=meal&city=${city}&meal_type=${mealType}&in_org_currency=true`)
-      const data = await response.json()
-      
-      if (data.success) {
-        // Ensure data.data is an array
-        const mealsData = Array.isArray(data.data) ? data.data : []
-        setMeals(mealsData)
-      } else {
-        setMeals([])
-      }
-    } catch (error) {
-      console.error('Failed to fetch meals:', error)
-      setMeals([])
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // Filter meals
   const filteredMeals = meals.filter(meal => {

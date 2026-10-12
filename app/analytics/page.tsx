@@ -148,28 +148,28 @@ export default function AnalyticsPage() {
   const formatCurrency = (num: number) => formatCurrencyIn(num, reportCurrency)
 
   useEffect(() => {
+    const fetchAnalytics = async () => {
+      setLoading(true)
+      try {
+        const response = await fetch(`/api/analytics?range=${timeRange}`)
+        const data = await response.json()
+        
+        if (data.success && data.data) {
+          setAnalytics(data.data)
+        } else {
+          // Use empty data if API fails or returns no data
+          setAnalytics(emptyData)
+        }
+      } catch (error) {
+        console.error('Error fetching analytics:', error)
+        setAnalytics(emptyData)
+      } finally {
+        setLoading(false)
+      }
+    }
+
     fetchAnalytics()
   }, [timeRange])
-
-  const fetchAnalytics = async () => {
-    setLoading(true)
-    try {
-      const response = await fetch(`/api/analytics?range=${timeRange}`)
-      const data = await response.json()
-      
-      if (data.success && data.data) {
-        setAnalytics(data.data)
-      } else {
-        // Use empty data if API fails or returns no data
-        setAnalytics(emptyData)
-      }
-    } catch (error) {
-      console.error('Error fetching analytics:', error)
-      setAnalytics(emptyData)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // Use analytics data or empty data (never mock data)
   const displayData = analytics || emptyData

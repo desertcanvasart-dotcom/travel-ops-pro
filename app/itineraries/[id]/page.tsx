@@ -4,7 +4,7 @@ import { clientTotalOfDays, seasonSupplementOf, tripClientTotal } from '@/lib/it
 import { addDays } from '@/lib/payment-schedule'
 import { overnightLabel, overnightProperty } from '@/lib/itineraries/overnight-property'
 import { todayLocal } from '@/lib/today'
-import { useEffect, useState, useMemo } from 'react'
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import { formatMoney } from '@/lib/currency-totals'
 import { useTranslations, useLocale, createTranslator } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
@@ -176,6 +176,8 @@ interface ExistingInvoice {
 
 export default function ViewItineraryPage() {
   const t = useTranslations('itineraries.detail')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const tEdit = useTranslations('itineraries.edit')
   const tCommon = useTranslations('common')
   const tPdf = useTranslations('pdf')
@@ -289,20 +291,7 @@ export default function ViewItineraryPage() {
   const [itineraryExpenses, setItineraryExpenses] = useState<any[]>([])
   const [expenseRefreshTrigger, setExpenseRefreshTrigger] = useState(0)
 
-  // The content language no longer follows the staff UI language (the
-  // sidebar switch): a Japanese-speaking operator still needs to see that the
-  // English source is the source. The view opens on the source, or side by
-  // side when a translation needs work — decided once the statuses load.
-  useEffect(() => {
-    if (params.id) {
-      fetchItinerary()
-      fetchDayTranslations()
-      checkExistingInvoice()
-      checkExistingBooking()
-    }
-  }, [params.id])
-
-  const fetchDayTranslations = async () => {
+  const fetchDayTranslations = useCallback(async () => {
     try {
       const res = await fetch(`/api/itineraries/${params.id}/day-translations`)
       const data = await res.json()
@@ -310,17 +299,9 @@ export default function ViewItineraryPage() {
     } catch (err) {
       console.error('Error fetching day translations:', err)
     }
-  }
+  }, [params.id])
 
-  // Fetch days when language changes
-  useEffect(() => {
-    if (params.id) {
-      console.log(`🔁 activeLanguage changed to: ${activeLanguage}, fetching days...`)
-      fetchDays(activeLanguage)
-    }
-  }, [params.id, activeLanguage])
-
-  const fetchDays = async (language: Language) => {
+  const fetchDays = useCallback(async (language: Language) => {
     try {
       console.log(`📥 fetchDays called with language=${language}`)
       const daysResponse = await fetch(`/api/itineraries/${params.id}/days?language=${language}`)
@@ -342,15 +323,15 @@ export default function ViewItineraryPage() {
     } catch (err) {
       console.error('Error fetching days:', err)
     }
-  }
+  }, [params.id])
 
-  const fetchItinerary = async () => {
+  const fetchItinerary = useCallback(async () => {
     try {
       const itinResponse = await fetch(`/api/itineraries/${params.id}`)
       const itinData = await itinResponse.json()
 
       if (!itinData.success) {
-        setError(t('itineraryNotFound'))
+        setError(tRef.current('itineraryNotFound'))
         setLoading(false)
         return
       }
@@ -361,12 +342,12 @@ export default function ViewItineraryPage() {
       // Fetch days will be done separately when activeLanguage changes
       setLoading(false)
     } catch (err) {
-      setError(t('errorLoadingItinerary'))
+      setError(tRef.current('errorLoadingItinerary'))
       setLoading(false)
     }
-  }
+  }, [params.id])
 
-  const checkExistingInvoice = async () => {
+  const checkExistingInvoice = useCallback(async () => {
     try {
       const response = await fetch(`/api/invoices?itineraryId=${params.id}`)
       if (response.ok) {
@@ -378,9 +359,9 @@ export default function ViewItineraryPage() {
     } catch (error) {
       console.error('Error checking existing invoice:', error)
     }
-  }
+  }, [params.id])
 
-  const checkExistingBooking = async () => {
+  const checkExistingBooking = useCallback(async () => {
     try {
       // By itinerary id — `search` matches names and codes, never the id, so
       // looking the booking up through it never found one: no booking chip,
@@ -398,7 +379,28 @@ export default function ViewItineraryPage() {
     } catch (error) {
       console.error('Error checking existing booking:', error)
     }
-  }
+  }, [params.id])
+
+  // The content language no longer follows the staff UI language (the
+  // sidebar switch): a Japanese-speaking operator still needs to see that the
+  // English source is the source. The view opens on the source, or side by
+  // side when a translation needs work — decided once the statuses load.
+  useEffect(() => {
+    if (params.id) {
+      fetchItinerary()
+      fetchDayTranslations()
+      checkExistingInvoice()
+      checkExistingBooking()
+    }
+  }, [params.id, fetchItinerary, fetchDayTranslations, checkExistingInvoice, checkExistingBooking])
+
+  // Fetch days when language changes
+  useEffect(() => {
+    if (params.id) {
+      console.log(`🔁 activeLanguage changed to: ${activeLanguage}, fetching days...`)
+      fetchDays(activeLanguage)
+    }
+  }, [params.id, activeLanguage, fetchDays])
 
   const handleCreateBooking = async () => {
     setCreatingBooking(true)

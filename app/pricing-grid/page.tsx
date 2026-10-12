@@ -591,7 +591,7 @@ function PricingGridContent() {
   }
 
   // --- Load from Existing Itinerary (full restore) ---
-  const handleLoadItinerary = async (itineraryId: string) => {
+  const handleLoadItinerary = useCallback(async (itineraryId: string) => {
     try {
       // Fetch itinerary header
       const headerRes = await fetch(`/api/itineraries/${itineraryId}`)
@@ -674,7 +674,7 @@ function PricingGridContent() {
       console.error('Load error:', err)
       alert('Failed to load itinerary')
     }
-  }
+  }, [rates])
 
   // Auto-load an itinerary passed via ?itinerary=<id> (e.g. from the itinerary
   // editor's "Price in Grid"). The grid is the single pricing surface, so the
@@ -689,7 +689,7 @@ function PricingGridContent() {
     // Clean the URL so a reload doesn't reload-by-param.
     window.history.replaceState({}, '', '/pricing-grid')
    
-  }, [searchParams])
+  }, [searchParams, handleLoadItinerary])
 
   // --- Save to Database ---
   const handleSave = async () => {

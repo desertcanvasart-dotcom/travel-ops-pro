@@ -159,8 +159,28 @@ export default function TemplatesPage() {
 
   useEffect(() => {
     fetchTemplates()
-    fetchPlaceholders()
   }, [])
+
+  // Locale starts as the default and switches after IntlClientProvider mounts,
+  // so refetch when it changes and ignore the stale response.
+  useEffect(() => {
+    let cancelled = false
+    const fetchPlaceholders = async () => {
+      try {
+        const response = await fetch(`/api/templates/placeholders?locale=${locale}`)
+        if (response.ok) {
+          const data = await response.json()
+          if (!cancelled) setPlaceholders(data.data || [])
+        }
+      } catch (error) {
+        console.error('Error fetching placeholders:', error)
+      }
+    }
+    fetchPlaceholders()
+    return () => {
+      cancelled = true
+    }
+  }, [locale])
 
   const fetchTemplates = async () => {
     try {
@@ -183,18 +203,6 @@ export default function TemplatesPage() {
       console.error('Error fetching templates:', error)
     } finally {
       setLoading(false)
-    }
-  }
-
-  const fetchPlaceholders = async () => {
-    try {
-      const response = await fetch(`/api/templates/placeholders?locale=${locale}`)
-      if (response.ok) {
-        const data = await response.json()
-        setPlaceholders(data.data || [])
-      }
-    } catch (error) {
-      console.error('Error fetching placeholders:', error)
     }
   }
 
@@ -860,7 +868,76 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
   }
 
   useEffect(() => {
+    const fetchRecipients = async () => {
+      setLoading(true)
+      try {
+        let endpoint = '/api/clients?limit=100'
+
+        if (isPartnerTemplate) {
+          // B2B partners are travel agencies who request quotes
+          endpoint = '/api/b2b/partners'
+        } else if (isSupplierTemplate) {
+          // Suppliers are service providers (hotels, transport, guides, etc.)
+          switch (supplierType) {
+            case 'hotel':
+              endpoint = '/api/suppliers?type=hotel'
+              break
+            case 'cruise':
+              endpoint = '/api/cruises'
+              break
+            case 'transport':
+              endpoint = '/api/suppliers?type=transport,local_operator'
+              break
+            case 'guide':
+              endpoint = '/api/guides'
+              break
+            default:
+              endpoint = '/api/suppliers'
+          }
+        }
+
+        const response = await fetch(endpoint)
+        if (response.ok) {
+          const data = await response.json()
+
+          // Handle different response formats from various APIs
+          let items: any[] = []
+          if (Array.isArray(data)) {
+            // Direct array response (e.g., guides)
+            items = data
+          } else if (data.success && Array.isArray(data.data)) {
+            // Standard { success: true, data: [...] } format (suppliers, cruises, etc.)
+            items = data.data
+          } else if (Array.isArray(data.data)) {
+            // { data: [...] } format
+            items = data.data
+          } else if (Array.isArray(data.clients)) {
+            // Clients API returns { clients: [...] }
+            items = data.clients
+          }
+
+          // Normalize to Recipient format
+          const normalized: Recipient[] = items.map(item => ({
+            id: item.id,
+            name: item.company_name || item.name || item.hotel_name || item.cruise_name || item.supplier_name || 'Unknown',
+            email: item.email || item.contact_email || item.reservations_email,
+            phone: item.phone || item.contact_phone || item.whatsapp_number || item.whatsapp,
+            type: isPartnerTemplate ? 'partner' : isSupplierTemplate ? supplierType as any : 'client'
+          }))
+
+          setRecipients(normalized)
+        }
+      } catch (error) {
+        console.error('Error fetching recipients:', error)
+        setRecipients([])
+      } finally {
+        setLoading(false)
+      }
+    }
     fetchRecipients()
+  }, [isPartnerTemplate, isSupplierTemplate, supplierType])
+
+  useEffect(() => {
     fetchItineraries()
   }, [])
 
@@ -960,73 +1037,6 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
     })
     setPreview(text)
   }, [filledValues, template.body])
-
-  const fetchRecipients = async () => {
-    setLoading(true)
-    try {
-      let endpoint = '/api/clients?limit=100'
-
-      if (isPartnerTemplate) {
-        // B2B partners are travel agencies who request quotes
-        endpoint = '/api/b2b/partners'
-      } else if (isSupplierTemplate) {
-        // Suppliers are service providers (hotels, transport, guides, etc.)
-        switch (supplierType) {
-          case 'hotel':
-            endpoint = '/api/suppliers?type=hotel'
-            break
-          case 'cruise':
-            endpoint = '/api/cruises'
-            break
-          case 'transport':
-            endpoint = '/api/suppliers?type=transport,local_operator'
-            break
-          case 'guide':
-            endpoint = '/api/guides'
-            break
-          default:
-            endpoint = '/api/suppliers'
-        }
-      }
-
-      const response = await fetch(endpoint)
-      if (response.ok) {
-        const data = await response.json()
-
-        // Handle different response formats from various APIs
-        let items: any[] = []
-        if (Array.isArray(data)) {
-          // Direct array response (e.g., guides)
-          items = data
-        } else if (data.success && Array.isArray(data.data)) {
-          // Standard { success: true, data: [...] } format (suppliers, cruises, etc.)
-          items = data.data
-        } else if (Array.isArray(data.data)) {
-          // { data: [...] } format
-          items = data.data
-        } else if (Array.isArray(data.clients)) {
-          // Clients API returns { clients: [...] }
-          items = data.clients
-        }
-
-        // Normalize to Recipient format
-        const normalized: Recipient[] = items.map(item => ({
-          id: item.id,
-          name: item.company_name || item.name || item.hotel_name || item.cruise_name || item.supplier_name || 'Unknown',
-          email: item.email || item.contact_email || item.reservations_email,
-          phone: item.phone || item.contact_phone || item.whatsapp_number || item.whatsapp,
-          type: isPartnerTemplate ? 'partner' : isSupplierTemplate ? supplierType as any : 'client'
-        }))
-
-        setRecipients(normalized)
-      }
-    } catch (error) {
-      console.error('Error fetching recipients:', error)
-      setRecipients([])
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // Extract placeholders from template
   const templatePlaceholders = template.body.match(/\{\{[^}]+\}\}/g) || []

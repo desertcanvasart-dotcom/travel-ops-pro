@@ -1,7 +1,7 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
@@ -245,7 +245,7 @@ export default function MealRatesContent() {
   })
 
   // Fetch rates
-  const fetchRates = async () => {
+  const fetchRates = useCallback(async () => {
     try {
       const params = new URLSearchParams()
       if (!showInactive) params.append('active_only', 'true')
@@ -261,7 +261,7 @@ export default function MealRatesContent() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [showInactive])
 
   // Fetch suppliers (restaurants)
   const fetchSuppliers = async () => {
@@ -279,9 +279,12 @@ export default function MealRatesContent() {
 
   useEffect(() => {
     setMounted(true)
-    fetchRates()
     fetchSuppliers()
   }, [])
+
+  useEffect(() => {
+    fetchRates()
+  }, [fetchRates])
 
   useEffect(() => {
     setCurrentPage(1)

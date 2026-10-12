@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
@@ -63,9 +63,28 @@ export default function QuotesListPage() {
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkStatus, setBulkStatus] = useState('')
 
+  const fetchQuotes = useCallback(async () => {
+    setLoading(true)
+    try {
+      let url = '/api/b2b/quotes?limit=100'
+      if (statusFilter !== 'all') {
+        url += `&status=${statusFilter}`
+      }
+      const res = await fetch(url)
+      const data = await res.json()
+      if (data.success) {
+        setQuotes(data.data || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch quotes:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [statusFilter])
+
   useEffect(() => {
     fetchQuotes()
-  }, [statusFilter])
+  }, [fetchQuotes])
 
   const toggleSelect = (id: string) =>
     setSelected((prev) => {
@@ -119,25 +138,6 @@ export default function QuotesListPage() {
       }
     } finally {
       setBulkBusy(false)
-    }
-  }
-
-  const fetchQuotes = async () => {
-    setLoading(true)
-    try {
-      let url = '/api/b2b/quotes?limit=100'
-      if (statusFilter !== 'all') {
-        url += `&status=${statusFilter}`
-      }
-      const res = await fetch(url)
-      const data = await res.json()
-      if (data.success) {
-        setQuotes(data.data || [])
-      }
-    } catch (err) {
-      console.error('Failed to fetch quotes:', err)
-    } finally {
-      setLoading(false)
     }
   }
 

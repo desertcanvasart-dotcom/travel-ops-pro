@@ -292,11 +292,27 @@ export default function InboxPage() {
   // NEW: Email caching hook
   const { getCached, cache, updateCached, removeCached, isCacheReady } = useEmailCache(user?.id || null)
 
+  // Latest render's functions/values for the user- and folder-keyed effects
+  // below: they must keep firing only when `user` / `folder` change, not on
+  // every render (these functions are recreated each render) or search keystroke.
+  const effectLatestRef = useRef<{
+    checkConnectionAndFetchEmails: typeof checkConnectionAndFetchEmails
+    fetchLabels: typeof fetchLabels
+    fetchClients: typeof fetchClients
+    fetchEmails: typeof fetchEmails
+    isConnected: boolean
+    searchQuery: string
+  } | null>(null)
   useEffect(() => {
-    if (user) {
-      checkConnectionAndFetchEmails()
-      fetchLabels()
-      fetchClients() // NEW: Fetch clients for template placeholders
+    effectLatestRef.current = { checkConnectionAndFetchEmails, fetchLabels, fetchClients, fetchEmails, isConnected, searchQuery }
+  })
+
+  useEffect(() => {
+    const latest = effectLatestRef.current
+    if (user && latest) {
+      latest.checkConnectionAndFetchEmails()
+      latest.fetchLabels()
+      latest.fetchClients() // NEW: Fetch clients for template placeholders
     }
   }, [user])
 
@@ -623,8 +639,9 @@ ${bodyText}`
     window.location.href = `/pricing-grid?${params.toString()}`
   }
   useEffect(() => {
-    if (isConnected) {
-      fetchEmails(searchQuery, folder)
+    const latest = effectLatestRef.current
+    if (latest?.isConnected) {
+      latest.fetchEmails(latest.searchQuery, folder)
     }
   }, [folder])
 

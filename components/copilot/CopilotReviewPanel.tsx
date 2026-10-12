@@ -44,16 +44,18 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
   const [commitError, setCommitError] = useState<string | null>(null)
 
   // Fetch draft details when thread changes
+  const latestDraftId = thread?.latest_draft?.id
+  const latestInbox = thread?.latest_inbox
   useEffect(() => {
-    if (!thread?.latest_draft?.id) {
+    if (!latestDraftId) {
       setDraft(null)
-      setInboxMessage(thread?.latest_inbox || null)
+      setInboxMessage(latestInbox || null)
       return
     }
 
     const fetchDraft = async () => {
       try {
-        const res = await fetch(`/api/copilot/drafts/${thread.latest_draft!.id}`)
+        const res = await fetch(`/api/copilot/drafts/${latestDraftId}`)
         const data = await res.json()
         if (data.success) {
           setDraft(data.draft)
@@ -67,7 +69,7 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
     }
 
     fetchDraft()
-  }, [thread?.latest_draft?.id, thread?.latest_inbox])
+  }, [latestDraftId, latestInbox])
 
   // WhatsApp countdown timer
   useEffect(() => {
@@ -217,8 +219,10 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
   // Phase 1: look up the spawned itinerary (if any) when a Concierge thread
   // is selected. Either renders the "Create itinerary" button or the
   // "View itinerary →" link.
+  const threadId = thread?.id
+  const threadOrigin = thread?.origin
   useEffect(() => {
-    if (!thread || thread.origin !== 'concierge') {
+    if (!threadId || threadOrigin !== 'concierge') {
       setSpawnedItinerary(null)
       setCommitError(null)
       return
@@ -226,7 +230,7 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
     let cancelled = false
     ;(async () => {
       try {
-        const res = await fetch(`/api/copilot/threads/${thread.id}/commit-itinerary`)
+        const res = await fetch(`/api/copilot/threads/${threadId}/commit-itinerary`)
         const data = await res.json()
         if (cancelled) return
         if (data.success && data.itinerary) {
@@ -241,7 +245,7 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
     return () => {
       cancelled = true
     }
-  }, [thread?.id, thread?.origin])
+  }, [threadId, threadOrigin])
 
   // Phase 1: commit the Concierge brief to a new itinerary. Idempotent at the
   // server (one itinerary per thread, enforced by partial UNIQUE INDEX) — a

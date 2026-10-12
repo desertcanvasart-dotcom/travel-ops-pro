@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { createBrowserClient } from '@supabase/ssr'
@@ -27,6 +27,8 @@ function AcceptInvitationContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const t = useTranslations('invite')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const token = searchParams.get('token')
 
   const [loading, setLoading] = useState(true)
@@ -57,30 +59,30 @@ function AcceptInvitationContent() {
   )
 
   useEffect(() => {
+    const verifyToken = async () => {
+      try {
+        const response = await fetch(`/api/invitations/verify?token=${token}`)
+        const data = await response.json()
+
+        if (data.success) {
+          setInvitation(data.data)
+        } else {
+          setError(data.error || tRef.current('invalidOrExpiredInvitation'))
+        }
+      } catch (err) {
+        setError(tRef.current('failedToVerifyInvitation'))
+      } finally {
+        setLoading(false)
+      }
+    }
+
     if (token) {
       verifyToken()
     } else {
-      setError(t('invalidInvitationLink'))
+      setError(tRef.current('invalidInvitationLink'))
       setLoading(false)
     }
   }, [token])
-
-  const verifyToken = async () => {
-    try {
-      const response = await fetch(`/api/invitations/verify?token=${token}`)
-      const data = await response.json()
-
-      if (data.success) {
-        setInvitation(data.data)
-      } else {
-        setError(data.error || t('invalidOrExpiredInvitation'))
-      }
-    } catch (err) {
-      setError(t('failedToVerifyInvitation'))
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

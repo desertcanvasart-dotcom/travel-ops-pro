@@ -1,7 +1,7 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
-import { useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
@@ -346,6 +346,8 @@ function Pagination({
 
 export default function HotelsContent() {
   const t = useTranslations('rates.hotels')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const tierOptions = useTierOptions(key => t(`tiers.${key}`))
   // A new rate starts on the ladder's own "standard" rung — 'standard' itself
   // may not exist once the agency has reshaped its tiers.
@@ -448,10 +450,10 @@ export default function HotelsContent() {
   })
 
   // Toast helpers
-  const showToast = (type: 'success' | 'error' | 'info', message: string) => {
+  const showToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     const id = Date.now().toString()
     setToasts(prev => [...prev, { id, type, message }])
-  }
+  }, [])
 
   const removeToast = (id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id))
@@ -466,7 +468,7 @@ export default function HotelsContent() {
   }
 
   // Fetch rates
-  const fetchRates = async () => {
+  const fetchRates = useCallback(async () => {
     try {
       const response = await fetch('/api/rates/hotels')
       const data = await response.json()
@@ -475,11 +477,11 @@ export default function HotelsContent() {
       }
     } catch (error) {
       console.error('Error fetching rates:', error)
-      showToast('error', t('messages.loadFailed'))
+      showToast('error', tRef.current('messages.loadFailed'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [showToast])
 
   // Fetch hotel suppliers (companies only)
   const fetchSuppliers = async () => {
@@ -498,7 +500,7 @@ export default function HotelsContent() {
     setMounted(true)
     fetchRates()
     fetchSuppliers()
-  }, [])
+  }, [fetchRates])
 
   // Reset to first page when filters change
   useEffect(() => {

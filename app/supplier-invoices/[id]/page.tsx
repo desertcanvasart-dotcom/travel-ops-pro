@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useCallback, useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { useConfirm } from '@/components/ConfirmDialog'
@@ -73,11 +73,7 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
   const [expenseSearch, setExpenseSearch] = useState('')
   const [loadingExpenses, setLoadingExpenses] = useState(false)
 
-  useEffect(() => {
-    fetchInvoice()
-  }, [id])
-
-  const fetchInvoice = async () => {
+  const fetchInvoice = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetch(`/api/supplier-invoices/${id}`)
@@ -89,7 +85,11 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
     } finally {
       setLoading(false)
     }
-  }
+  }, [id])
+
+  useEffect(() => {
+    fetchInvoice()
+  }, [fetchInvoice])
 
   const handleApprove = async () => {
     setActionLoading('approve')

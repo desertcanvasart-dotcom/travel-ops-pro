@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { useCompanyInfo } from '@/lib/use-company-info'
 import { useTranslations, useLocale } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
@@ -57,6 +57,8 @@ export default function SupplierDocumentViewPage() {
   // The operator's own letterhead — the PDF already used it; the preview did not.
   const company = useCompanyInfo()
   const t = useTranslations('supplierDocumentDetail')
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
   const tNav = useTranslations('navigation')
   const tVoucher = useTranslations('pdf.voucher')
   const tBrand = useTranslations('pdf')
@@ -176,13 +178,7 @@ export default function SupplierDocumentViewPage() {
     cruise_voucher: t('documentTypes.cruiseVoucher')
   }
 
-  useEffect(() => {
-    if (params.id) {
-      fetchDocument()
-    }
-  }, [params.id])
-
-  const fetchDocument = async () => {
+  const fetchDocument = useCallback(async () => {
     try {
       const response = await fetch(`/api/supplier-documents/${params.id}`)
       const result = await response.json()
@@ -190,14 +186,20 @@ export default function SupplierDocumentViewPage() {
       if (result.success) {
         setDocument(result.data)
       } else {
-        setError(t('documentNotFound'))
+        setError(tRef.current('documentNotFound'))
       }
     } catch (err) {
-      setError(t('errorLoadingDocument'))
+      setError(tRef.current('errorLoadingDocument'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [params.id])
+
+  useEffect(() => {
+    if (params.id) {
+      fetchDocument()
+    }
+  }, [params.id, fetchDocument])
 
   const handleDownload = async () => {
     if (!document) return

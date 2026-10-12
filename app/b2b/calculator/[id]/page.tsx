@@ -368,8 +368,35 @@ function TourPriceCalculatorInner() {
   // Fetch partners and template on mount
   useEffect(() => {
     fetchPartners()
-    fetchTemplateItinerary()
   }, [])
+
+  useEffect(() => {
+    const fetchTemplateItinerary = async () => {
+      setLoadingItinerary(true)
+      try {
+        const res = await fetch(`/api/b2b/calculator-init?variation_id=${variationId}`)
+        const data = await res.json()
+        if (data.success) {
+          setTemplateId(data.template_id)
+          setTemplateName(data.template_name || '')
+          if (data.tier) setImportedTier(String(data.tier))
+          // Ensure each day has the full enriched structure
+          // Every stored field is kept (lib/itineraries/editable-day): the old
+          // fixed field list dropped the travel mode, the picked ticket and the
+          // overnight-in-flight marker, and the next save erased them.
+          const days: TemplateItineraryDay[] = (data.itinerary || []).map((d: unknown, i: number) => toEditableDay(d, i) as TemplateItineraryDay)
+          setEditableDays(days)
+          setOriginalDays(JSON.parse(JSON.stringify(days)))
+        }
+      } catch (err) {
+        console.error('Failed to fetch template itinerary:', err)
+      } finally {
+        setLoadingItinerary(false)
+      }
+    }
+
+    fetchTemplateItinerary()
+  }, [variationId])
 
   const fetchPartners = async () => {
     try {
@@ -380,30 +407,6 @@ function TourPriceCalculatorInner() {
       }
     } catch (err) {
       console.error('Failed to fetch partners:', err)
-    }
-  }
-
-  const fetchTemplateItinerary = async () => {
-    setLoadingItinerary(true)
-    try {
-      const res = await fetch(`/api/b2b/calculator-init?variation_id=${variationId}`)
-      const data = await res.json()
-      if (data.success) {
-        setTemplateId(data.template_id)
-        setTemplateName(data.template_name || '')
-        if (data.tier) setImportedTier(String(data.tier))
-        // Ensure each day has the full enriched structure
-        // Every stored field is kept (lib/itineraries/editable-day): the old
-        // fixed field list dropped the travel mode, the picked ticket and the
-        // overnight-in-flight marker, and the next save erased them.
-        const days: TemplateItineraryDay[] = (data.itinerary || []).map((d: unknown, i: number) => toEditableDay(d, i) as TemplateItineraryDay)
-        setEditableDays(days)
-        setOriginalDays(JSON.parse(JSON.stringify(days)))
-      }
-    } catch (err) {
-      console.error('Failed to fetch template itinerary:', err)
-    } finally {
-      setLoadingItinerary(false)
     }
   }
 

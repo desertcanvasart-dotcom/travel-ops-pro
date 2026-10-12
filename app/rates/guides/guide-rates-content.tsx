@@ -2,7 +2,7 @@
 
 import { ENGINE_GUIDE_MODES, rateGuideMode } from '@/lib/guides/guide-mode'
 import { todayLocal } from '@/lib/today'
-import { useEffect, useState, useMemo } from 'react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
@@ -206,7 +206,7 @@ export default function GuideRatesContent() {
   })
 
   // Fetch rates
-  const fetchRates = async () => {
+  const fetchRates = useCallback(async () => {
     try {
       const params = new URLSearchParams()
       if (!showInactive) params.append('active_only', 'true')
@@ -222,7 +222,7 @@ export default function GuideRatesContent() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [showInactive])
 
   // Fetch the guide roster from suppliers(type='guide').
   // Was previously fetching from the separate `guides` table — the picker
@@ -247,9 +247,12 @@ export default function GuideRatesContent() {
 
   useEffect(() => {
     setMounted(true)
-    fetchRates()
     fetchGuides()
   }, [])
+
+  useEffect(() => {
+    fetchRates()
+  }, [fetchRates])
 
   useEffect(() => {
     setCurrentPage(1)

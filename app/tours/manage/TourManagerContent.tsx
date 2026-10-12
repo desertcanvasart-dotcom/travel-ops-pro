@@ -4,7 +4,7 @@ import { sampleTemplateCsv } from '@/lib/tours/template-csv'
 
 export const dynamic = 'force-dynamic'
 
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useTierOptions } from '@/hooks/useTierOptions'
@@ -1213,16 +1213,16 @@ export default function TourManagerContent() {
   const [inclusionInput, setInclusionInput] = useState('')   // NEW
   const [exclusionInput, setExclusionInput] = useState('')   // NEW
 
-  const showToast = (type: 'success' | 'error' | 'info', message: string) => {
+  const showToast = useCallback((type: 'success' | 'error' | 'info', message: string) => {
     const id = Date.now().toString()
     setToasts(prev => [...prev, { id, type, message }])
-  }
+  }, [])
 
   const removeToast = (id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id))
   }
 
-  const fetchTemplates = async () => {
+  const fetchTemplates = useCallback(async () => {
     try {
       const response = await fetch('/api/tours/templates')
       const data = await response.json()
@@ -1233,7 +1233,7 @@ export default function TourManagerContent() {
       console.error('Error fetching templates:', error)
       showToast('error', 'Failed to load tour templates')
     }
-  }
+  }, [showToast])
 
 
   // NEW: Fetch attractions from entrance_fees table
@@ -1256,7 +1256,7 @@ export default function TourManagerContent() {
       fetchTemplates(), 
       fetchAttractions()  // NEW: Fetch attractions on load
     ]).finally(() => setLoading(false))
-  }, [])
+  }, [fetchTemplates])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target

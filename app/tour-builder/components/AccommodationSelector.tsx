@@ -36,6 +36,26 @@ export default function AccommodationSelector({
 
   // Fetch accommodations when city changes
   useEffect(() => {
+    const fetchAccommodations = async () => {
+      setLoading(true)
+      try {
+        const response = await fetch(`/api/rates?type=accommodation&city=${city}&in_org_currency=true`)
+        const data = await response.json()
+      
+        if (data.success) {
+          // Ensure data.data is an array
+          const accommodationsData = Array.isArray(data.data) ? data.data : []
+          setAccommodations(accommodationsData)
+        } else {
+          setAccommodations([])
+        }
+      } catch (error) {
+        console.error('Failed to fetch accommodations:', error)
+        setAccommodations([])
+      } finally {
+        setLoading(false)
+      }
+    }
     if (!city) {
       setAccommodations([])
       return
@@ -43,27 +63,6 @@ export default function AccommodationSelector({
 
     fetchAccommodations()
   }, [city])
-
-  const fetchAccommodations = async () => {
-    setLoading(true)
-    try {
-      const response = await fetch(`/api/rates?type=accommodation&city=${city}&in_org_currency=true`)
-      const data = await response.json()
-      
-      if (data.success) {
-        // Ensure data.data is an array
-        const accommodationsData = Array.isArray(data.data) ? data.data : []
-        setAccommodations(accommodationsData)
-      } else {
-        setAccommodations([])
-      }
-    } catch (error) {
-      console.error('Failed to fetch accommodations:', error)
-      setAccommodations([])
-    } finally {
-      setLoading(false)
-    }
-  }
 
   // Filter accommodations
   const filteredAccommodations = accommodations.filter(acc => {
