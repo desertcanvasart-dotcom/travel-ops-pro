@@ -84,18 +84,6 @@ export default function B2CQuotesPage() {
           The quote moves through a simple lifecycle &mdash; <strong>Draft</strong> &rarr; <strong>Sent</strong> &mdash; and on to acceptance as the deal progresses.
         </p>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link href="/docs" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          All Docs
-        </Link>
-        <Link href="/docs/capacity-departures" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          Next: Capacity &amp; Departures
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }

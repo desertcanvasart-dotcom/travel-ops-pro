@@ -67,18 +67,6 @@ export default function FinancialReportsPage() {
           Every tab can be exported. Use the header <strong>CSV</strong> and <strong>PDF</strong> buttons for the annual report, or the per-section <strong>Export</strong> links to download individual tables.
         </p>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link href="/docs" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          All Docs
-        </Link>
-        <Link href="/docs/accounts-receivable" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          Next: Accounts Receivable
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }

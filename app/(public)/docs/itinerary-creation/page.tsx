@@ -202,18 +202,6 @@ export default function ItineraryCreationPage() {
           <strong>200+ abbreviations:</strong> The system automatically decodes travel abbreviations &mdash; CAI (Cairo), ALX (Alexandria), ASW (Aswan), LXR (Luxor), HRG (Hurghada), CRZ (Cruise), VoK (Valley of the Kings), BB (Bed &amp; Breakfast), and many more.
         </Tip>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link href="/docs/clients" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          Clients (CRM)
-        </Link>
-        <Link href="/docs/itineraries" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          Next: Itineraries
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }
