@@ -712,7 +712,6 @@ export async function POST(request: NextRequest) {
       // Rows entered in another currency are converted into the org's rate
       // currency at the fetch boundary (lib/rates/rate-currency.ts).
       rateCurrency,
-      orgId,
     })
 
 

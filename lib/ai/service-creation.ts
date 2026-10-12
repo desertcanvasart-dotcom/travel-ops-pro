@@ -260,9 +260,6 @@ export async function fetchAllPricingRates(
      *  see lib/rates/rate-currency.ts. Optional so existing callers keep the
      *  pre-migration behaviour verbatim. */
     rateCurrency?: string
-    /** The company pricing: the guides fallback reads ITS guides only
-     *  (suppliers.org_id, 20261205). No company = no guides fallback. */
-    orgId?: string | null
   }
 ): Promise<PricingRates> {
   const { tier, effectiveCity, totalPax, isEuroPassport, language, hotelName, includeAccommodation } = params

@@ -67,7 +67,9 @@ beforeAll(async () => {
   await db.exec(PRELUDE)
   await db.exec(TRACKER_BOOTSTRAP)
   for (const f of readdirSync(MIGRATIONS).filter((f: string) => f.endsWith('.sql')).sort()) {
-    if (f === FILE) continue
+    // The schema as it stood just before this migration: later ones (the next
+    // batches) make columns NOT NULL that this test's fixtures predate.
+    if (f >= FILE) continue
     await db.exec(readFileSync(path.join(MIGRATIONS, f), 'utf8'))
     await db.exec("SELECT pg_catalog.set_config('search_path','public',false);")
   }
