@@ -472,12 +472,21 @@
     "attnDismiss": "Dismiss",
     "attnDismissHint": "Hide for the whole office until something changes — the customer writes again, the balance or deadline moves, more forms come in",
     "attnDismissedCount": "{count} dismissed",
-    "attnUndo": "Undo"
+    "attnUndo": "Undo",
+    "attnExtraRequest": "{status, select, accepted {Option accepted, not yet secured: {title}} other {Traveller asked for an option: {title}}}",
+    "attnBalanceDueNoAmount": "Balance due {date}",
+    "attnBalanceOverdueNoAmount": "Balance OVERDUE",
+    "refundsCount": "{count} refunds netted out"
   },
   "analytics": {
     "title": "Analytics Dashboard",
     "subtitle": "Business performance and insights",
     "loading": "Loading analytics...",
+    "error": {
+      "title": "Analytics could not be loaded",
+      "description": "The figures could not be loaded. Nothing below is shown until they can be.",
+      "retry": "Try again"
+    },
     "timeRange": {
       "7d": "Last 7 Days",
       "30d": "Last 30 Days",
@@ -512,15 +521,15 @@
       "pending": "Pending",
       "cancelled": "Cancelled",
       "confirmed": "Confirmed",
-      "completed": "Completed"
+      "completed": "Completed",
+      "allTimeNote": "Leads and Follow-ups are current totals for all time. Pending, Cancelled, Confirmed and Completed count trips created in the selected range."
     },
     "highlights": {
-      "title": "Highlights This Month",
+      "title": "Highlights for this period",
       "newClients": "New clients",
       "pendingBookings": "Pending bookings",
       "avgDealSize": "Avg deal size",
       "topDestination": "Top destination",
-      "bestChannel": "Best channel",
       "na": "N/A"
     },
     "charts": {
@@ -528,7 +537,6 @@
       "topDestinations": "Top Destinations",
       "allDestinations": "All Destinations",
       "bookingStatus": "Booking Status",
-      "allStatus": "All Status",
       "revenueByDestination": "Revenue by Destination",
       "revenue": "Revenue",
       "bookings": "Bookings"
@@ -554,8 +562,8 @@
       "noRevenueData": "No revenue data available yet. Start adding confirmed bookings!",
       "noBookingInsights": "Start adding bookings to see insights.",
       "noConversionData": "Conversion data will appear once you have bookings.",
-      "busiestPeriod": "Your busiest period was {period} with {amount} in revenue.",
-      "pendingPercentage": "{percent}% of active bookings are still pending — consider follow-ups.",
+      "busiestWeek": "Your busiest week was the week of {week}, with {amount} in revenue.",
+      "pendingPercentage": "{percent}% of bookings in this range are still pending (draft or sent) — consider follow-ups.",
       "strongConversion": "Strong conversion rate! Your sales process is working well.",
       "lowConversion": "Conversion rate needs attention. Review your sales funnel.",
       "addBookingsForInsights": "Add bookings to see conversion insights.",
@@ -6032,7 +6040,14 @@
     "name": "Name",
     "type": "Type",
     "totalEarned": "Total Earned",
-    "noCommissionData": "No commission data"
+    "noCommissionData": "No commission data",
+    "loadFailed": "Could not load the financial report for {year}. No figures are shown rather than figures from another year.",
+    "retry": "Retry",
+    "fxHolesTitle": "{count, plural, one {# line is} other {# lines are}} not included in these figures",
+    "fxHolesBody": "No exchange rate was on file to state them in {currency}. They are excluded rather than added at face value, so the totals are understated.",
+    "fxHolesMore": "…and {count} more",
+    "demoExcluded": "{count, plural, one {# demo record is} other {# demo records are}} left out of these figures (DEMO- trips and the invoices, expenses and payments linked to them).",
+    "currencyFallback": "Figures are shown in {currency}: {requested} is not a supported reporting currency."
   },
   "expenses": {
     "expenses": "Expenses",

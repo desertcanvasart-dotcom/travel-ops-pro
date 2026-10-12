@@ -4,6 +4,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { loadFxIndex, convertLine, buildFxMeta, emptyFxSummary, type FxHole } from '@/lib/fx-report'
 import { SUPPORTED_CURRENCIES } from '@/lib/exchange-rate-api'
+import { summariseItineraries, revenueGrowth } from '@/lib/analytics-metrics'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -89,8 +90,7 @@ export async function GET(request: NextRequest) {
       itinerariesResult,
       clientsResult,
       leadsResult,
-      followUpsResult,
-      revenueByWeekResult
+      followUpsResult
     ] = await Promise.all([
       // Itineraries (bookings) in date range
       supabase
@@ -119,16 +119,7 @@ export async function GET(request: NextRequest) {
         .from('client_followups')
         .select('id, clients!inner(org_id)', { count: 'exact', head: true })
         .eq('clients.org_id', orgId)
-        .eq('status', 'pending'),
-
-      // Revenue by week for trend chart
-      supabase
-        .from('itineraries')
-        .select('itinerary_code, total_cost, currency, start_date, created_at')
-        .eq('org_id', orgId)
-        .in('status', ['confirmed', 'completed'])
-        .gte('created_at', startDateStr)
-        .order('created_at', { ascending: true })
+        .eq('status', 'pending')
     ])
 
     // Fail loudly. A dashboard that cannot read its own numbers must not print
@@ -137,8 +128,7 @@ export async function GET(request: NextRequest) {
       itinerariesResult,
       clientsResult,
       leadsResult,
-      followUpsResult,
-      revenueByWeekResult
+      followUpsResult
     )
     if (queryError) {
       console.error('Analytics query failed:', queryError)
@@ -167,81 +157,55 @@ export async function GET(request: NextRequest) {
     // still a booking and still belongs in the pipeline. Only its MONEY is
     // withheld, and the response says so via fx_holes / complete:false.
     const fxIndex = await loadFxIndex(supabase)
+
+    // One accumulator per period. The previous period is only read to compute
+    // growth; its holes used to land in the same list as this period's, so the
+    // banner counted trips from outside the range the operator selected.
+    const makeConverter = (fx: ReturnType<typeof emptyFxSummary>, holes: FxHole[]) =>
+      (row: {
+        total_cost?: unknown
+        currency?: string | null
+        start_date?: string | null
+        created_at?: string | null
+        itinerary_code?: string | null
+        id?: string
+      }): number | null => {
+        const converted = convertLine(fxIndex, fx, {
+          amount: row.total_cost,
+          fromCurrency: row.currency,
+          toCurrency: reportingCurrency,
+          date: row.start_date ?? row.created_at ?? null,
+          kind: 'trip',
+          reference: row.itinerary_code || row.id || 'trip',
+        })
+        if (converted.hole) {
+          holes.push(converted.hole)
+          return null
+        }
+        return converted.amount ?? 0
+      }
+
     const fx = emptyFxSummary()
     const fxHoles: FxHole[] = []
 
-    const toReporting = (row: {
-      total_cost?: unknown
-      currency?: string | null
-      start_date?: string | null
-      created_at?: string | null
-      itinerary_code?: string | null
-      id?: string
-    }): number | null => {
-      const converted = convertLine(fxIndex, fx, {
-        amount: row.total_cost,
-        fromCurrency: row.currency,
-        toCurrency: reportingCurrency,
-        date: row.start_date ?? row.created_at ?? null,
-        kind: 'trip',
-        reference: row.itinerary_code || row.id || 'trip',
-      })
-      if (converted.hole) {
-        fxHoles.push(converted.hole)
-        return null
-      }
-      return converted.amount ?? 0
-    }
-
-    // One converted amount per trip, reused by the revenue total and the
-    // destination breakdown so they can never disagree.
-    const revenueById = new Map<string, number | null>()
-    for (const itin of itineraries) revenueById.set(itin.id, toReporting(itin))
-
-    const revenueData = partitionDemoRows(
-      revenueByWeekResult.data,
-      row => row.itinerary_code,
-    ).real.map(row => ({
-      ...row,
-      total_cost: toReporting(row),
-    }))
-
-    // Calculate booking stats
-    const bookingStats = {
-      total: itineraries.length,
-      confirmed: itineraries.filter(i => i.status === 'confirmed').length,
-      pending: itineraries.filter(i => i.status === 'pending' || i.status === 'quoted').length,
-      cancelled: itineraries.filter(i => i.status === 'cancelled').length,
-      completed: itineraries.filter(i => i.status === 'completed').length
-    }
-
-    // Calculate revenue
-    const confirmedItineraries = itineraries.filter(i => 
-      i.status === 'confirmed' || i.status === 'completed'
-    )
-    // null = no usable rate; it is already recorded as a hole and must not be
-    // folded in at face value.
-    const totalRevenue = confirmedItineraries.reduce(
-      (sum, i) => sum + (revenueById.get(i.id) ?? 0), 0
-    )
+    // Only won trips are converted, and each exactly once (see
+    // lib/analytics-metrics.ts). The converted amount is reused by the
+    // revenue total, the weekly chart and the destination breakdown so they
+    // can never disagree. null = no usable rate; it is already recorded as a
+    // hole and must not be folded in at face value.
+    const {
+      bookings: bookingStats,
+      revenueById,
+      totalRevenue,
+      conversionRate,
+      avgDealSize,
+      weekly: weeklyRevenue,
+    } = summariseItineraries(itineraries, makeConverter(fx, fxHoles), { start: startDate, end: now })
 
     // Calculate client stats
     const totalClients = clients.length
     const newClients = clients.filter(c => c.status === 'lead' || c.status === 'prospect').length
     const returningClients = clients.filter(c => c.status === 'customer').length
-
-    // Calculate conversion rate (confirmed / total inquiries)
-    const conversionRate = bookingStats.total > 0 
-      ? (bookingStats.confirmed / bookingStats.total) * 100 
-      : 0
-
-    // Calculate average deal size
-    const avgDealSize = confirmedItineraries.length > 0
-      ? totalRevenue / confirmedItineraries.length
-      : 0
-
-    // Group revenue by week for trend chart
-    const weeklyRevenue = groupByWeek(revenueData, range)
 
     // Calculate destination stats from itineraries.
     // The column is `destinations`, and it is TEXT — a comma-separated list, not
@@ -294,22 +258,23 @@ export async function GET(request: NextRequest) {
     // one would invent growth out of nothing but exchange rates.
     // Filtered the same way as the current period: comparing a filtered total
     // against an unfiltered one would invent a growth figure.
+    const toPreviousReporting = makeConverter(emptyFxSummary(), [])
     const previousRevenue = partitionDemoRows(
       previousItineraries,
       row => row.itinerary_code,
     ).real.reduce(
-      (sum, i) => sum + (toReporting(i) ?? 0), 0
+      (sum, i) => sum + (toPreviousReporting(i) ?? 0), 0
     )
-    
-    const revenueGrowth = previousRevenue > 0 
-      ? ((totalRevenue - previousRevenue) / previousRevenue) * 100
-      : totalRevenue > 0 ? 100 : 0
+
+    // null when the previous period had no revenue: growth from zero is not a
+    // percentage, and the page shows a dash rather than an invented +100%.
+    const growth = revenueGrowth(totalRevenue, previousRevenue)
 
     // Build response
     const analyticsData = {
       revenue: {
         total: totalRevenue,
-        growth: revenueGrowth,
+        growth,
         monthlyData: weeklyRevenue
       },
       bookings: bookingStats,
@@ -344,56 +309,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
-}
-
-// Helper to group revenue by week
-function groupByWeek(data: any[], range: string): { month: string; revenue: number }[] {
-  if (data.length === 0) {
-    // Return empty weeks based on range
-    const weeks = range === '7d' ? 1 : range === '30d' ? 4 : range === '90d' ? 12 : 52
-    return Array.from({ length: Math.min(weeks, 5) }, (_, i) => ({
-      month: `Week ${i + 1}`,
-      revenue: 0
-    }))
-  }
-
-  const weekMap = new Map<string, number>()
-  
-  data.forEach(item => {
-    const date = new Date(item.created_at)
-    const weekStart = getWeekStart(date)
-    const weekKey = weekStart.toISOString().split('T')[0]
-    
-    const existing = weekMap.get(weekKey) || 0
-    // total_cost, not total_price. The rename reached the three call sites in
-    // the handler but not this helper, so every week summed `undefined` to 0 and
-    // the trend chart auto-scaled to an empty axis while the headline figure
-    // above it was correct.
-    weekMap.set(weekKey, existing + (parseFloat(item.total_cost) || 0))
-  })
-
-  // Convert to array and sort
-  const weeks = Array.from(weekMap.entries())
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .slice(-5) // Last 5 weeks
-    .map((entry, index) => ({
-      month: `Week ${index + 1}`,
-      revenue: entry[1]
-    }))
-
-  // Ensure at least some data points
-  if (weeks.length === 0) {
-    return [{ month: 'Week 1', revenue: 0 }]
-  }
-
-  return weeks
-}
-
-function getWeekStart(date: Date): Date {
-  const d = new Date(date)
-  const day = d.getDay()
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
-  d.setDate(diff)
-  d.setHours(0, 0, 0, 0)
-  return d
 }
