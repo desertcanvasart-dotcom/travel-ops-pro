@@ -65,6 +65,13 @@ describe('API mutation gate — coverage', () => {
     '/api/resources/transportation/abc',
     '/api/resources/attractions',
     '/api/resources/restaurants/abc',
+    // Tour Manager's catalogue writes (menu + RLS: manager and above); agents
+    // only browse and price the ready-made tours.
+    '/api/tours/templates',
+    '/api/tours/templates/abc/days',
+    '/api/tours/variations/abc/services',
+    '/api/tours/days/abc',
+    '/api/tours/bulk/import',
   ])('%s is manager-and-above', path => {
     const roles = rolesFor(path)
     expect(roles, `${path} has no entry in API_MUTATION_PERMISSIONS`).not.toBeNull()

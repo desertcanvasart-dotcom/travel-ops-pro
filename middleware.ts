@@ -139,6 +139,14 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   { prefix: '/api/b2c', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/itineraries', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/bookings', roles: ['admin', 'manager', 'agent'] },
+  // Building the catalogue — templates, variations, their days and the bulk
+  // CSV — is Tour Manager's, which the menu gives to managers and above (RLS
+  // on these tables requires it too). Agents browse and price ready-made
+  // tours (Tour Inventory) through the general entry below.
+  { prefix: '/api/tours/templates', roles: ['admin', 'manager'] },
+  { prefix: '/api/tours/variations', roles: ['admin', 'manager'] },
+  { prefix: '/api/tours/days', roles: ['admin', 'manager'] },
+  { prefix: '/api/tours/bulk', roles: ['admin', 'manager'] },
   { prefix: '/api/tours', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/templates', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/tasks', roles: ['admin', 'manager', 'agent'] },
