@@ -11,6 +11,9 @@
 // tier, the starred ship first then newest; a named embarkation port narrows
 // the list, and a port that matches nothing (programme days are usually
 // filed under "Nile Cruise") falls back to every ship at the tier.
+//
+// One company's rows only (org_id): a company prices and picks from its own
+// hotels and ships. No organisation, no rows.
 
 import { ANY_TIER } from './property-choice'
 
@@ -26,9 +29,12 @@ type Db = { from: (table: string) => any }
 const atTier = <T>(q: T, tier: string): T =>
   tier === ANY_TIER ? q : ((q as { eq: (c: string, v: string) => T }).eq('tier', tier))
 
-export async function hotelCandidates(db: Db, city: string, tier: string): Promise<Row[]> {
+// Matches no organisation (an org-less caller reads nothing).
+const NO_ORG = '00000000-0000-0000-0000-000000000000'
+
+export async function hotelCandidates(db: Db, orgId: string | null | undefined, city: string, tier: string): Promise<Row[]> {
   const { data, error } = await atTier(
-    db.from('accommodation_rates').select('*'),
+    db.from('accommodation_rates').select('*').eq('org_id', orgId ?? NO_ORG),
     tier
   )
     .eq('is_active', true)
@@ -38,7 +44,7 @@ export async function hotelCandidates(db: Db, city: string, tier: string): Promi
   return (data ?? []) as Row[]
 }
 
-export async function cruiseCandidates(db: Db, tier: string, embarkCity?: string | null, nights?: number | null): Promise<Row[]> {
+export async function cruiseCandidates(db: Db, orgId: string | null | undefined, tier: string, embarkCity?: string | null, nights?: number | null): Promise<Row[]> {
   // A sailing as long as the programme's cruise comes first (stable, so the
   // starred-then-newest order holds within): a 4-night programme's automatic
   // ship used to be the starred 3-night sailing the other way up the Nile,
@@ -48,7 +54,7 @@ export async function cruiseCandidates(db: Db, tier: string, embarkCity?: string
     nights && nights > 0
       ? [...rows.filter(r => Number(r.duration_nights) === nights), ...rows.filter(r => Number(r.duration_nights) !== nights)]
       : rows
-  const base = () => atTier(db.from('nile_cruises').select('*'), tier)
+  const base = () => atTier(db.from('nile_cruises').select('*').eq('org_id', orgId ?? NO_ORG), tier)
     .eq('is_active', true)
   const ordered = (q: ReturnType<typeof base>) =>
     q.order('is_preferred', { ascending: false }).order('created_at', { ascending: false })
@@ -63,13 +69,15 @@ export async function cruiseCandidates(db: Db, tier: string, embarkCity?: string
 }
 
 /** One row by id, whatever its tier or city — the operator chose it. Null
- *  when it no longer exists; `inactive` when it was switched off. */
+ *  when it no longer exists — or is another company's; `inactive` when it was
+ *  switched off. */
 export async function propertyById(
   db: Db,
+  orgId: string | null | undefined,
   table: 'accommodation_rates' | 'nile_cruises',
   id: string
 ): Promise<{ row: Row | null; inactive: boolean }> {
-  const { data, error } = await db.from(table).select('*').eq('id', id).maybeSingle()
+  const { data, error } = await db.from(table).select('*').eq('org_id', orgId ?? NO_ORG).eq('id', id).maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) return { row: null, inactive: false }
   return (data as Row).is_active === false ? { row: null, inactive: true } : { row: data as Row, inactive: false }

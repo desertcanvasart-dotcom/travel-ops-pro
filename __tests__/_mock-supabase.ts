@@ -14,8 +14,25 @@ export type MockTables = Record<string, Row[]>
 
 let currentTables: MockTables = {}
 
+// Every rate table carries org_id since 20261206, and every reader filters by
+// the caller's company. A hermetic fixture is ONE company's catalogue: a rate
+// row that names no company is MOCK_ORG's. A test about two companies sets
+// org_id on its rows explicitly (and those are left alone).
+export const MOCK_ORG = 'org-1'
+const RATE_TABLES = new Set([
+  'accommodation_rates', 'activity_rates', 'airport_staff_rates', 'hotel_staff_rates', 'guide_rates',
+  'meal_rates', 'nile_cruises', 'flight_rates', 'train_rates', 'sleeping_train_rates',
+  'transportation_rates', 'tipping_rates', 'entrance_fees', 'service_fees', 'assistant_rates',
+  'seasonal_rates', 'vehicle_rates', 'fixed_daily_costs', 'attraction_aliases', 'destinations',
+  'vehicles', 'hotel_contacts', 'cruise_contacts', 'restaurant_contacts',
+])
+
 /** Install the dataset the next engine call will read from. */
 export function setMockTables(tables: MockTables): void {
+  for (const [table, rows] of Object.entries(tables)) {
+    if (!RATE_TABLES.has(table) || !Array.isArray(rows)) continue
+    for (const row of rows) if (row && !('org_id' in row)) row.org_id = MOCK_ORG
+  }
   currentTables = tables
 }
 
@@ -102,6 +119,25 @@ function makeQuery(rows: Row[], table?: string) {
       filtered = inserted
       return builder
     },
+    // INSERT … ON CONFLICT (onConflict columns) DO UPDATE: a row matching an
+    // existing one on every conflict column updates it; any other is inserted.
+    upsert(payload: Row | Row[], opts: { onConflict?: string } = {}) {
+      if (!table) throw new Error('mock upsert: table name not provided')
+      const cols = (opts.onConflict ?? 'id').split(',').map((c) => c.trim())
+      if (!currentTables[table]) currentTables[table] = []
+      const written: Row[] = []
+      for (const r of Array.isArray(payload) ? payload : [payload]) {
+        const hit = currentTables[table].find((x) => cols.every((c) => x[c] === r[c]))
+        if (hit) { Object.assign(hit, r); written.push(hit) }
+        else {
+          const row = { id: r.id ?? `mock-${table}-${++idCounter}`, ...r }
+          currentTables[table].push(row)
+          written.push(row)
+        }
+      }
+      filtered = written
+      return builder
+    },
     update(patch: Row) {
       pendingPatch = { ...patch }
       return builder
@@ -111,7 +147,11 @@ function makeQuery(rows: Row[], table?: string) {
       return builder
     },
     eq(col: string, val: any) {
-      filtered = filtered.filter((r) => r[col] === val)
+      // A dotted column filters on an embedded row the fixture carries
+      // (`destinations.org_id` → row.destinations.org_id), as PostgREST's
+      // !inner embeds do.
+      const at = (r: Row) => col.includes('.') ? col.split('.').reduce((o: any, k) => (o == null ? o : o[k]), r) : r[col]
+      filtered = filtered.filter((r) => at(r) === val)
       return builder
     },
     neq(col: string, val: any) {
@@ -121,6 +161,10 @@ function makeQuery(rows: Row[], table?: string) {
     is(col: string, val: any) {
       // PostgREST .is(): used by the rate routes as .is('col', null) -> SQL IS NULL.
       filtered = filtered.filter((r) => (val === null ? r[col] == null : r[col] === val))
+      return builder
+    },
+    gt(col: string, val: any) {
+      filtered = filtered.filter((r) => r[col] != null && r[col] > val)
       return builder
     },
     gte(col: string, val: any) {

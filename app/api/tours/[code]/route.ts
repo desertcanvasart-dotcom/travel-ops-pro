@@ -14,8 +14,8 @@ const supabase = createServerClient()
 
 // One select for every variation lookup below. NO `destinations` embed: the
 // multi-destination campaign renamed the old destinations table to
-// destinations_legacy_2025 (tour_templates.primary_destination_id still
-// points there), so PostgREST has no tour_templates→destinations
+// destinations_legacy_2025 (tour_templates.primary_destination_id pointed
+// there until 20261206 dropped it), so PostgREST has no tour_templates→destinations
 // relationship and an embed of it fails the WHOLE query with PGRST200 — this
 // route 404'd every tour, variation path and template fallback alike, from
 // that rename until 2026-09-04. The displayed destination comes from

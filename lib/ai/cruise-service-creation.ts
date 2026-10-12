@@ -24,6 +24,9 @@ import {
 import { getFixedDailyCosts } from '@/lib/fixed-costs'
 import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, getExchangeRate, persistExchangeRate, type ExchangeRates } from '@/lib/currency-service'
 
+// Matches no organisation: an org-less read finds no rates.
+const NO_ORG = '00000000-0000-0000-0000-000000000000'
+
 // ============================================
 // SHARED GUIDE RATE LOOKUP
 // ============================================
@@ -31,11 +34,10 @@ import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, getExchangeR
 
 export async function fetchGuideRate(
   supabase: any,
+  /** Whose guide rates (guide_rates.org_id). */
+  orgId: string | null | undefined,
   tier: string,
-  language: string,
-  /** The company pricing: the guides fallback reads ITS guides only
-   *  (suppliers.org_id, 20261205). No company = no guides fallback. */
-  orgId: string | null = null
+  language: string
 ): Promise<{
   guidePerDay: number
   guideName: string | null
@@ -51,6 +53,7 @@ export async function fetchGuideRate(
   const { data: guideRates } = await supabase
     .from('guide_rates')
     .select('*')
+    .eq('org_id', orgId ?? NO_ORG)
     .eq('is_active', true)
     .eq('guide_language', language)
     .limit(1)
@@ -231,7 +234,7 @@ export async function createCruiseItineraryServices(
   }
 
   // 2. Guide rate (guide_rates table → guides table fallback)
-  const guideResult = await fetchGuideRate(supabase, tier, guideLanguage, orgId)
+  const guideResult = await fetchGuideRate(supabase, orgId, tier, guideLanguage)
   if (!guideResult.guidePerDay) {
     warnings.push(`No guide rate found for ${guideLanguage} (${tier} tier) — guide will be €0`)
   }
@@ -239,13 +242,13 @@ export async function createCruiseItineraryServices(
   // 3. Tipping rates (itemized, tier-adjusted)
   // Tip rows may be entered in another currency (per-rate currency work).
   const cruiseNormalizer = createRateNormalizer(rateCurrency)
-  const cruiseTippingRates = await getItemizedTippingRates(supabase, tier, cruiseNormalizer)
+  const cruiseTippingRates = await getItemizedTippingRates(supabase, orgId, tier, cruiseNormalizer)
   if (cruiseTippingRates.allRates.length === 0) {
     warnings.push('No tipping rates found — tips will be €0')
   }
 
   // 4. Entrance fees
-  const { data: entranceFees } = await supabase.from('entrance_fees').select('*').eq('is_active', true)
+  const { data: entranceFees } = await supabase.from('entrance_fees').select('*').eq('org_id', orgId ?? NO_ORG).eq('is_active', true)
   if (!entranceFees?.length) {
     warnings.push('No entrance fees found — entrance fees will be €0')
   }
@@ -255,10 +258,10 @@ export async function createCruiseItineraryServices(
   // previously priced at €0 because this module skipped the activity_rates
   // fallback that the land path uses. Mirror it here so cruise quotes don't
   // systematically under-charge for activity-priced items.
-  const { data: activityRates } = await supabase.from('activity_rates').select('*').eq('is_active', true)
+  const { data: activityRates } = await supabase.from('activity_rates').select('*').eq('org_id', orgId ?? NO_ORG).eq('is_active', true)
 
   // 5. Water rate
-  const fixedCosts = await getFixedDailyCosts()
+  const fixedCosts = await getFixedDailyCosts(orgId)
   const waterRatePerPerson = fixedCosts.waterPerPersonPerDay
 
   // ============================================
@@ -443,7 +446,7 @@ export async function createCruiseItineraryServices(
       // Fetch aliases for resolving alternative attraction names
       let aliasToCanonical: Map<string, string> | null = null
       try {
-        const aliases = await fetchAttractionAliases(supabase)
+        const aliases = await fetchAttractionAliases(supabase, orgId)
         aliasToCanonical = aliases.aliasToCanonical
       } catch { /* ignore if table doesn't exist yet */ }
 

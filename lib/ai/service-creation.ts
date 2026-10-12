@@ -28,32 +28,39 @@ import {
 // ALIAS RESOLUTION: DB-backed + hardcoded fallback
 // ============================================
 
-// In-memory cache for DB aliases (refreshed per request via setAliasCache)
-let _aliasCache: Map<string, string> | null = null
+// In-memory cache for DB aliases (refreshed per request via setAliasCache),
+// one per company: each company teaches its own aliases (attraction_aliases
+// .org_id), and one shared cache let a generation for one company match with
+// the other's.
+const _aliasCache = new Map<string, Map<string, string>>()
+
+// Matches no organisation: an org-less read finds no rates.
+const NO_ORG = '00000000-0000-0000-0000-000000000000'
 
 /**
  * Set the alias cache from DB data. Called once per generation request.
  * Map: lowercase alias → canonical name
  */
-export function setAliasCache(aliasMap: Map<string, string>) {
-  _aliasCache = aliasMap
+export function setAliasCache(orgId: string, aliasMap: Map<string, string>) {
+  _aliasCache.set(orgId, aliasMap)
 }
 
 /**
  * Normalize attraction names from AI output to canonical database names.
  * Uses DB aliases (primary) with hardcoded fallback for safety.
  */
-function normalizeAttractionForMatch(name: string): string {
+function normalizeAttractionForMatch(name: string, orgId: string | null | undefined): string {
+  const aliases = orgId ? _aliasCache.get(orgId) : undefined
   const normalized = name.toLowerCase().replace(/^the /, '').trim()
 
   // 1. Check DB alias cache first (populated from attraction_aliases table)
-  if (_aliasCache) {
-    const dbMatch = _aliasCache.get(normalized)
+  if (aliases) {
+    const dbMatch = aliases.get(normalized)
     if (dbMatch) return dbMatch
     // Try stripping "at/in/of <City>" suffix — AI often writes "Temple of Horus at Edfu"
     const withoutCitySuffix = normalized.replace(/\s+(at|in|of|near)\s+\w+$/i, '').trim()
     if (withoutCitySuffix !== normalized) {
-      const dbMatchStripped = _aliasCache.get(withoutCitySuffix)
+      const dbMatchStripped = aliases.get(withoutCitySuffix)
       if (dbMatchStripped) return dbMatchStripped
     }
   }
@@ -232,6 +239,8 @@ export interface PricingRates {
   /** Converts rate rows entered in another currency; created once per run in
    *  fetchAllPricingRates and reused by the per-city helpers. */
   rateNormalizer: RateNormalizer
+  /** Whose rates these are — the per-city helpers read the same company's. */
+  orgId: string | null
 }
 
 export async function fetchAllPricingRates(
@@ -244,6 +253,8 @@ export async function fetchAllPricingRates(
     language: string
     hotelName: string | null
     includeAccommodation: boolean
+    /** Whose rates: this company's rows only. No organisation, no rates. */
+    orgId: string | null | undefined
     /** The org's rate currency (organizations.rate_currency). Rows whose own
      *  rate_currency differs are converted into it at this fetch boundary —
      *  see lib/rates/rate-currency.ts. Optional so existing callers keep the
@@ -257,6 +268,7 @@ export async function fetchAllPricingRates(
   const { tier, effectiveCity, totalPax, isEuroPassport, language, hotelName, includeAccommodation } = params
   const orgId = params.orgId ?? null
   const rateNormalizer = createRateNormalizer(params.rateCurrency ?? DEFAULT_RATE_CURRENCY)
+  const orgScope = params.orgId ?? NO_ORG
 
   // All of these top-level lookups are mutually independent — run them in one
   // parallel batch (I/O scheduling only; downstream logic/warnings unchanged).
@@ -276,6 +288,7 @@ export async function fetchAllPricingRates(
     supabase
       .from('transportation_rates')
       .select('*')
+      .eq('org_id', orgScope)
       .eq('is_active', true)
       .eq('service_type', 'day_tour')
       .ilike('city', effectiveCity)
@@ -284,6 +297,7 @@ export async function fetchAllPricingRates(
     supabase
       .from('transportation_rates')
       .select('*')
+      .eq('org_id', orgScope)
       .eq('is_active', true)
       .eq('service_type', 'airport_transfer')
       .ilike('city', effectiveCity)
@@ -292,21 +306,22 @@ export async function fetchAllPricingRates(
     supabase
       .from('guide_rates')
       .select('*')
+      .eq('org_id', orgScope)
       .eq('is_active', true)
       .eq('guide_language', language)
       .limit(1),
     // Entrance fees + activity rates (sea trips, boat rides, etc.)
-    supabase.from('entrance_fees').select('*').eq('is_active', true),
-    supabase.from('activity_rates').select('*').eq('is_active', true),
+    supabase.from('entrance_fees').select('*').eq('org_id', orgScope).eq('is_active', true),
+    supabase.from('activity_rates').select('*').eq('org_id', orgScope).eq('is_active', true),
     // Meal rates — fetch ALL active rates for per-city lookup
-    supabase.from('meal_rates').select('*').eq('is_active', true),
+    supabase.from('meal_rates').select('*').eq('org_id', orgScope).eq('is_active', true),
     // Airport services (airport_staff_rates table — managed via Rates > Airport Services UI)
     // Fetch ALL active rows — per-airport rates are looked up dynamically via getAirportServiceRate()
-    supabase.from('airport_staff_rates').select('*').eq('is_active', true),
+    supabase.from('airport_staff_rates').select('*').eq('org_id', orgScope).eq('is_active', true),
     // Hotel services (hotel_staff_rates table — managed via Rates > Hotel Services UI)
-    supabase.from('hotel_staff_rates').select('*').eq('is_active', true),
+    supabase.from('hotel_staff_rates').select('*').eq('org_id', orgScope).eq('is_active', true),
     // Tipping rates (from tipping_rates table, tier-adjusted, per-role)
-    getItemizedTippingRates(supabase, tier, rateNormalizer),
+    getItemizedTippingRates(supabase, params.orgId, tier, rateNormalizer),
     import('@/lib/transport-rate-utils'),
   ])
 
@@ -429,6 +444,7 @@ export async function fetchAllPricingRates(
       let { data: namedHotelsTier } = await supabase
         .from('accommodation_rates')
         .select('*')
+        .eq('org_id', orgScope)
         .eq('is_active', true)
         .eq('tier', tier)
         .ilike('property_name', `%${hotelName}%`)
@@ -447,6 +463,7 @@ export async function fetchAllPricingRates(
         let { data: namedHotelsAny } = await supabase
           .from('accommodation_rates')
           .select('*')
+          .eq('org_id', orgScope)
           .eq('is_active', true)
           .ilike('property_name', `%${hotelName}%`)
           .limit(3)
@@ -467,6 +484,7 @@ export async function fetchAllPricingRates(
       let { data: hotels } = await supabase
         .from('accommodation_rates')
         .select('*')
+        .eq('org_id', orgScope)
         .ilike('city', effectiveCity)
         .eq('is_active', true)
         .eq('tier', tier)
@@ -519,6 +537,7 @@ export async function fetchAllPricingRates(
     selectedHotel,
     tippingRates,
     rateNormalizer,
+    orgId: params.orgId ?? null,
   }
 }
 
@@ -555,6 +574,7 @@ async function getTransportRatesForCity(
   const cacheKey = `${city.toLowerCase()}-${totalPax}-${isEuroPassport}`
   const cached = cache.get(cacheKey)
   if (cached) return cached
+  const orgScope = primaryRates.orgId ?? NO_ORG
 
   const { getTransportRateForPax } = await import('@/lib/transport-rate-utils')
 
@@ -562,6 +582,7 @@ async function getTransportRatesForCity(
   const { data: dayTourRates } = await supabase
     .from('transportation_rates')
     .select('*')
+    .eq('org_id', orgScope)
     .eq('is_active', true)
     .eq('service_type', 'day_tour')
     .ilike('city', city)
@@ -579,6 +600,7 @@ async function getTransportRatesForCity(
   const { data: transferRates } = await supabase
     .from('transportation_rates')
     .select('*')
+    .eq('org_id', orgScope)
     .eq('is_active', true)
     .eq('service_type', 'airport_transfer')
     .ilike('city', city)
@@ -631,10 +653,12 @@ async function getHotelRatesForCity(
   const cacheKey = `${city.toLowerCase()}-${tier}-${isEuroPassport}`
   const cached = cache.get(cacheKey)
   if (cached) return cached
+  const orgScope = primaryRates.orgId ?? NO_ORG
 
   let { data: hotels } = await supabase
     .from('accommodation_rates')
     .select('*')
+    .eq('org_id', orgScope)
     .ilike('city', city)
     .eq('is_active', true)
     .eq('tier', tier)
@@ -729,6 +753,8 @@ export async function createLandItineraryServices(
     includeGuide, skipPricing, marginPercent, startDate, currency = 'EUR', rateCurrency = 'EUR',
     mealPlan, orgId = null,
   } = params
+  // Every rate read below is this company's.
+  const orgScope = orgId ?? NO_ORG
 
   // All Inclusive: meals are provided by the hotel, not separate restaurant services
   const isAllInclusive = mealPlan?.toUpperCase().trim() === 'AI'
@@ -805,7 +831,7 @@ export async function createLandItineraryServices(
   }
 
   // Fetch configurable fixed daily costs (water, tips)
-  const fixedCosts = await getFixedDailyCosts()
+  const fixedCosts = await getFixedDailyCosts(orgId)
   const waterRatePerPerson = fixedCosts.waterPerPersonPerDay
 
   const marginMultiplier = 1 + (marginPercent / 100)
@@ -918,6 +944,7 @@ export async function createLandItineraryServices(
       nights: cruiseDayNumbers.length,
       startDate,
       isEuroPassport,
+      orgId,
     })
     if (!hoistedCruiseRate.found) {
       // Single trip-level warning instead of one per cruise day (which the
@@ -1419,6 +1446,7 @@ export async function createLandItineraryServices(
       const { data: intercityCandidates } = await supabase
         .from('transportation_rates')
         .select('*')
+        .eq('org_id', orgScope)
         .eq('is_active', true)
         .eq('service_type', 'intercity')
         .ilike('origin_city', originCity)
@@ -1566,6 +1594,7 @@ export async function createLandItineraryServices(
       const { data: dayTripCandidates } = await supabase
         .from('transportation_rates')
         .select('*')
+        .eq('org_id', orgScope)
         .eq('is_active', true)
         .in('service_type', ['intercity_with_sightseeing', 'intercity'])
         .ilike('origin_city', overnightCity.charAt(0).toUpperCase() + overnightCity.slice(1))
@@ -1645,6 +1674,7 @@ export async function createLandItineraryServices(
         const { data: cityDayTourRates } = await supabase
           .from('transportation_rates')
           .select('*')
+          .eq('org_id', orgScope)
           .eq('is_active', true)
           .eq('service_type', 'day_tour')
           .ilike('city', dayCity)
@@ -1668,6 +1698,7 @@ export async function createLandItineraryServices(
         const { data: cityTransferRates } = await supabase
           .from('transportation_rates')
           .select('*')
+          .eq('org_id', orgScope)
           .eq('is_active', true)
           .eq('service_type', 'airport_transfer')
           .ilike('city', dayCity)
@@ -1729,6 +1760,7 @@ export async function createLandItineraryServices(
         const { data: flightCityRates } = await supabase
           .from('transportation_rates')
           .select('*')
+          .eq('org_id', orgScope)
           .eq('is_active', true)
           .eq('service_type', 'day_tour')
           .ilike('city', flightSightseeingCity)
@@ -1840,7 +1872,7 @@ export async function createLandItineraryServices(
         }
 
         // Normalize attraction name for better matching
-        const normalizedAttr = normalizeAttractionForMatch(attr)
+        const normalizedAttr = normalizeAttractionForMatch(attr, orgId)
 
         // Find best match: prefer exact match, then STRICT partial match only
         let fee = rates.allEntranceFees.find((ef: any) =>
@@ -2211,9 +2243,12 @@ export async function fetchHotelsForCities(
     tier: ServiceTier
     primaryCity: string
     primaryHotelName: string | null
+    /** Whose hotels. */
+    orgId: string | null | undefined
   }
 ): Promise<Map<string, string>> {
   const { cities, tier, primaryCity, primaryHotelName } = params
+  const orgScope = params.orgId ?? NO_ORG
   const hotelMap = new Map<string, string>()
 
   // Primary city hotel is already known from fetchAllPricingRates
@@ -2231,6 +2266,7 @@ export async function fetchHotelsForCities(
       const { data: hotels } = await supabase
         .from('accommodation_rates')
         .select('property_name')
+        .eq('org_id', orgScope)
         .ilike('city', city)
         .eq('is_active', true)
         .eq('tier', tier)

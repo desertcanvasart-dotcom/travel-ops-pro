@@ -33,6 +33,7 @@ function admin() {
 async function resolveActorId(
   supabase: ReturnType<typeof admin>,
   resource: { resource_type?: string | null; resource_id?: string | null } | null,
+  /** The link's company: its fleet only. */
   orgId: string
 ): Promise<string | null> {
   try {
@@ -41,7 +42,7 @@ async function resolveActorId(
     if (!type || !rid) return null
     if (type === 'driver') return rid
     if (type === 'vehicle') {
-      const { data } = await supabase.from('vehicles').select('*').eq('id', rid).maybeSingle()
+      const { data } = await supabase.from('vehicles').select('*').eq('id', rid).eq('org_id', orgId).maybeSingle()
       const dd = data?.default_driver_id
       return typeof dd === 'string' ? dd : null
     }

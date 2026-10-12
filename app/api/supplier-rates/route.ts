@@ -35,6 +35,8 @@ const SUPPLIER_RATE_TABLES: Record<string, string[]> = {
 
 export async function GET(request: NextRequest) {
   try {
+    // This company's rates only: any supplier id used to return every
+    // company's rates linked to it.
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
@@ -78,6 +80,7 @@ export async function GET(request: NextRequest) {
         const { data, error } = await supabaseAdmin
           .from(table)
           .select('*')
+          .eq('org_id', orgId)
           .eq('supplier_id', supplierId)
           .order('created_at', { ascending: false })
 

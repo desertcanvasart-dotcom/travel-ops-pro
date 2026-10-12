@@ -12,6 +12,10 @@
 
 import type { RateNormalizer } from '@/lib/rates/rate-currency'
 
+// Matches no organisation: tips are one company's (tipping_rates.org_id), and
+// a read with no organisation reads none.
+const NO_ORG = '00000000-0000-0000-0000-000000000000'
+
 // ---- Types ----
 
 // 'hotel_assistant' was 'hotel_staff' until the vocabulary was unified: the
@@ -92,6 +96,8 @@ const TIPPING_TIER_MULTIPLIERS: Record<string, number> = {
  */
 export async function getDailyTippingRate(
   supabase: any,
+  /** Whose tips. */
+  orgId: string | null | undefined,
   tier: string = 'standard',
   /** Converts rows entered in another currency into the run currency —
    *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
@@ -102,6 +108,7 @@ export async function getDailyTippingRate(
     // select('*') so this deploys safely whether or not the rate_currency
     // migration has been applied yet (an explicitly named missing column errors).
     .select('*')
+    .eq('org_id', orgId ?? NO_ORG)
     .eq('is_active', true)
 
   if (error) {
@@ -159,6 +166,8 @@ export async function getDailyTippingRate(
  */
 export async function getItemizedTippingRates(
   supabase: any,
+  /** Whose tips. */
+  orgId: string | null | undefined,
   tier: string = 'standard',
   /** Converts rows entered in another currency into the run currency —
    *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
@@ -167,6 +176,7 @@ export async function getItemizedTippingRates(
   const { data, error } = await supabase
     .from('tipping_rates')
     .select('*')
+    .eq('org_id', orgId ?? NO_ORG)
     .eq('is_active', true)
 
   if (error) {

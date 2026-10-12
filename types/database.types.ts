@@ -113,6 +113,7 @@ export interface Database {
       }
       accommodation_rates: {
         Row: {
+          org_id: string
           id: string
           service_code: string
           property_name: string
@@ -200,6 +201,7 @@ export interface Database {
           supplements: Json
         }
         Insert: {
+          org_id: string
           id?: string
           service_code: string
           property_name: string
@@ -287,6 +289,7 @@ export interface Database {
           supplements: Json
         }
         Update: {
+          org_id?: string
           id?: string
           service_code?: string
           property_name?: string
@@ -558,6 +561,7 @@ export interface Database {
       }
       activity_rates: {
         Row: {
+          org_id: string
           id: string
           service_code: string
           activity_name: string
@@ -586,6 +590,7 @@ export interface Database {
           rate_currency: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           service_code: string
           activity_name: string
@@ -614,6 +619,7 @@ export interface Database {
           rate_currency?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           service_code?: string
           activity_name?: string
@@ -832,6 +838,7 @@ export interface Database {
       }
       airport_staff_rates: {
         Row: {
+          org_id: string
           id: string
           service_code: string
           airport_code: string
@@ -853,6 +860,7 @@ export interface Database {
           max_capacity: number | null
         }
         Insert: {
+          org_id: string
           id?: string
           service_code: string
           airport_code: string
@@ -874,6 +882,7 @@ export interface Database {
           max_capacity?: number | null
         }
         Update: {
+          org_id?: string
           id?: string
           service_code?: string
           airport_code?: string
@@ -906,6 +915,7 @@ export interface Database {
       }
       assistant_rates: {
         Row: {
+          org_id: string
           id: string
           assistant_type: string
           cost_per_service: number
@@ -914,6 +924,7 @@ export interface Database {
           supplier_id: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           assistant_type: string
           cost_per_service: number
@@ -922,6 +933,7 @@ export interface Database {
           supplier_id?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           assistant_type?: string
           cost_per_service?: number
@@ -941,6 +953,7 @@ export interface Database {
       }
       attraction_aliases: {
         Row: {
+          org_id: string
           id: string
           canonical_name: string
           alias: string
@@ -951,6 +964,7 @@ export interface Database {
           destination_id: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           canonical_name: string
           alias: string
@@ -961,6 +975,7 @@ export interface Database {
           destination_id?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           canonical_name?: string
           alias?: string
@@ -2203,30 +2218,6 @@ export interface Database {
             referencedColumns: ["id"]
           },
         ]
-      }
-      booking_rules: {
-        Row: {
-          id: string
-          rule_type: string
-          minimum_amount: number | null
-          is_active: boolean | null
-          created_at: string | null
-        }
-        Insert: {
-          id?: string
-          rule_type: string
-          minimum_amount?: number | null
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Update: {
-          id?: string
-          rule_type?: string
-          minimum_amount?: number | null
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Relationships: []
       }
       booking_supplier_status: {
         Row: {
@@ -4216,6 +4207,7 @@ export interface Database {
       }
       cruise_contacts: {
         Row: {
+          org_id: string
           id: string
           name: string
           ship_name: string | null
@@ -4237,6 +4229,7 @@ export interface Database {
           routes: string[] | null
         }
         Insert: {
+          org_id: string
           id?: string
           name: string
           ship_name?: string | null
@@ -4258,6 +4251,7 @@ export interface Database {
           routes?: string[] | null
         }
         Update: {
+          org_id?: string
           id?: string
           name?: string
           ship_name?: string | null
@@ -4447,6 +4441,7 @@ export interface Database {
       }
       destinations: {
         Row: {
+          org_id: string
           id: string
           country_code: string
           name: string
@@ -4459,6 +4454,7 @@ export interface Database {
           updated_at: string
         }
         Insert: {
+          org_id: string
           id?: string
           country_code: string
           name: string
@@ -4471,6 +4467,7 @@ export interface Database {
           updated_at?: string
         }
         Update: {
+          org_id?: string
           id?: string
           country_code?: string
           name?: string
@@ -4481,66 +4478,6 @@ export interface Database {
           glossary?: Json | null
           created_at?: string
           updated_at?: string
-        }
-        Relationships: []
-      }
-      destinations_legacy_2025: {
-        Row: {
-          id: string
-          destination_code: string
-          destination_name: string
-          region: string | null
-          description: string | null
-          popular_attractions: string[] | null
-          is_active: boolean | null
-          created_at: string | null
-        }
-        Insert: {
-          id?: string
-          destination_code: string
-          destination_name: string
-          region?: string | null
-          description?: string | null
-          popular_attractions?: string[] | null
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Update: {
-          id?: string
-          destination_code?: string
-          destination_name?: string
-          region?: string | null
-          description?: string | null
-          popular_attractions?: string[] | null
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Relationships: []
-      }
-      discount_rules: {
-        Row: {
-          id: string
-          rule_type: string
-          max_age: number | null
-          discount_percentage: number
-          is_active: boolean | null
-          created_at: string | null
-        }
-        Insert: {
-          id?: string
-          rule_type: string
-          max_age?: number | null
-          discount_percentage: number
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Update: {
-          id?: string
-          rule_type?: string
-          max_age?: number | null
-          discount_percentage?: number
-          is_active?: boolean | null
-          created_at?: string | null
         }
         Relationships: []
       }
@@ -5069,6 +5006,7 @@ export interface Database {
       }
       entrance_fees: {
         Row: {
+          org_id: string
           id: string
           service_code: string
           attraction_name: string
@@ -5094,6 +5032,7 @@ export interface Database {
           is_sellable_extra: boolean
         }
         Insert: {
+          org_id: string
           id?: string
           service_code: string
           attraction_name: string
@@ -5119,6 +5058,7 @@ export interface Database {
           is_sellable_extra?: boolean
         }
         Update: {
+          org_id?: string
           id?: string
           service_code?: string
           attraction_name?: string
@@ -5390,6 +5330,7 @@ export interface Database {
       }
       fixed_daily_costs: {
         Row: {
+          org_id: string
           id: string
           cost_type: string
           cost_per_person_per_day: number
@@ -5399,6 +5340,7 @@ export interface Database {
           rate_currency: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           cost_type: string
           cost_per_person_per_day: number
@@ -5408,6 +5350,7 @@ export interface Database {
           rate_currency?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           cost_type?: string
           cost_per_person_per_day?: number
@@ -5420,6 +5363,7 @@ export interface Database {
       }
       flight_rates: {
         Row: {
+          org_id: string
           id: string
           service_code: string
           route_from: string
@@ -5454,6 +5398,7 @@ export interface Database {
           seasons: Json | null
         }
         Insert: {
+          org_id: string
           id?: string
           service_code: string
           route_from: string
@@ -5488,6 +5433,7 @@ export interface Database {
           seasons?: Json | null
         }
         Update: {
+          org_id?: string
           id?: string
           service_code?: string
           route_from?: string
@@ -5571,6 +5517,7 @@ export interface Database {
       }
       guide_rates: {
         Row: {
+          org_id: string
           id: string
           service_code: string
           guide_language: string
@@ -5591,6 +5538,7 @@ export interface Database {
           guide_mode: string
         }
         Insert: {
+          org_id: string
           id?: string
           service_code: string
           guide_language: string
@@ -5611,6 +5559,7 @@ export interface Database {
           guide_mode?: string
         }
         Update: {
+          org_id?: string
           id?: string
           service_code?: string
           guide_language?: string
@@ -5881,6 +5830,7 @@ export interface Database {
       }
       hotel_contacts: {
         Row: {
+          org_id: string
           id: string
           name: string
           property_type: string | null
@@ -5930,6 +5880,7 @@ export interface Database {
           reservations_phone: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           name: string
           property_type?: string | null
@@ -5979,6 +5930,7 @@ export interface Database {
           reservations_phone?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           name?: string
           property_type?: string | null
@@ -6088,6 +6040,7 @@ export interface Database {
       }
       hotel_staff_rates: {
         Row: {
+          org_id: string
           id: string
           service_code: string
           service_type: string
@@ -6107,6 +6060,7 @@ export interface Database {
           max_capacity: number | null
         }
         Insert: {
+          org_id: string
           id?: string
           service_code: string
           service_type: string
@@ -6126,6 +6080,7 @@ export interface Database {
           max_capacity?: number | null
         }
         Update: {
+          org_id?: string
           id?: string
           service_code?: string
           service_type?: string
@@ -7656,32 +7611,9 @@ export interface Database {
         }
         Relationships: []
       }
-      meal_costs: {
-        Row: {
-          id: string
-          meal_type: string
-          cost_per_person: number
-          is_active: boolean | null
-          created_at: string | null
-        }
-        Insert: {
-          id?: string
-          meal_type: string
-          cost_per_person: number
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Update: {
-          id?: string
-          meal_type?: string
-          cost_per_person?: number
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Relationships: []
-      }
       meal_rates: {
         Row: {
+          org_id: string
           id: string
           service_code: string
           restaurant_name: string
@@ -7709,6 +7641,7 @@ export interface Database {
           rate_currency: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           service_code: string
           restaurant_name: string
@@ -7736,6 +7669,7 @@ export interface Database {
           rate_currency?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           service_code?: string
           restaurant_name?: string
@@ -7845,6 +7779,7 @@ export interface Database {
       }
       nile_cruises: {
         Row: {
+          org_id: string
           id: string
           cruise_code: string
           ship_name: string
@@ -7915,6 +7850,7 @@ export interface Database {
           supplements: Json
         }
         Insert: {
+          org_id: string
           id?: string
           cruise_code: string
           ship_name: string
@@ -7985,6 +7921,7 @@ export interface Database {
           supplements: Json
         }
         Update: {
+          org_id?: string
           id?: string
           cruise_code?: string
           ship_name?: string
@@ -8208,6 +8145,38 @@ export interface Database {
         Relationships: [
           {
             foreignKeyName: "operator_capacity_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_backfill_rate_copies: {
+        Row: {
+          copy_id: string
+          created_at: string
+          org_id: string
+          original_id: string
+          table_name: string
+        }
+        Insert: {
+          copy_id: string
+          created_at?: string
+          org_id: string
+          original_id: string
+          table_name: string
+        }
+        Update: {
+          copy_id?: string
+          created_at?: string
+          org_id?: string
+          original_id?: string
+          table_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_backfill_rate_copies_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -8517,27 +8486,6 @@ export interface Database {
         }
         Relationships: []
       }
-      outside_cairo_fees: {
-        Row: {
-          id: string
-          fee_per_person: number
-          is_active: boolean | null
-          created_at: string | null
-        }
-        Insert: {
-          id?: string
-          fee_per_person: number
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Update: {
-          id?: string
-          fee_per_person?: number
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Relationships: []
-      }
       overdue_followups: {
         Row: {
           id: string | null
@@ -8634,51 +8582,6 @@ export interface Database {
             referencedColumns: ["id"]
           },
         ]
-      }
-      package_type_definitions: {
-        Row: {
-          slug: string
-          name: string
-          description: string | null
-          include_accommodation: boolean | null
-          include_airport_transfers: boolean | null
-          include_internal_transfers: boolean | null
-          include_tours: boolean | null
-          include_meals: string | null
-          icon: string | null
-          display_order: number | null
-          is_active: boolean | null
-          created_at: string | null
-        }
-        Insert: {
-          slug: string
-          name: string
-          description?: string | null
-          include_accommodation?: boolean | null
-          include_airport_transfers?: boolean | null
-          include_internal_transfers?: boolean | null
-          include_tours?: boolean | null
-          include_meals?: string | null
-          icon?: string | null
-          display_order?: number | null
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Update: {
-          slug?: string
-          name?: string
-          description?: string | null
-          include_accommodation?: boolean | null
-          include_airport_transfers?: boolean | null
-          include_internal_transfers?: boolean | null
-          include_tours?: boolean | null
-          include_meals?: string | null
-          icon?: string | null
-          display_order?: number | null
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Relationships: []
       }
       payments: {
         Row: {
@@ -8946,30 +8849,6 @@ export interface Database {
             referencedColumns: ["id"]
           },
         ]
-      }
-      profit_margins: {
-        Row: {
-          id: string
-          tour_type: string
-          margin_percentage: number
-          is_active: boolean | null
-          created_at: string | null
-        }
-        Insert: {
-          id?: string
-          tour_type: string
-          margin_percentage: number
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Update: {
-          id?: string
-          tour_type?: string
-          margin_percentage?: number
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Relationships: []
       }
       prompt_templates: {
         Row: {
@@ -9298,6 +9177,7 @@ export interface Database {
       }
       rate_audit_log: {
         Row: {
+          org_id: string
           id: string
           table_name: string
           record_id: string
@@ -9310,6 +9190,7 @@ export interface Database {
           notes: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           table_name: string
           record_id: string
@@ -9322,6 +9203,7 @@ export interface Database {
           notes?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           table_name?: string
           record_id?: string
@@ -9514,6 +9396,7 @@ export interface Database {
       }
       restaurant_contacts: {
         Row: {
+          org_id: string
           id: string
           name: string
           restaurant_type: string | null
@@ -9551,6 +9434,7 @@ export interface Database {
           cuisine_types: string[] | null
         }
         Insert: {
+          org_id: string
           id?: string
           name: string
           restaurant_type?: string | null
@@ -9588,6 +9472,7 @@ export interface Database {
           cuisine_types?: string[] | null
         }
         Update: {
+          org_id?: string
           id?: string
           name?: string
           restaurant_type?: string | null
@@ -9689,50 +9574,9 @@ export interface Database {
         }
         Relationships: []
       }
-      seasonal_adjustments: {
-        Row: {
-          id: string
-          season_name: string
-          season_code: string
-          start_date: string
-          end_date: string
-          price_multiplier: number | null
-          applies_to_categories: string[] | null
-          applies_to_destinations: string[] | null
-          description: string | null
-          is_active: boolean | null
-          created_at: string | null
-        }
-        Insert: {
-          id?: string
-          season_name: string
-          season_code: string
-          start_date: string
-          end_date: string
-          price_multiplier?: number | null
-          applies_to_categories?: string[] | null
-          applies_to_destinations?: string[] | null
-          description?: string | null
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Update: {
-          id?: string
-          season_name?: string
-          season_code?: string
-          start_date?: string
-          end_date?: string
-          price_multiplier?: number | null
-          applies_to_categories?: string[] | null
-          applies_to_destinations?: string[] | null
-          description?: string | null
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Relationships: []
-      }
       seasonal_rates: {
         Row: {
+          org_id: string
           id: string
           season_name: string
           start_month: number
@@ -9744,6 +9588,7 @@ export interface Database {
           supplier_id: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           season_name: string
           start_month: number
@@ -9755,6 +9600,7 @@ export interface Database {
           supplier_id?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           season_name?: string
           start_month?: number
@@ -9777,6 +9623,7 @@ export interface Database {
       }
       service_fees: {
         Row: {
+          org_id: string
           id: string
           service_code: string
           service_name: string
@@ -9796,6 +9643,7 @@ export interface Database {
           updated_at: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           service_code: string
           service_name: string
@@ -9815,6 +9663,7 @@ export interface Database {
           updated_at?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           service_code?: string
           service_name?: string
@@ -9837,6 +9686,7 @@ export interface Database {
       }
       sleeping_train_rates: {
         Row: {
+          org_id: string
           id: string
           service_code: string
           origin_city: string | null
@@ -9861,6 +9711,7 @@ export interface Database {
           guide_rate: number | null
         }
         Insert: {
+          org_id: string
           id?: string
           service_code: string
           origin_city?: string | null
@@ -9885,6 +9736,7 @@ export interface Database {
           guide_rate?: number | null
         }
         Update: {
+          org_id?: string
           id?: string
           service_code?: string
           origin_city?: string | null
@@ -10810,6 +10662,7 @@ export interface Database {
       }
       tipping_rates: {
         Row: {
+          org_id: string
           id: string
           service_code: string
           role_type: string
@@ -10825,6 +10678,7 @@ export interface Database {
           city: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           service_code: string
           role_type: string
@@ -10840,6 +10694,7 @@ export interface Database {
           city?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           service_code?: string
           role_type?: string
@@ -11239,54 +11094,6 @@ export interface Database {
             referencedColumns: ["id"]
           },
         ]
-      }
-      tour_overview: {
-        Row: {
-          template_code: string | null
-          template_name: string | null
-          category_name: string | null
-          destination_name: string | null
-          duration_days: number | null
-          variation_code: string | null
-          tier: string | null
-          group_type: string | null
-          min_pax: number | null
-          max_pax: number | null
-          price_from: number | null
-          is_featured: boolean | null
-          popularity_score: number | null
-        }
-        Insert: {
-          template_code?: string | null
-          template_name?: string | null
-          category_name?: string | null
-          destination_name?: string | null
-          duration_days?: number | null
-          variation_code?: string | null
-          tier?: string | null
-          group_type?: string | null
-          min_pax?: number | null
-          max_pax?: number | null
-          price_from?: number | null
-          is_featured?: boolean | null
-          popularity_score?: number | null
-        }
-        Update: {
-          template_code?: string | null
-          template_name?: string | null
-          category_name?: string | null
-          destination_name?: string | null
-          duration_days?: number | null
-          variation_code?: string | null
-          tier?: string | null
-          group_type?: string | null
-          min_pax?: number | null
-          max_pax?: number | null
-          price_from?: number | null
-          is_featured?: boolean | null
-          popularity_score?: number | null
-        }
-        Relationships: []
       }
       tour_pricing: {
         Row: {
@@ -11852,13 +11659,6 @@ export interface Database {
             referencedRelation: "tour_categories"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "tour_templates_primary_destination_id_fkey"
-            columns: ["primary_destination_id"]
-            isOneToOne: false
-            referencedRelation: "destinations_legacy_2025"
-            referencedColumns: ["id"]
-          },
         ]
       }
       tour_templates_with_languages: {
@@ -11982,13 +11782,6 @@ export interface Database {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "tour_categories"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tour_templates_with_languages_primary_destination_id_fkey"
-            columns: ["primary_destination_id"]
-            isOneToOne: false
-            referencedRelation: "destinations_legacy_2025"
             referencedColumns: ["id"]
           },
         ]
@@ -12250,6 +12043,7 @@ export interface Database {
       }
       train_rates: {
         Row: {
+          org_id: string
           id: string
           service_code: string
           origin_city: string | null
@@ -12272,6 +12066,7 @@ export interface Database {
           guide_rate: number | null
         }
         Insert: {
+          org_id: string
           id?: string
           service_code: string
           origin_city?: string | null
@@ -12294,6 +12089,7 @@ export interface Database {
           guide_rate?: number | null
         }
         Update: {
+          org_id?: string
           id?: string
           service_code?: string
           origin_city?: string | null
@@ -12332,68 +12128,9 @@ export interface Database {
           },
         ]
       }
-      transportation_contacts: {
-        Row: {
-          id: string
-          name: string
-          service_type: string | null
-          vehicle_type: string | null
-          city: string | null
-          contact_person: string | null
-          email: string | null
-          phone: string | null
-          whatsapp: string | null
-          capacity: number | null
-          daily_rate: number | null
-          notes: string | null
-          is_active: boolean | null
-          created_at: string | null
-          updated_at: string | null
-          phone2: string | null
-          vehicle_types: string[] | null
-        }
-        Insert: {
-          id?: string
-          name: string
-          service_type?: string | null
-          vehicle_type?: string | null
-          city?: string | null
-          contact_person?: string | null
-          email?: string | null
-          phone?: string | null
-          whatsapp?: string | null
-          capacity?: number | null
-          daily_rate?: number | null
-          notes?: string | null
-          is_active?: boolean | null
-          created_at?: string | null
-          updated_at?: string | null
-          phone2?: string | null
-          vehicle_types?: string[] | null
-        }
-        Update: {
-          id?: string
-          name?: string
-          service_type?: string | null
-          vehicle_type?: string | null
-          city?: string | null
-          contact_person?: string | null
-          email?: string | null
-          phone?: string | null
-          whatsapp?: string | null
-          capacity?: number | null
-          daily_rate?: number | null
-          notes?: string | null
-          is_active?: boolean | null
-          created_at?: string | null
-          updated_at?: string | null
-          phone2?: string | null
-          vehicle_types?: string[] | null
-        }
-        Relationships: []
-      }
       transportation_rates: {
         Row: {
+          org_id: string
           id: string
           service_code: string
           service_type: string
@@ -12423,6 +12160,7 @@ export interface Database {
           trip_shape: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           service_code: string
           service_type: string
@@ -12452,6 +12190,7 @@ export interface Database {
           trip_shape?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           service_code?: string
           service_type?: string
@@ -13144,6 +12883,7 @@ export interface Database {
       }
       vehicle_rates: {
         Row: {
+          org_id: string
           id: string
           vehicle_type: string
           min_pax: number
@@ -13154,6 +12894,7 @@ export interface Database {
           supplier_id: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           vehicle_type: string
           min_pax: number
@@ -13164,6 +12905,7 @@ export interface Database {
           supplier_id?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           vehicle_type?: string
           min_pax?: number
@@ -13185,6 +12927,7 @@ export interface Database {
       }
       vehicles: {
         Row: {
+          org_id: string
           id: string
           name: string
           vehicle_type: string
@@ -13215,6 +12958,7 @@ export interface Database {
           city: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           name: string
           vehicle_type: string
@@ -13245,6 +12989,7 @@ export interface Database {
           city?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           name?: string
           vehicle_type?: string

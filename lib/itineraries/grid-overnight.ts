@@ -52,18 +52,20 @@ export function overnightCitiesFor(days: readonly GridDay[], stays: StayLookup):
 interface RateReader {
   from(table: string): {
     select(columns: string): {
-      in(column: string, values: string[]): PromiseLike<{ data: Array<Record<string, unknown>> | null; error: unknown }>
+      eq(column: 'org_id', value: string): {
+        in(column: string, values: string[]): PromiseLike<{ data: Array<Record<string, unknown>> | null; error: unknown }>
+      }
     }
   }
 }
 
-/** Looks the booked hotels and ships up, then resolves every night. */
-export async function gridOvernightCities(db: RateReader, days: readonly GridDay[]): Promise<Map<number, string | null>> {
+/** Looks the booked hotels and ships up — this company's — then resolves every night. */
+export async function gridOvernightCities(db: RateReader, orgId: string, days: readonly GridDay[]): Promise<Map<number, string | null>> {
   const hotelIds = [...new Set(days.map(d => bookedRateId(d, 'accommodation')).filter((x): x is string => !!x))]
   const cruiseIds = [...new Set(days.map(d => bookedRateId(d, 'cruise')).filter((x): x is string => !!x))]
   const [hotels, cruises] = await Promise.all([
-    hotelIds.length ? db.from('accommodation_rates').select('id, city').in('id', hotelIds) : { data: [] },
-    cruiseIds.length ? db.from('nile_cruises').select('id, ship_name').in('id', cruiseIds) : { data: [] },
+    hotelIds.length ? db.from('accommodation_rates').select('id, city').eq('org_id', orgId).in('id', hotelIds) : { data: [] },
+    cruiseIds.length ? db.from('nile_cruises').select('id, ship_name').eq('org_id', orgId).in('id', cruiseIds) : { data: [] },
   ])
   // A failed lookup leaves the night to the rest of the rule — never a guess.
   const stays: StayLookup = {

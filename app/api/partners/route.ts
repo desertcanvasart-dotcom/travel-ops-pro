@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
           const { data: hotels } = await supabase
             .from('hotel_contacts')
             .select('id, name, property_type, city, contact_person, phone, email, whatsapp, address, star_rating')
+            .eq('org_id', orgId)
             .eq('is_active', true)
             .order('name', { ascending: true })
             .limit(limit)
@@ -88,6 +89,7 @@ export async function GET(request: NextRequest) {
           const { data: restaurants } = await supabase
             .from('restaurant_contacts')
             .select('id, name, restaurant_type, cuisine_type, city, contact_person, phone, email, whatsapp, address')
+            .eq('org_id', orgId)
             .eq('is_active', true)
             .order('name', { ascending: true })
             .limit(limit)

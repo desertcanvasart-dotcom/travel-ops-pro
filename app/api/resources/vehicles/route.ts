@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
       const { data: rateRows } = await supabaseAdmin
         .from('transportation_rates')
         .select('supplier_id, vehicle_type')
+        .eq('org_id', orgId)
         .in('supplier_id', ids)
         .eq('is_active', true)
       for (const r of rateRows || []) {

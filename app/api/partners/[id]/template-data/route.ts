@@ -35,6 +35,7 @@ export async function GET(
         const { data: hotel, error: hotelError } = await supabase
           .from('hotel_contacts')
           .select('*')
+          .eq('org_id', orgId)
           .eq('id', partnerId)
           .single()
         
@@ -88,6 +89,7 @@ export async function GET(
         const { data: restaurant, error: restaurantError } = await supabase
           .from('restaurant_contacts')
           .select('*')
+          .eq('org_id', orgId)
           .eq('id', partnerId)
           .single()
         

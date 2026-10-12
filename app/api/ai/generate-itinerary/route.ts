@@ -87,11 +87,11 @@ export async function POST(request: NextRequest) {
     // resolution never throws — any failure means Egypt, exactly as before
     // destinations existed. Multi-destination plan, Phase 2.
     const requestedDestinationId: string | null = body.destination_id || null
-    const destinationContext = await loadDestinationPromptContext(supabaseAdmin, requestedDestinationId)
+    const destinationContext = await loadDestinationPromptContext(supabaseAdmin, orgId, requestedDestinationId)
     let resolvedDestinationId: string | null = requestedDestinationId
     if (!resolvedDestinationId) {
       const { data: defaultDest } = await supabaseAdmin
-        .from('destinations').select('id').eq('is_default', true).maybeSingle()
+        .from('destinations').select('id').eq('org_id', orgId).eq('is_default', true).maybeSingle()
       resolvedDestinationId = defaultDest?.id ?? null
     }
     if (!orgId) {
@@ -456,7 +456,9 @@ export async function POST(request: NextRequest) {
           totalPax,
           nights,
           startDate: start_date,
-          isEuroPassport
+          isEuroPassport,
+          // This company's ships.
+          orgId,
         })
         debugLog(`💰 Cruise rate: ${cruiseRate.totalPerNight}/night total on ${cruiseRate.shipName} (${cruiseRate.season})`)
         if (cruiseRate.cabinAllocation.length > 0) {
@@ -677,13 +679,13 @@ export async function POST(request: NextRequest) {
     ] = await Promise.all([
       fetchContentLibrary(supabaseAdmin, tier, searchCities, interests),
       fetchWritingRules(supabaseAdmin),
-      fetchAttractionsList(supabase),
-      fetchAttractionsWithCity(supabase),
-      // DB aliases for service-creation matching
-      fetchAttractionAliases(supabase),
+      fetchAttractionsList(supabase, orgId),
+      fetchAttractionsWithCity(supabase, orgId),
+      // DB aliases for service-creation matching — this company's
+      fetchAttractionAliases(supabase, orgId),
     ])
     const attractionMenu = formatAttractionMenuForPrompt(attractionsWithCity)
-    setAliasCache(aliasToCanonical)
+    setAliasCache(orgId, aliasToCanonical)
 
     // Build rich content map (full descriptions, not truncated) and format for prompts
     const contentMap = buildAttractionContentMap(contentLibrary)
@@ -705,6 +707,8 @@ export async function POST(request: NextRequest) {
       language: guideLanguage,
       hotelName: hotel_name || null,
       includeAccommodation: includeAccommodationFinal,
+      // This company's rates.
+      orgId,
       // Rows entered in another currency are converted into the org's rate
       // currency at the fetch boundary (lib/rates/rate-currency.ts).
       rateCurrency,
@@ -861,6 +865,7 @@ export async function POST(request: NextRequest) {
         tier,
         primaryCity: effectiveCity,
         primaryHotelName: rates.hotelName,
+        orgId,
       })
 
       hotelsPerCity = []

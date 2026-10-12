@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 
 // Actor-attributed service-role client (lib/supabase-actor): rate-table
 // writes from here reach fn_rate_audit_trigger, and without the actor
@@ -14,7 +16,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'accommodation_rates', id, orgId))) return notFoundInOrg('Rate')
 
     const { data, error } = await supabaseAdmin
       .from('accommodation_rates')
@@ -22,6 +27,7 @@ export async function GET(
         *,
         supplier:supplier_id (id, name, city, contact_phone, contact_email, star_rating, tier, is_preferred)
       `)
+      .eq('org_id', orgId)
       .eq('id', id)
       .single()
 
@@ -39,7 +45,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'accommodation_rates', id, orgId))) return notFoundInOrg('Rate')
     const body = await request.json()
 
     const updateData: any = {
@@ -105,6 +114,7 @@ export async function PUT(
     const { data, error } = await supabaseAdmin
       .from('accommodation_rates')
       .update(updateData)
+      .eq('org_id', orgId)
       .eq('id', id)
       .select(`*, supplier:supplier_id (id, name, city)`)
       .single()
@@ -123,11 +133,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'accommodation_rates', id, orgId))) return notFoundInOrg('Rate')
 
     const { error } = await supabaseAdmin
       .from('accommodation_rates')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
 
     if (error) throw error

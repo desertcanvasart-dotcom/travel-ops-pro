@@ -9,6 +9,7 @@ import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
 import { PRESET_VEHICLE_KEYS, bodyTouchesVehicles } from '@/lib/rates/vehicle-bands'
 import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
 import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // ============================================
 // TRANSPORTATION RATES API - Full CRUD
@@ -41,18 +42,18 @@ const SERVICE_TYPES = [
 // Which service types need a destination is the vocabulary's
 // `needs_destination` meta (Settings → Vocabulary → Transport service types),
 // so a type the agency adds validates like the intercity presets do. The two
-// presets stay as the floor for when there is no vocabulary. Refreshed at the
-// top of every write (single-org install; a module-level set is one org's).
+// presets stay as the floor for when there is no vocabulary. Read at the top
+// of every write, for the caller's company, and passed along — a module-level
+// set was whichever company wrote last.
 const INTERCITY_PRESETS = ['intercity', 'intercity_with_sightseeing']
-let intercityTypes = new Set<string>(INTERCITY_PRESETS)
 
-async function refreshIntercityTypes(): Promise<void> {
+async function intercityTypesForCurrentOrg(): Promise<Set<string>> {
   const items = await vocabularyItemsForCurrentOrg('transport_service_type')
-  if (items.length === 0) return
-  intercityTypes = new Set([...INTERCITY_PRESETS, ...items.filter(i => needsDestination(items, i.key)).map(i => i.key)])
+  if (items.length === 0) return new Set(INTERCITY_PRESETS)
+  return new Set([...INTERCITY_PRESETS, ...items.filter(i => needsDestination(items, i.key)).map(i => i.key)])
 }
 
-function isIntercityType(serviceType: string | null | undefined): boolean {
+function isIntercityType(serviceType: string | null | undefined, intercityTypes: Set<string>): boolean {
   return !!serviceType && intercityTypes.has(serviceType)
 }
 
@@ -77,6 +78,8 @@ const AREAS = [
 // GET - List transportation rates with filters
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const city = searchParams.get('city')
     const serviceType = searchParams.get('service_type')
@@ -93,6 +96,7 @@ export async function GET(request: NextRequest) {
         *,
         supplier:suppliers(id, name, city, contact_phone, contact_email)
       `)
+      .eq('org_id', orgId)
       .order('city')
       .order('service_type')
       .order('duration')
@@ -136,7 +140,9 @@ export async function GET(request: NextRequest) {
 // POST - Create new transportation rate (one row per service with tiered vehicle rates)
 export async function POST(request: NextRequest) {
   try {
-    await refreshIntercityTypes()
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const intercityTypes = await intercityTypesForCurrentOrg()
     const body = await request.json()
 
     const _rateCheck = validateRatePayload(body)
@@ -150,10 +156,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate service code if not provided
-    const serviceCode = body.service_code || generateServiceCode(body)
+    const serviceCode = body.service_code || generateServiceCode(body, intercityTypes)
 
     // Generate route name if not provided
-    const routeName = body.route_name || generateRouteName(body)
+    const routeName = body.route_name || generateRouteName(body, intercityTypes)
 
     // The vehicles this rate offers — a list, or the legacy per-vehicle fields.
     const vehicleWrite = await resolveVehicleWrite(body, null)
@@ -191,7 +197,7 @@ export async function POST(request: NextRequest) {
     if (!newRate.service_type) {
       return NextResponse.json({ success: false, error: 'service_type is required' }, { status: 400 })
     }
-    if (isIntercityType(newRate.service_type)) {
+    if (isIntercityType(newRate.service_type, intercityTypes)) {
       if (!newRate.origin_city || !newRate.destination_city) {
         return NextResponse.json({
           success: false,
@@ -216,9 +222,10 @@ export async function POST(request: NextRequest) {
     let existingQuery = supabaseAdmin
       .from('transportation_rates')
       .select('id, service_code, trip_shape')
+      .eq('org_id', orgId)
       .eq('service_type', newRate.service_type)
 
-    if (isIntercityType(newRate.service_type)) {
+    if (isIntercityType(newRate.service_type, intercityTypes)) {
       existingQuery = existingQuery
         .ilike('origin_city', newRate.origin_city)
         .ilike('destination_city', newRate.destination_city)
@@ -260,7 +267,7 @@ export async function POST(request: NextRequest) {
     {
       const result = await supabaseAdmin
         .from('transportation_rates')
-        .insert(newRate)
+        .insert({ ...newRate, org_id: orgId })
         .select('*')
         .single()
       data = result.data
@@ -282,9 +289,13 @@ export async function POST(request: NextRequest) {
 // PUT - Update transportation rate
 export async function PUT(request: NextRequest) {
   try {
-    await refreshIntercityTypes()
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const intercityTypes = await intercityTypesForCurrentOrg()
     const body = await request.json()
+    // A rate stays in its company: org_id is never the client's to set.
     const { id, ...rawUpdates } = body
+    delete rawUpdates.org_id
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
@@ -298,6 +309,7 @@ export async function PUT(request: NextRequest) {
       const { data: currentRow } = await supabaseAdmin
         .from('transportation_rates')
         .select('*')
+        .eq('org_id', orgId)
         .eq('id', id)
         .single()
       const vehicleWrite = await resolveVehicleWrite(rawUpdates, currentRow ?? null)
@@ -325,12 +337,13 @@ export async function PUT(request: NextRequest) {
       const { data: current } = await supabaseAdmin
         .from('transportation_rates')
         .select('*')
+        .eq('org_id', orgId)
         .eq('id', id)
         .single()
 
       if (current) {
         const merged = { ...current, ...updates }
-        updates.route_name = updates.route_name || generateRouteName(merged)
+        updates.route_name = updates.route_name || generateRouteName(merged, intercityTypes)
       }
     }
 
@@ -339,6 +352,7 @@ export async function PUT(request: NextRequest) {
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
       .update({ ...updates, ...vehiclePatch })
+      .eq('org_id', orgId)
       .eq('id', id)
       .select('*')
       .single()
@@ -358,6 +372,8 @@ export async function PUT(request: NextRequest) {
 // DELETE - Delete transportation rate
 export async function DELETE(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const id = searchParams.get('id')
 
@@ -368,6 +384,7 @@ export async function DELETE(request: NextRequest) {
     const { error } = await supabaseAdmin
       .from('transportation_rates')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
 
     if (error) {
@@ -386,10 +403,10 @@ export async function DELETE(request: NextRequest) {
 // HELPER FUNCTIONS
 // ============================================
 
-function generateServiceCode(data: any): string {
+function generateServiceCode(data: any, intercityTypes: Set<string>): string {
   const parts: string[] = []
 
-  if (isIntercityType(data.service_type)) {
+  if (isIntercityType(data.service_type, intercityTypes)) {
     parts.push('INTERCITY')
     parts.push(data.origin_city?.substring(0, 3).toUpperCase() || 'XXX')
     parts.push(data.destination_city?.substring(0, 3).toUpperCase() || 'XXX')
@@ -432,8 +449,8 @@ function generateServiceCode(data: any): string {
   return parts.join('-')
 }
 
-function generateRouteName(data: any): string {
-  if (isIntercityType(data.service_type)) {
+function generateRouteName(data: any, intercityTypes: Set<string>): string {
+  if (isIntercityType(data.service_type, intercityTypes)) {
     const suffix = data.service_type === 'intercity_with_sightseeing' ? ' (with sightseeing)' : ''
     return `${data.origin_city || 'Origin'} to ${data.destination_city || 'Destination'}${suffix}`
   }

@@ -27,7 +27,7 @@ const FX_ROWS = [
   { base_currency: 'EUR', target_currency: 'JPY', rate: 165, is_active: true },
 ]
 
-const PARAMS = {
+const PARAMS = { orgId: 'org-1',
   templateId: TEMPLATE_ID,
   tier: 'standard' as const,
   isEurPassport: true,

@@ -552,17 +552,24 @@ export default function ItineraryEditorPage() {
 
   const loadAttractions = async () => {
     try {
+      // The trip's company's attractions only. RLS lets someone in both
+      // companies read both companies' rates; this trip is priced from its own.
+      const { data: own } = await supabase.from('itineraries').select('org_id').eq('id', itineraryId).maybeSingle()
+      const tripOrgId = (own as { org_id?: string } | null)?.org_id
+      if (!tripOrgId) return
       // Load both entrance fees and activities in parallel
       const [entranceRes, activityRes] = await Promise.all([
         supabase
           .from('entrance_fees')
           .select('id, attraction_name, city, eur_rate, non_eur_rate')
+          .eq('org_id', tripOrgId)
           .neq('is_active', false)
           .order('city')
           .order('attraction_name'),
         supabase
           .from('activity_rates')
           .select('id, activity_name, city, base_rate_eur, base_rate_non_eur')
+          .eq('org_id', tripOrgId)
           .eq('is_active', true)
           .order('city')
           .order('activity_name')

@@ -2,18 +2,24 @@
 
 import { createServerClient } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
     const supabase = createServerClient()
+    if (!(await rowInOrg(supabase, 'cruise_contacts', id, orgId))) return notFoundInOrg('Cruise')
     
     const { data, error } = await supabase
       .from('cruise_contacts')
       .select('*')
+      .eq('org_id', orgId)
       .eq('id', id)
       .single()
     
@@ -34,16 +40,22 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
     const supabase = createServerClient()
+    if (!(await rowInOrg(supabase, 'cruise_contacts', id, orgId))) return notFoundInOrg('Cruise')
     const body = await request.json()
     
     const { data, error } = await supabase
       .from('cruise_contacts')
       .update({
         ...body,
+        // It stays this company's, whatever the body says.
+        org_id: orgId,
         updated_at: new Date().toISOString()
       })
+      .eq('org_id', orgId)
       .eq('id', id)
       .select()
       .single()
@@ -65,12 +77,16 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
     const supabase = createServerClient()
+    if (!(await rowInOrg(supabase, 'cruise_contacts', id, orgId))) return notFoundInOrg('Cruise')
     
     const { error } = await supabase
       .from('cruise_contacts')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
     
     if (error) throw error

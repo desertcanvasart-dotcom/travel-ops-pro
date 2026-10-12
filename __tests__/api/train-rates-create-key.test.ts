@@ -21,6 +21,18 @@ vi.mock('@/lib/supabase-actor', async () => {
   return { createActorAdminClient: () => mock.createMockClient() }
 })
 
+// The caller's company: every rate route reads and stamps it (20261206).
+vi.mock('@/lib/auth/current-org', async () => {
+  const { NextResponse } = await import('next/server')
+  return {
+    getCurrentOrgId: async () => 'org-1',
+    getCurrentUserId: async () => 'u1',
+    getCurrentUserRole: async () => 'admin',
+    requireRole: async () => null,
+    noOrgResponse: () => NextResponse.json({ success: false }, { status: 403 }),
+  }
+})
+
 // The resolver's propertyId path: a given id is the train, with its name.
 vi.mock('@/lib/suppliers/resolve-property', () => ({
   resolveRateProperty: vi.fn(async (_client: unknown, opts: { propertyId?: string | null }) =>

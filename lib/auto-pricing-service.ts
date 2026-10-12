@@ -69,6 +69,10 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// Matches no organisation: a rate read with no org returns no rows (a missing
+// rate, flagged as a hole) — never every company's rows.
+const NO_ORG = '00000000-0000-0000-0000-000000000000'
+
 // ============================================
 // TYPES
 // ============================================
@@ -1597,10 +1601,10 @@ async function fetchAirports(orgId: string | null | undefined): Promise<Airport[
 }
 
 /** Active rows of the catalogues the legs need, currency-normalized. */
-async function fetchTicketRates(legs: TicketLeg[], normalizer?: RateNormalizer): Promise<TicketRates> {
+async function fetchTicketRates(orgId: string | null | undefined, legs: TicketLeg[], normalizer?: RateNormalizer): Promise<TicketRates> {
   const need = new Set(legs.map(l => l.mode))
   const pull = async (table: 'flight_rates' | 'train_rates' | 'sleeping_train_rates') => {
-    const { data } = await supabaseAdmin.from(table).select('*').eq('is_active', true)
+    const { data } = await supabaseAdmin.from(table).select('*').eq('org_id', orgId ?? NO_ORG).eq('is_active', true)
     const rows = (data ?? []) as TicketRow[]
     return normalizer ? ((await normalizer.normalize(table, rows)) as TicketRow[]) : rows
   }
@@ -1688,6 +1692,9 @@ export function chosenRowDifference(row: Record<string, unknown>, tier: string, 
 }
 
 export async function getCruiseRates(
+  /** Whose rates: this company's rows only (every rate table carries org_id).
+   *  No organisation, no rows — a missing rate, never another company's. */
+  orgId: string | null | undefined,
   tier: ServiceTier,
   embarkCity?: string,
   isEurPassport: boolean = true,
@@ -1697,11 +1704,14 @@ export async function getCruiseRates(
   /** A nile_cruises id chosen on the programme days; wins over the automatic pick. */
   chosenId?: string
 ): Promise<CruiseStayRates | null> {
-  return (await resolveCruiseStay(tier, embarkCity, isEurPassport, travelDate, normalizer, chosenId)).rates
+  return (await resolveCruiseStay(orgId, tier, embarkCity, isEurPassport, travelDate, normalizer, chosenId)).rates
 }
 
 /** getCruiseRates, saying why a chosen ship could not be used. */
 export async function resolveCruiseStay(
+  /** Whose rates: this company's rows only (every rate table carries org_id).
+   *  No organisation, no rows — a missing rate, never another company's. */
+  orgId: string | null | undefined,
   tier: ServiceTier,
   embarkCity?: string,
   isEurPassport: boolean = true,
@@ -1715,7 +1725,7 @@ export async function resolveCruiseStay(
     let raw: HotelOrCruiseRow | null
     let note: ChosenPropertyNote | undefined
     if (chosenId) {
-      const found = await propertyById(supabaseAdmin, 'nile_cruises', chosenId)
+      const found = await propertyById(supabaseAdmin, orgId, 'nile_cruises', chosenId)
       if (!found.row) return { rates: null, problem: found.inactive ? 'inactive' : 'gone' }
       // A ship at another tier is still THIS ship: price it and say so.
       note = chosenRowDifference(found.row, tier)
@@ -1724,7 +1734,7 @@ export async function resolveCruiseStay(
       // The starred ship first, then newest; a port that matches nothing
       // falls back to every ship at the tier — lib/pricing/property-candidates,
       // the same list the day editor offers.
-      raw = (await cruiseCandidates(supabaseAdmin, tier, embarkCity, nights))[0] ?? null
+      raw = (await cruiseCandidates(supabaseAdmin, orgId, tier, embarkCity, nights))[0] ?? null
     }
     const cruise = (raw && normalizer
       ? (await normalizer.normalize('nile_cruises', [raw]))?.[0]
@@ -1844,6 +1854,9 @@ export function chosenPropertyMessage(kind: 'hotel' | 'cruise', problem: ChosenP
 }
 
 export async function getHotelRates(
+  /** Whose rates: this company's rows only (every rate table carries org_id).
+   *  No organisation, no rows — a missing rate, never another company's. */
+  orgId: string | null | undefined,
   city: string,
   tier: ServiceTier,
   isEurPassport: boolean = true,
@@ -1853,11 +1866,14 @@ export async function getHotelRates(
   /** An accommodation_rates id chosen for this city; wins over the automatic pick. */
   chosenId?: string
 ): Promise<HotelStayRates | null> {
-  return (await resolveHotelStay(city, tier, isEurPassport, travelDate, normalizer, chosenId)).rates
+  return (await resolveHotelStay(orgId, city, tier, isEurPassport, travelDate, normalizer, chosenId)).rates
 }
 
 /** getHotelRates, saying why a chosen hotel could not be used. */
 export async function resolveHotelStay(
+  /** Whose rates: this company's rows only (every rate table carries org_id).
+   *  No organisation, no rows — a missing rate, never another company's. */
+  orgId: string | null | undefined,
   city: string,
   tier: ServiceTier,
   isEurPassport: boolean = true,
@@ -1869,7 +1885,7 @@ export async function resolveHotelStay(
     let raw: HotelOrCruiseRow | null
     let note: ChosenPropertyNote | undefined
     if (chosenId) {
-      const found = await propertyById(supabaseAdmin, 'accommodation_rates', chosenId)
+      const found = await propertyById(supabaseAdmin, orgId, 'accommodation_rates', chosenId)
       if (!found.row) return { rates: null, problem: found.inactive ? 'inactive' : 'gone' }
       // A hotel at another tier, or filed under a neighbouring city, is still
       // the hotel the operator named: price it and say so on the line.
@@ -1880,7 +1896,7 @@ export async function resolveHotelStay(
       // editor offers (lib/pricing/property-candidates). Per the harness
       // policy no adjacent tier and no hardcoded default: a missing exact
       // city+tier rate is a hole the caller flags.
-      raw = (await hotelCandidates(supabaseAdmin, city, tier))[0] ?? null
+      raw = (await hotelCandidates(supabaseAdmin, orgId, city, tier))[0] ?? null
     }
     const hotel = (raw && normalizer
       ? (await normalizer.normalize('accommodation_rates', [raw]))?.[0]
@@ -1917,6 +1933,9 @@ export async function resolveHotelStay(
  * Get entrance fee for an attraction
  */
 export async function getEntranceFee(
+  /** Whose rates: this company's rows only (every rate table carries org_id).
+   *  No organisation, no rows — a missing rate, never another company's. */
+  orgId: string | null | undefined,
   attractionName: string,
   isEurPassport: boolean,
   /** Converts rows entered in another currency into the run currency —
@@ -1927,6 +1946,7 @@ export async function getEntranceFee(
     const { data: matched, error } = await supabaseAdmin
       .from('entrance_fees')
       .select('*')
+      .eq('org_id', orgId ?? NO_ORG)
       .eq('is_active', true)
       .ilike('attraction_name', `%${attractionName}%`)
       .limit(1)
@@ -1940,6 +1960,7 @@ export async function getEntranceFee(
       let { data: allFees } = await supabaseAdmin
         .from('entrance_fees')
         .select('*')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('is_active', true)
       if (normalizer && allFees) allFees = await normalizer.normalize('entrance_fees', allFees) as typeof allFees
 
@@ -1991,11 +2012,12 @@ type EntranceFeeRow = { id: string; attraction_name: string; eur_rate: number | 
  * (and a full-table scan on every miss); building this cache once and matching
  * with findEntranceFeeInList() collapses that N+1 to a single query.
  */
-export async function buildEntranceFeeCache(normalizer?: RateNormalizer): Promise<EntranceFeeRow[]> {
+export async function buildEntranceFeeCache(orgId: string | null | undefined, normalizer?: RateNormalizer): Promise<EntranceFeeRow[]> {
   const { data } = await supabaseAdmin
     .from('entrance_fees')
     // select('*') so this deploys safely before the rate_currency migration.
     .select('*')
+    .eq('org_id', orgId ?? NO_ORG)
     .eq('is_active', true)
   const rows = (data as EntranceFeeRow[]) || []
   return normalizer ? ((await normalizer.normalize('entrance_fees', rows)) ?? rows) : rows
@@ -2049,6 +2071,9 @@ export type GuideGrade = 'egyptologist' | 'senior'
  * real row — a hole, never a guess.
  */
 export async function getGuideRate(
+  /** Whose rates: this company's rows only (every rate table carries org_id).
+   *  No organisation, no rows — a missing rate, never another company's. */
+  orgId: string | null | undefined,
   language: string,
   tier: ServiceTier,
   /** Converts rows entered in another currency into the run currency —
@@ -2058,9 +2083,6 @@ export async function getGuideRate(
     grade?: GuideGrade
     duration?: 'full_day' | 'meet_greet'
     mode?: 'spot' | 'throughout'
-    /** The company pricing: the legacy guides fallback reads ITS guides only
-     *  (suppliers.org_id, 20261205). No company = no fallback. */
-    orgId?: string | null
   }
 ): Promise<{ id: string; name: string; dailyRate: number } | null> {
   const grade = opts?.grade ?? 'egyptologist'
@@ -2077,6 +2099,7 @@ export async function getGuideRate(
     const { data: activeRows } = await supabaseAdmin
       .from('guide_rates')
       .select('*')
+      .eq('org_id', orgId ?? NO_ORG)
       .eq('is_active', true)
     const ofLanguage = ((activeRows ?? []) as Record<string, any>[])
       .filter(r => sameGuideLanguage(r.guide_language, language) && rateGuideMode(r) === mode)
@@ -2109,14 +2132,14 @@ export async function getGuideRate(
     // 3. Legacy fallback to the guides supplier view — default ask only: a
     //    'senior' or 'meet_greet' ask must never be silently priced from a
     //    supplier's generic daily_rate.
-    if (grade !== 'egyptologist' || duration !== 'full_day' || mode !== 'spot' || !opts?.orgId) {
+    if (grade !== 'egyptologist' || duration !== 'full_day' || mode !== 'spot' || !orgId) {
       console.warn(`⚠️ No ${mode} guide rate for ${language} ${grade}/${duration} — flagging hole (no fabrication)`)
       return null
     }
     const { data: guides, error } = await supabaseAdmin
       .from('guides')
       .select('id, name, daily_rate, languages, tier')
-      .eq('org_id', opts.orgId)
+      .eq('org_id', orgId)
       .eq('is_active', true)
       .contains('languages', [language])
       .order('is_preferred', { ascending: false })
@@ -2159,6 +2182,9 @@ export async function getGuideRate(
  * synthesised rate.
  */
 export async function getMealRates(
+  /** Whose rates: this company's rows only (every rate table carries org_id).
+   *  No organisation, no rows — a missing rate, never another company's. */
+  orgId: string | null | undefined,
   tier: ServiceTier,
   /** Converts rows entered in another currency into the run currency —
    *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
@@ -2174,6 +2200,7 @@ export async function getMealRates(
     let { data: mealRows } = await supabaseAdmin
       .from('meal_rates')
       .select('*')
+      .eq('org_id', orgId ?? NO_ORG)
       .eq('is_active', true)
       .eq('tier', tier)
     if (normalizer && mealRows) mealRows = await normalizer.normalize('meal_rates', mealRows) as typeof mealRows
@@ -2213,6 +2240,9 @@ export async function getMealRates(
  * Get airport service rate
  */
 export async function getAirportServiceRate(
+  /** Whose rates: this company's rows only (every rate table carries org_id).
+   *  No organisation, no rows — a missing rate, never another company's. */
+  orgId: string | null | undefined,
   airportCode: string,
   direction: 'arrival' | 'departure',
   tier: ServiceTier,
@@ -2224,6 +2254,7 @@ export async function getAirportServiceRate(
     let { data: rates } = await supabaseAdmin
       .from('airport_staff_rates')
       .select('*')
+      .eq('org_id', orgId ?? NO_ORG)
       .eq('is_active', true)
       .eq('airport_code', airportCode)
       .or(`direction.eq.${direction},direction.eq.both`)
@@ -2244,6 +2275,9 @@ export async function getAirportServiceRate(
  * Get hotel service rate
  */
 export async function getHotelServiceRate(
+  /** Whose rates: this company's rows only (every rate table carries org_id).
+   *  No organisation, no rows — a missing rate, never another company's. */
+  orgId: string | null | undefined,
   serviceType: 'checkin_assist' | 'checkout_assist' | 'porter' | 'full_service',
   tier: ServiceTier,
   /** Converts rows entered in another currency into the run currency —
@@ -2257,6 +2291,7 @@ export async function getHotelServiceRate(
       let { data } = await supabaseAdmin
         .from('hotel_staff_rates')
         .select('*')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('is_active', true)
         .eq('service_type', type)
         .or(`hotel_category.eq.${category},hotel_category.eq.all`)
@@ -2279,17 +2314,17 @@ export async function getHotelServiceRate(
 /**
  * Get tipping rate per day (flat total — backward compat for simple callers)
  */
-export async function getTippingRate(tier: ServiceTier, normalizer?: RateNormalizer): Promise<number> {
+export async function getTippingRate(orgId: string | null | undefined, tier: ServiceTier, normalizer?: RateNormalizer): Promise<number> {
   const { getDailyTippingRate } = await import('@/lib/tipping-utils')
-  return getDailyTippingRate(supabaseAdmin, tier, normalizer)
+  return getDailyTippingRate(supabaseAdmin, orgId, tier, normalizer)
 }
 
 /**
  * Get itemized tipping rates for context-aware per-role lookups
  */
-async function getItemizedTips(tier: ServiceTier, normalizer?: RateNormalizer) {
+async function getItemizedTips(orgId: string | null | undefined, tier: ServiceTier, normalizer?: RateNormalizer) {
   const { getItemizedTippingRates } = await import('@/lib/tipping-utils')
-  return getItemizedTippingRates(supabaseAdmin, tier, normalizer)
+  return getItemizedTippingRates(supabaseAdmin, orgId, tier, normalizer)
 }
 
 // ============================================
@@ -2300,10 +2335,11 @@ async function getItemizedTips(tier: ServiceTier, normalizer?: RateNormalizer) {
  * Build transport cache from database
  * Key format: "service_type|city|duration|area" (one entry per service, all vehicle rates in one row)
  */
-export async function buildTransportCache(normalizer?: RateNormalizer): Promise<Map<string, TransportRate>> {
+export async function buildTransportCache(orgId: string | null | undefined, normalizer?: RateNormalizer): Promise<Map<string, TransportRate>> {
   let { data: allRates } = await supabaseAdmin
     .from('transportation_rates')
     .select('*')
+    .eq('org_id', orgId ?? NO_ORG)
     .eq('is_active', true)
   if (normalizer && allRates) allRates = await normalizer.normalize('transportation_rates', allRates) as typeof allRates
 
@@ -2626,7 +2662,9 @@ export async function calculateDayBasedPricing(
     language = 'English',
     marginPercent = 25,
     guideGrade = 'egyptologist',
-    guideMode = 'spot'
+    guideMode = 'spot',
+    // Whose rates price this: every rate read below is this company's.
+    orgId,
   } = params
 
   debugLog('🚀 Starting day-based pricing calculation (v4):', { templateId, tier, isEurPassport, guideGrade, guideMode })
@@ -2805,34 +2843,36 @@ export async function calculateDayBasedPricing(
     hotelStaffRows,
     attractionAliases,
   ] = await Promise.all([
-    buildTransportCache(rateNormalizer),
+    buildTransportCache(orgId, rateNormalizer),
     // Fetch cruise transport packages from b2b_transport_packages
     fetchCruiseTransportPricingRules(params.orgId, rateNormalizer),
     // Cruise rates only apply when the itinerary has cruise nights
     cruiseNights > 0
-      ? resolveCruiseStay(tier, firstCruiseDay?.city, isEurPassport, dateForDay(firstCruiseDay?.day), rateNormalizer, propertyChoices.cruiseId, cruiseNights)
+      ? resolveCruiseStay(orgId, tier, firstCruiseDay?.city, isEurPassport, dateForDay(firstCruiseDay?.day), rateNormalizer, propertyChoices.cruiseId, cruiseNights)
       : Promise.resolve({ rates: null } as Awaited<ReturnType<typeof resolveCruiseStay>>),
-    Promise.all(hotelCities.map(city => resolveHotelStay(city, tier, isEurPassport, params.travelDate, rateNormalizer, propertyChoices.hotelByCity.get(city.toLowerCase())))),
-    fetchTicketRates(ticketLegs, rateNormalizer),
+    Promise.all(hotelCities.map(city => resolveHotelStay(orgId, city, tier, isEurPassport, params.travelDate, rateNormalizer, propertyChoices.hotelByCity.get(city.toLowerCase())))),
+    fetchTicketRates(orgId, ticketLegs, rateNormalizer),
     fetchAirports(params.orgId),
-    getGuideRate(language, tier, rateNormalizer, { grade: guideGrade, mode: guideMode, orgId: params.orgId }),
-    getMealRates(tier, rateNormalizer),
-    getItemizedTips(tier, rateNormalizer),
+    getGuideRate(orgId, language, tier, rateNormalizer, { grade: guideGrade, mode: guideMode }),
+    getMealRates(orgId, tier, rateNormalizer),
+    getItemizedTips(orgId, tier, rateNormalizer),
     // Water cost from DB (fixed_daily_costs table) instead of hardcoding
-    import('@/lib/fixed-costs').then(m => m.getFixedDailyCosts(rateNormalizer)),
+    import('@/lib/fixed-costs').then(m => m.getFixedDailyCosts(orgId, rateNormalizer)),
     // Entrance fees fetched ONCE here, matched in memory later (Step 7)
-    buildEntranceFeeCache(rateNormalizer),
+    buildEntranceFeeCache(orgId, rateNormalizer),
     // Tiny tables prefetched whole so the day loop below resolves
     // airport/hotel staff rates in memory instead of one query per day
     supabaseAdmin
       .from('airport_staff_rates')
       .select('*')
+      .eq('org_id', orgId ?? NO_ORG)
       .eq('is_active', true)
       .then(({ data }) => rateNormalizer.normalize('airport_staff_rates', data || []))
       .then(rows => rows || []),
     supabaseAdmin
       .from('hotel_staff_rates')
       .select('*')
+      .eq('org_id', orgId ?? NO_ORG)
       .eq('is_active', true)
       .then(({ data }) => rateNormalizer.normalize('hotel_staff_rates', data || []))
       .then(rows => rows || []),
@@ -2841,6 +2881,7 @@ export async function calculateDayBasedPricing(
     supabaseAdmin
       .from('attraction_aliases')
       .select('alias, canonical_name')
+      .eq('org_id', orgId ?? NO_ORG)
       .eq('is_active', true)
       .then(({ data }) => buildAliasMap(data as { alias: string; canonical_name: string }[] | null)),
   ])
@@ -2959,7 +3000,7 @@ export async function calculateDayBasedPricing(
   // sightseeing bill at it, not at the full guiding day (operator, 2026-09-04).
   const hasSightseeingDay = (d: (typeof itinerary)[number]) => d.services.guide_required || d.attractions.length > 0
   const meetGreetGuideRate = guideMode === 'throughout'
-    ? await getGuideRate(language, tier, rateNormalizer, { grade: guideGrade, duration: 'meet_greet', mode: 'throughout', orgId: params.orgId })
+    ? await getGuideRate(orgId, language, tier, rateNormalizer, { grade: guideGrade, duration: 'meet_greet', mode: 'throughout' })
     : null
 
   // Flag missing rates that the itinerary actually needs (no fabrication).

@@ -140,10 +140,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { data: addons, error: addonError } = await admin
     .from('entrance_fees')
     .select('id, attraction_name, city, eur_rate, non_eur_rate, rate_currency, is_sellable_extra, is_active, addon_note, supplier_id')
-    // NOT org-scoped, because entrance_fees has no org_id column — the rate
-    // catalogue predates organisations and is shared, exactly as
-    // /api/rates/attractions reads it. If that table is ever partitioned by
-    // org, this query has to gain the filter with it.
+    // This company's attractions (entrance_fees.org_id, 20261206).
+    .eq('org_id', orgId)
     .eq('is_sellable_extra', true)
   if (addonError) console.error('extras catalog: sellable attraction extras', addonError)
 
@@ -268,11 +266,11 @@ async function staysForItinerary(itineraryId: string | null | undefined, orgId: 
 
   const stays: PropertyStay[] = []
   for (const [city, dates] of hotelNights) {
-    const hotel = await getHotelRates(city, tier, false, dates[0])
+    const hotel = await getHotelRates(orgId, city, tier, false, dates[0])
     if (hotel?.row) stays.push({ entity: 'accommodation', row: hotel.row, name: hotel.hotelName, dates })
   }
   if (cruiseNights.length > 0) {
-    const cruise = await getCruiseRates(tier, undefined, false, cruiseNights[0])
+    const cruise = await getCruiseRates(orgId, tier, undefined, false, cruiseNights[0])
     if (cruise?.row) stays.push({ entity: 'cruise', row: cruise.row, name: cruise.shipName, dates: cruiseNights })
   }
   return stays

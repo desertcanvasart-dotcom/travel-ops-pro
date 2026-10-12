@@ -20,7 +20,7 @@ import { PERIOD_SHEETS, parsePeriodRows, type PeriodRowError } from '@/lib/rates
 import { sanitizeSeasons, legacyColumnMirror, seasonsForRow } from '@/lib/rates/rate-seasons'
 import { sanitizeSupplements, supplementsForRow, type RateSupplement } from '@/lib/rates/supplements'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
-import { requireRole } from '@/lib/auth/current-org'
+import { requireRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +37,8 @@ interface RateChange {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     // Rates are pricing: same gate the rest of the rate surface uses.
     const denied = await requireRole(['admin', 'manager'])
     if (denied) return denied
@@ -96,8 +98,8 @@ export async function POST(request: NextRequest) {
     // Which of these rates actually exist, and what they have today — so the
     // preview can say "6 periods replacing 3" rather than just "6 periods".
     const { data: existing, error: fetchError } = config.table === 'accommodation_rates'
-      ? await supabase.from('accommodation_rates').select('*').in('service_code', keys)
-      : await supabase.from('nile_cruises').select('*').in('cruise_code', keys)
+      ? await supabase.from('accommodation_rates').select('*').eq('org_id', orgId).in('service_code', keys)
+      : await supabase.from('nile_cruises').select('*').eq('org_id', orgId).in('cruise_code', keys)
 
     if (fetchError) {
       console.error('[periods-import] lookup failed:', fetchError.message)
@@ -159,8 +161,8 @@ export async function POST(request: NextRequest) {
         ...(hasSupplementColumns ? { supplements: supplementsFor(change.key) } : {}),
       }
       const { error: updateError } = config.table === 'accommodation_rates'
-        ? await supabase.from('accommodation_rates').update(patch).eq('service_code', change.key)
-        : await supabase.from('nile_cruises').update(patch).eq('cruise_code', change.key)
+        ? await supabase.from('accommodation_rates').update(patch).eq('org_id', orgId).eq('service_code', change.key)
+        : await supabase.from('nile_cruises').update(patch).eq('org_id', orgId).eq('cruise_code', change.key)
 
       if (updateError) {
         rowErrors.push({ row: 0, key: change.key, message: updateError.message })

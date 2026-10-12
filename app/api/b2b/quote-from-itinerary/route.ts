@@ -80,10 +80,12 @@ async function selectGuideFromB2CTable(orgId: string | null, language: string = 
   }
 }
 
-async function getEntranceFee(attractionName: string, isEurPassport: boolean): Promise<{ rate: number; name: string; id: string } | null> {
+// This company's entrance fee.
+async function getEntranceFee(orgId: string, attractionName: string, isEurPassport: boolean): Promise<{ rate: number; name: string; id: string } | null> {
   const { data: fees, error } = await supabaseAdmin
     .from('entrance_fees')
     .select('id, attraction_name, eur_rate, non_eur_rate')
+    .eq('org_id', orgId)
     .eq('is_active', true)
     .ilike('attraction_name', `%${attractionName}%`)
     .limit(1)
@@ -103,8 +105,9 @@ async function getEntranceFee(attractionName: string, isEurPassport: boolean): P
   }
 }
 
-// Get hotel rate from accommodation_rates table (per-person pricing with single supplement)
+// Get hotel rate from accommodation_rates table (per-person pricing with single supplement) — this company's.
 async function getHotelRate(
+  orgId: string,
   city: string,
   tier: string = 'standard',
   isEurPassport: boolean = true
@@ -112,6 +115,7 @@ async function getHotelRate(
   const { data: hotels, error } = await supabaseAdmin
     .from('accommodation_rates')
     .select('id, property_name, pp_double_eur, pp_double_non_eur, single_supp_eur, single_supp_non_eur, city, tier')
+    .eq('org_id', orgId)
     .eq('is_active', true)
     .ilike('city', `%${city}%`)
     .eq('tier', tier)
@@ -147,6 +151,7 @@ async function getHotelRate(
     const { data: fbHotels } = await supabaseAdmin
       .from('accommodation_rates')
       .select('id, property_name, pp_double_eur, pp_double_non_eur, single_supp_eur, single_supp_non_eur, city, tier')
+      .eq('org_id', orgId)
       .eq('is_active', true)
       .ilike('city', `%${city}%`)
       .eq('tier', fbTier)
@@ -189,15 +194,18 @@ export async function POST(request: NextRequest) {
       language = 'English',
     } = body
 
-    // Day-tour vehicle rates come from transportation_rates (operator catalog,
-    // operator-set capacity bands) — NOT the rate-less `vehicles` fleet list.
-    const findDayTourVehicle = makeDayTourVehicleFinder()
 
     // TENANT BOUNDARY — every read below is the service role, so the trip and
     // the partner must be this organisation's: another org's itinerary id
     // returned its client's contact details and supplier costs in our quote.
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
+
+    // Day-tour vehicle rates come from transportation_rates (operator catalog,
+    // operator-set capacity bands) — NOT the rate-less `vehicles` fleet list.
+    // This company's.
+    const findDayTourVehicle = makeDayTourVehicleFinder(orgId)
+
     // The partner is saved on the quote (and printed on its PDF, and copied to
     // the trip on convert), not only used for its margin.
     if (!(await quoteRefsInOrg(supabaseAdmin, orgId, { partner_id }))) return quoteRefNotFound()
@@ -288,6 +296,7 @@ export async function POST(request: NextRequest) {
     const { data: allMealRates } = await supabaseAdmin
       .from('meal_rates')
       .select('*')
+      .eq('org_id', orgId)
       .eq('is_active', true)
     const mealRateFor = (mealType: 'lunch' | 'dinner'): number => {
       const typed = (allMealRates || []).filter(
@@ -368,7 +377,7 @@ export async function POST(request: NextRequest) {
           // Tiered activity pricing from the catalog first (volume discounts
           // like felucca) — lives on activity_rates.tiers, not the old (always
           // empty) b2b_pricing_rules table.
-          const tiered = await getTieredActivityRate(supabaseAdmin, serviceName)
+          const tiered = await getTieredActivityRate(supabaseAdmin, orgId, serviceName)
           const ruleResult = tiered ? applyActivityTiers(tiered.tiers, numPax, is_eur_passport, rateSym) : null
           if (ruleResult && usableRate(ruleResult.lineTotal) !== null) {
             const priceResult = ruleResult
@@ -379,7 +388,7 @@ export async function POST(request: NextRequest) {
             rateSource = 'activity_tiers'
           } else {
             // Try entrance_fees table
-            const fee = await getEntranceFee(serviceName, is_eur_passport)
+            const fee = await getEntranceFee(orgId, serviceName, is_eur_passport)
             if (fee) {
               unitCost = fee.rate
               lineTotal = fee.rate * numPax
@@ -428,7 +437,7 @@ export async function POST(request: NextRequest) {
         // Accommodation (hotel) - rate_double_eur is per-person (double occupancy)
         if (serviceType === 'hotel' || serviceType === 'accommodation') {
           const dayCity = day.city || day.overnight_location || 'Cairo'
-          const hotel = await getHotelRate(dayCity, tier, is_eur_passport)
+          const hotel = await getHotelRate(orgId, dayCity, tier, is_eur_passport)
           if (hotel) {
             unitCost = hotel.rate
             lineTotal = hotel.rate * numPax
@@ -501,7 +510,7 @@ export async function POST(request: NextRequest) {
     )
     for (const day of accommodationDays) {
       const dayCity = day.city || day.overnight_location || 'Cairo'
-      const hotel = await getHotelRate(dayCity, tier, is_eur_passport)
+      const hotel = await getHotelRate(orgId, dayCity, tier, is_eur_passport)
       if (hotel) {
         // Single supplement = single rate - double rate (both per-person)
         singleSupplement += hotel.singleRate - hotel.rate

@@ -7,12 +7,15 @@ import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-suppl
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const supplierId = searchParams.get('supplier_id')
     const city = searchParams.get('city')
@@ -25,6 +28,7 @@ export async function GET(request: NextRequest) {
         *,
         supplier:suppliers(id, name, city, contact_phone, contact_email)
       `)
+      .eq('org_id', orgId)
       .order('property_name')
 
     // Only one of the caller's company's suppliers (lib/suppliers/supplier-org).
@@ -49,6 +53,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
     // A malformed periods payload reads as "no periods" and the row keeps
     // pricing off its base columns — never a 500 on a rate save.
@@ -165,6 +171,7 @@ export async function POST(request: NextRequest) {
     const { data: existing } = await supabaseAdmin
       .from('accommodation_rates')
       .select('*')
+      .eq('org_id', orgId)
       .ilike('property_name', newHotel.property_name)
       .eq('city', newHotel.city)
       .eq('tier', newHotel.tier)
@@ -185,7 +192,7 @@ export async function POST(request: NextRequest) {
     {
       const result = await supabaseAdmin
         .from('accommodation_rates')
-        .insert(newHotel)
+        .insert({ ...newHotel, org_id: orgId })
         .select('*')
         .single()
       data = result.data
