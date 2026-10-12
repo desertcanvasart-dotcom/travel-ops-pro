@@ -8,13 +8,19 @@ import { AuthProvider } from './contexts/AuthContext'
 import { PreferencesProvider } from './contexts/PreferencesContext'
 import { ConfirmDialogProvider } from '@/components/ConfirmDialog'
 import { IntlClientProvider } from './providers/IntlClientProvider'
+import type { Locale } from '@/i18n/config'
 
 const inter = Inter({ subsets: ["latin"] })
 
-export default function RootLayout({
+// Everything the root layout renders. It is a client component (sidebar
+// state, pathname-dependent shells); app/layout.tsx is the server half, which
+// reads the locale from the request so the first render is already in it.
+export default function AppShell({
   children,
+  locale,
 }: {
   children: React.ReactNode
+  locale: Locale
 }) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const pathname = usePathname()
@@ -57,9 +63,9 @@ export default function RootLayout({
   }
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <body className={inter.className} suppressHydrationWarning>
-        <IntlClientProvider>
+        <IntlClientProvider locale={locale}>
           <AuthProvider>
             <PreferencesProvider>
               <ConfirmDialogProvider>

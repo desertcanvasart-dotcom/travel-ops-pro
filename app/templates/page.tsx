@@ -161,8 +161,8 @@ export default function TemplatesPage() {
     fetchTemplates()
   }, [])
 
-  // Locale starts as the default and switches after IntlClientProvider mounts,
-  // so refetch when it changes and ignore the stale response.
+  // Placeholders are fetched in the UI locale: refetch if it changes and
+  // ignore the superseded response.
   useEffect(() => {
     let cancelled = false
     const fetchPlaceholders = async () => {
