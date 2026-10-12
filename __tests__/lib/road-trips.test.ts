@@ -124,7 +124,7 @@ describe('planRoadTrips reads the shape from the days', () => {
 })
 
 describe('pricing charges an overnight return once, by route and shape', () => {
-  const BASE = { templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0, numPax: 2 }
+  const BASE = { orgId: 'org-1', templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0, numPax: 2 }
   const trip = () => {
     const t = fullRateTables() as any
     const vehicles = t.transportation_rates[0].vehicles

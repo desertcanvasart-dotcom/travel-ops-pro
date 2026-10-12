@@ -6,13 +6,16 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { assignableCruises, type CruiseContactRow, type NileCruiseRow } from '@/lib/resources/assignable-cruises'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export async function GET() {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const [directory, rates] = await Promise.all([
-      supabase.from('cruise_contacts').select('id, name, ship_name, route, routes, phone, is_active'),
-      supabase.from('nile_cruises').select('id, property_id, ship_name, route_name, embark_city, disembark_city, is_active'),
+      supabase.from('cruise_contacts').select('id, name, ship_name, route, routes, phone, is_active').eq('org_id', orgId),
+      supabase.from('nile_cruises').select('id, property_id, ship_name, route_name, embark_city, disembark_city, is_active').eq('org_id', orgId),
     ])
     // Either source alone still makes a list; both failing is an error.
     if (directory.error && rates.error) throw directory.error

@@ -17,6 +17,8 @@ export interface AuditRow {
   full_new_record: Record<string, unknown> | null
   changed_by: string | null
   changed_at: string
+  /** The rate's company (rate_audit_log.org_id, stamped by the trigger). */
+  org_id?: string | null
 }
 
 /** Audited table → the page that shows it, and how to name it. */

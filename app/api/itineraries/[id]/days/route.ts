@@ -93,8 +93,10 @@ export async function GET(
     const [{ data: hotelRows, error: hotelError }, { data: shipRows, error: shipError }] = await Promise.all([
       // id and city too: a line pinned to its rate row is judged by that row,
       // and "<hotel> <city>" by the hotel in that city (overnight-property.ts).
-      supabase.from('accommodation_rates').select('id, property_name, city, is_active'),
-      supabase.from('nile_cruises').select('id, ship_name, is_active'),
+      // This company's rates: another company's hotel of the same name says
+      // nothing about whether this one is still in OUR rates.
+      supabase.from('accommodation_rates').select('id, property_name, city, is_active').eq('org_id', orgId),
+      supabase.from('nile_cruises').select('id, ship_name, is_active').eq('org_id', orgId),
     ])
     // A catalog that failed to load says nothing about its properties: no
     // status rather than a false "no longer in your rates" — withheld only for

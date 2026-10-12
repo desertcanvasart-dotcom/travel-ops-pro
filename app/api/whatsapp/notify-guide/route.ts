@@ -52,11 +52,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get guide details from SUPPLIERS table
+    // Get guide details from SUPPLIERS table — the caller's company's only
+    // (suppliers.org_id, 20261205)
     const { data: guide, error: guideError } = await supabase
       .from('suppliers')
       .select('*')
       .eq('id', guideId)
+      .eq('org_id', orgId)
       .single()
 
     if (guideError || !guide) {

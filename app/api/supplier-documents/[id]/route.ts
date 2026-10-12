@@ -2,6 +2,7 @@ import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { NextRequest, NextResponse } from 'next/server'
+import { recordsInOrg } from '@/lib/org-refs'
 
 export async function GET(
   request: NextRequest,
@@ -76,6 +77,12 @@ export async function PUT(
       if (field in body) {
         updateData[field] = body[field]
       }
+    }
+
+    // A supplier must be this company's (suppliers.org_id, 20261205).
+    if (updateData.supplier_id === '') updateData.supplier_id = null
+    if (!(await recordsInOrg(supabase, orgId, { supplier_id: updateData.supplier_id }))) {
+      return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
     }
 
     // Auto-set timestamps based on status changes

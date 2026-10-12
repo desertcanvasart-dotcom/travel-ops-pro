@@ -29,6 +29,7 @@ describe('golden basket — cross-tier price drift guard', () => {
       for (const isEurPassport of [true, false]) {
         setMockTables(multiTierRateTables())
         const r = await calculateDayBasedPricing({
+          orgId: 'org-1',
           templateId: TEMPLATE_ID,
           tier,
           isEurPassport,

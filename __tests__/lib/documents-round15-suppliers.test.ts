@@ -103,13 +103,14 @@ describe('whole-table reads page past the 1000-row cap', () => {
       from: () => {
         const q: any = {
           select: () => q,
+          eq: () => q, // the company filter (suppliers.org_id, 20261205)
           order: () => q,
           range: async (from: number, to: number) => ({ data: suppliers.slice(from, to + 1), error: null }),
         }
         return q
       },
     }
-    const r = await batchResolveSuppliers([{ supplier_name: 'Supplier 1150' }], db)
+    const r = await batchResolveSuppliers([{ supplier_name: 'Supplier 1150' }], db, 'org-1')
     expect(r.resolvedIdByName.get('supplier 1150')).toBe('id-1150')
   })
 

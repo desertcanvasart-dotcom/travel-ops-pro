@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { recordsInOrg } from '@/lib/org-refs'
 import { buildFrozenFx, parseFrozenFx } from '@/lib/itinerary-fx'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { paymentRuleFrom } from '@/lib/payment-schedule'
@@ -128,8 +129,14 @@ export async function PUT(
     if (body.cancellation_reason !== undefined) updateData.cancellation_reason = body.cancellation_reason || null
     if (body.notes !== undefined) updateData.notes = body.notes
 
-    // Resource fields
-    if (body.assigned_guide_id !== undefined) updateData.assigned_guide_id = body.assigned_guide_id
+    // Resource fields. The guide is one of this company's suppliers
+    // (suppliers.org_id, 20261205).
+    if (body.assigned_guide_id !== undefined) {
+      if (body.assigned_guide_id && !(await recordsInOrg(supabase, orgId, { supplier_id: body.assigned_guide_id }))) {
+        return NextResponse.json({ error: 'Guide not found' }, { status: 404 })
+      }
+      updateData.assigned_guide_id = body.assigned_guide_id
+    }
     if (body.assigned_vehicle_id !== undefined) updateData.assigned_vehicle_id = body.assigned_vehicle_id
     if (body.guide_notes !== undefined) updateData.guide_notes = body.guide_notes
     if (body.vehicle_notes !== undefined) updateData.vehicle_notes = body.vehicle_notes

@@ -4,13 +4,17 @@ import { clientMessage } from '@/lib/api-errors'
 import { blankToNull } from '@/lib/blank-to-null'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export async function GET() {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { data, error } = await supabase
       .from('tipping_rates')
       .select('*')
+      .eq('org_id', orgId)
       .order('role_type')
       .order('context')
 
@@ -24,6 +28,8 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     // Same guard as /api/payments: this route spreads the body straight into
     // an update, so a blank form field must not reach a typed column as "".
@@ -38,6 +44,7 @@ export async function POST(request: NextRequest) {
     let existingQuery = supabase
       .from('tipping_rates')
       .select('id')
+      .eq('org_id', orgId)
     if (body.role_type) {
       existingQuery = existingQuery.eq('role_type', body.role_type)
     } else {
@@ -74,7 +81,7 @@ export async function POST(request: NextRequest) {
       // Insert new record
       const result = await supabase
         .from('tipping_rates')
-        .insert([body])
+        .insert([{ ...body, org_id: orgId }])
         .select()
         .single()
       data = result.data

@@ -9,6 +9,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabase = createActorAdminClient()
@@ -19,13 +21,17 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabase, 'entrance_fees', id, orgId))) return notFoundInOrg('Rate')
     const { searchParams } = new URL(request.url)
     const language = searchParams.get('language') || 'en'
 
     const { data, error } = await supabase
       .from('entrance_fees')
       .select('*')
+      .eq('org_id', orgId)
       .eq('id', id)
       .single()
 
@@ -98,7 +104,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabase, 'entrance_fees', id, orgId))) return notFoundInOrg('Rate')
     const body = await request.json()
 
     const {
@@ -155,6 +164,7 @@ export async function PUT(
       const { data, error } = await supabase
         .from('entrance_fees')
         .update(updateData)
+        .eq('org_id', orgId)
         .eq('id', id)
         .select()
         .single()
@@ -227,6 +237,7 @@ export async function PUT(
     const { data, error } = await supabase
       .from('entrance_fees')
       .update(updateData)
+      .eq('org_id', orgId)
       .eq('id', id)
       .select()
       .single()
@@ -254,12 +265,16 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabase, 'entrance_fees', id, orgId))) return notFoundInOrg('Rate')
     
     // First check if attraction exists
     const { data: existing } = await supabase
       .from('entrance_fees')
       .select('id, attraction_name')
+      .eq('org_id', orgId)
       .eq('id', id)
       .single()
     
@@ -267,10 +282,13 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: 'Attraction not found' }, { status: 404 })
     }
     
-    // Check if attraction is used in any itinerary services
+    // Check if attraction is used in any of THIS company's itinerary services
+    // (through the day's itinerary) — another company's trip naming a place
+    // of the same name used to block the delete.
     const { data: usedIn } = await supabase
       .from('itinerary_services')
-      .select('id')
+      .select('id, itinerary_days!inner(itineraries!inner(org_id))')
+      .eq('itinerary_days.itineraries.org_id', orgId)
       .ilike('service_name', `%${existing.attraction_name}%`)
       .limit(1)
     
@@ -284,6 +302,7 @@ export async function DELETE(
     const { error } = await supabase
       .from('entrance_fees')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
     
     if (error) {

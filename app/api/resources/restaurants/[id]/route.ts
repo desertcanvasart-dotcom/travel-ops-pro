@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 
 // GET - Get single restaurant
 export async function GET(
@@ -14,12 +15,16 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { id } = await params
+    if (!(await rowInOrg(supabase, 'restaurant_contacts', id, orgId))) return notFoundInOrg('Restaurant')
 
     const { data, error } = await supabase
       .from('restaurant_contacts')
       .select('*')
+      .eq('org_id', orgId)
       .eq('id', id)
       .single()
 
@@ -50,8 +55,11 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { id } = await params
+    if (!(await rowInOrg(supabase, 'restaurant_contacts', id, orgId))) return notFoundInOrg('Restaurant')
     const body = await request.json()
 
     const updateData: any = {}
@@ -100,6 +108,7 @@ export async function PUT(
     const { data, error } = await supabase
       .from('restaurant_contacts')
       .update(updateData)
+      .eq('org_id', orgId)
       .eq('id', id)
       .select()
       .single()
@@ -145,6 +154,7 @@ export async function DELETE(
 
     const supabase = createServerClient()
     const { id } = await params
+    if (!(await rowInOrg(supabase, 'restaurant_contacts', id, orgId))) return notFoundInOrg('Restaurant')
 
     // Check if restaurant has assigned itineraries
     const { data: itineraries, error: checkError } = await supabase
@@ -174,6 +184,7 @@ export async function DELETE(
     const { error } = await supabase
       .from('restaurant_contacts')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
 
     if (error) {

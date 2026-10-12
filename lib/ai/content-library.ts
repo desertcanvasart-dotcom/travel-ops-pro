@@ -323,7 +323,10 @@ export function buildWritingRulesContext(rules: WritingRule[]): string {
  * the AI from outputting attraction names in wrong languages.
  * Only pass English/Latin-script names to the AI prompt.
  */
-export async function fetchAttractionsList(supabase: any): Promise<string[]> {
+// Matches no organisation: an org-less read finds no attractions.
+const NO_ORG = '00000000-0000-0000-0000-000000000000'
+
+export async function fetchAttractionsList(supabase: any, orgId: string | null | undefined): Promise<string[]> {
   try {
     // Fetch BOTH entrance fees AND activity rates — activities (Sea Trip, etc.)
     // are valid attractions that need to be in the validation set
@@ -331,11 +334,13 @@ export async function fetchAttractionsList(supabase: any): Promise<string[]> {
       supabase
         .from('entrance_fees')
         .select('attraction_name')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('is_active', true)
         .eq('is_addon', false),
       supabase
         .from('activity_rates')
         .select('activity_name')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('is_active', true)
     ])
 
@@ -376,7 +381,7 @@ export interface AttractionAlias {
  * Fetches all active aliases from the attraction_aliases table.
  * Returns a map: alias (lowercase) → canonical_name
  */
-export async function fetchAttractionAliases(supabase: any): Promise<{
+export async function fetchAttractionAliases(supabase: any, orgId: string | null | undefined): Promise<{
   aliasToCanonical: Map<string, string>
   canonicalToAliases: Map<string, string[]>
 }> {
@@ -387,6 +392,7 @@ export async function fetchAttractionAliases(supabase: any): Promise<{
     const { data } = await supabase
       .from('attraction_aliases')
       .select('canonical_name, alias')
+      .eq('org_id', orgId ?? NO_ORG)
       .eq('is_active', true)
 
     if (data) {
@@ -409,19 +415,21 @@ export async function fetchAttractionAliases(supabase: any): Promise<{
  * Also fetches aliases from attraction_aliases table.
  * Returns a structured list so the AI can pick from a city-specific menu.
  */
-export async function fetchAttractionsWithCity(supabase: any): Promise<AttractionWithCity[]> {
+export async function fetchAttractionsWithCity(supabase: any, orgId: string | null | undefined): Promise<AttractionWithCity[]> {
   try {
     const [entranceResult, activityResult, { canonicalToAliases }] = await Promise.all([
       supabase
         .from('entrance_fees')
         .select('attraction_name, city')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('is_active', true)
         .eq('is_addon', false),
       supabase
         .from('activity_rates')
         .select('activity_name, city')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('is_active', true),
-      fetchAttractionAliases(supabase),
+      fetchAttractionAliases(supabase, orgId),
     ])
 
     const attractions: AttractionWithCity[] = []

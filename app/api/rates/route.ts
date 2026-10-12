@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { getOrgRateCurrency, normaliseRateCurrency } from '@/lib/org-rate-currency'
 import { createRateNormalizer, type RateCurrencyTable } from '@/lib/rates/rate-currency'
 
@@ -26,6 +26,8 @@ const TYPE_TABLE: Record<string, RateCurrencyTable> = {
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type')
@@ -52,6 +54,7 @@ export async function GET(request: NextRequest) {
         const accommodationQuery = supabase
           .from('accommodation_rates')
           .select('*')
+          .eq('org_id', orgId)
           .eq('is_active', true)
 
         if (city) {
@@ -70,6 +73,7 @@ export async function GET(request: NextRequest) {
         const mealQuery = supabase
           .from('meal_rates')
           .select('*')
+          .eq('org_id', orgId)
           .eq('is_active', true)
 
         if (city) {
@@ -86,6 +90,7 @@ export async function GET(request: NextRequest) {
         const entranceQuery = supabase
           .from('entrance_fees')
           .select('*')
+          .eq('org_id', orgId)
         
         if (city) {
           entranceQuery.eq('city', city)
@@ -101,6 +106,7 @@ export async function GET(request: NextRequest) {
         const transportQuery = supabase
           .from('transportation_rates')
           .select('*')
+          .eq('org_id', orgId)
           .eq('is_active', true)
 
         if (city) {
@@ -138,6 +144,7 @@ export async function GET(request: NextRequest) {
         const guideQuery = supabase
           .from('guide_rates')
           .select('*')
+          .eq('org_id', orgId)
           .eq('is_active', true)
 
         if (city) {
@@ -155,6 +162,7 @@ export async function GET(request: NextRequest) {
         const serviceQuery = supabase
           .from('service_fees')
           .select('*')
+          .eq('org_id', orgId)
           .eq('is_active', true)
         
         const serviceResult = await serviceQuery
@@ -171,6 +179,7 @@ export async function GET(request: NextRequest) {
         const airportStaffQuery = supabase
           .from('airport_staff_rates')
           .select('*')
+          .eq('org_id', orgId)
           .eq('is_active', true)
           .order('airport_code')
           .order('service_type')
@@ -185,6 +194,7 @@ export async function GET(request: NextRequest) {
         const hotelStaffQuery = supabase
           .from('hotel_staff_rates')
           .select('*')
+          .eq('org_id', orgId)
           .eq('is_active', true)
           .order('service_type')
           .order('hotel_category')
@@ -199,6 +209,7 @@ export async function GET(request: NextRequest) {
         const cruisesQuery = supabase
           .from('nile_cruises')
           .select('*')
+          .eq('org_id', orgId)
           .eq('is_active', true)
           .order('ship_name')
           .order('cabin_type')
@@ -214,6 +225,7 @@ export async function GET(request: NextRequest) {
           .from('sleeping_train_rates')
           // The rate names WHICH train it prices; the hub could not show it.
           .select('*, supplier_properties(name)')
+          .eq('org_id', orgId)
           .eq('is_active', true)
           .order('origin_city')
           .order('destination_city')
@@ -229,6 +241,7 @@ export async function GET(request: NextRequest) {
           .from('train_rates')
           // The rate names WHICH train it prices; the hub could not show it.
           .select('*, supplier_properties(name)')
+          .eq('org_id', orgId)
           .eq('is_active', true)
           .order('origin_city')
           .order('destination_city')
@@ -243,6 +256,7 @@ export async function GET(request: NextRequest) {
         const tippingQuery = supabase
           .from('tipping_rates')
           .select('*')
+          .eq('org_id', orgId)
           .eq('is_active', true)
           .order('role_type')
           .order('context')
@@ -279,7 +293,7 @@ export async function GET(request: NextRequest) {
     // rates TABLE never converts.
     const table = TYPE_TABLE[type]
     if (searchParams.get('in_org_currency') === 'true' && table) {
-      const run = await getOrgRateCurrency(supabase, await getCurrentOrgId())
+      const run = await getOrgRateCurrency(supabase, orgId)
       const normalizer = createRateNormalizer(run)
       const converted = (await normalizer.normalize(table, data as Record<string, unknown>[])) || []
       const missed = new Set(normalizer.misses.map(m => String(m.id)))

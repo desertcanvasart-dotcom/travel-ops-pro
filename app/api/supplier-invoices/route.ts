@@ -84,9 +84,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // The trip and the client invoice a bill is tied to must be this org's.
-    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: body.itinerary_id, invoice_id: body.client_invoice_id }))) {
-      return NextResponse.json({ error: 'Trip or client invoice not found' }, { status: 404 })
+    // The trip, the client invoice and the supplier a bill is tied to must be
+    // this org's.
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: body.itinerary_id, invoice_id: body.client_invoice_id, supplier_id: body.supplier_id }))) {
+      return NextResponse.json({ error: 'Trip, client invoice or supplier not found' }, { status: 404 })
     }
 
     // M31: internal_reference generation now uses nextDocumentNumber

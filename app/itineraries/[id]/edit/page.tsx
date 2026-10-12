@@ -552,17 +552,24 @@ export default function ItineraryEditorPage() {
 
   const loadAttractions = async () => {
     try {
+      // The trip's company's attractions only. RLS lets someone in both
+      // companies read both companies' rates; this trip is priced from its own.
+      const { data: own } = await supabase.from('itineraries').select('org_id').eq('id', itineraryId).maybeSingle()
+      const tripOrgId = (own as { org_id?: string } | null)?.org_id
+      if (!tripOrgId) return
       // Load both entrance fees and activities in parallel
       const [entranceRes, activityRes] = await Promise.all([
         supabase
           .from('entrance_fees')
           .select('id, attraction_name, city, eur_rate, non_eur_rate')
+          .eq('org_id', tripOrgId)
           .neq('is_active', false)
           .order('city')
           .order('attraction_name'),
         supabase
           .from('activity_rates')
           .select('id, activity_name, city, base_rate_eur, base_rate_non_eur')
+          .eq('org_id', tripOrgId)
           .eq('is_active', true)
           .order('city')
           .order('activity_name')
@@ -601,19 +608,21 @@ export default function ItineraryEditorPage() {
 
   // The "Sold by" guide list. Each line's own supplier list is
   // ServiceSupplierSelect: its kind, in its city.
+  // Through /api/suppliers, not the browser client: the server reads the
+  // ACTIVE workspace's suppliers (suppliers.org_id, 20261205). RLS alone would
+  // hand someone in both companies both companies' guides.
   const loadSuppliers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('suppliers')
-        .select('id, name, type, types, city, contact_phone')
-        .order('type')
-        .order('name')
-
-      if (error) {
-        console.error('Error loading suppliers:', error)
+      const res = await fetch('/api/suppliers')
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.success) {
+        console.error('Error loading suppliers:', json?.error ?? res.status)
         return
       }
-      setSuppliers(data || [])
+      const data = ((json.data ?? []) as Supplier[])
+        .slice()
+        .sort((a, b) => String(a.type ?? '').localeCompare(String(b.type ?? '')) || String(a.name ?? '').localeCompare(String(b.name ?? '')))
+      setSuppliers(data)
     } catch (error) {
       console.error('Error loading suppliers:', error)
     }

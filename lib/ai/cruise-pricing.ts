@@ -164,8 +164,13 @@ export function calculateCabinAllocations(
   return allocations
 }
 
+
+// Matches no organisation: an org-less read finds no rates.
+const NO_ORG = '00000000-0000-0000-0000-000000000000'
+
 /**
  * Main cruise rate function: finds ship, detects season, calculates optimal cabin allocation
+ * — from this company's ships (nile_cruises.org_id).
  */
 export async function getCruiseRate(
   params: {
@@ -178,9 +183,11 @@ export async function getCruiseRate(
     isEuroPassport: boolean
     /** Converts rows entered in another currency — lib/rates/rate-currency. */
     normalizer?: import('@/lib/rates/rate-currency').RateNormalizer
+    /** Whose ships. No organisation, no ship. */
+    orgId: string | null | undefined
   }
 ): Promise<CruiseRate> {
-  const { tier, recommendedSuppliers, supabase, totalPax, nights, startDate, isEuroPassport } = params
+  const { tier, recommendedSuppliers, supabase, totalPax, nights, startDate, isEuroPassport, orgId } = params
 
   const noRate: CruiseRate = {
     found: false,
@@ -201,6 +208,7 @@ export async function getCruiseRate(
       const { data } = await supabase
         .from('nile_cruises')
         .select('*')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('is_active', true)
         .in('ship_name', recommendedSuppliers)
         .limit(1)
@@ -215,6 +223,7 @@ export async function getCruiseRate(
       const { data } = await supabase
         .from('nile_cruises')
         .select('*')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('is_active', true)
         .eq('tier', tier)
         .order('is_preferred', { ascending: false })
@@ -230,6 +239,7 @@ export async function getCruiseRate(
       const { data } = await supabase
         .from('nile_cruises')
         .select('*')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('is_active', true)
         .order('is_preferred', { ascending: false })
         .limit(1)

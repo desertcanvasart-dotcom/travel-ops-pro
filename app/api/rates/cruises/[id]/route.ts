@@ -7,24 +7,32 @@ import { sanitizeSailingDays } from '@/lib/rates/cruise-sailing'
 import { createServerClient } from '@/lib/supabase-server'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
     const supabase = createServerClient()
+    if (!(await rowInOrg(supabase, 'nile_cruises', id, orgId))) return notFoundInOrg('Rate')
     const body = await request.json()
 
     // Validate supplier_id only when the client touched the field (PUT can patch).
-    let updateBody = body
+    // A rate stays in its company: org_id is never the client's to set.
+    const ownBody = { ...body }
+    delete ownBody.org_id
+    let updateBody = ownBody
     if ('supplier_id' in body || 'supplier_name' in body) {
       const supplierCheck = await validateAndResolveSupplierFields(body, supabase)
       if (!supplierCheck.ok) {
         return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
       }
-      updateBody = { ...body, supplier_id: supplierCheck.supplier_id }
+      updateBody = { ...ownBody, supplier_id: supplierCheck.supplier_id }
     }
 
     // PUT can patch, so only touch periods when the client sent them. When it
@@ -58,6 +66,7 @@ export async function PUT(
       const { data: current } = await supabase
         .from('nile_cruises')
         .select('supplier_id, ship_name')
+        .eq('org_id', orgId)
         .eq('id', id)
         .maybeSingle()
       const ship = await resolveRateProperty(supabase, {
@@ -76,6 +85,7 @@ export async function PUT(
     const { data, error } = await supabase
       .from('nile_cruises')
       .update(updateBody)
+      .eq('org_id', orgId)
       .eq('id', id)
       .select()
       .single()
@@ -93,12 +103,16 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
     const supabase = createServerClient()
+    if (!(await rowInOrg(supabase, 'nile_cruises', id, orgId))) return notFoundInOrg('Rate')
 
     const { error } = await supabase
       .from('nile_cruises')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
 
     if (error) throw error

@@ -5,12 +5,15 @@ import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const supplierId = searchParams.get('supplier_id')
     const language = searchParams.get('language')
@@ -21,6 +24,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('guide_rates')
       .select('*')
+      .eq('org_id', orgId)
       .order('guide_language')
 
     if (supplierId) query = query.eq('supplier_id', supplierId)
@@ -46,6 +50,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     const _rateCheck = validateRatePayload(body)
@@ -82,6 +88,7 @@ export async function POST(request: NextRequest) {
     let existingQuery = supabaseAdmin
       .from('guide_rates')
       .select('*')
+      .eq('org_id', orgId)
       .eq('guide_type', newRate.guide_type)
       .eq('tour_duration', newRate.tour_duration)
       .eq('guide_mode', newRate.guide_mode)
@@ -116,7 +123,7 @@ export async function POST(request: NextRequest) {
       // Insert new record
       const result = await supabaseAdmin
         .from('guide_rates')
-        .insert(newRate)
+        .insert({ ...newRate, org_id: orgId })
         .select('*')
         .single()
       data = result.data

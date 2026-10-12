@@ -14,7 +14,10 @@
 // heal on their next save, whichever screen performs it.
 //
 // With no supplier the caller's value stands, which keeps CSV imports and
-// legacy rows intact.
+// legacy rows intact. Only the caller's company's supplier is read
+// (suppliers.org_id, 20261205): another company's id names nothing.
+
+import { supplierOrgId } from './supplier-org'
 
 interface Db {
   from(table: string): any
@@ -23,15 +26,19 @@ interface Db {
 export async function operatorNameForSupplier(
   db: Db,
   supplierId: string | null | undefined,
-  fallback: unknown
+  fallback: unknown,
+  orgId?: string | null
 ): Promise<string | null> {
   const given = typeof fallback === 'string' && fallback.trim() ? fallback.trim() : null
   if (!supplierId) return given
+  const org = await supplierOrgId(orgId)
+  if (!org) return given
 
   const { data } = await db
     .from('suppliers')
     .select('name')
     .eq('id', supplierId)
+    .eq('org_id', org)
     .maybeSingle()
 
   // A supplier we cannot read must not blank a name the row already carried.

@@ -9,24 +9,38 @@
 // rate forms resolve a row at a time, the CSV importer resolves a whole sheet
 // in one pass (resolveRateProperties), and a sheet must never place a rate on
 // a different property than the form would.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+// The caller's company (suppliers and properties are per company since
+// migration 20261205): the resolver asks for it when none is passed.
+vi.mock('@/lib/auth/current-org', () => ({ getCurrentOrgId: async () => 'org-1' }))
+
 import { resolveRateProperty, resolveRateProperties } from '@/lib/suppliers/resolve-property'
 
-type Row = { id: string; name: string; supplier_id: string; property_type: string }
+type Row = { id: string; name: string; supplier_id: string; property_type: string; org_id?: string }
 
-/** A stand-in supplier_properties table supporting the two queries the
- *  resolver makes: .in('id', ids) and .in('supplier_id', ids). */
+/** A stand-in supplier_properties table (and the suppliers it hangs off)
+ *  answering the resolver's filtered reads: .in(), .eq(). Rows are org-1's
+ *  unless they say otherwise; s1..s3 are org-1's suppliers, 'foreign' is
+ *  org-2's. */
 function db(rows: Row[], opts: { insertError?: unknown } = {}) {
   const inserted: Record<string, unknown>[] = []
   let nextId = rows.length + 1
+  for (const r of rows) r.org_id ??= 'org-1'
+  const suppliers = [
+    { id: 's1', org_id: 'org-1' }, { id: 's2', org_id: 'org-1' }, { id: 's3', org_id: 'org-1' },
+    { id: 'foreign', org_id: 'org-2' },
+  ]
   const from = (table: string) => {
-    if (table !== 'supplier_properties') throw new Error(`unexpected table ${table}`)
+    if (table !== 'supplier_properties' && table !== 'suppliers') throw new Error(`unexpected table ${table}`)
+    const source = (): Record<string, unknown>[] => (table === 'suppliers' ? suppliers : rows)
+    const filters: Array<(r: Record<string, unknown>) => boolean> = []
     const chain: any = {
       select: () => chain,
-      in: async (column: string, values: string[]) => ({
-        data: rows.filter(r => values.includes((r as any)[column])),
-        error: null,
-      }),
+      in: (column: string, values: string[]) => { filters.push(r => values.includes(r[column] as string)); return chain },
+      eq: (column: string, value: unknown) => { filters.push(r => r[column] === value); return chain },
+      then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+        Promise.resolve({ data: source().filter(r => filters.every(f => f(r))), error: null }).then(resolve, reject),
       insert: (payload: Record<string, unknown>[]) => {
         inserted.push(...payload)
         if (opts.insertError) return { select: async () => ({ data: null, error: opts.insertError }) }
@@ -65,7 +79,7 @@ describe('resolveRateProperty', () => {
     const out = await resolveRateProperty(d, { propertyType: 'ship', supplierId: 's1', name: '  MS Farah  ' })
     expect(out.property_id).toBeTruthy()
     expect(out.name).toBe('MS Farah')
-    expect(d.inserted[0]).toMatchObject({ supplier_id: 's1', property_type: 'ship', name: 'MS Farah' })
+    expect(d.inserted[0]).toMatchObject({ org_id: 'org-1', supplier_id: 's1', property_type: 'ship', name: 'MS Farah' })
   })
 
   it('no supplier or no name → no property, and no writes', async () => {
@@ -136,5 +150,22 @@ describe('resolveRateProperties — a whole sheet at once', () => {
     expect(out[1].property_id).toBeTruthy()
     expect(out[2].property_id).toBeNull()
     expect(d.inserted).toHaveLength(1)
+  })
+})
+
+describe('one company at a time (supplier_properties.org_id, 20261205)', () => {
+  it("another company's property id is ignored, and its supplier gets no property", async () => {
+    const d = db([...SHIPS, { id: 'px', name: 'MS Elsewhere', supplier_id: 'foreign', property_type: 'ship', org_id: 'org-2' }])
+    expect(await resolveRateProperty(d, { propertyType: 'ship', supplierId: 'foreign', name: 'MS Elsewhere', propertyId: 'px' }))
+      .toEqual({ property_id: null })
+    expect(await resolveRateProperty(d, { propertyType: 'ship', supplierId: 'foreign', name: 'MS New' }))
+      .toEqual({ property_id: null })
+    expect(d.inserted).toHaveLength(0)
+  })
+
+  it('with no company nothing resolves', async () => {
+    const d = db([...SHIPS])
+    expect(await resolveRateProperty(d, { propertyType: 'ship', supplierId: 's1', name: 'MS Mayfair' }, null))
+      .toEqual({ property_id: null })
   })
 })

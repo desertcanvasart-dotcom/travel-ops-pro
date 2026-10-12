@@ -10,7 +10,10 @@
 // This exercises the real config, the real validator, and the real property
 // resolver against an in-memory supplier_properties table, with the same
 // argument the import route builds.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+// The importing company: properties resolve within it (20261205).
+vi.mock('@/lib/auth/current-org', () => ({ getCurrentOrgId: async () => 'org-1' }))
 import Papa from 'papaparse'
 import { RATE_TABLE_CONFIGS, getExportHeaders, validateImportData } from '@/lib/bulk-rate-service'
 import { resolveRateProperties } from '@/lib/suppliers/resolve-property'
@@ -23,12 +26,19 @@ function propertiesDb(rows: Prop[]) {
   return {
     inserted,
     rows,
-    from: () => {
+    from: (table: string) => {
+      // Every property and supplier here is the importing company's (org-1).
+      const source = (): Record<string, unknown>[] =>
+        table === 'suppliers'
+          ? [...new Set(rows.map(r => r.supplier_id).concat(SUPPLIER))].map(id => ({ id, org_id: 'org-1' }))
+          : rows.map(r => ({ org_id: 'org-1', ...r }))
+      const filters: Array<(r: Record<string, unknown>) => boolean> = []
       const chain: any = {
         select: () => chain,
-        in: async (column: string, values: string[]) => ({
-          data: rows.filter(r => values.includes((r as any)[column])), error: null,
-        }),
+        in: (column: string, values: string[]) => { filters.push(r => values.includes(r[column] as string)); return chain },
+        eq: (column: string, value: unknown) => { filters.push(r => r[column] === value); return chain },
+        then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+          Promise.resolve({ data: source().filter(r => filters.every(f => f(r))), error: null }).then(resolve, reject),
         insert: (payload: Record<string, unknown>[]) => {
           inserted.push(...payload)
           const created = payload.map(p => ({ ...(p as any), id: `made-${next++}` })) as Prop[]

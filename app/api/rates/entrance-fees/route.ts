@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // ============================================
 // ENTRANCE FEES API  
@@ -16,6 +17,8 @@ const supabaseAdmin = createActorAdminClient()
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const city = searchParams.get('city')
     const category = searchParams.get('category')
@@ -28,6 +31,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('entrance_fees')
       .select('*')
+      .eq('org_id', orgId)
       .order('city', { ascending: true })
       .order('attraction_name', { ascending: true })
 
@@ -89,6 +93,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     const _rateCheck = validateRatePayload(body)
@@ -137,6 +143,7 @@ export async function POST(request: NextRequest) {
       const { data } = await supabaseAdmin
         .from('entrance_fees')
         .select('*')
+        .eq('org_id', orgId)
         .eq('service_code', body.service_code)
         .limit(1)
       existing = data
@@ -146,6 +153,7 @@ export async function POST(request: NextRequest) {
       let existingQuery = supabaseAdmin
         .from('entrance_fees')
         .select('id')
+        .eq('org_id', orgId)
         .ilike('attraction_name', newFee.attraction_name)
       if (newFee.city) {
         existingQuery = existingQuery.eq('city', newFee.city)
@@ -172,7 +180,7 @@ export async function POST(request: NextRequest) {
       // Insert new record
       const result = await supabaseAdmin
         .from('entrance_fees')
-        .insert(newFee)
+        .insert({ ...newFee, org_id: orgId })
         .select('*')
         .single()
       data = result.data

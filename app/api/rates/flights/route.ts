@@ -4,6 +4,8 @@ import { validateRatePayload } from '@/lib/rate-validation'
 import { sanitizeSeasons, legacyColumnMirror, datedPeriodCount, tooManyPeriodsMessage } from '@/lib/rates/rate-seasons'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { AIRLINE_CODES, knownAirlineCode } from '@/lib/airline-codes'
+import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // ============================================
 // FLIGHT RATES API - Full CRUD
@@ -32,6 +34,8 @@ const FREQUENCIES = [
 // GET - List flight rates with filters
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const routeFrom = searchParams.get('route_from')
     const routeTo = searchParams.get('route_to')
@@ -47,6 +51,7 @@ export async function GET(request: NextRequest) {
         *,
         supplier:suppliers(id, name, city, contact_phone, contact_email)
       `)
+      .eq('org_id', orgId)
       .order('route_from')
       .order('route_to')
       .order('airline')
@@ -58,7 +63,8 @@ export async function GET(request: NextRequest) {
     if (airline) query = query.ilike('airline', `%${airline}%`)
     if (flightType) query = query.eq('flight_type', flightType)
     if (cabinClass) query = query.eq('cabin_class', cabinClass)
-    if (supplierId) query = query.eq('supplier_id', supplierId)
+    // Only one of the caller's company's suppliers (lib/suppliers/supplier-org).
+    if (supplierId) query = query.eq('supplier_id', await ownSupplierFilterId(supabaseAdmin, supplierId))
     if (activeOnly) query = query.eq('is_active', true)
 
     const { data, error } = await query
@@ -88,6 +94,8 @@ export async function GET(request: NextRequest) {
 // POST - Create new flight rate
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
     // A malformed periods payload reads as "no periods" and the row keeps
     // pricing off its base columns — never a 500 on a rate save. Over the
@@ -168,6 +176,7 @@ export async function POST(request: NextRequest) {
     const existingQuery = supabaseAdmin
       .from('flight_rates')
       .select('*')
+      .eq('org_id', orgId)
       .ilike('route_from', newRate.route_from)
       .ilike('route_to', newRate.route_to)
       .ilike('airline', newRate.airline)
@@ -190,7 +199,7 @@ export async function POST(request: NextRequest) {
       // Insert new record
       const result = await supabaseAdmin
         .from('flight_rates')
-        .insert(newRate)
+        .insert({ ...newRate, org_id: orgId })
         .select('*')
         .single()
       data = result.data
@@ -212,8 +221,12 @@ export async function POST(request: NextRequest) {
 // PUT - Update flight rate (by ID in body)
 export async function PUT(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
+    // A rate stays in its company: org_id is never the client's to set.
     const { id, ...updates } = body
+    delete updates.org_id
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
@@ -234,6 +247,7 @@ export async function PUT(request: NextRequest) {
       const { data: current } = await supabaseAdmin
         .from('flight_rates')
         .select('*')
+        .eq('org_id', orgId)
         .eq('id', id)
         .single()
 
@@ -276,6 +290,7 @@ export async function PUT(request: NextRequest) {
     const { data, error } = await supabaseAdmin
       .from('flight_rates')
       .update(updates)
+      .eq('org_id', orgId)
       .eq('id', id)
       .select('*')
       .single()
@@ -295,6 +310,8 @@ export async function PUT(request: NextRequest) {
 // DELETE - Delete flight rate (by query param)
 export async function DELETE(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const id = searchParams.get('id')
 
@@ -305,6 +322,7 @@ export async function DELETE(request: NextRequest) {
     const { error } = await supabaseAdmin
       .from('flight_rates')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
 
     if (error) {

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 
 // ============================================
 // FLIGHT RATES API - Single Record
@@ -16,7 +18,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'flight_rates', id, orgId))) return notFoundInOrg('Rate')
 
     const { data, error } = await supabaseAdmin
       .from('flight_rates')
@@ -24,6 +29,7 @@ export async function GET(
         *,
         supplier:suppliers(id, name, city, contact_phone, contact_email)
       `)
+      .eq('org_id', orgId)
       .eq('id', id)
       .single()
 
@@ -45,17 +51,23 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'flight_rates', id, orgId))) return notFoundInOrg('Rate')
     const body = await request.json()
 
     // Remove id from body to avoid conflicts
+    // ...and org_id: a rate stays in its company.
     const { id: _, ...updates } = body
+    delete updates.org_id
 
     // Regenerate route_name if route fields changed
     if (updates.route_from || updates.route_to) {
       const { data: current } = await supabaseAdmin
         .from('flight_rates')
         .select('*')
+        .eq('org_id', orgId)
         .eq('id', id)
         .single()
 
@@ -97,6 +109,7 @@ export async function PUT(
     const { data, error } = await supabaseAdmin
       .from('flight_rates')
       .update(updates)
+      .eq('org_id', orgId)
       .eq('id', id)
       .select('*')
       .single()
@@ -119,11 +132,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'flight_rates', id, orgId))) return notFoundInOrg('Rate')
 
     const { error } = await supabaseAdmin
       .from('flight_rates')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
 
     if (error) {

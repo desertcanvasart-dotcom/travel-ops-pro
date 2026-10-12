@@ -10,6 +10,7 @@ import { resolveRequestedTier } from '@/lib/ai/parsing-utils'
 
 type TierItem = Pick<VocabularyItem, 'key' | 'label'>
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 
 // Read-only vocabulary lookups (destination city codes for detection).
 const supabaseAdmin = createSupabaseClient(
@@ -469,10 +470,13 @@ export async function POST(request: Request) {
     // built-in codes only, which is the pre-destinations behaviour.
     let destinationCityCodes: string[] = []
     try {
-      const { data: codeRows } = await supabaseAdmin
+      // This company's destinations' cities (destinations.org_id).
+      const codesOrgId = await getCurrentOrgId()
+      const { data: codeRows } = codesOrgId ? await supabaseAdmin
         .from('destination_cities')
-        .select('aliases, airport_codes')
-        .eq('is_active', true)
+        .select('aliases, airport_codes, destinations!inner(org_id)')
+        .eq('destinations.org_id', codesOrgId)
+        .eq('is_active', true) : { data: [] }
       destinationCityCodes = (codeRows ?? []).flatMap(
         (r: { aliases: string[] | null; airport_codes: string[] | null }) =>
           [...(r.aliases ?? []), ...(r.airport_codes ?? [])]

@@ -39,10 +39,9 @@ export {
 
 /**
  * Every address one organisation knows, lowercased, for the known-contact
- * check: its clients and B2B partners, plus suppliers — which have no org_id
- * yet (the suppliers batch), so every company's suppliers count for each
- * until then. It was every company's clients and partners: another agency's
- * client writing here was "known" and stored without the machine-mail check.
+ * check: its clients, suppliers (org_id since migration 20261205) and B2B
+ * partners. It was every company's: another agency's client or supplier
+ * writing here was "known" and stored without the machine-mail check.
  *
  * One query per table per sync run, not per message. Suppliers keep their
  * address on `contact_email` (lib/suppliers/fields.ts is the vocabulary);
@@ -62,7 +61,7 @@ export async function loadKnownContactEmails(
   }
   const [clients, suppliers, partners] = await Promise.all([
     supabase.from('clients').select('email').eq('org_id', orgId),
-    supabase.from('suppliers').select('contact_email'),
+    supabase.from('suppliers').select('contact_email').eq('org_id', orgId),
     supabase.from('b2b_partners').select('email').eq('org_id', orgId),
   ])
   collect(clients.data, 'email')

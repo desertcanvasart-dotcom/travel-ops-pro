@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { paymentDateForStatus } from '@/lib/expense-status'
+import { recordsInOrg } from '@/lib/org-refs'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -78,6 +79,11 @@ export async function PUT(
         )
       }
       updateData.amount = amt
+    }
+    // A supplier must be this company's (suppliers.org_id, 20261205).
+    if (updateData.supplier_id === '') updateData.supplier_id = null
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { supplier_id: updateData.supplier_id }))) {
+      return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
     }
     if (updateData.status !== undefined && !ALLOWED_STATUSES.includes(updateData.status)) {
       return NextResponse.json(

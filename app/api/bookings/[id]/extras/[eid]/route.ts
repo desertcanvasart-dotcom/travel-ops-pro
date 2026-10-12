@@ -17,6 +17,7 @@ import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/cur
 import { clientMessage } from '@/lib/api-errors'
 import { nextStatus, isPriced, lineAmount, type ExtraAction, type BookingExtraLine } from '@/lib/booking-extras'
 import { recomputeBookingExtras } from '../recompute'
+import { rowInOrg } from '@/lib/api/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -111,6 +112,10 @@ export async function PATCH(
   }
   if (body?.supplier_id !== undefined) {
     updates.supplier_id = typeof body.supplier_id === 'string' && body.supplier_id ? body.supplier_id : null
+    // One of this company's suppliers (suppliers.org_id, 20261205).
+    if (updates.supplier_id && !(await rowInOrg(admin, 'suppliers', updates.supplier_id as string, orgId))) {
+      return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
+    }
   }
 
   // ---------- the action ----------
@@ -174,7 +179,7 @@ export async function PATCH(
   }
 
   if (saved.status === 'confirmed' && extra.status !== 'confirmed') {
-    await addToSupplierManifest(id, saved)
+    await addToSupplierManifest(id, saved, orgId)
   }
 
   return NextResponse.json({
@@ -224,10 +229,10 @@ export async function DELETE(
  * Best-effort: the sale is the valuable record, and the manifest can be rebuilt
  * from /api/bookings/[id]/sync-suppliers.
  */
-async function addToSupplierManifest(bookingId: string, extra: Record<string, unknown>) {
+async function addToSupplierManifest(bookingId: string, extra: Record<string, unknown>, orgId: string) {
   if (!extra.supplier_id && !extra.supplier_cost) return
   const { data: supplier } = extra.supplier_id
-    ? await admin.from('suppliers').select('name').eq('id', extra.supplier_id).maybeSingle()
+    ? await admin.from('suppliers').select('name').eq('id', extra.supplier_id).eq('org_id', orgId).maybeSingle()
     : { data: null }
 
   // booking_supplier_status.quoted_cost has no currency of its own: it is read

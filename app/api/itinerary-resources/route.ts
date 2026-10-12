@@ -4,6 +4,8 @@ import { createServerClient } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { assignmentInOrg, itineraryInOrg } from '@/lib/itinerary-resources/org-scope'
+import { OUTSIDE_TYPES, readOutside } from '@/lib/resources/outside-staff'
+import { recordsInOrg } from '@/lib/org-refs'
 
 // Every method reads or writes only the signed-in organisation's trips
 // (lib/itinerary-resources/org-scope): the service-role client bypasses RLS.
@@ -93,6 +95,14 @@ export async function POST(request: NextRequest) {
 
     if (!(await itineraryInOrg(supabase, itinerary_id, orgId))) {
       return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
+    }
+
+    // A guide, airport or hotel assistant picked from the directory is one of
+    // this company's suppliers (suppliers.org_id, 20261205). A person typed in
+    // for this trip only (lib/resources/outside-staff) has a fresh id.
+    if (OUTSIDE_TYPES.has(resource_type) && !readOutside(resource_name) &&
+        !(await recordsInOrg(supabase, orgId, { supplier_id: resource_id }))) {
+      return NextResponse.json({ success: false, error: 'Resource not found' }, { status: 404 })
     }
 
     // The day, when given, must be a day of THIS trip — not another trip's,

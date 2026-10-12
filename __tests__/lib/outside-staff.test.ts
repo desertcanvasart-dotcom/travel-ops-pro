@@ -33,7 +33,7 @@ describe('reaching them', () => {
   })
   it('the staff link reads their phone back and shows their name only', async () => {
     const db = { from: () => { throw new Error('no directory lookup for an outside person') } } as never
-    expect(await resolveAssigneeContact(db, { resource_type: 'airport_staff', resource_id: 'x', resource_name: 'Ahmed · 01000000000 (outside)' }))
+    expect(await resolveAssigneeContact(db, { resource_type: 'airport_staff', resource_id: 'x', resource_name: 'Ahmed · 01000000000 (outside)' }, 'org-1'))
       .toEqual({ name: 'Ahmed', phone: '01000000000' })
     expect(toStaffView({}, {}, { resource_name: 'Ahmed · 01000000000 (outside)' }, []).memberName).toBe('Ahmed')
   })

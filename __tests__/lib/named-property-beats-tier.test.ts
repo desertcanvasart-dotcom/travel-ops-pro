@@ -76,11 +76,11 @@ describe('the list the operator picks from spans every tier', () => {
     ]
     setMockTables(t)
     const { hotelCandidates } = await import('@/lib/pricing/property-candidates')
-    const all = await hotelCandidates(await db(), 'Cairo', ANY_TIER)
+    const all = await hotelCandidates(await db(), 'org-1', 'Cairo', ANY_TIER)
     expect(all.map(r => r.id).sort()).toEqual(['lux', 'none', 'std'])
     // Switched off is still excluded — ANY_TIER widens the tier, nothing else.
     expect(all.some(r => r.id === 'off')).toBe(false)
-    expect((await hotelCandidates(await db(), 'Cairo', 'standard')).map(r => r.id)).toEqual(['std'])
+    expect((await hotelCandidates(await db(), 'org-1', 'Cairo', 'standard')).map(r => r.id)).toEqual(['std'])
   })
 
   it('ANY_TIER returns ships of every tier', async () => {
@@ -91,8 +91,8 @@ describe('the list the operator picks from spans every tier', () => {
     ]
     setMockTables(t)
     const { cruiseCandidates } = await import('@/lib/pricing/property-candidates')
-    expect((await cruiseCandidates(await db(), ANY_TIER, null, null)).map(r => r.id).sort()).toEqual(['a', 'b'])
-    expect((await cruiseCandidates(await db(), 'luxury', null, null)).map(r => r.id)).toEqual(['b'])
+    expect((await cruiseCandidates(await db(), 'org-1', ANY_TIER, null, null)).map(r => r.id).sort()).toEqual(['a', 'b'])
+    expect((await cruiseCandidates(await db(), 'org-1', 'luxury', null, null)).map(r => r.id)).toEqual(['b'])
   })
 })
 

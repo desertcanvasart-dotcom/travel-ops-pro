@@ -4,12 +4,15 @@ import { validateRatePayload } from '@/lib/rate-validation'
 import { sanitizeTiers } from '@/lib/rates/activity-tiers'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const supplierId = searchParams.get('supplier_id')
     const city = searchParams.get('city')
@@ -20,6 +23,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('activity_rates')
       .select('*')
+      .eq('org_id', orgId)
       .order('activity_name')
 
     if (supplierId) query = query.eq('supplier_id', supplierId)
@@ -44,6 +48,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     const _rateCheck = validateRatePayload(body)
@@ -87,6 +93,7 @@ export async function POST(request: NextRequest) {
     let existingQuery = supabaseAdmin
       .from('activity_rates')
       .select('*')
+      .eq('org_id', orgId)
       .ilike('activity_name', newRate.activity_name)
     if (newRate.city) {
       existingQuery = existingQuery.eq('city', newRate.city)
@@ -116,7 +123,7 @@ export async function POST(request: NextRequest) {
       // Insert new record
       const result = await supabaseAdmin
         .from('activity_rates')
-        .insert(newRate)
+        .insert({ ...newRate, org_id: orgId })
         .select('*')
         .single()
       data = result.data

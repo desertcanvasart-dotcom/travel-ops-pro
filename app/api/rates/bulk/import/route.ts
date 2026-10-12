@@ -9,6 +9,7 @@ import { validateRatePayload } from '@/lib/rate-validation'
 import { batchResolveSuppliers } from '@/lib/suppliers/resolve-supplier'
 import { resolveRateProperties } from '@/lib/suppliers/resolve-property'
 import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createServerClient()
 
@@ -31,6 +32,8 @@ const VALIDITY_REQUIRED_TABLES = new Set(['transportation_rates', 'entrance_fees
  */
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
     const { table, csvData, dryRun = false } = body
 
@@ -356,6 +359,7 @@ export async function POST(request: NextRequest) {
         const { data: existing } = await supabase
           .from(config.tableName)
           .select(hasValidity ? `${uniqueKeyColumn}, rate_valid_from, rate_valid_to` : uniqueKeyColumn)
+          .eq('org_id', orgId)
           .in(uniqueKeyColumn, keyValues)
 
         if (existing) {
@@ -391,10 +395,16 @@ export async function POST(request: NextRequest) {
       // A single upsert with onConflict on the unique key column handles
       // inserts AND updates in one PostgREST call: PostgreSQL turns it into
       // INSERT ... ON CONFLICT (key) DO UPDATE SET ...
+      //
+      // The key is unique PER COMPANY (org_id, key): two companies may use the
+      // same code, and an import here must never land on — and overwrite —
+      // the other company's row. Every row is stamped with this company,
+      // whatever the sheet says.
       if (batch.length > 0) {
+        for (const row of batch) row.org_id = orgId
         const { error: upsertError } = await supabase
           .from(config.tableName)
-          .upsert(batch, { onConflict: uniqueKeyColumn })
+          .upsert(batch, { onConflict: `org_id,${uniqueKeyColumn}` })
 
         if (upsertError) {
           importErrors.push({

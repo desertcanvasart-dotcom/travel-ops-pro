@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { SUPPLIER_REFERENCE_CHECKS, describeBlockers } from '@/lib/suppliers/delete-guard'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,12 +33,16 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
 
+    // Another company's supplier is a plain 404 (suppliers.org_id, 20261205).
     const { data, error } = await supabaseAdmin
       .from('suppliers')
       .select('*')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (error) {
@@ -57,6 +62,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
     const body = await request.json()
 
@@ -91,8 +98,9 @@ export async function PUT(
       .from('suppliers')
       .update(updateData)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) {
       console.error('Error updating supplier:', error)
@@ -115,14 +123,17 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
 
-    // Check if supplier exists first
+    // Check if supplier exists first — in the caller's company
     const { data: existing } = await supabaseAdmin
       .from('suppliers')
       .select('id, name')
       .eq('id', id)
-      .single()
+      .eq('org_id', orgId)
+      .maybeSingle()
 
     if (!existing) {
       return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
@@ -145,6 +156,7 @@ export async function DELETE(
       .from('suppliers')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
 
     if (error) {
       // A reference this guard doesn't list. Still a 409 with a reason, not a 500.

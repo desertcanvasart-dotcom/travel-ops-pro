@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg } from '@/lib/api/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +44,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if ('name' in record) {
       record.name = String(record.name ?? '').trim()
       if (!record.name) return NextResponse.json({ success: false, error: 'Name is required' }, { status: 400 })
+    }
+    // One of this company's suppliers (suppliers.org_id, 20261205).
+    if (typeof record.supplier_id === 'string' && record.supplier_id &&
+        !(await rowInOrg(supabase, 'suppliers', record.supplier_id, orgId))) {
+      return NextResponse.json({ success: false, error: 'Supplier not found' }, { status: 404 })
     }
     record.updated_at = new Date().toISOString()
 

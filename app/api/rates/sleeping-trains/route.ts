@@ -6,12 +6,16 @@ import { validateRatePayload } from '@/lib/rate-validation'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { operatorNameForSupplier } from '@/lib/suppliers/operator-name'
+import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const supplierId = searchParams.get('supplier_id')
     const originCity = searchParams.get('origin_city')
@@ -22,9 +26,11 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('sleeping_train_rates')
       .select('*, supplier_properties(name)')
+      .eq('org_id', orgId)
       .order('origin_city')
 
-    if (supplierId) query = query.eq('supplier_id', supplierId)
+    // Only one of the caller's company's suppliers (lib/suppliers/supplier-org).
+    if (supplierId) query = query.eq('supplier_id', await ownSupplierFilterId(supabaseAdmin, supplierId))
     if (originCity) query = query.eq('origin_city', originCity)
     if (destinationCity) query = query.eq('destination_city', destinationCity)
     if (cabinType) query = query.eq('cabin_type', cabinType)
@@ -46,6 +52,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     const _rateCheck = validateRatePayload(body)
@@ -104,6 +112,7 @@ export async function POST(request: NextRequest) {
     let existingQuery = supabaseAdmin
       .from('sleeping_train_rates')
       .select('*')
+      .eq('org_id', orgId)
     existingQuery = whereNullable(existingQuery, 'origin_city', newRate.origin_city, { ilike: true })
     existingQuery = whereNullable(existingQuery, 'destination_city', newRate.destination_city, { ilike: true })
     existingQuery = whereNullable(existingQuery, 'cabin_type', newRate.cabin_type)
@@ -132,7 +141,7 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabaseAdmin
       .from('sleeping_train_rates')
-      .insert(newRate)
+      .insert({ ...newRate, org_id: orgId })
       .select('*')
       .single()
 

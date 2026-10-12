@@ -18,9 +18,16 @@ import { currencySymbol } from '@/lib/currency-totals'
 // 不明なユーザー" to the whole team (audit AUT-H04).
 const supabaseAdmin = createServerClient()
 
+// Matches no organisation: an org-less read finds no rate.
+const NO_ORG = '00000000-0000-0000-0000-000000000000'
+
 async function getRateDetails(rateType: string, rateId: string) {
+  // The rate is read from THIS company's rates only: a service naming another
+  // company's rate shows no details (tours themselves get their company in a
+  // later migration).
+  const orgId = await getCurrentOrgId()
   // Rate amounts in the details text carry the org's rate-currency symbol, never a hard-coded euro.
-  const rateSym = currencySymbol(await getOrgRateCurrency(supabaseAdmin, await getCurrentOrgId()))
+  const rateSym = currencySymbol(await getOrgRateCurrency(supabaseAdmin, orgId))
   let result = null
 
   switch (rateType) {
@@ -28,6 +35,7 @@ async function getRateDetails(rateType: string, rateId: string) {
       const { data: transport } = await supabaseAdmin
         .from('transportation_rates')
         .select('id, service_code, service_type, route_name, city, origin_city, destination_city, vehicles')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('id', rateId)
         .single()
       if (transport) {
@@ -50,6 +58,7 @@ async function getRateDetails(rateType: string, rateId: string) {
       const { data: guide } = await supabaseAdmin
         .from('guide_rates')
         .select('id, guide_type, city, half_day_rate, full_day_rate')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('id', rateId)
         .single()
       if (guide) {
@@ -68,6 +77,7 @@ async function getRateDetails(rateType: string, rateId: string) {
       const { data: activity } = await supabaseAdmin
         .from('activity_rates')
         .select('id, activity_name, activity_category, city, base_rate_eur, base_rate_non_eur')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('id', rateId)
         .single()
       if (activity) {
@@ -86,6 +96,7 @@ async function getRateDetails(rateType: string, rateId: string) {
       const { data: meal } = await supabaseAdmin
         .from('meal_rates')
         .select('id, restaurant_name, meal_type, tier, city, base_rate_eur, base_rate_non_eur')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('id', rateId)
         .single()
       if (meal) {
@@ -104,6 +115,7 @@ async function getRateDetails(rateType: string, rateId: string) {
       const { data: hotel } = await supabaseAdmin
         .from('accommodation_rates')
         .select('id, hotel_name, room_type, city, rate_low_season_sgl, rate_high_season_sgl, rate_peak_season_sgl')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('id', rateId)
         .single()
       if (hotel) {
@@ -123,6 +135,7 @@ async function getRateDetails(rateType: string, rateId: string) {
       const { data: cruise } = await supabaseAdmin
         .from('nile_cruises')
         .select('id, ship_name, cabin_type, rate_low_season, rate_high_season, rate_peak_season')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('id', rateId)
         .single()
       if (cruise) {

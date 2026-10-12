@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { recordsInOrg } from '@/lib/org-refs'
 import { emptyTotals, addToTotals, sumByCurrency, type CurrencyTotals } from '@/lib/currency-totals'
 
 const supabaseAdmin = createClient(
@@ -122,6 +123,11 @@ export async function POST(request: NextRequest) {
         { error: 'Commission type, category, and either commission_amount or (base_amount + commission_rate) are required' },
         { status: 400 }
       )
+    }
+
+    // A supplier must be this company's (suppliers.org_id, 20261205).
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { supplier_id: body.supplier_id }))) {
+      return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
     }
 
     // Calculate commission amount from rate if explicit amount missing.

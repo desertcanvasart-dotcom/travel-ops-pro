@@ -15,7 +15,7 @@ import { planRoadTrips, type TripShape } from '@/lib/pricing/road-trips'
 import { choicesForTier } from '@/lib/pricing/property-choice'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import {
@@ -77,7 +77,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const db = createServerClient()
-    const currency = await getOrgRateCurrency(db, await getCurrentOrgId())
+    // This company's transport rates and ships price the preview.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const currency = await getOrgRateCurrency(db, orgId)
 
     // Same package reading the engine does from the template's tour_type.
     let packageType: string | undefined
@@ -87,7 +90,7 @@ export async function POST(request: NextRequest) {
     }
 
     const itinerary = parseItinerary(rawDays, { packageType })
-    const cache = await buildTransportCache(createRateNormalizer(currency))
+    const cache = await buildTransportCache(orgId, createRateNormalizer(currency))
 
     // The trip's road plan, as the engine builds it: the day after a cruise
     // starts from the ship's end port — the ship chosen for this tier, else
@@ -95,7 +98,7 @@ export async function POST(request: NextRequest) {
     const tier = typeof body?.tier === 'string' && body.tier ? body.tier : 'standard'
     const firstCruiseDay = itinerary.find(d => d.accommodation_type === 'cruise')
     const ship = firstCruiseDay
-      ? (await resolveCruiseStay(tier, firstCruiseDay.city, false, null, undefined, choicesForTier(itinerary, tier).cruiseId, itinerary.filter(d => d.accommodation_type === 'cruise').length)).rates
+      ? (await resolveCruiseStay(orgId, tier, firstCruiseDay.city, false, null, undefined, choicesForTier(itinerary, tier).cruiseId, itinerary.filter(d => d.accommodation_type === 'cruise').length)).rates
       : null
     const roadPlan = planRoadTrips(itinerary, ship?.row ? String((ship.row as Record<string, unknown>).disembark_city ?? '') || null : null)
 

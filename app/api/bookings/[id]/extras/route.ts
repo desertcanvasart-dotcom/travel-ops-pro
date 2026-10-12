@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { extrasTotal, isPriced, lineAmount, type BookingExtraLine } from '@/lib/booking-extras'
+import { rowInOrg } from '@/lib/api/org-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -130,6 +131,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     passengerId = body.passenger_id
   }
 
+  // One of this company's suppliers (suppliers.org_id, 20261205).
+  const supplierId = typeof body?.supplier_id === 'string' && body.supplier_id ? body.supplier_id : null
+  if (supplierId && !(await rowInOrg(admin, 'suppliers', supplierId, orgId))) {
+    return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
+  }
+
   const row = {
     org_id: orgId,
     booking_id: id,
@@ -146,7 +153,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           ? body.supplier_currency.trim().toUpperCase()
           : currency || booking.currency || 'EUR')
       : null,
-    supplier_id: typeof body?.supplier_id === 'string' && body.supplier_id ? body.supplier_id : null,
+    supplier_id: supplierId,
     source_kind: typeof body?.source_kind === 'string' ? body.source_kind : 'manual',
     source_id: typeof body?.source_id === 'string' && body.source_id ? body.source_id : null,
     replaces_service_id:

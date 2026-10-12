@@ -73,8 +73,8 @@ export async function PUT(
       if (updateData[key] === '') updateData[key] = null
     }
 
-    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updateData.itinerary_id, invoice_id: updateData.client_invoice_id }))) {
-      return NextResponse.json({ error: 'Trip or client invoice not found' }, { status: 404 })
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updateData.itinerary_id, invoice_id: updateData.client_invoice_id, supplier_id: updateData.supplier_id }))) {
+      return NextResponse.json({ error: 'Trip, client invoice or supplier not found' }, { status: 404 })
     }
 
     const { data: current } = await supabaseAdmin

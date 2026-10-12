@@ -6,6 +6,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+
+// The caller's company's staff only (the view carries suppliers.org_id,
+// 20261205): another company's id is a plain 404.
 
 // GET - Get single airport staff
 export async function GET(
@@ -13,6 +17,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { id } = await params
 
@@ -20,6 +26,7 @@ export async function GET(
       .from('airport_staff')
       .select('*')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (error || !data) {
@@ -49,6 +56,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { id } = await params
     const body = await request.json()
@@ -71,8 +80,9 @@ export async function PUT(
       .from('airport_staff')
       .update(updateData)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) {
       console.error('Error updating airport staff:', error)
@@ -110,19 +120,29 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { id } = await params
 
-    const { error } = await supabase
+    const { data: deleted, error } = await supabase
       .from('airport_staff')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
+      .select('id')
 
     if (error) {
       console.error('Error deleting airport staff:', error)
       return NextResponse.json(
         { success: false, error: 'Failed to delete airport staff' },
         { status: 500 }
+      )
+    }
+    if (!deleted?.length) {
+      return NextResponse.json(
+        { success: false, error: 'Airport staff not found' },
+        { status: 404 }
       )
     }
 

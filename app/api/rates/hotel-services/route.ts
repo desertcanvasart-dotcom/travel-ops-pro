@@ -4,13 +4,17 @@ import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { cleanPricingBasisFields } from '@/lib/pricing/pricing-basis'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export async function GET() {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { data, error } = await supabase
       .from('hotel_staff_rates')
       .select('*')
+      .eq('org_id', orgId)
       .order('service_type')
       .order('hotel_category')
 
@@ -24,6 +28,8 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const body = await request.json()
 
@@ -50,6 +56,7 @@ export async function POST(request: NextRequest) {
     let existingQuery = supabase
       .from('hotel_staff_rates')
       .select('id')
+      .eq('org_id', orgId)
     if (body.service_type) {
       existingQuery = existingQuery.eq('service_type', body.service_type)
     } else {
@@ -90,7 +97,7 @@ export async function POST(request: NextRequest) {
       // Insert new record
       const result = await supabase
         .from('hotel_staff_rates')
-        .insert([payload])
+        .insert([{ ...payload, org_id: orgId }])
         .select()
         .single()
       data = result.data

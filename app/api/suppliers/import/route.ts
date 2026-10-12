@@ -10,6 +10,7 @@ import { prepareSupplierRows, supplierCsvTemplate, type SupplierCsvRow } from '@
 import { allowedSupplierTypeKeys } from '@/lib/supplier-types'
 import { supplierTypesForCurrentOrg } from '@/lib/vocabulary-server'
 import { selectAllRows } from '@/lib/db/select-all-rows'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export async function GET(request: NextRequest) {
   if (request.nextUrl.searchParams.get('template') !== '1') {
@@ -25,6 +26,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Imports into the caller's company; "already on file" is asked of its
+    // own roster (suppliers.org_id, 20261205) — the other company holding a
+    // supplier of the same name does not stop this one adding theirs.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { csvData, dryRun = false } = await request.json()
     if (!csvData || typeof csvData !== 'string') {
       return NextResponse.json({ success: false, error: 'csvData is required' }, { status: 400 })
@@ -45,7 +51,7 @@ export async function POST(request: NextRequest) {
       // Every supplier, not the first 1000 (lib/db/select-all-rows): past the
       // cap an existing supplier read as new and was inserted a second time.
       const { data, error } = await selectAllRows<{ name: string }>(
-        () => supabase.from('suppliers').select('id, name'),
+        () => supabase.from('suppliers').select('id, name').eq('org_id', orgId),
       )
       if (error) throw error
       for (const s of data ?? []) if (names.includes(String(s.name).toLowerCase())) existing.add(String(s.name).toLowerCase())
@@ -69,11 +75,11 @@ export async function POST(request: NextRequest) {
     const insertErrors: { name: string; message: string }[] = []
     for (let i = 0; i < toInsert.length; i += 50) {
       const batch = toInsert.slice(i, i + 50)
-      const { data, error } = await supabase.from('suppliers').insert(batch.map(r => r.row)).select('id')
+      const { data, error } = await supabase.from('suppliers').insert(batch.map(r => ({ ...r.row, org_id: orgId }))).select('id')
       if (error) {
         // Fall back to one at a time so a single bad row does not sink the batch.
         for (const r of batch) {
-          const { error: e1 } = await supabase.from('suppliers').insert([r.row])
+          const { error: e1 } = await supabase.from('suppliers').insert([{ ...r.row, org_id: orgId }])
           if (e1) insertErrors.push({ name: r.name, message: clientMessage(e1, 'Could not insert') })
           else inserted++
         }

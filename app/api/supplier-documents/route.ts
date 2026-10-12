@@ -4,6 +4,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { NextRequest, NextResponse } from 'next/server'
 import { createDocumentNumberer, supplierDocumentPrefix } from '@/lib/documents/numberer'
+import { rowInOrg } from '@/lib/api/org-scope'
 
 export async function GET(request: NextRequest) {
   const supabase = createServerClient()
@@ -105,12 +106,18 @@ export async function POST(request: NextRequest) {
       body.document_number = await createDocumentNumberer(supabase, supplierDocumentPrefix)(body.document_type)
     }
     
+    // The supplier must be this company's (suppliers.org_id, 20261205).
+    if (body.supplier_id && !(await rowInOrg(supabase, 'suppliers', String(body.supplier_id), orgId))) {
+      return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
+    }
+
     // If supplier_id provided, fetch supplier details
     if (body.supplier_id && !body.supplier_name) {
       const { data: supplier } = await supabase
         .from('suppliers')
         .select('name, contact_name, contact_email, contact_phone, whatsapp, address, city, country')
         .eq('id', body.supplier_id)
+        .eq('org_id', orgId)
         .single()
 
       if (supplier) {

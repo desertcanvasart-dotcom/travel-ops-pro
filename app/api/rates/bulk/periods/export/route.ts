@@ -16,11 +16,14 @@ import { PERIOD_SHEETS, periodHeaders, periodsToRows, periodTemplateRows, withSu
 import { seasonsForRow } from '@/lib/rates/rate-seasons'
 import { supplementsForRow } from '@/lib/rates/supplements'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const entity = request.nextUrl.searchParams.get('entity')
     if (entity !== 'accommodation' && entity !== 'cruise') {
       return NextResponse.json(
@@ -56,8 +59,8 @@ export async function GET(request: NextRequest) {
     // per-season columns that differ by table, and this is a small catalog —
     // the same plain select the wide export uses.
     const { data, error } = baseConfig.table === 'accommodation_rates'
-      ? await supabase.from('accommodation_rates').select('*').order('property_name')
-      : await supabase.from('nile_cruises').select('*').order('ship_name')
+      ? await supabase.from('accommodation_rates').select('*').eq('org_id', orgId).order('property_name')
+      : await supabase.from('nile_cruises').select('*').eq('org_id', orgId).order('ship_name')
 
     if (error) {
       console.error('[periods-export] fetch failed:', error.message)

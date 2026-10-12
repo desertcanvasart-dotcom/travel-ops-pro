@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Actor-attributed service-role client (lib/supabase-actor): rate-table
 // writes from here reach fn_rate_audit_trigger, and without the actor
@@ -11,6 +12,8 @@ const supabaseAdmin = createServerClient()
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const supplierId = searchParams.get('supplier_id')
     const activeOnly = searchParams.get('active_only') === 'true'
@@ -18,6 +21,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('accommodation_rates')
       .select('*')
+      .eq('org_id', orgId)
       .order('property_name')
 
     if (supplierId) query = query.eq('supplier_id', supplierId)
@@ -46,6 +50,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
     console.log('=== HOTELS API POST START ===')
     console.log('Body received:', JSON.stringify(body, null, 2))
@@ -73,7 +79,7 @@ export async function POST(request: NextRequest) {
     // Try insert without select first to see if it works
     const { data: insertData, error: insertError, count, status, statusText } = await supabaseAdmin
       .from('accommodation_rates')
-      .insert(newRate)
+      .insert({ ...newRate, org_id: orgId })
       .select('*')
       .single()
 

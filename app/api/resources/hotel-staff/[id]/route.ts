@@ -6,6 +6,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+
+// The caller's company's staff only (the view carries suppliers.org_id,
+// 20261205): another company's id is a plain 404.
 
 // GET - Get single hotel staff
 export async function GET(
@@ -13,6 +17,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { id } = await params
 
@@ -20,6 +26,7 @@ export async function GET(
       .from('hotel_staff')
       .select('*')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (error || !data) {
@@ -49,6 +56,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { id } = await params
     const body = await request.json()
@@ -57,12 +66,14 @@ export async function PUT(
     
     if (body.name !== undefined) updateData.name = body.name
     if (body.role !== undefined) updateData.role = body.role
-    if (body.hotel_id !== undefined) updateData.hotel_id = body.hotel_id
+    // No hotel_id: hotel_staff has no such column (staff are not hotel-scoped
+    // in this schema) — sending it failed the whole update.
     if (body.phone !== undefined) updateData.phone = body.phone
     if (body.whatsapp !== undefined) updateData.whatsapp = body.whatsapp
     if (body.email !== undefined) updateData.email = body.email
     if (body.languages !== undefined) updateData.languages = body.languages
     if (body.shift_times !== undefined) updateData.shift_times = body.shift_times
+    if (body.emergency_contact !== undefined) updateData.emergency_contact = body.emergency_contact
     if (body.notes !== undefined) updateData.notes = body.notes
     if (body.is_active !== undefined) updateData.is_active = body.is_active
 
@@ -70,8 +81,9 @@ export async function PUT(
       .from('hotel_staff')
       .update(updateData)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select('*')
-      .single()
+      .maybeSingle()
 
     if (error) {
       console.error('Error updating hotel staff:', error)
@@ -109,19 +121,29 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { id } = await params
 
-    const { error } = await supabase
+    const { data: deleted, error } = await supabase
       .from('hotel_staff')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
+      .select('id')
 
     if (error) {
       console.error('Error deleting hotel staff:', error)
       return NextResponse.json(
         { success: false, error: 'Failed to delete hotel staff' },
         { status: 500 }
+      )
+    }
+    if (!deleted?.length) {
+      return NextResponse.json(
+        { success: false, error: 'Hotel staff not found' },
+        { status: 404 }
       )
     }
 

@@ -79,7 +79,7 @@ describe('a travel request by email becomes a Lead', () => {
       { id: 'supplier', from: 'shereif.ali@oberoihotels.com' },
       { id: 'dismissed', from: 'avasofia024@gmail.com' },
     ], {
-      suppliers: [{ contact_email: 'shereif.ali@oberoihotels.com' }],
+      suppliers: [{ org_id: 'org1', contact_email: 'shereif.ali@oberoihotels.com' }],
       email_lead_dismissals: [{ org_id: 'org1', email: 'avasofia024@gmail.com' }],
     })
     const out = await processNewEmailLeads(db, { extract: async () => { asked++; return { ...request, is_travel_request: false } } })

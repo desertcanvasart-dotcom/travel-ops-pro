@@ -7,12 +7,15 @@ import { sanitizeSailingDays } from '@/lib/rates/cruise-sailing'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const supplierId = searchParams.get('supplier_id')
     const shipName = searchParams.get('ship_name')
@@ -25,6 +28,7 @@ export async function GET(request: NextRequest) {
         *,
         supplier:supplier_id (id, name, city, contact_phone, contact_email, star_rating)
       `)
+      .eq('org_id', orgId)
       .order('ship_name')
       .order('cabin_type')
 
@@ -46,6 +50,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     const _rateCheck = validateRatePayload(body)
@@ -96,6 +102,7 @@ export async function POST(request: NextRequest) {
     let existingQuery = supabaseAdmin
       .from('nile_cruises')
       .select('*')
+      .eq('org_id', orgId)
       .ilike('ship_name', newCruise.ship_name)
     if (newCruise.cabin_type) {
       existingQuery = existingQuery.eq('cabin_type', newCruise.cabin_type)
@@ -125,7 +132,7 @@ export async function POST(request: NextRequest) {
       // Insert new record
       const result = await supabaseAdmin
         .from('nile_cruises')
-        .insert([newCruise])
+        .insert([{ ...newCruise, org_id: orgId }])
         .select(`*, supplier:supplier_id (id, name)`)
         .single()
       data = result.data

@@ -46,6 +46,8 @@ beforeEach(() => {
   db.inserted = []; db.deleted = []
   db.tables = {
     itineraries: [{ id: 'itn-1', org_id: 'org-1' }, { id: 'itn-9', org_id: 'org-2' }],
+    // Guides are suppliers, one company's each (suppliers.org_id, 20261205).
+    suppliers: [{ id: 'g1', org_id: 'org-1' }, { id: 'g9', org_id: 'org-2' }],
     itinerary_resources: [
       { id: 'r1', itinerary_id: 'itn-1', resource_id: 'drv', itinerary: mine },
       { id: 'r9', itinerary_id: 'itn-9', resource_id: 'drv', itinerary: theirs },
@@ -69,6 +71,17 @@ describe('the assignments', () => {
     expect((await add('itn-9')).status).toBe(404)
     expect(db.inserted).toEqual([])
     expect((await add('itn-1')).status).toBe(200)
+    expect(db.inserted).toHaveLength(1)
+  })
+
+  it("assigns only the organisation's own guide; a person typed in for the trip needs none", async () => {
+    const add = (body: Record<string, unknown>) => POST(new Request('http://x', { method: 'POST', body: JSON.stringify({
+      itinerary_id: 'itn-1', start_date: '2026-10-01', ...body,
+    }) }) as never)
+    expect((await add({ resource_type: 'guide', resource_id: 'g9' })).status).toBe(404)
+    expect((await add({ resource_type: 'airport_staff', resource_id: 'g9' })).status).toBe(404)
+    expect(db.inserted).toEqual([])
+    expect((await add({ resource_type: 'guide', resource_id: 'fresh-id', resource_name: 'Ahmed · 01000000000 (outside)' })).status).toBe(200)
     expect(db.inserted).toHaveLength(1)
   })
 

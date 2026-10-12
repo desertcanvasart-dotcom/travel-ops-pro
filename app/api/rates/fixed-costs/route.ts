@@ -3,15 +3,20 @@ import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { clearFixedCostsCache } from '@/lib/fixed-costs'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { notFoundInOrg } from '@/lib/api/org-scope'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
 
 export async function GET() {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { data, error } = await supabaseAdmin
       .from('fixed_daily_costs')
       .select('*')
+      .eq('org_id', orgId)
       .order('cost_type')
 
     if (error) {
@@ -28,6 +33,8 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     const _rateCheck = validateRatePayload(body)
@@ -39,6 +46,7 @@ export async function POST(request: NextRequest) {
     const { data: sampleRow } = await supabaseAdmin
       .from('fixed_daily_costs')
       .select('*')
+      .eq('org_id', orgId)
       .limit(1)
       .single()
     const tableColumns = sampleRow
@@ -63,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabaseAdmin
       .from('fixed_daily_costs')
-      .insert(newCost)
+      .insert({ ...newCost, org_id: orgId })
       .select('*')
       .single()
 
@@ -72,7 +80,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
-    clearFixedCostsCache()
+    clearFixedCostsCache(orgId)
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('POST fixed_daily_costs catch error:', error)
@@ -82,6 +90,8 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
     const { id, ...updateFields } = body
 
@@ -93,8 +103,11 @@ export async function PUT(request: NextRequest) {
     const { data: existing } = await supabaseAdmin
       .from('fixed_daily_costs')
       .select('*')
+      .eq('org_id', orgId)
       .eq('id', id)
-      .single()
+      .maybeSingle()
+    // Another company's cost is not yours to edit.
+    if (!existing) return notFoundInOrg('Fixed cost')
     const tableColumns = existing
       ? new Set(Object.keys(existing))
       : new Set(['cost_type', 'cost_per_person_per_day', 'is_active'])
@@ -110,6 +123,7 @@ export async function PUT(request: NextRequest) {
     const { data, error } = await supabaseAdmin
       .from('fixed_daily_costs')
       .update(updateData)
+      .eq('org_id', orgId)
       .eq('id', id)
       .select('*')
       .single()
@@ -119,7 +133,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
-    clearFixedCostsCache()
+    clearFixedCostsCache(orgId)
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('PUT fixed_daily_costs catch error:', error)
@@ -134,6 +148,8 @@ export async function PUT(request: NextRequest) {
 // reversible alternative and zeroes nothing either.
 export async function DELETE(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const id = request.nextUrl.searchParams.get('id')
     if (!id) {
       return NextResponse.json({ success: false, error: 'Missing id' }, { status: 400 })
@@ -142,6 +158,7 @@ export async function DELETE(request: NextRequest) {
     const { error } = await supabaseAdmin
       .from('fixed_daily_costs')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
 
     if (error) {
@@ -149,7 +166,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
-    clearFixedCostsCache()
+    clearFixedCostsCache(orgId)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('DELETE fixed_daily_costs catch error:', error)

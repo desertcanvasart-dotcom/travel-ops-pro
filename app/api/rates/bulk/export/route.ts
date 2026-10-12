@@ -11,6 +11,8 @@ import { transportationConfigFor, vehicleColumnSpecsFor } from '@/lib/bulk-rate-
 import { flattenVehicles } from '@/lib/rates/vehicle-bands'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
 import { selectAllRows } from '@/lib/db/select-all-rows'
+import { supplierOrgId } from '@/lib/suppliers/supplier-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createServerClient()
 
@@ -23,6 +25,8 @@ const supabase = createServerClient()
  */
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const table = request.nextUrl.searchParams.get('table')
 
     if (!table || !RATE_TABLE_CONFIGS[table]) {
@@ -70,7 +74,7 @@ export async function GET(request: NextRequest) {
     // and an export that silently drops rows is lost data after a
     // delete-and-re-import. `id` breaks created_at ties so pages never overlap.
     const { data, error } = await selectAllRows<Record<string, any>>(
-      () => supabase.from(config.tableName).select('*'),
+      () => supabase.from(config.tableName).select('*').eq('org_id', orgId),
       { order: [{ column: 'created_at', ascending: false }, { column: 'id' }] },
     )
 
@@ -94,9 +98,11 @@ export async function GET(request: NextRequest) {
       ) as string[]
       const codeById = new Map<string, string>()
       if (supplierIds.length > 0) {
+        // The caller's company's suppliers only (suppliers.org_id, 20261205).
         const { data: sup } = await supabase
           .from('suppliers')
           .select('id, supplier_code')
+          .eq('org_id', (await supplierOrgId()) ?? '')
           .in('id', supplierIds)
         for (const s of sup || []) if (s.supplier_code) codeById.set(s.id, s.supplier_code)
       }
@@ -125,6 +131,7 @@ export async function GET(request: NextRequest) {
         const { data: props } = await supabase
           .from('supplier_properties')
           .select('id, name')
+          .eq('org_id', (await supplierOrgId()) ?? '')
           .in('id', propertyIds)
         for (const pr of props || []) if (pr.name) nameById.set(pr.id, pr.name)
       }

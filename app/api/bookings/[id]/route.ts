@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { supplierBacking } from '@/lib/bookings/supplier-backing'
 import { removeBookingDocumentFiles } from '@/lib/portal/traveller-documents'
+import { rowInOrg } from '@/lib/api/org-scope'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -80,7 +81,8 @@ export async function GET(
         .from('suppliers')
         .select('id, name, phone, email')
         .eq('id', booking.assigned_guide_id)
-        .single()
+        .eq('org_id', orgId)
+        .maybeSingle()
       assignedGuide = guide
     }
 
@@ -147,6 +149,12 @@ export async function PUT(
       if (body[field] !== undefined) {
         updates[field] = body[field]
       }
+    }
+
+    // The guide is one of this company's suppliers (suppliers.org_id, 20261205).
+    if (typeof updates.assigned_guide_id === 'string' && updates.assigned_guide_id &&
+        !(await rowInOrg(supabaseAdmin, 'suppliers', updates.assigned_guide_id, orgId))) {
+      return NextResponse.json({ success: false, error: 'Guide not found' }, { status: 404 })
     }
 
     // If status is being set to cancelled, set cancelled_at
