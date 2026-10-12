@@ -246,9 +246,9 @@ export default function AttractionsContent() {
   const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
   
   const [attractions, setAttractions] = useState<Attraction[]>([])
-  // Read by the ?edit= effect without making it re-run on every refetch.
-  const attractionsRef = useRef(attractions)
-  attractionsRef.current = attractions
+  // The ?edit= id whose editor has been opened, so a refetch or closing the
+  // modal doesn't open it again.
+  const openedEditIdRef = useRef<string | null>(null)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -345,14 +345,6 @@ export default function AttractionsContent() {
   useEffect(() => {
     fetchAttractions()
     fetchSuppliers()
-
-    const editId = searchParams.get('edit')
-    if (editId) {
-      const attraction = attractionsRef.current.find(a => a.id === editId)
-      if (attraction) {
-        handleEdit(attraction)
-      }
-    }
   }, [searchParams, activeLanguage, fetchAttractions])
 
   // Reset to first page when filters change
@@ -453,7 +445,7 @@ export default function AttractionsContent() {
     setFormData(prev => ({ ...prev, service_code: '' }))
   }
 
-  const handleEdit = (attraction: Attraction) => {
+  const handleEdit = useCallback((attraction: Attraction) => {
     setEditingAttraction(attraction)
     setFormData({
       service_code: attraction.service_code,
@@ -478,7 +470,20 @@ export default function AttractionsContent() {
       supplier_id: attraction.supplier_id || ''
     })
     setShowModal(true)
-  }
+  }, [])
+
+  // ?edit=<id> opens that attraction's editor. It has to wait for the list:
+  // looking it up in the same effect that starts the fetch searched the list
+  // before it had loaded, so the editor almost never opened.
+  useEffect(() => {
+    const editId = searchParams.get('edit')
+    if (!editId || openedEditIdRef.current === editId) return
+    const attraction = attractions.find(a => a.id === editId)
+    if (attraction) {
+      openedEditIdRef.current = editId
+      handleEdit(attraction)
+    }
+  }, [searchParams, attractions, handleEdit])
 
   // Submit form
   const handleSubmit = async (e: React.FormEvent) => {
