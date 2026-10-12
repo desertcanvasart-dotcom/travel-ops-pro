@@ -6,34 +6,19 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
+import { contentInOrg, contentSession, withoutOwnedColumns } from '@/lib/content-library/session'
 
 // A valid tier is one on the agency's ladder (Settings → Vocabulary) — read
 // per request by tierLadderForCurrentOrg(); this used to be a frozen copy of
 // the four presets, which refused every tier the agency added.
+//
+// A variation belongs to its content item: every handler first checks the
+// item is the caller's ACTIVE company's (404 otherwise), and every variation
+// query is pinned to that item — a variation_id alone reaches no other
+// item's variations.
 
-// Helper to create Supabase client
-async function createClient() {
-  const cookieStore = await cookies()
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options)
-          })
-        },
-      },
-    }
-  )
-}
+const notFound = () => NextResponse.json({ error: 'Content item not found' }, { status: 404 })
 
 // GET - List variations for a content item
 export async function GET(
@@ -41,8 +26,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId } = session
     const { id } = await params
+    if (!(await contentInOrg(supabase, orgId, id))) return notFound()
     const { searchParams } = new URL(request.url)
     const tier = searchParams.get('tier')
 
@@ -86,14 +74,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId, userId } = session
     const { id: contentId } = await params
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    if (!(await contentInOrg(supabase, orgId, contentId))) return notFound()
 
     const body = await request.json()
     const { tier, title, description, highlights, inclusions, internal_notes } = body
@@ -114,20 +99,6 @@ export async function POST(
       )
     }
 
-    // Check if content exists
-    const { data: content, error: contentError } = await supabase
-      .from('content_library')
-      .select('id')
-      .eq('id', contentId)
-      .single()
-
-    if (contentError || !content) {
-      return NextResponse.json(
-        { error: 'Content item not found' },
-        { status: 404 }
-      )
-    }
-
     // Create variation
     const { data, error } = await supabase
       .from('content_variations')
@@ -139,8 +110,8 @@ export async function POST(
         highlights: highlights || [],
         inclusions: inclusions || [],
         internal_notes: internal_notes || null,
-        created_by: user.id,
-        updated_by: user.id
+        created_by: userId,
+        updated_by: userId
       })
       .select()
       .single()
@@ -172,14 +143,11 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId, userId } = session
     const { id: contentId } = await params
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    if (!(await contentInOrg(supabase, orgId, contentId))) return notFound()
 
     const body = await request.json()
     const { variations } = body
@@ -240,9 +208,10 @@ export async function PUT(
             inclusions: v.inclusions || [],
             internal_notes: v.internal_notes || null,
             is_active: v.is_active ?? true,
-            updated_by: user.id
+            updated_by: userId
           })
           .eq('id', existingId)
+          .eq('content_id', contentId)
           .select()
           .single()
 
@@ -261,8 +230,8 @@ export async function PUT(
             highlights: v.highlights || [],
             inclusions: v.inclusions || [],
             internal_notes: v.internal_notes || null,
-            created_by: user.id,
-            updated_by: user.id
+            created_by: userId,
+            updated_by: userId
           })
           .select()
           .single()
@@ -289,17 +258,17 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId, userId } = session
     const { id: contentId } = await params
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    if (!(await contentInOrg(supabase, orgId, contentId))) return notFound()
 
     const body = await request.json()
-    const { tier, variation_id, ...updates } = body
+    const { tier, variation_id } = body
+    const updates = withoutOwnedColumns(body)
+    delete updates.tier
+    delete updates.variation_id
 
     if (!tier && !variation_id) {
       return NextResponse.json(
@@ -309,33 +278,27 @@ export async function PATCH(
     }
 
     // Remove fields that shouldn't be updated
-    delete updates.id
     delete updates.content_id
-    delete updates.created_at
-    delete updates.created_by
 
     // Add updated_by
-    updates.updated_by = user.id
+    updates.updated_by = userId
 
     let query = supabase
       .from('content_variations')
       .update(updates)
 
-    if (variation_id) {
-      query = query.eq('id', variation_id)
-    } else {
-      query = query.eq('content_id', contentId).eq('tier', tier)
+    query = query.eq('content_id', contentId)
+    query = variation_id ? query.eq('id', variation_id) : query.eq('tier', tier)
+
+    const { data, error } = await query.select().maybeSingle()
+
+    if (!error && !data) {
+      return NextResponse.json(
+        { error: 'Variation not found' },
+        { status: 404 }
+      )
     }
-
-    const { data, error } = await query.select().single()
-
     if (error) {
-      if (error.code === 'PGRST116') {
-        return NextResponse.json(
-          { error: 'Variation not found' },
-          { status: 404 }
-        )
-      }
       console.error('Error updating variation:', error)
       return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
@@ -356,14 +319,11 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId } = session
     const { id: contentId } = await params
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    if (!(await contentInOrg(supabase, orgId, contentId))) return notFound()
 
     const { searchParams } = new URL(request.url)
     const tier = searchParams.get('tier')
@@ -374,7 +334,7 @@ export async function DELETE(
       .delete()
 
     if (variationId) {
-      query = query.eq('id', variationId)
+      query = query.eq('content_id', contentId).eq('id', variationId)
     } else if (tier) {
       query = query.eq('content_id', contentId).eq('tier', tier)
     } else {

@@ -42,6 +42,9 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
   >(null)
   const [committing, setCommitting] = useState(false)
   const [commitError, setCommitError] = useState<string | null>(null)
+  // The company the itinerary will land in — the THREAD's (G1), named on the
+  // button so nobody is surprised whose books it goes into.
+  const [commitOrgName, setCommitOrgName] = useState<string | null>(null)
 
   // Fetch draft details when thread changes
   useEffect(() => {
@@ -221,6 +224,7 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
     if (!thread || thread.origin !== 'concierge') {
       setSpawnedItinerary(null)
       setCommitError(null)
+      setCommitOrgName(null)
       return
     }
     let cancelled = false
@@ -229,6 +233,7 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
         const res = await fetch(`/api/copilot/threads/${thread.id}/commit-itinerary`)
         const data = await res.json()
         if (cancelled) return
+        setCommitOrgName(data.success && data.org?.name ? data.org.name : null)
         if (data.success && data.itinerary) {
           setSpawnedItinerary(data.itinerary)
         } else {
@@ -413,7 +418,11 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-purple-700 rounded-md hover:bg-purple-800 transition-colors disabled:opacity-50"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                {committing ? 'Creating…' : 'Create itinerary from brief'}
+                {committing
+                  ? 'Creating…'
+                  : commitOrgName
+                    ? `Create itinerary in ${commitOrgName}`
+                    : 'Create itinerary from brief'}
               </button>
             </div>
           )}

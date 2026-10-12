@@ -3710,6 +3710,7 @@ export interface Database {
       content_categories: {
         Row: {
           id: string
+          org_id: string
           name: string
           slug: string
           description: string | null
@@ -3721,6 +3722,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          org_id: string
           name: string
           slug: string
           description?: string | null
@@ -3732,6 +3734,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          org_id?: string
           name?: string
           slug?: string
           description?: string | null
@@ -3746,6 +3749,7 @@ export interface Database {
       content_library: {
         Row: {
           id: string
+          org_id: string
           category_id: string | null
           name: string
           slug: string
@@ -3769,6 +3773,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          org_id: string
           category_id?: string | null
           name: string
           slug: string
@@ -3792,6 +3797,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          org_id?: string
           category_id?: string | null
           name?: string
           slug?: string
@@ -3847,6 +3853,7 @@ export interface Database {
       content_usage_log: {
         Row: {
           id: string
+          org_id: string
           content_id: string | null
           variation_id: string | null
           itinerary_id: string | null
@@ -3855,6 +3862,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          org_id: string
           content_id?: string | null
           variation_id?: string | null
           itinerary_id?: string | null
@@ -3863,6 +3871,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          org_id?: string
           content_id?: string | null
           variation_id?: string | null
           itinerary_id?: string | null
@@ -3889,7 +3898,7 @@ export interface Database {
       content_variations: {
         Row: {
           id: string
-          content_id: string | null
+          content_id: string
           tier: string
           title: string | null
           description: string
@@ -3906,7 +3915,7 @@ export interface Database {
         }
         Insert: {
           id?: string
-          content_id?: string | null
+          content_id: string
           tier: string
           title?: string | null
           description: string
@@ -3923,7 +3932,7 @@ export interface Database {
         }
         Update: {
           id?: string
-          content_id?: string | null
+          content_id?: string
           tier?: string
           title?: string | null
           description?: string
@@ -8152,6 +8161,38 @@ export interface Database {
           },
         ]
       }
+      org_backfill_content_copies: {
+        Row: {
+          copy_id: string
+          created_at: string
+          org_id: string
+          original_id: string
+          table_name: string
+        }
+        Insert: {
+          copy_id: string
+          created_at?: string
+          org_id: string
+          original_id: string
+          table_name: string
+        }
+        Update: {
+          copy_id?: string
+          created_at?: string
+          org_id?: string
+          original_id?: string
+          table_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_backfill_content_copies_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_backfill_rate_copies: {
         Row: {
           copy_id: string
@@ -8853,6 +8894,7 @@ export interface Database {
       prompt_templates: {
         Row: {
           id: string
+          org_id: string
           name: string
           purpose: string
           description: string | null
@@ -8871,6 +8913,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          org_id: string
           name: string
           purpose: string
           description?: string | null
@@ -8889,6 +8932,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          org_id?: string
           name?: string
           purpose?: string
           description?: string | null
@@ -13279,6 +13323,7 @@ export interface Database {
       writing_rules: {
         Row: {
           id: string
+          org_id: string
           name: string
           category: string
           rule_type: string
@@ -13294,6 +13339,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          org_id: string
           name: string
           category: string
           rule_type: string
@@ -13309,6 +13355,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          org_id?: string
           name?: string
           category?: string
           rule_type?: string

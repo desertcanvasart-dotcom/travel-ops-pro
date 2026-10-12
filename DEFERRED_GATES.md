@@ -13,19 +13,41 @@ PROJECT_HANDOVER.md → Known Issues. Items in this file BLOCK something.
 
 ## G1. org_id authority must move to the thread before any second org onboards
 
-**Status:** Deferred — solo operation today, work is gated, not abandoned.
-**Trigger:** [GATE — REQUIRED BEFORE SECOND ORG ONBOARDS]
+**Status:** Mostly shipped (2026-10-12) — the commit authority flip, NOT NULL,
+membership check and UI label are done; the per-org Concierge webhook secret
+is still open (below).
+**Trigger:** [GATE — REQUIRED BEFORE SECOND ORG ONBOARDS] — a second org (ATS)
+is live.
 **Owner:** Architecture / multi-tenancy.
-**Related code:** `lib/auth/current-org.ts`, `app/api/copilot/threads/[id]/commit-itinerary/route.ts`, `migrations/20260626_*concierge*.sql`, `migrations/20260627_itinerary_thread_id.sql`.
+**Related code:** `lib/auth/current-org.ts`, `app/api/copilot/threads/[id]/commit-itinerary/route.ts`, `lib/concierge/commit-brief-to-itinerary.ts`, `components/copilot/CopilotReviewPanel.tsx`, `migrations/20260626_*concierge*.sql`, `migrations/20260627_itinerary_thread_id.sql`, `migrations/20261204_email_org_id.sql`.
+
+**Shipped (2026-10-12, tenancy batch 3b):** `communication_threads.org_id` is
+NOT NULL (migration 20261204 backfilled every thread to its company first).
+`commitBriefToItinerary(threadId, db)` no longer takes an org at all: it stamps
+the itinerary with `thread.org_id`, and uses that company's
+`organizations.default_currency` (not a hard-coded EUR). The commit route
+checks the caller is a MEMBER of the thread's company
+(`lib/auth/org-members.ts isOrgMember`) — the session is an access check, not
+an attribution — so a person in both companies commits a thread into the
+thread's company whichever workspace is active. A non-member gets **404
+"Thread not found"**, not 403: the cross-company hotfix already answered 404
+so another company's thread ids are not confirmed to exist, and that is kept
+deliberately. GET returns the thread company's name and the button reads
+"Create itinerary in `<org name>`". Also fixed while there: a 23505 on the
+random `ITN-S-<year>-<nnn>` code was read as a concurrent commit of the same
+thread and failed ("re-lookup found no row"); now a re-lookup that finds no
+row for the thread means the code was taken, and the insert retries with a new
+code (5 attempts).
 
 **Progress (2026-10-10):** WhatsApp is per org. Each organization has its own
 sender (`organizations.whatsapp_number`, migration 20261125); the webhook
 resolves the org from the number written TO (`lib/whatsapp-org.ts`) and stamps
 it on the conversation and the copilot thread; `whatsapp_conversations.org_id`
 scopes every inbox route; sends go out from the org's own number. Still
-deferred: the commit authority flip below, and email intake's org resolution.
+deferred then: the commit authority flip (shipped 2026-10-12, above), and email
+intake's org resolution (email threads carry org_id since 20261204).
 
-### What's broken (today, only in a multi-org world)
+### What was broken (fixed 2026-10-12 — kept for the record)
 
 `org_id` on every committed itinerary is currently stamped from
 `getCurrentOrgId()` — the operator's session — at the moment they click "Create
@@ -38,7 +60,7 @@ actually came from. There is no automatic correction path post-stamp.
 `communication_threads.org_id` already exists (Phase 2 intake-stamping shipped),
 but commit does not yet read it.
 
-### What ships when the gate trips
+### What shipped (the agreed fix shape; item 1 partly open)
 
 Agreed fix shape (from prior design conversation, recorded here so it can't drift):
 
@@ -58,7 +80,7 @@ Agreed fix shape (from prior design conversation, recorded here so it can't drif
    "Create itinerary in `<org name>`" so the operator sees what's about to happen
    and has no surprise about which org's books the itinerary will land in.
 
-### Why this isn't built yet
+### Why it waited
 
 Phase 2 intentionally split the work: it shipped the **intake stamping** (cheap,
 no behavior change), so when the gate trips the data is already populated and
@@ -91,17 +113,25 @@ destructure-and-omit and the mapper comment.
 ### Verification checklist for when the gate trips
 
 - [ ] Per-org webhook secret resolver in `app/api/webhooks/concierge/route.ts`
-      and per-channel resolver in WhatsApp intake
-- [ ] Backfill any `communication_threads.org_id IS NULL` to the per-org resolved
-      value, then `ALTER TABLE ... ALTER COLUMN org_id SET NOT NULL`
-- [ ] `commit-brief-to-itinerary.ts` takes thread.org_id as authority, not the
-      param `orgId`; route passes session user to a `verifyMembership(orgId,
-      userId)` check
-- [ ] Commit route returns 403 with a clear message on cross-org access attempts
-- [ ] `CopilotReviewPanel` button label shows the resolved org name
-- [ ] End-to-end test: two orgs, brief lands in org A; operator B (member of
-      org B only) sees 403 on commit; operator A (member of org A) succeeds and
-      the itinerary lands in org A regardless of who else is logged in
+      — STILL OPEN. Concierge briefs still resolve their org without the
+      signature (one shared `CONCIERGE_WEBHOOK_SECRET`). Needed before a
+      second company receives Concierge leads: each org its own secret, the
+      matched secret names the org, and `lib/concierge-brief-intake.ts` /
+      `lib/concierge-brief-schema.ts` revisited together (see "Structural
+      protection" above). The per-channel WhatsApp resolver is done
+      (`lib/whatsapp-org.ts`, 20261125).
+- [x] Backfill any `communication_threads.org_id IS NULL` to the per-org resolved
+      value, then `ALTER TABLE ... ALTER COLUMN org_id SET NOT NULL` (20261204)
+- [x] `commit-brief-to-itinerary.ts` takes thread.org_id as authority, not the
+      param `orgId`; route checks the session user is a member of the
+      thread's org (`isOrgMember`)
+- [x] Commit route refuses cross-org access attempts — with 404 "Thread not
+      found" (kept from the hotfix; see Shipped above), not 403
+- [x] `CopilotReviewPanel` button label shows the resolved org name
+- [x] Two-org test (`__tests__/api/commit-itinerary-thread-authority.test.ts`):
+      brief lands in org A; an operator of org B only is refused; an
+      operator of org A — or one in both orgs with B active — succeeds and the
+      itinerary lands in org A
 
 ### Bundled into this gate: suppliers.org_id (Phase 3 step 2 finding)
 

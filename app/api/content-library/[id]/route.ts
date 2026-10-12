@@ -6,30 +6,11 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
+import { categoryInOrg, contentSession, destinationInOrg, withoutOwnedColumns } from '@/lib/content-library/session'
 
-// Helper to create Supabase client
-async function createClient() {
-  const cookieStore = await cookies()
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options)
-          })
-        },
-      },
-    }
-  )
-}
+// One content item — the caller's ACTIVE company's, else 404
+// (lib/content-library/session.ts).
 
 // GET - Fetch single content item with all details
 export async function GET(
@@ -37,7 +18,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId } = session
     const { id } = await params
 
     const { data, error } = await supabase
@@ -50,12 +33,13 @@ export async function GET(
         updated_by_user:user_profiles!content_library_updated_by_fkey(id, full_name, email)
       `)
       .eq('id', id)
-      .single()
+      .eq('org_id', orgId)
+      .maybeSingle()
 
+    if (!error && !data) {
+      return NextResponse.json({ error: 'Content not found' }, { status: 404 })
+    }
     if (error) {
-      if (error.code === 'PGRST116') {
-        return NextResponse.json({ error: 'Content not found' }, { status: 404 })
-      }
       console.error('Error fetching content:', error)
       return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
@@ -85,14 +69,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId, userId } = session
     const { id } = await params
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     const body = await request.json()
     const {
@@ -108,6 +88,13 @@ export async function PUT(
       variations
     } = body
 
+    if (category_id && !(await categoryInOrg(supabase, orgId, category_id))) {
+      return NextResponse.json({ error: 'Category not found' }, { status: 404 })
+    }
+    if (body.destination_id && !(await destinationInOrg(supabase, orgId, body.destination_id))) {
+      return NextResponse.json({ error: 'Destination not found' }, { status: 404 })
+    }
+
     // Update content item
     const { data: content, error: contentError } = await supabase
       .from('content_library')
@@ -121,12 +108,17 @@ export async function PUT(
         tags: tags || [],
         metadata: metadata || {},
         is_active: is_active ?? true,
-        updated_by: user.id
+        ...(body.destination_id !== undefined ? { destination_id: body.destination_id || null } : {}),
+        updated_by: userId
       })
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
-      .single()
+      .maybeSingle()
 
+    if (!contentError && !content) {
+      return NextResponse.json({ error: 'Content not found' }, { status: 404 })
+    }
     if (contentError) {
       console.error('Error updating content:', contentError)
       return NextResponse.json({ error: clientMessage(contentError, 'Internal server error') }, { status: 500 })
@@ -158,9 +150,10 @@ export async function PUT(
               inclusions: variation.inclusions || [],
               internal_notes: variation.internal_notes || null,
               is_active: variation.is_active ?? true,
-              updated_by: user.id
+              updated_by: userId
             })
             .eq('id', existingId)
+            .eq('content_id', id)
         } else {
           // Insert new
           await supabase
@@ -173,8 +166,8 @@ export async function PUT(
               highlights: variation.highlights || [],
               inclusions: variation.inclusions || [],
               internal_notes: variation.internal_notes || null,
-              created_by: user.id,
-              updated_by: user.id
+              created_by: userId,
+              updated_by: userId
             })
         }
       }
@@ -189,6 +182,7 @@ export async function PUT(
         variations:content_variations(*)
       `)
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (fetchError) {
@@ -211,36 +205,38 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId, userId } = session
     const { id } = await params
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // Fields that shouldn't be directly updated — the company above all.
+    const body = withoutOwnedColumns(await request.json())
+    if (body.category_id && !(await categoryInOrg(supabase, orgId, body.category_id))) {
+      return NextResponse.json({ error: 'Category not found' }, { status: 404 })
+    }
+    if (body.destination_id && !(await destinationInOrg(supabase, orgId, body.destination_id))) {
+      return NextResponse.json({ error: 'Destination not found' }, { status: 404 })
     }
 
-    const body = await request.json()
-    
-    // Remove any fields that shouldn't be directly updated
-    delete body.id
-    delete body.created_at
-    delete body.created_by
-    
     // Add updated_by
-    body.updated_by = user.id
+    body.updated_by = userId
 
     const { data, error } = await supabase
       .from('content_library')
       .update(body)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select(`
         *,
         category:content_categories(*),
         variations:content_variations(*)
       `)
-      .single()
+      .maybeSingle()
 
+    if (!error && !data) {
+      return NextResponse.json({ error: 'Content not found' }, { status: 404 })
+    }
     if (error) {
       console.error('Error updating content:', error)
       return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -262,20 +258,17 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createClient()
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId } = session
     const { id } = await params
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     // Variations are deleted via CASCADE
     const { error } = await supabase
       .from('content_library')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
 
     if (error) {
       console.error('Error deleting content:', error)

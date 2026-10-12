@@ -267,3 +267,41 @@ describe('generate-itinerary route — a day trip is one vehicle', () => {
     expect(names).toEqual(['Sedan Sightseeing Transportation (Alexandria)'])
   })
 })
+
+describe('generate-itinerary route — the company’s own content library and writing rules', () => {
+  // content_library / writing_rules carry org_id since 20261208; the route
+  // runs on the service role, so only its own filter keeps the other
+  // company's content and style rules out of this company's prompt.
+  const variation = (org: string, id: string, text: string) => ({
+    id: `v-${id}`, content_id: id, tier: 'standard', is_active: true, title: 'Pyramids of Giza', description: text,
+    highlights: [], inclusions: [],
+    content_library: { id, org_id: org, name: 'Pyramids of Giza', tags: ['cairo'], location: 'Cairo', is_cruise: false,
+      content_categories: { name: 'Sites', slug: 'sites' } },
+  })
+
+  it('reads only its company’s content and rules, prints rules as "name: description", logs usage in its company', async () => {
+    seed({
+      writing_rules: [
+        { id: 'wr-own', org_id: 'org-test-1', name: 'Warm tone', description: 'Write warmly', rule_type: 'enforce', is_active: true, priority: 5 },
+        { id: 'wr-own-avoid', org_id: 'org-test-1', name: 'No cliches', description: 'Never say breathtaking', rule_type: 'avoid', is_active: true, priority: 4 },
+        { id: 'wr-other', org_id: 'org-other', name: 'Other house style', description: 'Their rule', rule_type: 'enforce', is_active: true, priority: 9 },
+      ],
+      content_variations: [variation('org-test-1', 'c-own', 'Our Giza text'), variation('org-other', 'c-other', 'Their Giza text')],
+      content_usage_log: [],
+    })
+    const res = await POST(makeRequest({ ...VALID_BODY, tier: 'standard' }))
+    expect((await res.json()).success).toBe(true)
+    const args = mockedCreative.mock.calls[0][0] as any
+    expect(args.writingContext).toContain('- Warm tone: Write warmly')
+    expect(args.writingContext).toContain('- No cliches: Never say breathtaking')
+    expect(args.writingContext).not.toContain('Their rule')
+    expect(args.writingContext).not.toContain('undefined')
+    expect(args.contentContext).toContain('Our Giza text')
+    expect(args.contentContext).not.toContain('Their Giza text')
+
+    const db = (await import('../_mock-supabase')).createMockClient()
+    const { data: logs } = await db.from('content_usage_log').select()
+    expect(logs!.length).toBeGreaterThan(0)
+    expect(logs!.every((l: any) => l.org_id === 'org-test-1' && l.content_id === 'c-own')).toBe(true)
+  })
+})
