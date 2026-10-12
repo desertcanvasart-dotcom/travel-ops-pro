@@ -79,10 +79,13 @@ export async function processTourUpOrder(
 ): Promise<ProcessOrderResult> {
   const { orgId, userId, order, dryRun } = opts
 
-  // The programme: the website page it was ordered from, else the code.
+  // The programme: the website page it was ordered from, else the code —
+  // among the intake's company's programmes only (tour_templates.org_id,
+  // 20261207; both companies may hold the same code).
   const { data: templates } = await supabase
     .from('tour_templates')
     .select('id, template_code, template_name, duration_days, tour_type, website_url')
+    .eq('org_id', orgId)
     .eq('is_active', true)
   type Tpl = { id: string; template_code: string; template_name: string; duration_days: number; tour_type: string | null; website_url?: string | null }
   const { template: matched, matchedBy } = matchProgramme(order, (templates ?? []) as Tpl[])
@@ -185,10 +188,11 @@ export async function processTourUpOrder(
   let variationId: string | null = null
   {
     const { data: existing } = await supabase
-      .from('tour_variations').select('id').eq('template_id', template.id).eq('tier', 'standard').limit(1).maybeSingle()
+      .from('tour_variations').select('id').eq('org_id', orgId).eq('template_id', template.id).eq('tier', 'standard').limit(1).maybeSingle()
     variationId = existing?.id ?? null
     if (!variationId) {
       const { data: made, error } = await supabase.from('tour_variations').insert({
+        org_id: orgId,
         template_id: template.id,
         variation_code: `${template.template_code}-STANDARD`.toUpperCase().slice(0, 60),
         variation_name: `${template.template_name} - Standard`,

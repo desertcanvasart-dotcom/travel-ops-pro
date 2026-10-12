@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { tourInOrg, foreignRateIds } from '@/lib/tours/org-scope'
+
+/** The day when its tour is the caller's company's, else null (a day has no
+ *  org_id of its own — 20261207 scopes it through tours). */
+async function dayInOrg(supabase: ReturnType<typeof createServerClient>, orgId: string, id: string) {
+  const { data } = await supabase.from('tour_days').select('id, tour_id, day_number').eq('id', id).maybeSingle()
+  const day = data as { id: string; tour_id: string; day_number: number } | null
+  if (!day || !(await tourInOrg(supabase, orgId, day.tour_id))) return null
+  return day
+}
 
 // ============================================
 // TOUR DAYS - SINGLE OPERATIONS
@@ -12,8 +23,13 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { id } = await params
+    if (!(await dayInOrg(supabase, orgId, id))) {
+      return NextResponse.json({ success: false, error: 'Day not found' }, { status: 404 })
+    }
 
     const { data, error } = await supabase
       .from('tour_days')
@@ -60,8 +76,13 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { id } = await params
+    if (!(await dayInOrg(supabase, orgId, id))) {
+      return NextResponse.json({ success: false, error: 'Day not found' }, { status: 404 })
+    }
     const body = await request.json()
 
     const updateData: any = {}
@@ -75,6 +96,11 @@ export async function PUT(
     if (body.guide_required !== undefined) updateData.guide_required = body.guide_required
     if (body.guide_id !== undefined) updateData.guide_id = body.guide_id
     if (body.notes !== undefined) updateData.notes = body.notes
+
+    const foreign = await foreignRateIds(supabase, orgId, [updateData.accommodation_id, updateData.lunch_meal_id, updateData.dinner_meal_id, updateData.guide_id])
+    if (foreign.length) {
+      return NextResponse.json({ success: false, error: "A rate on this day is not this company's", rate_ids: foreign }, { status: 400 })
+    }
 
     const { data, error } = await supabase
       .from('tour_days')
@@ -112,8 +138,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { id } = await params
+    if (!(await dayInOrg(supabase, orgId, id))) {
+      return NextResponse.json({ success: false, error: 'Day not found' }, { status: 404 })
+    }
 
     // Activities are keyed by (template_id, day_number), not by the day row's
     // id — `.eq('tour_day_id', id)` filtered on a column that does not exist

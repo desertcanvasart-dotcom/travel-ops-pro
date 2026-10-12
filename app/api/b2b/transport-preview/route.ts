@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     // Same package reading the engine does from the template's tour_type.
     let packageType: string | undefined
     if (typeof body?.template_id === 'string' && body.template_id) {
-      const { data } = await db.from('tour_templates').select('tour_type').eq('id', body.template_id).maybeSingle()
+      const { data } = await db.from('tour_templates').select('tour_type').eq('id', body.template_id).eq('org_id', orgId).maybeSingle()
       if (SINGLE_DAY_TOUR_TYPES.includes(String(data?.tour_type ?? ''))) packageType = 'day-trips'
     }
 

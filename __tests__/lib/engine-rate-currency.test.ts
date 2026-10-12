@@ -3,7 +3,7 @@
 // currency (organizations.rate_currency) and defaults to EUR so no existing
 // org changes — the same numbers, a different label.
 import { vi, describe, it, expect, beforeAll, beforeEach } from 'vitest'
-import { setMockTables } from '../_mock-supabase'
+import { setMockTables, MOCK_ORG } from '../_mock-supabase'
 import { TEMPLATE_ID, fullRateTables } from '../fixtures/sample-templates'
 
 vi.mock('@supabase/supabase-js', async () => {
@@ -18,7 +18,7 @@ import {
   composeAgeBasedPricing,
 } from '@/lib/auto-pricing-service'
 
-const BASE = { templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 25, numPax: 2 }
+const BASE = { orgId: MOCK_ORG, templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 25, numPax: 2 }
 
 beforeAll(() => {
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://localhost')

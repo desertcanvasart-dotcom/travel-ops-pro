@@ -4,6 +4,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { foreignRateIds } from '@/lib/tours/org-scope'
 
 // Service-role client (route is session-gated by middleware). Previously used
 // the raw anon key inline — its WRITES to tours/tour_days/tour_pricing only
@@ -12,12 +14,28 @@ const supabase = createServerClient()
 
 export async function POST(request: NextRequest) {
   try {
+    // A tour is one company's (20261207): stamped with the caller's, and its
+    // days may only name that company's hotels, meals and guides.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { tour, pax, is_euro_passport, pricing } = await request.json()
+
+    const days: any[] = Array.isArray(tour?.days) ? tour.days : []
+    const foreign = await foreignRateIds(supabase, orgId, days.flatMap((day: any) => [
+      day.accommodation?.id, day.lunch_meal?.id, day.dinner_meal?.id, day.guide?.id,
+    ]))
+    if (foreign.length) {
+      return NextResponse.json(
+        { success: false, error: "A rate on this tour is not this company's", rate_ids: foreign },
+        { status: 400 }
+      )
+    }
 
     // 1. Save main tour
     const { data: tourData, error: tourError } = await supabase
       .from('tours')
       .insert({
+        org_id: orgId,
         tour_code: tour.tour_code,
         tour_name: tour.tour_name,
         duration_days: tour.duration_days,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Papa from 'papaparse'
 import { parseTemplatesCsv, splitVirtualFields } from '@/lib/tours/template-csv'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,9 +19,16 @@ const supabaseAdmin = createClient(
  * summary sheet updates names/type/duration/cities/flags and never wipes the
  * day-by-day work. New codes are created as metadata shells (their itinerary is
  * built in the editor afterward).
+ *
+ * Keyed on (org_id, template_code): codes are unique per company (20261207),
+ * and both companies may hold the same one. A row matches ONLY the caller's
+ * company's template — another company's programme with that code is never
+ * updated; a new one is created in the caller's company.
  */
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
     const { csvData, dryRun = false } = body
     if (!csvData || typeof csvData !== 'string') {
@@ -45,6 +53,7 @@ export async function POST(request: NextRequest) {
     const { data: existing } = await supabaseAdmin
       .from('tour_templates')
       .select('template_code')
+      .eq('org_id', orgId)
       .in('template_code', codes)
     const existingCodes = new Set((existing || []).map((r: any) => r.template_code))
 
@@ -77,7 +86,8 @@ export async function POST(request: NextRequest) {
       if (existingCodes.has(rec.template_code)) {
         const { data, error } = await supabaseAdmin
           .from('tour_templates')
-          .update(row as never)
+          .update({ ...row, org_id: orgId } as never)
+          .eq('org_id', orgId)
           .eq('template_code', rec.template_code)
           .select('id')
           .maybeSingle()
@@ -86,7 +96,7 @@ export async function POST(request: NextRequest) {
       } else {
         const { data, error } = await supabaseAdmin
           .from('tour_templates')
-          .insert(row as never)
+          .insert({ ...row, org_id: orgId } as never)
           .select('id')
           .maybeSingle()
         if (error) errors.push({ code: rec.template_code, message: error.message })

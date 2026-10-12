@@ -41,7 +41,7 @@ const NOT_ON_THE_SHEET: Record<string, string> = {
   created_at: 'audit timestamp, set by the database',
   updated_at: 'audit timestamp, set by the database',
 
-  category_id: 'install-local UUID link, superseded by theme_key (migration 20261011)',
+  org_id: 'the company the template belongs to — the importer stamps the caller\'s, a sheet never names one (migration 20261207)',
   primary_destination_id: 'install-local UUID link; no portable key exists for it yet',
   destinations_covered: 'install-local UUID list; cities_covered is the portable free-text equivalent',
 

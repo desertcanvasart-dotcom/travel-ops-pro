@@ -1123,9 +1123,9 @@ export default function TourManagerContent() {
   // ranges when the vocabulary is empty.
   const tourTypeRanges = tourTypeOptions.map(o => ({ key: o.value, meta: o.meta }))
   // Themes were the one picker 20261010 left out, on the mistaken reasoning
-  // that a table meant they were already customizable. /api/tours/categories
-  // has a POST that nothing calls and there was no screen to add, rename or
-  // remove a theme — see migration 20261011.
+  // that a table meant they were already customizable. There was no screen
+  // to add, rename or remove a theme — see migration 20261011. The table and
+  // its /api/tours/categories route are gone (20261207).
   const themeOptions = useVocabOptions('tour_theme', [])
   const physicalLevelOptions = useVocabOptions('physical_level', PHYSICAL_LEVELS)
   // "Best for" is label-valued — see the note on BEST_FOR_OPTIONS.

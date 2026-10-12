@@ -6,6 +6,7 @@ import { buildFrozenFx, parseFrozenFx } from '@/lib/itinerary-fx'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { paymentRuleFrom } from '@/lib/payment-schedule'
 import { buildBookingRow, populateSuppliersFromItinerary } from '@/lib/booking-creation'
+import { templateInOrg } from '@/lib/tours/org-scope'
 
 // Server-side admin client — bypasses RLS for reliable reads/writes
 const supabase = createAdminClient(
@@ -118,7 +119,13 @@ export async function PUT(
     if (body.trip_name !== undefined) updateData.trip_name = body.trip_name
     // The programme this trip follows, so its 日程表 can be generated from the
     // record. Null clears the link.
-    if (body.template_id !== undefined) updateData.template_id = body.template_id || null
+    // The company's own programme only (tour_templates.org_id, 20261207).
+    if (body.template_id !== undefined) {
+      if (body.template_id && !(await templateInOrg(supabase, orgId, body.template_id))) {
+        return NextResponse.json({ error: 'Programme not found' }, { status: 404 })
+      }
+      updateData.template_id = body.template_id || null
+    }
     if (body.start_date !== undefined) updateData.start_date = body.start_date
     if (body.end_date !== undefined) updateData.end_date = body.end_date
     if (body.num_adults !== undefined) updateData.num_adults = body.num_adults

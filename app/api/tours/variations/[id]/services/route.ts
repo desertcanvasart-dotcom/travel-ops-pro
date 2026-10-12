@@ -2,9 +2,10 @@ import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
 import { vehicleBands } from '@/lib/rates/vehicle-bands'
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
+import { variationInOrg, foreignRateIds } from '@/lib/tours/org-scope'
 
 // ============================================
 // TOUR VARIATION SERVICES API - CRUD + BULK
@@ -18,13 +19,22 @@ import { currencySymbol } from '@/lib/currency-totals'
 // 不明なユーザー" to the whole team (audit AUT-H04).
 const supabaseAdmin = createServerClient()
 
+/** 400 when a service names another company's rate (rates are per company
+ *  since 20261206; a variation's lines must price with its own company's). */
+async function refuseForeignRates(orgId: string, rateIds: Array<string | null | undefined>) {
+  const foreign = await foreignRateIds(supabaseAdmin, orgId, rateIds)
+  return foreign.length
+    ? NextResponse.json({ error: 'A service names a rate that is not this company\'s', rate_ids: foreign }, { status: 400 })
+    : null
+}
+
 // Matches no organisation: an org-less read finds no rate.
 const NO_ORG = '00000000-0000-0000-0000-000000000000'
 
 async function getRateDetails(rateType: string, rateId: string) {
   // The rate is read from THIS company's rates only: a service naming another
-  // company's rate shows no details (tours themselves get their company in a
-  // later migration).
+  // company's rate shows no details (20261207 pointed every variation's lines
+  // at its own company's rates; the ones it could not are on the review list).
   const orgId = await getCurrentOrgId()
   // Rate amounts in the details text carry the org's rate-currency symbol, never a hard-coded euro.
   const rateSym = currencySymbol(await getOrgRateCurrency(supabaseAdmin, orgId))
@@ -160,6 +170,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await variationInOrg(supabaseAdmin, orgId, id))) {
+      return NextResponse.json({ error: 'Variation not found' }, { status: 404 })
+    }
 
     const { data, error } = await supabaseAdmin
       .from('tour_variation_services')
@@ -191,7 +206,14 @@ export async function POST(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await variationInOrg(supabaseAdmin, orgId, id))) {
+      return NextResponse.json({ error: 'Variation not found' }, { status: 404 })
+    }
     const body = await request.json()
+    const refusedPost = await refuseForeignRates(orgId, [body.rate_id])
+    if (refusedPost) return refusedPost
 
     const { data: maxSeq } = await supabaseAdmin
       .from('tour_variation_services')
@@ -239,12 +261,19 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await variationInOrg(supabaseAdmin, orgId, id))) {
+      return NextResponse.json({ error: 'Variation not found' }, { status: 404 })
+    }
     const body = await request.json()
     const { services, mode } = body
 
     if (!Array.isArray(services)) {
       return NextResponse.json({ error: 'services array is required' }, { status: 400 })
     }
+    const refusedPut = await refuseForeignRates(orgId, services.map((sv: { rate_id?: string | null }) => sv?.rate_id))
+    if (refusedPut) return refusedPut
 
     // Mode: 'replace' = delete all and re-insert (default for ServiceLinkerModal)
     // Mode: 'update' = update existing by ID
@@ -394,6 +423,11 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await variationInOrg(supabaseAdmin, orgId, id))) {
+      return NextResponse.json({ error: 'Variation not found' }, { status: 404 })
+    }
     const body = await request.json().catch(() => ({}))
     const serviceId = typeof body?.serviceId === 'string' ? body.serviceId : null
     if (!serviceId) {
@@ -450,6 +484,11 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await variationInOrg(supabaseAdmin, orgId, id))) {
+      return NextResponse.json({ error: 'Variation not found' }, { status: 404 })
+    }
     const { searchParams } = new URL(request.url)
     const serviceId = searchParams.get('serviceId')
 

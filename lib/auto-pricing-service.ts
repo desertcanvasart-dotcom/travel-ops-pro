@@ -2712,14 +2712,13 @@ export async function calculateDayBasedPricing(
       template_code,
       duration_days,
       tour_type,
-      category_id,
-      itinerary,
-      tour_categories (
-        id,
-        category_name
-      )
+      itinerary
     `)
     .eq('id', templateId)
+    // The pricing company's template only (tour_templates.org_id, 20261207):
+    // another company's programme is "not found", never priced with this
+    // company's rates. No company, nothing.
+    .eq('org_id', orgId ?? NO_ORG)
     .single()
 
   if (templateError || !template) {

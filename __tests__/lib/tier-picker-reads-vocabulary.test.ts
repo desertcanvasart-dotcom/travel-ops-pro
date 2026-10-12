@@ -57,7 +57,9 @@ describe('tier routes read the org ladder', () => {
   for (const rel of TIER_ROUTES) {
     it(`${rel} validates or iterates tiers from tierLadderForCurrentOrg, not a frozen list`, () => {
       const src = read(rel)
-      expect(src.includes('tierLadderForCurrentOrg('), `${rel} must read the org ladder`).toBe(true)
+      // tierLadderForOrg( for a route that runs one company at a time without a
+      // session (recalculate-prices: the scheduler loops every company).
+      expect(src.includes('tierLadderForCurrentOrg(') || src.includes('tierLadderForOrg('), `${rel} must read the org ladder`).toBe(true)
       expect(
         /\[\s*'budget',\s*'standard',\s*'deluxe',\s*'luxury'\s*\]/.test(src),
         `${rel} carries a four-entry tier list — an agency-added tier is refused or skipped`

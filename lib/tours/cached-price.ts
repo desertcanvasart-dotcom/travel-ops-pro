@@ -16,6 +16,7 @@ import { guideLanguageKey } from '@/lib/guides/guide-language'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { activeKeysForOrg } from '@/lib/vocabulary-server'
+import { NO_ORG } from '@/lib/tours/org-scope'
 
 // ============================================
 // What the "from" price is priced AS
@@ -161,6 +162,10 @@ export async function refreshTemplateCachedPrice(
   let price: number | null = null
   let tier: string | null = null
   let noPrice: NoPriceReason | undefined
+  // The template's company (ctx.pricingOptions.orgId — loadCachedPriceSettings
+  // for that company): its rates price it, and only its rows are read or
+  // written. No company, nothing matches.
+  const orgId = ctx.pricingOptions.orgId ?? NO_ORG
 
   // Only templates that use auto-pricing are priced by the engine.
   if (template.uses_day_builder || template.pricing_mode === 'auto') {
@@ -171,24 +176,30 @@ export async function refreshTemplateCachedPrice(
     noPrice = { tier: null, missing: [], failed: [`Pricing mode is "${template.pricing_mode ?? 'manual'}", not auto`] }
   }
 
-  // Fallback: the variation_pricing table.
+  // Fallback: the variation_pricing table — this company's variations of
+  // this template only.
   if (price === null) {
     const { data: variations } = await db
       .from('tour_variations')
       .select('id')
       .eq('template_id', template.id)
+      .eq('org_id', orgId)
       .eq('is_active', true)
 
     if (variations && variations.length > 0) {
+      // price_per_person: there is no selling_price_per_person column — the
+      // query named one, PostgREST refused it, and this fallback never found
+      // a price.
       const { data: pricing } = await db
         .from('variation_pricing')
-        .select('selling_price_per_person, tour_variations!inner(tier)')
+        .select('price_per_person, tour_variations!inner(tier)')
         .in('variation_id', variations.map(v => v.id))
-        .order('selling_price_per_person', { ascending: true })
+        .not('price_per_person', 'is', null)
+        .order('price_per_person', { ascending: true })
         .limit(1)
 
       if (pricing && pricing.length > 0) {
-        price = Math.round(pricing[0].selling_price_per_person)
+        price = Math.round(Number(pricing[0].price_per_person))
         const joined = (pricing[0] as { tour_variations?: { tier?: string } | null }).tour_variations
         tier = joined?.tier || 'standard'
       }
@@ -203,6 +214,7 @@ export async function refreshTemplateCachedPrice(
       cached_price_updated_at: new Date().toISOString(),
     })
     .eq('id', template.id)
+    .eq('org_id', orgId)
   if (error) throw error
 
   // An authored variation price stands in — then there is nothing to report.

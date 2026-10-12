@@ -7,6 +7,20 @@ import { setMockTables, createMockClient } from '../_mock-supabase'
 // tours with an empty itinerary (NMS803, 2026-09-05). A variation with day
 // rows of its own still wins.
 
+// Tours belong to one company (20261207): the routes read the caller's.
+// The fixture rows name none, so they are MOCK_ORG's (setMockTables).
+vi.mock('@/lib/auth/current-org', async () => {
+  const { NextResponse } = await import('next/server')
+  const { MOCK_ORG } = await import('../_mock-supabase')
+  return {
+    getCurrentOrgId: async () => MOCK_ORG,
+    getCurrentUserId: async () => 'u1',
+    getCurrentUserRole: async () => 'manager',
+    requireRole: async () => null,
+    noOrgResponse: () => NextResponse.json({ success: false }, { status: 403 }),
+  }
+})
+
 vi.mock('@/lib/supabase-server', () => ({ createServerClient: () => createMockClient() }))
 
 import { GET } from '@/app/api/tours/[code]/route'

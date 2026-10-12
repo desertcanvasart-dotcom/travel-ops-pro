@@ -8,6 +8,20 @@ import { setMockTables, type MockTables } from '../_mock-supabase'
 // backstop: a create matching one just made returns the existing row, and the
 // variations batch skips (template_id, tier) pairs that already exist.
 
+// Tours belong to one company (20261207): the routes read the caller's.
+// The fixture rows name none, so they are MOCK_ORG's (setMockTables).
+vi.mock('@/lib/auth/current-org', async () => {
+  const { NextResponse } = await import('next/server')
+  const { MOCK_ORG } = await import('../_mock-supabase')
+  return {
+    getCurrentOrgId: async () => MOCK_ORG,
+    getCurrentUserId: async () => 'u1',
+    getCurrentUserRole: async () => 'manager',
+    requireRole: async () => null,
+    noOrgResponse: () => NextResponse.json({ success: false }, { status: 403 }),
+  }
+})
+
 vi.mock('@supabase/supabase-js', async () => {
   const mock = await import('../_mock-supabase')
   return { createClient: mock.createMockClient }
@@ -60,6 +74,8 @@ describe('tour template create idempotency', () => {
 describe('tour variations create idempotency', () => {
   it('skips a (template_id, tier) pair that already exists', async () => {
     setMockTables({
+      // The template must be the caller's company's (20261207).
+      tour_templates: [{ id: 'tmpl-1' }],
       tour_variations: [{ id: 'var-1', template_id: 'tmpl-1', tier: 'standard', variation_name: 'X - Standard' }],
     } as unknown as MockTables)
     const res = await createVariations(req([{ template_id: 'tmpl-1', tier: 'standard', variation_name: 'X - Standard' }]) as never)
@@ -70,6 +86,7 @@ describe('tour variations create idempotency', () => {
 
   it('inserts a genuinely new tier for the same template', async () => {
     setMockTables({
+      tour_templates: [{ id: 'tmpl-1' }],
       tour_variations: [{ id: 'var-1', template_id: 'tmpl-1', tier: 'standard' }],
     } as unknown as MockTables)
     const res = await createVariations(req([{ template_id: 'tmpl-1', tier: 'luxury', variation_name: 'X - Luxury' }]) as never)

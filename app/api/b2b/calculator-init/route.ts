@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // ============================================
 // B2B: Calculator Init — Fetch template itinerary for editor
@@ -16,6 +17,8 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { searchParams } = new URL(request.url)
     const variationId = searchParams.get('variation_id')
 
@@ -46,6 +49,8 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('id', variationId)
+      // The caller's company's variation only (20261207).
+      .eq('org_id', orgId)
       .single()
 
     if (varError || !variation) {

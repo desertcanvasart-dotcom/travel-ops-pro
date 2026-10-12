@@ -9,11 +9,42 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { templateInOrg } from '@/lib/tours/org-scope'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+// ============================================
+// Content library items are one company's too (content_library.org_id,
+// migration 20261208). This route runs on the service role, so RLS filters
+// nothing: an activity may only LINK the template's company's content, and an
+// embedded content item of another company is never returned (an activity
+// that points at one shows no content — it keeps its own name and city).
+// ============================================
+
+/** The content ids among `ids` that are NOT this company's (or do not exist). */
+async function foreignContentIds(orgId: string, ids: Array<string | null | undefined>): Promise<string[]> {
+  const wanted = [...new Set(ids.filter((x): x is string => typeof x === 'string' && x.length > 0))]
+  if (wanted.length === 0) return []
+  const { data } = await supabaseAdmin.from('content_library').select('id').in('id', wanted).eq('org_id', orgId)
+  const own = new Set(((data ?? []) as Array<{ id: string }>).map(r => r.id))
+  return wanted.filter(id => !own.has(id))
+}
+
+function contentNotFound(ids: string[]) {
+  return NextResponse.json({ success: false, error: 'Content item not found', content_ids: ids }, { status: 404 })
+}
+
+/** Drop an embedded content item that is not this company's. */
+function ownContent<T extends Record<string, any> | null>(row: T, orgId: string): T {
+  if (!row) return row
+  const c = (row as Record<string, any>).content_library
+  if (c && c.org_id !== orgId) return { ...row, content_library: null }
+  return row
+}
 
 // ============================================
 // GET - List all days/activities for a template
@@ -25,11 +56,17 @@ export async function GET(
 ) {
   try {
     const { id: templateId } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await templateInOrg(supabaseAdmin, orgId, templateId))) {
+      return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 })
+    }
 
     // Fetch template info
     const { data: template, error: templateError } = await supabaseAdmin
       .from('tour_templates')
       .select('id, template_name, template_code, duration_days')
+      .eq('org_id', orgId)
       .eq('id', templateId)
       .single()
 
@@ -61,6 +98,7 @@ export async function GET(
         created_at,
         content_library (
           id,
+          org_id,
           name,
           slug,
           short_description,
@@ -93,7 +131,8 @@ export async function GET(
       dayMap.set(d, [])
     }
 
-    for (const activity of activities || []) {
+    for (const raw of activities || []) {
+      const activity = ownContent(raw as Record<string, any>, orgId)
       const dayNum = activity.day_number
       if (!dayMap.has(dayNum)) {
         dayMap.set(dayNum, [])
@@ -137,6 +176,11 @@ export async function POST(
 ) {
   try {
     const { id: templateId } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await templateInOrg(supabaseAdmin, orgId, templateId))) {
+      return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 })
+    }
     const body = await request.json()
 
     const {
@@ -158,6 +202,8 @@ export async function POST(
 
     // Batch insert mode
     if (activities && Array.isArray(activities)) {
+      const foreignBatch = await foreignContentIds(orgId, activities.map((a: { content_id?: string | null }) => a?.content_id))
+      if (foreignBatch.length) return contentNotFound(foreignBatch)
       const activitiesToInsert = activities.map((act, index) => ({
         template_id: templateId,
         day_number: act.day_number,
@@ -192,6 +238,7 @@ export async function POST(
       await supabaseAdmin
         .from('tour_templates')
         .update({ uses_day_builder: true })
+        .eq('org_id', orgId)
         .eq('id', templateId)
 
       return NextResponse.json({
@@ -227,7 +274,9 @@ export async function POST(
         .from('content_library')
         .select('name, location, duration')
         .eq('id', content_id)
-        .single()
+        .eq('org_id', orgId)
+        .maybeSingle()
+      if (!data) return contentNotFound([content_id])
       contentData = data
     }
 
@@ -253,6 +302,7 @@ export async function POST(
         *,
         content_library (
           id,
+          org_id,
           name,
           short_description,
           location,
@@ -276,11 +326,12 @@ export async function POST(
     await supabaseAdmin
       .from('tour_templates')
       .update({ uses_day_builder: true })
+      .eq('org_id', orgId)
       .eq('id', templateId)
 
     return NextResponse.json({
       success: true,
-      data: activity
+      data: ownContent(activity, orgId)
     }, { status: 201 })
 
   } catch (error: any) {
@@ -302,6 +353,11 @@ export async function PATCH(
 ) {
   try {
     const { id: templateId } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await templateInOrg(supabaseAdmin, orgId, templateId))) {
+      return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 })
+    }
     const body = await request.json()
 
     const { activity_id, ...updates } = body
@@ -339,6 +395,10 @@ export async function PATCH(
     delete updates.id
     delete updates.template_id
     delete updates.created_at
+    if (updates.content_id) {
+      const foreignPatch = await foreignContentIds(orgId, [updates.content_id])
+      if (foreignPatch.length) return contentNotFound(foreignPatch)
+    }
 
     const { data: activity, error } = await supabaseAdmin
       .from('tour_day_activities')
@@ -349,6 +409,7 @@ export async function PATCH(
         *,
         content_library (
           id,
+          org_id,
           name,
           short_description,
           location
@@ -366,7 +427,7 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
-      data: activity
+      data: ownContent(activity, orgId)
     })
 
   } catch (error: any) {
@@ -388,6 +449,11 @@ export async function DELETE(
 ) {
   try {
     const { id: templateId } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await templateInOrg(supabaseAdmin, orgId, templateId))) {
+      return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 })
+    }
     const { searchParams } = new URL(request.url)
     
     const activityId = searchParams.get('activity_id')
@@ -412,6 +478,7 @@ export async function DELETE(
       await supabaseAdmin
         .from('tour_templates')
         .update({ uses_day_builder: false })
+        .eq('org_id', orgId)
         .eq('id', templateId)
 
       return NextResponse.json({
@@ -474,6 +541,7 @@ export async function DELETE(
       await supabaseAdmin
         .from('tour_templates')
         .update({ uses_day_builder: false })
+        .eq('org_id', orgId)
         .eq('id', templateId)
     }
 

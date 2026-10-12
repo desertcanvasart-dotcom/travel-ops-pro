@@ -99,6 +99,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .from('tour_variations')
       .select('id, variation_name, tier')
       .eq('template_id', templateId)
+      // The company's own variations (tour_variations.org_id, 20261207).
+      .eq('org_id', orgId)
 
     const variationIds = (variations ?? []).map(v => v.id)
     if (variationIds.length) {

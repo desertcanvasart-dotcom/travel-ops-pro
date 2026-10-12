@@ -103,7 +103,7 @@ describe('B2B quote revisions and bulk updates', () => {
     const r = src('app/api/b2b/quotes/[id]/revisions/revert/route.ts')
     expect(r).toContain('A converted or booked quote cannot be reverted')
     expect(r).toContain("live.status === 'converted' || live.converted_to_itinerary_id")
-    expect(r).toContain('quoteRefsInOrg(supabaseAdmin, orgId, { itinerary_id: snapshot.itinerary_id, partner_id: snapshot.partner_id })')
+    expect(r).toContain('quoteRefsInOrg(supabaseAdmin, orgId, { itinerary_id: snapshot.itinerary_id, partner_id: snapshot.partner_id, variation_id: snapshot.variation_id })')
   })
 
   it('revert restores the season premium; compare shows it', () => {
