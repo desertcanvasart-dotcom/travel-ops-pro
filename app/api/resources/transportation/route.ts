@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { resolveTripShapeWrite } from '@/lib/pricing/road-trips'
 import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Actor-attributed service-role client (lib/supabase-actor): rate-table
 // writes from here reach fn_rate_audit_trigger, and without the actor
@@ -16,6 +17,8 @@ const supabaseAdmin = createServerClient()
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const city = searchParams.get('city')
     const serviceType = searchParams.get('serviceType')
@@ -28,6 +31,7 @@ export async function GET(request: NextRequest) {
         *,
         supplier:supplier_id (id, name, city, contact_phone, contact_email)
       `)
+      .eq('org_id', orgId)
       .order('city', { ascending: true })
       .order('service_type', { ascending: true })
 
@@ -52,6 +56,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     if (!body.city || !body.service_type) {
@@ -101,7 +107,7 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
-      .insert([newRate])
+      .insert([{ ...newRate, org_id: orgId }])
       .select(`*, supplier:supplier_id (id, name, city)`)
       .single()
 

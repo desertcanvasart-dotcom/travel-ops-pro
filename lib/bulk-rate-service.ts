@@ -15,7 +15,7 @@ export interface RateTableConfig {
   tableName: string
   displayName: string
   columns: ColumnDef[]
-  uniqueKey: string[]       // columns used for upsert matching
+  uniqueKey: string[]       // columns used for upsert matching — within one company: ON CONFLICT (org_id, key)
   /** How this table's property_id travels through a CSV. Set on every rate
    *  table that HAS a property_id — see PropertyLink. */
   propertyLink?: PropertyLink

@@ -83,7 +83,7 @@ describe('writes and a size changed in Settings', () => {
     expect(w).toEqual({ ok: true, patch: { vehicles: [{ key: 'hiace', rate_eur: 100, rate_non_eur: null, capacity_min: 1, capacity_max: 5 }] } })
   })
 
-  it('re-stamps every transportation rate and the org\'s packages, writing only rows that change', async () => {
+  it('re-stamps the org\'s transportation rates and packages — never another company\'s — writing only rows that change', async () => {
     const { restampVehicleBands } = await import('@/lib/rates/vehicle-bands-server')
     const tables: Record<string, Array<{ id: string; vehicles: unknown }>> = {
       transportation_rates: [
@@ -95,18 +95,29 @@ describe('writes and a size changed in Settings', () => {
       ],
     }
     const updates: string[] = []
+    const reads: string[] = []
     const client = {
       from: (table: string) => {
         const q: any = {
           select: () => q,
-          eq: () => q,
+          eq: (c: string, v: string) => { reads.push(`${table}:${c}=${v}`); return q },
           then: (res: (v: unknown) => void) => res({ data: tables[table], error: null }),
-          update: (patch: unknown) => ({ eq: async (_c: string, id: string) => { updates.push(`${table}:${id}:${JSON.stringify(patch)}`); return { error: null } } }),
+          update: (patch: unknown) => ({
+            eq: (_c: string, id: string) => ({
+              eq: async (c: string, v: string) => {
+                updates.push(`${table}:${id}:${JSON.stringify(patch)}`)
+                expect(`${c}=${v}`).toBe('org_id=org')
+                return { error: null }
+              },
+            }),
+          }),
         }
         return q
       },
     }
     expect(await restampVehicleBands(client as any, 'org')).toBe(2)
+    // Both reads are this organisation's rows.
+    expect(reads).toEqual(expect.arrayContaining(['transportation_rates:org_id=org', 'b2b_transport_packages:org_id=org']))
     expect(updates.map(u => u.split(':').slice(0, 2).join(':'))).toEqual(['transportation_rates:t1', 'b2b_transport_packages:p1'])
     expect(updates[1]).toContain('"capacity_min":13')
   })

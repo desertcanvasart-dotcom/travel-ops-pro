@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 function getSupabase() {
   return createClient(
@@ -20,12 +21,15 @@ function getSupabase() {
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = getSupabase()
     const is_active = request.nextUrl.searchParams.get('is_active')
 
     let query = supabase
       .from('vehicles')
       .select('id, name, vehicle_type, passenger_capacity, city, license_plate, is_active')
+      .eq('org_id', orgId)
       .order('name', { ascending: true })
 
     if (is_active === 'true') {

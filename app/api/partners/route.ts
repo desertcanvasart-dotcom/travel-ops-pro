@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,6 +11,8 @@ const supabase = createClient(
 // GET /api/partners?type=hotel|guide|restaurant|airport_staff&search=xxx
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type') // hotel, guide, restaurant, airport_staff, or 'all'
     const search = searchParams.get('search')
@@ -30,6 +33,7 @@ export async function GET(request: NextRequest) {
           const { data: hotels } = await supabase
             .from('hotel_contacts')
             .select('id, name, property_type, city, contact_person, phone, email, whatsapp, address, star_rating')
+            .eq('org_id', orgId)
             .eq('is_active', true)
             .order('name', { ascending: true })
             .limit(limit)
@@ -81,6 +85,7 @@ export async function GET(request: NextRequest) {
           const { data: restaurants } = await supabase
             .from('restaurant_contacts')
             .select('id, name, restaurant_type, cuisine_type, city, contact_person, phone, email, whatsapp, address')
+            .eq('org_id', orgId)
             .eq('is_active', true)
             .order('name', { ascending: true })
             .limit(limit)

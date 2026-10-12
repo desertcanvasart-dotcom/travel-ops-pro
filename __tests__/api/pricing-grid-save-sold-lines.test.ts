@@ -43,16 +43,23 @@ function fakeDb() {
           return chain
         },
         select() {
-          return {
-            in: async (_col: string, ids: string[]) => ({
-              data: table === 'tipping_rates'
-                ? ids.filter(id => tipRoles[id]).map(id => ({ id, role_type: tipRoles[id] }))
-                : table === 'accommodation_rates'
-                  ? ids.filter(id => HOTEL_CITY[id]).map(id => ({ id, city: HOTEL_CITY[id] }))
-                  : [],
-              error: null,
-            }),
+          // Every rate here is the caller's (org-1): the foreign-rate check
+          // (.neq('org_id', …)) finds none; the org-filtered reads find them.
+          const rowsFor = (ids: string[]) => table === 'tipping_rates'
+            ? ids.filter(id => tipRoles[id]).map(id => ({ id, role_type: tipRoles[id] }))
+            : table === 'accommodation_rates'
+              ? ids.filter(id => HOTEL_CITY[id]).map(id => ({ id, city: HOTEL_CITY[id] }))
+              : []
+          const q: any = {
+            ids: [] as string[],
+            foreign: false,
+            eq: () => q,
+            in: (_col: string, ids: string[]) => { q.ids = ids; return q },
+            neq: () => { q.foreign = true; return q },
+            limit: () => q,
+            then: (r: any) => r({ data: q.foreign ? [] : rowsFor(q.ids), error: null }),
           }
+          return q
         },
       }
     },

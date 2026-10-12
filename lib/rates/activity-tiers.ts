@@ -73,12 +73,16 @@ export function pickTier(tiers: ActivityTier[], numPax: number): ActivityTier {
  *  safer fuzzy fallback. */
 export async function getTieredActivityRate(
   supabase: { from: (table: string) => any },
+  /** Whose activities: this company's (activity_rates.org_id). */
+  orgId: string | null | undefined,
   serviceName: string
 ): Promise<{ tiers: ActivityTier[]; activity_name: string } | null> {
+  if (!orgId) return null
   const base = () =>
     supabase
       .from('activity_rates')
       .select('activity_name, service_code, tiers')
+      .eq('org_id', orgId)
       .eq('is_active', true)
       .eq('pricing_type', 'tiered')
       .not('tiers', 'is', null)

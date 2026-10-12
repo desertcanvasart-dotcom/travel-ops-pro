@@ -30,6 +30,14 @@ const isAddOnItem = (item: { rateId?: string }) =>
   Boolean(item.rateId && (item.rateId.endsWith('_supp') || item.rateId.includes('#supp:')))
 const baseRateId = (rateId: string) => rateId.replace(/_supp$/, '').replace(/#supp:.*$/, '')
 
+// Every table a grid line can name a rate of (lib/pricing-grid rates route).
+const GRID_RATE_TABLES = [
+  'transportation_rates', 'guide_rates', 'airport_staff_rates', 'hotel_staff_rates', 'tipping_rates',
+  'activity_rates', 'accommodation_rates', 'entrance_fees', 'meal_rates', 'nile_cruises', 'flight_rates',
+  'b2b_transport_packages',
+] as const
+const UUID_PREFIX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
+
 // ============================================
 // POST /api/pricing-grid/save
 // Save pricing grid state → itineraries + itinerary_days + itinerary_services
@@ -100,9 +108,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Missing config or days' }, { status: 400 })
     }
 
+    const callerOrgId = await getCurrentOrgId()
+    if (!callerOrgId) {
+      return NextResponse.json({ success: false, error: 'No organization' }, { status: 403 })
+    }
+
+    // Every rate a line names must be THIS company's — checked before anything
+    // is written: a grid tab could pin another company's rate (its price, its
+    // supplier) into this company's trip. The id is the rate row's uuid, before
+    // any vehicle (`__van`) or supplement (`_supp`, `#supp:`) suffix. A rate
+    // that no longer exists is no one's and saves as before.
+    const pinnedIds = [...new Set((days as Array<{ slots?: Array<{ selectedItems?: Array<{ rateId?: unknown }> }> }>)
+      .flatMap(d => (d.slots || []).flatMap(sl => (sl.selectedItems || []).map(i => String(i.rateId ?? '').match(UUID_PREFIX)?.[0])))
+      .filter((x): x is string => !!x))]
+    if (pinnedIds.length) {
+      const foreign = await Promise.all(GRID_RATE_TABLES.map(tbl => supabase
+        .from(tbl)
+        .select('id')
+        .in('id', pinnedIds)
+        .neq('org_id', callerOrgId)
+        .limit(1)))
+      if (foreign.some(r => (r.data ?? []).length > 0)) {
+        return NextResponse.json(
+          { success: false, error: 'A selected rate belongs to another company. Reload the grid and choose again.' },
+          { status: 400 }
+        )
+      }
+    }
+
     // A tip from a grid tab opened before tips carried their role is given it
     // from its rate row, so the guide switch below decides by role (tip-roles.ts).
-    await fillTipRoles(supabase as unknown as TipRoleReader, days)
+    await fillTipRoles(supabase as unknown as TipRoleReader, callerOrgId, days)
     const withGuide = config.withGuide !== false
 
     // Completeness signal (harness consolidation Phase B). The grid saves a
@@ -119,10 +155,6 @@ export async function POST(request: NextRequest) {
     // service role. It was addressed by id alone, so a manager in one org could
     // overwrite another org's trip. Refuse anything not this org's, before any
     // write.
-    const callerOrgId = await getCurrentOrgId()
-    if (!callerOrgId) {
-      return NextResponse.json({ success: false, error: 'No organization' }, { status: 403 })
-    }
     if (isUpdate) {
       const { data: owned } = await supabase
         .from('itineraries')
@@ -290,7 +322,7 @@ export async function POST(request: NextRequest) {
     // not the day's sightseeing city: a day trip to Alexandria from a Cairo
     // hotel said "Overnight in Alexandria" (lib/itineraries/overnight-city.ts).
     const numbered = days.map((day: any, idx: number) => ({ ...day, dayNumber: day.dayNumber || idx + 1 }))
-    const overnightByDay = await gridOvernightCities(supabase as unknown as Parameters<typeof gridOvernightCities>[0], numbered)
+    const overnightByDay = await gridOvernightCities(supabase as unknown as Parameters<typeof gridOvernightCities>[0], callerOrgId, numbered)
     const dayInserts = days.map((day: any, idx: number) => ({
       day_number: day.dayNumber || idx + 1,
       title: day.title || `Day ${idx + 1}`,
@@ -366,12 +398,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Pass 2 — batched lookup. One query per table, only when there are IDs.
+    // This company's rows only (another company's were refused above).
     const supplierIdByRateId = new Map<string, string>()
     for (const [tbl, ids] of Object.entries(rateIdsByTable)) {
       if (!ids.size) continue
       const { data: rows, error: lookupErr } = await supabase
         .from(tbl)
         .select('id, supplier_id')
+        .eq('org_id', callerOrgId)
         .in('id', Array.from(ids))
       if (lookupErr) {
         // Non-fatal — log and continue. The service rows just won't carry

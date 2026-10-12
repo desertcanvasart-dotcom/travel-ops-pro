@@ -13,7 +13,7 @@ vi.mock('@supabase/supabase-js', async () => {
 
 import { calculateAutoPricing } from '@/lib/auto-pricing-service'
 
-const BASE = { templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0, numPax: 2 }
+const BASE = { orgId: 'org-1', templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0, numPax: 2 }
 const checkin = (extra: Record<string, unknown>) => ({ id: 'hs-in', service_type: 'checkin_assist', hotel_category: 'all', rate_eur: 10, is_active: true, ...extra })
 const checkinLine = (r: any) => (r.services ?? []).find((s: any) => s.serviceType === 'hotel_service' && /check-in/i.test(s.serviceName) && !s.unpriced)
 

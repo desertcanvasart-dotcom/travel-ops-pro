@@ -28,19 +28,19 @@ import { currencySymbol } from '@/lib/currency-totals'
 async function buildRateCatalog(supabase: any, orgId: string, tier: string, sym: string, runRateCurrency: string) {
   // Use select('*') — specific column selects fail silently if a column name doesn't match
   const results = await Promise.all([
-    supabase.from('transportation_rates').select('*').eq('is_active', true),
-    supabase.from('guide_rates').select('*').eq('is_active', true),
-    supabase.from('airport_staff_rates').select('*').eq('is_active', true),
-    supabase.from('hotel_staff_rates').select('*').eq('is_active', true),
-    supabase.from('tipping_rates').select('*').eq('is_active', true),
-    supabase.from('activity_rates').select('*').eq('is_active', true),
-    supabase.from('accommodation_rates').select('*').eq('is_active', true).eq('tier', tier),
-    supabase.from('entrance_fees').select('*').eq('is_active', true),
-    supabase.from('meal_rates').select('*').eq('is_active', true),
-    supabase.from('nile_cruises').select('*').eq('is_active', true).eq('tier', tier),
+    supabase.from('transportation_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('guide_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('airport_staff_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('hotel_staff_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('tipping_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('activity_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('accommodation_rates').select('*').eq('org_id', orgId).eq('is_active', true).eq('tier', tier),
+    supabase.from('entrance_fees').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('meal_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('nile_cruises').select('*').eq('org_id', orgId).eq('is_active', true).eq('tier', tier),
     // The org's own packages (b2b_transport_packages.org_id) — not every company's.
     supabase.from('b2b_transport_packages').select('*').eq('org_id', orgId).eq('is_active', true),
-    supabase.from('flight_rates').select('*').eq('is_active', true),
+    supabase.from('flight_rates').select('*').eq('org_id', orgId).eq('is_active', true),
   ])
 
   // Log any Supabase errors

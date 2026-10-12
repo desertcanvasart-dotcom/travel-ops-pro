@@ -37,11 +37,14 @@ export type DayTourVehicleFinder = (
  * Returns null when the catalog has no usable rate for the city/pax — the
  * caller must then keep whatever cost the line already had (never 0).
  */
-export function makeDayTourVehicleFinder(): DayTourVehicleFinder {
+export function makeDayTourVehicleFinder(
+  /** Whose transport rates: this company's only. */
+  orgId: string | null | undefined
+): DayTourVehicleFinder {
   let cachePromise: ReturnType<typeof buildTransportCache> | null = null
 
   return async (city, pax, isEurPassport) => {
-    cachePromise ??= buildTransportCache()
+    cachePromise ??= buildTransportCache(orgId)
     const cache = await cachePromise
 
     const record = findTransportRate(cache, {

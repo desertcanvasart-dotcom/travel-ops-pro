@@ -32,8 +32,8 @@ export async function loadTripStays(supabase: SupabaseClient, itineraryId: strin
   if (nights.length === 0) return []
 
   const [{ data: hotels }, { data: ships }, { data: properties }] = await Promise.all([
-    supabase.from('accommodation_rates').select('property_name, property_id'),
-    supabase.from('nile_cruises').select('ship_name, property_id'),
+    supabase.from('accommodation_rates').select('property_name, property_id').eq('org_id', orgId),
+    supabase.from('nile_cruises').select('ship_name, property_id').eq('org_id', orgId),
     supabase.from('supplier_properties').select('id, name, property_type, name_ja, contact_phone, address').in('property_type', ['hotel', 'ship']),
   ])
   const byId = new Map((properties as PropertyRow[] | null ?? []).map(p => [p.id, p]))

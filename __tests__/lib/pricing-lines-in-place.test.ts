@@ -44,7 +44,7 @@ function cruiseThenHotelTables() {
   return tables
 }
 
-const price = () => calculateDayBasedPricing({ templateId: TEMPLATE_ID, tier: 'standard', isEurPassport: true })
+const price = () => calculateDayBasedPricing({ orgId: 'org-1', templateId: TEMPLATE_ID, tier: 'standard', isEurPassport: true })
 const lineOn = (r: Awaited<ReturnType<typeof price>>, id: string) => r.services.find(s => s.id === id)
 
 describe('a service with no rate stays on its day', () => {

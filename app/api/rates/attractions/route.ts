@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabase = createActorAdminClient()
@@ -17,6 +18,8 @@ const supabase = createActorAdminClient()
 // GET - Fetch all attractions
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { searchParams } = new URL(request.url)
     const city = searchParams.get('city')
     const category = searchParams.get('category')
@@ -26,6 +29,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('entrance_fees')
       .select('*')
+      .eq('org_id', orgId)
       .order('attraction_name', { ascending: true })
     
     if (city) {
@@ -126,6 +130,8 @@ export async function GET(request: NextRequest) {
 // POST - Create new attraction
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     const _rateCheck = validateRatePayload(body)
@@ -190,6 +196,7 @@ export async function POST(request: NextRequest) {
     let existingQuery = supabase
       .from('entrance_fees')
       .select('*')
+      .eq('org_id', orgId)
       .ilike('attraction_name', attraction_name)
     if (city) {
       existingQuery = existingQuery.eq('city', city)
@@ -214,7 +221,7 @@ export async function POST(request: NextRequest) {
       // Insert new record
       const result = await supabase
         .from('entrance_fees')
-        .insert(newRecord)
+        .insert({ ...newRecord, org_id: orgId })
         .select()
         .single()
       data = result.data

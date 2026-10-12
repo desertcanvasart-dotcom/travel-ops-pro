@@ -3,6 +3,8 @@ import { clientMessage } from '@/lib/api-errors'
 import { sanitizeTiers } from '@/lib/rates/activity-tiers'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
@@ -12,11 +14,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'activity_rates', id, orgId))) return notFoundInOrg('Rate')
 
     const { data, error } = await supabaseAdmin
       .from('activity_rates')
       .select('*')
+      .eq('org_id', orgId)
       .eq('id', id)
       .single()
 
@@ -41,7 +47,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'activity_rates', id, orgId))) return notFoundInOrg('Rate')
     const body = await request.json()
 
     const supplierCheck = await validateAndResolveSupplierFields(body, supabaseAdmin)
@@ -80,6 +89,7 @@ export async function PUT(
     const { data, error } = await supabaseAdmin
       .from('activity_rates')
       .update(updateData)
+      .eq('org_id', orgId)
       .eq('id', id)
       .select('*')
       .single()
@@ -101,11 +111,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'activity_rates', id, orgId))) return notFoundInOrg('Rate')
 
     const { error } = await supabaseAdmin
       .from('activity_rates')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
 
     if (error) {

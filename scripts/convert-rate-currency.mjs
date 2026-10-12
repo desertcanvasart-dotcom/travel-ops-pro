@@ -8,9 +8,12 @@
 // every non-null, non-zero amount in every rate table by one factor, rounded to
 // cents, so the numbers mean what their labels now say.
 //
-//   node scripts/convert-rate-currency.mjs                     # dry run, factor = today's EUR→USD
-//   node scripts/convert-rate-currency.mjs --factor 1.17       # dry run at a chosen factor
-//   node scripts/convert-rate-currency.mjs --factor 1.17 --apply --note "EUR→USD cut-over"
+//   node scripts/convert-rate-currency.mjs --org <uuid>                     # dry run, factor = today's EUR→USD
+//   node scripts/convert-rate-currency.mjs --org <uuid> --factor 1.17       # dry run at a chosen factor
+//   node scripts/convert-rate-currency.mjs --org <uuid> --factor 1.17 --apply --note "EUR→USD cut-over"
+//
+// --org is required: rates belong to one company each (20261206), and a
+// currency cut-over is that company's — the other's rates are never touched.
 //
 // Safety: dry run by default; --apply refuses without an explicit --factor;
 // every UPDATE goes through PostgREST with the service key so the existing
@@ -29,6 +32,8 @@ const flag = (n) => args.includes(n)
 const opt = (n) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : undefined }
 const APPLY = flag('--apply')
 const NOTE = opt('--note') || ''
+const ORG = opt('--org') || ''
+if (!/^[0-9a-f-]{36}$/i.test(ORG)) { console.error('--org <organisation uuid> is required: each company converts its own rates.'); process.exit(2) }
 
 /** Every rate table and the amount columns it carries (passport-tier pairs included — both are amounts). */
 const TABLES = {
@@ -79,7 +84,7 @@ async function main() {
     const def = spec.definitions[table]
     if (!def) { console.log(`${table.padEnd(22)} (not in schema — skipped)`); continue }
     const cols = (declared || Object.keys(def.properties).filter(c => /(_eur\b|eur_rate\b)/.test(c))).filter(c => def.properties[c])
-    const rows = await rest('GET', UNAUDITED.has(table) ? `/rest/v1/${table}?select=*` : `/rest/v1/${table}?select=${['id', ...cols].join(',')}`)
+    const rows = await rest('GET', UNAUDITED.has(table) ? `/rest/v1/${table}?select=*&org_id=eq.${ORG}` : `/rest/v1/${table}?select=${['id', ...cols].join(',')}&org_id=eq.${ORG}`)
     let cells = 0, changed = 0, sumB = 0, sumA = 0
     for (const row of rows) {
       const patch = {}
@@ -92,12 +97,12 @@ async function main() {
       if (Object.keys(patch).length) {
         changed++
         if (APPLY) {
-          await rest('PATCH', `/rest/v1/${table}?id=eq.${row.id}`, patch)
+          await rest('PATCH', `/rest/v1/${table}?id=eq.${row.id}&org_id=eq.${ORG}`, patch)
           if (UNAUDITED.has(table)) {
             const changed_fields = Object.fromEntries(Object.entries(patch).map(([c, nv]) => [c, { old: row[c], new: nv }]))
             await rest('POST', '/rest/v1/rate_audit_log', {
               table_name: table, record_id: row.id, action: 'UPDATE', changed_fields,
-              full_old_record: row, full_new_record: { ...row, ...patch }, changed_by: null, notes: NOTE || null,
+              full_old_record: row, full_new_record: { ...row, ...patch }, changed_by: null, notes: NOTE || null, org_id: ORG,
             })
           }
         }
@@ -109,7 +114,7 @@ async function main() {
   console.log(`\n${APPLY ? 'UPDATED' : 'WOULD UPDATE'}: ${totalRows} rows, ${totalCells} amounts; Σ ${before.toFixed(2)} → ${after.toFixed(2)} (×${factor})`)
   if (APPLY && NOTE) {
     // The trigger cannot know why; stamp this run's rows so the cut-over is one query away.
-    await rest('PATCH', `/rest/v1/rate_audit_log?changed_at=gte.${encodeURIComponent(startedAt)}&notes=is.null`, { notes: NOTE })
+    await rest('PATCH', `/rest/v1/rate_audit_log?changed_at=gte.${encodeURIComponent(startedAt)}&notes=is.null&org_id=eq.${ORG}`, { notes: NOTE })
   }
   if (APPLY) console.log('Every change is in rate_audit_log (full_old_record / full_new_record) via the rate-audit trigger. Reverse with --factor ' + (1 / factor).toFixed(8))
 }

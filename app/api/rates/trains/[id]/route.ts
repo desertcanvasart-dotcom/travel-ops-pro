@@ -3,6 +3,8 @@ import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { operatorNameForSupplier } from '@/lib/suppliers/operator-name'
 import { clientMessage } from '@/lib/api-errors'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
@@ -12,11 +14,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'train_rates', id, orgId))) return notFoundInOrg('Rate')
 
     const { data, error } = await supabaseAdmin
       .from('train_rates')
       .select('*')
+      .eq('org_id', orgId)
       .eq('id', id)
       .single()
 
@@ -37,7 +43,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'train_rates', id, orgId))) return notFoundInOrg('Rate')
     const body = await request.json()
 
     const updateData: Record<string, any> = {}
@@ -83,6 +92,7 @@ export async function PUT(
     const { data, error } = await supabaseAdmin
       .from('train_rates')
       .update(updateData)
+      .eq('org_id', orgId)
       .eq('id', id)
       .select('*')
       .single()
@@ -104,11 +114,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'train_rates', id, orgId))) return notFoundInOrg('Rate')
 
     const { error } = await supabaseAdmin
       .from('train_rates')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
 
     if (error) {

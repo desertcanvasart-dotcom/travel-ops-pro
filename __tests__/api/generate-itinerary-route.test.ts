@@ -235,7 +235,8 @@ describe('generate-itinerary route — a day trip is one vehicle', () => {
       { day_number: 3, title: 'Departure', city: 'Cairo', overnight_city: null, description: 'Fly home.', attractions: [] },
     ],
   })
-  const rate = (over: Record<string, unknown>) => ({ is_active: true, base_rate_eur: 50, base_rate_non_eur: 50, vehicle_type: 'Sedan', ...over })
+  // The caller's company's rates (org-test-1).
+  const rate = (over: Record<string, unknown>) => ({ org_id: 'org-test-1', is_active: true, base_rate_eur: 50, base_rate_non_eur: 50, vehicle_type: 'Sedan', ...over })
 
   async function transportOfDay2(rates: Record<string, unknown>[]) {
     seed({ transportation_rates: rates })

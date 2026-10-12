@@ -21,15 +21,18 @@ type Row = {
   service_code?: string
 }
 
+// select → eq('org_id') → eq('is_active'): the company's active tips.
 const supabaseWith = (rows: Row[]) => ({
   from: () => ({
     select: () => ({
-      eq: async () => ({ data: rows.map(r => ({ rate_unit: 'per_day', ...r })), error: null }),
+      eq: () => ({
+        eq: async () => ({ data: rows.map(r => ({ rate_unit: 'per_day', ...r })), error: null }),
+      }),
     }),
   }),
 })
 
-const load = (rows: Row[]) => getItemizedTippingRates(supabaseWith(rows) as never, 'standard')
+const load = (rows: Row[]) => getItemizedTippingRates(supabaseWith(rows) as never, 'org-1', 'standard')
 
 describe('city-specific tipping', () => {
   it('prefers the city rate over the country-wide one', async () => {

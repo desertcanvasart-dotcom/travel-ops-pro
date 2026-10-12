@@ -43,20 +43,20 @@ export async function GET(request: NextRequest) {
       { data: flightRates },
       { data: airportRows },
     ] = await Promise.all([
-      supabase.from('transportation_rates').select('*').eq('is_active', true),
-      supabase.from('guide_rates').select('*').eq('is_active', true),
-      supabase.from('airport_staff_rates').select('*').eq('is_active', true),
-      supabase.from('hotel_staff_rates').select('*').eq('is_active', true),
-      supabase.from('tipping_rates').select('*').eq('is_active', true),
-      supabase.from('activity_rates').select('*').eq('is_active', true),
-      supabase.from('accommodation_rates').select('*').eq('is_active', true).eq('tier', tier),
-      supabase.from('entrance_fees').select('*').eq('is_active', true),
-      supabase.from('meal_rates').select('*').eq('is_active', true),
-      supabase.from('nile_cruises').select('*').eq('is_active', true).eq('tier', tier),
+      supabase.from('transportation_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+      supabase.from('guide_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+      supabase.from('airport_staff_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+      supabase.from('hotel_staff_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+      supabase.from('tipping_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+      supabase.from('activity_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+      supabase.from('accommodation_rates').select('*').eq('org_id', orgId).eq('is_active', true).eq('tier', tier),
+      supabase.from('entrance_fees').select('*').eq('org_id', orgId).eq('is_active', true),
+      supabase.from('meal_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+      supabase.from('nile_cruises').select('*').eq('org_id', orgId).eq('is_active', true).eq('tier', tier),
       // The org's own packages and airports (both carry org_id) — these were
       // every company's.
       supabase.from('b2b_transport_packages').select('*').eq('org_id', orgId).eq('is_active', true),
-      supabase.from('flight_rates').select('*').eq('is_active', true),
+      supabase.from('flight_rates').select('*').eq('org_id', orgId).eq('is_active', true),
       // A fare's route is airport KEYS; every line the operator reads, and the
       // day-city match, needs them back as places.
       supabase.from('org_vocabularies').select('key, label, meta, is_active').eq('org_id', orgId).eq('kind', 'airport').order('rank'),

@@ -94,7 +94,10 @@ export async function loadCachedPriceSettings(db: SupabaseClient, orgId: string 
     getOrgRateCurrency(db, orgId),
     getOrgDefaultMargin(db, orgId),
     orgId ? activeKeysForOrg(db, orgId, 'guide_language').catch(() => [] as string[]) : Promise.resolve([] as string[]),
-    db.from('guide_rates').select('guide_language').eq('is_active', true),
+    // This company's guide rates; no organisation, none.
+    orgId
+      ? db.from('guide_rates').select('guide_language').eq('org_id', orgId).eq('is_active', true)
+      : Promise.resolve({ data: [] as { guide_language?: string | null }[] }),
   ])
   const language = pickGuideLanguage(
     vocabulary,

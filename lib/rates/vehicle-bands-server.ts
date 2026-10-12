@@ -58,9 +58,9 @@ export async function resolveVehicleWrite(
 }
 
 /**
- * Put the org's vocabulary bands on every stored rate — after a vehicle's
- * size changes in Settings → Vocabulary. transportation_rates has no org_id
- * (one organisation per install, DEFERRED_GATES G1); packages are scoped.
+ * Put the org's vocabulary bands on every one of ITS stored rates — after a
+ * vehicle's size changes in Settings → Vocabulary. Both tables carry org_id;
+ * this rewrote every company's transportation rates with one company's sizes.
  * Only rows whose list changes are written. Returns how many were.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,21 +68,15 @@ export async function restampVehicleBands(supabase: SupabaseClient<any>, orgId: 
   const bands = await vehicleBandsForOrg(supabase, orgId)
   if (bands.length === 0) return 0
   let written = 0
-  const tables = [
-    { table: 'transportation_rates', scoped: false },
-    { table: 'b2b_transport_packages', scoped: true },
-  ] as const
-  for (const { table, scoped } of tables) {
-    let query = supabase.from(table).select('id, vehicles')
-    if (scoped) query = query.eq('org_id', orgId)
-    const { data, error } = await query
+  for (const table of ['transportation_rates', 'b2b_transport_packages'] as const) {
+    const { data, error } = await supabase.from(table).select('id, vehicles').eq('org_id', orgId)
     if (error) throw error
     for (const row of (data ?? []) as { id: string; vehicles: unknown }[]) {
       const current = parseVehicles(row.vehicles)
       if (!current || current.length === 0) continue
       const stamped = stampVocabularyBands(current, bands)
       if (sameVehicleBands(current, stamped)) continue
-      const { error: upErr } = await supabase.from(table).update({ vehicles: stamped }).eq('id', row.id)
+      const { error: upErr } = await supabase.from(table).update({ vehicles: stamped }).eq('id', row.id).eq('org_id', orgId)
       if (upErr) throw upErr
       written++
     }
@@ -94,11 +88,11 @@ export async function restampVehicleBands(supabase: SupabaseClient<any>, orgId: 
  *  transport packages whose `vehicles` list holds it. Deleting the key in
  *  Settings → Vocabulary leaves them naming a vehicle the list no longer has,
  *  so the settings screen warns first (ported from autoura-saas #644).
- *  transportation_rates has no org_id (one organisation per install). */
+ *  This organisation's rows only — the vocabulary is its own. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function vehicleTypeUsage(supabase: SupabaseClient<any>, orgId: string, key: string): Promise<VehicleTypeUsage> {
   const [rates, packages] = await Promise.all([
-    supabase.from('transportation_rates').select('id', { count: 'exact', head: true }).contains('vehicles', [{ key }]),
+    supabase.from('transportation_rates').select('id', { count: 'exact', head: true }).eq('org_id', orgId).contains('vehicles', [{ key }]),
     supabase.from('b2b_transport_packages').select('id', { count: 'exact', head: true }).eq('org_id', orgId).contains('vehicles', [{ key }]),
   ])
   return { transport_rates: rates.count ?? 0, transport_packages: packages.count ?? 0 }

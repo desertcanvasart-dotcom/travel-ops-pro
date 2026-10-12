@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
   // A driver assigned that day; else the vehicle's own driver.
   const vehicleRow = onDay.find(x => x.resource_type === 'vehicle')
   const { data: car } = !driver.person && vehicleRow?.resource_id
-    ? await supabase.from('vehicles').select('default_driver_name, default_driver_phone').eq('id', vehicleRow.resource_id).maybeSingle()
+    ? await supabase.from('vehicles').select('default_driver_name, default_driver_phone').eq('id', vehicleRow.resource_id).eq('org_id', org_id).maybeSingle()
     : { data: null }
   const carDriver: PickupPerson | null = car?.default_driver_name?.trim()
     ? { name: car.default_driver_name.trim(), phone: car.default_driver_phone ?? null }

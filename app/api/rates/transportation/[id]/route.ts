@@ -4,6 +4,8 @@ import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
 import { clientMessage } from '@/lib/api-errors'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 
 // ============================================
 // TRANSPORTATION RATES API - Single Record
@@ -23,7 +25,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'transportation_rates', id, orgId))) return notFoundInOrg('Rate')
 
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
@@ -31,6 +36,7 @@ export async function GET(
         *,
         supplier:suppliers(id, name, city, contact_phone, contact_email)
       `)
+      .eq('org_id', orgId)
       .eq('id', id)
       .single()
 
@@ -52,7 +58,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'transportation_rates', id, orgId))) return notFoundInOrg('Rate')
     const body = await request.json()
 
     // Validate supplier fields if either was provided. PUT can patch a subset
@@ -71,7 +80,9 @@ export async function PUT(
     }
 
     // Remove id from body to avoid conflicts
+    // A rate stays in its company: org_id is never the client's to set.
     const { id: _, ...rawUpdates } = body
+    delete rawUpdates.org_id
 
     // Vehicles: a list replaces the row's; legacy fields patch it, merged over
     // what the row carries. Nothing vehicle-related in the body → unchanged.
@@ -80,6 +91,7 @@ export async function PUT(
       const { data: currentRow } = await supabaseAdmin
         .from('transportation_rates')
         .select('*')
+        .eq('org_id', orgId)
         .eq('id', id)
         .single()
       const vehicleWrite = await resolveVehicleWrite(rawUpdates, currentRow ?? null)
@@ -114,6 +126,7 @@ export async function PUT(
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
       .update({ ...updates, ...vehiclePatch })
+      .eq('org_id', orgId)
       .eq('id', id)
       .select('*')
       .single()
@@ -136,11 +149,15 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'transportation_rates', id, orgId))) return notFoundInOrg('Rate')
 
     const { error } = await supabaseAdmin
       .from('transportation_rates')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
 
     if (error) {

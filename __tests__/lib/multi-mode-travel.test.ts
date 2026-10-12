@@ -132,7 +132,7 @@ describe('cruise boarding and leaving', () => {
     })
 
     it('boarding and leaving are priced at the hotel check-in and check-out assistance rates', async () => {
-      const r = await calculateDayBasedPricing({ templateId: TEMPLATE_ID, tier: 'standard', isEurPassport: true })
+      const r = await calculateDayBasedPricing({ orgId: 'org-1', templateId: TEMPLATE_ID, tier: 'standard', isEurPassport: true })
       expect(r.services.find(s => s.id === 'day2-cruise-embark')).toMatchObject({ serviceName: 'Cruise Embarkation Assistance', unitCost: 20, isPerPax: false })
       expect(r.services.find(s => s.id === 'day4-cruise-disembark')).toMatchObject({ serviceName: 'Cruise Disembarkation Assistance', unitCost: 20 })
     })
@@ -142,7 +142,7 @@ describe('cruise boarding and leaving', () => {
       t.tour_templates = [{ ...t.tour_templates[0], duration_days: 5, itinerary: cruiseDays }]
       t.hotel_staff_rates = []
       setMockTables(t)
-      const r = await calculateDayBasedPricing({ templateId: TEMPLATE_ID, tier: 'standard', isEurPassport: true })
+      const r = await calculateDayBasedPricing({ orgId: 'org-1', templateId: TEMPLATE_ID, tier: 'standard', isEurPassport: true })
       expect(r.services.find(s => s.id === 'day2-cruise-embark')).toMatchObject({ unpriced: true, lineTotal: 0 })
       expect(r.holes.some(h => h.kind === 'hotel_service' && /embarkation/.test(h.message))).toBe(true)
     })
@@ -158,7 +158,7 @@ describe('one boarding or leaving event is charged once', () => {
     const t = fullRateTables()
     t.tour_templates = [{ ...t.tour_templates[0], duration_days: itinerary.length, itinerary }]
     setMockTables(t)
-    return calculateDayBasedPricing({ templateId: TEMPLATE_ID, tier: 'standard', isEurPassport: true })
+    return calculateDayBasedPricing({ orgId: 'org-1', templateId: TEMPLATE_ID, tier: 'standard', isEurPassport: true })
   }
   const ids = (r: Awaited<ReturnType<typeof priceDays>>, n: number) =>
     r.services.filter(s => s.dayNumber === n).map(s => s.id)

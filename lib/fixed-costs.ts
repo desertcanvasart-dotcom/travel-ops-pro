@@ -18,9 +18,10 @@ export interface FixedDailyCosts {
 // The cache holds the RAW rows, not derived costs: rows may carry a
 // rate_currency (per-rate currency work), and the conversion target depends
 // on the run — caching a converted number would leak one run's currency into
-// the next.
+// the next. Keyed by organisation: each company has its own fixed costs
+// (fixed_daily_costs.org_id), and one cache served every company's.
 type FixedCostRow = { cost_type: string; cost_per_person_per_day: number | null; rate_currency?: string | null }
-let cachedRows: { rows: FixedCostRow[]; fetchedAt: number } | null = null
+const cachedRows = new Map<string, { rows: FixedCostRow[]; fetchedAt: number }>()
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 /**
@@ -32,20 +33,25 @@ const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
  * Use getDailyTippingRate() from lib/tipping-utils.ts for tips.
  */
 export async function getFixedDailyCosts(
+  /** Whose costs. No organisation, the built-in defaults. */
+  orgId: string | null | undefined,
   /** Converts rows entered in another currency into the run currency —
    *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
   normalizer?: RateNormalizer
 ): Promise<FixedDailyCosts> {
   let rows: FixedCostRow[]
+  if (!orgId) return { waterPerPersonPerDay: DEFAULTS['Water Bottle'] }
 
-  if (cachedRows && Date.now() - cachedRows.fetchedAt < CACHE_TTL) {
-    rows = cachedRows.rows
+  const cached = cachedRows.get(orgId)
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
+    rows = cached.rows
   } else {
     try {
       const { data, error } = await supabaseAdmin
         .from('fixed_daily_costs')
         // select('*') so this deploys safely before the rate_currency migration.
         .select('*')
+        .eq('org_id', orgId)
         .eq('is_active', true)
 
       if (error) {
@@ -53,7 +59,7 @@ export async function getFixedDailyCosts(
         return { waterPerPersonPerDay: DEFAULTS['Water Bottle'] }
       }
       rows = (data as FixedCostRow[]) || []
-      cachedRows = { rows, fetchedAt: Date.now() }
+      cachedRows.set(orgId, { rows, fetchedAt: Date.now() })
     } catch (err: any) {
       console.warn('[FixedCosts] Exception fetching costs, using defaults:', err.message)
       return { waterPerPersonPerDay: DEFAULTS['Water Bottle'] }
@@ -74,7 +80,10 @@ export async function getFixedDailyCosts(
   }
 }
 
-/** Clear the cache (e.g. after updating rates via the API) */
-export function clearFixedCostsCache() {
-  cachedRows = null
+/** Clear the cache (e.g. after updating rates via the API) — one
+ *  organisation's, or every one's. */
+export function clearFixedCostsCache(orgId?: string) {
+  // An entry fetched at time 0 is always stale: the next read refetches.
+  if (orgId) cachedRows.set(orgId, { rows: [], fetchedAt: 0 })
+  else cachedRows.clear()
 }

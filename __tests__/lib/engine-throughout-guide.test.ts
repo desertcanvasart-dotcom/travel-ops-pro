@@ -16,7 +16,7 @@ vi.mock('@supabase/supabase-js', async () => {
 
 import { calculateAutoPricing } from '@/lib/auto-pricing-service'
 
-const BASE = {
+const BASE = { orgId: 'org-1',
   templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false,
   language: 'English', marginPercent: 0, numPax: 2, travelDate: '2026-11-03',
 }

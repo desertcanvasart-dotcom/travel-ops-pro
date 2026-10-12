@@ -4,13 +4,17 @@ import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { cleanPricingBasisFields } from '@/lib/pricing/pricing-basis'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export async function GET() {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { data, error } = await supabase
       .from('airport_staff_rates')
       .select('*')
+      .eq('org_id', orgId)
       .order('airport_code')
       .order('service_type')
 
@@ -24,6 +28,8 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const body = await request.json()
 
@@ -45,6 +51,7 @@ export async function POST(request: NextRequest) {
     let existingQuery = supabase
       .from('airport_staff_rates')
       .select('id')
+      .eq('org_id', orgId)
     if (body.airport_code) {
       existingQuery = existingQuery.eq('airport_code', body.airport_code)
     } else {
@@ -80,7 +87,7 @@ export async function POST(request: NextRequest) {
       // Insert new record
       const result = await supabase
         .from('airport_staff_rates')
-        .insert([payload])
+        .insert([{ ...payload, org_id: orgId }])
         .select()
         .single()
       data = result.data

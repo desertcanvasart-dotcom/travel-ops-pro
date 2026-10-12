@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,6 +35,10 @@ const SUPPLIER_RATE_TABLES: Record<string, string[]> = {
 
 export async function GET(request: NextRequest) {
   try {
+    // This company's rates only: any supplier id used to return every
+    // company's rates linked to it.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const supplierId = searchParams.get('supplier_id')
     const supplierType = searchParams.get('supplier_type')
@@ -62,6 +67,7 @@ export async function GET(request: NextRequest) {
         const { data, error } = await supabaseAdmin
           .from(table)
           .select('*')
+          .eq('org_id', orgId)
           .eq('supplier_id', supplierId)
           .order('created_at', { ascending: false })
 

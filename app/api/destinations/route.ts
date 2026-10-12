@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('destinations')
       .select('id, country_code, name, name_ja, is_default, is_active, generation_brief, destination_cities(id, name, name_ja, aliases, lat, lng, airport_codes, timezone, sort_order, is_active)')
+      .eq('org_id', orgId)
       .order('name')
     if (!includeInactive) query = query.eq('is_active', true)
     const { data: destinations, error } = await query

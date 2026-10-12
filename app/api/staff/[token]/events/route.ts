@@ -32,7 +32,9 @@ function admin() {
  */
 async function resolveActorId(
   supabase: ReturnType<typeof admin>,
-  resource: { resource_type?: string | null; resource_id?: string | null } | null
+  resource: { resource_type?: string | null; resource_id?: string | null } | null,
+  /** The link's company: its fleet only. */
+  orgId: string
 ): Promise<string | null> {
   try {
     const type = resource?.resource_type
@@ -40,7 +42,7 @@ async function resolveActorId(
     if (!type || !rid) return null
     if (type === 'driver') return rid
     if (type === 'vehicle') {
-      const { data } = await supabase.from('vehicles').select('*').eq('id', rid).maybeSingle()
+      const { data } = await supabase.from('vehicles').select('*').eq('id', rid).eq('org_id', orgId).maybeSingle()
       const dd = data?.default_driver_id
       return typeof dd === 'string' ? dd : null
     }
@@ -117,7 +119,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         org_id: link.org_id,
         itinerary_id: link.itinerary_id,
         itinerary_resource_id: link.itinerary_resource_id,
-        actor_team_member_id: await resolveActorId(supabase, resource),
+        actor_team_member_id: await resolveActorId(supabase, resource, link.org_id),
         event_kind,
         occurred_at: new Date().toISOString(),
         lat: hasLat ? Number(lat) : null,

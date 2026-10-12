@@ -15,7 +15,7 @@ vi.mock('@supabase/supabase-js', async () => {
 
 import { calculateAutoPricing } from '@/lib/auto-pricing-service'
 
-const BASE = { templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0 }
+const BASE = { orgId: 'org-1', templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0 }
 const JA = 'スフィンクスと河岸神殿見学'
 
 function tablesWith(day1: Record<string, unknown>, aliases: { alias: string; canonical_name: string }[] = []) {
