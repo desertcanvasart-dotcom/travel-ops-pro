@@ -92,7 +92,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (a.user?.id) {
       try {
         const { data: me } = await a.supabase
-          .from('team_members').select('id, name').eq('user_id', a.user.id).maybeSingle()
+          .from('team_members').select('id, name').eq('user_id', a.user.id).eq('org_id', a.orgId).maybeSingle()
         teamMemberId = me?.id ?? null
         senderName = me?.name ?? null
       } catch { /* no directory row — the reply goes out unsigned */ }

@@ -8,7 +8,10 @@
 // days; the copy in Communicate stays until restored.
 //
 // The mailbox is the conversation's own (email_conversations.user_id, the
-// owner of the connected Gmail), not the viewer's.
+// owner of the connected Gmail), not the viewer's — and only while that
+// connection serves the conversation's company (gmail_tokens.org_id,
+// 20261204): a person who reconnected their mailbox to the other company
+// must not have this company's delete reach into it.
 
 import { getAuthenticatedGmail } from '@/lib/gmail'
 
@@ -17,11 +20,13 @@ export type GmailTrashResult = { ok: true } | { ok: false; error: string }
 export async function moveThreadInGmail(
   mailboxUserId: string | null | undefined,
   threadId: string | null | undefined,
-  to: 'trash' | 'untrash'
+  to: 'trash' | 'untrash',
+  orgId: string,
 ): Promise<GmailTrashResult> {
   if (!mailboxUserId || !threadId) return { ok: false, error: 'This conversation has no Gmail thread to move.' }
   try {
-    const { gmail } = await getAuthenticatedGmail(mailboxUserId)
+    const { gmail, orgId: mailboxOrg } = await getAuthenticatedGmail(mailboxUserId)
+    if (mailboxOrg !== orgId) return { ok: false, error: 'The mailbox this conversation came from is connected to another company.' }
     if (to === 'trash') await gmail.users.threads.trash({ userId: 'me', id: threadId })
     else await gmail.users.threads.untrash({ userId: 'me', id: threadId })
     return { ok: true }

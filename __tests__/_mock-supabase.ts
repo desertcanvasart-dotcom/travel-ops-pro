@@ -20,15 +20,44 @@ export function setMockTables(tables: MockTables): void {
 }
 
 // Parse a PostgREST `.or()` expression like "direction.eq.arrival,direction.eq.both"
-// and keep rows matching ANY clause (only the `eq` operator is used by the engine).
+// and keep rows matching ANY clause. eq (the pricing engine's only operator),
+// plus what the email lists send: is.null / is.true / is.false, in.(…),
+// ilike, gt/gte/lt/lte, and(…), and "quoted" values.
+function splitTop(expr: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let cur = ''
+  for (const ch of expr) {
+    if (ch === '(') depth++
+    if (ch === ')') depth--
+    if (ch === ',' && depth === 0) { parts.push(cur); cur = '' } else cur += ch
+  }
+  if (cur) parts.push(cur)
+  return parts
+}
+const unquote = (v: string) => v.replace(/^"(.*)"$/, '$1')
+function clauseMatches(row: Row, clause: string): boolean {
+  if (clause.startsWith('and(')) return splitTop(clause.slice(4, -1)).every((c) => clauseMatches(row, c))
+  if (clause.startsWith('or(')) return splitTop(clause.slice(3, -1)).some((c) => clauseMatches(row, c))
+  const [col, op, ...rest] = clause.split('.')
+  const val = rest.join('.')
+  const v = row[col]
+  switch (op) {
+    case 'eq': return String(v) === unquote(val)
+    case 'neq': return String(v) !== unquote(val)
+    case 'is': return val === 'null' ? v == null : String(v) === val
+    case 'in': return splitTop(val.replace(/^\((.*)\)$/, '$1')).map(unquote).includes(String(v))
+    case 'ilike': return String(v ?? '').toLowerCase().includes(unquote(val).replace(/%/g, '').toLowerCase())
+    case 'gt': return v != null && v > unquote(val)
+    case 'gte': return v != null && v >= unquote(val)
+    case 'lt': return v != null && v < unquote(val)
+    case 'lte': return v != null && v <= unquote(val)
+    default: return false
+  }
+}
 function applyOr(rows: Row[], expr: string): Row[] {
-  const clauses = expr.split(',').map((c) => {
-    const [col, op, ...rest] = c.split('.')
-    return { col, op, val: rest.join('.') }
-  })
-  return rows.filter((r) =>
-    clauses.some((cl) => cl.op === 'eq' && String(r[cl.col]) === cl.val)
-  )
+  const clauses = splitTop(expr)
+  return rows.filter((r) => clauses.some((cl) => clauseMatches(r, cl)))
 }
 
 let idCounter = 0
@@ -38,8 +67,15 @@ function makeQuery(rows: Row[], table?: string) {
   // Set by .update(patch); applied to the filtered rows at terminal time
   // (PostgREST semantics: filters compose before the write executes).
   let pendingPatch: Row | null = null
+  // Set by .delete(); the filtered rows leave the table at terminal time.
+  let pendingDelete = false
 
   function applyPendingPatch() {
+    if (pendingDelete && table) {
+      const gone = new Set(filtered)
+      currentTables[table] = (currentTables[table] ?? []).filter((r) => !gone.has(r))
+      pendingDelete = false
+    }
     if (pendingPatch) {
       // `filtered` holds references to the live table rows, so assigning
       // mutates the stored data — matching a real UPDATE.
@@ -70,6 +106,10 @@ function makeQuery(rows: Row[], table?: string) {
       pendingPatch = { ...patch }
       return builder
     },
+    delete() {
+      pendingDelete = true
+      return builder
+    },
     eq(col: string, val: any) {
       filtered = filtered.filter((r) => r[col] === val)
       return builder
@@ -85,6 +125,19 @@ function makeQuery(rows: Row[], table?: string) {
     },
     gte(col: string, val: any) {
       filtered = filtered.filter((r) => r[col] != null && r[col] >= val)
+      return builder
+    },
+    lt(col: string, val: any) {
+      filtered = filtered.filter((r) => r[col] != null && r[col] < val)
+      return builder
+    },
+    not(col: string, op: string, val: any) {
+      // .not('col', 'is', null) and .not('col', 'in', '(a,b)') — the forms routes use.
+      if (op === 'is') filtered = filtered.filter((r) => (val === null ? r[col] != null : r[col] !== val))
+      else if (op === 'in') {
+        const list = String(val).replace(/^\(|\)$/g, '').split(',')
+        filtered = filtered.filter((r) => !list.includes(String(r[col])))
+      }
       return builder
     },
     lte(col: string, val: any) {
@@ -148,7 +201,7 @@ function makeQuery(rows: Row[], table?: string) {
     // Make the builder awaitable: `await query` -> { data: rows[], error: null }
     then(onFulfilled: any, onRejected: any) {
       applyPendingPatch()
-      return Promise.resolve({ data: filtered, error: null }).then(
+      return Promise.resolve({ data: filtered, error: null, count: filtered.length }).then(
         onFulfilled,
         onRejected
       )

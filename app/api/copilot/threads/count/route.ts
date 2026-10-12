@@ -21,8 +21,7 @@ export async function GET() {
     // Count inbox messages with draft_ready status (draft generated, awaiting review)
     const { count, error } = await supabase
       .from('communication_inbox')
-      // Of the org's own threads (inbox rows carry no org_id); a thread with
-      // no org_id counts for nobody (lib/copilot/thread-access).
+      // Of the org's own threads (inbox rows carry no org_id; their thread does).
       .select('id, communication_threads!inner(org_id)', { count: 'exact', head: true })
       .eq('communication_threads.org_id', orgId)
       .in('status', ['draft_ready', 'draft_pending', 'new'])

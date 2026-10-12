@@ -51,8 +51,11 @@ describe('task reminders', () => {
 
   it('skip archived tasks and deactivated team members', () => {
     expect(s.match(/\.or\('archived\.eq\.false,archived\.is\.null'\)/g)).toHaveLength(2)
-    expect(s.match(/assigned_member:team_members\(id, name, email, user_id, is_active\)/g)).toHaveLength(2)
-    expect(s.match(/task\.assigned_member\.is_active === false\) continue/g)).toHaveLength(2)
+    // One field list for both queries (and the member's org, checked too).
+    expect(s).toMatch(/assigned_member:team_members!tasks_assigned_to_fkey\(id, name, email, user_id, is_active, org_id\)/)
+    expect(s.match(/\.select\(TASK_FIELDS\)/g)).toHaveLength(2)
+    expect(s).toContain('task.assigned_member.is_active !== false')
+    expect(s.match(/if \(!reachable\(task\)\) continue/g)).toHaveLength(2)
   })
 
   it('formats a date-only due date in UTC, and POST is not recorded twice', () => {

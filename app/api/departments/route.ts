@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { requireRole } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 import { findServiceTypeConflict, sanitizeServiceTypes } from '@/lib/department-admin'
 
 const supabaseAdmin = createClient(
@@ -8,14 +8,19 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// The organisation's own departments (departments.org_id, migration
+// 20261203): each company routes its own work.
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     // The management screen needs deactivated departments too; everything
     // else (task routing, pickers) keeps seeing only active ones.
     const includeInactive = request.nextUrl.searchParams.get('include_inactive') === '1'
     let query = supabaseAdmin
       .from('departments')
       .select('id, name, description, service_types, is_active')
+      .eq('org_id', orgId)
       .order('name')
     if (!includeInactive) query = query.eq('is_active', true)
 
@@ -35,6 +40,8 @@ export async function POST(request: NextRequest) {
   try {
     const forbidden = await requireRole(['admin'])
     if (forbidden) return forbidden
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
 
     const body = await request.json()
     const name = typeof body.name === 'string' ? body.name.trim() : ''
@@ -43,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
     const serviceTypes = sanitizeServiceTypes(body.service_types)
 
-    const conflict = await findServiceTypeConflict(serviceTypes, null)
+    const conflict = await findServiceTypeConflict(serviceTypes, null, orgId)
     if (conflict) {
       return NextResponse.json(
         { success: false, error: `Service type already routed to ${conflict}` },
@@ -54,6 +61,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabaseAdmin
       .from('departments')
       .insert({
+        org_id: orgId,
         name,
         description: typeof body.description === 'string' ? body.description.trim() || null : null,
         service_types: serviceTypes,

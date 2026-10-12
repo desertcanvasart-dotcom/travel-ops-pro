@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
           max_conversations
         )
       `)
+      .eq('org_id', orgId)
       .eq('status', status)
       .order('last_message_at', { ascending: false, nullsFirst: false })
 
@@ -105,7 +106,7 @@ export async function GET(request: NextRequest) {
 
     // Only mail of the org's Gmail addresses connected now (lib/email/connected-mailboxes).
     const { data, error } = await scopedToConnectedMailboxes(supabase, orgId, (mailboxFilter) =>
-      (mailboxFilter ? query.or(mailboxFilter) : query).limit(50)
+      query.or(mailboxFilter).limit(50)
     )
 
     if (error) throw error
@@ -143,9 +144,9 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Conversation ID required', success: false }, { status: 400 })
     }
 
-    // Only a conversation in one of this organisation's mailboxes
-    // (lib/email/conversation-access): any id was updated — and restored in
-    // its owner's real Gmail — whichever company it belonged to.
+    // Only this organisation's conversation (lib/email/conversation-access):
+    // any id was updated — and restored in its owner's real Gmail — whichever
+    // company it belonged to.
     const existing = await emailConversationInOrg(supabase, orgId, String(conversation_id))
     if (!existing) {
       return NextResponse.json({ error: 'Conversation not found', success: false }, { status: 404 })
@@ -211,6 +212,7 @@ export async function PATCH(request: NextRequest) {
       .from('email_conversations')
       .update(updateData)
       .eq('id', existing.id)
+      .eq('org_id', orgId)
     if (action === 'unhide') updateQuery = updateQuery.eq('status', 'trashed')
     const { data, error } = await updateQuery
       .select(`
@@ -231,22 +233,14 @@ export async function PATCH(request: NextRequest) {
     // Restored from Trash: back out of Gmail's Trash too (see DELETE).
     let warning: string | undefined
     if (action === 'unhide' && data) {
-      const gmail = await moveThreadInGmail(data.user_id, data.thread_id, 'untrash')
+      const gmail = await moveThreadInGmail(data.user_id, data.thread_id, 'untrash', orgId)
       if (!gmail.ok) warning = 'Restored here, but the email could not be taken out of Trash in Gmail. Reconnect Gmail in Settings and try again.'
     }
 
-    // Log activity if agent provided
-    if (agent_id && action) {
-      await supabase
-        .from('conversation_activity')
-        .insert({
-          conversation_id,
-          agent_id,
-          team_member_id: agent_id,
-          action_type: action === 'mark_read' ? 'viewed' : 'status_changed',
-          action_details: { action, updates, channel: 'email' }
-        })
-    }
+    // No conversation_activity row: that log belongs to WhatsApp
+    // conversations (its conversation_id references whatsapp_conversations
+    // and agent_id the retired sales_agents), so writing an email
+    // conversation's id there always failed the foreign key.
 
     return NextResponse.json({ conversation: data, success: true, ...(warning ? { warning } : {}) })
   } catch (error: any) {
@@ -271,8 +265,8 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Conversation ID required', success: false }, { status: 400 })
     }
 
-    // Only a conversation in one of this organisation's mailboxes: any id
-    // was trashed here AND in its owner's real Gmail, whichever company's.
+    // Only this organisation's conversation: any id was trashed here AND in
+    // its owner's real Gmail, whichever company's.
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
     const existing = await emailConversationInOrg(supabase, orgId, conversationId)
@@ -295,6 +289,7 @@ export async function DELETE(request: NextRequest) {
         updated_at: new Date().toISOString()
       })
       .eq('id', existing.id)
+      .eq('org_id', orgId)
       .select()
       .maybeSingle()
 
@@ -305,7 +300,7 @@ export async function DELETE(request: NextRequest) {
 
     // The thread follows it into Gmail's Trash. Moved here regardless: a
     // mailbox that needs reconnecting must not stop the delete — it says so.
-    const gmail = await moveThreadInGmail(data.user_id, data.thread_id, 'trash')
+    const gmail = await moveThreadInGmail(data.user_id, data.thread_id, 'trash', orgId)
 
     return NextResponse.json({
       success: true,

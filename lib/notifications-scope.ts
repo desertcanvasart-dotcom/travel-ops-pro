@@ -6,6 +6,11 @@
 // a row when it names their user_id, or a roster entry linked to their
 // user_id. Every read and every mark-read/delete goes through this filter;
 // before it existed the bell showed everyone everything.
+//
+// And the active organisation's only (notifications.org_id, migration
+// 20261203): a person in both companies sees, marks and deletes only the
+// company they are working in. Their roster entry is that company's too —
+// they have one per company.
 // ============================================
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -13,9 +18,9 @@ type Db = { from(table: string): any }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** Roster entries linked to this login (usually none). */
-export async function linkedTeamMemberIds(db: Db, userId: string): Promise<string[]> {
-  const { data } = await db.from('team_members').select('id').eq('user_id', userId)
+/** This login's roster entries in the organisation (usually none). */
+export async function linkedTeamMemberIds(db: Db, userId: string, orgId: string): Promise<string[]> {
+  const { data } = await db.from('team_members').select('id').eq('user_id', userId).eq('org_id', orgId)
   return ((data ?? []) as Array<{ id: string }>).map(r => r.id).filter(id => UUID.test(id))
 }
 
@@ -39,10 +44,11 @@ export function notificationScopeFilter(userId: string, teamMemberIds: string[])
 export async function ownNotificationIds(
   db: Db,
   userId: string,
+  orgId: string,
   where: { id?: string; unreadOnly?: boolean } = {}
 ): Promise<string[]> {
-  const scope = notificationScopeFilter(userId, await linkedTeamMemberIds(db, userId))
-  let q = db.from('notifications').select('id').or(scope).limit(1000)
+  const scope = notificationScopeFilter(userId, await linkedTeamMemberIds(db, userId, orgId))
+  let q = db.from('notifications').select('id').eq('org_id', orgId).or(scope).limit(1000)
   if (where.id) q = q.eq('id', where.id)
   if (where.unreadOnly) q = q.eq('is_read', false)
   const { data, error } = await q

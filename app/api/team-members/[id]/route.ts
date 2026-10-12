@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg } from '@/lib/api/org-scope'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,12 +14,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
 
     const { data, error } = await supabaseAdmin
       .from('team_members')
       .select('*')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (error) {
@@ -38,6 +43,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
     const body = await request.json()
 
@@ -51,19 +58,27 @@ export async function PUT(
     if (body.role !== undefined) updateData.role = body.role
     if (body.notes !== undefined) updateData.notes = body.notes
     if (body.is_active !== undefined) updateData.is_active = body.is_active
-    if (body.department_id !== undefined) updateData.department_id = body.department_id || null
+    if (body.department_id !== undefined) {
+      if (body.department_id && (typeof body.department_id !== 'string' ||
+          !(await rowInOrg(supabaseAdmin, 'departments', body.department_id, orgId)))) {
+        return NextResponse.json({ error: 'Department not found' }, { status: 404 })
+      }
+      updateData.department_id = body.department_id || null
+    }
 
     const { data, error } = await supabaseAdmin
       .from('team_members')
       .update(updateData)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) {
       console.error('Error updating team member:', error)
       return NextResponse.json({ error: 'Failed to update team member' }, { status: 500 })
     }
+    if (!data) return NextResponse.json({ error: 'Team member not found' }, { status: 404 })
 
     return NextResponse.json({ success: true, data })
   } catch (error) {
@@ -78,18 +93,23 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
 
     // Soft delete - just mark as inactive
-    const { error } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from('team_members')
       .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq('id', id)
+      .eq('org_id', orgId)
+      .select('id')
 
     if (error) {
       console.error('Error deleting team member:', error)
       return NextResponse.json({ error: 'Failed to delete team member' }, { status: 500 })
     }
+    if (!data?.length) return NextResponse.json({ error: 'Team member not found' }, { status: 404 })
 
     return NextResponse.json({ success: true })
   } catch (error) {

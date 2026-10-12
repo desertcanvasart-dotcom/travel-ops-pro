@@ -37,9 +37,9 @@ export async function POST(
     const dryRun = body.dry_run === true
     const today = todayFromRequest(request.url)
 
-    // Every assignee must be the org's own team member: team_members has no
-    // org_id, and another company's member would be given these tasks and
-    // notified of this trip (teamMemberInOrg).
+    // Every assignee must be the org's own team member: another company's
+    // member would be given these tasks and notified of this trip
+    // (teamMemberInOrg).
     const assigneeIds = [...new Set(Object.values(assignments).filter(v => v != null && v !== ''))]
     for (const assigneeId of assigneeIds) {
       if (typeof assigneeId !== 'string' || !(await teamMemberInOrg(supabaseAdmin, assigneeId, orgId))) {
@@ -78,14 +78,17 @@ export async function POST(
         .from('itinerary_services')
         .select('itinerary_day_id, service_type, service_code, service_name, quantity, notes, supplier_name')
         .in('itinerary_day_id', days.map(d => d.id)),
-      // Active only: a department switched off gets no tasks at all.
+      // Active only: a department switched off gets no tasks at all. This
+      // organisation's own departments route its work.
       supabaseAdmin
         .from('departments')
         .select('id, name, service_types')
+        .eq('org_id', orgId)
         .eq('is_active', true),
       supabaseAdmin
         .from('tasks')
         .select('id, service_type, status, archived, assigned_to, generation_snapshot, checklist')
+        .eq('org_id', orgId)
         .eq('linked_type', 'itinerary')
         .eq('linked_id', itineraryId)
         .order('created_at'),
@@ -167,6 +170,7 @@ export async function POST(
       const { data, error } = await supabaseAdmin
         .from('tasks')
         .insert(creates.map(({ task, checklist }) => ({
+          org_id: orgId,
           title: task.title,
           description: task.description,
           due_date: task.due_date,
@@ -217,7 +221,7 @@ export async function POST(
       if (action.status !== 'done') fields.completed_at = null
       if (action.kind === 'reopen') Object.assign(fields, { archived: false, archived_at: null })
 
-      const { error } = await supabaseAdmin.from('tasks').update(fields).eq('id', action.id)
+      const { error } = await supabaseAdmin.from('tasks').update(fields).eq('id', action.id).eq('org_id', orgId)
       if (error) throw error
       if (action.kind === 'reopen') reopened.push({ id: action.id, assigned_to: assignedTo })
       else updatedCount++
@@ -241,6 +245,7 @@ export async function POST(
           mine.reopened.length ? `${mine.reopened.length} reopened (itinerary changed)` : '',
         ].filter(Boolean).join(', ')
         return {
+          org_id: orgId,
           team_member_id: assigneeId,
           type: 'task_assigned' as const,
           title: `Operations tasks for ${itinerary.itinerary_code}: ${parts}`,

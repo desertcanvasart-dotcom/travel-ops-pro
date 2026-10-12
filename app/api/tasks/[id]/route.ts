@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { completeChecklist, type ChecklistItem } from '@/lib/tasks/itinerary-tasks'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { taskRefsInOrg } from '@/lib/org-refs'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,6 +15,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
 
     const { data, error } = await supabaseAdmin
@@ -22,6 +26,7 @@ export async function GET(
         assigned_member:team_members(id, name, role, email)
       `)
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
     if (error) {
@@ -42,6 +47,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
     const body = await request.json()
 
@@ -60,6 +67,23 @@ export async function PUT(
     if (body.notes !== undefined) updateData.notes = body.notes
     if (body.department_id !== undefined) updateData.department_id = body.department_id || null
 
+    // A new assignee, department or link must be this organisation's own.
+    const linkChanges = body.linked_id !== undefined || body.linked_type !== undefined
+    if (body.assigned_to !== undefined || body.department_id !== undefined || linkChanges) {
+      let link: { linked_type?: unknown; linked_id?: unknown } = {}
+      if (linkChanges) {
+        const { data: current } = await supabaseAdmin
+          .from('tasks').select('linked_type, linked_id').eq('id', id).eq('org_id', orgId).maybeSingle()
+        link = {
+          linked_type: body.linked_type !== undefined ? body.linked_type : current?.linked_type,
+          linked_id: body.linked_id !== undefined ? body.linked_id : current?.linked_id,
+        }
+      }
+      if (!(await taskRefsInOrg(supabaseAdmin, orgId, { assigned_to: body.assigned_to, department_id: body.department_id, ...link }))) {
+        return NextResponse.json({ error: 'Assignee, department or linked record not found' }, { status: 404 })
+      }
+    }
+
     // Status change with completed_at tracking
     if (body.status !== undefined) {
       updateData.status = body.status
@@ -71,6 +95,7 @@ export async function PUT(
           .from('tasks')
           .select('checklist')
           .eq('id', id)
+          .eq('org_id', orgId)
           .maybeSingle()
         if (readError) throw readError
         if (Array.isArray(current?.checklist)) {
@@ -104,16 +129,18 @@ export async function PUT(
       .from('tasks')
       .update(updateData)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select(`
         *,
         assigned_member:team_members(id, name, role, email)
       `)
-      .single()
+      .maybeSingle()
 
     if (error) {
       console.error('Error updating task:', error)
       return NextResponse.json({ error: 'Failed to update task' }, { status: 500 })
     }
+    if (!data) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
 
     return NextResponse.json({ success: true, data })
   } catch (error) {
@@ -128,17 +155,22 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
 
-    const { error } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from('tasks')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
+      .select('id')
 
     if (error) {
       console.error('Error deleting task:', error)
       return NextResponse.json({ error: 'Failed to delete task' }, { status: 500 })
     }
+    if (!data?.length) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
 
     return NextResponse.json({ success: true })
   } catch (error) {

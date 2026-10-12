@@ -511,68 +511,6 @@ export interface Database {
           },
         ]
       }
-      active_tasks: {
-        Row: {
-          id: string | null
-          title: string | null
-          description: string | null
-          due_date: string | null
-          priority: string | null
-          status: string | null
-          assigned_to: string | null
-          linked_type: string | null
-          linked_id: string | null
-          notes: string | null
-          created_at: string | null
-          updated_at: string | null
-          completed_at: string | null
-          archived: boolean | null
-          archived_at: string | null
-        }
-        Insert: {
-          id?: string | null
-          title?: string | null
-          description?: string | null
-          due_date?: string | null
-          priority?: string | null
-          status?: string | null
-          assigned_to?: string | null
-          linked_type?: string | null
-          linked_id?: string | null
-          notes?: string | null
-          created_at?: string | null
-          updated_at?: string | null
-          completed_at?: string | null
-          archived?: boolean | null
-          archived_at?: string | null
-        }
-        Update: {
-          id?: string | null
-          title?: string | null
-          description?: string | null
-          due_date?: string | null
-          priority?: string | null
-          status?: string | null
-          assigned_to?: string | null
-          linked_type?: string | null
-          linked_id?: string | null
-          notes?: string | null
-          created_at?: string | null
-          updated_at?: string | null
-          completed_at?: string | null
-          archived?: boolean | null
-          archived_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "active_tasks_assigned_to_fkey"
-            columns: ["assigned_to"]
-            isOneToOne: false
-            referencedRelation: "team_members"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       activity_log: {
         Row: {
           id: string
@@ -832,29 +770,6 @@ export interface Database {
           },
         ]
       }
-      agent_team_member_mapping: {
-        Row: {
-          sales_agent_id: string
-          team_member_id: string
-        }
-        Insert: {
-          sales_agent_id: string
-          team_member_id: string
-        }
-        Update: {
-          sales_agent_id?: string
-          team_member_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "agent_team_member_mapping_team_member_id_fkey"
-            columns: ["team_member_id"]
-            isOneToOne: false
-            referencedRelation: "team_members"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       airport_staff: {
         Row: {
           id: string | null
@@ -982,112 +897,6 @@ export interface Database {
             columns: ["supplier_id"]
             isOneToOne: false
             referencedRelation: "suppliers"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      archived_tasks: {
-        Row: {
-          id: string | null
-          title: string | null
-          description: string | null
-          due_date: string | null
-          priority: string | null
-          status: string | null
-          assigned_to: string | null
-          linked_type: string | null
-          linked_id: string | null
-          notes: string | null
-          created_at: string | null
-          updated_at: string | null
-          completed_at: string | null
-          archived: boolean | null
-          archived_at: string | null
-        }
-        Insert: {
-          id?: string | null
-          title?: string | null
-          description?: string | null
-          due_date?: string | null
-          priority?: string | null
-          status?: string | null
-          assigned_to?: string | null
-          linked_type?: string | null
-          linked_id?: string | null
-          notes?: string | null
-          created_at?: string | null
-          updated_at?: string | null
-          completed_at?: string | null
-          archived?: boolean | null
-          archived_at?: string | null
-        }
-        Update: {
-          id?: string | null
-          title?: string | null
-          description?: string | null
-          due_date?: string | null
-          priority?: string | null
-          status?: string | null
-          assigned_to?: string | null
-          linked_type?: string | null
-          linked_id?: string | null
-          notes?: string | null
-          created_at?: string | null
-          updated_at?: string | null
-          completed_at?: string | null
-          archived?: boolean | null
-          archived_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "archived_tasks_assigned_to_fkey"
-            columns: ["assigned_to"]
-            isOneToOne: false
-            referencedRelation: "team_members"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      assignment_rules: {
-        Row: {
-          id: string
-          name: string
-          description: string | null
-          rule_type: string
-          conditions: Json | null
-          agent_id: string | null
-          priority: number | null
-          is_active: boolean | null
-          created_at: string | null
-        }
-        Insert: {
-          id?: string
-          name: string
-          description?: string | null
-          rule_type: string
-          conditions?: Json | null
-          agent_id?: string | null
-          priority?: number | null
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Update: {
-          id?: string
-          name?: string
-          description?: string | null
-          rule_type?: string
-          conditions?: Json | null
-          agent_id?: string | null
-          priority?: number | null
-          is_active?: boolean | null
-          created_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "assignment_rules_agent_id_fkey"
-            columns: ["agent_id"]
-            isOneToOne: false
-            referencedRelation: "sales_agents"
             referencedColumns: ["id"]
           },
         ]
@@ -3624,7 +3433,7 @@ export interface Database {
           updated_at: string
           brief_id: string | null
           origin: string | null
-          org_id: string | null
+          org_id: string
         }
         Insert: {
           id?: string
@@ -3791,7 +3600,7 @@ export interface Database {
           request_id: string | null
           created_at: string
           updated_at: string
-          org_id: string | null
+          org_id: string
         }
         Insert: {
           id?: string
@@ -4477,6 +4286,7 @@ export interface Database {
           is_active: boolean | null
           created_at: string | null
           updated_at: string | null
+          org_id: string
         }
         Insert: {
           id?: string
@@ -4486,6 +4296,7 @@ export interface Database {
           is_active?: boolean | null
           created_at?: string | null
           updated_at?: string | null
+          org_id: string
         }
         Update: {
           id?: string
@@ -4495,8 +4306,17 @@ export interface Database {
           is_active?: boolean | null
           created_at?: string | null
           updated_at?: string | null
+          org_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "departments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       departure_bookings: {
         Row: {
@@ -4841,6 +4661,7 @@ export interface Database {
       }
       email_conversations: {
         Row: {
+          org_id: string
           id: string
           thread_id: string
           user_id: string | null
@@ -4869,6 +4690,7 @@ export interface Database {
           mailbox_email: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           thread_id: string
           user_id?: string | null
@@ -4897,6 +4719,7 @@ export interface Database {
           mailbox_email?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           thread_id?: string
           user_id?: string | null
@@ -4972,6 +4795,7 @@ export interface Database {
       }
       email_messages: {
         Row: {
+          org_id: string
           id: string
           conversation_id: string | null
           message_id: string
@@ -4997,6 +4821,7 @@ export interface Database {
           order_checked_at: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           conversation_id?: string | null
           message_id: string
@@ -5022,6 +4847,7 @@ export interface Database {
           order_checked_at?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           conversation_id?: string | null
           message_id?: string
@@ -5163,6 +4989,7 @@ export interface Database {
       }
       email_templates: {
         Row: {
+          org_id: string
           id: string
           user_id: string | null
           name: string
@@ -5174,6 +5001,7 @@ export interface Database {
           placeholders: string[] | null
         }
         Insert: {
+          org_id: string
           id?: string
           user_id?: string | null
           name: string
@@ -5185,6 +5013,7 @@ export interface Database {
           placeholders?: string[] | null
         }
         Update: {
+          org_id?: string
           id?: string
           user_id?: string | null
           name?: string
@@ -5700,6 +5529,7 @@ export interface Database {
       }
       gmail_tokens: {
         Row: {
+          org_id: string
           id: string
           user_id: string | null
           email: string
@@ -5711,6 +5541,7 @@ export interface Database {
           last_history_id: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           user_id?: string | null
           email: string
@@ -5722,6 +5553,7 @@ export interface Database {
           last_history_id?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           user_id?: string | null
           email?: string
@@ -8244,6 +8076,7 @@ export interface Database {
           updated_at: string | null
           related_itinerary_id: string | null
           user_id: string | null
+          org_id: string
         }
         Insert: {
           id?: string
@@ -8259,6 +8092,7 @@ export interface Database {
           updated_at?: string | null
           related_itinerary_id?: string | null
           user_id?: string | null
+          org_id: string
         }
         Update: {
           id?: string
@@ -8274,8 +8108,16 @@ export interface Database {
           updated_at?: string | null
           related_itinerary_id?: string | null
           user_id?: string | null
+          org_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "notifications_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "notifications_team_member_id_fkey"
             columns: ["team_member_id"]
@@ -8358,6 +8200,41 @@ export interface Database {
           {
             foreignKeyName: "operator_capacity_org_id_fkey"
             columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_backfill_review: {
+        Row: {
+          assigned_org: string | null
+          created_at: string
+          id: number
+          reason: string
+          row_id: string
+          table_name: string
+        }
+        Insert: {
+          assigned_org?: string | null
+          created_at?: string
+          id?: number
+          reason: string
+          row_id: string
+          table_name: string
+        }
+        Update: {
+          assigned_org?: string | null
+          created_at?: string
+          id?: number
+          reason?: string
+          row_id?: string
+          table_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_backfill_review_assigned_org_fkey"
+            columns: ["assigned_org"]
             isOneToOne: false
             referencedRelation: "organizations"
             referencedColumns: ["id"]
@@ -8476,6 +8353,7 @@ export interface Database {
           rate_currency: string
           default_margin_percent: number | null
           rate_change_alerts: string
+          slug: string | null
           support_hours: Json | null
           office_email_addresses: string[]
           whatsapp_number: string | null
@@ -8506,6 +8384,7 @@ export interface Database {
           rate_currency?: string
           default_margin_percent?: number | null
           rate_change_alerts?: string
+          slug?: string | null
           support_hours?: Json | null
           office_email_addresses: string[]
           whatsapp_number?: string | null
@@ -8536,6 +8415,7 @@ export interface Database {
           rate_currency?: string
           default_margin_percent?: number | null
           rate_change_alerts?: string
+          slug?: string | null
           support_hours?: Json | null
           office_email_addresses?: string[]
           whatsapp_number?: string | null
@@ -9396,36 +9276,6 @@ export interface Database {
           status?: string | null
           error_message?: string | null
           changes?: Json | null
-        }
-        Relationships: []
-      }
-      reminder_settings: {
-        Row: {
-          id: string
-          name: string
-          days_offset: number
-          is_active: boolean | null
-          email_subject_template: string | null
-          created_at: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          id?: string
-          name: string
-          days_offset: number
-          is_active?: boolean | null
-          email_subject_template?: string | null
-          created_at?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          id?: string
-          name?: string
-          days_offset?: number
-          is_active?: boolean | null
-          email_subject_template?: string | null
-          created_at?: string | null
-          updated_at?: string | null
         }
         Relationships: []
       }
@@ -10594,6 +10444,7 @@ export interface Database {
           department_id: string | null
           generation_snapshot: Json | null
           service_type: string | null
+          org_id: string
         }
         Insert: {
           id?: string
@@ -10615,6 +10466,7 @@ export interface Database {
           department_id?: string | null
           generation_snapshot?: Json | null
           service_type?: string | null
+          org_id: string
         }
         Update: {
           id?: string
@@ -10636,8 +10488,16 @@ export interface Database {
           department_id?: string | null
           generation_snapshot?: Json | null
           service_type?: string | null
+          org_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tasks_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tasks_assigned_to_fkey"
             columns: ["assigned_to"]
@@ -10672,6 +10532,7 @@ export interface Database {
           last_assigned_at: string | null
           avatar_url: string | null
           department_id: string | null
+          org_id: string
         }
         Insert: {
           id?: string
@@ -10690,6 +10551,7 @@ export interface Database {
           last_assigned_at?: string | null
           avatar_url?: string | null
           department_id?: string | null
+          org_id: string
         }
         Update: {
           id?: string
@@ -10708,8 +10570,16 @@ export interface Database {
           last_assigned_at?: string | null
           avatar_url?: string | null
           department_id?: string | null
+          org_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "team_members_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "team_members_department_id_fkey"
             columns: ["department_id"]
@@ -12656,66 +12526,6 @@ export interface Database {
             referencedColumns: ["id"]
           },
         ]
-      }
-      unified_conversations: {
-        Row: {
-          id: string | null
-          channel: string | null
-          identifier: string | null
-          client_id: string | null
-          client_name: string | null
-          client_email: string | null
-          contact_info: string | null
-          subject: string | null
-          last_message_snippet: string | null
-          last_message_at: string | null
-          unread_count: number | null
-          status: string | null
-          assigned_team_member_id: string | null
-          assigned_at: string | null
-          created_at: string | null
-          updated_at: string | null
-          is_hidden: boolean | null
-        }
-        Insert: {
-          id?: string | null
-          channel?: string | null
-          identifier?: string | null
-          client_id?: string | null
-          client_name?: string | null
-          client_email?: string | null
-          contact_info?: string | null
-          subject?: string | null
-          last_message_snippet?: string | null
-          last_message_at?: string | null
-          unread_count?: number | null
-          status?: string | null
-          assigned_team_member_id?: string | null
-          assigned_at?: string | null
-          created_at?: string | null
-          updated_at?: string | null
-          is_hidden?: boolean | null
-        }
-        Update: {
-          id?: string | null
-          channel?: string | null
-          identifier?: string | null
-          client_id?: string | null
-          client_name?: string | null
-          client_email?: string | null
-          contact_info?: string | null
-          subject?: string | null
-          last_message_snippet?: string | null
-          last_message_at?: string | null
-          unread_count?: number | null
-          status?: string | null
-          assigned_team_member_id?: string | null
-          assigned_at?: string | null
-          created_at?: string | null
-          updated_at?: string | null
-          is_hidden?: boolean | null
-        }
-        Relationships: []
       }
       user_activity_summary: {
         Row: {

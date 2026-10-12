@@ -50,9 +50,9 @@ const request: LeadExtraction = {
 
 function inbox(conversations: Array<{ id: string; from: string; client_id?: string | null; inbound?: boolean }>, extra: Record<string, Row[]> = {}) {
   return fakeDb({
-    email_conversations: conversations.map((c, i) => ({ id: c.id, user_id: 'u1', client_id: c.client_id ?? null, subject: 'Siwa noviembre 2026', lead_checked_at: null, created_at: `2026-09-17T0${i}:00:00Z` })),
-    email_messages: conversations.filter(c => c.inbound !== false).map(c => ({ conversation_id: c.id, direction: 'inbound', from_address: c.from, subject: 'Siwa noviembre 2026', body_text: 'Hola, queremos ir a Siwa', sent_at: '2026-09-17T06:43:00Z' })),
-    gmail_tokens: [{ email: 'info@travel2egypt.org' }],
+    email_conversations: conversations.map((c, i) => ({ id: c.id, org_id: 'org1', user_id: 'u1', client_id: c.client_id ?? null, subject: 'Siwa noviembre 2026', lead_checked_at: null, created_at: `2026-09-17T0${i}:00:00Z` })),
+    email_messages: conversations.filter(c => c.inbound !== false).map(c => ({ org_id: 'org1', conversation_id: c.id, direction: 'inbound', from_address: c.from, subject: 'Siwa noviembre 2026', body_text: 'Hola, queremos ir a Siwa', sent_at: '2026-09-17T06:43:00Z' })),
+    gmail_tokens: [{ user_id: 'u1', org_id: 'org1', email: 'info@travel2egypt.org' }],
     organizations: [{ id: 'org1', office_email_addresses: [] }],
     organization_members: [{ user_id: 'u1', org_id: 'org1', created_at: '2026-01-01' }],
     clients: [], suppliers: [], b2b_partners: [], email_lead_dismissals: [],
@@ -88,6 +88,20 @@ describe('a travel request by email becomes a Lead', () => {
     ])
     expect(asked).toBe(1)
     expect(db.tables.clients).toEqual([])
+  })
+
+  it("each conversation is judged as its own company's: another company's office writing in is a customer here, and the lead is filed under the conversation's company", async () => {
+    // The mailbox user is in org1 only, but the first conversation is org2's
+    // — the company its mailbox serves (20261204); org2 lists ats-hj.com as
+    // its own office, org1 does not.
+    const db = inbox([{ id: 'c-ats', from: 'Desk <desk@ats-hj.com>' }, { id: 'c-t2e', from: 'Desk <desk@ats-hj.com>' }], {
+      organizations: [{ id: 'org1', office_email_addresses: [] }, { id: 'org2', office_email_addresses: ['ats-hj.com'] }],
+    })
+    db.tables.email_conversations[0].org_id = 'org2'
+    db.tables.email_messages[0].org_id = 'org2'
+    const out = await processNewEmailLeads(db, { extract: async () => request })
+    expect(out.map(o => [o.conversationId, o.outcome])).toEqual([['c-ats', 'office'], ['c-t2e', 'lead_created']])
+    expect(db.tables.clients.map(c => c.org_id)).toEqual(['org1'])
   })
 
   it('a no-reply or service address is skipped, and the AI is not asked', async () => {

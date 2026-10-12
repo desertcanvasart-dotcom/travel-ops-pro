@@ -3,6 +3,7 @@ import { newNonce, setNonceCookie } from '@/lib/oauth/csrf-nonce'
 import { clientMessage } from '@/lib/api-errors'
 import { getAuthUrl } from '@/lib/gmail'
 import { getAuthenticatedUser } from '@/lib/supabase-secure'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { signState } from '@/lib/oauth-state'
 import { wrongAddressFor } from '@/lib/oauth/redirect-address'
 
@@ -26,8 +27,17 @@ export async function POST(request: Request) {
       )
     }
 
+    // The company this mailbox will serve: the workspace active NOW
+    // (gmail_tokens.org_id, 20261204). Signed into the state with the user,
+    // so the callback — which has no trustworthy workspace of its own (it is
+    // Google redirecting back) — stamps the company the person chose.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) {
+      return NextResponse.json({ error: 'No organization membership for current user' }, { status: 403 })
+    }
+
     const nonce = newNonce()
-    const authUrl = getAuthUrl(signState(`${user.id}:${nonce}`))
+    const authUrl = getAuthUrl(signState(`${user.id}:${nonce}:${orgId}`))
 
     const res = NextResponse.json({ authUrl })
     setNonceCookie(res, nonce)

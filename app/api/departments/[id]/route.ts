@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { requireRole } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 import { deleteDepartment, findServiceTypeConflict, sanitizeServiceTypes } from '@/lib/department-admin'
 
 const supabaseAdmin = createClient(
@@ -16,6 +16,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const forbidden = await requireRole(['admin'])
     if (forbidden) return forbidden
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
 
     const { id } = await params
     const body = await request.json()
@@ -34,7 +36,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       const serviceTypes = sanitizeServiceTypes(body.service_types)
       const stillActive = update.is_active !== false
       if (stillActive) {
-        const conflict = await findServiceTypeConflict(serviceTypes, id)
+        const conflict = await findServiceTypeConflict(serviceTypes, id, orgId)
         if (conflict) {
           return NextResponse.json(
             { success: false, error: `Service type already routed to ${conflict}` },
@@ -54,10 +56,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       .from('departments')
       .update(update)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select('id, name, description, service_types, is_active')
-      .single()
+      .maybeSingle()
 
     if (error) throw error
+    if (!data) return NextResponse.json({ success: false, error: 'Department not found' }, { status: 404 })
     return NextResponse.json({ success: true, data })
   } catch (error) {
     console.error('Error in department PUT:', error)
@@ -69,6 +73,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   try {
     const forbidden = await requireRole(['admin'])
     if (forbidden) return forbidden
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
 
     const { id } = await params
     // Where the department's members and tasks go: another department's id,
@@ -78,8 +84,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     if (!reassign) {
       const [{ count: memberCount }, { count: taskCount }] = await Promise.all([
-        supabaseAdmin.from('team_members').select('id', { count: 'exact', head: true }).eq('department_id', id),
-        supabaseAdmin.from('tasks').select('id', { count: 'exact', head: true }).eq('department_id', id),
+        supabaseAdmin.from('team_members').select('id', { count: 'exact', head: true }).eq('department_id', id).eq('org_id', orgId),
+        supabaseAdmin.from('tasks').select('id', { count: 'exact', head: true }).eq('department_id', id).eq('org_id', orgId),
       ])
       if ((memberCount ?? 0) > 0 || (taskCount ?? 0) > 0) {
         return NextResponse.json(
@@ -94,7 +100,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       }
     }
 
-    const result = await deleteDepartment(supabaseAdmin, id, reassign && reassign !== 'none' ? reassign : null)
+    const result = await deleteDepartment(supabaseAdmin, id, reassign && reassign !== 'none' ? reassign : null, orgId)
     if (!result.ok) {
       return NextResponse.json({ success: false, error: result.error }, { status: result.status })
     }

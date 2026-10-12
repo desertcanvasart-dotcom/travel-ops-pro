@@ -7,7 +7,7 @@ import { GmailAuthError } from '@/lib/gmail'
 import { getMailboxGmail } from '@/lib/gmail-mailbox'
 import { getCurrentUserId } from '@/lib/auth/current-org'
 import { loadKnownContactEmails, looksAutomated } from '@/lib/email-scoping'
-import { isMissingMailboxColumn } from '@/lib/email/connected-mailboxes'
+import { findThreadConversation, type MailboxRef } from '@/lib/email/conversation-access'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -41,7 +41,12 @@ export async function GET(request: NextRequest) {
 
     const { gmail, emailAddress } = auth
     const userEmail = emailAddress?.toLowerCase()
-    const loadedRule = await loadOfficeRule(supabase)
+    // The organisation this mailbox serves (the active workspace's — lib/
+    // gmail-mailbox): what is stored here is stamped with it, and only its
+    // store is read (20261204).
+    const orgId = auth.orgId
+    const mailbox: MailboxRef = { orgId, mailboxEmail: String(auth.email || '').toLowerCase(), mailboxUserId: auth.mailboxUserId }
+    const loadedRule = await loadOfficeRule(supabase, orgId)
     const officeRuleForPoll = officeRule(userEmail ? [userEmail] : [], [...loadedRule.addresses, ...loadedRule.domains])
 
     // If no historyId, get the current one
@@ -123,7 +128,7 @@ export async function GET(request: NextRequest) {
       // still lists every new message (it is the owner reading their own
       // mailbox), but machine mail addressed to them personally must not be
       // WRITTEN into tables the whole team reads. See lib/email-scoping.ts.
-      const knownContacts = newMessageIds.length > 0 ? await loadKnownContactEmails(supabase) : new Set<string>()
+      const knownContacts = newMessageIds.length > 0 ? await loadKnownContactEmails(supabase, orgId) : new Set<string>()
 
       for (const messageId of newMessageIds.slice(0, 10)) { // Limit to 10
         try {
@@ -201,12 +206,9 @@ export async function GET(request: NextRequest) {
               }
               extractAttachments(message.data.payload)
 
-              // Find or create conversation
-              const { data: existingConv } = await supabase
-                .from('email_conversations')
-                .select('id')
-                .eq('thread_id', threadId)
-                .single()
+              // Find or create conversation — this mailbox's, in this
+              // organisation (a Gmail thread id is per mailbox).
+              const existingConv = await findThreadConversation<{ id: string }>(supabase, mailbox, threadId)
 
               let conversationId = existingConv?.id
 
@@ -232,34 +234,28 @@ export async function GET(request: NextRequest) {
               }
 
               if (!conversationId) {
-                const conversationRow = {
-                  thread_id: threadId,
-                  // The mailbox's owner, not the viewer: a shared mailbox's
-                  // threads stay one owner's (gmail/send replies from it).
-                  user_id: auth.mailboxUserId,
-                  client_email: clientEmail,
-                  subject,
-                  last_message_snippet: message.data.snippet,
-                  last_message_at: new Date(date || Date.now()).toISOString(),
-                  unread_count: direction === 'inbound' ? 1 : 0,
-                  status: 'active',
-                  is_hidden: false,
-                  last_sync_at: new Date().toISOString()
-                }
-                // The address it came from (lib/email/connected-mailboxes);
-                // without the column (before migration 20261128), stored as before.
-                let { data: newConv, error: newConvError } = await supabase
+                // The address it came from (lib/email/connected-mailboxes) and
+                // the organisation it serves.
+                const { data: newConv } = await supabase
                   .from('email_conversations')
-                  .insert({ ...conversationRow, mailbox_email: String(auth.email || '').toLowerCase() || null })
+                  .insert({
+                    org_id: orgId,
+                    mailbox_email: mailbox.mailboxEmail || null,
+                    thread_id: threadId,
+                    // The mailbox's owner, not the viewer: a shared mailbox's
+                    // threads stay one owner's (gmail/send replies from it).
+                    user_id: auth.mailboxUserId,
+                    client_email: clientEmail,
+                    subject,
+                    last_message_snippet: message.data.snippet,
+                    last_message_at: new Date(date || Date.now()).toISOString(),
+                    unread_count: direction === 'inbound' ? 1 : 0,
+                    status: 'active',
+                    is_hidden: false,
+                    last_sync_at: new Date().toISOString()
+                  })
                   .select()
                   .single()
-                if (newConvError && isMissingMailboxColumn(newConvError)) {
-                  ;({ data: newConv, error: newConvError } = await supabase
-                    .from('email_conversations')
-                    .insert(conversationRow)
-                    .select()
-                    .single())
-                }
                 conversationId = newConv?.id
               } else {
                 // Update conversation
@@ -271,19 +267,22 @@ export async function GET(request: NextRequest) {
                     updated_at: new Date().toISOString()
                   })
                   .eq('id', conversationId)
+                  .eq('org_id', orgId)
               }
 
               // Store message (if not exists)
               const { data: existingMsg } = await supabase
                 .from('email_messages')
                 .select('id')
+                .eq('org_id', orgId)
                 .eq('message_id', message.data.id)
-                .single()
+                .maybeSingle()
 
               if (!existingMsg) {
                 const { error: msgInsertError } = await supabase
                   .from('email_messages')
                   .insert({
+                    org_id: orgId,
                     conversation_id: conversationId,
                     message_id: message.data.id,
                     thread_id: threadId,
@@ -320,6 +319,7 @@ export async function GET(request: NextRequest) {
                       .from('email_conversations')
                       .update({ is_hidden: false, status: 'active' })
                       .eq('id', existingConv.id)
+                      .eq('org_id', orgId)
                       .eq('is_hidden', true)
                       .eq('status', 'trashed')
                   }

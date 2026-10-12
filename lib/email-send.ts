@@ -131,8 +131,10 @@ export { encodeEmailHeader }
 
 /**
  * The platform's own mailbox, for mail no organization sends: the connected
- * account whose address is GMAIL_USER, else (legacy installs that never set
- * it) the first connected account.
+ * account whose address is GMAIL_USER, else none. It fell back to the first
+ * connected account — whichever company's mailbox that was (each connection
+ * serves one company since 20261204) — so platform mail went out from one
+ * company's address; now it is not sent instead.
  */
 async function platformSenderId(): Promise<string | null> {
   const platformAddress = (process.env.GMAIL_USER || '').trim()
@@ -145,8 +147,7 @@ async function platformSenderId(): Promise<string | null> {
       .maybeSingle()
     if (data?.user_id) return data.user_id
   }
-  const { data } = await supabase.from('gmail_tokens').select('user_id').limit(1).maybeSingle()
-  return data?.user_id ?? null
+  return null
 }
 
 // From is the sending account's own address (Gmail would rewrite any other);

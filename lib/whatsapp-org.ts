@@ -82,64 +82,21 @@ export async function senderForOrg(
 }
 
 /**
- * Whether a team member may hold an org's conversation. team_members has no
- * org_id; a member belongs to the org their linked login (user_id) is a
- * member of. A member with no login cannot be placed in any org, so they are
- * accepted only while the deployment has a single organization (how every
- * team member was created until now) and refused once there are two.
+ * Whether a team member is the org's own (team_members.org_id, migration
+ * 20261203) — who may hold its conversations, tasks and trips. A member with
+ * no login is the org that created them, like any other.
  */
 export async function teamMemberInOrg(
   supabase: SupabaseClient,
   teamMemberId: string,
   orgId: string,
 ): Promise<boolean> {
-  const { data: member, error } = await supabase
+  const { data, error } = await supabase
     .from('team_members')
-    .select('id, user_id')
+    .select('id')
     .eq('id', teamMemberId)
+    .eq('org_id', orgId)
     .maybeSingle()
   if (error) throw error
-  if (!member) return false
-  const userId = (member as { user_id: string | null }).user_id
-  if (userId) {
-    const { data: membership, error: mErr } = await supabase
-      .from('organization_members')
-      .select('user_id')
-      .eq('org_id', orgId)
-      .eq('user_id', userId)
-      .limit(1)
-    if (mErr) throw mErr
-    return (membership?.length ?? 0) > 0
-  }
-  const { count, error: cErr } = await supabase
-    .from('organizations')
-    .select('id', { count: 'exact', head: true })
-  if (cErr) throw cErr
-  return count === 1
-}
-
-/**
- * The team members (rows carrying id and user_id) that belong to an org —
- * teamMemberInOrg's rule for a whole list in two reads, for listing them.
- */
-export async function teamMembersInOrg<T extends { user_id?: string | null }>(
-  supabase: SupabaseClient,
-  members: T[],
-  orgId: string,
-): Promise<T[]> {
-  const { data: memberships, error } = await supabase
-    .from('organization_members')
-    .select('user_id')
-    .eq('org_id', orgId)
-  if (error) throw error
-  const inOrg = new Set(((memberships ?? []) as { user_id: string | null }[]).map(m => m.user_id).filter(Boolean))
-  let singleOrg: boolean | null = null
-  if (members.some(m => !m.user_id)) {
-    const { count, error: cErr } = await supabase
-      .from('organizations')
-      .select('id', { count: 'exact', head: true })
-    if (cErr) throw cErr
-    singleOrg = count === 1
-  }
-  return members.filter(m => (m.user_id ? inOrg.has(m.user_id) : singleOrg === true))
+  return !!data
 }

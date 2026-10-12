@@ -2,14 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { shiftDateISO, todayFromRequest } from '@/lib/today'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { taskRefsInOrg } from '@/lib/org-refs'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// The organisation's own tasks only (tasks.org_id, migration 20261203): this
+// listed, and created tasks against, every company's.
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
     const priority = searchParams.get('priority')
@@ -30,6 +36,7 @@ export async function GET(request: NextRequest) {
         assigned_member:team_members!tasks_assigned_to_fkey(id, name, role, email),
         department:departments(id, name)
       `)
+      .eq('org_id', orgId)
       .order('created_at', { ascending: false })
 
     if (departmentId) {
@@ -86,6 +93,7 @@ export async function GET(request: NextRequest) {
     const { data: allTasks } = await supabase
       .from('tasks')
       .select('id, status, priority, due_date, archived')
+      .eq('org_id', orgId)
 
     const today = todayFromRequest(request.url)
     const nonArchivedTasks = (allTasks || []).filter(t => !t.archived)
@@ -115,11 +123,20 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
-    
+
+    // Who it is for, where it routes and what it is about must be this
+    // organisation's own.
+    if (!(await taskRefsInOrg(supabase, orgId, body))) {
+      return NextResponse.json({ success: false, error: 'Assignee, department or linked record not found' }, { status: 404 })
+    }
+
     const { data, error } = await supabase
       .from('tasks')
       .insert({
+        org_id: orgId,
         title: body.title,
         description: body.description || null,
         due_date: body.due_date || null,

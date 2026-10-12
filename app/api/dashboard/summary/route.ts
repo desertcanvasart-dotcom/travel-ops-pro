@@ -69,15 +69,11 @@ export async function GET() {
         .neq('status', 'cancelled')
         .lte('start_date', todayDate)
         .gte('end_date', todayDate),
-      // NOT org-scoped, and cannot be: tasks have NO org_id column at all
-      // (adding .eq('org_id', ...) returns a 400). They predate organisations;
-      // scoping them is the deferred G1 work. Called out here so the omission
-      // reads as known rather than missed. (whatsapp_conversations has org_id
-      // since 20261125; email_conversations is scoped to the org's mailboxes,
-      // client_followups through their client — both below.)
-      // Open tasks with a due date (split due-today vs overdue in JS)
+      // Open tasks with a due date (split due-today vs overdue in JS) — this
+      // organisation's (tasks.org_id since 20261203).
       supabase.from('tasks')
         .select('id, due_date, status')
+        .eq('org_id', orgId)
         .not('status', 'in', `(${OPEN_TASK.join(',')})`)
         .not('due_date', 'is', null),
       // Unread counts straight from the conversation tables (hidden rows excluded)
@@ -88,12 +84,12 @@ export async function GET() {
         .gt('unread_count', 0),
       // Only a connected address's mail (lib/email/connected-mailboxes).
       scopedToConnectedMailboxes(supabase, orgId, (mailboxFilter) => {
-        let q = supabase.from('email_conversations')
+        return supabase.from('email_conversations')
           .select('unread_count')
+          .eq('org_id', orgId)
           .or('is_hidden.is.null,is_hidden.eq.false')
           .gt('unread_count', 0)
-        if (mailboxFilter) q = q.or(mailboxFilter)
-        return q
+          .or(mailboxFilter)
       }),
       // client_followups has no org_id: scoped through its client, as the
       // analytics follow-ups count is (this counted every company's).
