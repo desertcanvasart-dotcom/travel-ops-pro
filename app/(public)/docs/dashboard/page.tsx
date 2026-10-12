@@ -94,9 +94,9 @@ export default function DashboardPage() {
         <p className="text-gray-600 mb-3">Shortcuts to the most common screens. You only see the ones your role can open:</p>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
           <li><strong>Unified Inbox</strong> &mdash; WhatsApp and email conversations (owner, admin, manager, agent).</li>
-          <li><strong>New Quote</strong> &mdash; start a new itinerary from scratch (owner, admin, manager).</li>
+          <li><strong>New Quote</strong> &mdash; start a new itinerary from scratch (owner, admin, manager, agent).</li>
           <li><strong>Rates Hub</strong> &mdash; hotel, guide and service rates (owner, admin, manager).</li>
-          <li><strong>B2B Packages</strong> &mdash; the tour inventory of ready-made packages (owner, admin, manager).</li>
+          <li><strong>B2B Packages</strong> &mdash; the tour inventory of ready-made packages (owner, admin, manager, agent).</li>
         </ul>
         <p className="text-gray-600 mt-3">If none of them apply to your role, the panel is not shown.</p>
       </section>

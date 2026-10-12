@@ -40,6 +40,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // Admin, Manager, Agent
   '/clients': ['admin', 'manager', 'agent'],
   '/itineraries': ['admin', 'manager', 'agent'],
+  '/bookings': ['admin', 'manager', 'agent'],
   '/invoices': ['admin', 'manager', 'agent'],
   '/payments': ['admin', 'manager', 'agent'],
   '/tasks': ['admin', 'manager', 'agent'],

@@ -19,7 +19,7 @@ export default function TourInventoryPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Who Can Use It</h2>
         <p className="text-gray-700">
-          The Tours menu is shown to the owner, Administrators and Managers. Agents and Viewers do not see it. Roles are explained in <Link href="/docs/user-management" className="text-primary-600 hover:underline">User Management</Link>.
+          Tour Inventory is shown to the owner, Administrators, Managers and Agents. The other Tours items, Tour Manager and Transport Packages, are for the owner, Administrators and Managers. Viewers do not see the Tours menu. Roles are explained in <Link href="/docs/user-management" className="text-primary-600 hover:underline">User Management</Link>.
         </p>
       </section>
 
