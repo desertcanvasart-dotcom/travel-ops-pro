@@ -136,6 +136,8 @@ export async function createCruiseItineraryServices(
     rateCurrency?: string
     /** The trip's billing currency. Service amounts are converted into it, as the land path does. */
     currency?: string
+    /** The trip's organisation — whose cruise transport packages price it. */
+    orgId?: string | null
   }
 ): Promise<{
   createdDays: CruiseCreatedDay[]
@@ -149,6 +151,7 @@ export async function createCruiseItineraryServices(
     marginPercent, includeGuide, effectiveCity,
     rateCurrency = 'EUR',
     currency = rateCurrency,
+    orgId = null,
   } = params
 
   const warnings: string[] = []
@@ -208,7 +211,7 @@ export async function createCruiseItineraryServices(
   // ============================================
 
   // 1. Cruise transport (bundled flat rate from b2b_pricing_rules)
-  const cruiseTransportRules = await fetchCruiseTransportPricingRules()
+  const cruiseTransportRules = await fetchCruiseTransportPricingRules(orgId)
   const cruiseTransportRule = findCruiseTransportRule(cruiseTransportRules, durationDays)
   let cruiseTransportRate = 0
   let cruiseTransportVehicle = 'Minivan'

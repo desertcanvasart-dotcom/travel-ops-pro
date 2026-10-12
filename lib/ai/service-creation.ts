@@ -707,6 +707,8 @@ export async function createLandItineraryServices(
     currency?: string  // Target currency for client-facing prices (default: EUR)
     /** Currency the supplier rates are entered in (organizations.rate_currency). Default EUR. */
     rateCurrency?: string
+    /** The trip's organisation — whose cruise transport packages price it. */
+    orgId?: string | null
   }
 ): Promise<{
   createdDays: CreateDayServicesResult[]
@@ -720,7 +722,7 @@ export async function createLandItineraryServices(
     effectivePackageType, effectiveCity, totalPax, isEuroPassport,
     tier, language, includeLunch, includeDinner, includeAccommodation,
     includeGuide, skipPricing, marginPercent, startDate, currency = 'EUR', rateCurrency = 'EUR',
-    mealPlan,
+    mealPlan, orgId = null,
   } = params
 
   // All Inclusive: meals are provided by the hotel, not separate restaurant services
@@ -2103,7 +2105,7 @@ export async function createLandItineraryServices(
         (d: any) => d.is_cruise_day || d.accommodation_type === 'cruise'
       ).length + 1
 
-      const landCruiseTransportRules = await fetchCruiseTransportPricingRules()
+      const landCruiseTransportRules = await fetchCruiseTransportPricingRules(orgId)
       const landCruiseTransportRule = findCruiseTransportRule(landCruiseTransportRules, cruiseDaysCount)
       if (landCruiseTransportRule) {
         const transport = getCruiseTransportRate(landCruiseTransportRule, totalPax)

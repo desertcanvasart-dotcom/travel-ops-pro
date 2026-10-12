@@ -51,6 +51,12 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/tours': ['admin', 'manager', 'agent'],
   '/expenses': ['admin', 'manager'],
   '/reminders': ['admin', 'manager', 'agent'],
+  // Customer conversations and the AI copilot's drafts — the menu shows these
+  // to agent and above; a viewer opened them by URL.
+  '/communications': ['admin', 'manager', 'agent'],
+  '/copilot': ['admin', 'manager', 'agent'],
+  '/copilot-knowledge': ['admin', 'manager', 'agent'],
+  '/concierge-briefs': ['admin', 'manager', 'agent'],
   
   // All authenticated users (including viewer)
   '/dashboard': ['admin', 'manager', 'agent', 'viewer'],
@@ -151,6 +157,8 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   { prefix: '/api/email', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/gmail', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/copilot', roles: ['admin', 'manager', 'agent'] },
+  // Reviewing an AI Concierge brief is staff work.
+  { prefix: '/api/concierge-briefs', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/supplier-documents', roles: ['admin', 'manager', 'agent'] },
 ]
 // Deliberately NOT listed, and therefore session-only for every role: the
@@ -210,6 +218,9 @@ const STAFF_ONLY_API_PREFIXES = [
   '/api/whatsapp',
   '/api/unified',
   '/api/copilot',
+  // Concierge briefs: the visitor name, contact details, medical and
+  // religious constraints — PII, like the conversations above.
+  '/api/concierge-briefs',
   '/api/email',
   '/api/gmail',
   '/api/ai',

@@ -85,6 +85,9 @@ describe('API mutation gate — coverage', () => {
     '/api/b2b/quotes/abc-123',
     '/api/b2b/quotes/bulk-delete',
     '/api/b2c/quotes',
+    // A viewer could PATCH a concierge brief's review status.
+    '/api/concierge-briefs',
+    '/api/concierge-briefs/abc-123',
   ])('%s is agent-and-above', path => {
     const roles = rolesFor(path)
     expect(roles, `${path} has no entry in API_MUTATION_PERMISSIONS`).not.toBeNull()
@@ -165,6 +168,14 @@ describe('page gate — a manager sees everything', () => {
     expect(roles, `${page} has no page gate`).toBeTruthy()
     expect(roleAllows('manager', roles)).toBe(true)
     expect(roleAllows('agent', roles)).toBe(false)
+    expect(roleAllows('viewer', roles)).toBe(false)
+  })
+
+  // The menu shows these to agent and above; a viewer could open them by URL.
+  it.each(['/communications', '/copilot', '/copilot-knowledge', '/concierge-briefs'])('%s is agent-and-above', page => {
+    const roles = pagePermissions()[page]
+    expect(roles, `${page} has no page gate`).toBeTruthy()
+    expect(roleAllows('agent', roles)).toBe(true)
     expect(roleAllows('viewer', roles)).toBe(false)
   })
 
@@ -313,7 +324,7 @@ describe('routes that act on "me" resolve me from the session', () => {
 describe('staff-only API prefixes (reads included)', () => {
   const block = source.match(/const STAFF_ONLY_API_PREFIXES = \[([\s\S]*?)\n\]/)
   const prefixes = block ? [...block[1].matchAll(/'([^']+)'/g)].map(m => m[1]) : []
-  it.each(['/api/whatsapp/conversations', '/api/whatsapp/messages', '/api/unified/client/x', '/api/copilot/threads', '/api/copilot/inbox', '/api/ai/suggest-reply', '/api/translate'])(
+  it.each(['/api/whatsapp/conversations', '/api/whatsapp/messages', '/api/unified/client/x', '/api/copilot/threads', '/api/copilot/inbox', '/api/ai/suggest-reply', '/api/translate', '/api/concierge-briefs', '/api/concierge-briefs/abc-123'])(
     '%s is covered', path => {
       expect(prefixes.some(p => path.startsWith(p))).toBe(true)
     })

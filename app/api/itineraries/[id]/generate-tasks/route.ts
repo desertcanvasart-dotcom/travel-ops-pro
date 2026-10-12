@@ -10,6 +10,7 @@ import {
 import { createNotifications } from '@/lib/notifications'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { todayFromRequest } from '@/lib/today'
+import { teamMemberInOrg } from '@/lib/whatsapp-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,6 +36,19 @@ export async function POST(
     const assignments: Record<string, string> = body.assignments || {}
     const dryRun = body.dry_run === true
     const today = todayFromRequest(request.url)
+
+    // Every assignee must be the org's own team member: team_members has no
+    // org_id, and another company's member would be given these tasks and
+    // notified of this trip (teamMemberInOrg).
+    const assigneeIds = [...new Set(Object.values(assignments).filter(v => v != null && v !== ''))]
+    for (const assigneeId of assigneeIds) {
+      if (typeof assigneeId !== 'string' || !(await teamMemberInOrg(supabaseAdmin, assigneeId, orgId))) {
+        return NextResponse.json(
+          { success: false, error: 'An assignee is not a team member of this organization. Pick someone from your own team.' },
+          { status: 404 }
+        )
+      }
+    }
 
     const { data: itinerary, error: itinError } = await supabaseAdmin
       .from('itineraries')

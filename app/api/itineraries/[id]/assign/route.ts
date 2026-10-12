@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createNotification } from '@/lib/notifications'
 import { clientMessage } from '@/lib/api-errors'
+import { teamMemberInOrg } from '@/lib/whatsapp-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -111,7 +112,9 @@ export async function PUT(
         .eq('id', assignedTo)
         .maybeSingle()
 
-      if (!member) {
+      // And the org's own: team_members has no org_id, and another company's
+      // member would be told — and emailed — this trip and its client.
+      if (!member || !(await teamMemberInOrg(supabaseAdmin, assignedTo, orgId))) {
         return NextResponse.json({ success: false, error: 'Team member not found' }, { status: 404 })
       }
       if (member.is_active === false) {

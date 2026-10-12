@@ -464,7 +464,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Quick transport lookup for inclusions vehicle type (actual rate fetched inside module)
-        const cruiseTransportRulesForInc = await fetchCruiseTransportPricingRules()
+        const cruiseTransportRulesForInc = await fetchCruiseTransportPricingRules(orgId)
         const cruiseTransportRuleForInc = findCruiseTransportRule(cruiseTransportRulesForInc, duration_days)
         const cruiseTransportVehicle = cruiseTransportRuleForInc
           ? getCruiseTransportRate(cruiseTransportRuleForInc, totalPax).vehicleType
@@ -559,6 +559,7 @@ export async function POST(request: NextRequest) {
 
         // Delegate day + service creation to the extracted cruise module
         const cruiseServiceResult = await createCruiseItineraryServices(supabase, {
+          orgId,
           itineraryId: itinerary.id,
           cruiseContent,
           cruiseRate,
@@ -955,6 +956,7 @@ export async function POST(request: NextRequest) {
 
     // Create days and services using extracted module
     const serviceResult = await createLandItineraryServices(supabase, {
+      orgId,
       itineraryId: itinerary.id,
       itineraryData,
       rates,

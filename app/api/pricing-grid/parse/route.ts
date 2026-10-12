@@ -15,7 +15,7 @@ import { createServerClient } from '@/lib/supabase-server'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { MODEL_PARSER } from '@/lib/ai/models'
 import { enrichSlots } from '@/app/pricing-grid/lib/enrich-slots'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
 
@@ -25,7 +25,7 @@ import { currencySymbol } from '@/lib/currency-totals'
 
 // `sym` is the org's rate-currency symbol: the AI reads these lines, so they
 // must say what the numbers are.
-async function buildRateCatalog(supabase: any, tier: string, sym: string, runRateCurrency: string) {
+async function buildRateCatalog(supabase: any, orgId: string, tier: string, sym: string, runRateCurrency: string) {
   // Use select('*') — specific column selects fail silently if a column name doesn't match
   const results = await Promise.all([
     supabase.from('transportation_rates').select('*').eq('is_active', true),
@@ -38,7 +38,8 @@ async function buildRateCatalog(supabase: any, tier: string, sym: string, runRat
     supabase.from('entrance_fees').select('*').eq('is_active', true),
     supabase.from('meal_rates').select('*').eq('is_active', true),
     supabase.from('nile_cruises').select('*').eq('is_active', true).eq('tier', tier),
-    supabase.from('b2b_transport_packages').select('*').eq('is_active', true),
+    // The org's own packages (b2b_transport_packages.org_id) — not every company's.
+    supabase.from('b2b_transport_packages').select('*').eq('org_id', orgId).eq('is_active', true),
     supabase.from('flight_rates').select('*').eq('is_active', true),
   ])
 
@@ -561,9 +562,11 @@ export async function POST(request: NextRequest) {
 
     // 1. Fetch all rates from DB
     // The org's rate-currency symbol: the catalogue the AI reads, and the logs, both say what the numbers are.
-    const runRateCurrency = await getOrgRateCurrency(supabase, await getCurrentOrgId())
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const runRateCurrency = await getOrgRateCurrency(supabase, orgId)
     const sym = currencySymbol(runRateCurrency)
-    const { catalog, rawRates } = await buildRateCatalog(supabase, tier || 'standard', sym, runRateCurrency)
+    const { catalog, rawRates } = await buildRateCatalog(supabase, orgId, tier || 'standard', sym, runRateCurrency)
 
     // 2. Build prompt with real rate IDs
     const systemPrompt = buildSystemPrompt(catalog, pkg)

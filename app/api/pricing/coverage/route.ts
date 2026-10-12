@@ -16,6 +16,7 @@ import { createClient } from '@supabase/supabase-js'
 import { calculateDayBasedPricing, type ServiceTier } from '@/lib/auto-pricing-service'
 import { computeCoverage } from '@/lib/pricing-coverage'
 import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 
 // Service-role client, matching ours' other tour-template routes; the /api/*
 // middleware gate handles authentication. Pricing/templates are single-org here.
@@ -32,6 +33,7 @@ export async function GET(request: NextRequest) {
     const templateId = searchParams.get('templateId')
     const tierParam = searchParams.get('tier')
     const isEurPassport = searchParams.get('isEurPassport') !== 'false'
+    const orgId = await getCurrentOrgId()
 
     // 'all' = every tier on the agency's ladder (Settings → Vocabulary)
     const ALL_TIERS: ServiceTier[] = await tierLadderForCurrentOrg()
@@ -63,7 +65,8 @@ export async function GET(request: NextRequest) {
       templates,
       tiers,
       isEurPassport,
-      calc: (args) => calculateDayBasedPricing(args),
+      // The org's own cruise packages and airports (the engine reads none without it).
+      calc: (args) => calculateDayBasedPricing({ ...args, orgId: orgId ?? undefined }),
     })
 
     return NextResponse.json({

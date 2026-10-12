@@ -8,6 +8,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { copilotThreadInOrg } from '@/lib/copilot/thread-access'
 import { generateDraft, draftFlags } from '@/lib/ai/draft-generator'
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { MODEL_DRAFT } from '@/lib/ai/models'
@@ -23,6 +25,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
     const body: RegenerateDraftRequest & { user_id?: string } = await request.json()
 
@@ -33,7 +37,12 @@ export async function POST(
       .eq('id', id)
       .single()
 
-    if (fetchError || !originalDraft) {
+    // A draft is its thread's organisation's (lib/copilot/thread-access):
+    // any id regenerated — and expired — another company's draft.
+    const thread = originalDraft
+      ? await copilotThreadInOrg<{ id: string; org_id: string | null; channel: 'whatsapp' | 'email' }>(supabase, orgId, originalDraft.thread_id, 'channel')
+      : null
+    if (fetchError || !originalDraft || !thread) {
       return NextResponse.json(
         { success: false, error: 'Original draft not found' },
         { status: 404 }
@@ -50,20 +59,6 @@ export async function POST(
     if (!inboxMessage) {
       return NextResponse.json(
         { success: false, error: 'Inbox message not found' },
-        { status: 404 }
-      )
-    }
-
-    // Fetch the thread
-    const { data: thread } = await supabase
-      .from('communication_threads')
-      .select('channel')
-      .eq('id', originalDraft.thread_id)
-      .single()
-
-    if (!thread) {
-      return NextResponse.json(
-        { success: false, error: 'Thread not found' },
         { status: 404 }
       )
     }
@@ -90,6 +85,7 @@ export async function POST(
         senderName: inboxMessage.sender_name,
         tone,
         additionalInstructions: body.additional_instructions,
+        orgId, // scope RAG retrieval to the thread's org (as the first draft does)
       },
       supabase
     )

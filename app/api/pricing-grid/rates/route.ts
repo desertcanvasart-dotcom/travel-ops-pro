@@ -12,7 +12,7 @@ import { airportsFrom, flightRouteLabel, cityOfAirportKey } from '@/lib/rates/ai
 import { supplementsForRow, supplementField } from '@/lib/rates/supplements'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { pricingBasisLabel, toPricingBasis } from '@/lib/pricing/pricing-basis'
@@ -24,6 +24,8 @@ export async function GET(request: NextRequest) {
     const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     const tier = searchParams.get('tier') || 'standard'
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
 
     // Fetch all rate tables in parallel
     const [
@@ -51,11 +53,13 @@ export async function GET(request: NextRequest) {
       supabase.from('entrance_fees').select('*').eq('is_active', true),
       supabase.from('meal_rates').select('*').eq('is_active', true),
       supabase.from('nile_cruises').select('*').eq('is_active', true).eq('tier', tier),
-      supabase.from('b2b_transport_packages').select('*').eq('is_active', true),
+      // The org's own packages and airports (both carry org_id) — these were
+      // every company's.
+      supabase.from('b2b_transport_packages').select('*').eq('org_id', orgId).eq('is_active', true),
       supabase.from('flight_rates').select('*').eq('is_active', true),
       // A fare's route is airport KEYS; every line the operator reads, and the
       // day-city match, needs them back as places.
-      supabase.from('org_vocabularies').select('key, label, meta, is_active').eq('kind', 'airport').order('rank'),
+      supabase.from('org_vocabularies').select('key, label, meta, is_active').eq('org_id', orgId).eq('kind', 'airport').order('rank'),
     ])
     const airports = airportsFrom((airportRows ?? []) as Array<{ key: string; label: string; meta: Record<string, unknown>; is_active: boolean }>)
 
@@ -66,7 +70,7 @@ export async function GET(request: NextRequest) {
     // rates into a total that was confidently wrong by ~50x. Same
     // normalizer, same policy: a row whose currency cannot be converted is
     // neutralised (prices to 0 and shows as such) rather than guessed.
-    const rateCurrency = await getOrgRateCurrency(supabase, await getCurrentOrgId())
+    const rateCurrency = await getOrgRateCurrency(supabase, orgId)
     const normalizer = createRateNormalizer(rateCurrency)
     const [
       nTransport, nGuides, nAirport, nHotelSvc, nTipping, nActivities,

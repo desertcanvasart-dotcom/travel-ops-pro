@@ -7,6 +7,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { copilotThreadInOrg } from '@/lib/copilot/thread-access'
 import { generateDraft, draftFlags } from '@/lib/ai/draft-generator'
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { MODEL_DRAFT } from '@/lib/ai/models'
@@ -22,7 +24,6 @@ export async function POST(request: NextRequest) {
   let inboxMessageIdForFailure: string | undefined
   try {
     const body: GenerateDraftRequest & { user_id?: string } = await request.json()
-    inboxMessageIdForFailure = body.inbox_message_id
 
     if (!body.inbox_message_id || !body.thread_id) {
       return NextResponse.json(
@@ -31,11 +32,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Only a thread of this organisation's, and an inbox message of that
+    // thread (lib/copilot/thread-access): any ids returned another company's
+    // draft or drafted against its customer's message. Checked before the
+    // catch below may mark the inbox row failed (set once it is verified).
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const thread = await copilotThreadInOrg<{ id: string; org_id: string | null }>(supabase, orgId, body.thread_id)
+    if (!thread) {
+      return NextResponse.json(
+        { success: false, error: 'Thread not found' },
+        { status: 404 }
+      )
+    }
+
     // Check if a draft already exists for this inbox message (idempotency)
     const { data: existingDraft } = await supabase
       .from('communication_drafts')
       .select('id')
       .eq('inbox_message_id', body.inbox_message_id)
+      .eq('thread_id', body.thread_id)
       .is('parent_draft_id', null) // Only check original drafts, not regenerated
       .in('status', ['pending', 'approved'])
       .single()
@@ -56,6 +72,7 @@ export async function POST(request: NextRequest) {
       .from('communication_inbox')
       .select('*')
       .eq('id', body.inbox_message_id)
+      .eq('thread_id', body.thread_id)
       .single()
 
     if (inboxError || !inboxMessage) {
@@ -64,20 +81,7 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       )
     }
-
-    // Fetch the thread
-    const { data: thread, error: threadError } = await supabase
-      .from('communication_threads')
-      .select('*')
-      .eq('id', body.thread_id)
-      .single()
-
-    if (threadError || !thread) {
-      return NextResponse.json(
-        { success: false, error: 'Thread not found' },
-        { status: 404 }
-      )
-    }
+    inboxMessageIdForFailure = body.inbox_message_id
 
     // Fetch user's tone preference
     let tone: CopilotTone = 'professional'
