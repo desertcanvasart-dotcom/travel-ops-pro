@@ -118,8 +118,8 @@ export const navigationConfig: NavConfig[] = [
       { labelKey: 'b2cQuotes', href: '/b2c/quotes', icon: FileText, roles: ['admin', 'manager'] },
       { labelKey: 'b2bQuotes', href: '/b2b/quotes', icon: FileText, roles: ['admin', 'manager'] },
       { labelKey: 'orderIntake', href: '/intake/order', icon: ClipboardPaste, roles: ['admin', 'manager'] },
-      { labelKey: 'itineraries', href: '/itineraries', icon: Route, roles: ['admin', 'manager'] },
-      { labelKey: 'bookings', href: '/bookings', icon: Briefcase, roles: ['admin', 'manager'] },
+      { labelKey: 'itineraries', href: '/itineraries', icon: Route, roles: ['admin', 'manager', 'agent'] },
+      { labelKey: 'bookings', href: '/bookings', icon: Briefcase, roles: ['admin', 'manager', 'agent'] },
       { labelKey: 'calendar', href: '/calendar', icon: Calendar, roles: ['admin', 'manager', 'agent'] },
       { labelKey: 'extras', href: '/rates/extras', icon: Sparkles, roles: ['admin', 'manager'] },
     ]
@@ -131,7 +131,7 @@ export const navigationConfig: NavConfig[] = [
     key: 'operate',
     roles: ['admin', 'manager', 'agent'],
     items: [
-      { labelKey: 'tasks', href: '/tasks', icon: CheckSquare, roles: ['admin', 'manager'] },
+      { labelKey: 'tasks', href: '/tasks', icon: CheckSquare, roles: ['admin', 'manager', 'agent'] },
       { labelKey: 'departures', href: '/departures', icon: Calendar, roles: ['admin', 'manager'] },
       { labelKey: 'capacity', href: '/capacity', icon: CalendarDays, roles: ['admin', 'manager'] },
       { labelKey: 'followups', href: '/followups', icon: CheckSquare, roles: ['admin', 'manager', 'agent'] },
@@ -140,15 +140,17 @@ export const navigationConfig: NavConfig[] = [
     ]
   },
   // The catalogue: tour templates, the ready-made packages, the transport
-  // packages that price them.
+  // packages that price them. Agents browse the ready-made tours (the
+  // dashboard links them there); building templates and pricing packages
+  // stays with managers.
   {
     titleKey: 'tours',
     key: 'tours',
-    roles: ['admin', 'manager'],
+    roles: ['admin', 'manager', 'agent'],
     items: [
-      { labelKey: 'tourTemplates', href: '/tours/manage', icon: LayoutTemplate },
-      { labelKey: 'readyMadePackages', href: '/tours', icon: Package },
-      { labelKey: 'pricingRules', href: '/b2b/pricing-rules', icon: Tags },
+      { labelKey: 'tourTemplates', href: '/tours/manage', icon: LayoutTemplate, roles: ['admin', 'manager'] },
+      { labelKey: 'readyMadePackages', href: '/tours', icon: Package, roles: ['admin', 'manager', 'agent'] },
+      { labelKey: 'pricingRules', href: '/b2b/pricing-rules', icon: Tags, roles: ['admin', 'manager'] },
     ]
   },
   // What you buy and what it costs: the supplier roster, then the buying rates

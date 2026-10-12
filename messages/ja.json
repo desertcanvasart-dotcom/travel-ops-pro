@@ -472,12 +472,21 @@
     "attnDismiss": "非表示",
     "attnDismissHint": "状況が変わるまで（お客様からの新しいメール、残金や期限の変更、申込書の追加など）オフィス全体で非表示にします",
     "attnDismissedCount": "{count}件を非表示中",
-    "attnUndo": "元に戻す"
+    "attnUndo": "元に戻す",
+    "attnExtraRequest": "{status, select, accepted {オプション承諾済み・未手配: {title}} other {お客様からのオプション希望: {title}}}",
+    "attnBalanceDueNoAmount": "残金の期限 {date}",
+    "attnBalanceOverdueNoAmount": "残金 期限超過",
+    "refundsCount": "返金 {count} 件を差し引き済み"
   },
   "analytics": {
     "title": "分析ダッシュボード",
     "subtitle": "ビジネスパフォーマンスとインサイト",
     "loading": "分析を読み込み中...",
+    "error": {
+      "title": "分析データを読み込めませんでした",
+      "description": "数値を読み込めませんでした。読み込めるまで以下の内容は表示されません。",
+      "retry": "再試行"
+    },
     "timeRange": {
       "7d": "過去7日間",
       "30d": "過去30日間",
@@ -512,15 +521,15 @@
       "pending": "保留中",
       "cancelled": "キャンセル",
       "confirmed": "確定",
-      "completed": "完了"
+      "completed": "完了",
+      "allTimeNote": "リードとフォローアップは期間に関係なく現在の総数です。保留中・キャンセル・確定・完了は、選択した期間に作成された旅程の件数です。"
     },
     "highlights": {
-      "title": "今月のハイライト",
+      "title": "選択期間のハイライト",
       "newClients": "新規顧客",
       "pendingBookings": "保留中の予約",
       "avgDealSize": "平均取引額",
       "topDestination": "人気の目的地",
-      "bestChannel": "最適なチャネル",
       "na": "N/A"
     },
     "charts": {
@@ -528,7 +537,6 @@
       "topDestinations": "人気目的地",
       "allDestinations": "すべての目的地",
       "bookingStatus": "予約ステータス",
-      "allStatus": "すべてのステータス",
       "revenueByDestination": "目的地別売上",
       "revenue": "売上",
       "bookings": "予約"
@@ -554,8 +562,8 @@
       "noRevenueData": "売上データがありません。確定済みの予約を追加してください！",
       "noBookingInsights": "予約を追加するとインサイトが表示されます。",
       "noConversionData": "予約があるとコンバージョンデータが表示されます。",
-      "busiestPeriod": "最も忙しかった期間は{period}で、売上は{amount}でした。",
-      "pendingPercentage": "アクティブな予約の{percent}%がまだ保留中です。フォローアップを検討してください。",
+      "busiestWeek": "売上が最も多かったのは{week}から始まる週で、{amount}でした。",
+      "pendingPercentage": "この期間の予約の{percent}%がまだ保留中（下書きまたは送信済み）です。フォローアップを検討してください。",
       "strongConversion": "コンバージョン率は良好です！セールスプロセスがうまく機能しています。",
       "lowConversion": "コンバージョン率に注意が必要です。セールスファネルを見直してください。",
       "addBookingsForInsights": "予約を追加するとコンバージョンインサイトが表示されます。",
@@ -956,7 +964,14 @@
     "name": "名前",
     "type": "タイプ",
     "totalEarned": "総獲得額",
-    "noCommissionData": "コミッションデータがありません"
+    "noCommissionData": "コミッションデータがありません",
+    "loadFailed": "{year}年の財務レポートを読み込めませんでした。別の年の数値を表示しないよう、数値は表示していません。",
+    "retry": "再試行",
+    "fxHolesTitle": "{count}件の明細がこの数値に含まれていません",
+    "fxHolesBody": "{currency}に換算するための為替レートが登録されていません。額面のまま合算せず除外しているため、合計は実際より少なく表示されています。",
+    "fxHolesMore": "…ほか{count}件",
+    "demoExcluded": "デモ用データ{count}件（DEMO-で始まる旅程と、それに紐づく請求書・経費・入金）はこの数値から除外しています。",
+    "currencyFallback": "{requested}はレポート通貨に対応していないため、{currency}で表示しています。"
   },
   "expenses": {
     "expenses": "経費",

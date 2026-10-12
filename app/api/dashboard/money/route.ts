@@ -4,6 +4,7 @@ import { excludeDemoLinked, loadDemoItineraryIds, type DemoLookupClient } from '
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { addTo, billsWithoutExpenses, netReceived, receivableTotals, type CurrencyTotals } from '@/lib/dashboard/figures'
 
 // ============================================
 // DASHBOARD MONEY ROW — manager/owner only
@@ -11,14 +12,8 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 // Gated by the middleware financial-API prefix list ('/api/dashboard/money'),
 // same as /api/accounts-receivable et al. Money is summed PER CURRENCY and
 // never across currencies — an org that bills JPY and pays USD owes two
-// amounts, not one sum (house rule from accounts-payable).
-
-type CurrencyTotals = Record<string, number>
-
-const add = (t: CurrencyTotals, currency: string | null | undefined, amount: number | null | undefined) => {
-  const c = currency || 'EUR'
-  t[c] = (t[c] || 0) + Number(amount || 0)
-}
+// amounts, not one sum (house rule from accounts-payable). The arithmetic
+// lives in lib/dashboard/figures.
 
 export async function GET(request: NextRequest) {
   try {
@@ -54,14 +49,15 @@ export async function GET(request: NextRequest) {
         .select('amount, currency, itinerary_id')
         .eq('org_id', orgId)
         .in('status', ['pending', 'approved']),
-      // Supplier bills not yet settled
+      // Supplier bills not yet settled (those matched to an expense are
+      // dropped below — the expense already carries that money)
       supabase.from('supplier_invoices')
-        .select('amount, currency')
+        .select('id, amount, currency')
         .eq('org_id', orgId)
         .in('status', ['received', 'matched', 'approved']),
-      // Money that actually arrived this month
+      // Money that actually arrived this month, refunds netted out below
       supabase.from('payments')
-        .select('amount, currency, itinerary_id')
+        .select('amount, currency, itinerary_id, payment_type')
         .eq('org_id', orgId)
         .gte('payment_date', monthStart.slice(0, 10)),
       // Money that actually left this month (expenses marked paid this month)
@@ -74,6 +70,17 @@ export async function GET(request: NextRequest) {
     for (const r of [receivableInvoices, unpaidExpenses, unpaidBills, monthPayments, monthPaidExpenses]) {
       if (r.error) throw r.error
     }
+
+    // Which open bills are matched to expenses. The junction has no org_id;
+    // it is keyed on bill ids this org's query just returned.
+    const billIds = (unpaidBills.data || []).map(b => b.id)
+    const billLinks = billIds.length
+      ? await supabase.from('supplier_invoice_expenses')
+          .select('supplier_invoice_id')
+          .in('supplier_invoice_id', billIds)
+      : { data: [], error: null }
+    if (billLinks.error) throw billLinks.error
+    const billsUnlinked = billsWithoutExpenses(unpaidBills.data || [], billLinks.data || [])
 
     // Hold back rows belonging to a seeded fixture. Reported below, not silent.
     const invoicesReal = excludeDemoLinked(receivableInvoices.data, demoItineraryIds)
@@ -89,42 +96,37 @@ export async function GET(request: NextRequest) {
       codes: [],
     }
 
-    const receivableTotals: CurrencyTotals = {}
-    const receivableOverdue: CurrencyTotals = {}
-    for (const inv of invoicesReal.real) {
-      add(receivableTotals, inv.currency, inv.balance_due)
-      if (inv.due_date && inv.due_date <= today) add(receivableOverdue, inv.currency, inv.balance_due)
-    }
+    const receivables = receivableTotals(invoicesReal.real, today)
 
     const expenseTotals: CurrencyTotals = {}
-    for (const e of unpaidExpensesReal.real) add(expenseTotals, e.currency, e.amount)
+    for (const e of unpaidExpensesReal.real) addTo(expenseTotals, e.currency, e.amount)
 
     const billTotals: CurrencyTotals = {}
-    for (const b of unpaidBills.data || []) add(billTotals, b.currency, b.amount)
+    for (const b of billsUnlinked) addTo(billTotals, b.currency, b.amount)
 
-    const receivedThisMonth: CurrencyTotals = {}
-    for (const p of monthPaymentsReal.real) add(receivedThisMonth, p.currency, p.amount)
+    const received = netReceived(monthPaymentsReal.real)
 
     const spentThisMonth: CurrencyTotals = {}
-    for (const e of monthPaidExpensesReal.real) add(spentThisMonth, e.currency, e.amount)
+    for (const e of monthPaidExpensesReal.real) addTo(spentThisMonth, e.currency, e.amount)
 
     return NextResponse.json({
       success: true,
       data: {
         receivables: {
-          totals: receivableTotals,
-          overdue: receivableOverdue,
+          totals: receivables.totals,
+          overdue: receivables.overdue,
           count: invoicesReal.real.length,
         },
         payables: {
           expenseTotals,
           expenseCount: unpaidExpensesReal.real.length,
           billTotals,
-          billCount: unpaidBills.data?.length || 0,
+          billCount: billsUnlinked.length,
         },
         month: {
-          received: receivedThisMonth,
-          receivedCount: monthPaymentsReal.real.length,
+          received: received.totals,
+          receivedCount: received.count,
+          refundCount: received.refundCount,
           spent: spentThisMonth,
           spentCount: monthPaidExpensesReal.real.length,
         },

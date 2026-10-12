@@ -43,7 +43,9 @@ import { useCurrency } from '@/app/contexts/PreferencesContext'
 interface AnalyticsData {
   revenue: {
     total: number
-    growth: number
+    /** null when the previous period had no revenue to grow from. */
+    growth: number | null
+    /** One point per week of the range, labelled by its start date (UTC). */
     monthlyData: { month: string; revenue: number }[]
   }
   bookings: {
@@ -98,13 +100,8 @@ const formatPercent = (num: number): string => {
 const emptyData: AnalyticsData = {
   revenue: {
     total: 0,
-    growth: 0,
-    monthlyData: [
-      { month: 'Week 1', revenue: 0 },
-      { month: 'Week 2', revenue: 0 },
-      { month: 'Week 3', revenue: 0 },
-      { month: 'Week 4', revenue: 0 }
-    ]
+    growth: null,
+    monthlyData: []
   },
   bookings: {
     total: 0,
@@ -138,7 +135,10 @@ export default function AnalyticsPage() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | '1y'>('30d')
   const [destinationFilter, setDestinationFilter] = useState<string>('all')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  // A failed load is shown as a failure. It used to be swapped for all-zero
+  // data, so a 500 rendered as "No data yet" — indistinguishable from an
+  // operator who really has no bookings.
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Format in the currency the API actually CONVERTED into, falling back to the
   // org's billing currency only before the first response lands. The page used
@@ -153,25 +153,27 @@ export default function AnalyticsPage() {
 
   const fetchAnalytics = async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const response = await fetch(`/api/analytics?range=${timeRange}`)
-      const data = await response.json()
-      
-      if (data.success && data.data) {
+      const data = await response.json().catch(() => null)
+
+      if (response.ok && data?.success && data.data) {
         setAnalytics(data.data)
       } else {
-        // Use empty data if API fails or returns no data
-        setAnalytics(emptyData)
+        setAnalytics(null)
+        setLoadError(data?.error || t('error.description'))
       }
     } catch (error) {
       console.error('Error fetching analytics:', error)
-      setAnalytics(emptyData)
+      setAnalytics(null)
+      setLoadError(t('error.description'))
     } finally {
       setLoading(false)
     }
   }
 
-  // Use analytics data or empty data (never mock data)
+  // Zeros only stand in before the first load; an error renders its own state.
   const displayData = analytics || emptyData
 
   // Color system
@@ -188,7 +190,7 @@ export default function AnalyticsPage() {
     completed: '#8B5CF6'
   }
 
-  const PIE_COLORS = [COLORS.confirmed, COLORS.pending, COLORS.cancelled]
+  const PIE_COLORS = [COLORS.confirmed, COLORS.completed, COLORS.pending, COLORS.cancelled]
 
   // Safe percentage calculation
   const safePercent = (value: number, total: number): number => {
@@ -216,7 +218,7 @@ export default function AnalyticsPage() {
 
     return {
       revenueInsight: maxRevenue > 0
-        ? t('insights.busiestPeriod', { period: maxRevenueWeek?.month || '-', amount: formatCurrency(maxRevenue) })
+        ? t('insights.busiestWeek', { week: maxRevenueWeek?.month || '-', amount: formatCurrency(maxRevenue) })
         : t('insights.noRevenueYet'),
       bookingInsight: displayData.bookings.total > 0
         ? t('insights.pendingPercentage', { percent: pendingPercentage })
@@ -254,6 +256,14 @@ export default function AnalyticsPage() {
     { key: 'cancelled', label: t('pipeline.cancelled'), color: COLORS.cancelled },
     { key: 'confirmed', label: t('pipeline.confirmed'), color: COLORS.confirmed },
     { key: 'completed', label: t('pipeline.completed'), color: COLORS.completed }
+  ]
+
+  // Every status bucket, so the slices add up to Total Bookings.
+  const statusSlices = [
+    { name: t('pipeline.confirmed'), value: displayData.bookings.confirmed },
+    { name: t('pipeline.completed'), value: displayData.bookings.completed || 0 },
+    { name: t('pipeline.pending'), value: displayData.bookings.pending },
+    { name: t('pipeline.cancelled'), value: displayData.bookings.cancelled }
   ]
 
   // Calculate returning rate safely
@@ -311,6 +321,23 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
+      {loadError && (
+        <div role="alert" className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-semibold text-red-800">{t('error.title')}</h3>
+            <p className="text-sm text-red-700 mt-1">{loadError}</p>
+            <button
+              onClick={fetchAnalytics}
+              className="mt-3 px-3 py-1.5 text-xs font-medium bg-red-100 text-red-800 rounded-lg hover:bg-red-200 transition-colors"
+            >
+              {t('error.retry')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!loadError && (<>
       {/* FX shortfall — trips left OUT of the money figures.
           An excluded trip that says nothing is just a wrong total with better
           manners, so when the API reports holes the operator sees exactly which
@@ -387,7 +414,9 @@ export default function AnalyticsPage() {
                 <DollarSign className="w-4 h-4 text-gray-400" />
                 <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS.revenue }} />
               </div>
-              {displayData.revenue.total > 0 && (
+              {displayData.revenue.growth === null ? (
+                <span className="text-xs font-medium text-gray-400">—</span>
+              ) : (
                 displayData.revenue.growth >= 0 ? (
                   <span className="flex items-center text-xs font-medium" style={{ color: COLORS.revenue }}>
                     <ArrowUpRight className="w-3 h-3 mr-1" />
@@ -556,6 +585,10 @@ export default function AnalyticsPage() {
             <span className="text-xs text-gray-400">{t('pipeline.emptyHint')}</span>
           )}
         </div>
+        {/* Leads and follow-ups are what is open NOW; the booking stages are
+            trips created in the selected range. Said on the panel so the row
+            is not read as one funnel over one window. */}
+        <p className="text-xs text-gray-500 mb-3">{t('pipeline.allTimeNote')}</p>
         <div className="flex items-center gap-1.5">
           {pipelineStages.map((stage, index) => (
             <div key={stage.key} className="flex items-center flex-1 min-w-0">
@@ -580,13 +613,13 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {/* Highlights of the Month */}
+      {/* Highlights for the selected range */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div className="flex items-center gap-2 mb-3">
           <Zap className="w-5 h-5 text-yellow-500" />
           <h3 className="text-base font-semibold text-gray-900">{t('highlights.title')}</h3>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center p-3 bg-gray-50 rounded-lg">
             <p className="text-2xl font-bold text-gray-900">{displayData.clients.new}</p>
             <p className="text-xs text-gray-600 mt-1">{t('highlights.newClients')}</p>
@@ -606,10 +639,6 @@ export default function AnalyticsPage() {
                 : t('highlights.na')}
             </p>
             <p className="text-xs text-gray-600 mt-1">{t('highlights.topDestination')}</p>
-          </div>
-          <div className="text-center p-3 bg-gray-50 rounded-lg">
-            <p className="text-2xl font-bold text-gray-900">WhatsApp</p>
-            <p className="text-xs text-gray-600 mt-1">{t('highlights.bestChannel')}</p>
           </div>
         </div>
       </div>
@@ -727,30 +756,13 @@ export default function AnalyticsPage() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-base font-semibold text-gray-900">{t('charts.bookingStatus')}</h3>
-            {displayData.bookings.total > 0 && (
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                aria-label={t('charts.allStatus')}
-              >
-                <option value="all">{t('charts.allStatus')}</option>
-                <option value="confirmed">{t('pipeline.confirmed')}</option>
-                <option value="pending">{t('pipeline.pending')}</option>
-                <option value="cancelled">{t('pipeline.cancelled')}</option>
-              </select>
-            )}
           </div>
 
           {displayData.bookings.total > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
               <PieChart>
                 <Pie
-                  data={[
-                    { name: t('pipeline.confirmed'), value: displayData.bookings.confirmed },
-                    { name: t('pipeline.pending'), value: displayData.bookings.pending },
-                    { name: t('pipeline.cancelled'), value: displayData.bookings.cancelled }
-                  ]}
+                  data={statusSlices}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
@@ -758,11 +770,7 @@ export default function AnalyticsPage() {
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {[
-                    { name: t('pipeline.confirmed'), value: displayData.bookings.confirmed },
-                    { name: t('pipeline.pending'), value: displayData.bookings.pending },
-                    { name: t('pipeline.cancelled'), value: displayData.bookings.cancelled }
-                  ].map((entry, index) => (
+                  {statusSlices.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={PIE_COLORS[index]} />
                   ))}
                 </Pie>
@@ -782,33 +790,17 @@ export default function AnalyticsPage() {
 
           {/* Status Legend with Counts */}
           <div className="space-y-2 mt-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.confirmed }} />
-                <span className="text-xs text-gray-700">{t('pipeline.confirmed')}</span>
+            {statusSlices.map((slice, index) => (
+              <div key={slice.name} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: PIE_COLORS[index] }} />
+                  <span className="text-xs text-gray-700">{slice.name}</span>
+                </div>
+                <span className="text-xs font-bold text-gray-900">
+                  {slice.value} ({safePercent(slice.value, displayData.bookings.total)}%)
+                </span>
               </div>
-              <span className="text-xs font-bold text-gray-900">
-                {displayData.bookings.confirmed} ({safePercent(displayData.bookings.confirmed, displayData.bookings.total)}%)
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.pending }} />
-                <span className="text-xs text-gray-700">{t('pipeline.pending')}</span>
-              </div>
-              <span className="text-xs font-bold text-gray-900">
-                {displayData.bookings.pending} ({safePercent(displayData.bookings.pending, displayData.bookings.total)}%)
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.cancelled }} />
-                <span className="text-xs text-gray-700">{t('pipeline.cancelled')}</span>
-              </div>
-              <span className="text-xs font-bold text-gray-900">
-                {displayData.bookings.cancelled} ({safePercent(displayData.bookings.cancelled, displayData.bookings.total)}%)
-              </span>
-            </div>
+            ))}
           </div>
           
           <div className="mt-3 p-2 bg-orange-50 rounded text-xs text-gray-700">
@@ -854,6 +846,8 @@ export default function AnalyticsPage() {
           )}
         </div>
       </div>
+
+      </>)}
 
       {/* Quick Actions - Enhanced */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">

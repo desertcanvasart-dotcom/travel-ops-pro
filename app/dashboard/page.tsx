@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { useRole } from '@/hooks/useRole'
+import { canOpenFromMenu } from '@/lib/dashboard/menu-access'
 import {
   Users,
   CheckSquare,
@@ -63,9 +64,13 @@ export default function DashboardPage() {
   const tCommon = useTranslations('common')
   const tDates = useTranslations('dates')
   const { profile } = useAuth()
-  const { canViewFinancials, canAccess } = useRole()
+  const { role, canViewFinancials, canAccess } = useRole()
   // Dismissing changes the office's shared list: staff only (the route agrees).
+  // Staff also see Recent Activity (the summary sends quotes to staff only).
   const canDismiss = canAccess(['admin', 'manager', 'agent'])
+  // A link only where the menu lets this role open the page — a card that
+  // leads to "unauthorized" is a dead end (lib/dashboard/menu-access).
+  const linkFor = (href: string) => (canOpenFromMenu(role, href) ? href : undefined)
   const [money, setMoney] = useState<any | null>(null)
   const [stats, setStats] = useState<DashboardStats>({
     totalClients: 0,
@@ -92,7 +97,6 @@ export default function DashboardPage() {
   // Rows hidden by a dismissal still in force, and the last one, for Undo.
   const [dismissedCount, setDismissedCount] = useState(0)
   const [undoable, setUndoable] = useState<{ item: any; index: number } | null>(null)
-  const [recentClients, setRecentClients] = useState<any[]>([])
   const [upcomingFollowups, setUpcomingFollowups] = useState<any[]>([])
   const [recentQuotes, setRecentQuotes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -117,34 +121,29 @@ export default function DashboardPage() {
   }, [canViewFinancials])
 
   // "¥879,917 · €70" — one figure per currency, never summed across them.
+  // A net figure can be negative (refunds out-ran payments): "-¥5,000".
   const CURRENCY_SYMBOLS: Record<string, string> = { JPY: '¥', USD: '$', EUR: '€', EGP: 'E£' }
+  const fmtAmount = (c: string, v: number) =>
+    `${v < 0 ? '-' : ''}${CURRENCY_SYMBOLS[c] || c + ' '}${Math.abs(Math.round(v)).toLocaleString()}`
   const fmtTotals = (t: Record<string, number> | undefined | null) => {
     const entries = Object.entries(t || {}).filter(([, v]) => v !== 0)
     if (entries.length === 0) return '0'
-    return entries
-      .map(([c, v]) => `${CURRENCY_SYMBOLS[c] || c + ' '}${Math.round(v).toLocaleString()}`)
-      .join(' · ')
+    return entries.map(([c, v]) => fmtAmount(c, v)).join(' · ')
   }
 
   async function loadDashboardData() {
     try {
       // One computed summary from the server (ops row, pipeline, today) —
-      // every number here is calculated, none are hardcoded strings.
+      // every number here is calculated, none are hardcoded strings. All three
+      // routes are given the browser's date, so they agree on "today".
       const [summaryRes, attentionRes] = await Promise.all([
-        fetch('/api/dashboard/summary'),
+        fetch(`/api/dashboard/summary?today=${todayLocal()}`),
         fetch(`/api/dashboard/attention?today=${todayLocal()}`),
       ])
       const summary = summaryRes.ok ? (await summaryRes.json()).data : null
       const attentionData = attentionRes.ok ? (await attentionRes.json()).data : null
       setAttention(attentionData?.items || [])
       setDismissedCount(Number(attentionData?.dismissed) || 0)
-
-      // Recent clients (side panel)
-      const { data: clients } = await supabase
-        .from('clients')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5)
 
       // Upcoming follow-ups list
       const { data: upcoming } = await supabase
@@ -163,21 +162,14 @@ export default function DashboardPage() {
         .order('due_date', { ascending: true })
         .limit(5)
 
-      // Recent quotes list (first page is plenty for 5 rows)
-      let recentQuotes: any[] = []
-      try {
-        const res = await fetch('/api/itineraries?page=1')
-        if (res.ok) {
-          const body = await res.json()
-          const rows: any[] = body.data || body.itineraries || []
-          recentQuotes = rows.slice(0, 5).map((q: any) => ({
-            id: q.id,
-            action: `Quote ${q.itinerary_code} for ${q.client_name}`,
-            time: new Date(q.created_at).toLocaleString(),
-            status: q.status
-          }))
-        }
-      } catch { /* the list is decorative — the counts above are authoritative */ }
+      // Recent quotes list — the five newest, from the summary (staff only;
+      // empty for a viewer, as the itineraries API it replaced was)
+      const recentQuotes = ((summary?.quotes?.recent || []) as any[]).map((q: any) => ({
+        id: q.id,
+        action: `Quote ${q.itinerary_code} for ${q.client_name}`,
+        time: new Date(q.created_at).toLocaleString(),
+        status: q.status
+      }))
 
       if (summary) {
         setStats({
@@ -202,7 +194,6 @@ export default function DashboardPage() {
           todayPaymentsReceived: summary.today.paymentsReceived
         })
       }
-      setRecentClients(clients || [])
       setUpcomingFollowups(upcoming || [])
       setRecentQuotes(recentQuotes)
     } catch (error) {
@@ -255,6 +246,28 @@ export default function DashboardPage() {
     }
   }
 
+  const quickActions = [
+    { icon: MessageSquare, label: t('unifiedInbox'), href: '/communications', description: t('manageConversations'), color: 'bg-success' },
+    { icon: Sparkles, label: t('newQuote'), href: '/itineraries/new', description: t('createFromScratch'), color: 'bg-purple-500' },
+    { icon: Layers, label: t('ratesHub'), href: '/rates', description: t('manageRates'), color: 'bg-primary-600' },
+    { icon: Package, label: t('b2bPackages'), href: '/tours', description: t('readyMadePackages'), color: 'bg-warning' },
+  ].filter(a => linkFor(a.href))
+
+  // A balance row's figure in the booking's own currency. The route sends no
+  // amount to a role below manager, and then the row says so without one.
+  const balanceText = (item: any) => {
+    const raw = item.detail.balanceDue
+    if (raw === undefined || raw === null) {
+      return item.detail.overdue
+        ? t('attnBalanceOverdueNoAmount')
+        : t('attnBalanceDueNoAmount', { date: item.detail.dueDate || '' })
+    }
+    const amount = fmtAmount(item.currency || 'EUR', Number(raw))
+    return item.detail.overdue
+      ? t('attnBalanceOverdue', { amount })
+      : t('attnBalanceDue', { amount, date: item.detail.dueDate || '' })
+  }
+
   return (
     <div className="p-4 lg:p-6 space-y-6">
       {/* Header */}
@@ -274,7 +287,7 @@ export default function DashboardPage() {
           value={stats.departingSoon}
           icon={CalendarDays}
           subtitle={t('next7Days')}
-          href="/bookings"
+          href={linkFor('/bookings')}
           color="orange"
         />
 
@@ -283,7 +296,7 @@ export default function DashboardPage() {
           value={stats.tripsInProgress}
           icon={Activity}
           subtitle={t('onTheGround')}
-          href="/bookings"
+          href={linkFor('/bookings')}
           color="primary"
         />
 
@@ -292,7 +305,7 @@ export default function DashboardPage() {
           value={stats.unreadInbox}
           icon={MessageSquare}
           subtitle={t('acrossWhatsappEmail')}
-          href="/communications"
+          href={linkFor('/communications')}
           color="purple"
         />
 
@@ -302,7 +315,7 @@ export default function DashboardPage() {
           icon={CheckSquare}
           badge={stats.tasksOverdue > 0 ? `${stats.tasksOverdue} ${t('overdue')}` : undefined}
           badgeColor="danger"
-          href="/tasks"
+          href={linkFor('/tasks')}
           color="warning"
         />
       </div>
@@ -315,7 +328,7 @@ export default function DashboardPage() {
           icon={Users}
           trend={stats.clientsThisMonth > 0 ? `+${stats.clientsThisMonth}` : undefined}
           trendUp={stats.clientsThisMonth >= stats.clientsPrevMonth}
-          href="/clients"
+          href={linkFor('/clients')}
           color="primary"
           trendLabel={t('newThisMonth')}
         />
@@ -326,7 +339,7 @@ export default function DashboardPage() {
           icon={CheckSquare}
           badge={stats.overdueFollowups > 0 ? `${stats.overdueFollowups} ${t('overdue')}` : undefined}
           badgeColor="danger"
-          href="/followups"
+          href={linkFor('/followups')}
           color="warning"
         />
 
@@ -334,7 +347,7 @@ export default function DashboardPage() {
           title={t('clientQuotes')}
           value={stats.totalQuotes}
           icon={FileText}
-          href="/itineraries"
+          href={linkFor('/itineraries')}
           color="purple"
         />
 
@@ -343,7 +356,7 @@ export default function DashboardPage() {
           value={stats.upcomingTrips}
           icon={CalendarDays}
           subtitle={t('next30Days')}
-          href="/calendar"
+          href={linkFor('/calendar')}
           color="orange"
         />
       </div>
@@ -412,7 +425,7 @@ export default function DashboardPage() {
               : undefined}
             badgeColor="danger"
             subtitle={t('invoicesCount', { count: money.receivables.count })}
-            href="/accounts-receivable"
+            href={linkFor('/accounts-receivable')}
             color="primary"
           />
           <StatCard
@@ -425,15 +438,18 @@ export default function DashboardPage() {
             })}
             icon={CreditCard}
             subtitle={t('itemsCount', { count: money.payables.expenseCount + money.payables.billCount })}
-            href="/accounts-payable"
+            href={linkFor('/accounts-payable')}
             color="warning"
           />
           <StatCard
             title={t('receivedThisMonth')}
             value={fmtTotals(money.month.received)}
             icon={DollarSign}
-            subtitle={t('paymentsCount', { count: money.month.receivedCount })}
-            href="/payments"
+            subtitle={[
+              t('paymentsCount', { count: money.month.receivedCount }),
+              money.month.refundCount > 0 ? t('refundsCount', { count: money.month.refundCount }) : null,
+            ].filter(Boolean).join(' · ')}
+            href={linkFor('/payments')}
             color="primary"
           />
           <StatCard
@@ -441,52 +457,25 @@ export default function DashboardPage() {
             value={fmtTotals(money.month.spent)}
             icon={Receipt}
             subtitle={t('paymentsCount', { count: money.month.spentCount })}
-            href="/expenses"
+            href={linkFor('/expenses')}
             color="orange"
           />
         </div>
       )}
 
-      {/* Quick Actions */}
+      {/* Quick Actions — only the ones this role can open; none, no panel */}
+      {quickActions.length > 0 && (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <h3 className="text-base font-semibold text-gray-900 mb-3">
           {t('quickActions')}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          <QuickActionButton
-            icon={MessageSquare}
-            label={t('unifiedInbox')}
-            href="/communications"
-            description={t('manageConversations')}
-            color="bg-success"
-            startNowLabel={t('startNow')}
-          />
-          <QuickActionButton
-            icon={Sparkles}
-            label={t('newQuote')}
-            href="/itineraries/new"
-            description={t('createFromScratch')}
-            color="bg-purple-500"
-            startNowLabel={t('startNow')}
-          />
-          <QuickActionButton
-            icon={Layers}
-            label={t('ratesHub')}
-            href="/rates"
-            description={t('manageRates')}
-            color="bg-primary-600"
-            startNowLabel={t('startNow')}
-          />
-          <QuickActionButton
-            icon={Package}
-            label={t('b2bPackages')}
-            href="/tours"
-            description={t('readyMadePackages')}
-            color="bg-warning"
-            startNowLabel={t('startNow')}
-          />
+          {quickActions.map(a => (
+            <QuickActionButton key={a.href} {...a} startNowLabel={t('startNow')} />
+          ))}
         </div>
       </div>
+      )}
 
       {/* Needs Attention — departures with a problem to fix before the group flies */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -511,8 +500,8 @@ export default function DashboardPage() {
                 key={item.dismissKey ?? `${item.type}-${item.bookingId}-${i}`}
                 className="flex items-center gap-1 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
               >
-              <Link
-                href={item.href}
+              <MaybeLink
+                href={linkFor(item.href)}
                 className="flex flex-1 min-w-0 items-center gap-3 p-3"
               >
                 <span
@@ -520,12 +509,11 @@ export default function DashboardPage() {
                 />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">
-                    {item.type === 'balance_due' && (item.detail.overdue
-                      ? t('attnBalanceOverdue', { amount: Number(item.detail.balanceDue).toLocaleString() })
-                      : t('attnBalanceDue', { amount: Number(item.detail.balanceDue).toLocaleString(), date: item.detail.dueDate || '' }))}
+                    {item.type === 'balance_due' && balanceText(item)}
                     {item.type === 'forms_incomplete' && t('attnForms', { submitted: item.detail.submitted, total: item.detail.total })}
                     {item.type === 'no_guide' && t('attnNoGuide')}
                     {item.type === 'change_request' && t('attnChangeRequest')}
+                    {item.type === 'extra_request' && t('attnExtraRequest', { status: String(item.detail.status ?? ''), title: String(item.detail.title ?? '') })}
                     {item.type === 'reply_overdue' && t('attnReplyOverdue', { time: String(item.detail.waiting ?? '') })}
                   </p>
                   <p className="text-xs text-gray-500 truncate">
@@ -533,8 +521,8 @@ export default function DashboardPage() {
                       .filter(Boolean).join(' · ')}
                   </p>
                 </div>
-                <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
-              </Link>
+                {linkFor(item.href) && <ArrowRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+              </MaybeLink>
               {canDismiss && item.dismissKey && (
                 <button
                   type="button"
@@ -566,31 +554,38 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Recent Activity - 2 columns */}
         <div className="lg:col-span-2">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          {/* Staff only: the summary sends a viewer no quotes, and an empty
+              panel would read as "no quotes yet" */}
+          {canDismiss && (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-base font-semibold text-gray-900">
                 {t('recentActivity')}
               </h3>
-              <Link
-                href="/itineraries"
-                className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
-              >
-                {t('viewAll')}
-                <ArrowRight className="w-4 h-4" />
-              </Link>
+              {linkFor('/itineraries') && (
+                <Link
+                  href="/itineraries"
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                >
+                  {t('viewAll')}
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              )}
             </div>
 
             {recentQuotes.length === 0 ? (
               <div className="text-center py-8">
                 <FileText className="w-8 h-8 text-gray-300 mx-auto mb-2" />
                 <p className="text-sm text-gray-500 mb-3">{t('noQuotesYet')}</p>
-                <Link
-                  href="/itineraries/new"
-                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  {t('createFirstQuote')}
-                </Link>
+                {linkFor('/itineraries/new') && (
+                  <Link
+                    href="/itineraries/new"
+                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    {t('createFirstQuote')}
+                  </Link>
+                )}
               </div>
             ) : (
               <div className="space-y-2">
@@ -606,31 +601,36 @@ export default function DashboardPage() {
                       <p className="text-sm font-medium text-gray-900">{activity.action}</p>
                       <p className="text-xs text-gray-500">{activity.time}</p>
                     </div>
-                    <Link
-                      href={`/itineraries/${activity.id}`}
-                      className="text-primary-600 hover:text-primary-700 text-sm font-medium whitespace-nowrap"
-                    >
-                      {tCommon('view')} →
-                    </Link>
+                    {linkFor(`/itineraries/${activity.id}`) && (
+                      <Link
+                        href={`/itineraries/${activity.id}`}
+                        className="text-primary-600 hover:text-primary-700 text-sm font-medium whitespace-nowrap"
+                      >
+                        {tCommon('view')} →
+                      </Link>
+                    )}
                   </div>
                 ))}
               </div>
             )}
           </div>
+          )}
 
           {/* Upcoming Follow-ups */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mt-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-base font-semibold text-gray-900">
                 {t('upcomingFollowups')}
               </h3>
-              <Link
-                href="/followups"
-                className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
-              >
-                {t('viewAll')}
-                <ArrowRight className="w-4 h-4" />
-              </Link>
+              {linkFor('/followups') && (
+                <Link
+                  href="/followups"
+                  className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                >
+                  {t('viewAll')}
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              )}
             </div>
 
             {upcomingFollowups.length === 0 ? (
@@ -641,7 +641,13 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-2">
                 {upcomingFollowups.map((followup) => (
-                  <FollowupCard key={followup.id} followup={followup} t={t} tDates={tDates} />
+                  <FollowupCard
+                    key={followup.id}
+                    followup={followup}
+                    href={linkFor(`/clients/${followup.client_id}`)}
+                    t={t}
+                    tDates={tDates}
+                  />
                 ))}
               </div>
             )}
@@ -699,7 +705,8 @@ interface StatCardProps {
   trendLabel?: string
   badge?: string
   badgeColor?: 'primary' | 'danger'
-  href: string
+  /** No href: the role cannot open the page, so the card is not a link. */
+  href?: string
   color?: 'primary' | 'warning' | 'purple' | 'orange'
   subtitle?: string
 }
@@ -726,8 +733,8 @@ function StatCard({
   }
 
   return (
-    <Link href={href} className="block group">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow h-full min-h-[120px] flex flex-col">
+    <MaybeLink href={href} className="block group">
+      <div className={`bg-white rounded-lg shadow-sm border border-gray-200 p-4 ${href ? 'hover:shadow-md transition-shadow' : ''} h-full min-h-[120px] flex flex-col`}>
         <div className="flex items-start justify-between flex-1">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
@@ -756,8 +763,14 @@ function StatCard({
           <Icon className="w-4 h-4 text-gray-400" />
         </div>
       </div>
-    </Link>
+    </MaybeLink>
   )
+}
+
+// A Link when there is somewhere this role may go, else the same box unlinked
+function MaybeLink({ href, className, children }: { href?: string; className?: string; children: React.ReactNode }) {
+  if (!href) return <div className={className}>{children}</div>
+  return <Link href={href} className={className}>{children}</Link>
 }
 
 // Quick Action Button
@@ -786,7 +799,7 @@ function QuickActionButton({ icon: Icon, label, href, description, color, startN
 }
 
 // Followup Card
-function FollowupCard({ followup, t, tDates }: any) {
+function FollowupCard({ followup, href, t, tDates }: any) {
   const daysUntil = Math.ceil(
     (new Date(followup.due_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
   )
@@ -798,17 +811,18 @@ function FollowupCard({ followup, t, tDates }: any) {
   }
 
   return (
-    <Link
-      href={`/clients/${followup.client_id}`}
-      className="block p-3 border border-gray-200 rounded-lg hover:border-primary-300 hover:bg-primary-50/50 transition-all group"
+    <MaybeLink
+      href={href}
+      className={`block p-3 border border-gray-200 rounded-lg ${href ? 'hover:border-primary-300 hover:bg-primary-50/50 transition-all' : ''} group`}
     >
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-900 group-hover:text-primary-700">
             {followup.clients?.first_name} {followup.clients?.last_name}
           </p>
+          {/* title is required; description is optional detail */}
           <p className="text-xs text-gray-600 mt-1 line-clamp-2">
-            {followup.description}
+            {followup.title || followup.description}
           </p>
         </div>
         <div className="flex items-center gap-2 ml-4">
@@ -821,6 +835,7 @@ function FollowupCard({ followup, t, tDates }: any) {
               ${followup.priority === 'high' ? 'bg-danger/10 text-danger' : ''}
               ${followup.priority === 'medium' ? 'bg-warning/10 text-warning' : ''}
               ${followup.priority === 'low' ? 'bg-gray-200 text-gray-700' : ''}
+              ${followup.priority === 'normal' ? 'bg-primary-50 text-primary-700' : ''}
             `}>
               {followup.priority}
             </span>
@@ -828,6 +843,6 @@ function FollowupCard({ followup, t, tDates }: any) {
           <Clock className="w-4 h-4 text-gray-400 group-hover:text-primary-600 transition-colors" />
         </div>
       </div>
-    </Link>
+    </MaybeLink>
   )
 }
