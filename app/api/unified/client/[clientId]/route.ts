@@ -3,7 +3,6 @@ import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
-import { orgMemberUserIds } from '@/lib/auth/org-members'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -61,15 +60,13 @@ export async function GET(
     // WhatsApp is simply absent — never listed unscoped.
     if (waError) console.error('[unified client] WhatsApp chats unavailable:', waError.message)
 
-    // Get Email conversations for this client — only those in a mailbox of one
-    // of this org's members. email_conversations has no org_id yet (G1), and
-    // the email link trigger used to match clients across organisations, so a
-    // conversation in another agency's mailbox could carry this client's id.
-    const memberIds = await orgMemberUserIds(supabase, orgId)
-
-    // And only a connected address's (lib/email/connected-mailboxes).
+    // Get Email conversations for this client — only this org's
+    // (email_conversations.org_id, 20261204): the email link trigger used to
+    // match clients across organisations, so a conversation in another
+    // agency's mailbox could carry this client's id. And only a connected
+    // address's (lib/email/connected-mailboxes).
     const { data: emailConversations, error: emailError } = await scopedToConnectedMailboxes(supabase, orgId, (mailboxFilter) => {
-      let q = supabase
+      const q = supabase
         .from('email_conversations')
         .select(`
           *,
@@ -81,10 +78,10 @@ export async function GET(
             is_available
           )
         `)
+        .eq('org_id', orgId)
         .eq('client_id', clientId)
-        .in('user_id', memberIds)
         .or('is_hidden.is.null,is_hidden.eq.false')
-      if (mailboxFilter) q = q.or(mailboxFilter)
+        .or(mailboxFilter)
       return q.order('last_message_at', { ascending: false })
     })
 

@@ -3,8 +3,9 @@ import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { resolveMailbox } from '@/lib/gmail-mailbox'
-import { getCurrentOrgId, getCurrentUserId } from '@/lib/auth/current-org'
-import { orgMemberUserIds } from '@/lib/auth/org-members'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { mailboxServesOrg } from '@/lib/email/org-gmail-sender'
+import { findThreadConversation, type MailboxRef } from '@/lib/email/conversation-access'
 import { storedReplyHeaders, type ThreadingHeaders } from '@/lib/email/reply-threading'
 import { headerSafe, encodeEmailHeader } from '@/lib/http/safe-header'
 import { claimSend, finishSend, replyBodyHash, threadConflict } from '@/lib/email/send-guard'
@@ -41,40 +42,39 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // A reply in the shared inbox may be in a colleague's mailbox: the stored
-    // conversation for this Gmail thread belongs to whoever's Gmail synced it,
-    // and its thread id means nothing in the sender's own mailbox. Reply from
-    // that mailbox when its owner is a member of the sender's organisation and
-    // still connected (the rule lib/email/org-gmail-sender.ts applies to
-    // vouchers); otherwise send from the sender's own Gmail as a new thread,
-    // kept in the customer's conversation by In-Reply-To / References from the
-    // stored Message-IDs.
-    // Your own mailbox, else the organisation's shared one (lib/gmail-mailbox).
-    let mailboxUserId: string = (await resolveMailbox(userId))?.mailboxUserId ?? userId
+    // The organisation this is sent for: the active workspace. Everything
+    // read and stored below is its (email_conversations.org_id, 20261204).
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
+    // Your own mailbox when it serves this organisation, else the
+    // organisation's (lib/gmail-mailbox). Never a connection that serves
+    // another company — your own included, when you connected it there.
+    const mailbox = await resolveMailbox(userId)
+    if (!mailbox) {
+      return NextResponse.json({ error: 'Gmail not connected. Please connect your Gmail account first.' }, { status: 401 })
+    }
+    let mailboxUserId: string = mailbox.mailboxUserId
     let gmailThreadId: string | undefined = threadId || undefined
     let storedThreading: ThreadingHeaders | null = null
-    // The stored conversation is used only when it is in a mailbox of this
-    // organisation's members (lib/auth/org-members). threadId comes from the
-    // caller: another company's thread id read that company's conversation —
-    // its "already answered by <name>" guard and its Message-IDs for
-    // In-Reply-To. A thread stored only in other companies' mailboxes is
-    // foreign: sent as a new thread, with no guard and no stored threading.
-    let foreignThread = false
+    // A reply in the shared inbox may be in a colleague's mailbox: the stored
+    // conversation for this Gmail thread belongs to whoever's Gmail synced it,
+    // and its thread id means nothing in another mailbox. Reply from that
+    // mailbox while it still serves this organisation; otherwise send from
+    // this one as a new thread, kept in the customer's conversation by
+    // In-Reply-To / References from the stored Message-IDs. Only this
+    // organisation's conversations are read: another company's thread id
+    // finds nothing here (no guard, no stored threading of theirs).
     if (threadId) {
-      const orgId = await getCurrentOrgId()
-      const memberIds = orgId ? await orgMemberUserIds(supabase, orgId) : []
       const { data: convRows } = await supabase
         .from('email_conversations')
         .select('id, user_id')
+        .eq('org_id', orgId)
         .eq('thread_id', threadId)
       const stored = (convRows ?? []) as { id: string; user_id: string | null }[]
-      const inOrg = stored.filter(c => c.user_id && memberIds.includes(c.user_id))
-      const conv = inOrg.find(c => c.user_id === mailboxUserId) ?? inOrg[0] ?? null
-      foreignThread = stored.length > 0 && !conv
-      if (foreignThread) gmailThreadId = undefined
+      const conv = stored.find(c => c.user_id === mailboxUserId) ?? stored[0] ?? null
       if (conv?.user_id && conv.user_id !== mailboxUserId) {
-        const { data: ownerToken } = await supabase.from('gmail_tokens').select('user_id').eq('user_id', conv.user_id).limit(1)
-        if ((ownerToken?.length ?? 0) > 0) {
+        if (await mailboxServesOrg(supabase, orgId, conv.user_id)) {
           mailboxUserId = conv.user_id
         } else {
           gmailThreadId = undefined
@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
     let gmail, emailAddress: string
     try {
       const auth = await getAuthenticatedGmail(mailboxUserId)
+      if (auth.orgId !== orgId) throw new GmailAuthError('Gmail not connected. Please connect your Gmail account first.')
       gmail = auth.gmail
       emailAddress = auth.emailAddress
     } catch (err) {
@@ -99,8 +100,9 @@ export async function POST(request: NextRequest) {
     // Never the same reply twice (operator, 2026-09-17).
     const key = typeof requestKey === 'string' && requestKey.trim() ? requestKey.trim().slice(0, 200) : null
     const bodyHash = replyBodyHash(body)
-    if (threadId && !foreignThread && !confirmDuplicate) {
+    if (threadId && !confirmDuplicate) {
       const conflict = await threadConflict(supabase, {
+        orgId,
         threadId,
         requestKey: key,
         seenUpTo: seenUpTo === undefined ? undefined : (seenUpTo || null),
@@ -162,13 +164,10 @@ export async function POST(request: NextRequest) {
     if (sentMessageId && sentThreadId) {
       try {
         // Find or create conversation for this thread — in the mailbox it
-        // was sent from (a Gmail thread id is per mailbox).
-        const { data: existingConv } = await supabase
-          .from('email_conversations')
-          .select('id')
-          .eq('thread_id', sentThreadId)
-          .eq('user_id', mailboxUserId)
-          .single()
+        // was sent from (a Gmail thread id is per mailbox), in this
+        // organisation.
+        const sentFrom: MailboxRef = { orgId, mailboxEmail: String(emailAddress || '').toLowerCase(), mailboxUserId }
+        const existingConv = await findThreadConversation<{ id: string }>(supabase, sentFrom, sentThreadId)
 
         let conversationId = existingConv?.id
 
@@ -177,6 +176,8 @@ export async function POST(request: NextRequest) {
           const { data: newConv } = await supabase
             .from('email_conversations')
             .insert({
+              org_id: orgId,
+              mailbox_email: sentFrom.mailboxEmail || null,
               thread_id: sentThreadId,
               // The mailbox's owner — the shared mailbox's threads stay its own.
               user_id: mailboxUserId,
@@ -203,12 +204,14 @@ export async function POST(request: NextRequest) {
               updated_at: new Date().toISOString()
             })
             .eq('id', conversationId)
+            .eq('org_id', orgId)
         }
 
         // Store the sent message
         await supabase
           .from('email_messages')
           .insert({
+            org_id: orgId,
             conversation_id: conversationId,
             message_id: sentMessageId,
             thread_id: sentThreadId,

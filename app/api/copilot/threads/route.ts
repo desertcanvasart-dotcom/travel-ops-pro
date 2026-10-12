@@ -35,8 +35,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('communication_threads')
       .select('*, latest_inbox:communication_inbox(*), latest_draft:communication_drafts(*)', { count: 'exact' })
-      // The org's own threads (this listed every company's). A thread with no
-      // org_id is shown to nobody until the G1 backfill (lib/copilot/thread-access).
+      // The org's own threads (this listed every company's).
       .eq('org_id', orgId)
       .order('last_message_at', { ascending: false })
       .order('received_at', { referencedTable: 'latest_inbox', ascending: false })

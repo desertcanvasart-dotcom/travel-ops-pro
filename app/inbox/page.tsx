@@ -200,6 +200,8 @@ export default function InboxPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [isConnected, setIsConnected] = useState(false)
   const [connectedEmail, setConnectedEmail] = useState<string>('')
+  // A colleague's connection: the company's mailbox, not the user's own.
+  const [mailboxShared, setMailboxShared] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showCompose, setShowCompose] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -317,6 +319,7 @@ export default function InboxPage() {
 
       setIsConnected(true)
       setConnectedEmail(data.gmail_email || '')
+      setMailboxShared(!!data.gmail_shared)
       await fetchEmails()
     } catch (err) {
       setIsConnected(false)
@@ -902,6 +905,13 @@ ${bodyText}`
                   </span>
                 )}
               </h1>
+              {/* Which mailbox this is — in a company with several connections,
+                  or for a person in two companies, it is not always your own. */}
+              {connectedEmail && (
+                <span className="hidden sm:inline text-xs text-gray-500 truncate max-w-[16rem]" title={connectedEmail}>
+                  Mailbox: {connectedEmail}{mailboxShared ? ' (shared)' : ''}
+                </span>
+              )}
             </div>
 
             <form onSubmit={handleSearch} className="flex-1 max-w-md">

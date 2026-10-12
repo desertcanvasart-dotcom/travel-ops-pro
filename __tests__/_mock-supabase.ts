@@ -20,20 +20,44 @@ export function setMockTables(tables: MockTables): void {
 }
 
 // Parse a PostgREST `.or()` expression like "direction.eq.arrival,direction.eq.both"
-// and keep rows matching ANY clause (only the `eq` operator is used by the engine).
-// Also `col.is.null` and `col.in.(a,b)`.
+// and keep rows matching ANY clause. eq (the pricing engine's only operator),
+// plus what the email lists send: is.null / is.true / is.false, in.(…),
+// ilike, gt/gte/lt/lte, and(…), and "quoted" values.
+function splitTop(expr: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let cur = ''
+  for (const ch of expr) {
+    if (ch === '(') depth++
+    if (ch === ')') depth--
+    if (ch === ',' && depth === 0) { parts.push(cur); cur = '' } else cur += ch
+  }
+  if (cur) parts.push(cur)
+  return parts
+}
+const unquote = (v: string) => v.replace(/^"(.*)"$/, '$1')
+function clauseMatches(row: Row, clause: string): boolean {
+  if (clause.startsWith('and(')) return splitTop(clause.slice(4, -1)).every((c) => clauseMatches(row, c))
+  if (clause.startsWith('or(')) return splitTop(clause.slice(3, -1)).some((c) => clauseMatches(row, c))
+  const [col, op, ...rest] = clause.split('.')
+  const val = rest.join('.')
+  const v = row[col]
+  switch (op) {
+    case 'eq': return String(v) === unquote(val)
+    case 'neq': return String(v) !== unquote(val)
+    case 'is': return val === 'null' ? v == null : String(v) === val
+    case 'in': return splitTop(val.replace(/^\((.*)\)$/, '$1')).map(unquote).includes(String(v))
+    case 'ilike': return String(v ?? '').toLowerCase().includes(unquote(val).replace(/%/g, '').toLowerCase())
+    case 'gt': return v != null && v > unquote(val)
+    case 'gte': return v != null && v >= unquote(val)
+    case 'lt': return v != null && v < unquote(val)
+    case 'lte': return v != null && v <= unquote(val)
+    default: return false
+  }
+}
 function applyOr(rows: Row[], expr: string): Row[] {
-  const clauses = (expr.match(/[^,(]+(\([^)]*\))?/g) ?? []).map((c) => {
-    const [col, op, ...rest] = c.split('.')
-    return { col, op, val: rest.join('.') }
-  })
-  return rows.filter((r) =>
-    clauses.some((cl) =>
-      (cl.op === 'eq' && String(r[cl.col]) === cl.val) ||
-      (cl.op === 'is' && cl.val === 'null' && r[cl.col] == null) ||
-      (cl.op === 'in' && cl.val.replace(/^\(|\)$/g, '').split(',').includes(String(r[cl.col])))
-    )
-  )
+  const clauses = splitTop(expr)
+  return rows.filter((r) => clauses.some((cl) => clauseMatches(r, cl)))
 }
 
 let idCounter = 0

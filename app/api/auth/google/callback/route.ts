@@ -54,9 +54,11 @@ export async function GET(request: NextRequest) {
 
   // Verify the signed state and recover the user id — never trust a raw user id
   // from the URL (an attacker could otherwise write tokens to any account).
-  // The signed payload is `${userId}:${nonce}` since P4b-2.
-  const [userId, stateNonce] = (verifyState(state) || '').split(':')
-  if (!userId) {
+  // The signed payload is `${userId}:${nonce}:${orgId}` — the nonce since
+  // P4b-2, the company the mailbox will serve since 20261204 (the workspace
+  // active when Connect was pressed, app/api/gmail/connect).
+  const [userId, stateNonce, stateOrgId] = (verifyState(state) || '').split(':')
+  if (!userId || !stateOrgId) {
     // The signature did not verify: a different OAUTH_STATE_SECRET (or service
     // key) signed it — another instance or a deploy mid-flow.
     console.warn('[gmail callback] invalid_state: state signature did not verify')
@@ -82,6 +84,19 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Still a member of that company (removed since the flow began: refused).
+    const { data: membership } = await supabase
+      .from('organization_members')
+      .select('user_id')
+      .eq('org_id', stateOrgId)
+      .eq('user_id', userId)
+      .limit(1)
+    if (!membership || membership.length === 0) {
+      const res = NextResponse.redirect(new URL('/settings/email?error=invalid_state', baseUrl))
+      clearNonceCookie(res)
+      return res
+    }
+
     // Exchange code for tokens
     const tokens = await getTokensFromCode(code)
 
@@ -111,11 +126,28 @@ export async function GET(request: NextRequest) {
       ? new Date(tokens.expiry_date)
       : new Date(Date.now() + 3600 * 1000)
 
+    // One connection per person (UNIQUE user_id), serving one company. A
+    // connection made from the other company MOVES it there: the old row is
+    // removed and a new one made, so it starts as that company's newest
+    // connection (the company mailbox is the longest-standing one —
+    // lib/email/org-gmail-sender). Mail already synced stays with the
+    // company it was synced for.
+    const { data: previous } = await supabase
+      .from('gmail_tokens')
+      .select('org_id')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (previous && previous.org_id !== stateOrgId) {
+      const { error: moveError } = await supabase.from('gmail_tokens').delete().eq('user_id', userId)
+      if (moveError) throw new Error('Failed to save tokens')
+    }
+
     // Upsert token record
     const { error: dbError } = await supabase
       .from('gmail_tokens')
       .upsert({
         user_id: userId,
+        org_id: stateOrgId,
         email,
         access_token: encryptToken(tokens.access_token),
         refresh_token: encryptToken(tokens.refresh_token),

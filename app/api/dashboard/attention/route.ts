@@ -221,18 +221,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Customers waiting too long for an email answer. email_conversations has
-    // no org_id (DEFERRED_GATES G1): scoped to mailboxes of the org's members.
+    // Customers waiting too long for an email answer — this org's
+    // conversations (email_conversations.org_id, 20261204).
     const overdueBefore = new Date(Date.now() - REPLY_OVERDUE_HOURS * 3_600_000).toISOString()
     // Only a connected address's mail (lib/email/connected-mailboxes).
     const { data: waiting } = await scopedToConnectedMailboxes(supabase, orgId, (mailboxFilter) => {
-      let q = supabase
+      const q = supabase
         .from('email_conversations')
         .select('id, client_name, client_email, subject, awaiting_reply_since, last_message_at')
+        .eq('org_id', orgId)
         .not('awaiting_reply_since', 'is', null)
         .lte('awaiting_reply_since', overdueBefore)
         .or('is_hidden.is.null,is_hidden.eq.false')
-      if (mailboxFilter) q = q.or(mailboxFilter)
+        .or(mailboxFilter)
       return q
         .order('awaiting_reply_since', { ascending: true })
         // Read past the robots: the oldest rows were no-reply and ticket-system

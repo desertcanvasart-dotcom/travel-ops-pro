@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
-import { orgMemberUserIds } from '@/lib/auth/org-members'
 import { emailConversationInOrg } from '@/lib/email/conversation-access'
 
 // Use service role for API routes to bypass RLS
@@ -33,15 +32,16 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Only the messages of a conversation in one of this organisation's
-    // mailboxes (lib/email/conversation-access): any conversation or thread
-    // id returned its full bodies, whichever company's mail it was.
+    // Only this organisation's messages (email_messages.org_id, and the
+    // conversation's — lib/email/conversation-access): any conversation or
+    // thread id returned its full bodies, whichever company's mail it was.
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
     let query = supabase
       .from('email_messages')
       .select('*')
+      .eq('org_id', orgId)
       .order('sent_at', { ascending: false })
       .limit(limit)
 
@@ -51,10 +51,7 @@ export async function GET(request: NextRequest) {
       query = query.eq('conversation_id', conv.id)
     } else if (threadId) {
       // A Gmail thread id is per mailbox: the org's conversations with it.
-      const memberIds = await orgMemberUserIds(supabase, orgId)
-      const { data: convs } = memberIds.length
-        ? await supabase.from('email_conversations').select('id').eq('thread_id', threadId).in('user_id', memberIds)
-        : { data: [] }
+      const { data: convs } = await supabase.from('email_conversations').select('id').eq('org_id', orgId).eq('thread_id', threadId)
       const ids = ((convs ?? []) as { id: string }[]).map(c => c.id)
       if (ids.length === 0) return NextResponse.json({ error: 'Conversation not found', success: false }, { status: 404 })
       query = query.eq('thread_id', threadId).in('conversation_id', ids)

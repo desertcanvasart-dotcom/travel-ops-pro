@@ -8,10 +8,8 @@
 // from. They load the thread through this first and answer 404 when it is
 // null; send already did (drafts/[id]/send).
 //
-// A thread with NO org_id is not visible to anyone: it cannot be placed in a
-// company, and guessing is the leak this closes. The G1 backfill of
-// communication_threads.org_id is still pending — until it runs, such
-// threads are hidden rather than shown to both companies.
+// communication_threads.org_id is NOT NULL since 20261204 (every thread
+// assigned to a company), so the check is a plain filter.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (table: string) => any }
@@ -29,7 +27,8 @@ export async function copilotThreadInOrg<T extends { id: string; org_id: string 
     .from('communication_threads')
     .select(columns === '*' ? '*' : `id, org_id, ${columns}`)
     .eq('id', threadId)
+    .eq('org_id', orgId)
     .maybeSingle()
   if (error || !data) return null
-  return (data as T).org_id === orgId ? (data as T) : null
+  return data as T
 }

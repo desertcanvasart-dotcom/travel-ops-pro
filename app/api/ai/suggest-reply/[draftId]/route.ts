@@ -12,6 +12,8 @@ import { createClient } from '@supabase/supabase-js'
 import { generateReplyOptions } from '@/lib/ai/reply-suggestions'
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import type { CopilotChannel } from '@/types/copilot'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { copilotThreadInOrg } from '@/lib/copilot/thread-access'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -26,6 +28,9 @@ export async function POST(
     const limited = await guardAiRate()
     if (limited) return limited
 
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const { draftId } = await params
     const body = await request.json().catch(() => ({}))
 
@@ -39,12 +44,13 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Draft not found' }, { status: 404 })
     }
 
-    // Channel comes from the thread.
-    const { data: thread } = await supabase
-      .from('communication_threads')
-      .select('channel')
-      .eq('id', parent.thread_id)
-      .single()
+    // Only a draft of this organisation's thread (lib/copilot/thread-access):
+    // any draft id regenerated — and read the context of — any company's
+    // customer conversation. A plain 404, as for a missing draft.
+    const thread = await copilotThreadInOrg<{ id: string; org_id: string | null; channel: string }>(supabase, orgId, parent.thread_id, 'channel')
+    if (!thread) {
+      return NextResponse.json({ success: false, error: 'Draft not found' }, { status: 404 })
+    }
     const channel: CopilotChannel = thread?.channel === 'email' ? 'email' : 'whatsapp'
 
     const result = await generateReplyOptions({
@@ -54,7 +60,8 @@ export async function POST(
       channel,
       count: body.count,
       instruction: body.instruction ?? null,
-      reviewerUserId: body.user_id ?? null,
+      // Who asked: the session, never a user_id from the body.
+      reviewerUserId: await getCurrentUserId(),
       parentDraftId: draftId,
     })
 

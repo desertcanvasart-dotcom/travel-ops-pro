@@ -27,7 +27,7 @@ export async function buildCommunicationContext(
   // 1. Get the thread to determine client, channel, and linked conversations
   const { data: thread, error: threadError } = await supabase
     .from('communication_threads')
-    .select('id, channel, client_id, whatsapp_conversation_id, email_conversation_id')
+    .select('id, org_id, channel, client_id, whatsapp_conversation_id, email_conversation_id')
     .eq('id', threadId)
     .single()
 
@@ -185,7 +185,7 @@ async function fetchPayments(
 }
 
 async function fetchRecentMessages(
-  thread: { channel: string; whatsapp_conversation_id: string | null; email_conversation_id: string | null },
+  thread: { org_id: string; channel: string; whatsapp_conversation_id: string | null; email_conversation_id: string | null },
   supabase: SupabaseClient
 ): Promise<CopilotContextMessage[]> {
   if (thread.channel === 'whatsapp' && thread.whatsapp_conversation_id) {
@@ -209,6 +209,8 @@ async function fetchRecentMessages(
     const { data, error } = await supabase
       .from('email_messages')
       .select('direction, body_text, sent_at')
+      // The thread's own company's mail only (email_messages.org_id, 20261204).
+      .eq('org_id', thread.org_id)
       .eq('conversation_id', thread.email_conversation_id)
       .order('sent_at', { ascending: false })
       .limit(10)

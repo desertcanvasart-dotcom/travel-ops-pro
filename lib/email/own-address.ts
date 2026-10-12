@@ -12,7 +12,7 @@
 // and members' login emails — never another company's staff (team_members
 // carries org_id since 20261203). Ported from autoura-saas (#611).
 
-import { bareAddress, isOfficeAddress, type OfficeRule } from './office-addresses'
+import { bareAddress, isOfficeAddress, officeRule, type OfficeRule } from './office-addresses'
 import { loadOfficeRule } from './office-addresses-server'
 
 export interface OwnAddresses {
@@ -34,7 +34,7 @@ type Db = { from(table: string): any; rpc(fn: string, args: Record<string, unkno
 /** The office's addresses for an organisation. A read that fails adds nothing. */
 export async function loadOwnAddresses(db: Db, orgId: string | null): Promise<OwnAddresses> {
   const [rule, team, members] = await Promise.all([
-    loadOfficeRule(db),
+    orgId ? loadOfficeRule(db, orgId) : Promise.resolve(officeRule([], [])),
     orgId ? db.from('team_members').select('email').eq('org_id', orgId) : Promise.resolve({ data: [] }),
     orgId ? db.from('organization_members').select('user_id').eq('org_id', orgId) : Promise.resolve({ data: [] }),
   ])

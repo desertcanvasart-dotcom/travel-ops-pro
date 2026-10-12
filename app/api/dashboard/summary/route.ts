@@ -84,12 +84,12 @@ export async function GET() {
         .gt('unread_count', 0),
       // Only a connected address's mail (lib/email/connected-mailboxes).
       scopedToConnectedMailboxes(supabase, orgId, (mailboxFilter) => {
-        let q = supabase.from('email_conversations')
+        return supabase.from('email_conversations')
           .select('unread_count')
+          .eq('org_id', orgId)
           .or('is_hidden.is.null,is_hidden.eq.false')
           .gt('unread_count', 0)
-        if (mailboxFilter) q = q.or(mailboxFilter)
-        return q
+          .or(mailboxFilter)
       }),
       // client_followups has no org_id: scoped through its client, as the
       // analytics follow-ups count is (this counted every company's).

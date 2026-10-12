@@ -8,7 +8,6 @@
 // ============================================
 
 import { SupabaseClient } from '@supabase/supabase-js'
-import { getDefaultOrgId } from '@/lib/auth/default-org'
 
 interface CopilotIntakeParams {
   channel: 'whatsapp' | 'email'
@@ -22,9 +21,11 @@ interface CopilotIntakeParams {
   receivedAt: string
   clientId: string | null
   clientName: string | null
-  /** The org the message came in for, when the channel knows it (WhatsApp:
-   *  the receiving number's org). Without it, the default-org placeholder. */
-  orgId?: string | null
+  /** The org the message came in for: WhatsApp, the receiving number's
+   *  org; email, the org the mailbox serves (gmail_tokens.org_id). Required —
+   *  communication_threads.org_id is NOT NULL (20261204), and a guessed
+   *  "default org" filed one company's customers under the other. */
+  orgId: string
 }
 
 interface CopilotIntakeResult {
@@ -122,6 +123,7 @@ async function findOrCreateThread(
       .from('communication_threads')
       .select('id')
       .eq('whatsapp_conversation_id', params.whatsappConversationId)
+      .eq('org_id', params.orgId)
       .single()
 
     if (existing) {
@@ -145,6 +147,7 @@ async function findOrCreateThread(
       .from('communication_threads')
       .select('id')
       .eq('email_conversation_id', params.emailConversationId)
+      .eq('org_id', params.orgId)
       .single()
 
     if (existing) {
@@ -162,11 +165,10 @@ async function findOrCreateThread(
     }
   }
 
-  // Phase 2 — stamp org_id at intake. Webhook context (no operator session).
+  // Stamp org_id at intake. Webhook / sync context (no operator session):
   // WhatsApp resolves it from the number the customer wrote to
-  // (lib/whatsapp-org); email still uses the default-org placeholder until
-  // its own per-org resolution (DEFERRED_GATES.md G1).
-  const orgId = params.orgId ?? await getDefaultOrgId(supabase)
+  // (lib/whatsapp-org), email from the connection it was synced through.
+  const orgId = params.orgId
 
   // Create new thread
   const { data: newThread, error } = await supabase

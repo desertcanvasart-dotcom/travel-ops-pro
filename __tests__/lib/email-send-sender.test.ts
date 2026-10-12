@@ -6,29 +6,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const h = vi.hoisted(() => {
-  // Two organizations, each with one member who connected Gmail; the
-  // platform mailbox belongs to neither.
-  const members: Record<string, { user_id: string }[]> = {
-    'org-A': [{ user_id: 'a-owner' }, { user_id: 'a-agent' }],
-    'org-B': [{ user_id: 'b-owner' }],
-    'org-C': [{ user_id: 'c-owner' }], // nobody connected
-  }
+  // Two organizations, each with connections that serve it (gmail_tokens.
+  // org_id, 20261204); the platform mailbox belongs to neither; org-C has
+  // none.
   const tokens = [
-    { user_id: 'b-owner', email: 'office@org-b.example' }, // first row: what the old code always used
-    { user_id: 'a-owner', email: 'office@org-a.example' },
-    { user_id: 'a-agent', email: 'agent@org-a.example' },
-    { user_id: 'platform', email: 'platform@autoura.example' },
+    { user_id: 'b-owner', org_id: 'org-B', created_at: '1', email: 'office@org-b.example' }, // first row: what the old code always used
+    { user_id: 'a-owner', org_id: 'org-A', created_at: '2', email: 'office@org-a.example' },
+    { user_id: 'a-agent', org_id: 'org-A', created_at: '3', email: 'agent@org-a.example' },
+    { user_id: 'platform', org_id: 'org-P', created_at: '0', email: 'platform@autoura.example' },
   ]
   const sent: { userId: string; raw: string }[] = []
 
-  function query(table: string) {
+  function query(_table: string) {
     const f: { eq?: [string, unknown]; in?: string[]; ilike?: string } = {}
     const rows = () => {
-      if (table === 'organization_members') return members[f.eq![1] as string] ?? []
       let r = tokens
+      if (f.eq) r = r.filter(t => (t as Record<string, unknown>)[f.eq![0]] === f.eq![1])
       if (f.in) r = r.filter(t => f.in!.includes(t.user_id))
       if (f.ilike) r = r.filter(t => t.email.toLowerCase() === f.ilike!.toLowerCase())
-      return r
+      return [...r].sort((x, y) => x.created_at.localeCompare(y.created_at))
     }
     const b: Record<string, unknown> = {
       select: () => b,
@@ -38,7 +34,7 @@ const h = vi.hoisted(() => {
       order: () => b,
       limit: () => b,
       maybeSingle: async () => ({ data: rows()[0] ?? null }),
-      then: (resolve: (v: unknown) => void) => resolve({ data: rows() }),
+      then: (resolve: (v: unknown) => void) => resolve({ data: rows(), error: null }),
     }
     return b
   }
@@ -111,6 +107,13 @@ describe('sendEmailInternal: whose mailbox', () => {
     await sendEmailInternal({ ...mail, orgId: 'org-B' })
     expect(headers()).not.toMatch(/^Bcc:/m)
     expect(h.sent.at(-1)!.raw).not.toContain('platform@autoura.example')
+  })
+
+  it('platform mail with no GMAIL_USER mailbox is not sent — never from a company’s mailbox', async () => {
+    process.env.GMAIL_USER = 'nobody@autoura.example'
+    const r = await sendEmailInternal(mail)
+    expect(r).toMatchObject({ success: false, noAccount: true })
+    expect(h.sent).toHaveLength(0)
   })
 
   it('names the platform on the platform’s own mail', async () => {

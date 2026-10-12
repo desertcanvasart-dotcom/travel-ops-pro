@@ -306,10 +306,11 @@ export async function GET(request: NextRequest) {
     if (channel === 'all' || channel === 'email') {
       const orgId = await getCurrentOrgId()
       if (!orgId) return
-      // Only mail of the org's Gmail addresses connected now: a disconnected
-      // address's conversations stay stored but out of the inbox until it is
-      // connected again (lib/email/connected-mailboxes).
-      const buildEmailQuery = (mailboxFilter: string | null) => {
+      // The org's own conversations (org_id), and only those of its Gmail
+      // addresses connected now: a disconnected address's conversations stay
+      // stored but out of the inbox until it is connected again
+      // (lib/email/connected-mailboxes).
+      const buildEmailQuery = (mailboxFilter: string) => {
         let emailQuery = supabase
           .from('email_conversations')
           .select(`
@@ -334,6 +335,7 @@ export async function GET(request: NextRequest) {
               max_conversations
             )
           `)
+          .eq('org_id', orgId)
           .order('last_message_at', { ascending: false, nullsFirst: false })
         // Trash: conversations deleted in Communicate (status 'trashed'),
         // never mail hidden to keep it private (is_hidden alone).
@@ -354,7 +356,7 @@ export async function GET(request: NextRequest) {
         if (search) {
           emailQuery = emailQuery.or(`client_email.ilike.%${search}%,client_name.ilike.%${search}%,subject.ilike.%${search}%`)
         }
-        if (mailboxFilter) emailQuery = emailQuery.or(mailboxFilter)
+        emailQuery = emailQuery.or(mailboxFilter)
         return emailQuery.limit(limit)
       }
       const { data: emailData, error: emailError } = await scopedToConnectedMailboxes(supabase, orgId, buildEmailQuery)

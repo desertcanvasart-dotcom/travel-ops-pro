@@ -31,8 +31,10 @@ beforeAll(async () => {
   db = new PGlite({ extensions: { pgcrypto, uuid_ossp } }) as any
   await db.exec(PRELUDE)
   await db.exec(TRACKER_BOOTSTRAP)
+  // The migrations before this one: later ones (the per-table backfills)
+  // call these helpers and cannot run without them.
   for (const f of readdirSync(MIGRATIONS).filter((f: string) => f.endsWith('.sql')).sort()) {
-    if (f === FILE) continue
+    if (f >= FILE) continue
     await db.exec(readFileSync(path.join(MIGRATIONS, f), 'utf8'))
     await db.exec("SELECT pg_catalog.set_config('search_path','public',false);")
   }
