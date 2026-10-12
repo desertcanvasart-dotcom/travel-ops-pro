@@ -20,6 +20,8 @@ interface Summary {
 
 interface Analytics {
   period: Period
+  truncated: boolean
+  draft_cap: number
   summary: Summary
   confidence: { high: number; medium: number; low: number; unknown: number }
   by_channel: Record<string, { generated: number; sent: number }>
@@ -89,6 +91,15 @@ export default function CopilotAnalyticsPage() {
         </div>
       ) : !data ? null : (
         <div className="space-y-6">
+          {/* The API reads at most draft_cap drafts. Past that every figure
+              covers only the newest ones, so say it rather than let the
+              counts pass for the whole period. */}
+          {data.truncated && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+              Based on the newest {data.draft_cap.toLocaleString()} drafts in this period — older drafts are not counted.
+            </p>
+          )}
+
           {/* Headline cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatCard label="Drafts generated" value={data.summary.total_generated} icon={<Sparkles className="w-4 h-4" />} />
