@@ -431,7 +431,7 @@ export async function POST(request: NextRequest) {
     if (cruiseDetection.isCruise && inputMode === 'creative' && !is_structured_input && (effectivePackageType === 'cruise-package' || effectivePackageType === 'cruise-land')) {
       debugLog(`🚢 Processing as ${effectivePackageType} itinerary (creative mode, no structured input)...`)
       
-      const cruiseContent = await findCruiseContent(supabaseAdmin, cruiseDetection, tier, duration_days)
+      const cruiseContent = await findCruiseContent(supabaseAdmin, orgId, cruiseDetection, tier, duration_days)
       
       if (cruiseContent.found && cruiseContent.dayByDay.length > 0) {
         debugLog(`📚 Using Content Library cruise: ${cruiseContent.content.name}`)
@@ -607,7 +607,7 @@ export async function POST(request: NextRequest) {
 
         // Log content library usage for cruise path
         if (cruiseContent.found && cruiseContent.content?.id) {
-          logContentUsage(supabaseAdmin, [cruiseContent.content.id], tier, itinerary.id, 'cruise_generation')
+          logContentUsage(supabaseAdmin, orgId, [cruiseContent.content.id], tier, itinerary.id, 'cruise_generation')
         }
 
         // Auto-create language version
@@ -677,8 +677,8 @@ export async function POST(request: NextRequest) {
       attractionsWithCity,
       { aliasToCanonical },
     ] = await Promise.all([
-      fetchContentLibrary(supabaseAdmin, tier, searchCities, interests),
-      fetchWritingRules(supabaseAdmin),
+      fetchContentLibrary(supabaseAdmin, orgId, tier, searchCities, interests),
+      fetchWritingRules(supabaseAdmin, orgId),
       fetchAttractionsList(supabase, orgId),
       fetchAttractionsWithCity(supabase, orgId),
       // DB aliases for service-creation matching — this company's
@@ -1050,7 +1050,7 @@ export async function POST(request: NextRequest) {
 
     // Log content library usage for land path
     if (matchedContentIds.length > 0) {
-      logContentUsage(supabaseAdmin, matchedContentIds, tier, itinerary.id, 'land_generation')
+      logContentUsage(supabaseAdmin, orgId, matchedContentIds, tier, itinerary.id, 'land_generation')
     }
 
     // Auto-create language version

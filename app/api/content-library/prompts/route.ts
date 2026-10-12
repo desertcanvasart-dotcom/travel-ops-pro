@@ -6,9 +6,12 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { MODEL_DEFAULT } from '@/lib/ai/models'
+import { contentSession, withoutOwnedColumns } from '@/lib/content-library/session'
+
+// Prompt templates are each company's own (20261208): read and written in the
+// caller's ACTIVE company only, and "the default for a purpose" is one per
+// company — setting one never un-defaults another company's.
 
 const VALID_PURPOSES = [
   'itinerary_full',
@@ -20,33 +23,14 @@ const VALID_PURPOSES = [
   'whatsapp'
 ]
 
-// Helper to create Supabase client
-async function createClient() {
-  const cookieStore = await cookies()
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options)
-          })
-        },
-      },
-    }
-  )
-}
-
 // GET - List prompt templates
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId } = session
     const { searchParams } = new URL(request.url)
-    
+
     // Parse filters
     const purpose = searchParams.get('purpose')
     const activeOnly = searchParams.get('active_only') !== 'false'
@@ -55,6 +39,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('prompt_templates')
       .select('*')
+      .eq('org_id', orgId)
       .order('purpose', { ascending: true })
       .order('name', { ascending: true })
 
@@ -91,13 +76,9 @@ export async function GET(request: NextRequest) {
 // POST - Create new prompt template
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId, userId } = session
 
     const body = await request.json()
     const {
@@ -142,6 +123,7 @@ export async function POST(request: NextRequest) {
       await supabase
         .from('prompt_templates')
         .update({ is_default: false })
+        .eq('org_id', orgId)
         .eq('purpose', purpose)
         .eq('is_default', true)
     }
@@ -158,6 +140,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('prompt_templates')
       .insert({
+        org_id: orgId,
         name,
         purpose,
         description: description || null,
@@ -168,7 +151,7 @@ export async function POST(request: NextRequest) {
         temperature: finalTemperature,
         max_tokens: max_tokens || 2000,
         is_default: is_default || false,
-        created_by: user.id
+        created_by: userId
       })
       .select()
       .single()
@@ -191,16 +174,13 @@ export async function POST(request: NextRequest) {
 // PATCH - Update prompt template
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId } = session
 
     const body = await request.json()
-    const { id, ...updates } = body
+    const id = body.id
+    const updates = withoutOwnedColumns(body)
 
     if (!id) {
       return NextResponse.json(
@@ -232,22 +212,21 @@ export async function PATCH(request: NextRequest) {
         .from('prompt_templates')
         .select('purpose')
         .eq('id', id)
+        .eq('org_id', orgId)
         .single()
 
-      if (current) {
-        const purpose = updates.purpose || current.purpose
-        await supabase
-          .from('prompt_templates')
-          .update({ is_default: false })
-          .eq('purpose', purpose)
-          .eq('is_default', true)
-          .neq('id', id)
+      if (!current) {
+        return NextResponse.json({ error: 'Template not found' }, { status: 404 })
       }
+      const purpose = updates.purpose || current.purpose
+      await supabase
+        .from('prompt_templates')
+        .update({ is_default: false })
+        .eq('org_id', orgId)
+        .eq('purpose', purpose)
+        .eq('is_default', true)
+        .neq('id', id)
     }
-
-    // Remove fields that shouldn't be updated
-    delete updates.created_at
-    delete updates.created_by
 
     // Increment version if content changed
     if (updates.system_prompt || updates.user_prompt_template) {
@@ -255,6 +234,7 @@ export async function PATCH(request: NextRequest) {
         .from('prompt_templates')
         .select('version')
         .eq('id', id)
+        .eq('org_id', orgId)
         .single()
       
       if (current) {
@@ -266,9 +246,13 @@ export async function PATCH(request: NextRequest) {
       .from('prompt_templates')
       .update(updates)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
-      .single()
+      .maybeSingle()
 
+    if (!error && !data) {
+      return NextResponse.json({ error: 'Template not found' }, { status: 404 })
+    }
     if (error) {
       console.error('Error updating prompt template:', error)
       return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -287,13 +271,9 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Delete prompt template
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId } = session
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
@@ -310,9 +290,13 @@ export async function DELETE(request: NextRequest) {
       .from('prompt_templates')
       .select('is_default, purpose')
       .eq('id', id)
+      .eq('org_id', orgId)
       .single()
 
-    if (template?.is_default) {
+    if (!template) {
+      return NextResponse.json({ error: 'Template not found' }, { status: 404 })
+    }
+    if (template.is_default) {
       return NextResponse.json(
         { error: 'Cannot delete default template. Set another template as default first.' },
         { status: 400 }
@@ -323,6 +307,7 @@ export async function DELETE(request: NextRequest) {
       .from('prompt_templates')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
 
     if (error) {
       console.error('Error deleting prompt template:', error)

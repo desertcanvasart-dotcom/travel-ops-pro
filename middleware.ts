@@ -143,7 +143,11 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   { prefix: '/api/templates', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/tasks', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/reminders', roles: ['admin', 'manager', 'agent'] },
-  { prefix: '/api/content-library', roles: ['admin', 'manager', 'agent'] },
+  // Content library, writing rules and prompts are the Communicate menu's
+  // manager-and-above screens, and their tables' RLS lets only a manager write
+  // (20261208) — an agent's write would fail there anyway; refuse it here
+  // with a clear 403. Reads stay open: generation reads them for every role.
+  { prefix: '/api/content-library', roles: ['admin', 'manager'] },
   { prefix: '/api/itinerary-resources', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/capacity', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/departures', roles: ['admin', 'manager', 'agent'] },
