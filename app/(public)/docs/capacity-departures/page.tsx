@@ -84,18 +84,6 @@ export default function CapacityDeparturesPage() {
           <strong>No overbooking by design:</strong> Because the AI agent reads the same live numbers your operations team does, its availability answers stay in sync &mdash; busy and blackout dates are surfaced before a booking is ever confirmed.
         </Tip>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link href="/docs" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          All Docs
-        </Link>
-        <Link href="/docs/quote-revisions" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          Next: Quote Revisions
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }

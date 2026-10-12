@@ -125,18 +125,6 @@ export default function B2BPricingPage() {
           After calculating a price, click <strong>Save as Quote</strong> to create a B2B quote. See the <Link href="/docs/b2b-quotes" className="text-primary-600 hover:underline">B2B Quotes</Link> documentation for details on managing and exporting quotes.
         </p>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link href="/docs/b2c-pricing" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          B2C Pricing
-        </Link>
-        <Link href="/docs/tour-programs" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          Next: Tour Programs Manager
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }

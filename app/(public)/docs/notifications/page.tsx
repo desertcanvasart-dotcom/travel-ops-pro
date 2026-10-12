@@ -73,18 +73,6 @@ export default function NotificationsPage() {
           The feed loads the latest 100 notifications. Mark items read or delete them to keep it focused on what still needs action.
         </Tip>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link href="/docs" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          All Docs
-        </Link>
-        <Link href="/docs/tasks" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          Next: Tasks
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }

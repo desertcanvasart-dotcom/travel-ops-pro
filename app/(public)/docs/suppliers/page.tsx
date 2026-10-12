@@ -110,18 +110,6 @@ export default function SuppliersPage() {
           <li><strong>Export</strong> the list, and view, edit, or delete any supplier</li>
         </ul>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link href="/docs" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          All Docs
-        </Link>
-        <Link href="/docs/content-library" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          Next: Content Library
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }

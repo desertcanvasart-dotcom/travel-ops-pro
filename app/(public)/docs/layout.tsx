@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { CATEGORIES } from './toc'
+import { DocsPager } from './DocsPager'
 import { ArrowLeft, Menu, X, Camera, Lightbulb, BookOpen } from 'lucide-react'
 
 
@@ -165,6 +166,7 @@ export default function DocsLayout({
           <main className="flex-1 min-w-0">
             <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
               {children}
+              <DocsPager href={pathname} />
             </div>
           </main>
         </div>

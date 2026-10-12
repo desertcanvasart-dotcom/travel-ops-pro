@@ -71,18 +71,6 @@ export default function FollowupsRemindersPage() {
           Your upcoming follow-ups and reminders appear on the <strong>Dashboard</strong> for quick access. Overdue items are highlighted in red so you can prioritize them immediately.
         </p>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link href="/docs/profit-loss" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          Profit &amp; Loss
-        </Link>
-        <Link href="/docs/tours-rates" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          Next: Tours &amp; Rates
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }

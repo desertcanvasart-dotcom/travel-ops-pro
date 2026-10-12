@@ -83,17 +83,6 @@ export default function GettingStartedPage() {
         </div>
         <DocScreenshot src="/docs/getting-started/user-management.jpg" alt="User management page showing roles and permissions" />
       </section>
-
-      {/* Next Page */}
-      <div className="mt-12 pt-6 border-t border-gray-200">
-        <Link
-          href="/docs/dashboard"
-          className="inline-flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
-        >
-          Next: Dashboard
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }

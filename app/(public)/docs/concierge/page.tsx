@@ -90,18 +90,6 @@ export default function ConciergeBriefsDocsPage() {
           A matching client prospect is found or created automatically from the brief&apos;s email or phone, and the provenance chain &mdash; brief &rarr; thread &rarr; itinerary &mdash; stays linked so you can trace where a booking came from. Promotion is idempotent: a brief maps to at most one thread and one itinerary.
         </p>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link href="/docs" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          All Docs
-        </Link>
-        <Link href="/docs/copilot" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          Next: AI Copilot &amp; Knowledge Base
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }

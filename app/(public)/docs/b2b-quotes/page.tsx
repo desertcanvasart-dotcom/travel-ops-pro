@@ -88,18 +88,6 @@ export default function B2BQuotesPage() {
           <strong>Japanese Support:</strong> The PDF generator supports Japanese text, so quotes for Japanese partners will render correctly with proper fonts.
         </Tip>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link href="/docs/tour-programs" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          Tour Programs Manager
-        </Link>
-        <Link href="/docs/bookings" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          Next: Bookings
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }

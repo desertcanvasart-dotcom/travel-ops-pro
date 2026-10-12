@@ -139,24 +139,6 @@ export default function TeamSettingsPage() {
           When editing rates while in Japanese mode, translated names are saved separately &mdash; the English names are never overwritten.
         </Tip>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link
-          href="/docs/message-templates"
-          className="inline-flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
-        >
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          Message Templates
-        </Link>
-        <Link
-          href="/docs/workflows"
-          className="inline-flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
-        >
-          Next: Workflows &amp; Tips
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }
