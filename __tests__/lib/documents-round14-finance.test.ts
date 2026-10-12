@@ -121,8 +121,10 @@ describe('trip P&L', () => {
 describe('financial reports', () => {
   it('cancelled invoices and rejected/cancelled expenses are dropped; receivables are converted', () => {
     const r = src('app/api/financial-reports/route.ts')
-    expect(r).toContain("total_amount, amount_paid, balance_due, currency, status')")
-    expect(r).toContain(".filter(inv => inv.status !== 'cancelled')")
+    expect(r).toContain("total_amount, amount_paid, balance_due, currency, status, itinerary_id')")
+    // Draft invoices are now dropped too (invoiceCountsAsRevenue); the
+    // behaviour is pinned in __tests__/api/financial-reports.test.ts.
+    expect(r).toContain('.filter(inv => invoiceCountsAsRevenue(inv.status))')
     expect(r).toContain(".filter(exp => exp.status !== 'rejected' && exp.status !== 'cancelled')")
     expect(r).not.toContain('Number(inv.balance_due')
     expect(r).toContain('Number(inv.total_amount || 0) - Number(inv.amount_paid || 0)')
