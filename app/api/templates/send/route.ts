@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     let result
 
     if (channel === 'email') {
-      result = await sendEmail(recipient, subject, messageBody, sessionUserId!)
+      result = await sendEmail(recipient, subject, messageBody, sessionUserId!, orgId)
     } else if (channel === 'whatsapp') {
       result = await sendWhatsApp(recipient, messageBody, orgId)
     } else {
@@ -138,13 +138,20 @@ async function sendEmail(
   to: string,
   subject: string,
   body: string,
-  userId: string
+  userId: string,
+  orgId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Sends from the SIGNED-IN user's own Gmail. The former "first connected
     // account" fallback is gone: it sent from whichever account happened to be
-    // first in the table, regardless of tenant.
-    const { accessToken, refreshToken } = await getAuthenticatedGmail(userId)
+    // first in the table, regardless of tenant. And only while that connection
+    // serves this workspace's company (gmail_tokens.org_id, 20261204): a
+    // person in both companies must not send one company's mail from the
+    // mailbox they connected to the other.
+    const { accessToken, refreshToken, orgId: mailboxOrg } = await getAuthenticatedGmail(userId)
+    if (mailboxOrg !== orgId) {
+      return { success: false, error: 'Your Gmail is connected to another company. Connect it from this workspace to send from it.' }
+    }
     await gmailSendEmail(accessToken, refreshToken, to, subject, body)
 
     return { success: true }

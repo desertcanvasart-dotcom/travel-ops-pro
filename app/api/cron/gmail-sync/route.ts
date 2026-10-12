@@ -18,6 +18,11 @@
 // button still does the 30-day catch-up. One mailbox failing (a revoked
 // token) never stops the next.
 //
+// Per organisation (20261204): each connection syncs into the company it
+// serves (gmail_tokens.org_id — lib/email/sync-mailbox stamps it), the office
+// repair runs once per company with that company's rule, and orders and
+// leads are filed under the company of the message's own mailbox.
+//
 // Auth: lib/cron/auth (fails closed).
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -38,14 +43,15 @@ async function getHandler(request: NextRequest) {
   }
 
   const db = createServerClient()
-  const { data: mailboxes, error } = await db.from('gmail_tokens').select('user_id').not('user_id', 'is', null)
+  const { data: mailboxes, error } = await db.from('gmail_tokens').select('user_id, org_id').not('user_id', 'is', null)
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
 
   const results: Array<{
     user_id: string; ok: boolean; messages_created?: number
     messages_fetched?: number; messages_already_stored?: number; sync_mode?: string; error?: string
   }> = []
-  for (const { user_id } of (mailboxes ?? []) as { user_id: string }[]) {
+  const rows = (mailboxes ?? []) as { user_id: string; org_id: string | null }[]
+  for (const { user_id } of rows) {
     try {
       const r = await syncMailbox(user_id, { full_sync: false, max_results: 50, days_back: 3, use_history: true })
       results.push({
@@ -61,12 +67,18 @@ async function getHandler(request: NextRequest) {
   // run the rule changed (and six-hourly as a safety net), so the rule reaches
   // what was synced before it (lib/email/office-addresses-server). Null when
   // not due — the scan reads every inbound message, so not every 10 minutes.
-  let reclassified: { messages: number; conversations: number } | null = null
-  try {
-    reclassified = await applyOfficeRuleWhenDue(db, await loadOfficeRule(db))
-  } catch (e) {
-    console.error('[gmail-sync] office-address re-classify failed:', e)
+  const repairs: Array<{ messages: number; conversations: number }> = []
+  for (const orgId of [...new Set(rows.map(r => r.org_id).filter((o): o is string => !!o))]) {
+    try {
+      const changed = await applyOfficeRuleWhenDue(db, orgId, await loadOfficeRule(db, orgId))
+      if (changed) repairs.push(changed)
+    } catch (e) {
+      console.error('[gmail-sync] office-address re-classify failed for organisation', orgId, e)
+    }
   }
+  const reclassified = repairs.length
+    ? repairs.reduce((a, r) => ({ messages: a.messages + r.messages, conversations: a.conversations + r.conversations }))
+    : null
 
   // The website's order emails become quotes (lib/intake/web-order-intake).
   let orders: WebOrderResult[] = []

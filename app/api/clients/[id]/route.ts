@@ -326,12 +326,14 @@ export async function DELETE(
     const { data: emailConvs } = await supabaseAdmin
       .from('email_conversations')
       .select('id')
+      .eq('org_id', orgId)
       .eq('client_id', id)
 
     if (emailConvs && emailConvs.length > 0) {
       await supabaseAdmin
         .from('email_messages')
         .delete()
+        .eq('org_id', orgId)
         .in('conversation_id', emailConvs.map(c => c.id))
     }
 

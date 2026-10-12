@@ -1,24 +1,20 @@
 // ============================================
 // Is this email conversation the caller's organisation's?
 // ============================================
-// email_conversations has no org_id (G1). A conversation belongs to the
-// mailbox it was synced from (user_id, the Gmail owner), and that mailbox to
-// the organisation its owner is a member of — the rule the lists apply
-// (lib/email/connected-mailboxes). The by-id endpoints read, changed and
-// trashed (in the owner's real Gmail) any conversation whose id they were
-// given; they now load it through this first, and answer 404 when it is null.
-// LIMIT: a login in BOTH companies owns a mailbox visible to both until
-// gmail_tokens gets an org_id (a later migration).
-
-import { isOrgMember } from '@/lib/auth/org-members'
+// email_conversations.org_id (migration 20261204) says whose it is. The by-id
+// endpoints read, changed and trashed (in the owner's real Gmail) any
+// conversation whose id they were given; they load it through this first,
+// and answer 404 when it is null.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (table: string) => any }
 
 export interface OwnedEmailConversation {
   id: string
+  org_id: string
   user_id: string | null
   thread_id: string | null
+  mailbox_email: string | null
   status: string | null
   is_hidden: boolean | null
 }
@@ -31,10 +27,51 @@ export async function emailConversationInOrg(
 ): Promise<OwnedEmailConversation | null> {
   const { data, error } = await db
     .from('email_conversations')
-    .select('id, user_id, thread_id, status, is_hidden')
+    .select('id, org_id, user_id, thread_id, mailbox_email, status, is_hidden')
     .eq('id', conversationId)
+    .eq('org_id', orgId)
     .maybeSingle()
   if (error || !data) return null
-  const conv = data as OwnedEmailConversation
-  return (await isOrgMember(db, orgId, conv.user_id)) ? conv : null
+  return data as OwnedEmailConversation
+}
+
+// ── One conversation per Gmail thread, per mailbox, per company ─────────────
+// A Gmail thread id is an id inside ONE mailbox, so the same id can be a
+// conversation in each company's mailbox (UNIQUE (org_id, mailbox_email,
+// thread_id), 20261204). A conversation stored before its address was
+// recorded (mailbox_email NULL) belongs to the mailbox of the user who synced
+// it, and is found by that.
+
+export interface MailboxRef {
+  orgId: string
+  /** The mailbox address (any case). */
+  mailboxEmail: string
+  /** The user whose connection it is. */
+  mailboxUserId: string
+}
+
+/** The filter for "this mailbox's conversations" (PostgREST `.or()`). */
+export function mailboxConversationFilter(m: MailboxRef): string {
+  const q = (v: string) => `"${v.replace(/["\\]/g, '')}"`
+  const parts = [`and(mailbox_email.is.null,user_id.eq.${q(m.mailboxUserId)})`]
+  if (m.mailboxEmail) parts.unshift(`mailbox_email.eq.${q(m.mailboxEmail.toLowerCase())}`)
+  return parts.join(',')
+}
+
+/** This mailbox's conversation for a Gmail thread, or null. */
+export async function findThreadConversation<T = { id: string }>(
+  db: Db,
+  m: MailboxRef,
+  threadId: string,
+  columns = 'id',
+): Promise<T | null> {
+  const { data, error } = await db
+    .from('email_conversations')
+    .select(columns)
+    .eq('org_id', m.orgId)
+    .eq('thread_id', threadId)
+    .or(mailboxConversationFilter(m))
+    .limit(1)
+  if (error) throw new Error(`Could not read conversations: ${error.message}`)
+  return ((data ?? []) as T[])[0] ?? null
 }

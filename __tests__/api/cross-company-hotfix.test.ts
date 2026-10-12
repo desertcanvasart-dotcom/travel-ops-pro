@@ -10,7 +10,7 @@ import { NextRequest } from 'next/server'
 import { setMockTables, createMockClient } from '../_mock-supabase'
 
 const ctx = vi.hoisted(() => ({ orgId: 'org-a' as string | null, userId: 'ua1' as string | null }))
-const gmail = vi.hoisted(() => ({ moves: [] as Array<[unknown, unknown, unknown]> }))
+const gmail = vi.hoisted(() => ({ moves: [] as Array<[unknown, unknown, unknown, unknown]> }))
 const notify = vi.hoisted(() => ({ calls: [] as unknown[] }))
 
 vi.mock('@supabase/supabase-js', async (orig) => ({
@@ -29,7 +29,7 @@ vi.mock('@/lib/auth/current-org', async () => {
   }
 })
 vi.mock('@/lib/email/conversation-trash', () => ({
-  moveThreadInGmail: async (...a: [unknown, unknown, unknown]) => { gmail.moves.push(a); return { ok: true } },
+  moveThreadInGmail: async (...a: [unknown, unknown, unknown, unknown]) => { gmail.moves.push(a); return { ok: true } },
 }))
 vi.mock('@/lib/notifications', () => ({
   createNotification: async (n: unknown) => { notify.calls.push(n); return { success: true, notification: n } },
@@ -64,13 +64,13 @@ function tables(extra: Record<string, Record<string, unknown>[]> = {}) {
     organization_members: MEMBERS.map(m => ({ ...m })),
     organizations: [{ id: 'org-a' }, { id: 'org-b' }],
     email_conversations: [
-      { id: 'ca', user_id: 'ua2', thread_id: 'ta', status: 'trashed', is_hidden: true },
-      { id: 'ca-private', user_id: 'ua2', thread_id: 'tp', status: 'active', is_hidden: true },
-      { id: 'cb', user_id: 'ub1', thread_id: 'tb', status: 'trashed', is_hidden: true },
+      { id: 'ca', org_id: 'org-a', user_id: 'ua2', thread_id: 'ta', status: 'trashed', is_hidden: true },
+      { id: 'ca-private', org_id: 'org-a', user_id: 'ua2', thread_id: 'tp', status: 'active', is_hidden: true },
+      { id: 'cb', org_id: 'org-b', user_id: 'ub1', thread_id: 'tb', status: 'trashed', is_hidden: true },
     ],
     email_messages: [
-      { id: 'ma', conversation_id: 'ca', thread_id: 'ta', sent_at: '1', body_text: 'A mail' },
-      { id: 'mb', conversation_id: 'cb', thread_id: 'tb', sent_at: '1', body_text: 'B private mail' },
+      { id: 'ma', org_id: 'org-a', conversation_id: 'ca', thread_id: 'ta', sent_at: '1', body_text: 'A mail' },
+      { id: 'mb', org_id: 'org-b', conversation_id: 'cb', thread_id: 'tb', sent_at: '1', body_text: 'B private mail' },
     ],
     team_members: [
       { id: 'tm-a', user_id: 'ua2', name: 'A agent', is_active: true, is_available: true },
@@ -147,7 +147,7 @@ describe('email conversations by id (fix 3)', () => {
     const trashed = await emailConversations.PATCH(req('/api/email/conversations', { method: 'PATCH', body: { conversation_id: 'ca', action: 'unhide' } }))
     expect(trashed.status).toBe(200)
     expect((await trashed.json()).conversation).toMatchObject({ id: 'ca', is_hidden: false, status: 'active' })
-    expect(gmail.moves).toEqual([['ua2', 'ta', 'untrash']])
+    expect(gmail.moves).toEqual([['ua2', 'ta', 'untrash', 'org-a']])
   })
 
   it("DELETE: another company's conversation is 404 — not trashed here nor in its owner's Gmail", async () => {
@@ -156,7 +156,7 @@ describe('email conversations by id (fix 3)', () => {
     expect(gmail.moves).toEqual([])
     const own = await emailConversations.DELETE(req('/api/email/conversations?id=ca-private', { method: 'DELETE' }))
     expect(own.status).toBe(200)
-    expect(gmail.moves).toEqual([['ua2', 'tp', 'trash']])
+    expect(gmail.moves).toEqual([['ua2', 'tp', 'trash', 'org-a']])
   })
 })
 
@@ -187,11 +187,10 @@ describe('lists scoped to the caller org (fixes 1, 2, 23)', () => {
 })
 
 describe('gmail send uses only the org stored conversation (fix 5)', () => {
-  it('a thread stored only in another company mailbox is foreign: no guard, no stored threading', () => {
+  it("reads only the organisation's conversations for the thread, and guards on the organisation's replies", () => {
     const r = src('app/api/gmail/send/route.ts')
-    expect(r).toContain('const inOrg = stored.filter(c => c.user_id && memberIds.includes(c.user_id))')
-    expect(r).toContain('foreignThread = stored.length > 0 && !conv')
-    expect(r).toContain('if (threadId && !foreignThread && !confirmDuplicate) {')
+    expect(r).toMatch(/from\('email_conversations'\)\s*\n\s*\.select\('id, user_id'\)\s*\n\s*\.eq\('org_id', orgId\)\s*\n\s*\.eq\('thread_id', threadId\)/)
+    expect(r).toMatch(/threadConflict\(supabase, \{\s*\n\s*orgId,/)
   })
 })
 

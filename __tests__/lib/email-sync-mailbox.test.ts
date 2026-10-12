@@ -16,6 +16,26 @@ const h = vi.hoisted(() => {
     reads: [] as Array<{ table: string; filters: string[] }>,
     seq: 0,
   }
+  const splitTop = (expr: string) => {
+    const parts: string[] = []
+    let depth = 0, cur = ''
+    for (const ch of expr) {
+      if (ch === '(') depth++
+      if (ch === ')') depth--
+      if (ch === ',' && depth === 0) { parts.push(cur); cur = '' } else cur += ch
+    }
+    if (cur) parts.push(cur)
+    return parts
+  }
+  const termMatches = (term: string, r: Row): boolean => {
+    if (term.startsWith('and(')) return splitTop(term.slice(4, -1)).every(t => termMatches(t, r))
+    const [col, op, ...rest] = term.split('.')
+    const val = rest.join('.').replace(/^"|"$/g, '')
+    if (op === 'is' && val === 'null') return r[col] == null
+    if (op === 'eq') return String(r[col]) === val
+    throw new Error(`fake or(): ${term}`)
+  }
+  const orMatches = (expr: string, r: Row) => splitTop(expr).some(t => termMatches(t, r))
   const db = {
     from(table: string) {
       const rows = (state.tables[table] ??= [])
@@ -51,6 +71,10 @@ const h = vi.hoisted(() => {
       }
       const q: any = {
         select: () => q,
+        // PostgREST .or(): the shapes the sync sends — col.eq."v", col.is.null,
+        // and(...) — enough to tell one mailbox's conversations from another's.
+        or: (expr: string) => { filters.push(r => orMatches(expr, r)); described.push(`or(${expr})`); return q },
+        limit: () => q,
         eq: (c: string, v: unknown) => { filters.push(r => r[c] === v); described.push(`${c}=`); return q },
         in: (c: string, vs: unknown[]) => { filters.push(r => vs.includes(r[c])); described.push(`${c} in`); return q },
         insert: (p: Row) => { op = 'insert'; payload = p; return q },
@@ -113,7 +137,8 @@ const h = vi.hoisted(() => {
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => h.db }))
 vi.mock('@/lib/gmail', () => ({
-  getAuthenticatedGmail: async () => ({ gmail: h.client, accessToken: 'x', refreshToken: 'y', emailAddress: 'info@travel2egypt.org' }),
+  // The connection serves Travel2Egypt (gmail_tokens.org_id, 20261204).
+  getAuthenticatedGmail: async () => ({ gmail: h.client, accessToken: 'x', refreshToken: 'y', emailAddress: 'info@travel2egypt.org', orgId: 'org-t' }),
   getUserEmail: async () => 'info@travel2egypt.org',
 }))
 vi.mock('@/lib/copilot-intake', () => ({ createCopilotInboxEntry: async () => undefined }))
@@ -138,14 +163,14 @@ function msg(id: string, threadId: string, from: string, to: string, minute: num
 /** The store as a previous run left it: thread t1 with m1, m2. */
 function seedStore(opts: { historyId?: string | null } = {}) {
   h.state.tables = {
-    email_conversations: [{ id: 'c1', thread_id: 't1', client_email: 'poch.narcis@gmail.com', subject: 'Siwa in November', message_count: 2 }],
+    email_conversations: [{ id: 'c1', org_id: 'org-t', mailbox_email: 'info@travel2egypt.org', user_id: 'u1', thread_id: 't1', client_email: 'poch.narcis@gmail.com', subject: 'Siwa in November', message_count: 2 }],
     email_messages: [
-      { id: 'e1', conversation_id: 'c1', message_id: 'm1', thread_id: 't1' },
-      { id: 'e2', conversation_id: 'c1', message_id: 'm2', thread_id: 't1' },
+      { id: 'e1', org_id: 'org-t', conversation_id: 'c1', message_id: 'm1', thread_id: 't1' },
+      { id: 'e2', org_id: 'org-t', conversation_id: 'c1', message_id: 'm2', thread_id: 't1' },
     ],
     email_sync_state: opts.historyId === undefined ? [] : [{ id: 's1', user_id: 'u1', last_history_id: opts.historyId }],
-    gmail_tokens: [{ email: 'info@travel2egypt.org' }],
-    organizations: [{ office_email_addresses: [] }],
+    gmail_tokens: [{ user_id: 'u1', org_id: 'org-t', email: 'info@travel2egypt.org' }],
+    organizations: [{ id: 'org-t', office_email_addresses: [] }],
     clients: [], suppliers: [], b2b_partners: [],
   }
 }
@@ -227,6 +252,47 @@ describe('list-based sync (no usable history id)', () => {
     expect(h.gmail.calls.history).toHaveLength(0)
     expect(h.gmail.calls.list).toBe(1)
     expect(storedHistoryId()).toBe('9001')
+  })
+})
+
+describe('each company its own store (20261204)', () => {
+  it('stamps the connection\'s company on every conversation and message it stores', async () => {
+    seedStore({ historyId: '5000' })
+    h.gmail.mailbox.set('n1', msg('n1', 't2', CUSTOMER, OFFICE, 1))
+    h.gmail.historyPages = [{ historyId: '5300', history: [{ id: '5250', messagesAdded: [{ message: { id: 'n1', threadId: 't2', labelIds: ['INBOX'] } }] }] }]
+    await syncMailbox('u1', { max_results: 50, days_back: 3, use_history: true })
+    expect(writesTo('email_conversations', 'insert').map(w => [w.payload.org_id, w.payload.mailbox_email])).toEqual([['org-t', 'info@travel2egypt.org']])
+    expect(writesTo('email_messages', 'insert').map(w => w.payload.org_id)).toEqual(['org-t'])
+    // Every store read asked for this company only.
+    for (const r of h.state.reads.filter(q => q.table === 'email_messages' || q.table === 'email_conversations')) {
+      expect(r.filters).toContain('org_id=')
+    }
+  })
+
+  it('the same Gmail thread and message ids in the other company\'s mailbox are a separate conversation, not "already stored"', async () => {
+    seedStore()
+    // ATS has a conversation with the same Gmail thread id and message ids.
+    h.state.tables.email_conversations = [{ id: 'c-ats', org_id: 'org-a', mailbox_email: 'yoyaku@ats-hj.com', user_id: 'u-ats', thread_id: 't1', message_count: 2 }]
+    h.state.tables.email_messages = [
+      { id: 'a1', org_id: 'org-a', conversation_id: 'c-ats', message_id: 'm1', thread_id: 't1' },
+      { id: 'a2', org_id: 'org-a', conversation_id: 'c-ats', message_id: 'm2', thread_id: 't1' },
+    ]
+    h.gmail.listed = ['m3', 'm2', 'm1']
+    const r = await syncMailbox('u1', { max_results: 50, days_back: 3 })
+    expect(r.messages_already_stored).toBe(0)
+    expect(writesTo('email_conversations', 'insert').map(w => [w.payload.org_id, w.payload.thread_id])).toEqual([['org-t', 't1']])
+    expect(writesTo('email_messages', 'insert').map(w => w.payload.org_id)).toEqual(['org-t', 'org-t', 'org-t'])
+    // ATS's conversation is untouched.
+    expect(writesTo('email_conversations', 'update')).toEqual([])
+  })
+
+  it('a conversation stored before its address was recorded is still this mailbox\'s (found by its user)', async () => {
+    seedStore()
+    h.state.tables.email_conversations[0].mailbox_email = null
+    h.gmail.listed = ['m3', 'm2', 'm1']
+    await syncMailbox('u1', { max_results: 50, days_back: 3 })
+    expect(writesTo('email_conversations', 'insert')).toEqual([])
+    expect(writesTo('email_messages', 'insert').map(w => w.payload.conversation_id)).toEqual(['c1'])
   })
 })
 
@@ -351,20 +417,31 @@ describe('the office-address repair runs when there can be something to repair',
     const rule = officeRule(['info@travel2egypt.org'], [])
     const t0 = Date.UTC(2026, 8, 23, 9)
 
-    expect(await applyOfficeRuleWhenDue(db, rule, t0)).toEqual({ messages: 0, conversations: 0 })
+    expect(await applyOfficeRuleWhenDue(db, 'org-t', rule, t0)).toEqual({ messages: 0, conversations: 0 })
     const afterFirst = db.scans.length
     expect(afterFirst).toBeGreaterThan(0)
 
-    expect(await applyOfficeRuleWhenDue(db, rule, t0 + 10 * 60_000)).toBeNull()
+    expect(await applyOfficeRuleWhenDue(db, 'org-t', rule, t0 + 10 * 60_000)).toBeNull()
     expect(db.scans.length).toBe(afterFirst) // no scan at all
 
     // An address added in Settings changes the rule: repaired at once.
     const wider = officeRule(['info@travel2egypt.org'], ['ats-hj.com'])
-    expect(await applyOfficeRuleWhenDue(db, wider, t0 + 20 * 60_000)).not.toBeNull()
+    expect(await applyOfficeRuleWhenDue(db, 'org-t', wider, t0 + 20 * 60_000)).not.toBeNull()
     const afterChange = db.scans.length
     expect(afterChange).toBeGreaterThan(afterFirst)
 
-    expect(await applyOfficeRuleWhenDue(db, wider, t0 + 7 * 3600_000)).not.toBeNull()
+    expect(await applyOfficeRuleWhenDue(db, 'org-t', wider, t0 + 7 * 3600_000)).not.toBeNull()
     expect(db.scans.length).toBeGreaterThan(afterChange)
+  })
+
+  it('each company has its own schedule: one company repaired does not skip the other', async () => {
+    const { applyOfficeRuleWhenDue, resetOfficeRuleRepairSchedule } = await import('@/lib/email/office-addresses-server')
+    const { officeRule } = await import('@/lib/email/office-addresses')
+    resetOfficeRuleRepairSchedule()
+    const db = scanningDb()
+    const rule = officeRule(['info@travel2egypt.org'], [])
+    const t0 = Date.UTC(2026, 8, 23, 9)
+    expect(await applyOfficeRuleWhenDue(db, 'org-t', rule, t0)).not.toBeNull()
+    expect(await applyOfficeRuleWhenDue(db, 'org-a', rule, t0 + 60_000)).not.toBeNull()
   })
 })

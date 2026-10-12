@@ -30,7 +30,8 @@ export async function POST(request: NextRequest) {
 
   const db = createServerClient()
   try {
-    const { data: conv } = await db.from('email_conversations').select('id, client_id').eq('id', conversationId).maybeSingle()
+    // This organisation's conversation only: another company's id is a 404.
+    const { data: conv } = await db.from('email_conversations').select('id, client_id').eq('id', conversationId).eq('org_id', orgId).maybeSingle()
     if (!conv?.client_id) return NextResponse.json({ success: false, error: 'This conversation has no lead' }, { status: 404 })
 
     const { data: client } = await db.from('clients').select('id, email, status, lead_source').eq('id', conv.client_id).eq('org_id', orgId).maybeSingle()
@@ -55,6 +56,7 @@ export async function POST(request: NextRequest) {
     }
     const { error: unlinkErr } = await db.from('email_conversations')
       .update({ client_id: null, client_name: null, lead_check: 'dismissed' })
+      .eq('org_id', orgId)
       .eq('client_id', client.id)
     if (unlinkErr) throw unlinkErr
     const { error: delErr } = await db.from('clients').delete().eq('id', client.id).eq('org_id', orgId)

@@ -24,7 +24,8 @@ export async function GET() {
   const db = createServerClient()
   const [{ data: org, error }, { data: tokens }] = await Promise.all([
     db.from('organizations').select('office_email_addresses').eq('id', orgId).maybeSingle(),
-    db.from('gmail_tokens').select('email'),
+    // This organisation's connected mailboxes only (gmail_tokens.org_id).
+    db.from('gmail_tokens').select('email').eq('org_id', orgId),
   ])
   if (error) return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to load office addresses') }, { status: 500 })
   const automatic = officeRule(((tokens ?? []) as { email: string | null }[]).map(t => t.email || '').filter(Boolean), [])
@@ -55,7 +56,7 @@ export async function PUT(request: NextRequest) {
   if (error) return NextResponse.json({ success: false, error: clientMessage(error, 'Failed to save office addresses') }, { status: 500 })
 
   try {
-    const changed = await applyOfficeRule(db, await loadOfficeRule(db))
+    const changed = await applyOfficeRule(db, orgId, await loadOfficeRule(db, orgId))
     return NextResponse.json({ success: true, addresses, reclassified: changed })
   } catch (e) {
     // Saved; the scheduled sync re-applies the rule on its next run.

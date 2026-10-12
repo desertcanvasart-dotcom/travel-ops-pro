@@ -3624,7 +3624,7 @@ export interface Database {
           updated_at: string
           brief_id: string | null
           origin: string | null
-          org_id: string | null
+          org_id: string
         }
         Insert: {
           id?: string
@@ -3791,7 +3791,7 @@ export interface Database {
           request_id: string | null
           created_at: string
           updated_at: string
-          org_id: string | null
+          org_id: string
         }
         Insert: {
           id?: string
@@ -4841,6 +4841,7 @@ export interface Database {
       }
       email_conversations: {
         Row: {
+          org_id: string
           id: string
           thread_id: string
           user_id: string | null
@@ -4869,6 +4870,7 @@ export interface Database {
           mailbox_email: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           thread_id: string
           user_id?: string | null
@@ -4897,6 +4899,7 @@ export interface Database {
           mailbox_email?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           thread_id?: string
           user_id?: string | null
@@ -4972,6 +4975,7 @@ export interface Database {
       }
       email_messages: {
         Row: {
+          org_id: string
           id: string
           conversation_id: string | null
           message_id: string
@@ -4997,6 +5001,7 @@ export interface Database {
           order_checked_at: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           conversation_id?: string | null
           message_id: string
@@ -5022,6 +5027,7 @@ export interface Database {
           order_checked_at?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           conversation_id?: string | null
           message_id?: string
@@ -5163,6 +5169,7 @@ export interface Database {
       }
       email_templates: {
         Row: {
+          org_id: string
           id: string
           user_id: string | null
           name: string
@@ -5174,6 +5181,7 @@ export interface Database {
           placeholders: string[] | null
         }
         Insert: {
+          org_id: string
           id?: string
           user_id?: string | null
           name: string
@@ -5185,6 +5193,7 @@ export interface Database {
           placeholders?: string[] | null
         }
         Update: {
+          org_id?: string
           id?: string
           user_id?: string | null
           name?: string
@@ -5700,6 +5709,7 @@ export interface Database {
       }
       gmail_tokens: {
         Row: {
+          org_id: string
           id: string
           user_id: string | null
           email: string
@@ -5711,6 +5721,7 @@ export interface Database {
           last_history_id: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           user_id?: string | null
           email: string
@@ -5722,6 +5733,7 @@ export interface Database {
           last_history_id?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           user_id?: string | null
           email?: string
@@ -12656,66 +12668,6 @@ export interface Database {
             referencedColumns: ["id"]
           },
         ]
-      }
-      unified_conversations: {
-        Row: {
-          id: string | null
-          channel: string | null
-          identifier: string | null
-          client_id: string | null
-          client_name: string | null
-          client_email: string | null
-          contact_info: string | null
-          subject: string | null
-          last_message_snippet: string | null
-          last_message_at: string | null
-          unread_count: number | null
-          status: string | null
-          assigned_team_member_id: string | null
-          assigned_at: string | null
-          created_at: string | null
-          updated_at: string | null
-          is_hidden: boolean | null
-        }
-        Insert: {
-          id?: string | null
-          channel?: string | null
-          identifier?: string | null
-          client_id?: string | null
-          client_name?: string | null
-          client_email?: string | null
-          contact_info?: string | null
-          subject?: string | null
-          last_message_snippet?: string | null
-          last_message_at?: string | null
-          unread_count?: number | null
-          status?: string | null
-          assigned_team_member_id?: string | null
-          assigned_at?: string | null
-          created_at?: string | null
-          updated_at?: string | null
-          is_hidden?: boolean | null
-        }
-        Update: {
-          id?: string | null
-          channel?: string | null
-          identifier?: string | null
-          client_id?: string | null
-          client_name?: string | null
-          client_email?: string | null
-          contact_info?: string | null
-          subject?: string | null
-          last_message_snippet?: string | null
-          last_message_at?: string | null
-          unread_count?: number | null
-          status?: string | null
-          assigned_team_member_id?: string | null
-          assigned_at?: string | null
-          created_at?: string | null
-          updated_at?: string | null
-          is_hidden?: boolean | null
-        }
-        Relationships: []
       }
       user_activity_summary: {
         Row: {

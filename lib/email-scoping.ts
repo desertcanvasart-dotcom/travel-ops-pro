@@ -38,30 +38,32 @@ export {
 } from './email-scoping-core.mjs'
 
 /**
- * Every address the business knows, lowercased, for the known-contact check.
+ * Every address one organisation knows, lowercased, for the known-contact
+ * check: its clients and B2B partners, plus suppliers — which have no org_id
+ * yet (the suppliers batch), so every company's suppliers count for each
+ * until then. It was every company's clients and partners: another agency's
+ * client writing here was "known" and stored without the machine-mail check.
  *
  * One query per table per sync run, not per message. Suppliers keep their
  * address on `contact_email` (lib/suppliers/fields.ts is the vocabulary);
  * clients and partners on `email`.
  */
 export async function loadKnownContactEmails(
-  supabase: {
-    from: (t: string) => {
-      select: (c: string) => PromiseLike<{ data: Array<Record<string, unknown>> | null }>
-    }
-  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: { from: (t: string) => any },
+  orgId: string,
 ): Promise<Set<string>> {
   const known = new Set<string>()
-  const collect = (rows: Array<Record<string, unknown>> | null, col: string) => {
+  const collect = (rows: Array<Record<string, unknown>> | null | undefined, col: string) => {
     for (const row of rows ?? []) {
       const v = row[col]
       if (typeof v === 'string' && v.includes('@')) known.add(v.trim().toLowerCase())
     }
   }
   const [clients, suppliers, partners] = await Promise.all([
-    supabase.from('clients').select('email'),
+    supabase.from('clients').select('email').eq('org_id', orgId),
     supabase.from('suppliers').select('contact_email'),
-    supabase.from('b2b_partners').select('email'),
+    supabase.from('b2b_partners').select('email').eq('org_id', orgId),
   ])
   collect(clients.data, 'email')
   collect(suppliers.data, 'contact_email')

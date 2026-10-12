@@ -38,9 +38,10 @@ function inbox(messages: Array<{ id: string; body: string; conv?: string; html?:
   setMockTables({
     organizations: [{ id: 'org-1' }],
     organization_members: [{ user_id: 'u1', org_id: 'org-1', created_at: '2026-01-01' }],
-    email_conversations: [{ id: 'conv-tup', user_id: 'u1', lead_checked_at: null, lead_check: null }],
+    // Stamped by the sync with the company the mailbox serves (20261204).
+    email_conversations: [{ id: 'conv-tup', org_id: 'org-1', user_id: 'u1', lead_checked_at: null, lead_check: null }],
     email_messages: messages.map((m, i) => ({
-      id: m.id, message_id: `gmail-${m.id}`, conversation_id: m.conv ?? 'conv-tup', direction: 'inbound',
+      id: m.id, org_id: 'org-1', message_id: `gmail-${m.id}`, conversation_id: m.conv ?? 'conv-tup', direction: 'inbound',
       subject: '【T-UP】オプショナルツアー申込み', body_text: m.html ? null : m.body, body_html: m.html ? m.body.replace(/\n/g, '<br>') : null,
       sent_at: m.sentAt ?? `2026-10-02T0${i}:00:00Z`, order_checked_at: null,
     })),
