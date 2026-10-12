@@ -3,6 +3,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
+import { orgMemberUserIds } from '@/lib/auth/org-members'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -64,14 +65,10 @@ export async function GET(
     // of this org's members. email_conversations has no org_id yet (G1), and
     // the email link trigger used to match clients across organisations, so a
     // conversation in another agency's mailbox could carry this client's id.
-    const { data: members } = await supabase
-      .from('organization_members')
-      .select('user_id')
-      .eq('org_id', orgId)
-    const memberIds = (members ?? []).map((m: { user_id: string }) => m.user_id)
+    const memberIds = await orgMemberUserIds(supabase, orgId)
 
     // And only a connected address's (lib/email/connected-mailboxes).
-    const { data: emailConversations, error: emailError } = await scopedToConnectedMailboxes(supabase, (mailboxFilter) => {
+    const { data: emailConversations, error: emailError } = await scopedToConnectedMailboxes(supabase, orgId, (mailboxFilter) => {
       let q = supabase
         .from('email_conversations')
         .select(`

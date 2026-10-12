@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createNotification } from '@/lib/notifications'
 import { getCurrentOrgId, getCurrentUserId, requireRole } from '@/lib/auth/current-org'
 import { linkedTeamMemberIds, notificationScopeFilter } from '@/lib/notifications-scope'
+import { teamMemberInOrg } from '@/lib/whatsapp-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -104,6 +105,15 @@ export async function POST(request: NextRequest) {
             .maybeSingle()
         : { data: null }
       if (!member) {
+        return NextResponse.json({ success: false, error: 'Recipient not found' }, { status: 404 })
+      }
+    }
+    // The same for a team member: team_members has no org_id, and an agent
+    // could notify — and email — another company's staff (teamMemberInOrg).
+    if (body.team_member_id != null) {
+      const orgId = await getCurrentOrgId()
+      if (!orgId || typeof body.team_member_id !== 'string' ||
+          !(await teamMemberInOrg(supabase, body.team_member_id, orgId))) {
         return NextResponse.json({ success: false, error: 'Recipient not found' }, { status: 404 })
       }
     }

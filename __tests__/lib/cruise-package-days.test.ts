@@ -43,10 +43,12 @@ describe('a sailing\'s length in days', () => {
   })
 })
 
-const BASE = { templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0, numPax: 2 }
+// The engine reads the org's own airports and cruise packages (both carry
+// org_id): the fixtures are one org's.
+const BASE = { orgId: 'org-1', templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0, numPax: 2 }
 const cruiseDay = (day: number) => ({ day, title: 'Nile Cruise', city: 'Nile Cruise', overnight_city: 'Nile Cruise', accommodation_type: 'cruise', is_cruise_day: true, attractions: [], meals: {}, services: {} })
 const pkg = (id: string, days: number, van: number) => ({
-  id, package_code: id, package_name: `${days}D Cruise Sightseeing Transport`, package_type: 'cruise_sightseeing', duration_days: days,
+  id, org_id: 'org-1', package_code: id, package_name: `${days}D Cruise Sightseeing Transport`, package_type: 'cruise_sightseeing', duration_days: days,
   sedan_rate: van, sedan_capacity: 3, minivan_rate: van, minivan_capacity: 7, van_rate: van, van_capacity: 12,
   minibus_rate: null, minibus_capacity: null, bus_rate: null, bus_capacity: null, includes: '', notes: null, is_active: true,
 })

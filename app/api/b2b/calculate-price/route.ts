@@ -11,6 +11,7 @@ import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
 import { parseOptionalSelection, isOptionalSelected } from '@/lib/b2b/optional-selection'
 // Catalogue extras chosen at QUOTE time — same rule as options: cost + margin,
 // or the operator's set price as-is. Ported from autoura-saas.
@@ -229,11 +230,15 @@ function foldExtras(
   }
 }
 
-// Get transport package for cruise sightseeing (kept for package deals)
-async function getTransportPackage(packageType: string, originCity: string, destCity: string): Promise<any | null> {
+// Get transport package for cruise sightseeing (kept for package deals) —
+// the org's own (b2b_transport_packages.org_id): this priced with whichever
+// company's package came first. No org, no package.
+async function getTransportPackage(orgId: string | null, packageType: string, originCity: string, destCity: string): Promise<any | null> {
+  if (!orgId) return null
   const { data, error } = await supabaseAdmin
     .from('b2b_transport_packages')
     .select('*')
+    .eq('org_id', orgId)
     .eq('package_type', packageType)
     .eq('origin_city', originCity)
     .eq('destination_city', destCity)
@@ -411,6 +416,14 @@ export async function POST(request: NextRequest) {
       guide_mode = 'spot'
     } = body
     const guideGrade = guide_grade === 'senior' ? 'senior' as const : 'egyptologist' as const
+
+    // The partner whose margin prices this must be the org's own: partner_id
+    // came from the body and was read — with its b2b_partner_pricing override
+    // — whichever company it belonged to. The same 404 as a missing one.
+    const orgId = await getCurrentOrgId()
+    if (partner_id && !(orgId && await quoteRefsInOrg(supabaseAdmin, orgId, { partner_id }))) {
+      return quoteRefNotFound()
+    }
     const guideMode = guide_mode === 'throughout' ? 'throughout' as const : 'spot' as const
     const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(supabaseAdmin, await getCurrentOrgId()) })
 
@@ -534,6 +547,7 @@ export async function POST(request: NextRequest) {
           .from('b2b_partners')
           .select('default_margin_percent')
           .eq('id', partner_id)
+          .eq('org_id', orgId)
           .single()
 
         if (partner?.default_margin_percent) {
@@ -744,6 +758,7 @@ export async function POST(request: NextRequest) {
         .from('b2b_partners')
         .select('default_margin_percent')
         .eq('id', partner_id)
+        .eq('org_id', orgId)
         .single()
       
       if (partner?.default_margin_percent) {
@@ -809,7 +824,7 @@ export async function POST(request: NextRequest) {
       // ============================================
       if (rateSource === 'manual' && service.service_category === 'transportation') {
         if (service.service_name?.toLowerCase().includes('sightseeing')) {
-          const pkg = await getTransportPackage('cruise_sightseeing', 'Luxor', 'Aswan')
+          const pkg = await getTransportPackage(orgId, 'cruise_sightseeing', 'Luxor', 'Aswan')
           const vehicle = pkg ? selectVehicleFromPackage(pkg, num_pax) : null
           if (vehicle) {
             unitCost = vehicle.rate
@@ -822,7 +837,7 @@ export async function POST(request: NextRequest) {
         }
         else if (service.service_name?.toLowerCase().includes('transfer') || 
                  service.service_name?.toLowerCase().includes('airport')) {
-          const pkg = await getTransportPackage('cruise_transfer', 'Luxor', 'Aswan')
+          const pkg = await getTransportPackage(orgId, 'cruise_transfer', 'Luxor', 'Aswan')
           const vehicle = pkg ? selectVehicleFromPackage(pkg, num_pax) : null
           if (vehicle) {
             unitCost = vehicle.rate

@@ -6,15 +6,16 @@
 // POST /api/copilot/threads/:id/commit-itinerary
 //      → idempotently creates the itinerary
 //
-// Auth: gated by the standard /api/* middleware (logged-in operator session
-// required). No additional auth here.
+// Auth: gated by the standard /api/* middleware (logged-in operator session,
+// agent and above); the thread must be the caller's organisation's.
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { commitBriefToItinerary } from '@/lib/concierge/commit-brief-to-itinerary'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { copilotThreadInOrg } from '@/lib/copilot/thread-access'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,11 +31,15 @@ interface RouteContext {
 export async function GET(_request: NextRequest, ctx: RouteContext) {
   try {
     const { id: threadId } = await ctx.params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
 
     const { data: itin, error } = await supabase
       .from('itineraries')
       .select('id, itinerary_code, trip_name')
       .eq('thread_id', threadId)
+      // The org's own itinerary only (this read any company's).
+      .eq('org_id', orgId)
       .maybeSingle()
 
     if (error) {
@@ -77,6 +82,13 @@ export async function POST(_request: NextRequest, ctx: RouteContext) {
         { success: false, error: 'No organization context — re-login or contact admin.' },
         { status: 403 }
       )
+    }
+
+    // Only a thread of this organisation's (lib/copilot/thread-access): any
+    // thread id copied another company's concierge brief — the visitor's
+    // name, email and phone — into a new itinerary here.
+    if (!(await copilotThreadInOrg(supabase, orgId, threadId, 'id'))) {
+      return NextResponse.json({ success: false, error: 'Thread not found' }, { status: 404 })
     }
 
     const result = await commitBriefToItinerary(threadId, orgId, supabase)

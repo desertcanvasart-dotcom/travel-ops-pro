@@ -117,3 +117,29 @@ export async function teamMemberInOrg(
   if (cErr) throw cErr
   return count === 1
 }
+
+/**
+ * The team members (rows carrying id and user_id) that belong to an org —
+ * teamMemberInOrg's rule for a whole list in two reads, for listing them.
+ */
+export async function teamMembersInOrg<T extends { user_id?: string | null }>(
+  supabase: SupabaseClient,
+  members: T[],
+  orgId: string,
+): Promise<T[]> {
+  const { data: memberships, error } = await supabase
+    .from('organization_members')
+    .select('user_id')
+    .eq('org_id', orgId)
+  if (error) throw error
+  const inOrg = new Set(((memberships ?? []) as { user_id: string | null }[]).map(m => m.user_id).filter(Boolean))
+  let singleOrg: boolean | null = null
+  if (members.some(m => !m.user_id)) {
+    const { count, error: cErr } = await supabase
+      .from('organizations')
+      .select('id', { count: 'exact', head: true })
+    if (cErr) throw cErr
+    singleOrg = count === 1
+  }
+  return members.filter(m => (m.user_id ? inOrg.has(m.user_id) : singleOrg === true))
+}

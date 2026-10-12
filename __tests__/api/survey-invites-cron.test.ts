@@ -7,6 +7,7 @@ import { NextRequest } from 'next/server'
 
 const updates: { table: string; vals: Record<string, unknown> }[] = []
 let itineraries: Record<string, unknown>[] = []
+let templatesOf = (): string[] => ['ats-questionnaire']
 
 function builder(table: string) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -19,6 +20,8 @@ function builder(table: string) {
       updates.push({ table, vals })
       return { eq: async () => ({ error: null }) }
     },
+    // Which document templates the trip's org has (lib/documents/org-templates).
+    maybeSingle: async () => ({ data: { document_templates: templatesOf() }, error: null }),
     then: (resolve: (v: unknown) => void) =>
       resolve({ data: table === 'itineraries' ? itineraries : [], error: null }),
   }
@@ -55,6 +58,7 @@ const run = async () => (await (GET as (r: NextRequest) => Promise<Response>)(
 const surveyUpdates = () => updates.filter(u => u.table === 'guest_surveys')
 
 beforeEach(() => {
+  templatesOf = () => ['ats-questionnaire']
   updates.length = 0
   sendEmailInternal.mockReset()
   sendWhatsAppMessage.mockReset()
@@ -91,5 +95,19 @@ describe('survey-invites cron records a send only when it happened', () => {
     sendWhatsAppMessage.mockResolvedValue({ success: false })
     await run()
     expect(surveyUpdates()[0].vals).toMatchObject({ status: 'sent', sent_email: true, sent_whatsapp: false })
+  })
+})
+
+describe('survey-invites cron surveys only the organisations that have the questionnaire', () => {
+  it("another company's trip is not surveyed — no survey minted, nothing sent", async () => {
+    const { ensureSurvey } = await import('@/lib/surveys/ensure-survey')
+    vi.mocked(ensureSurvey).mockClear()
+    templatesOf = () => ['ats-operations-sheet']
+    itineraries = [trip({ org_id: 'other', client_email: 'g@x.com', client_phone: '+819012345678' })]
+    const body = await run()
+    expect(body).toMatchObject({ sent: 0, failed: 0, skipped: 1 })
+    expect(ensureSurvey).not.toHaveBeenCalled()
+    expect(sendEmailInternal).not.toHaveBeenCalled()
+    expect(sendWhatsAppMessage).not.toHaveBeenCalled()
   })
 })

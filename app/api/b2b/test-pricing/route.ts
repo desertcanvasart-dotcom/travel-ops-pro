@@ -17,6 +17,7 @@ import {
   ServiceTier 
 } from '@/lib/auto-pricing-service'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -94,7 +95,10 @@ export async function GET(request: NextRequest) {
     // ============================================
     // STEP 3: Run the NEW day-based pricing
     // ============================================
+    // The org's own cruise packages and airports (the engine reads none without it).
+    const orgId = (await getCurrentOrgId()) ?? undefined
     const dayPricingResult = await calculateDayBasedPricing({
+      orgId,
       templateId,
       tier,
       isEurPassport,
@@ -111,6 +115,7 @@ export async function GET(request: NextRequest) {
     // STEP 5: Also test backward compatibility
     // ============================================
     const legacyResult = await calculateAutoPricing({
+      orgId,
       templateId,
       tier,
       numPax: 2,

@@ -160,7 +160,9 @@ describe('an email links only to the receiving organisation\'s client', () => {
 describe('shared-inbox replies', () => {
   it('send from the conversation owner\'s mailbox only when they are in the caller\'s org; else drop the thread and thread by Message-ID', () => {
     const r = src('app/api/gmail/send/route.ts')
-    expect(r).toContain(".from('organization_members').select('user_id').eq('org_id', orgId).eq('user_id', conv.user_id)")
+    // Only a conversation in a mailbox of the caller's org members is used at all.
+    expect(r).toContain('const memberIds = orgId ? await orgMemberUserIds(supabase, orgId) : []')
+    expect(r).toContain('const inOrg = stored.filter(c => c.user_id && memberIds.includes(c.user_id))')
     expect(r).toContain('getAuthenticatedGmail(mailboxUserId)')
     expect(r).toContain('gmailThreadId = undefined')
     expect(r).toContain('storedThreading = await storedReplyHeaders(supabase, conv.id)')

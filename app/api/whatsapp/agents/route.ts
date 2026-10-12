@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
-import { requireRole, getCurrentUserRole, getCurrentUserId } from '@/lib/auth/current-org'
+import { requireRole, getCurrentUserRole, getCurrentUserId, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { roleAllows } from '@/lib/auth/roles'
+import { teamMemberInOrg, teamMembersInOrg } from '@/lib/whatsapp-org'
 
 // team_members is the same table /api/team-members manages behind the
 // admin/manager gate; /api/whatsapp/* only requires an agent, so an agent
@@ -12,6 +13,12 @@ import { roleAllows } from '@/lib/auth/roles'
 const MANAGERS = ['admin', 'manager']
 const MANAGER_EDITABLE = ['name', 'email', 'phone', 'avatar_url', 'max_conversations', 'is_available', 'role']
 
+// team_members has no org_id: a member is an organisation's when their login
+// (user_id) is a member of it (teamMemberInOrg, lib/whatsapp-org.ts). This
+// listed, edited and deactivated every company's team. A member with no login
+// belongs to no org once there are two — listed and editable by nobody until
+// a login is linked (or team_members gets an org_id).
+
 // GET /api/whatsapp/agents - List all team members (for WhatsApp assignment)
 export async function GET(request: NextRequest) {
   try {
@@ -20,9 +27,12 @@ export async function GET(request: NextRequest) {
     const activeOnly = searchParams.get('active_only') !== 'false'
     const availableOnly = searchParams.get('available_only') === 'true'
 
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     let query = supabase
       .from('team_members')
-      .select('id, name, email, phone, avatar_url, role, is_active, is_available, max_conversations, current_conversations, last_assigned_at, created_at, updated_at')
+      .select('id, user_id, name, email, phone, avatar_url, role, is_active, is_available, max_conversations, current_conversations, last_assigned_at, created_at, updated_at')
       .order('name', { ascending: true })
 
     if (activeOnly) {
@@ -33,14 +43,18 @@ export async function GET(request: NextRequest) {
       query = query.eq('is_available', true)
     }
 
-    const { data, error } = await query
+    const { data: rows, error } = await query
 
     if (error) throw error
 
+    // The org's own team only; user_id was read to decide that, not to show.
+    const data = (await teamMembersInOrg(supabase, rows ?? [], orgId))
+      .map(({ user_id: _userId, ...agent }) => agent)
+
     return NextResponse.json({ 
       success: true, 
-      agents: data || [],
-      count: data?.length || 0
+      agents: data,
+      count: data.length
     })
   } catch (error: any) {
     console.error('Error fetching agents:', error)
@@ -115,6 +129,12 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Agent ID is required' }, { status: 400 })
     }
 
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (typeof id !== 'string' || !(await teamMemberInOrg(supabase, id, orgId))) {
+      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+    }
+
     const isManager = roleAllows(await getCurrentUserRole(), MANAGERS)
     const editable = isManager ? MANAGER_EDITABLE : ['is_available']
     const updates: Record<string, unknown> = {}
@@ -165,6 +185,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Agent ID is required' }, { status: 400 })
     }
 
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await teamMemberInOrg(supabase, id, orgId))) {
+      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+    }
+
     const { data, error } = await supabase
       .from('team_members')
       .update({
@@ -186,6 +212,8 @@ export async function DELETE(request: NextRequest) {
         assigned_at: null
       })
       .eq('assigned_team_member_id', id)
+      // Only this org's conversations (whatsapp_conversations.org_id).
+      .eq('org_id', orgId)
 
     return NextResponse.json({ 
       success: true, 

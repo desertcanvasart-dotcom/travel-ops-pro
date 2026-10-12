@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { withMembershipRoles } from '@/lib/auth/profile-roles'
 
 const supabase = createClient(
@@ -8,7 +8,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET - List all profiles (team members)
+// GET - List the organisation's profiles (team members)
 //
 // `role` on each row is the ORGANIZATION MEMBERSHIP role — the one every gate
 // reads — not the user_profiles mirror the table itself carries. The mirror
@@ -23,9 +23,24 @@ export async function GET(request: NextRequest) {
     const activeOnly = searchParams.get('active') === 'true'
     const role = searchParams.get('role')
 
+    // Only this organisation's members. user_profiles has no org_id and this
+    // listed every account on the install — the other company's people,
+    // their emails and phones — on the service-role client.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const { data: memberships, error: membersError } = await supabase
+      .from('organization_members')
+      .select('user_id, role')
+      .eq('org_id', orgId)
+      .order('created_at', { ascending: true })
+    if (membersError) throw membersError
+    const memberIds = [...new Set(((memberships ?? []) as Array<{ user_id: string }>).map(m => m.user_id))]
+    if (memberIds.length === 0) return NextResponse.json({ success: true, data: [] })
+
     let query = supabase
       .from('user_profiles')
       .select('*')
+      .in('id', memberIds)
       .order('created_at', { ascending: false })
 
     if (activeOnly) {
@@ -35,15 +50,6 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
 
     if (error) throw error
-
-    const orgId = await getCurrentOrgId()
-    const { data: memberships } = orgId
-      ? await supabase
-          .from('organization_members')
-          .select('user_id, role')
-          .eq('org_id', orgId)
-          .order('created_at', { ascending: true })
-      : { data: [] }
 
     let listed = withMembershipRoles(
       (data ?? []) as Array<{ id: string; role?: string | null }>,

@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { resolveMailbox } from '@/lib/gmail-mailbox'
 import { getCurrentOrgId, getCurrentUserId } from '@/lib/auth/current-org'
+import { orgMemberUserIds } from '@/lib/auth/org-members'
 import { storedReplyHeaders, type ThreadingHeaders } from '@/lib/email/reply-threading'
 import { headerSafe, encodeEmailHeader } from '@/lib/http/safe-header'
 import { claimSend, finishSend, replyBodyHash, threadConflict } from '@/lib/email/send-guard'
@@ -52,20 +53,27 @@ export async function POST(request: NextRequest) {
     let mailboxUserId: string = (await resolveMailbox(userId))?.mailboxUserId ?? userId
     let gmailThreadId: string | undefined = threadId || undefined
     let storedThreading: ThreadingHeaders | null = null
+    // The stored conversation is used only when it is in a mailbox of this
+    // organisation's members (lib/auth/org-members). threadId comes from the
+    // caller: another company's thread id read that company's conversation —
+    // its "already answered by <name>" guard and its Message-IDs for
+    // In-Reply-To. A thread stored only in other companies' mailboxes is
+    // foreign: sent as a new thread, with no guard and no stored threading.
+    let foreignThread = false
     if (threadId) {
-      const { data: conv } = await supabase
+      const orgId = await getCurrentOrgId()
+      const memberIds = orgId ? await orgMemberUserIds(supabase, orgId) : []
+      const { data: convRows } = await supabase
         .from('email_conversations')
         .select('id, user_id')
         .eq('thread_id', threadId)
-        .maybeSingle()
+      const stored = (convRows ?? []) as { id: string; user_id: string | null }[]
+      const inOrg = stored.filter(c => c.user_id && memberIds.includes(c.user_id))
+      const conv = inOrg.find(c => c.user_id === mailboxUserId) ?? inOrg[0] ?? null
+      foreignThread = stored.length > 0 && !conv
+      if (foreignThread) gmailThreadId = undefined
       if (conv?.user_id && conv.user_id !== mailboxUserId) {
-        const orgId = await getCurrentOrgId()
-        const { data: ownerMembership } = orgId
-          ? await supabase.from('organization_members').select('user_id').eq('org_id', orgId).eq('user_id', conv.user_id).limit(1)
-          : { data: null }
-        const { data: ownerToken } = (ownerMembership?.length ?? 0) > 0
-          ? await supabase.from('gmail_tokens').select('user_id').eq('user_id', conv.user_id).limit(1)
-          : { data: null }
+        const { data: ownerToken } = await supabase.from('gmail_tokens').select('user_id').eq('user_id', conv.user_id).limit(1)
         if ((ownerToken?.length ?? 0) > 0) {
           mailboxUserId = conv.user_id
         } else {
@@ -91,7 +99,7 @@ export async function POST(request: NextRequest) {
     // Never the same reply twice (operator, 2026-09-17).
     const key = typeof requestKey === 'string' && requestKey.trim() ? requestKey.trim().slice(0, 200) : null
     const bodyHash = replyBodyHash(body)
-    if (threadId && !confirmDuplicate) {
+    if (threadId && !foreignThread && !confirmDuplicate) {
       const conflict = await threadConflict(supabase, {
         threadId,
         requestKey: key,
@@ -153,11 +161,13 @@ export async function POST(request: NextRequest) {
 
     if (sentMessageId && sentThreadId) {
       try {
-        // Find or create conversation for this thread
+        // Find or create conversation for this thread — in the mailbox it
+        // was sent from (a Gmail thread id is per mailbox).
         const { data: existingConv } = await supabase
           .from('email_conversations')
           .select('id')
           .eq('thread_id', sentThreadId)
+          .eq('user_id', mailboxUserId)
           .single()
 
         let conversationId = existingConv?.id

@@ -222,10 +222,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Customers waiting too long for an email answer. email_conversations has
-    // no org_id (one organisation per install — DEFERRED_GATES G1).
+    // no org_id (DEFERRED_GATES G1): scoped to mailboxes of the org's members.
     const overdueBefore = new Date(Date.now() - REPLY_OVERDUE_HOURS * 3_600_000).toISOString()
     // Only a connected address's mail (lib/email/connected-mailboxes).
-    const { data: waiting } = await scopedToConnectedMailboxes(supabase, (mailboxFilter) => {
+    const { data: waiting } = await scopedToConnectedMailboxes(supabase, orgId, (mailboxFilter) => {
       let q = supabase
         .from('email_conversations')
         .select('id, client_name, client_email, subject, awaiting_reply_since, last_message_at')

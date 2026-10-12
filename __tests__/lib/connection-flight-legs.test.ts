@@ -19,7 +19,9 @@ beforeAll(() => {
   vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-key')
 })
 
-const BASE = { templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0, numPax: 2 }
+// The engine reads the org's own airports and cruise packages (both carry
+// org_id): the fixtures are one org's.
+const BASE = { orgId: 'org-1', templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0, numPax: 2 }
 const inTheAir = { day: 1, title: 'Overnight flight', city: '', accommodation_type: 'none', in_transit: true, overnight_kind: 'flight', attractions: [], meals: {}, services: {} }
 
 function tables(days: unknown[]) {
@@ -32,9 +34,9 @@ function tables(days: unknown[]) {
   // A fare is priced between AIRPORTS; this is what joins them to the leg's
   // cities. Kom Ombo deliberately has none — the test below flies to it.
   t.org_vocabularies = [
-    { key: 'cai', label: 'Cairo', meta: { iata: 'CAI', city: 'Cairo', country_code: 'EG' }, is_active: true, kind: 'airport', rank: 1 },
-    { key: 'lxr', label: 'Luxor', meta: { iata: 'LXR', city: 'Luxor', country_code: 'EG' }, is_active: true, kind: 'airport', rank: 2 },
-    { key: 'kom', label: 'Kom Ombo', meta: { iata: 'KMB', city: 'Kom Ombo', country_code: 'EG' }, is_active: true, kind: 'airport', rank: 3 },
+    { key: 'cai', label: 'Cairo', meta: { iata: 'CAI', city: 'Cairo', country_code: 'EG' }, is_active: true, org_id: 'org-1', kind: 'airport', rank: 1 },
+    { key: 'lxr', label: 'Luxor', meta: { iata: 'LXR', city: 'Luxor', country_code: 'EG' }, is_active: true, org_id: 'org-1', kind: 'airport', rank: 2 },
+    { key: 'kom', label: 'Kom Ombo', meta: { iata: 'KMB', city: 'Kom Ombo', country_code: 'EG' }, is_active: true, org_id: 'org-1', kind: 'airport', rank: 3 },
   ]
   return t
 }

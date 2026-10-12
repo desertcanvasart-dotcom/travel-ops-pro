@@ -132,6 +132,10 @@ export async function GET(request: NextRequest) {
     // WhatsApp chat stay separate. That is deliberate: one is tied to a trip.
     const portalTask = (async () => {
     if (!trash && (channel === 'all' || channel === 'portal')) {
+      // The org's own threads (portal_message_threads.org_id, NOT NULL). This
+      // listed every company's travellers' messages.
+      const orgId = await getCurrentOrgId()
+      if (!orgId) return
       let portalQuery = supabase
         .from('portal_message_threads')
         .select(`
@@ -158,6 +162,7 @@ export async function GET(request: NextRequest) {
             given_name_kanji
           )
         `)
+        .eq('org_id', orgId)
         .order('last_message_at', { ascending: false, nullsFirst: false })
 
       // No client filter: bookings carry the client's details inline and have
@@ -299,7 +304,9 @@ export async function GET(request: NextRequest) {
     // Query Email conversations
     const emailTask = (async () => {
     if (channel === 'all' || channel === 'email') {
-      // Only mail of the Gmail addresses connected now: a disconnected
+      const orgId = await getCurrentOrgId()
+      if (!orgId) return
+      // Only mail of the org's Gmail addresses connected now: a disconnected
       // address's conversations stay stored but out of the inbox until it is
       // connected again (lib/email/connected-mailboxes).
       const buildEmailQuery = (mailboxFilter: string | null) => {
@@ -350,7 +357,7 @@ export async function GET(request: NextRequest) {
         if (mailboxFilter) emailQuery = emailQuery.or(mailboxFilter)
         return emailQuery.limit(limit)
       }
-      const { data: emailData, error: emailError } = await scopedToConnectedMailboxes(supabase, buildEmailQuery)
+      const { data: emailData, error: emailError } = await scopedToConnectedMailboxes(supabase, orgId, buildEmailQuery)
 
       if (emailError) throw emailError
 

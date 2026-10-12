@@ -1581,13 +1581,16 @@ export interface TicketRates { flights: TicketRow[]; trains: TicketRow[]; sleepe
  * seam: it says which airports serve which city, so a leg between two cities
  * can find the fares that fly it.
  *
- * Read unscoped, like every other catalogue this engine reads (the org_id
- * authority gate is still deferred — see DEFERRED_GATES.md G1).
+ * The ORG's airports (org_vocabularies is per organisation): read unscoped,
+ * every company's airports — with their city mapping — fed this one's fares.
+ * No org, no airports.
  */
-async function fetchAirports(): Promise<Airport[]> {
+async function fetchAirports(orgId: string | null | undefined): Promise<Airport[]> {
+  if (!orgId) return []
   const { data } = await supabaseAdmin
     .from('org_vocabularies')
     .select('key, label, meta, is_active')
+    .eq('org_id', orgId)
     .eq('kind', 'airport')
     .order('rank')
   return airportsFrom((data ?? []) as Array<{ key: string; label: string; meta: Record<string, unknown>; is_active: boolean }>)
@@ -2497,10 +2500,17 @@ export function findTransportRate(
  * NOT b2b_pricing_rules. The old b2b_pricing_rules.cruise_transport read was
  * removed (table permanently empty, uncreatable from the UI).
  */
-export async function fetchCruiseTransportPricingRules(normalizer?: RateNormalizer): Promise<CruiseTransportPackage[]> {
+export async function fetchCruiseTransportPricingRules(
+  orgId: string | null | undefined,
+  normalizer?: RateNormalizer
+): Promise<CruiseTransportPackage[]> {
+  // The org's own packages (b2b_transport_packages.org_id): this priced with
+  // every company's. No org, no package — a missing rate, never another's.
+  if (!orgId) return []
   const { data: rawData, error } = await supabaseAdmin
     .from('b2b_transport_packages')
     .select('*')
+    .eq('org_id', orgId)
     .eq('is_active', true)
   const data = normalizer && rawData ? await normalizer.normalize('b2b_transport_packages', rawData) as typeof rawData : rawData
 
@@ -2789,14 +2799,14 @@ export async function calculateDayBasedPricing(
   ] = await Promise.all([
     buildTransportCache(rateNormalizer),
     // Fetch cruise transport packages from b2b_transport_packages
-    fetchCruiseTransportPricingRules(rateNormalizer),
+    fetchCruiseTransportPricingRules(params.orgId, rateNormalizer),
     // Cruise rates only apply when the itinerary has cruise nights
     cruiseNights > 0
       ? resolveCruiseStay(tier, firstCruiseDay?.city, isEurPassport, dateForDay(firstCruiseDay?.day), rateNormalizer, propertyChoices.cruiseId, cruiseNights)
       : Promise.resolve({ rates: null } as Awaited<ReturnType<typeof resolveCruiseStay>>),
     Promise.all(hotelCities.map(city => resolveHotelStay(city, tier, isEurPassport, params.travelDate, rateNormalizer, propertyChoices.hotelByCity.get(city.toLowerCase())))),
     fetchTicketRates(ticketLegs, rateNormalizer),
-    fetchAirports(),
+    fetchAirports(params.orgId),
     getGuideRate(language, tier, rateNormalizer, { grade: guideGrade, mode: guideMode }),
     getMealRates(tier, rateNormalizer),
     getItemizedTips(tier, rateNormalizer),
@@ -4779,7 +4789,9 @@ export async function calculateAutoPricing(params: PricingParams): Promise<Prici
     // Same trap, same fix: guide options must survive the wrapper.
     guideGrade: params.guideGrade,
     guideMode: params.guideMode,
-    numPax: params.numPax
+    numPax: params.numPax,
+    // Whose cruise packages and airports the day pricing reads.
+    orgId: params.orgId,
   })
 
   if (!dayResult.success) {
@@ -5224,7 +5236,9 @@ export async function calculatePricingWithPassengerBreakdown(
     // Same trap, same fix: guide options must survive the wrapper.
     guideGrade: params.guideGrade,
     guideMode: params.guideMode,
-    numPax: params.numPax
+    numPax: params.numPax,
+    // Whose cruise packages and airports the day pricing reads.
+    orgId: params.orgId,
   })
 
   if (!dayResult.success) {
