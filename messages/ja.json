@@ -1663,6 +1663,7 @@
       "newService": "新しいサービス",
       "failedToSave": "保存に失敗しました：{error}",
       "failedToSaveDraft": "下書きの保存に失敗しました。もう一度お試しください。",
+      "fxUnavailable": "{from} から {to} への為替レートを取得できなかったため、この行の金額は更新されていません。しばらくしてからもう一度お試しください。",
       "pricingCalculationFailed": "料金計算に失敗しました",
       "failedToCalculatePricing": "料金の計算に失敗しました：{error}",
       "itineraryNotFound": "旅程が見つかりません",
@@ -1830,6 +1831,8 @@
     },
     "delete": "削除",
     "clickToConfirm": "確認のためもう一度クリック",
+    "deleteConfirmTitle": "この旅程を削除しますか？",
+    "deleteConfirmMessage": "{code} {trip} と、その日程・サービスがすべて削除されます。元に戻すことはできません。予約・入金・請求書・送付済みの手配書がある旅程は削除できません。キャンセルしてください。",
     "noItinerariesFound": "旅程が見つかりません",
     "tryAdjusting": "検索条件やフィルターを調整してください",
     "errorDeleteFailed": "旅程の削除に失敗しました",
@@ -3615,7 +3618,10 @@
       "partiallyPaid": "一部支払い済み",
       "partial": "一部",
       "paid": "支払い済み",
-      "completed": "完了"
+      "completed": "完了",
+      "quote": "見積り（未成約）",
+      "noBooking": "予約未作成",
+      "refunded": "返金済み"
     },
     "filters": {
       "title": "フィルター",
@@ -7967,6 +7973,7 @@
     "subtitle": "確定済みの旅行と運営管理",
     "searchPlaceholder": "コード、顧客名、旅行名で検索...",
     "noBookingsFound": "予約が見つかりません",
+    "loadMore": "さらに読み込む",
     "adults": "大人",
     "children": "子供",
     "bookingNotFound": "予約が見つかりません",

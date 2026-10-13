@@ -47,6 +47,8 @@ import { buildInclusionsExclusions, extractItineraryDetails } from '@/lib/inclus
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { createLanguageVersions } from '@/lib/ai/language-versions'
 import { getUserPreferences } from '@/lib/ai/user-preferences'
+import { foreignTripRef, TRIP_REF_LABELS } from '@/lib/itineraries/trip-refs'
+import { insertItineraryWithCode, itineraryCode } from '@/lib/itineraries/itinerary-code'
 import { loadVocabularyForOrg } from '@/lib/vocabulary-server'
 import { activeInOrder } from '@/lib/vocabulary'
 import { applyDayRules } from '@/lib/ai/day-rules-engine'
@@ -87,6 +89,21 @@ export async function POST(request: NextRequest) {
     // resolution never throws — any failure means Egypt, exactly as before
     // destinations existed. Multi-destination plan, Phase 2.
     const requestedDestinationId: string | null = body.destination_id || null
+    // Every id the caller names must be this company's own: a client, partner,
+    // destination or conversation thread of the other company was stored on
+    // the trip as given (and the thread lookup below answered with the other
+    // company's itinerary, code and price). Refused before any AI work runs.
+    if (orgId) {
+      const foreign = await foreignTripRef(supabaseAdmin, orgId, {
+        client_id: body.client_id,
+        partner_id: body.partner_id,
+        destination_id: requestedDestinationId,
+        thread_id: body.thread_id,
+      })
+      if (foreign) {
+        return NextResponse.json({ success: false, error: `${TRIP_REF_LABELS[foreign]} not found` }, { status: 404 })
+      }
+    }
     const destinationContext = await loadDestinationPromptContext(supabaseAdmin, orgId, requestedDestinationId)
     let resolvedDestinationId: string | null = requestedDestinationId
     if (!resolvedDestinationId) {
@@ -200,7 +217,8 @@ export async function POST(request: NextRequest) {
         .from('itineraries')
         .select('id, itinerary_code, trip_name, tier, package_type, currency, total_days, total_cost, supplier_cost, status')
         .eq('idempotency_key', idempotency_key)
-        .single()
+        .eq('org_id', orgId)
+        .maybeSingle()
 
       if (existing) {
         debugLog(`\u267B\uFE0F Idempotency hit: returning existing itinerary ${existing.id}`)
@@ -251,6 +269,7 @@ export async function POST(request: NextRequest) {
         .from('itineraries')
         .select('id, itinerary_code, trip_name, tier, package_type, currency, total_days, total_cost, supplier_cost, status')
         .eq('thread_id', resolvedThreadId)
+        .eq('org_id', orgId)
         .maybeSingle()
       if (existingByThread) {
         debugLog(`♻️ Thread idempotency hit: returning existing itinerary ${existingByThread.id} for thread ${resolvedThreadId}`)
@@ -418,10 +437,12 @@ export async function POST(request: NextRequest) {
     const endDate = new Date(startDateObj)
     endDate.setDate(startDateObj.getDate() + duration_days - 1)
 
+    // The code is drawn at insert time and drawn again if it is taken (see
+    // lib/itineraries/itinerary-code) — a clash used to surface as a 500 only
+    // after the whole AI run.
     const year = new Date().getFullYear()
-    const randomNum = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
     const tierPrefix = tier.charAt(0).toUpperCase()
-    const itinerary_code = `ITN-${tierPrefix}-${year}-${randomNum}`
+    const newItineraryCode = () => itineraryCode(year, tierPrefix)
 
     // ============================================
     // CRUISE PATH (creative mode ONLY, cruise-package or cruise-land)
@@ -514,10 +535,7 @@ export async function POST(request: NextRequest) {
         })
 
         // Create itinerary with cabin_allocation AND inclusions/exclusions in INSERT
-        const { data: itinerary, error: itineraryError } = await supabase
-          .from('itineraries')
-          .insert({
-            itinerary_code,
+        const { data: itinerary, error: itineraryError } = await insertItineraryWithCode<any>(supabase, {
             org_id: orgId,
             destination_id: resolvedDestinationId,
             client_name,
@@ -549,9 +567,7 @@ export async function POST(request: NextRequest) {
             source: partner_id ? 'b2b_custom' : source,
             // Idempotency
             idempotency_key: idempotency_key || null,
-          })
-          .select()
-          .single()
+          }, newItineraryCode)
 
         if (itineraryError) throw new Error(`Failed to create itinerary: ${itineraryError.message}`)
         // Prod drops client_id on INSERT — see lib/itineraries/reassert-client.ts
@@ -907,10 +923,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Create itinerary record WITH inclusions/exclusions included in INSERT
-    const { data: itinerary, error: itineraryError } = await supabase
-      .from('itineraries')
-      .insert({
-        itinerary_code,
+    const { data: itinerary, error: itineraryError } = await insertItineraryWithCode<any>(supabase, {
         org_id: orgId,
         destination_id: resolvedDestinationId,
         client_name,
@@ -946,9 +959,7 @@ export async function POST(request: NextRequest) {
         thread_id: resolvedThreadId,
         // Idempotency
         idempotency_key: idempotency_key || null,
-      })
-      .select()
-      .single()
+      }, newItineraryCode)
 
     if (itineraryError) {
       console.error('❌ Failed to create itinerary:', itineraryError)

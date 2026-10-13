@@ -1230,6 +1230,7 @@
       "editContentHint": "Edit itinerary content",
       "eurNonEur": "EU / non-EU passport",
       "failedToSaveDraft": "Failed to save draft",
+      "fxUnavailable": "The exchange rate from {from} to {to} could not be loaded, so this line was not repriced. Try again in a moment.",
       "failedToUpdateStatus": "Failed to update status",
       "from": "From",
       "guide": "Guide",
@@ -1374,6 +1375,8 @@
     },
     "delete": "Delete",
     "clickToConfirm": "Click again to confirm",
+    "deleteConfirmTitle": "Delete this itinerary?",
+    "deleteConfirmMessage": "{code} {trip} and its days and services will be deleted. This cannot be undone. A trip with a booking, payments, invoices or sent supplier documents cannot be deleted — cancel it instead.",
     "noItinerariesFound": "No itineraries found",
     "tryAdjusting": "Try adjusting your search or filters",
     "errorDeleteFailed": "Failed to delete itinerary",
@@ -2845,7 +2848,10 @@
       "partiallyPaid": "Partially Paid",
       "partial": "Partial",
       "paid": "Paid",
-      "completed": "Completed"
+      "completed": "Completed",
+      "quote": "Quote (not sold)",
+      "noBooking": "No booking yet",
+      "refunded": "Refunded"
     },
     "filters": {
       "title": "Filters",
@@ -7382,6 +7388,7 @@
     "subtitle": "Manage confirmed trips and operational tracking",
     "searchPlaceholder": "Search by code, client, or trip name...",
     "noBookingsFound": "No bookings found",
+    "loadMore": "Load more",
     "adults": "adults",
     "children": "children",
     "bookingNotFound": "Booking not found",

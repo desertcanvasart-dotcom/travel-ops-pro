@@ -32,6 +32,7 @@ import {
   validateDepositPercent,
 } from '@/lib/booking-creation'
 import { paymentRuleFrom } from '@/lib/payment-schedule'
+import { insertBookingWithCode } from '@/lib/bookings/booking-code'
 
 export const dynamic = 'force-dynamic'
 
@@ -194,7 +195,7 @@ export async function POST(request: NextRequest) {
     // ---------- Load the itinerary (also the org gate for B2B) ----------
     const { data: itinerary, error: itineraryError } = await supabaseAdmin
       .from('itineraries')
-      .select('*, b2b_partners(id, company_name, partner_code)')
+      .select('*, b2b_partners(id, company_name, partner_code, org_id)')
       .eq('id', itineraryId)
       .eq('org_id', orgId)
       .maybeSingle()
@@ -267,10 +268,6 @@ export async function POST(request: NextRequest) {
     }
 
     // ---------- Create ----------
-    const { data: codeData } = await supabaseAdmin.rpc('generate_booking_code')
-    const bookingCode =
-      codeData || `BKG-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`
-
     // The operator's payment terms. A missing row or missing columns fall back
     // to the standing rule rather than failing the booking.
     const { data: org } = await supabaseAdmin
@@ -286,8 +283,10 @@ export async function POST(request: NextRequest) {
     const effectiveDepositPercent =
       body?.deposit_percent == null ? rule.deposit_percent : depositPercent
 
-    const partnerInfo = itinerary.b2b_partners as { company_name?: string } | null
-    const row = buildBookingRow({
+    // This company's partner only (see POST /api/bookings).
+    const linkedPartner = itinerary.b2b_partners as { company_name?: string; org_id?: string } | null
+    const partnerInfo = linkedPartner && linkedPartner.org_id === orgId ? linkedPartner : null
+    const row = (bookingCode: string) => buildBookingRow({
       orgId,
       bookingCode,
       itinerary,
@@ -303,17 +302,14 @@ export async function POST(request: NextRequest) {
       paymentRule: rule,
     })
 
-    const { data: booking, error: createError } = await supabaseAdmin
-      .from('bookings')
-      .insert(row)
-      .select()
-      .single()
+    // Numbered per company; a taken code draws another (lib/bookings/booking-code).
+    const { data: booking, error: createError } = await insertBookingWithCode<{ id: string; [key: string]: unknown }>(supabaseAdmin, orgId, row)
 
-    if (createError) {
+    if (createError || !booking) {
       // 23505 on uq_bookings_one_per_quote: converted concurrently between our
       // check and our insert. Return THEIR booking — the caller wanted this
       // quote booked, and it is.
-      if (createError.code === '23505') {
+      if (createError?.code === '23505') {
         const { data: raced } = await supabaseAdmin
           .from('bookings')
           .select('id, booking_code')

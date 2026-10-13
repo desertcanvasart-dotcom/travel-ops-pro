@@ -37,7 +37,10 @@ export default function NewItineraryContent() {
     num_adults: 2,
     num_children: 0,  // Ages 4-12: 50% discount
     num_infants: 0,   // Ages 0-3: FREE except flights
-    currency: 'USD',
+    // Empty until the preferences arrive (the person's, else the company's
+    // default currency). Submitted empty, the server applies the same rule —
+    // never a constant the company may not bill in.
+    currency: '',
     notes: '',
     client_id: null as string | null,
     // The programme this trip is built from, when it is built from one. It is
@@ -387,6 +390,7 @@ export default function NewItineraryContent() {
                   onChange={handleChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 >
+                  {formData.currency === '' && <option value="">—</option>}
                   {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c} ({currencySymbol(c)})</option>)}
                 </select>
               </div>

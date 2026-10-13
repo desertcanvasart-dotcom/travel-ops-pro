@@ -1541,6 +1541,32 @@ export interface Database {
           },
         ]
       }
+      booking_code_counters: {
+        Row: {
+          last_value: number
+          org_id: string
+          year: number
+        }
+        Insert: {
+          last_value: number
+          org_id: string
+          year: number
+        }
+        Update: {
+          last_value?: number
+          org_id?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_code_counters_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       booking_change_requests: {
         Row: {
           id: string
@@ -13202,7 +13228,9 @@ export interface Database {
         Returns: any
       }
       generate_booking_code: {
-        Args: Record<PropertyKey, never>
+        Args: {
+          p_org_id?: string
+        }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any
       }
@@ -13331,6 +13359,15 @@ export interface Database {
           p_days?: Json
           p_itinerary_id?: string
           p_services?: Json
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Returns: any
+      }
+      shift_itinerary_dates: {
+        Args: {
+          p_days?: number
+          p_itinerary_id?: string
+          p_org_id?: string
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any
