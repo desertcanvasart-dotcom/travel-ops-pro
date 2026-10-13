@@ -9,6 +9,7 @@ import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { currencySymbol } from '@/lib/currency-totals'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
+import { quoteMarginPercent } from '@/lib/b2b/partner-margin'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { createInitialQuoteRevision } from '@/lib/quotes/initial-revision'
 import { quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
@@ -256,8 +257,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 3. Determine partner margin override
-    let effectiveMargin = margin_percent
+    // 3. The margin: the one the operator set wins, then the partner's, then
+    // the company's (lib/b2b/partner-margin — the calculator's rule too). The
+    // partner's default used to override a margin the operator had typed.
+    let partnerDefault: unknown = null
     if (partner_id) {
       const { data: partner } = await supabaseAdmin
         .from('b2b_partners')
@@ -265,11 +268,9 @@ export async function POST(request: NextRequest) {
         .eq('id', partner_id)
         .eq('org_id', orgId)
         .maybeSingle()
-
-      if (partner?.default_margin_percent) {
-        effectiveMargin = partner.default_margin_percent
-      }
+      partnerDefault = partner?.default_margin_percent ?? null
     }
+    const effectiveMargin = quoteMarginPercent({ requested: requestedMargin, partnerDefault, orgDefault: margin_percent })
 
     const tier = itinerary.tier || 'standard'
     const numPax = (itinerary.num_adults || 2) + (itinerary.num_children || 0)

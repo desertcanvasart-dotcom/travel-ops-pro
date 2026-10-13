@@ -50,9 +50,9 @@ vi.mock('@/lib/auth/current-org', () => ({
   noOrgResponse: () => new Response(JSON.stringify({ error: 'no org' }), { status: 403 }),
 }))
 vi.mock('@/lib/org-rate-currency', () => ({ getOrgRateCurrency: async () => 'USD' }))
-vi.mock('@/lib/org-default-margin', () => ({
+vi.mock('@/lib/org-default-margin', async (orig) => ({
+  ...(await orig<typeof import('@/lib/org-default-margin')>()),
   getOrgDefaultMargin: async () => 30,
-  resolveMarginPercent: ({ requested, orgDefault }: { requested?: number | null; orgDefault: number | null }) => requested ?? orgDefault ?? 25,
 }))
 const priced = {
   success: true, complete: true, holes: [], warnings: [],
@@ -120,6 +120,30 @@ describe('first revision', () => {
     expect(res.status).toBe(201)
     expect(revisions()).toEqual([{ p_quote_id: json.data.id, p_changed_by: 'user-1', p_change_reason: 'Quote created' }])
     expect((await rows('tour_quotes'))[0]).toMatchObject({ id: json.data.id, itinerary_id: 'it-1' })
+  })
+})
+
+describe('a quote from a trip: whose margin', () => {
+  const fromTrip = async (body: Record<string, unknown>) => {
+    const res = await quoteFromItinerary(new NextRequest('http://localhost/api/b2b/quote-from-itinerary', {
+      method: 'POST', body: JSON.stringify({ itinerary_id: 'it-1', ...body }),
+    }))
+    expect(res.status).toBe(201)
+    return (await rows('tour_quotes'))[0]
+  }
+  beforeEach(async () => {
+    const t = createMockClient() as any
+    await t.from('b2b_partners').insert({ id: 'p-1', org_id: 'org-1', company_name: 'Agency', default_margin_percent: 12 })
+  })
+
+  it('the margin the operator set wins over the partner’s', async () => {
+    expect((await fromTrip({ partner_id: 'p-1', margin_percent: 20 })).margin_percent).toBe(20)
+  })
+  it('without one, the partner’s default margin', async () => {
+    expect((await fromTrip({ partner_id: 'p-1' })).margin_percent).toBe(12)
+  })
+  it('without a partner, the company’s default', async () => {
+    expect((await fromTrip({})).margin_percent).toBe(30)
   })
 })
 
