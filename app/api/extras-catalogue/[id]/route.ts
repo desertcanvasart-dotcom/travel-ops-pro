@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { rowInOrg } from '@/lib/api/org-scope'
+import { extraInputError } from '../validate'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +35,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params
 
     const body = await request.json()
+    // The same checks as create: a bad unit was a bare 500 from the
+    // database, a negative price was saved.
+    const invalid = extraInputError(body)
+    if (invalid) return NextResponse.json({ success: false, error: invalid }, { status: 400 })
     const record: Record<string, unknown> = {}
     for (const k of WRITABLE) {
       if (!(k in body)) continue

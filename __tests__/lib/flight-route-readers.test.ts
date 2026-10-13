@@ -70,7 +70,7 @@ describe('every reader goes through it', () => {
   })
 
   it('the grid option label and the day-city it is matched on', () => {
-    const src = read('app/api/pricing-grid/rates/route.ts')
+    const src = read('app/api/pricing-grid/rate-options.ts')
     expect(src).toContain('flightRouteLabel(airports, r)')
     expect(src).toContain('city: cityOfAirportKey(airports, r.route_from)')
     expect(src).not.toContain('city: r.route_from,')

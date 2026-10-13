@@ -11,7 +11,8 @@ import type {
 } from '../types'
 import { isSupplementItem, isSingleSupplementItem, SLOT_DEFINITIONS } from '../types'
 import { priceAcrossPax } from '@/lib/pricing/pax-range'
-import { computeUplift, seasonForDate, type SeasonWindow } from '@/lib/pricing/season-uplift'
+import { computeUplift, seasonForDate, type SeasonMatch, type SeasonWindow } from '@/lib/pricing/season-uplift'
+import { roundToCurrency } from '@/lib/currency-totals'
 import { dayDate, rateOnDate } from '@/lib/rates/date-window'
 import { soldItems, customAmountSold } from './guide-rule'
 import { soldAccommodationItems } from './sold-lines'
@@ -134,18 +135,42 @@ export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
 
   const groupPerPerson = pax > 0 ? groupTotal / pax : 0
   const dailyPerPerson = groupPerPerson + perPersonTotal
-  const dailyTotal = dailyPerPerson * pax
+  // The day's whole cost, unrounded and without dividing the group costs:
+  // what the save's lines for this day add up to.
+  const exactTotal = groupTotal + perPersonTotal * pax
 
   return {
     groupTotal: round2(groupTotal),
     perPersonTotal: round2(perPersonTotal),
     groupPerPerson: round2(groupPerPerson),
     dailyPerPerson: round2(dailyPerPerson),
-    dailyTotal: round2(dailyTotal),
+    dailyTotal: round2(exactTotal),
+    exactTotal,
   }
 }
 
 // --- Grand Totals ---
+
+/**
+ * The selling figures from a trip's whole cost — ONE rounding for the screen
+ * and the save. The screen used to round each day's per-person figure and
+ * then multiply by pax, while the save summed its lines: a group cost of 100
+ * for 3 at 25% showed 124.98 and stored 125.00. Now both take the whole cost,
+ * apply the margin once, round once in the rate currency (a yen has no
+ * cents), and add the premium (departure date) on top, rounded the same way.
+ */
+export function sellingFromCost(input: {
+  totalCost: number
+  marginPercent: number
+  season: SeasonMatch | null
+  currency?: string | null
+}): { baseSellingPriceTotal: number; seasonUplift: number; sellingPriceTotal: number } {
+  const round = (n: number) => roundToCurrency(n, input.currency || 'EUR')
+  const margin = Math.max(0, Math.min(isNaN(input.marginPercent) ? 0 : input.marginPercent, MARGIN_CAP))
+  const baseSellingPriceTotal = round(input.totalCost * (1 + margin / 100))
+  const seasonUplift = round(computeUplift({ sellingPrice: baseSellingPriceTotal, season: input.season }).amount)
+  return { baseSellingPriceTotal, seasonUplift, sellingPriceTotal: round(baseSellingPriceTotal + seasonUplift) }
+}
 
 export function calculateGrandTotals(
   days: GridDay[],
@@ -155,35 +180,30 @@ export function calculateGrandTotals(
   // down. No calendar means no premium, which is what an ordinary date is.
   seasonWindows: SeasonWindow[] = [],
 ): GridTotals {
-  const { pax, marginPercent } = config
+  const { pax } = config
 
-  let costPerPerson = 0
+  // The whole cost, unrounded: each day's group costs plus its per-person
+  // costs × pax — the same lines the save writes and sums.
+  let totalCost = 0
   for (const day of days) {
     const calc = calculateDay(day, config)
-    costPerPerson += calc.dailyPerPerson
+    totalCost += calc.exactTotal
   }
-
-  const totalCost = costPerPerson * pax
-  // Clamp margin to reasonable range (0-200%)
-  const safeMargin = Math.max(0, Math.min(isNaN(marginPercent) ? 0 : marginPercent, 200))
-  const marginMultiplier = 1 + safeMargin / 100
-  const basePerPerson = round2(costPerPerson * marginMultiplier)
-  const baseSellingPriceTotal = round2(basePerPerson * pax)
-  const marginAmount = round2(baseSellingPriceTotal - totalCost)
 
   // The premium rides on top of the selling price, on the whole of it, and the
   // DEPARTURE date decides — the same rule the B2B engine follows, so the same
   // trip cannot be quoted two ways depending on which screen produced it.
   const season = seasonForDate(seasonWindows, config.startDate)
-  const uplift = computeUplift({ sellingPrice: baseSellingPriceTotal, season })
-  const seasonUplift = round2(uplift.amount)
-  const sellingPriceTotal = round2(baseSellingPriceTotal + seasonUplift)
+  const { baseSellingPriceTotal, seasonUplift, sellingPriceTotal } = sellingFromCost({
+    totalCost, marginPercent: config.marginPercent, season, currency: config.rateCurrency,
+  })
+  const marginAmount = round2(baseSellingPriceTotal - totalCost)
 
   return {
-    costPerPerson: round2(costPerPerson),
+    costPerPerson: pax > 0 ? round2(totalCost / pax) : 0,
     totalCost: round2(totalCost),
     marginAmount,
-    sellingPricePerPerson: pax > 0 ? round2(sellingPriceTotal / pax) : basePerPerson,
+    sellingPricePerPerson: pax > 0 ? round2(sellingPriceTotal / pax) : sellingPriceTotal,
     sellingPriceTotal,
     baseSellingPriceTotal,
     seasonName: season?.name ?? null,
@@ -465,9 +485,13 @@ export function countMissingGuideBeds(days: GridDay[], config: GridConfig): numb
 
 // --- Currency Conversion ---
 
-export function convertAmount(eurAmount: number, exchangeRate: number | null): number {
-  if (!exchangeRate) return eurAmount
-  return round2(eurAmount * exchangeRate)
+/** A rate-currency amount in the currency the grid shows. The factor is
+ *  rate currency → shown currency (display-fx.ts); null = no conversion —
+ *  the figure is shown in the rate currency and labelled so, never under
+ *  another currency's sign. */
+export function convertAmount(rateAmount: number, exchangeRate: number | null): number {
+  if (!exchangeRate) return rateAmount
+  return round2(rateAmount * exchangeRate)
 }
 
 // --- Utility ---

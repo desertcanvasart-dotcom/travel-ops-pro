@@ -68,7 +68,8 @@ describe('cruise transport packages (fix 20)', () => {
 
   it('the B2B calculator and the pricing grid read the org packages; the package PUT is org-filtered', () => {
     expect(src('app/api/b2b/calculate-price/route.ts')).toMatch(/from\('b2b_transport_packages'\)\s*\n\s*\.select\('\*'\)\s*\n\s*\.eq\('org_id', orgId\)/)
-    expect(src('app/api/pricing-grid/rates/route.ts')).toContain("from('b2b_transport_packages').select('*').eq('org_id', orgId)")
+    // The grid's rate options are shaped in rate-options.ts (the rates route and the save share it).
+    expect(src('app/api/pricing-grid/rate-options.ts')).toContain("from('b2b_transport_packages').select('*').eq('org_id', orgId)")
     expect(src('app/api/pricing-grid/parse/route.ts')).toContain("from('b2b_transport_packages').select('*').eq('org_id', orgId)")
     expect(src('app/api/b2b/transport-packages/[id]/route.ts')).toMatch(/\.update\([\s\S]*?\.eq\('id', id\)\s*\n\s*\.eq\('org_id', orgId\)/)
   })
@@ -78,7 +79,7 @@ describe('airports (fix 22)', () => {
   it("the engine and the pricing grid read the org's airports", () => {
     expect(src('lib/auto-pricing-service.ts')).toMatch(/from\('org_vocabularies'\)\s*\n\s*\.select\('key, label, meta, is_active'\)\s*\n\s*\.eq\('org_id', orgId\)\s*\n\s*\.eq\('kind', 'airport'\)/)
     expect(src('lib/auto-pricing-service.ts')).toContain('fetchAirports(params.orgId)')
-    expect(src('app/api/pricing-grid/rates/route.ts')).toContain(".eq('org_id', orgId).eq('kind', 'airport')")
+    expect(src('app/api/pricing-grid/rate-options.ts')).toContain(".eq('org_id', orgId).eq('kind', 'airport')")
   })
 })
 
