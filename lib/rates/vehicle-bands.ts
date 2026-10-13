@@ -16,9 +16,9 @@
 //
 // This module is the ONE reader: vehicleBands(row) understands the list and
 // the oldest single-rate rows, in that order. The
-// chooser is lib/vocabulary's vehicleForPax — the same rule
-// getTransportRateForPax always applied (exact band, else the smallest
-// vehicle whose maximum covers the group, else the largest).
+// chooser is lib/vocabulary's vehicleFleetForPax — exact band, else the
+// smallest vehicle whose maximum covers the group, else as many of the
+// largest as the group needs (it used to be ONE of the largest, silently).
 //
 // Rules, all inherited from the columns:
 //   - a vehicle absent from the list is not offered; a blank or zero rate
@@ -33,7 +33,7 @@
 //     list; a package row from before it reads its five columns
 // ============================================
 
-import { KEY_PATTERN, slugifyKey, vehicleForPax, type VehicleBand } from '@/lib/vocabulary'
+import { KEY_PATTERN, slugifyKey, vehicleFleetForPax, type VehicleBand } from '@/lib/vocabulary'
 
 export interface VehicleBandRate {
   /** The vocabulary vehicle key ('sedan', '4x4', …). */
@@ -293,12 +293,24 @@ export function stripVehicleFields(row: Record<string, unknown>, keys: readonly 
   for (const k of keys) for (const f of FLAT_FIELDS) delete row[`${k}_${f}`]
 }
 
-/** The vehicle this row prices a group of `pax` in: the band it falls in,
- *  else the smallest vehicle whose maximum still covers it, else the largest
- *  the row offers. Null when the row offers nothing. */
-export function vehicleRateForPax(row: Record<string, unknown>, pax: number): VehicleBandRate | null {
+/** The vehicles this row prices a group of `pax` in: the band it falls in,
+ *  else the smallest vehicle whose maximum still covers it — else, for a
+ *  group bigger than every vehicle, as many of the largest as seat it
+ *  (lib/vocabulary vehicleFleetForPax). The rates are for the WHOLE fleet:
+ *  `count` vehicles at the per-vehicle price, which `unit_rate_eur` keeps.
+ *  Null when the row offers nothing. */
+export function vehicleRateForPax(row: Record<string, unknown>, pax: number): (VehicleBandRate & { count: number; unit_rate_eur: number }) | null {
   const bands = vehicleBands(row)
   if (bands.length === 0) return null
-  const key = vehicleForPax(bands.map(b => ({ key: b.key, min_pax: b.capacity_min, max_pax: b.capacity_max })), pax)
-  return bands.find(b => b.key === key) ?? null
+  const fleet = vehicleFleetForPax(bands.map(b => ({ key: b.key, min_pax: b.capacity_min, max_pax: b.capacity_max })), pax)
+  const band = fleet ? bands.find(b => b.key === fleet.key) : undefined
+  if (!band || !fleet) return null
+  const n = fleet.count
+  return {
+    ...band,
+    rate_eur: band.rate_eur * n,
+    rate_non_eur: band.rate_non_eur == null ? null : band.rate_non_eur * n,
+    count: n,
+    unit_rate_eur: band.rate_eur,
+  }
 }

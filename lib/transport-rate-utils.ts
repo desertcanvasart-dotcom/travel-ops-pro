@@ -37,6 +37,9 @@ export interface TransportRateRecord {
 
 export interface VehicleRateResult {
   vehicleType: string
+  /** How many of the vehicle the group needs — 1 unless the group is bigger
+   *  than every vehicle the row offers. rateEur/rateNonEur are for all of them. */
+  vehicleCount?: number
   rateEur: number
   rateNonEur: number
   capacityMin: number
@@ -47,13 +50,17 @@ export interface VehicleRateResult {
 // The vehicles a row offers come from lib/rates/vehicle-bands.ts — the
 // `vehicles` list (20261005). The two functions below are the shape their
 // five call sites expect; the selection
-// rule is lib/vocabulary's vehicleForPax, which is the rule this file always
-// applied: exact band, else the smallest vehicle whose maximum covers the
-// group, else the largest offered.
+// rule is lib/vocabulary's vehicleFleetForPax: exact band, else the smallest
+// vehicle whose maximum covers the group, else as many of the largest offered
+// as seat the group (it used to be one of the largest, silently).
 
-function toResult(band: VehicleBandRate): VehicleRateResult {
+function toResult(band: VehicleBandRate & { count?: number }): VehicleRateResult {
+  const count = band.count ?? 1
   return {
-    vehicleType: vehicleKeyLabel(band.key),
+    // A group bigger than every vehicle rides in several of the largest
+    // (vehicleRateForPax); the rates below are already the whole fleet's.
+    vehicleType: count > 1 ? `${count} × ${vehicleKeyLabel(band.key)}` : vehicleKeyLabel(band.key),
+    vehicleCount: count,
     rateEur: band.rate_eur,
     rateNonEur: band.rate_non_eur ?? band.rate_eur,
     capacityMin: band.capacity_min,

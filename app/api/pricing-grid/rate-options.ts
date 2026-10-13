@@ -16,6 +16,7 @@ import { seasonsForRow, plainPeriodName, type RateSeasonEntity } from '@/lib/rat
 import { periodLabel, type OptionPeriod } from '@/lib/rates/date-window'
 import { cruiseSailingLabel, sanitizeSailingDays } from '@/lib/rates/cruise-sailing'
 import { airportsFrom, flightRouteLabel, cityOfAirportKey } from '@/lib/rates/airports'
+import { flightGuideFare } from '@/lib/rates/ticket-guide-fare'
 import { supplementsForRow, supplementField } from '@/lib/rates/supplements'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
@@ -327,8 +328,10 @@ export async function loadGridRateOptions(
       periods: flightPeriods(r),
       route_from: r.route_from,
       route_to: r.route_to,
-      // Guide fare for the "+1" seat; null = he pays the customer fare.
-      guide_rate: r.guide_rate == null ? null : toNum(r.guide_rate),
+      // Guide fare for the "+1" seat; null = he pays the customer fare. Read
+      // from the first period as STORED (lib/rates/ticket-guide-fare): the
+      // mirrored column holds 0 for a blank, which flew the guide free.
+      guide_rate: flightGuideFare(r),
     })),
 
     experiences: (nActivities || [])

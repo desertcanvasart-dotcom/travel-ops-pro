@@ -204,11 +204,6 @@ export async function POST(request: NextRequest) {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
-    // Day-tour vehicle rates come from transportation_rates (operator catalog,
-    // operator-set capacity bands) — NOT the rate-less `vehicles` fleet list.
-    // This company's.
-    const findDayTourVehicle = makeDayTourVehicleFinder(orgId)
-
     // The partner is saved on the quote (and printed on its PDF, and copied to
     // the trip on convert), not only used for its margin.
     if (!(await quoteRefsInOrg(supabaseAdmin, orgId, { partner_id }))) return quoteRefNotFound()
@@ -282,6 +277,10 @@ export async function POST(request: NextRequest) {
     // What the rate tables (and services' supplier_cost_original) are in.
     const rateCurrency = await getOrgRateCurrency(supabaseAdmin, orgId)
     const rateSym = currencySymbol(rateCurrency)
+    // Day-tour vehicle rates come from transportation_rates (operator catalog,
+    // operator-set capacity bands) — NOT the rate-less `vehicles` fleet list.
+    // This company's, converted into the rate currency the quote is built in.
+    const findDayTourVehicle = makeDayTourVehicleFinder(orgId, rateCurrency)
     const departureDate: string | null = itinerary.start_date
       ? String(itinerary.start_date).slice(0, 10)
       : null

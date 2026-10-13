@@ -3,6 +3,7 @@
 import { todayLocal } from '@/lib/today'
 import { useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
+import { useDestinationCities } from '@/app/components/useDestinationCities'
 import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import SupplierPicker from '@/components/rates/SupplierPicker'
@@ -37,12 +38,16 @@ import { Copy, Train,
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
 
-// Egyptian cities with train stations
-const TRAIN_CITIES = [
-  'Alexandria', 'Aswan', 'Asyut', 'Beni Suef', 'Cairo', 'Damanhur',
-  'Edfu', 'El Minya', 'Esna', 'Giza', 'Kom Ombo', 'Luxor',
-  'Mansoura', 'Port Said', 'Qena', 'Sohag', 'Suez', 'Tanta', 'Zagazig'
-]
+// Origin and destination are the company's own destination cities (Settings
+// → Destinations) — the names its trips' days carry, which is what pricing
+// matches a train on. They were a fixed list of 19 Egyptian cities, so a
+// city spelled differently in Settings, or one outside Egypt, never matched.
+// A city a stored rate names that is not in the list is still offered.
+function cityChoices(cities: readonly string[], ...extra: Array<string | null | undefined>): string[] {
+  const seen = new Set(cities.map(c => c.toLowerCase()))
+  const more = extra.filter((c): c is string => !!c && !seen.has(c.toLowerCase()))
+  return [...cities, ...[...new Set(more)].sort()]
+}
 
 // WORDS, kept as the built-in fallback. The picker stores the vocabulary KEY
 // ('first_class' — Settings → Vocabulary → Train classes) and lists the
@@ -146,7 +151,9 @@ export default function TrainRatesContent() {
     origin_city: '',
     destination_city: '',
     class_type: '',
-    rate_eur: 0,
+    // Kept as typed: '' is "not entered", which is not 0 (a 0 fare priced
+    // the ticket free; a cleared guide fare flew the guide free).
+    rate_eur: '' as string | number,
     guide_rate: '' as string | number,
     rate_currency: '',
     duration_hours: '',
@@ -160,6 +167,7 @@ export default function TrainRatesContent() {
     notes: '',
     is_active: true
   })
+  const { cities: destinationCities } = useDestinationCities()
 
   // Fetch rates
   const fetchRates = async () => {
@@ -182,8 +190,14 @@ export default function TrainRatesContent() {
 
   useEffect(() => {
     setMounted(true)
-    fetchRates()
   }, [])
+
+  // Show All / Active Only is a server filter: it refetches. It used to run
+  // on mount only, so inactive rates could never be listed or reactivated.
+  useEffect(() => {
+    fetchRates()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showInactive])
 
   useEffect(() => {
     setCurrentPage(1)
@@ -191,10 +205,11 @@ export default function TrainRatesContent() {
 
   // Handlers
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target
+    // Numbers stay as typed: '' is blank, never 0 (see formData).
+    const { name, value } = e.target
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'number' ? parseFloat(value) || 0 : value
+      [name]: value
     }))
   }
 
@@ -205,7 +220,7 @@ export default function TrainRatesContent() {
       origin_city: '',
       destination_city: '',
       class_type: '',
-      rate_eur: 0,
+      rate_eur: '' as string | number,
       guide_rate: '' as string | number,
       rate_currency: '',
       duration_hours: '',
@@ -239,7 +254,7 @@ export default function TrainRatesContent() {
       origin_city: rate.origin_city || '',
       destination_city: rate.destination_city || '',
       class_type: slugifyKey(rate.class_type || ''),
-      rate_eur: rate.rate_eur || 0,
+      rate_eur: rate.rate_eur ?? '',
       guide_rate: rate.guide_rate ?? '',
       rate_currency: rate.rate_currency || '',
       duration_hours: rate.duration_hours?.toString() || '',
@@ -275,6 +290,11 @@ export default function TrainRatesContent() {
     const invalid = firstInvalidMessage(e.currentTarget)
     if (invalid) {
       showNotification('error', 'Error', invalid)
+      return
+    }
+    // A fare of 0 would price the ticket free; blank is refused by `required`.
+    if (!(Number(formData.rate_eur) > 0)) {
+      showNotification('error', 'Error', t('form.rateRequired'))
       return
     }
 
@@ -588,7 +608,7 @@ export default function TrainRatesContent() {
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
             <option value="">{t('allOrigins')}</option>
-            {TRAIN_CITIES.map(city => (
+            {cityChoices(destinationCities, ...rates.map(r => r.origin_city)).map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
           </select>
@@ -600,7 +620,7 @@ export default function TrainRatesContent() {
             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600"
           >
             <option value="">{t('allDestinations')}</option>
-            {TRAIN_CITIES.map(city => (
+            {cityChoices(destinationCities, ...rates.map(r => r.destination_city)).map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
           </select>
@@ -1049,7 +1069,7 @@ export default function TrainRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       <option value="">{t('form.selectOrigin')}</option>
-                      {TRAIN_CITIES.map(city => (
+                      {cityChoices(destinationCities, formData.origin_city).map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
                     </select>
@@ -1064,7 +1084,7 @@ export default function TrainRatesContent() {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     >
                       <option value="">{t('form.selectDestination')}</option>
-                      {TRAIN_CITIES.map(city => (
+                      {cityChoices(destinationCities, formData.destination_city).map(city => (
                         <option key={city} value={city}>{city}</option>
                       ))}
                     </select>
@@ -1128,7 +1148,7 @@ export default function TrainRatesContent() {
                       value={formData.rate_eur}
                       onChange={handleChange}
                       required
-                      min="0"
+                      min="0.01"
                       step="0.01"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                     />

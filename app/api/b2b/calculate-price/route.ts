@@ -788,7 +788,7 @@ export async function POST(request: NextRequest) {
     // Day-tour vehicle rates come from transportation_rates (the operator's
     // catalog with their own capacity bands) — NOT the `vehicles` fleet list,
     // which has no rates and priced these lines at 0. Cache built once per request.
-    const findDayTourVehicle = makeDayTourVehicleFinder(orgId)
+    const findDayTourVehicle = makeDayTourVehicleFinder(orgId, rateCurrency)
     // The Guides & Services tables, read once per request and converted into
     // the run currency — each row from ITS OWN rate_currency (a fee entered as
     // 600 EGP was priced as 600 in a USD quote). Same normaliser, same policy
