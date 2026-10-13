@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { insertWithTemplateCode } from '@/lib/tours/template-code'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -143,12 +144,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate template code if not provided
-    const templateCode = body.template_code || generateTemplateCode(body)
-
     const templateData = {
       org_id: orgId,
-      template_code: templateCode,
       template_name: body.template_name,
       // The portable theme key (org_vocabularies tour_theme). The
       // install-local category_id it replaced is gone (20261207).
@@ -179,6 +176,9 @@ export async function POST(request: NextRequest) {
       popularity_score: body.popularity_score || 0,
       default_transportation_service: body.default_transportation_service || 'day_tour',
       transportation_city: body.transportation_city || 'Cairo',
+      // The form's Auto-Pricing box: 'manual' keeps the engine off this
+      // template's cached price (lib/tours/cached-price). Default as the column.
+      pricing_mode: body.pricing_mode === 'manual' ? 'manual' : 'auto',
       // NEW FIELDS
       itinerary: body.itinerary || [],
       inclusions: body.inclusions || [],
@@ -217,14 +217,25 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const { data, error } = await supabaseAdmin
-      .from('tour_templates')
-      .insert([templateData])
-      .select()
-      .single()
+    // The code: the one typed, else generated — and generated again when it
+    // clashes with one of the company's codes (lib/tours/template-code).
+    const typedCode = typeof body.template_code === 'string' ? body.template_code.trim() : ''
+    const inserted = await insertWithTemplateCode<Record<string, any>>(
+      (template_code) => supabaseAdmin.from('tour_templates').insert([{ ...templateData, template_code }]).select().single(),
+      { typed: typedCode, cities: body.cities_covered, tourType: body.tour_type }
+    )
+    const data = inserted.data
 
-    if (error) {
-      console.error('Error creating template:', error)
+    if (inserted.error) {
+      if (inserted.clash) {
+        return NextResponse.json(
+          { success: false, error: typedCode
+            ? `Template code "${typedCode}" is already used by another template`
+            : 'Could not find a free template code — type one in' },
+          { status: 409 }
+        )
+      }
+      console.error('Error creating template:', inserted.error)
       return NextResponse.json(
         { success: false, error: 'Failed to create template' },
         { status: 500 }
@@ -270,12 +281,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
-
-// Helper to generate template code
-function generateTemplateCode(data: any): string {
-  const city = data.cities_covered?.[0] || 'EGYPT'
-  const type = (data.tour_type || 'tour').toUpperCase().replace('_', '-')
-  const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
-  return `${city.substring(0, 3).toUpperCase()}-${type.substring(0, 3)}-${random}`
 }

@@ -190,6 +190,12 @@ export function closestTierReason(results: Map<string, TierResult>): NoPriceReas
   return { tier: best.tier, missing }
 }
 
+/** Does the engine price this template's cached "from" price? */
+export function usesAutoPricing(template: { uses_day_builder?: boolean | null; pricing_mode?: string | null }): boolean {
+  if (template.pricing_mode === 'manual') return false
+  return !!template.uses_day_builder || template.pricing_mode === 'auto'
+}
+
 /**
  * Price one template and write its cached "from" price. A template the engine
  * cannot price completely caches NULL — the card shows no price rather than a
@@ -208,8 +214,11 @@ export async function refreshTemplateCachedPrice(
   // written. No company, nothing matches.
   const orgId = ctx.pricingOptions.orgId ?? NO_ORG
 
-  // Only templates that use auto-pricing are priced by the engine.
-  if (template.uses_day_builder || template.pricing_mode === 'auto') {
+  // Only templates that use auto-pricing are priced by the engine. An
+  // explicit 'manual' (Tour Manager's Auto-Pricing box unticked) wins over
+  // uses_day_builder, which only says the template has day activities — else
+  // the box could not switch auto-pricing off.
+  if (usesAutoPricing(template)) {
     const results = await calculateMultiTierPricing(template.id, [...ctx.tierLadder], CATALOGUE_PAX, true, ctx.pricingOptions)
     ;({ price, tier } = cheapestCompleteTier(results))
     if (price === null) noPrice = closestTierReason(results)
