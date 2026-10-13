@@ -60,8 +60,10 @@ describe('cruise transport packages (fix 20)', () => {
 
   it('every caller passes the org', () => {
     expect(src('lib/auto-pricing-service.ts')).toContain('fetchCruiseTransportPricingRules(params.orgId, rateNormalizer)')
-    expect(src('lib/ai/cruise-service-creation.ts')).toContain('fetchCruiseTransportPricingRules(orgId)')
-    expect(src('lib/ai/service-creation.ts')).toContain('fetchCruiseTransportPricingRules(orgId)')
+    // …and its normalizer, so a package in another currency is converted
+    // (Tours audit, 2026-10, #3).
+    expect(src('lib/ai/cruise-service-creation.ts')).toContain('fetchCruiseTransportPricingRules(orgId, cruiseNormalizer)')
+    expect(src('lib/ai/service-creation.ts')).toContain('fetchCruiseTransportPricingRules(orgId, rates.rateNormalizer)')
     expect(src('app/api/ai/generate-itinerary/route.ts')).toContain('fetchCruiseTransportPricingRules(orgId)')
     expect(src('app/api/ai/generate-itinerary/route.ts').match(/ItineraryServices\(supabase, \{\n\s*orgId,/g)).toHaveLength(2)
   })

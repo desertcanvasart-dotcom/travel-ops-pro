@@ -3,6 +3,7 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { notFoundInOrg } from '@/lib/api/org-scope'
 import { clientMessage } from '@/lib/api-errors'
 import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
+import { validDuration, duplicateOf, duplicateMessage } from '@/lib/b2b/transport-packages'
 import { NextRequest, NextResponse } from 'next/server'
 
 // ============================================
@@ -40,6 +41,29 @@ export async function PUT(
       return NextResponse.json({ success: false, error: 'At least one vehicle rate is required' }, { status: 400 })
     }
 
+    if (body.duration_days !== undefined && validDuration(body.duration_days) === null) {
+      return NextResponse.json({ success: false, error: 'Duration must be a whole number of days, 1 or more' }, { status: 400 })
+    }
+    // The row as it will be (a key left out keeps its stored value): no second
+    // active package for the same type, length and route.
+    const pick = <T,>(k: string, stored: T): T => (body[k] !== undefined ? body[k] : stored)
+    const after = {
+      id,
+      package_type: pick('package_type', currentRow.package_type),
+      duration_days: body.duration_days !== undefined ? validDuration(body.duration_days) : currentRow.duration_days,
+      origin_city: pick('origin_city', currentRow.origin_city),
+      destination_city: pick('destination_city', currentRow.destination_city),
+      is_active: pick('is_active', currentRow.is_active),
+    }
+    const { data: sameType } = await supabaseAdmin
+      .from('b2b_transport_packages')
+      .select('id, package_name, package_type, duration_days, origin_city, destination_city, is_active')
+      .eq('org_id', orgId)
+      .eq('package_type', after.package_type)
+      .eq('is_active', true)
+    const dup = duplicateOf(after, sameType ?? [])
+    if (dup) return NextResponse.json({ success: false, error: duplicateMessage(dup) }, { status: 409 })
+
     const { data, error } = await supabaseAdmin
       .from('b2b_transport_packages')
       .update({
@@ -48,7 +72,7 @@ export async function PUT(
         package_type: body.package_type,
         origin_city: body.origin_city,
         destination_city: body.destination_city,
-        duration_days: body.duration_days,
+        duration_days: body.duration_days === undefined ? undefined : after.duration_days,
         ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
         ...(vehicleWrite.patch ?? {}),
         description: body.description,

@@ -13,7 +13,8 @@
 // for the save's re-price alike, so both arrive at the same number:
 //
 //   the margin the operator typed or stepped     wins, always
-//   the partner's margin for this variation      b2b_partner_pricing
+//   the partner's margin for this variation      b2b_partner_pricing, the
+//     row valid on the travel date               (partnerOverrideOn)
 //   the partner's default margin                 b2b_partners
 //   the company's default margin, else 25        lib/org-default-margin
 //
@@ -40,4 +41,30 @@ export function quoteMarginPercent(input: {
   const partner = partnerMarginValue(input.partnerOverride) ?? partnerMarginValue(input.partnerDefault)
   if (partner !== null) return partner
   return resolveMarginPercent({ orgDefault: input.orgDefault })
+}
+
+export interface PartnerPricingRow {
+  id?: string
+  margin_percent_override?: unknown
+  valid_from?: string | null
+  valid_to?: string | null
+}
+
+/** The partner's per-variation override in force on `date` (YYYY-MM-DD):
+ *  valid_from and valid_to are inclusive, a blank one is open. Of several in
+ *  force, the one that started latest (the most specific), then by id — the
+ *  same answer whatever order the rows come back in. The dates were never
+ *  read, so an expired or not-yet-started override priced. */
+export function partnerOverrideOn<R extends PartnerPricingRow>(rows: readonly R[], date: string): R | null {
+  const day = (date || '').slice(0, 10)
+  const live = rows.filter(r =>
+    (!r.valid_from || r.valid_from.slice(0, 10) <= day) &&
+    (!r.valid_to || r.valid_to.slice(0, 10) >= day))
+  live.sort((a, b) => {
+    const fa = a.valid_from ?? ''
+    const fb = b.valid_from ?? ''
+    if (fa !== fb) return fa > fb ? -1 : 1
+    return String(a.id ?? '') < String(b.id ?? '') ? -1 : 1
+  })
+  return live[0] ?? null
 }

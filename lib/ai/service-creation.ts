@@ -2139,7 +2139,9 @@ export async function createLandItineraryServices(
         (d: any) => d.is_cruise_day || d.accommodation_type === 'cruise'
       ).length + 1
 
-      const landCruiseTransportRules = await fetchCruiseTransportPricingRules(orgId)
+      // In the run currency, like every other rate here: a package entered
+      // in EGP was stored as that many dollars of cost.
+      const landCruiseTransportRules = await fetchCruiseTransportPricingRules(orgId, rates.rateNormalizer)
       const landCruiseTransportRule = findCruiseTransportRule(landCruiseTransportRules, cruiseDaysCount)
       if (landCruiseTransportRule) {
         const transport = getCruiseTransportRate(landCruiseTransportRule, totalPax)

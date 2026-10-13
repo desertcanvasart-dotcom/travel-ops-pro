@@ -37,7 +37,8 @@ describe('a sailing\'s length in days', () => {
   })
 
   it('a package matches its exact length only — never the closest', () => {
-    const pkgs = [{ id: '4d', duration_days: 4 }, { id: '5d', duration_days: 5 }]
+    // Only a Cruise Sightseeing package prices a sailing (Tours audit #2).
+    const pkgs = [{ id: '4d', duration_days: 4, package_type: 'cruise_sightseeing' }, { id: '5d', duration_days: 5, package_type: 'cruise_sightseeing' }]
     expect(packageForDuration(pkgs, 5)?.id).toBe('5d')
     expect(packageForDuration(pkgs, 6)).toBeNull()
   })

@@ -60,7 +60,7 @@ import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-curr
 import { tripAccommodationCost, type NightRates } from '@/lib/pricing/rooming'
 import { resolveAttractions, buildAliasMap } from '@/lib/pricing/attractions'
 import { PRESET_TIERS, presetTierFor } from '@/lib/vocabulary'
-import { cruiseSailings, packageForDuration, type Sailing } from '@/lib/pricing/cruise-package'
+import { cruiseSailings, packageForDuration, sailingRoute, type Sailing } from '@/lib/pricing/cruise-package'
 import { vehicleKeyLabel, vehicleRateForPax } from '@/lib/rates/vehicle-bands'
 import { rateGuideMode } from '@/lib/guides/guide-mode'
 
@@ -407,6 +407,8 @@ interface CruiseTransportPackage {
   includes: string | null
   notes: string | null
   is_active: boolean
+  /** The tie-break when several packages fit a sailing: oldest first. */
+  created_at?: string | null
 }
 
 // Cruise package pricing info (used during calculation)
@@ -2572,13 +2574,16 @@ export async function fetchCruiseTransportPricingRules(
  * (nights aboard + 1 — lib/pricing/cruise-package). Matches the
  * `duration_days` column EXACTLY: a 4D and a 5D package are different prices,
  * so a missing length is No rate, never the closest one (operator, 2026-09-17).
+ * Only a Cruise Sightseeing package, on the sailing's `route` when the caller
+ * knows it, picked in a fixed order (lib/pricing/cruise-package).
  * Name kept as findCruiseTransportRule for call-site compatibility.
  */
 export function findCruiseTransportRule(
   packages: CruiseTransportPackage[],
-  durationDays: number
+  durationDays: number,
+  route: readonly string[] = []
 ): CruiseTransportPackage | null {
-  const pkg = packageForDuration(packages, durationDays)
+  const pkg = packageForDuration(packages, durationDays, route)
   debugLog(pkg ? `✅ Found cruise transport package: ${pkg.package_name} (${durationDays}D)` : `❌ No cruise transport package for ${durationDays}D`)
   return pkg
 }
@@ -2618,7 +2623,7 @@ export function cruisePackagesFor(
   numPax: number
 ): CruisePackageInfo[] {
   return cruiseSailings(itinerary).map(sailing => {
-    const pkg = findCruiseTransportRule(packages, sailing.durationDays)
+    const pkg = findCruiseTransportRule(packages, sailing.durationDays, sailingRoute(itinerary, sailing))
     const priced = pkg ? getCruiseTransportRate(pkg, numPax) : null
     const rate = priced ? usableRate(priced.rate) : null
     if (!pkg || !priced || rate == null) {
@@ -4376,7 +4381,7 @@ export async function calculateDayBasedPricing(
         })
         debugLog(`🚢 Cruise package cost (2 pax): €${info.packageRate.toFixed(2)} (${info.packageName})`)
       } else {
-        const message = `No ${info.durationDays}D cruise transport package (${sailing.nights} nights aboard). Add a ${info.durationDays}-day package in Rates → Transport Packages.`
+        const message = `No ${info.durationDays}D cruise transport package (${sailing.nights} nights aboard). Add an active ${info.durationDays}-day Cruise Sightseeing package for this route in Tours › Transport Packages.`
         listUnpriced({ id, dayNumber: firstDay, serviceType: 'transportation', serviceName: `Cruise transport package (${info.durationDays}D)`, isPerPax: false }, {
           kind: 'transport',
           reason: 'missing',
