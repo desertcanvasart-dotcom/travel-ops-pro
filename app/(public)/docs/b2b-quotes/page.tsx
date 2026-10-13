@@ -44,6 +44,13 @@ export default function B2BQuotesPage() {
           again. A new quote is a <strong>Draft</strong> and is valid for 30 days.
         </p>
         <p className="text-gray-600 mt-3">
+          The margin: until you change it in the calculator, the server picks it. With a partner chosen in the save
+          dialog, that is the partner&apos;s default margin (from <strong>Partners</strong>), or a margin stored for that
+          partner on this tour variation when there is one; without a partner, or for a partner whose margin is 0, it is your company&apos;s default
+          margin, else 25%. Choosing a partner prices the tour again at once, so the price in the dialog is the price
+          saved. A margin you set yourself is always used, partner or not.
+        </p>
+        <p className="text-gray-600 mt-3">
           Quote numbers run per company and per year: QT-2026-00001, QT-2026-00002 and so on. Your numbers do not skip
           when another company on the same installation makes a quote, and two quotes saved at the same moment get two
           numbers. A quote number cannot be changed.

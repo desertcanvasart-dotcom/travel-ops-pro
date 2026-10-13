@@ -19,12 +19,16 @@ const rpc = vi.hoisted(() => ({ days: [] as any[] }))
 vi.mock('@/lib/supabase-server', () => ({
   createServerClient: () => ({
     ...createMockClient(),
-    rpc: async (_fn: string, args: any) => { rpc.days = args.p_days; return { data: [{ days_inserted: args.p_days.length, services_inserted: 0 }], error: null } },
+    rpc: async (fn: string, args: any) => {
+      // The quote's first revision (create_quote_revision) is not this test's.
+      if (fn === 'create_quote_revision') return { data: null, error: null }
+      rpc.days = args.p_days; return { data: [{ days_inserted: args.p_days.length, services_inserted: 0 }], error: null }
+    },
   }),
 }))
 vi.mock('@/lib/auth/current-org', async () => {
   const { NextResponse } = await import('next/server')
-  return { getCurrentOrgId: async () => 'org-1', noOrgResponse: () => NextResponse.json({ success: false }, { status: 403 }) }
+  return { getCurrentOrgId: async () => 'org-1', getCurrentUserId: async () => 'user-1', noOrgResponse: () => NextResponse.json({ success: false }, { status: 403 }) }
 })
 vi.mock('@/lib/vocabulary-server', () => ({ vocabularyItemsForCurrentOrg: vi.fn(async () => []) }))
 // USD 1 = JPY 150; EUR 1 = USD 1.08. No network.

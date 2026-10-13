@@ -95,6 +95,8 @@ describe('the B2B partner (fix 21)', () => {
 
   it('the partner reads are org-filtered as well', () => {
     const code = src('app/api/b2b/calculate-price/route.ts')
-    expect(code.match(/from\('b2b_partners'\)\s*\n\s*\.select\('default_margin_percent'\)\s*\n\s*\.eq\('id', partner_id\)\s*\n\s*\.eq\('org_id', orgId\)/g)).toHaveLength(2)
+    // One read now (loadPartnerMargins), shared by both engine branches.
+    expect(code.match(/from\('b2b_partners'\)\s*\n\s*\.select\('default_margin_percent'\)\s*\n\s*\.eq\('id', partnerId\)\s*\n\s*\.eq\('org_id', orgId\)/g)).toHaveLength(1)
+    expect(code).not.toMatch(/from\('b2b_partners'\)\s*\n\s*\.select\('default_margin_percent'\)\s*\n\s*\.eq\('id', partner_id\)/)
   })
 })

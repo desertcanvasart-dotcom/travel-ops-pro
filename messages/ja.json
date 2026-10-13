@@ -6377,7 +6377,10 @@
       "cancel": "キャンセル",
       "loadFailed": "オプションを読み込めませんでした。再読み込みしてください。",
       "saveFailed": "オプションを保存できませんでした。",
-      "deleteFailed": "オプションを削除できませんでした。"
+      "deleteFailed": "オプションを削除できませんでした。",
+      "inUse": "「{name}」は保存済みの見積もり {count} 件で使われているため削除できません（{numbers}）。代わりに無効にしてください。今後は提案されなくなり、それらの見積もりはそのまま残ります。",
+      "deactivate": "無効にする",
+      "deactivateFailed": "オプションを無効にできませんでした。"
     }
   },
   "profitLoss": {
@@ -7780,6 +7783,9 @@
     "tablePerPerson": "1人あたり",
     "saveQuote": "見積りを保存",
     "partnerOptional": "パートナー（オプション）",
+    "partnerMarginApplied": "このパートナーのマージン {percent}% で計算しています。",
+    "partnerMarginYours": "設定したマージン {percent}% で計算しています（パートナーのマージンより優先）。",
+    "repricingForPartner": "このパートナーで再計算しています…",
     "noPartnerDirect": "パートナーなし / 直接クライアント",
     "clientDetailsOptional": "クライアント詳細（オプション）",
     "clientName": "クライアント名",

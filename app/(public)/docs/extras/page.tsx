@@ -33,6 +33,12 @@ export default function ExtrasPage() {
           <strong>Per booking</strong>). Each row has <strong>Duplicate</strong>, <strong>Edit</strong> and <strong>Delete</strong>;
           delete asks you to confirm.
         </p>
+        <p className="text-gray-600 mb-3">
+          An extra that one of your saved B2B quotes sells cannot be deleted. The page says how many quotes use it and
+          names the newest five, and offers <strong>Deactivate</strong> instead: the extra is no longer offered, and
+          those quotes keep it. A quote counts when its saved services include that extra, whatever the quote&rsquo;s
+          status.
+        </p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>Amounts show as &ldquo;currency amount&rdquo;: the row&rsquo;s own currency, else your company&rsquo;s rate currency.</li>
           <li>A blank amount shows <strong>Not priced</strong>, never 0.</li>
@@ -78,7 +84,6 @@ export default function ExtrasPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li>It does not warn you when you delete an extra that a saved B2B quote selected. That quote later shows the extra as not found.</li>
           <li>It does not attach extras to itineraries; they are offered by the B2B calculator and on bookings.</li>
           <li>It does not hold per-programme upgrades; those are set on the tour variation.</li>
         </ul>

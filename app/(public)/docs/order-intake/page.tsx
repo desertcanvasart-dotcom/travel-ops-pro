@@ -54,12 +54,14 @@ export default function OrderIntakePage() {
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>the client, if new;</li>
           <li>a standard variation of the programme, if it has none;</li>
-          <li>a draft B2B quote, valid for 30 days, with the order&apos;s details in its notes;</li>
+          <li>a draft B2B quote, valid for 30 days, with the order&apos;s details in its notes, and its first revision (&ldquo;Quote created&rdquo;);</li>
           <li>
             a <strong>pending</strong> seat hold on that date&apos;s departure, when you run one and the party fits the
             seats left. Seats left are the departure&apos;s maximum less the larger of its booked count and its
-            confirmed holds, less its pending holds. When the party does not fit, the quote is still made, no seats are
-            held, and the result says how many were free.
+            confirmed holds, less its pending holds. The count and the hold are one step in the database, with the
+            departure locked while it runs: when two orders for the last seats arrive at the same moment, the first
+            is held and the second is not. When the party does not fit, the quote is still made, no seats are held,
+            and the result says how many were free.
           </li>
         </ul>
         <p className="text-gray-600 mt-3">The result links to the quote.</p>
@@ -108,7 +110,6 @@ export default function OrderIntakePage() {
           <li>It does not create an itinerary or a booking. Convert the quote when the customer confirms.</li>
           <li>It does not confirm a seat hold or change the departure&apos;s booked count; confirm holds on the departure.</li>
           <li>It prices at the standard tier with the defaults above; change anything else by pricing the tour in the calculator.</li>
-          <li>The seat check is made when the order is processed; two orders for the last seats at the same moment can both be held.</li>
         </ul>
       </section>
     </div>

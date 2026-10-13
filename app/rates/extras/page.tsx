@@ -62,6 +62,9 @@ export default function ExtrasPage() {
   const [draft, setDraft] = useState<Draft | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // A delete refused because saved quotes sell the extra: what to say, and
+  // the extra the Deactivate button would switch off.
+  const [inUse, setInUse] = useState<{ extra: Extra; count: number; quoteNumbers: string[] } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -101,9 +104,27 @@ export default function ExtrasPage() {
   const remove = async (x: Extra) => {
     const ok = await dialog.confirmDelete(x.name)
     if (!ok) return
+    setInUse(null)
     const res = await fetch(`/api/extras-catalogue/${x.id}`, { method: 'DELETE' })
     const data = await res.json().catch(() => ({}))
+    if (res.status === 409 && data.in_use) {
+      setError(null)
+      setInUse({ extra: x, count: data.in_use.count, quoteNumbers: data.in_use.quote_numbers || [] })
+      return
+    }
     if (!res.ok || !data.success) { setError(data.error || t('deleteFailed')); return }
+    await load()
+  }
+
+  const deactivate = async (x: Extra) => {
+    const res = await fetch(`/api/extras-catalogue/${x.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: false }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.success) { setError(data.error || t('deactivateFailed')); return }
+    setInUse(null)
     await load()
   }
 
@@ -139,6 +160,31 @@ export default function ExtrasPage() {
       <p className="text-sm text-gray-500 mb-6">{t('subtitle')}</p>
 
       {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
+      {inUse && (
+        <div role="alert" className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm flex items-start justify-between gap-3">
+          <p>
+            {t('inUse', {
+              name: inUse.extra.name,
+              count: inUse.count,
+              numbers: inUse.quoteNumbers.join(', ') + (inUse.count > inUse.quoteNumbers.length ? ', …' : ''),
+            })}
+          </p>
+          <div className="flex items-center gap-2 shrink-0">
+            {inUse.extra.is_active && (
+              <button
+                type="button"
+                onClick={() => void deactivate(inUse.extra)}
+                className="px-3 py-1.5 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700"
+              >
+                {t('deactivate')}
+              </button>
+            )}
+            <button type="button" aria-label={t('cancel')} onClick={() => setInUse(null)} className="p-1 text-amber-700 hover:text-amber-900">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-primary-600" /></div>
