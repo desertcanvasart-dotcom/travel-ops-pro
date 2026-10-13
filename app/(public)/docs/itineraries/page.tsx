@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
+import { Tip, DocScreenshot } from '../layout'
 
 export default function ItinerariesPage() {
   return (
@@ -14,183 +14,156 @@ export default function ItinerariesPage() {
 
       <h1 className="text-3xl font-bold text-gray-900 mb-4">Itineraries</h1>
       <p className="text-gray-600 mb-8">
-        Itineraries are the heart of Autoura. An itinerary is a day-by-day trip plan with pricing that you send to clients as a quote.
+        An itinerary is a trip: the client, the dates, the travellers, a day-by-day plan with a service line for each thing
+        you buy, and the price the client pays. It is what you quote, send, confirm and book. Open it from{' '}
+        <strong>Sell &rsaquo; Itineraries</strong>. The menu shows it to admins, managers and agents; the owner always sees
+        it. You only ever see your own company&apos;s trips.
       </p>
 
-      {/* Viewing */}
+      {/* List */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Viewing Itineraries</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">The list</h2>
         <p className="text-gray-600 mb-3">
-          Go to <strong>Itineraries</strong> in the sidebar. At the top, you see status cards:
+          The page is titled <strong>Itineraries</strong> (&ldquo;Create and manage client trip itineraries&rdquo;), newest
+          first, 100 rows at a time with <strong>Load more</strong> for the next 100. Partner (B2B) trips are not listed here.
         </p>
         <ul className="list-disc list-inside space-y-1 text-gray-700 mb-3">
-          <li><strong>Draft</strong> &mdash; Still being prepared</li>
-          <li><strong>Sent</strong> &mdash; Sent to the client</li>
-          <li><strong>Confirmed</strong> &mdash; Client accepted</li>
-          <li><strong>Completed</strong> &mdash; Trip is over</li>
-          <li><strong>Cancelled</strong> &mdash; Client declined</li>
+          <li>
+            <strong>Total, Draft, Sent, Confirmed, Completed, Cancelled</strong> &mdash; how many of your company&apos;s
+            trips are in each status, counted on the server over every trip (not just the rows loaded). Click a card to
+            show only that status.
+          </li>
+          <li>
+            <strong>Search</strong> &mdash; client name or email, trip name or itinerary code. It searches every trip on the
+            server, a moment after you stop typing.
+          </li>
+          <li>
+            Columns: <strong>Code, Created, Client, Trip, Owner</strong> (&ldquo;Unassigned&rdquo; in amber when nobody owns it),{' '}
+            <strong>Dates, Days, Pax</strong> (adults / children), <strong>Cost</strong> (the client price in the trip&apos;s
+            currency), <strong>Lang</strong>, <strong>Status</strong> and <strong>Actions</strong> (View, Edit, Delete).
+          </li>
         </ul>
-        <p className="text-gray-600">Click any status card to filter the list. Use the search bar to find by client name, trip name, or itinerary code.</p>
         <DocScreenshot src="/docs/itineraries/itinerary-list.jpg" alt="Itineraries list page with status cards and search bar" />
       </section>
 
-      {/* Creating */}
+      {/* Status */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Creating a New Itinerary</h2>
-        <ol className="list-decimal list-inside space-y-2 text-gray-700">
-          <li>Click <strong>New Itinerary</strong></li>
-          <li>Fill in:
-            <ul className="list-disc list-inside ml-6 mt-2 space-y-1 text-gray-600">
-              <li><strong>Client Name</strong> (required)</li>
-              <li><strong>Client Email</strong> and <strong>Phone</strong></li>
-              <li><strong>Trip Name</strong> (e.g., &ldquo;6-Day Egypt Private Tour&rdquo;)</li>
-              <li><strong>Start Date</strong> and <strong>End Date</strong> (total days calculated automatically)</li>
-              <li><strong>Number of Adults</strong> (default: 2)</li>
-              <li><strong>Number of Children</strong> ages 4-12 (50% discount)</li>
-              <li><strong>Number of Infants</strong> ages 0-3 (free except flights)</li>
-              <li><strong>Currency</strong> (EUR by default)</li>
-              <li><strong>Notes</strong> (optional)</li>
-            </ul>
-          </li>
-          <li>Click <strong>Create Itinerary</strong></li>
-        </ol>
-        <ScreenshotPlaceholder caption="New itinerary creation form with client info, dates, and traveler counts" />
-      </section>
-
-      {/* Editing */}
-      <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Editing an Itinerary</h2>
-        <p className="text-gray-600 mb-4">
-          From the itinerary detail page, click the <strong>Edit</strong> button (pencil icon).
-        </p>
-
-        <h3 className="text-lg font-medium text-gray-900 mb-3">Adding Days</h3>
-        <ul className="list-disc list-inside space-y-1 text-gray-700 mb-4">
-          <li>Each day has a <strong>city</strong>, <strong>title</strong> (e.g., &ldquo;Arrival in Cairo&rdquo;), and <strong>description</strong></li>
-          <li>Set the <strong>overnight city</strong> (where the client sleeps)</li>
-        </ul>
-
-        <h3 className="text-lg font-medium text-gray-900 mb-3">Adding Services to Each Day</h3>
-        <ol className="list-decimal list-inside space-y-1 text-gray-700 mb-4">
-          <li>Click <strong>Add Service</strong> under any day</li>
-          <li>Choose the type: Hotel, Guide, Transportation, Entrance Fee, Meal, Activity, Tips, Supplies, or other</li>
-          <li>Enter the service name, quantity, and rates</li>
-          <li>Costs calculate automatically in <strong>Auto</strong> mode</li>
-        </ol>
-        <ScreenshotPlaceholder caption="Itinerary edit page showing days with services, cost mode toggle, and add service button" />
-
-        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Cost Modes</h3>
-        <ul className="list-disc list-inside space-y-1 text-gray-700 mb-4">
-          <li><strong>Auto</strong> &mdash; The system looks up your rates database and calculates costs automatically</li>
-          <li><strong>Manual</strong> &mdash; You enter costs by hand for each service</li>
-        </ul>
-        <Tip>
-          <strong>Tip:</strong> Keep your rates database up to date and use Auto cost mode for instant, accurate pricing.
-        </Tip>
-
-        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Inclusions &amp; Exclusions</h3>
-        <p className="text-gray-600">
-          Add items that are included in the trip (e.g., &ldquo;All entrance fees&rdquo;, &ldquo;Private air-conditioned vehicle&rdquo;) and items that are NOT included (e.g., &ldquo;International flights&rdquo;, &ldquo;Travel insurance&rdquo;).
-        </p>
-      </section>
-
-      {/* Viewing Detail */}
-      <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Itinerary Detail Page</h2>
-        <p className="text-gray-600 mb-3">The detail page shows everything in a clean layout:</p>
-        <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>Client Info</strong> &mdash; Name, email, phone</li>
-          <li><strong>Trip Summary</strong> &mdash; Dates, total days, travelers, total cost</li>
-          <li><strong>Assigned Resources</strong> &mdash; Guide, vehicle, pickup details</li>
-          <li><strong>Day-by-Day Breakdown</strong> &mdash; Click any day to expand services</li>
-          <li><strong>Inclusions &amp; Exclusions</strong></li>
-          <li><strong>Expenses</strong> &mdash; Costs logged against this itinerary</li>
-          <li><strong>Profit &amp; Loss</strong> &mdash; Revenue vs. costs breakdown</li>
-        </ul>
-        <ScreenshotPlaceholder caption="Itinerary detail page with client info, trip summary, and day-by-day breakdown" />
-      </section>
-
-      {/* Actions */}
-      <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Itinerary Actions</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left px-4 py-3 font-semibold text-gray-900 border-b border-gray-200">Action</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-900 border-b border-gray-200">What It Does</th>
-              </tr>
-            </thead>
-            <tbody className="text-gray-700">
-              <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">Download PDF</td><td className="px-4 py-2.5">Creates a professional PDF document you can share</td></tr>
-              <tr className="border-b border-gray-100 bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Send via WhatsApp</td><td className="px-4 py-2.5">Sends the itinerary to the client on WhatsApp</td></tr>
-              <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">Send Email</td><td className="px-4 py-2.5">Emails the itinerary to the client</td></tr>
-              <tr className="border-b border-gray-100 bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Generate Invoice</td><td className="px-4 py-2.5">Creates an invoice from this itinerary</td></tr>
-              <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">Create Booking</td><td className="px-4 py-2.5">Converts confirmed itinerary into a booking</td></tr>
-              <tr className="border-b border-gray-100 bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Generate Commissions</td><td className="px-4 py-2.5">Calculates commissions for all services</td></tr>
-              <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">Generate Tasks</td><td className="px-4 py-2.5">Uses AI to create operational tasks</td></tr>
-              <tr><td className="px-4 py-2.5 font-medium">Generate Documents</td><td className="px-4 py-2.5">Creates contracts and other documents</td></tr>
-              <tr className="bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Create Share Link</td><td className="px-4 py-2.5">A private live link for the client &mdash; see below</td></tr>
-              <tr><td className="px-4 py-2.5 font-medium">Ops Sheet</td><td className="px-4 py-2.5">Internal operations PDF &mdash; the day-by-day run sheet for your team</td></tr>
-              <tr className="bg-gray-50/50"><td className="px-4 py-2.5 font-medium">日程表 (Itinerary Doc)</td><td className="px-4 py-2.5">The customer-facing Japanese day-schedule document</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* Assigning Resources */}
-      <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Assigning Resources</h2>
-        <p className="text-gray-600 mb-3">The assignment panel on the itinerary detail page covers every resource type, each with its own Add flow:</p>
-        <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>Guides</strong> &mdash; language spoken and daily rate come from your guides database</li>
-          <li><strong>Vehicles</strong> &mdash; from your transportation database, with pickup location and time</li>
-          <li><strong>Hotels</strong> and <strong>Restaurants</strong></li>
-          <li><strong>Nile Cruises</strong></li>
-          <li><strong>Airport Assistants</strong> and <strong>Hotel Assistants</strong></li>
-        </ul>
-        <Tip>
-          Assignment is conflict-aware: the system checks the calendar and warns when a guide, vehicle or other resource is already booked on those dates.
-        </Tip>
-        <ScreenshotPlaceholder caption="Resource assignment panel showing all resource types with conflict warnings" />
-      </section>
-
-      {/* Trip Owner */}
-      <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Trip Owner</h2>
-        <p className="text-gray-600 mb-3">
-          Every itinerary names the <Link href="/docs/team-members" className="text-primary-600 hover:underline">team member</Link> responsible for it via the <strong>Trip owner</strong> dropdown on the detail page. An unowned trip shows &ldquo;Nobody owns this trip yet&rdquo; &mdash; treat that as a to-do, not a state: the owner is who the dashboard, follow-ups and your colleagues hold accountable.
-        </p>
-      </section>
-
-      {/* Client Share Links */}
-      <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Client Share Links</h2>
-        <p className="text-gray-600 mb-3">
-          Instead of a PDF snapshot, <strong>Create Share Link</strong> gives the client a private live page of their itinerary:
-        </p>
-        <ol className="list-decimal list-inside space-y-2 text-gray-700">
-          <li>Click <strong>Create Share Link</strong> on the itinerary detail page</li>
-          <li>Copy the generated link (a long, unguessable address) and send it by WhatsApp or email</li>
-          <li>The client sees the trip laid out day by day &mdash; and when you edit the itinerary, their link shows the updated version, no re-sending</li>
-        </ol>
-        <ul className="list-disc list-inside space-y-1 text-gray-700 mt-3">
-          <li>The page is read-only and shows client-facing content only &mdash; never your costs, margins or internal notes</li>
-          <li>Links can be revoked from the same place; a revoked link stops working immediately</li>
-        </ul>
-        <Tip>
-          A share link is best while the trip is still being shaped &mdash; it always shows the latest version. Once things are agreed, the PDF is the fixed record.
-        </Tip>
-      </section>
-
-      {/* Trip documents */}
-      <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Ops Sheet, Contract &amp; 日程表</h2>
-        <p className="text-gray-600 mb-3">Three documents generate from the itinerary, for three different readers:</p>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Changing the status</h2>
+        <p className="text-gray-600 mb-3">The Status dropdown on each row offers Draft, Sent, Confirmed, Completed and Cancelled.</p>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
-          <li><strong>Ops Sheet</strong> &mdash; the internal run sheet for your operations team: day by day, who is assigned, what is booked, pickup details. Never sent to the client.</li>
-          <li><strong>Contract</strong> &mdash; the booking agreement with terms, generated under your company letterhead (see <Link href="/docs/resources-documents" className="text-primary-600 hover:underline">Documents</Link>).</li>
-          <li><strong>日程表 (Itinerary Doc)</strong> &mdash; the customer-facing Japanese day-schedule: check-in/check-out pairing per stay, the 作成日 date, rendered with the customer&apos;s own template where one is set.</li>
+          <li>
+            <strong>Confirmed</strong> books the trip: its booking is created at the same moment, with your company&apos;s
+            payment terms. A trip with no usable price (a total of zero, or no currency) cannot be confirmed &mdash; you are
+            told to price it first, and nothing changes. If the booking could not be created, you are told, and you can
+            use <strong>Create booking</strong> on the trip.
+          </li>
+          <li>
+            <strong>Cancelled</strong> opens the same <strong>Cancel trip</strong> dialog as the itinerary page: an optional
+            reason, and, when the trip has a booking, a box (ticked) to cancel the booking with it.
+          </li>
+          <li>Only these statuses (and Quoted, which the quote flow sets) are accepted; anything else is refused.</li>
+        </ul>
+      </section>
+
+      {/* Delete */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Deleting a trip</h2>
+        <p className="text-gray-600 mb-3">
+          The bin asks you to confirm first. A trip is deleted only when nothing has happened on it yet. The delete is
+          refused, with the reasons, when the trip:
+        </p>
+        <ul className="list-disc list-inside space-y-1 text-gray-700 mb-3">
+          <li>has a booking (whatever its status),</li>
+          <li>has a customer payment recorded against it or its booking,</li>
+          <li>has an invoice,</li>
+          <li>has a supplier document that has been sent (anything but draft or cancelled), or</li>
+          <li>is Confirmed or Completed.</li>
+        </ul>
+        <p className="text-gray-600">
+          Cancel such a trip instead. When a trip is deleted, its days, services, translations, resource assignments, share
+          links and draft supplier documents go with it, and the contract and supplier-document PDFs stored for it are removed
+          from storage first.
+        </p>
+      </section>
+
+      {/* View page */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">The itinerary page</h2>
+        <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li>The stage steps and the one next action (send the quote, convert, create the booking, create the invoice, record a payment, &hellip;).</li>
+          <li>
+            <strong>Profit &amp; Loss</strong> &mdash; managers and above see the actual figures; agents see the quoted
+            figures only (the actual P&amp;L is a financial screen).
+          </li>
+          <li>Resources and their coverage (guide, vehicle, hotels, staff), the trip owner, and the share link.</li>
+          <li>
+            <strong>Create share link</strong> is refused while the trip is a draft or has no price, unless you choose to
+            share it anyway.
+          </li>
+          <li>Send by email or WhatsApp &mdash; marks the trip Sent only when it was a draft or quoted.</li>
+          <li>
+            The <strong>More</strong> menu: Edit itinerary, Add expense, Operations tasks, Duplicate, Cancel trip (or Reopen
+            when cancelled), and <strong>Generate commissions</strong> &mdash; shown only to admins and managers.
+          </li>
+          <li>
+            <strong>Manual cost mode</strong> lets you change each line&apos;s cost; the client total is then the sum of the
+            lines&apos; client prices plus any season supplement.
+          </li>
+        </ul>
+      </section>
+
+      {/* Edit page */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">The editor</h2>
+        <p className="text-gray-600 mb-3">
+          <strong>Edit</strong> opens the day and service editor. Days have a city, title, description and overnight city;
+          each service line has a type, a name, a supplier (or a rate from your rate tables), a quantity and a rate.
+        </p>
+        <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li>
+            Rates are in your company&apos;s <strong>rate currency</strong>; the line total is in the{' '}
+            <strong>trip&apos;s currency</strong>. Changing a quantity or a rate converts it: at the rate the line already
+            carries, else the trip&apos;s frozen rate (set when it was confirmed), else today&apos;s rate. The original
+            amount and the rate used are shown under the line. If no exchange rate can be loaded, the change is not made and
+            you are told why.
+          </li>
+          <li>
+            The client price of a changed line moves with its cost, at the line&apos;s own mark-up (or the trip&apos;s margin,
+            or 25% for a new line).
+          </li>
+          <li>
+            <strong>Total Cost</strong> at the bottom is the sum of the line costs. When you save, the trip&apos;s client
+            total becomes the sum of the lines&apos; client prices plus the season supplement &mdash; the same figure the
+            itinerary page, documents and booking use &mdash; and its supplier cost and profit are stored with it.
+          </li>
+          <li>
+            <strong>Reprice FX</strong> (on a confirmed trip with frozen rates) is shown only to admins and managers.
+          </li>
+        </ul>
+        <Tip>
+          The editor saves from your browser. Your company&apos;s days and services are the only ones it can read or write:
+          the database refuses any other company&apos;s.
+        </Tip>
+      </section>
+
+      {/* New */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">New Itinerary</h2>
+        <p className="text-gray-600 mb-3">
+          <strong>New Itinerary</strong> asks for the client&apos;s name, email and phone, the trip name, start and end dates,
+          adults, children (ages 4&ndash;12), infants, the currency, an optional programme and notes. It creates a draft at
+          zero with a code like ITN-2026-4821 and an English version. See{' '}
+          <Link href="/docs/itinerary-creation" className="text-primary-600 hover:underline">Itinerary Creation</Link> for the details.
+        </p>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>Partner (B2B) trips are not in this list; they are on the calendar and in the B2B screens.</li>
+          <li>A trip that has been booked or paid cannot be deleted, only cancelled.</li>
+          <li>The list does not move a trip&apos;s dates; the calendar does, for a trip without a booking or supplier documents.</li>
+          <li>The editor&apos;s Invoice button bills the trip total as one line with no tax line.</li>
         </ul>
       </section>
     </div>

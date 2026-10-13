@@ -58,6 +58,7 @@ import ComposeEmailModal from '@/components/unified/ComposeEmailModal'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { formatPhoneForWhatsApp, generateWhatsAppLink } from '@/lib/whatsapp-link'
 import { withReturnTo } from '@/lib/nav/return-to'
+import { useRole } from '@/hooks/useRole'
 
 const ItineraryMap = dynamic(() => import('@/components/ItineraryMap'), {
   ssr: false,
@@ -227,6 +228,9 @@ export default function ViewItineraryPage() {
   const router = useRouter()
   const supabase = createClient()
   const intlLocale = useLocale() as Language
+  // Generating commissions is a manager's action (the route refuses agents).
+  const { canAccess } = useRole()
+  const canGenerateCommissions = canAccess(['admin', 'manager'])
 
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [days, setDays] = useState<DayWithServices[]>([])
@@ -1402,6 +1406,8 @@ export default function ViewItineraryPage() {
     const data = await res.json().catch(() => ({}))
     if (!res.ok || !data.success) throw new Error(data.error || tStage('statusFailed'))
     setItinerary(prev => (prev ? { ...prev, status } : prev))
+    // Confirmed, but the booking it should have made was not: say so.
+    if (data.booking_error) await dialog.alert(tCommon('error'), data.booking_error, 'warning')
   }
 
   const closeOut = async () => {
@@ -1745,7 +1751,9 @@ export default function ViewItineraryPage() {
                   { label: tStage('editItinerary'), icon: <Edit2 className="w-4 h-4" />, href: `/itineraries/${itinerary.id}/edit` },
                   { label: tStage('addExpense'), icon: <Receipt className="w-4 h-4" />, onSelect: () => setExpenseSignal(n => n + 1) },
                   { label: generatingTasks ? t('generating') : t('operationsTasks'), icon: <ClipboardList className="w-4 h-4" />, onSelect: handleOpenTaskDialog, disabled: generatingTasks, title: t('generateOperationsTasks') },
-                  { label: generatingCommissions ? t('generating') : tStage('generateCommissions'), icon: <Handshake className="w-4 h-4" />, onSelect: handleGenerateCommissions, disabled: generatingCommissions },
+                  ...(canGenerateCommissions
+                    ? [{ label: generatingCommissions ? t('generating') : tStage('generateCommissions'), icon: <Handshake className="w-4 h-4" />, onSelect: handleGenerateCommissions, disabled: generatingCommissions }]
+                    : []),
                   { label: duplicating ? tStage('duplicating') : tStage('duplicate'), icon: <Copy className="w-4 h-4" />, onSelect: duplicateTrip, disabled: duplicating, title: tStage('duplicateHint') },
                   itinerary.status === 'cancelled'
                     ? { label: tStage('reopen'), icon: <RotateCcw className="w-4 h-4" />, onSelect: reopenTrip }

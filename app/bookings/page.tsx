@@ -19,12 +19,20 @@ import {
 } from 'lucide-react'
 import { Booking, BookingStatus, BOOKING_STATUS_CONFIG, statusChip } from '@/types/bookings'
 
+// One page of the list. The API returns the newest bookings first; the search
+// box searches every booking on the server, not just the rows loaded so far.
+const PAGE_SIZE = 50
+
 export default function BookingsPage() {
   const t = useTranslations('bookings')
 
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
+  const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [summary, setSummary] = useState({
     total: 0,
@@ -37,41 +45,49 @@ export default function BookingsPage() {
     cancelled: 0
   })
 
+  // The search runs on the server a moment after typing stops.
   useEffect(() => {
-    fetchBookings()
-  }, [statusFilter])
+    const timer = setTimeout(() => setSearch(searchQuery.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
-  const fetchBookings = async () => {
-    setLoading(true)
+  useEffect(() => {
+    fetchBookings(1)
+  }, [statusFilter, search])
+
+  const fetchBookings = async (pageToLoad: number) => {
+    if (pageToLoad === 1) setLoading(true)
+    else setLoadingMore(true)
     try {
-      const params = new URLSearchParams()
+      const params = new URLSearchParams({ page: String(pageToLoad), limit: String(PAGE_SIZE) })
       if (statusFilter !== 'all') {
         params.append('status', statusFilter)
       }
+      if (search) params.append('search', search)
 
       const response = await fetch(`/api/bookings?${params.toString()}`)
       const data = await response.json()
 
       if (data.success) {
-        setBookings(data.data || [])
+        const rows: Booking[] = data.data || []
+        setBookings(prev => {
+          if (pageToLoad === 1) return rows
+          const seen = new Set(prev.map(b => b.id))
+          return [...prev, ...rows.filter(b => !seen.has(b.id))]
+        })
+        setPage(pageToLoad)
+        setTotal(data.pagination?.total ?? rows.length)
         setSummary(data.summary || summary)
       }
     } catch (error) {
       console.error('Error fetching bookings:', error)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }
 
-  const filteredBookings = bookings.filter(booking => {
-    if (!searchQuery) return true
-    const search = searchQuery.toLowerCase()
-    return (
-      booking.booking_code.toLowerCase().includes(search) ||
-      booking.client_name.toLowerCase().includes(search) ||
-      booking.trip_name.toLowerCase().includes(search)
-    )
-  })
+  const filteredBookings = bookings
 
   const getStatusIcon = (status: BookingStatus) => {
     switch (status) {
@@ -267,7 +283,7 @@ export default function BookingsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-4">
-                      <span className="text-gray-700">{booking.trip_name}</span>
+                      <span className="text-gray-700">{booking.trip_name || '—'}</span>
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-2">
@@ -317,6 +333,19 @@ export default function BookingsPage() {
           </table>
         )}
       </div>
+
+      {/* The next page, newest first, from the server. */}
+      {!loading && bookings.length < total && (
+        <div className="flex justify-center mt-4">
+          <button
+            onClick={() => fetchBookings(page + 1)}
+            disabled={loadingMore}
+            className="px-4 py-2 text-sm font-medium text-[#647C47] bg-white border border-[#647C47]/40 rounded-lg hover:bg-[#e8ede3] disabled:opacity-50"
+          >
+            {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : `${t('loadMore')} (${bookings.length}/${total})`}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
