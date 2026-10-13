@@ -16,6 +16,17 @@ const VALID_CATEGORIES = ['tone', 'vocabulary', 'structure', 'formatting', 'bran
 const VALID_RULE_TYPES = ['enforce', 'prefer', 'avoid']
 const VALID_APPLIES_TO = ['itinerary', 'email', 'whatsapp', 'all']
 
+// applies_to as stored: missing or empty means every channel (['all']) — an
+// empty array used to be stored as-is ([] is truthy) and read as "applies to
+// nothing" on the page. Anything that is not a list of known channels is
+// rejected (null = invalid).
+function normaliseAppliesTo(value: unknown): string[] | null {
+  if (value === undefined || value === null) return ['all']
+  if (!Array.isArray(value)) return null
+  if (value.length === 0) return ['all']
+  return value.every(a => typeof a === 'string' && VALID_APPLIES_TO.includes(a)) ? value : null
+}
+
 // GET - List writing rules
 export async function GET(request: NextRequest) {
   try {
@@ -141,8 +152,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate applies_to
-    const finalAppliesTo = applies_to || ['all']
-    if (!finalAppliesTo.every((a: string) => VALID_APPLIES_TO.includes(a))) {
+    const finalAppliesTo = normaliseAppliesTo(applies_to)
+    if (!finalAppliesTo) {
       return NextResponse.json(
         { error: `Invalid applies_to values. Must be from: ${VALID_APPLIES_TO.join(', ')}` },
         { status: 400 }
@@ -226,6 +237,21 @@ export async function PATCH(request: NextRequest) {
         { error: `Invalid rule_type. Must be one of: ${VALID_RULE_TYPES.join(', ')}` },
         { status: 400 }
       )
+    }
+
+    if ('applies_to' in updates) {
+      const appliesTo = normaliseAppliesTo(updates.applies_to)
+      if (!appliesTo) {
+        return NextResponse.json(
+          { error: `Invalid applies_to values. Must be from: ${VALID_APPLIES_TO.join(', ')}` },
+          { status: 400 }
+        )
+      }
+      updates.applies_to = appliesTo
+    }
+
+    if ('is_active' in updates && typeof updates.is_active !== 'boolean') {
+      return NextResponse.json({ error: 'is_active must be true or false' }, { status: 400 })
     }
 
     // Validate priority if provided

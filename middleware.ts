@@ -58,7 +58,10 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/copilot': ['admin', 'manager', 'agent'],
   '/copilot-knowledge': ['admin', 'manager', 'agent'],
   '/concierge-briefs': ['admin', 'manager', 'agent'],
-  
+  // Content library and writing rules (/content-library/rules): the menu
+  // shows them to managers and above, and their API is admin/manager.
+  '/content-library': ['admin', 'manager'],
+
   // All authenticated users (including viewer)
   '/dashboard': ['admin', 'manager', 'agent', 'viewer'],
   '/analytics': ['admin', 'manager'],

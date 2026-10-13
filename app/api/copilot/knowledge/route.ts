@@ -10,6 +10,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { chunkText, embedBatch, EMBEDDING_MODEL, toPgVector } from '@/lib/embeddings'
+import { joinKnowledgeChunks } from '@/lib/copilot/knowledge-text'
 
 type KbSourceType = 'kb_faq' | 'kb_policy' | 'kb_tour' | 'kb_custom'
 const KB_TYPES: KbSourceType[] = ['kb_faq', 'kb_policy', 'kb_tour', 'kb_custom']
@@ -40,7 +41,30 @@ export async function GET(request: NextRequest) {
   const { data, error } = await q
   if (error) return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
 
-  return NextResponse.json({ success: true, entries: data || [] })
+  // full_text: the whole entry, for the edit modal. answer_text is only the
+  // parent's chunk 0, and editing that alone threw the other chunks away.
+  const entries = data || []
+  const multi = entries.filter((e) => (e.metadata as { total_chunks?: number } | null)?.total_chunks !== 1).map((e) => e.id)
+  const rest = new Map<string, { chunk_index: number; answer_text: string }[]>()
+  if (multi.length > 0) {
+    const { data: children, error: childErr } = await supabase
+      .from('copilot_knowledge')
+      .select('parent_id, chunk_index, answer_text')
+      .eq('org_id', orgId)
+      .in('parent_id', multi)
+    if (childErr) return NextResponse.json({ success: false, error: clientMessage(childErr, 'Internal server error') }, { status: 500 })
+    for (const c of children || []) {
+      const list = rest.get(c.parent_id) || []
+      list.push(c)
+      rest.set(c.parent_id, list)
+    }
+  }
+  const withText = entries.map((e) => {
+    const children = (rest.get(e.id) || []).sort((a, b) => a.chunk_index - b.chunk_index)
+    return { ...e, full_text: joinKnowledgeChunks([e.answer_text, ...children.map((c) => c.answer_text)]) }
+  })
+
+  return NextResponse.json({ success: true, entries: withText })
 }
 
 export async function POST(request: NextRequest) {

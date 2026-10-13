@@ -453,7 +453,6 @@ Public:               /, /login, /signup, /forgot-password, /reset-password,
 |-------|-------------|
 | `/content-library` | Content entries list |
 | `/content-library/[id]` | Content entry detail |
-| `/content-library/prompts` | AI prompt management |
 | `/content-library/rules` | Writing rules management |
 
 ### Administration
@@ -689,7 +688,6 @@ Additional rate endpoints:
 | GET/PUT/DELETE | `/api/content-library/[id]` | Specific entry |
 | GET/POST | `/api/content-library/[id]/variations` | Content variations |
 | GET | `/api/content-library/categories` | Content categories |
-| GET/POST | `/api/content-library/prompts` | AI prompts |
 | GET/POST | `/api/content-library/writing-rules` | Writing style rules |
 
 ### Administration Endpoints

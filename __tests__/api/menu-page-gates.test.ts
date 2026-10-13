@@ -64,8 +64,6 @@ const sorted = (roles: string[]) => [...roles].sort().join(',')
 // fixes its gaps and deletes its lines here.
 const KNOWN_GAPS: string[] = [
   '/templates: menu=admin,agent,manager server=admin,agent,manager,viewer',
-  '/content-library: menu=admin,manager server=admin,agent,manager,viewer',
-  '/content-library/rules: menu=admin,manager server=admin,agent,manager,viewer',
   '/pricing-grid: menu=admin,manager server=admin,agent,manager,viewer',
   '/b2c/quotes: menu=admin,manager server=admin,agent,manager,viewer',
   '/b2b/quotes: menu=admin,manager server=admin,agent,manager,viewer',

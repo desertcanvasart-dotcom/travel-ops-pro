@@ -7,12 +7,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { copilotToneFor } from '@/lib/copilot/tone'
 import { copilotThreadInOrg } from '@/lib/copilot/thread-access'
 import { generateDraft, draftFlags } from '@/lib/ai/draft-generator'
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { MODEL_DRAFT } from '@/lib/ai/models'
-import type { GenerateDraftRequest, CopilotTone } from '@/types/copilot'
+import type { GenerateDraftRequest } from '@/types/copilot'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
   // Hoisted so the catch block can mark this inbox row terminally failed.
   let inboxMessageIdForFailure: string | undefined
   try {
-    const body: GenerateDraftRequest & { user_id?: string } = await request.json()
+    const body: GenerateDraftRequest = await request.json()
 
     if (!body.inbox_message_id || !body.thread_id) {
       return NextResponse.json(
@@ -83,16 +84,8 @@ export async function POST(request: NextRequest) {
     }
     inboxMessageIdForFailure = body.inbox_message_id
 
-    // Fetch user's tone preference
-    let tone: CopilotTone = 'professional'
-    if (body.user_id) {
-      const { data: settings } = await supabase
-        .from('copilot_settings')
-        .select('tone')
-        .eq('user_id', body.user_id)
-        .single()
-      if (settings?.tone) tone = settings.tone as CopilotTone
-    }
+    // The signed-in user's tone — never a user_id from the request body.
+    const tone = await copilotToneFor(supabase, await getCurrentUserId())
 
     // Update inbox status to draft_pending
     await supabase

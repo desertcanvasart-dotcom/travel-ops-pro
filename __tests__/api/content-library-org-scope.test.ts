@@ -6,6 +6,8 @@
 // applies no RLS at all: only the routes' own filters stand between them.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { setMockTables, createMockClient } from '../_mock-supabase'
 
 const ctx = vi.hoisted(() => ({
@@ -44,7 +46,6 @@ import * as byId from '@/app/api/content-library/[id]/route'
 import * as variations from '@/app/api/content-library/[id]/variations/route'
 import * as categories from '@/app/api/content-library/categories/route'
 import * as rules from '@/app/api/content-library/writing-rules/route'
-import * as prompts from '@/app/api/content-library/prompts/route'
 
 const req = (url: string, init?: { method?: string; body?: unknown }) =>
   new NextRequest(`http://x${url}`, { method: init?.method ?? 'GET', ...(init?.body !== undefined ? { body: JSON.stringify(init.body) } : {}) })
@@ -175,24 +176,14 @@ describe('writing rules', () => {
   })
 })
 
+// The prompt templates screen and its API are gone (CL6): nothing linked to
+// the screen and the itinerary generator never read prompt_templates. The
+// table and its rows stay (per company since 20261208).
 describe('prompt templates', () => {
-  it("setting a default un-defaults only the company's own", async () => {
-    const res = await prompts.PATCH(req('/x', { method: 'PATCH', body: { id: 'p-a2', is_default: true } }))
-    expect(res.status).toBe(200)
-    const all = await table('prompt_templates')
-    expect(all.find(p => p.id === 'p-a')!.is_default).toBe(false)
-    expect(all.find(p => p.id === 'p-a2')!.is_default).toBe(true)
-    expect(all.find(p => p.id === 'p-b')!.is_default).toBe(true)
-  })
-
-  it("lists the company's own; creates stamped; another company's is 404", async () => {
-    const r = await (await prompts.GET(req('/api/content-library/prompts'))).json()
-    expect(r.map((x: { id: string }) => x.id).sort()).toEqual(['p-a', 'p-a2'])
-    const res = await prompts.POST(req('/x', { method: 'POST', body: { name: 'S', purpose: 'summary', user_prompt_template: 'x', is_default: true } }))
-    expect(res.status).toBe(201)
-    expect((await table('prompt_templates')).find(x => x.name === 'S')).toMatchObject({ org_id: 'org-a' })
-    expect((await prompts.PATCH(req('/x', { method: 'PATCH', body: { id: 'p-b', name: 'x' } }))).status).toBe(404)
-    expect((await prompts.DELETE(req('/x?id=p-b', { method: 'DELETE' }))).status).toBe(404)
+  it('have no screen and no API any more', () => {
+    for (const f of ['app/content-library/prompts/page.tsx', 'app/api/content-library/prompts/route.ts']) {
+      expect(existsSync(join(process.cwd(), f)), f).toBe(false)
+    }
   })
 })
 

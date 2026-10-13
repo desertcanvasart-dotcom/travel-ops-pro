@@ -8,12 +8,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { copilotToneFor } from '@/lib/copilot/tone'
 import { copilotThreadInOrg } from '@/lib/copilot/thread-access'
 import { generateDraft, draftFlags } from '@/lib/ai/draft-generator'
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { MODEL_DRAFT } from '@/lib/ai/models'
-import type { RegenerateDraftRequest, CopilotTone } from '@/types/copilot'
+import type { RegenerateDraftRequest } from '@/types/copilot'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,7 +29,7 @@ export async function POST(
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
     const { id } = await params
-    const body: RegenerateDraftRequest & { user_id?: string } = await request.json()
+    const body: RegenerateDraftRequest = await request.json()
 
     // Fetch the original draft
     const { data: originalDraft, error: fetchError } = await supabase
@@ -63,16 +64,8 @@ export async function POST(
       )
     }
 
-    // Fetch user's tone preference
-    let tone: CopilotTone = 'professional'
-    if (body.user_id) {
-      const { data: settings } = await supabase
-        .from('copilot_settings')
-        .select('tone')
-        .eq('user_id', body.user_id)
-        .single()
-      if (settings?.tone) tone = settings.tone as CopilotTone
-    }
+    // The signed-in user's tone — never a user_id from the request body.
+    const tone = await copilotToneFor(supabase, await getCurrentUserId())
 
     // Generate new draft with optional additional instructions
     const result = await generateDraft(

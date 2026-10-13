@@ -8,7 +8,6 @@ import {
 } from 'lucide-react'
 import CopilotContextCard from './CopilotContextCard'
 import type { CopilotThreadWithLatest, CopilotDraft, CopilotInboxMessage, CopilotContext } from '@/types/copilot'
-import { useAuth } from '@/app/contexts/AuthContext'
 
 interface CopilotReviewPanelProps {
   thread: CopilotThreadWithLatest | null
@@ -20,7 +19,6 @@ const WHATSAPP_WINDOW_MS = 23 * 60 * 60 * 1000 // 23 hours
 export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotReviewPanelProps) {
   const tConcierge = useTranslations('copilot.concierge')
   const tDraft = useTranslations('copilot.draft')
-  const { user } = useAuth()
   const [draft, setDraft] = useState<CopilotDraft | null>(null)
   const [inboxMessage, setInboxMessage] = useState<CopilotInboxMessage | null>(null)
   const [editableBody, setEditableBody] = useState('')
@@ -196,7 +194,6 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           additional_instructions: additionalInstructions || undefined,
-          user_id: user?.id,
         }),
       })
       const data = await res.json()
@@ -290,7 +287,6 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
         body: JSON.stringify({
           inbox_message_id: inboxMessage.id,
           thread_id: thread.id,
-          user_id: user?.id,
         }),
       })
       const data = await res.json()

@@ -275,7 +275,8 @@ describe('generate-itinerary route — the company’s own content library and w
   const variation = (org: string, id: string, text: string) => ({
     id: `v-${id}`, content_id: id, tier: 'standard', is_active: true, title: 'Pyramids of Giza', description: text,
     highlights: [], inclusions: [],
-    content_library: { id, org_id: org, name: 'Pyramids of Giza', tags: ['cairo'], location: 'Cairo', is_cruise: false,
+    // is_active: the generator skips a deactivated item (Content Library › Active).
+    content_library: { id, org_id: org, is_active: true, name: 'Pyramids of Giza', tags: ['cairo'], location: 'Cairo', is_cruise: false,
       content_categories: { name: 'Sites', slug: 'sites' } },
   })
 
