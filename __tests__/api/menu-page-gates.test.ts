@@ -63,8 +63,6 @@ const sorted = (roles: string[]) => [...roles].sort().join(',')
 // Screens not yet audited, as "path: menu=… server=…". Each group's audit
 // fixes its gaps and deletes its lines here.
 const KNOWN_GAPS: string[] = [
-  '/content-library: menu=admin,manager server=admin,agent,manager,viewer',
-  '/content-library/rules: menu=admin,manager server=admin,agent,manager,viewer',
   '/pricing-grid: menu=admin,manager server=admin,agent,manager,viewer',
   '/b2c/quotes: menu=admin,manager server=admin,agent,manager,viewer',
   '/b2b/quotes: menu=admin,manager server=admin,agent,manager,viewer',

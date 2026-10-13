@@ -107,7 +107,6 @@ export default function ResourcesDocumentsPage() {
           <li><strong>Tour descriptions</strong> &mdash; Reusable descriptions for popular destinations</li>
           <li><strong>Email templates</strong> &mdash; Pre-written emails for common scenarios</li>
           <li><strong>Itinerary text blocks</strong> &mdash; Standard day descriptions you use repeatedly</li>
-          <li><strong>AI Prompts</strong> &mdash; Custom prompts for generating content</li>
           <li><strong>Writing Rules</strong> &mdash; Style guidelines so AI-generated content matches your brand voice</li>
         </ul>
 

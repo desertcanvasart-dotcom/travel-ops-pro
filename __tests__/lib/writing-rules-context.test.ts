@@ -41,6 +41,48 @@ describe('buildWritingRulesContext', () => {
   it('nothing when there are no rules', () => {
     expect(buildWritingRulesContext([])).toBe('')
   })
+
+  // WR4: applies_to was ignored, Preferred rules and examples never reached the AI.
+  it('keeps only rules for itineraries: applies_to itinerary or all (none counts as all)', () => {
+    const ctx = buildWritingRulesContext([
+      rule({ name: 'For all', applies_to: ['all'] }),
+      rule({ name: 'For itineraries', applies_to: ['itinerary', 'email'] }),
+      rule({ name: 'Unset', applies_to: [] }),
+      rule({ name: 'Null', applies_to: null }),
+      rule({ name: 'Email only', applies_to: ['email'] }),
+      rule({ name: 'WhatsApp only', applies_to: ['whatsapp'] }),
+    ])
+    for (const n of ['For all', 'For itineraries', 'Unset', 'Null']) expect(ctx).toContain(`- ${n}:`)
+    expect(ctx).not.toContain('Email only')
+    expect(ctx).not.toContain('WhatsApp only')
+    expect(buildWritingRulesContext([rule({ applies_to: ['email'] })])).toBe('')
+  })
+
+  it('Preferred rules come after MUST follow and AVOID, at most three', () => {
+    const ctx = buildWritingRulesContext([
+      ...[1, 2, 3, 4].map(i => rule({ name: `Pref ${i}`, rule_type: 'prefer' })),
+      rule({ name: 'No cliches', rule_type: 'avoid' }),
+      rule({}),
+    ])
+    expect(ctx.indexOf('MUST follow:')).toBeLessThan(ctx.indexOf('AVOID:'))
+    expect(ctx.indexOf('AVOID:')).toBeLessThan(ctx.indexOf('PREFER where it fits:'))
+    expect(ctx).toContain('- Pref 3:')
+    expect(ctx).not.toContain('Pref 4')
+  })
+
+  it('one good and one bad example per rule, clipped', () => {
+    const long = 'x'.repeat(400)
+    const ctx = buildWritingRulesContext([
+      rule({ examples: { good: ['', 'Sunrise over the Nile', 'second good'], bad: ['Breathtaking views', 'second bad'] } }),
+      rule({ name: 'Only bad', rule_type: 'avoid', examples: { bad: [long] } }),
+      rule({ name: 'No examples', examples: {} }),
+    ])
+    expect(ctx).toContain('- Warm tone: Write warmly\n  e.g. write "Sunrise over the Nile"; not "Breathtaking views"\n')
+    expect(ctx).not.toContain('second')
+    const badLine = ctx.split('\n').find(l => l.startsWith('  e.g. not "x'))!
+    expect(badLine.length).toBeLessThan(200)
+    expect(ctx).toContain('- No examples: Write warmly\n')
+  })
 })
 
 describe('the generator reads only its company’s content', () => {
@@ -52,9 +94,9 @@ describe('the generator reads only its company’s content', () => {
       ],
       content_variations: [
         { id: 'va', content_id: 'ca', tier: 'standard', is_active: true, description: 'A text',
-          content_library: { id: 'ca', org_id: 'org-a', name: 'Giza', tags: [], location: 'Cairo', is_cruise: false, content_categories: { name: 'S', slug: 's' } } },
+          content_library: { id: 'ca', org_id: 'org-a', is_active: true, name: 'Giza', tags: [], location: 'Cairo', is_cruise: false, content_categories: { name: 'S', slug: 's' } } },
         { id: 'vb', content_id: 'cb', tier: 'standard', is_active: true, description: 'B text',
-          content_library: { id: 'cb', org_id: 'org-b', name: 'Giza', tags: [], location: 'Cairo', is_cruise: false, content_categories: { name: 'S', slug: 's' } } },
+          content_library: { id: 'cb', org_id: 'org-b', is_active: true, name: 'Giza', tags: [], location: 'Cairo', is_cruise: false, content_categories: { name: 'S', slug: 's' } } },
       ],
       content_library: [
         { id: 'cruise-b', org_id: 'org-b', is_cruise: true, is_active: true, name: 'B cruise', content_variations: [] },
@@ -70,6 +112,11 @@ describe('the generator reads only its company’s content', () => {
   it('content library', async () => {
     const items = await fetchContentLibrary(createMockClient(), 'org-a', 'standard', ['Cairo'], [])
     expect(items.map(i => i.description)).toEqual(['A text'])
+    // CL5: a deactivated item is not used, though its variation is active.
+    const db = createMockClient()
+    const rows = (await db.from('content_variations').select()) as { data: { content_library: { is_active: boolean } }[] }
+    rows.data[0].content_library.is_active = false
+    expect(await fetchContentLibrary(db, 'org-a', 'standard', ['Cairo'], [])).toEqual([])
     expect(await fetchContentLibrary(createMockClient(), null, 'standard', ['Cairo'], [])).toEqual([])
   })
 

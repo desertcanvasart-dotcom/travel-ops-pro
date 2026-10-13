@@ -38,10 +38,12 @@ const CATEGORIES = [
   { id: 'brand', label: 'Brand', icon: Award, color: 'purple' },
 ] as const
 
+// Static class names: Tailwind only ships classes it can see written out,
+// so `text-${color}-700` rendered with no colour at all.
 const RULE_TYPES = [
-  { id: 'enforce', label: 'Must Follow', color: 'red' },
-  { id: 'prefer', label: 'Preferred', color: 'amber' },
-  { id: 'avoid', label: 'Avoid', color: 'gray' },
+  { id: 'enforce', label: 'Must Follow', heading: 'text-red-700', dot: 'bg-red-500', badge: 'bg-red-50 text-red-700' },
+  { id: 'prefer', label: 'Preferred', heading: 'text-amber-700', dot: 'bg-amber-500', badge: 'bg-amber-50 text-amber-700' },
+  { id: 'avoid', label: 'Avoid', heading: 'text-gray-700', dot: 'bg-gray-500', badge: 'bg-gray-50 text-gray-700' },
 ] as const
 
 const APPLIES_TO = [
@@ -83,7 +85,10 @@ interface RuleFormData {
   applies_to: string[]
 }
 
-const DEFAULT_FORM: RuleFormData = {
+// A fresh copy every time: the form's example arrays are edited in place
+// (updateExample/addExample), which used to write into this shared default
+// so the next "Add Rule" opened with the previous rule's examples.
+const defaultForm = (): RuleFormData => ({
   name: '',
   category: 'vocabulary',
   rule_type: 'enforce',
@@ -91,7 +96,7 @@ const DEFAULT_FORM: RuleFormData = {
   examples: { good: [''], bad: [''] },
   priority: 5,
   applies_to: ['all'],
-}
+})
 
 export default function WritingRulesPage() {
   const t = useTranslations('writingRules')
@@ -101,10 +106,11 @@ export default function WritingRulesPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState<RuleFormData>(DEFAULT_FORM)
+  const [formData, setFormData] = useState<RuleFormData>(defaultForm)
   const [expandedRules, setExpandedRules] = useState<Set<string>>(new Set())
   const [filterCategory, setFilterCategory] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [togglingId, setTogglingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchRules()
@@ -112,7 +118,9 @@ export default function WritingRulesPage() {
 
   async function fetchRules() {
     try {
-      const response = await fetch('/api/content-library/writing-rules')
+      // Inactive rules too: they are listed (dimmed) so they can be turned
+      // back on. Only active ones reach the AI (lib/ai/content-library.ts).
+      const response = await fetch('/api/content-library/writing-rules?active_only=false')
       if (!response.ok) throw new Error(t('failedToFetch'))
       const data = await response.json()
       setRules(data)
@@ -141,19 +149,41 @@ export default function WritingRulesPage() {
       category: rule.category,
       rule_type: rule.rule_type,
       description: rule.description,
+      // Copies, so editing the form does not change the listed rule.
       examples: {
-        good: rule.examples?.good?.length ? rule.examples.good : [''],
-        bad: rule.examples?.bad?.length ? rule.examples.bad : [''],
+        good: rule.examples?.good?.length ? [...rule.examples.good] : [''],
+        bad: rule.examples?.bad?.length ? [...rule.examples.bad] : [''],
       },
       priority: rule.priority,
-      applies_to: rule.applies_to || ['all'],
+      applies_to: rule.applies_to?.length ? [...rule.applies_to] : ['all'],
     })
     setShowForm(true)
   }
 
   function handleNew() {
-    setFormData(DEFAULT_FORM)
+    setFormData(defaultForm())
     setShowForm(true)
+  }
+
+  async function handleToggleActive(rule: WritingRule) {
+    setTogglingId(rule.id)
+    setError(null)
+    try {
+      const response = await fetch('/api/content-library/writing-rules', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: rule.id, is_active: !rule.is_active })
+      })
+      if (!response.ok) throw new Error(t('failedToToggle'))
+      setRules(prev => prev.map(r => (r.id === rule.id ? { ...r, is_active: !rule.is_active } : r)))
+      setSuccess(rule.is_active ? t('ruleDeactivated') : t('ruleActivated'))
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (err) {
+      console.error('Toggle error:', err)
+      setError(t('failedToToggle'))
+    } finally {
+      setTogglingId(null)
+    }
   }
 
   async function handleSave() {
@@ -222,15 +252,12 @@ export default function WritingRulesPage() {
   }
 
   function updateExample(type: 'good' | 'bad', index: number, value: string) {
-    const newExamples = { ...formData.examples }
-    newExamples[type][index] = value
-    setFormData({ ...formData, examples: newExamples })
+    const list = formData.examples[type].map((e, i) => (i === index ? value : e))
+    setFormData({ ...formData, examples: { ...formData.examples, [type]: list } })
   }
 
   function addExample(type: 'good' | 'bad') {
-    const newExamples = { ...formData.examples }
-    newExamples[type].push('')
-    setFormData({ ...formData, examples: newExamples })
+    setFormData({ ...formData, examples: { ...formData.examples, [type]: [...formData.examples[type], ''] } })
   }
 
   function removeExample(type: 'good' | 'bad', index: number) {
@@ -341,6 +368,25 @@ export default function WritingRulesPage() {
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-8 h-8 text-[#647C47] animate-spin" />
           </div>
+        ) : filteredRules.length === 0 ? (
+          <div className="bg-white rounded-xl border border-dashed border-gray-300 py-14 text-center">
+            <BookOpen className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+            {rules.length === 0 ? (
+              <>
+                <p className="font-medium text-gray-700">{t('emptyTitle')}</p>
+                <p className="text-sm text-gray-500 mt-1 mb-4">{t('emptyHint')}</p>
+                <button
+                  onClick={handleNew}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f613a] transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  {t('addRule')}
+                </button>
+              </>
+            ) : (
+              <p className="text-sm text-gray-500">{t('emptyFiltered')}</p>
+            )}
+          </div>
         ) : (
           <div className="space-y-6">
             {RULE_TYPES.map(type => {
@@ -349,8 +395,8 @@ export default function WritingRulesPage() {
               
               return (
                 <div key={type.id}>
-                  <h2 className={`text-sm font-semibold mb-3 flex items-center gap-2 text-${type.color}-700`}>
-                    <span className={`w-2 h-2 rounded-full bg-${type.color}-500`}></span>
+                  <h2 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${type.heading}`}>
+                    <span className={`w-2 h-2 rounded-full ${type.dot}`}></span>
                     {t(`ruleTypes.${type.id}`)}
                     <span className="text-gray-400 font-normal">({typeRules.length})</span>
                   </h2>
@@ -362,7 +408,7 @@ export default function WritingRulesPage() {
                       return (
                         <div
                           key={rule.id}
-                          className="bg-white rounded-xl border border-gray-200 overflow-hidden"
+                          className={`bg-white rounded-xl border border-gray-200 overflow-hidden ${rule.is_active ? '' : 'opacity-60'}`}
                         >
                           <div
                             className="flex items-center gap-3 p-4 cursor-pointer hover:bg-gray-50 transition-colors"
@@ -372,9 +418,14 @@ export default function WritingRulesPage() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-gray-900">{rule.name}</span>
-                                <span className={`text-xs px-1.5 py-0.5 rounded bg-${type.color}-50 text-${type.color}-700`}>
+                                <span className={`text-xs px-1.5 py-0.5 rounded ${type.badge}`}>
                                   {t(`ruleTypes.${type.id}`)}
                                 </span>
+                                {!rule.is_active && (
+                                  <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500" title={t('inactiveHint')}>
+                                    {t('inactive')}
+                                  </span>
+                                )}
                                 <span className="text-xs text-gray-400">
                                   {t('priority')}: {rule.priority}
                                 </span>
@@ -386,6 +437,20 @@ export default function WritingRulesPage() {
                               )}
                             </div>
                             <div className="flex items-center gap-2">
+                              <label
+                                className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer"
+                                title={t('inactiveHint')}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={rule.is_active}
+                                  disabled={togglingId === rule.id}
+                                  onChange={() => handleToggleActive(rule)}
+                                  className="accent-[#647C47]"
+                                />
+                                {t('active')}
+                              </label>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation()
@@ -449,7 +514,7 @@ export default function WritingRulesPage() {
 
                               <div className="mt-3 flex flex-wrap gap-2">
                                 <span className="text-xs text-gray-400">{t('appliesTo')}:</span>
-                                {(rule.applies_to || ['all']).map(a => (
+                                {(rule.applies_to?.length ? rule.applies_to : ['all']).map(a => (
                                   <span key={a} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
                                     {t(`appliesOptions.${a}`)}
                                   </span>

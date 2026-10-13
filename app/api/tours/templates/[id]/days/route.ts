@@ -38,12 +38,27 @@ function contentNotFound(ids: string[]) {
   return NextResponse.json({ success: false, error: 'Content item not found', content_ids: ids }, { status: 404 })
 }
 
-/** Drop an embedded content item that is not this company's. */
-function ownContent<T extends Record<string, any> | null>(row: T, orgId: string): T {
-  if (!row) return row
-  const c = (row as Record<string, any>).content_library
-  if (c && c.org_id !== orgId) return { ...row, content_library: null }
-  return row
+// tour_day_activities.content_id has no foreign key (20261208), so PostgREST
+// cannot embed content_library(...) from an activity — every select that
+// tried failed (PGRST200): the day plan never loaded, and adding or editing
+// an activity saved it and then answered 500. The content is read with its
+// own query and attached as `content_library`: the company's own item, else
+// null (an activity that points at another company's item, or a deleted
+// one, shows no content — it keeps its own name and city).
+const CONTENT_COLUMNS = `
+  id, org_id, name, slug, short_description, location, duration, tags,
+  content_categories ( id, name, slug, icon )
+`
+
+async function withContent<T extends Record<string, any>>(rows: T[], orgId: string): Promise<Array<T & { content_library: Record<string, any> | null }>> {
+  const ids = [...new Set(rows.map(r => r.content_id).filter((x): x is string => typeof x === 'string' && x.length > 0))]
+  const byId = new Map<string, Record<string, any>>()
+  if (ids.length > 0) {
+    const { data, error } = await supabaseAdmin.from('content_library').select(CONTENT_COLUMNS).in('id', ids).eq('org_id', orgId)
+    if (error) throw error
+    for (const c of (data ?? []) as Array<Record<string, any>>) byId.set(c.id, c)
+  }
+  return rows.map(r => ({ ...r, content_library: (r.content_id && byId.get(r.content_id)) || null }))
 }
 
 // ============================================
@@ -95,23 +110,7 @@ export async function GET(
         requires_guide,
         notes,
         internal_notes,
-        created_at,
-        content_library (
-          id,
-          org_id,
-          name,
-          slug,
-          short_description,
-          location,
-          duration,
-          tags,
-          content_categories (
-            id,
-            name,
-            slug,
-            icon
-          )
-        )
+        created_at
       `)
       .eq('template_id', templateId)
       .order('day_number')
@@ -131,8 +130,7 @@ export async function GET(
       dayMap.set(d, [])
     }
 
-    for (const raw of activities || []) {
-      const activity = ownContent(raw as Record<string, any>, orgId)
+    for (const activity of await withContent((activities || []) as Array<Record<string, any>>, orgId)) {
       const dayNum = activity.day_number
       if (!dayMap.has(dayNum)) {
         dayMap.set(dayNum, [])
@@ -298,20 +296,7 @@ export async function POST(
         notes,
         internal_notes
       })
-      .select(`
-        *,
-        content_library (
-          id,
-          org_id,
-          name,
-          short_description,
-          location,
-          content_categories (
-            name,
-            slug
-          )
-        )
-      `)
+      .select('*')
       .single()
 
     if (error) {
@@ -331,7 +316,7 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      data: ownContent(activity, orgId)
+      data: (await withContent([activity], orgId))[0]
     }, { status: 201 })
 
   } catch (error: any) {
@@ -405,16 +390,7 @@ export async function PATCH(
       .update(updates)
       .eq('id', activity_id)
       .eq('template_id', templateId)
-      .select(`
-        *,
-        content_library (
-          id,
-          org_id,
-          name,
-          short_description,
-          location
-        )
-      `)
+      .select('*')
       .single()
 
     if (error) {
@@ -427,7 +403,7 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
-      data: ownContent(activity, orgId)
+      data: (await withContent([activity], orgId))[0]
     })
 
   } catch (error: any) {

@@ -61,7 +61,10 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // Message templates send to real customers and partners — the menu shows
   // the screen to agents and above; a viewer opened it by URL.
   '/templates': ['admin', 'manager', 'agent'],
-  
+  // Content library and writing rules (/content-library/rules): the menu
+  // shows them to managers and above, and their API is admin/manager.
+  '/content-library': ['admin', 'manager'],
+
   // All authenticated users (including viewer)
   '/dashboard': ['admin', 'manager', 'agent', 'viewer'],
   '/analytics': ['admin', 'manager'],

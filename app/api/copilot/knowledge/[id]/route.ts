@@ -9,6 +9,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { chunkText, embedBatch, EMBEDDING_MODEL, toPgVector } from '@/lib/embeddings'
+import { knowledgeMetadataOnEdit } from '@/lib/copilot/knowledge-text'
 
 export async function PATCH(
   request: NextRequest,
@@ -28,7 +29,7 @@ export async function PATCH(
 
   const { data: existing, error: existingErr } = await supabase
     .from('copilot_knowledge')
-    .select('id, org_id, source_type, parent_id')
+    .select('id, org_id, source_type, parent_id, metadata')
     .eq('id', id)
     .single()
 
@@ -95,7 +96,11 @@ export async function PATCH(
     embedding_model: EMBEDDING_MODEL,
     chunk_index: 0,
   }
-  if (metadata) parentPatch.metadata = { ...metadata, question: question ?? null, total_chunks: chunks.length }
+  // Always rewrite the metadata: the page sends no `metadata`, and gating on
+  // it left an edited FAQ question and the new chunk count unsaved.
+  const mergedMetadata = knowledgeMetadataOnEdit(existing.metadata as Record<string, unknown> | null, metadata, question, chunks.length)
+  parentPatch.metadata = mergedMetadata
+  const { total_chunks: _total, ...childMetadata } = mergedMetadata
   if (typeof is_active === 'boolean') parentPatch.is_active = is_active
 
   const { data: updatedParent, error: parentErr } = await supabase
@@ -117,7 +122,7 @@ export async function PATCH(
       title: title ?? null,
       query_text: buildQueryText(chunk),
       answer_text: chunk,
-      metadata: { ...(metadata || {}), question: question ?? null },
+      metadata: childMetadata,
       embedding: toPgVector(vectors[idx + 1]) as any,
       embedding_model: EMBEDDING_MODEL,
       chunk_index: idx + 1,
