@@ -64,7 +64,8 @@ export default function PricingGridPage() {
         </ul>
         <p className="text-gray-600 mt-3">
           Your work is kept in this browser as you go, so a refresh does not lose it. Prices are not kept from the
-          draft: every pick is priced again from your rates when the page opens.
+          draft: every pick is priced again from your rates when the page opens. A line marked as a saved price
+          keeps that price on screen, and the save reads it again from the itinerary.
         </p>
       </section>
 
@@ -97,7 +98,9 @@ export default function PricingGridPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">How the figures are worked out</h2>
         <ul className="list-disc list-inside space-y-2 text-gray-700 mb-3">
-          <li>Every pick is priced from the rate it names, as your rates hold it now. A pick whose rate has been deleted or switched off has <strong>no price</strong>: it counts as 0 and the screen lists it under &ldquo;No current rate, so no price&rdquo;. Pick another rate or type an amount.</li>
+          <li>Every pick is priced from the rate it names, as your rates hold it now.</li>
+          <li>A line of a loaded itinerary that is not linked to a current rate &mdash; saved before rates were linked, typed in, or whose rate has since been deleted or switched off &mdash; keeps the unit price it was saved with. Its row is marked <strong>saved price &mdash; not linked to a current rate</strong>. If the stored price is in another currency than your rate currency, it is converted (at the line&rsquo;s own exchange rate when it has one, else at today&rsquo;s rates). Pick a rate to price it from your rates instead.</li>
+          <li>A pick you add whose rate is then deleted or switched off has <strong>no price</strong>: it counts as 0 and the screen lists it under &ldquo;No current rate, so no price&rdquo;. Pick another rate or type an amount.</li>
           <li>Each day is priced at the rate period that covers its date. A date that no period covers has no price, and an amber note names the periods that exist.</li>
           <li>A day&rsquo;s cost is its group services plus its per-person services &times; pax. The day card shows it per person (group costs &divide; pax) and in total.</li>
           <li>The single supplement is charged only when pax is 1. A hotel&rsquo;s other supplements (a view, a meal plan) are charged to everyone, per night.</li>
@@ -155,6 +158,7 @@ export default function PricingGridPage() {
         </p>
         <ul className="list-disc list-inside space-y-1 text-gray-700 mb-3">
           <li>The save prices every line again from your rates, by the rate each pick names, with the vehicle for the group. It does not take the prices the screen sent. So the stored total is the same as the screen&rsquo;s Selling total when your rates have not changed since the page loaded.</li>
+          <li>When you update an itinerary, a line marked as a saved price is stored again at the price read from that same line of that itinerary, not the price the screen sent. A line with no current rate and no saved line behind it is stored with no price, and the save message says &ldquo;No current rate for &hellip; &mdash; saved with no price&rdquo;.</li>
           <li>The itinerary&rsquo;s total is the Selling total, including the season premium. Each service line also stores its own cost and price (line &times; markup); the lines can add up to a cent or two away from the total, which is the quote.</li>
           <li>A conversation from the inbox that matched a client links the itinerary to that client.</li>
           <li>For B2B, the save stores the partner and the partner&rsquo;s commission, then creates a B2B quote and a tour template and opens the B2B calculator.</li>
@@ -171,7 +175,8 @@ export default function PricingGridPage() {
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>It does not add VAT or any tax line. A flight&rsquo;s price is its fare plus its tax, and the markup is applied to both.</li>
           <li>It does not store the quote in the currency you were viewing; the itinerary is in the rate currency.</li>
-          <li>It does not guess a price: a pick with no current rate, a date outside every rate period, or water without an exchange rate has no price until you fix it.</li>
+          <li>It does not guess a price: a new pick with no current rate, a date outside every rate period, or water without an exchange rate has no price until you fix it.</li>
+          <li>It does not re-price a line kept at its saved price when your rates change; it keeps that price until you pick a rate for it. A saved line whose price cannot be converted into your rate currency has no price.</li>
           <li>It does not block a save when a day is missing a service; it saves a draft.</li>
           <li>A typed amount is taken as it is, in the rate currency.</li>
         </ul>

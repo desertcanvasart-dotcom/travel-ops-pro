@@ -20,6 +20,9 @@ import { roundToCurrency } from '@/lib/currency-totals'
 import { seasonForDate, type SeasonWindow } from '@/lib/pricing/season-uplift'
 import { sellingFromCost } from '@/app/pricing-grid/lib/calculator'
 import { hydrateDays } from '@/app/pricing-grid/lib/hydrate-items'
+import { applyStoredPrices, storedUnitPrice, type StoredPrice, type StoredServiceRow } from '@/app/pricing-grid/lib/saved-price'
+import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
+import type { ExchangeRates } from '@/lib/currency-service'
 import { loadGridRateOptions } from '../rate-options'
 
 /**
@@ -129,6 +132,52 @@ async function seasonWindowsOn(supabase: any, orgId: string, departure: string |
   }))
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * The stored price, in the rate currency, of each itinerary_services row the
+ * request names (SelectedItem.serviceId) — only rows of `itineraryId`, which
+ * the caller has checked is this company's. A row of another trip or another
+ * company is simply not found. Also each row's supplier, kept with its price.
+ */
+async function storedLinePrices(
+  supabase: any,
+  itineraryId: string,
+  postedDays: any[],
+  ctx: { itineraryCurrency: string | null; rateCurrency: string },
+): Promise<{ prices: Map<string, StoredPrice>; supplierIds: Map<string, string> }> {
+  const prices = new Map<string, StoredPrice>()
+  const supplierIds = new Map<string, string>()
+  // Only uuids: one malformed id in the IN list fails the whole lookup.
+  const ids = [...new Set((postedDays || []).flatMap((d: any) => (d?.slots || []).flatMap((sl: any) =>
+    (sl?.selectedItems || []).map((i: any) => (typeof i?.serviceId === 'string' ? i.serviceId : '')))))]
+    .filter((id): id is string => UUID.test(id))
+  if (ids.length === 0) return { prices, supplierIds }
+  const { data, error } = await supabase
+    .from('itinerary_services')
+    .select('id, rate_eur, rate_non_eur, supplier_id, supplier_currency, exchange_rate_used, itinerary_days!inner(itinerary_id)')
+    .in('id', ids)
+    .eq('itinerary_days.itinerary_id', itineraryId)
+  if (error) {
+    console.warn('[pricing-grid save] stored line prices not read:', error.message)
+    return { prices, supplierIds }
+  }
+  let fxRates: ExchangeRates | null | undefined
+  for (const row of (data || []) as Array<StoredServiceRow & { supplier_id?: string | null; itinerary_days?: { itinerary_id?: string } }>) {
+    if (row.itinerary_days?.itinerary_id !== itineraryId) continue
+    let price = storedUnitPrice(row, { ...ctx })
+    if (!price) {
+      // Today's rates, read once and only when a line needs converting.
+      if (fxRates === undefined) fxRates = await fetchRunExchangeRates().catch(() => null)
+      price = storedUnitPrice(row, { ...ctx, fxRates })
+    }
+    if (!price) continue
+    prices.set(row.id, price)
+    if (row.supplier_id) supplierIds.set(row.id, row.supplier_id)
+  }
+  return { prices, supplierIds }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = createServerClient()
@@ -192,18 +241,9 @@ export async function POST(request: NextRequest) {
     // whatever prices it held. Each pick is rebuilt here from this company's
     // rate options — the ones the grid lists (rate-options.ts) — by its id,
     // with the route's vehicle sized for the group. A pick whose rate is gone
-    // has no price, and the save says so. Only typed amounts are the
-    // operator's own. All of it is in the org's rate currency.
-    const { rates: gridRates, rateCurrency } = await loadGridRateOptions(supabase, callerOrgId, null)
-    const { days, unpriced } = hydrateDays(postedDays as any[], gridRates, paxN)
-
-    // Completeness signal (harness consolidation Phase B). The grid saves a
-    // DRAFT, so this does NOT block the save (you build incrementally) — it is
-    // returned so the UI can surface "needs attention". The hard gate is the
-    // send/output path (Phase 2 pricing-guards), which blocks non-deliverable
-    // prices before they reach a customer.
-    const completeness = gridCompleteness(days, { ...config, pax: paxN })
-
+    // has no price, and the save says so — unless it is a line of this trip
+    // with a stored price (below). Only typed amounts are the operator's own.
+    // All of it is in the org's rate currency.
     const isUpdate = !!config.itineraryId
     const now = new Date().toISOString()
 
@@ -211,17 +251,36 @@ export async function POST(request: NextRequest) {
     // service role. It was addressed by id alone, so a manager in one org could
     // overwrite another org's trip. Refuse anything not this org's, before any
     // write.
+    let itineraryCurrency: string | null = null
     if (isUpdate) {
       const { data: owned } = await supabase
         .from('itineraries')
-        .select('id')
+        .select('id, currency')
         .eq('id', config.itineraryId)
         .eq('org_id', callerOrgId)
         .maybeSingle()
       if (!owned) {
         return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
       }
+      itineraryCurrency = owned.currency ?? null
     }
+
+    const { rates: gridRates, rateCurrency } = await loadGridRateOptions(supabase, callerOrgId, null)
+    // A line of the trip being re-saved that has no current rate (none
+    // stored, or since deleted or switched off) keeps the price it was saved
+    // with — read here from ITS row of THIS trip, never from the request
+    // (saved-price.ts). It was saved at 0, losing the trip's real price.
+    const { prices: storedPrices, supplierIds: storedSupplierIds } = isUpdate
+      ? await storedLinePrices(supabase, config.itineraryId, postedDays, { itineraryCurrency, rateCurrency })
+      : { prices: new Map<string, StoredPrice>(), supplierIds: new Map<string, string>() }
+    const { days, unpriced } = hydrateDays(applyStoredPrices(postedDays as any[], storedPrices), gridRates, paxN)
+
+    // Completeness signal (harness consolidation Phase B). The grid saves a
+    // DRAFT, so this does NOT block the save (you build incrementally) — it is
+    // returned so the UI can surface "needs attention". The hard gate is the
+    // send/output path (Phase 2 pricing-guards), which blocks non-deliverable
+    // prices before they reach a customer.
+    const completeness = gridCompleteness(days, { ...config, pax: paxN })
 
     // One margin for every line and the header: the one asked for, else the
     // company's default (it was the request's figure on the lines and the
@@ -419,7 +478,10 @@ export async function POST(request: NextRequest) {
             total_cost: supplierCost,
             client_price: grossUp(supplierCost),
             // An add-on carries its property's supplier: the id before the marker.
-            supplier_id: item.rateId ? (supplierIdByRateId.get(baseRateId(item.rateId)) ?? null) : null,
+            // A line kept at its saved price keeps its row's supplier.
+            supplier_id: item.savedPrice && item.serviceId
+              ? (storedSupplierIds.get(item.serviceId) ?? null)
+              : item.rateId ? (supplierIdByRateId.get(baseRateId(item.rateId)) ?? null) : null,
             notes: `__grid:slot:${slot.slotId}|rate_id:${item.rateId}`,
           })
         }

@@ -5,6 +5,7 @@
 import type { SlotValue } from '../types'
 import { SLOT_DEFINITIONS } from '../types'
 import { normalizeServiceType } from '@/lib/service-types'
+import { storedUnitPrice, type StoredServiceRow } from './saved-price'
 
 // --- Slot → Service Type ---
 
@@ -77,8 +78,14 @@ export function mapServicesToSlots(
     total_cost: number
     notes?: string | null
     description?: string | null
+    supplier_currency?: string | null
+    exchange_rate_used?: number | string | null
   }>,
-  pax: number
+  pax: number,
+  /** The trip's currency and the grid's rate currency (with today's rates):
+   *  given, each line carries its stored price in the rate currency, kept
+   *  when it has no current rate (saved-price.ts). */
+  savedPrices?: Parameters<typeof storedUnitPrice>[1]
 ): SlotValue[] {
   // Start with empty slots for all definitions
   const slotMap = new Map<string, SlotValue>()
@@ -118,15 +125,19 @@ export function mapServicesToSlots(
     const rateMatch = metaSource.match(/rate_id:(.+?)(\||$)/)
     if (rateMatch) rateId = rateMatch[1]
 
-    // Only the id and name matter: the page re-prices every pick from the
-    // rate it names (hydrate-items.ts) — periods, guide bed, supplement key,
-    // the vehicle for the group. The saved prices are the fallback shown
-    // until the rates load.
+    // The page re-prices every pick from the rate it names (hydrate-items.ts)
+    // — periods, guide bed, supplement key, the vehicle for the group. A line
+    // with no current rate keeps the price stored on its row, in the rate
+    // currency, marked as such; one that cannot be put in the rate currency
+    // has no price.
+    const stored = savedPrices ? storedUnitPrice(svc as StoredServiceRow, savedPrices) : null
     slot.selectedItems.push({
       rateId,
       name: svc.service_name,
-      rateEur: svc.rate_eur,
-      rateNonEur: svc.rate_non_eur,
+      rateEur: stored ? stored.rateEur : savedPrices ? 0 : svc.rate_eur,
+      rateNonEur: stored ? stored.rateNonEur : savedPrices ? 0 : svc.rate_non_eur,
+      serviceId: svc.id,
+      ...(stored ? { savedPrice: true } : {}),
     })
   }
 

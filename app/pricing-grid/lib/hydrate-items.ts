@@ -18,7 +18,11 @@
 // the rate option with its id. A route takes the vehicle that seats the
 // group (vehicleForPax — the vehicle SlotRow's list shows). An item whose
 // rate is not in the list (deleted, deactivated, a line with no rate id) has
-// NO price: 0, reported, never the price it came with.
+// NO price: 0, reported, never the price it came with — unless it is a line
+// of a saved itinerary carrying the price stored on its row (`savedPrice`,
+// saved-price.ts): that price is kept, and reported as a saved price. The
+// save sets `savedPrice` itself from the stored row; the browser's is shown,
+// never stored.
 //
 // Pure: the page, the save route and the tests share it.
 
@@ -53,6 +57,8 @@ function fromOption(item: SelectedItem, opt: RateOption): SelectedItem {
     out.pricingBasis = opt.pricing_basis
     out.unitCapacity = opt.unit_capacity ?? null
   }
+  // The saved line it came from: if its rate goes, its stored price is back.
+  if (item.serviceId) out.serviceId = item.serviceId
   return out
 }
 
@@ -65,6 +71,19 @@ const unpriced = (item: SelectedItem): SelectedItem => ({
   rateNonEur: 0,
   ...(item.supplementKey ? { supplementKey: item.supplementKey } : {}),
   ...(item.tipRole ? { tipRole: item.tipRole } : {}),
+  ...(item.serviceId ? { serviceId: item.serviceId } : {}),
+})
+
+/** A saved line with no current rate: the price it was saved with, marked. */
+const keptSaved = (item: SelectedItem): SelectedItem => ({
+  rateId: item.rateId,
+  name: item.name,
+  rateEur: Number(item.rateEur) || 0,
+  rateNonEur: Number(item.rateNonEur) || 0,
+  ...(item.supplementKey ? { supplementKey: item.supplementKey } : {}),
+  ...(item.tipRole ? { tipRole: item.tipRole } : {}),
+  ...(item.serviceId ? { serviceId: item.serviceId } : {}),
+  savedPrice: true,
 })
 
 const SUPP_MARK = '#supp:'
@@ -118,15 +137,16 @@ const same = (a: SelectedItem, b: SelectedItem) => JSON.stringify(a) === JSON.st
 
 /**
  * Every day's picks rebuilt from `rates` at a group of `pax`. Returns the same
- * `days` array when nothing changed (a React state update can skip it), and
- * the items left without a rate.
+ * `days` array when nothing changed (a React state update can skip it), the
+ * items left without a rate, and the items kept at their saved price.
  */
 export function hydrateDays<D extends Pick<GridDay, 'dayNumber' | 'slots'>>(
   days: D[],
   rates: Partial<AllRates>,
   pax: number,
-): { days: D[]; unpriced: UnpricedItem[] } {
+): { days: D[]; unpriced: UnpricedItem[]; saved: UnpricedItem[] } {
   const missing: UnpricedItem[] = []
+  const saved: UnpricedItem[] = []
   let changed = false
   const next = days.map((day, idx) => {
     let dayChanged = false
@@ -137,10 +157,13 @@ export function hydrateDays<D extends Pick<GridDay, 'dayNumber' | 'slots'>>(
       let slotChanged = false
       const rebuilt = items.map(item => {
         const resolved = resolveItem(slot.slotId, item, options, pax)
+        const keep = !resolved && item.savedPrice === true
         // A typed amount wins over the slot's picks (calculator, save), so
         // a pick under it is not a missing price.
-        if (!resolved && !(slot.customAmount > 0)) missing.push({ dayNumber: day.dayNumber || idx + 1, slotId: slot.slotId, rateId: String(item.rateId ?? ''), name: String(item.name ?? '') })
-        const out = resolved ?? unpriced(item)
+        if (!resolved && !(slot.customAmount > 0)) {
+          (keep ? saved : missing).push({ dayNumber: day.dayNumber || idx + 1, slotId: slot.slotId, rateId: String(item.rateId ?? ''), name: String(item.name ?? '') })
+        }
+        const out = resolved ?? (keep ? keptSaved(item) : unpriced(item))
         if (same(out, item)) return item
         slotChanged = true
         return out
@@ -153,5 +176,5 @@ export function hydrateDays<D extends Pick<GridDay, 'dayNumber' | 'slots'>>(
     changed = true
     return { ...day, slots }
   })
-  return { days: changed ? next : days, unpriced: missing }
+  return { days: changed ? next : days, unpriced: missing, saved }
 }

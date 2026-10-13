@@ -8370,6 +8370,10 @@
     "savedFixed": "Saved — {messages} stored messages were ours, {conversations} conversations updated",
     "saveFailed": "Could not save"
   },
+  "pricingGrid": {
+    "savedPrice": "saved price — not linked to a current rate",
+    "savedPriceHint": "This line has no current rate, so it keeps the price it was saved with. Pick a rate to price it from your rates."
+  },
   "blogAdmin": {
     "title": "Blog",
     "subtitle": "Posts on the public blog at /blog — product news, how-tos and tips for tour operators.",

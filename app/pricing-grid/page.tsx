@@ -651,13 +651,24 @@ function PricingGridContent() {
       // original 日程表 on the next save.
       const daysRes = await fetch(`/api/itineraries/${itineraryId}/days?language=source`)
       const daysData = await daysRes.json()
+      // A line with no current rate keeps the price it was saved with
+      // (saved-price.ts), put in the rate currency the grid works in — so the
+      // rate currency and today's rates are needed now, not when fx loads.
+      let loadFx: { rateCurrency: string | null; rates: ExchangeRates | null } = { rateCurrency: null, rates: null }
+      try {
+        const fxData = await (await fetch('/api/pricing-grid/fx')).json()
+        if (fxData.success && fxData.data) loadFx = { rateCurrency: fxData.data.rateCurrency ?? null, rates: fxData.data.rates ?? null }
+      } catch (err) {
+        console.error('Failed to load exchange rates:', err)
+      }
+      const savedPrices = { itineraryCurrency: itn.currency || null, rateCurrency: loadFx.rateCurrency, fxRates: loadFx.rates }
 
       if (daysData.success && daysData.data) {
         const loadedDays: GridDay[] = daysData.data.map((dayData: any, idx: number) => {
           // Reverse-map services to slots
           const services = dayData.services || []
           const slots = services.length > 0
-            ? mapServicesToSlots(services, itn.num_adults || 2)
+            ? mapServicesToSlots(services, itn.num_adults || 2, savedPrices)
             : SLOT_DEFINITIONS.map(def => ({ slotId: def.slotId, selectedItems: [], customAmount: 0 }))
 
           return {
@@ -996,7 +1007,9 @@ function PricingGridContent() {
 
           {/* Picks whose rate is no longer in Rates (deleted, switched off, or
               a line saved without one): no price, said here, never the price
-              they came with. The save says the same. */}
+              they came with. The save says the same. A line of the loaded
+              itinerary keeps its stored price instead, marked in its row
+              (saved-price.ts), and is not listed here. */}
           {unpricedItems.length > 0 && (
             <div className="mb-3 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-800">
               No current rate, so no price: {unpricedItems.map(u => `day ${u.dayNumber} ${u.name || u.rateId}`).join('; ')}. Pick a rate or type an amount.

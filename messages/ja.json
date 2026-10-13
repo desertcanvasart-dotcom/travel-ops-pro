@@ -8955,6 +8955,10 @@
     "savedFixed": "保存しました — 保存済みメール{messages}件を当社の送信に訂正、{conversations}件の会話を更新",
     "saveFailed": "保存できませんでした"
   },
+  "pricingGrid": {
+    "savedPrice": "保存時の価格 — 現在の料金に未連携",
+    "savedPriceHint": "この行には現在の料金がないため、保存時の価格のままです。料金を選ぶと料金表から計算されます。"
+  },
   "blogAdmin": {
     "title": "ブログ",
     "subtitle": "公開ブログ（/blog）の記事 — 製品ニュース、使い方、ツアーオペレーター向けのヒント。",

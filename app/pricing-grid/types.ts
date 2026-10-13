@@ -203,6 +203,13 @@ export interface SelectedItem {
   pricingBasis?: PricingBasis
   /** per_unit only: people per unit. */
   unitCapacity?: number | null
+  /** A line loaded from a saved itinerary: its itinerary_services row id.
+   *  The save reads that row's stored price when the line has no current
+   *  rate (lib/saved-price.ts). */
+  serviceId?: string
+  /** The price is the one the line was saved with, not a current rate's —
+   *  shown as such. Only the save's own lookup sets it on what it stores. */
+  savedPrice?: boolean
 }
 
 export interface SlotValue {
