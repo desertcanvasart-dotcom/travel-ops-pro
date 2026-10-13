@@ -320,7 +320,9 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('city', 'City', 'text', false),
       col('tour_duration', 'Tour Duration', 'text', true),
       // spot | throughout (Settings → Vocabulary → Guide modes); blank = spot.
-      col('guide_mode', 'Guide Mode', 'text', false),
+      // A KEY like the language: "Throughout" in a sheet failed the column's
+      // key CHECK and took its whole batch down with it.
+      colKey('guide_mode', 'Guide Mode', false),
       col('base_rate_eur', 'Rate', 'number', true),
       legacyRate('base_rate_non_eur', 'Rate (non-EU passport, legacy)', 'base_rate_eur'),
       season(), rateValidFrom(), rateValidTo(),

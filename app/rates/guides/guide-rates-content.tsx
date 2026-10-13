@@ -208,10 +208,10 @@ export default function GuideRatesContent() {
   // Fetch rates
   const fetchRates = async () => {
     try {
-      const params = new URLSearchParams()
-      if (!showInactive) params.append('active_only', 'true')
-
-      const response = await fetch(`/api/rates/guides?${params}`)
+      // Every rate, inactive ones too: "Show inactive" filters on this page.
+      // The fetch ran once, active only, so an inactive rate could never be
+      // found again to reactivate — and Total always equalled Active.
+      const response = await fetch('/api/rates/guides')
       const data = await response.json()
 
       if (data.success) {
@@ -1204,6 +1204,7 @@ export default function GuideRatesContent() {
                         <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
+                    <p className="text-xs text-gray-500 mt-1">{t('form.durationHint')}</p>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.eurRate')} *</label>

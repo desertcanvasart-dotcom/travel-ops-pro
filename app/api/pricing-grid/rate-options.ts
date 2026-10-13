@@ -210,12 +210,18 @@ export async function loadGridRateOptions(
 
     guide: (nGuides || []).map((r: any) => ({
       id: r.id,
-      // Spot and throughout rates are different prices — the name says which.
-      name: `${r.guide_language ? guideLanguageWord(r.guide_language) : 'Guide'} (${r.guide_type || 'Egyptologist'}${rateGuideMode(r) !== 'spot' ? `, ${rateGuideMode(r)}` : ''})`,
+      // Spot and throughout rates are different prices — the name says which,
+      // and so do the duration and the city: a half-day and a full-day rate
+      // (or a Cairo and a Luxor one) read identically at different prices.
+      name: `${r.guide_language ? guideLanguageWord(r.guide_language) : 'Guide'} (${[
+        r.guide_type || 'Egyptologist',
+        GUIDE_DURATION_LABEL[r.tour_duration] ?? r.tour_duration,
+        rateGuideMode(r) !== 'spot' ? rateGuideMode(r) : '',
+      ].filter(Boolean).join(', ')})${r.city ? ` — ${r.city}` : ''}`,
       rateEur: toNum(r.base_rate_eur || r.rate_eur),
       rateNonEur: toNum(r.base_rate_non_eur || r.rate_non_eur || r.base_rate_eur || r.rate_eur),
       city: r.city,
-      details: r.guide_language ? guideLanguageWord(r.guide_language) : r.guide_language,
+      details: withValidity(r.guide_language ? guideLanguageWord(r.guide_language) : r.guide_language, r),
       // The dropdown filters by language and by kind of guide.
       language: r.guide_language ? guideLanguageWord(r.guide_language) : undefined,
       category: r.guide_type || 'Egyptologist',
@@ -344,7 +350,10 @@ export async function loadGridRateOptions(
       rateNonEur: toNum(r.base_rate_non_eur || r.rate_non_eur || r.base_rate_eur || r.rate_eur),
       city: r.city,
       category: r.meal_type,
-      details: r.restaurant_name,
+      details: withValidity(mealDetails(r), r),
+      // "Per Person Rate" unticked = one price for the whole group; it was
+      // charged per traveller.
+      ...(r.per_person_rate === false ? { pricing_basis: 'flat' as const, unit_capacity: null } : {}),
     })),
 
     water: [await waterOption(rateCurrency)],
@@ -380,6 +389,30 @@ export async function loadGridRateOptions(
   }
 
   return { rates: rates as unknown as AllRates, rateCurrency }
+}
+
+/** The guide durations as the rate form names them. */
+const GUIDE_DURATION_LABEL: Record<string, string> = {
+  half_day: 'half day', full_day: 'full day', extended: 'extended', hourly: 'hourly', meet_greet: 'meet & assist day',
+}
+
+/** A meal's restaurant and how its price applies — the grid charges a
+ *  per-person meal per traveller and cannot add a restaurant's minimum, so
+ *  the minimum is named for the person picking it. */
+function mealDetails(r: { restaurant_name?: string | null; per_person_rate?: boolean | null; minimum_pax?: number | null }): string {
+  const basis = r.per_person_rate === false
+    ? 'per group'
+    : Number(r.minimum_pax) > 1 ? `per person, minimum ${r.minimum_pax}` : 'per person'
+  return [r.restaurant_name, basis].filter(Boolean).join(' | ')
+}
+
+/** " | valid 2026-01-01 to 2026-12-31" on a dated rate: one service may hold
+ *  two periods, and the options must not read alike. */
+function withValidity(details: string | null | undefined, r: { rate_valid_from?: string | null; rate_valid_to?: string | null }): string {
+  const from = r.rate_valid_from ? String(r.rate_valid_from).slice(0, 10) : ''
+  const to = r.rate_valid_to ? String(r.rate_valid_to).slice(0, 10) : ''
+  const period = from && to ? `valid ${from} to ${to}` : from ? `valid from ${from}` : to ? `valid until ${to}` : ''
+  return [details, period].filter(Boolean).join(' | ')
 }
 
 /** A rate row's pricing basis for the grid (lib/pricing/pricing-basis.ts). */

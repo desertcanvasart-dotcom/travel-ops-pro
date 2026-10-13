@@ -11,6 +11,12 @@ import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
+import { whereNullable } from '@/lib/rates/natural-key'
+import { selectAllRows } from '@/lib/db/select-all-rows'
+import { rowsInRateCurrency } from '@/lib/rates/rows-in-rate-currency'
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
+import { entranceFeeVersions } from '@/lib/rates/entrance-fee-versions'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabase = createActorAdminClient()
@@ -26,61 +32,42 @@ export async function GET(request: NextRequest) {
     const activeOnly = searchParams.get('active_only') === 'true'
     const addonsOnly = searchParams.get('addons_only') === 'true'
     
-    let query = supabase
-      .from('entrance_fees')
-      .select('*')
-      .eq('org_id', orgId)
-      .order('attraction_name', { ascending: true })
-    
-    if (city) {
-      query = query.eq('city', city)
-    }
-    
-    if (category) {
-      query = query.eq('category', category)
-    }
-    
-    if (activeOnly) {
+    // Every row, past PostgREST's 1000-row cap: the page's list and tiles
+    // count what this returns.
+    const { data: rows, error } = await selectAllRows<Record<string, any>>(() => {
+      let query = supabase
+        .from('entrance_fees')
+        .select('*')
+        .eq('org_id', orgId)
+      if (city) query = query.eq('city', city)
+      if (category) query = query.eq('category', category)
       // Use neq(false) instead of eq(true) to include NULL values (default = active)
-      query = query.neq('is_active', false)
-    }
-    
-    if (addonsOnly) {
-      query = query.eq('is_addon', true)
-    }
-    
-    const { data, error } = await query
+      if (activeOnly) query = query.neq('is_active', false)
+      if (addonsOnly) query = query.eq('is_addon', true)
+      return query
+    }, { order: [{ column: 'attraction_name' }, { column: 'id' }] })
 
     if (error) {
       console.error('[Attractions API] Error fetching:', error)
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
+    // A picker that copies the fee onto a voucher or a trip asks for every
+    // row in the company's rate currency (lib/rates/rows-in-rate-currency).
+    const data: Record<string, any>[] = searchParams.get('in_rate_currency') === 'true'
+      ? await rowsInRateCurrency('entrance_fees', rows ?? [], await getOrgRateCurrency(supabase, orgId))
+      : (rows ?? [])
+
     // Check for language parameter to merge versions
     const language = searchParams.get('language') || 'en'
 
-    // Build versions map for non-English languages
-    const versionsMap: Record<string, { attraction_name?: string; notes?: string }> = {}
-    if (language !== 'en' && data && data.length > 0) {
-      const ids = data.map((item: any) => item.id)
-      const { data: versions } = await supabase
-        .from('entrance_fee_versions')
-        .select('entrance_fee_id, attraction_name, notes')
-        .in('entrance_fee_id', ids)
-        .eq('language', language)
-
-      if (versions) {
-        for (const v of versions) {
-          versionsMap[v.entrance_fee_id] = {
-            attraction_name: v.attraction_name,
-            notes: v.notes
-          }
-        }
-      }
-    }
+    // Build versions map for non-English languages (ids in batches)
+    const versionsMap = language !== 'en' && data.length > 0
+      ? await entranceFeeVersions(supabase, data.map((item: any) => item.id), language)
+      : {}
 
     // Transform field names for frontend compatibility
-    const transformedData = data?.map(item => {
+    const transformedData = data.map(item => {
       const version = versionsMap[item.id]
       return {
         id: item.id,
@@ -110,10 +97,12 @@ export async function GET(request: NextRequest) {
         // on the default, which read exactly like "the currency didn't
         // save". It had saved; this transform ate it on the way back.
         rate_currency: item.rate_currency ?? null,
+        ...(item.entered_currency !== undefined ? { entered_currency: item.entered_currency } : {}),
+        ...(item.rate_unconvertible ? { rate_unconvertible: true } : {}),
         created_at: item.created_at,
         updated_at: item.updated_at
       }
-    }) || []
+    })
 
     return NextResponse.json({
       success: true,
@@ -168,6 +157,17 @@ export async function POST(request: NextRequest) {
         error: 'Attraction name and city are required' 
       }, { status: 400 })
     }
+
+    // The supplier must be this company's: it was stored as sent, so a fee
+    // could name the other company's supplier (whose delete it then blocked).
+    let supplierId: string | null = null
+    if (supplier_id) {
+      const supplierCheck = await validateAndResolveSupplierFields({ supplier_id }, supabase)
+      if (!supplierCheck.ok) {
+        return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+      }
+      supplierId = supplierCheck.supplier_id
+    }
     
     const newRecord = {
       service_code: service_code || `ENT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
       is_addon: is_addon || false,
       is_sellable_extra: is_sellable_extra || false,
       addon_note: addon_note || null,
-      supplier_id: supplier_id || null
+      supplier_id: supplierId
     }
 
     // Check for existing rate with same natural key
@@ -198,11 +198,11 @@ export async function POST(request: NextRequest) {
       .select('*')
       .eq('org_id', orgId)
       .ilike('attraction_name', attraction_name)
-    if (city) {
-      existingQuery = existingQuery.eq('city', city)
-    } else {
-      existingQuery = existingQuery.is('city', null)
-    }
+    existingQuery = whereNullable(existingQuery, 'city', city)
+    // The validity period is part of the identity: next year's fee is a second
+    // rate, and pricing uses the one whose period covers the trip.
+    existingQuery = whereNullable(existingQuery, 'rate_valid_from', rate_valid_from)
+    existingQuery = whereNullable(existingQuery, 'rate_valid_to', rate_valid_to)
     const { data: existing } = await existingQuery.limit(1)
 
     // A create never updates. The natural-key match used to be UPDATED in
@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
     if (existing?.length) {
       return NextResponse.json({
         success: false,
-        error: 'A rate with these details already exists. Edit that rate, or change what makes this one different (supplier, period, class, city) before saving.',
+        error: 'An attraction with these details already exists (same name, city and validity period). Edit that one, or change one of those before saving.',
         existing: existing[0],
       }, { status: 409 })
     }

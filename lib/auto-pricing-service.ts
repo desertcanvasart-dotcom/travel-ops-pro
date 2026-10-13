@@ -51,7 +51,7 @@ import { sailsOn, sailingDaysLabel } from '@/lib/rates/cruise-sailing'
 import { seasonsForRow as flightSeasonsForRow } from '@/lib/rates/rate-seasons'
 import { cruiseCandidates, hotelCandidates, propertyById } from '@/lib/pricing/property-candidates'
 import { choicesForTier, sanitizePropertyChoice } from '@/lib/pricing/property-choice'
-import { guideLanguageWord, sameGuideLanguage } from '@/lib/guides/guide-language'
+import { guideLanguageWord } from '@/lib/guides/guide-language'
 import { isRoadTransferType, planRoadTrips, rateDeparture, rateTripShape, roadRouteKey, sanitizeTripShape, type RoadPlanEntry, type TripShape } from '@/lib/pricing/road-trips'
 import { durationFor, isRoadTransfer, isSightseeing, sanitizeTransportLines, type TransportLine } from '@/lib/pricing/transport-lines'
 import { getAirportCode, legAssistance, routeAirportCode, sanitizeLegAssist, sanitizeLegPlace, type LegAssist } from '@/lib/pricing/flight-leg'
@@ -63,7 +63,7 @@ import { PRESET_TIERS, presetTierFor } from '@/lib/vocabulary'
 import { hotelServiceCategories, pickHotelServiceRow } from '@/lib/pricing/hotel-service-pick'
 import { cruiseSailings, packageForDuration, sailingRoute, type Sailing } from '@/lib/pricing/cruise-package'
 import { vehicleKeyLabel, vehicleRateForPax } from '@/lib/rates/vehicle-bands'
-import { rateGuideMode } from '@/lib/guides/guide-mode'
+import { isHalfDayGuiding, mealCostForGroup, pickGuideRate, pickMealRate, rateValidOn, todayIso, type GuideAskDuration, type PickedMeal } from '@/lib/pricing/service-rates'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -2011,7 +2011,7 @@ export async function getEntranceFee(
   }
 }
 
-type EntranceFeeRow = { id: string; attraction_name: string; eur_rate: number | null; non_eur_rate: number | null }
+type EntranceFeeRow = { id: string; attraction_name: string; eur_rate: number | null; non_eur_rate: number | null; is_addon?: boolean | null; rate_valid_from?: string | null; rate_valid_to?: string | null }
 
 /**
  * Fetch ALL active entrance fees once, for in-memory matching across a whole
@@ -2060,6 +2060,17 @@ export function findEntranceFeeInList(
   return { id: match.id, name: match.attraction_name, rate }
 }
 
+/** This company's active guide rates, unconverted (getGuideRate normalises
+ *  the one it picks). */
+export async function fetchGuideRows(orgId: string | null | undefined): Promise<Record<string, any>[]> {
+  const { data } = await supabaseAdmin
+    .from('guide_rates')
+    .select('*')
+    .eq('org_id', orgId ?? NO_ORG)
+    .eq('is_active', true)
+  return (data ?? []) as Record<string, any>[]
+}
+
 /** The two guide grades the operator sells (2026-09-04): a licensed
  *  Egyptologist, and a senior one at a higher daily rate. Rows are told apart
  *  by guide_rates.guide_type. */
@@ -2088,8 +2099,16 @@ export async function getGuideRate(
   normalizer?: RateNormalizer,
   opts?: {
     grade?: GuideGrade
-    duration?: 'full_day' | 'meet_greet'
+    duration?: GuideAskDuration
     mode?: 'spot' | 'throughout'
+    /** The day's city: its rate before a city-less one before another city's. */
+    city?: string | null
+    /** The day's date: a rate outside its validity period is not used. */
+    date?: string | null
+    /** A guide the operator chose: that guide's rate first. */
+    supplierId?: string | null
+    /** Rows already fetched (fetchGuideRows) — one query for a whole trip. */
+    rows?: Record<string, any>[]
   }
 ): Promise<{ id: string; name: string; dailyRate: number } | null> {
   const grade = opts?.grade ?? 'egyptologist'
@@ -2103,23 +2122,16 @@ export async function getGuideRate(
     // hold the word ("Japanese") or the key ("japanese") and callers ask by
     // either (lib/guides/guide-language). It was an ilike substring, so any
     // language whose name contained the one asked for could price the guide.
-    const { data: activeRows } = await supabaseAdmin
-      .from('guide_rates')
-      .select('*')
-      .eq('org_id', orgId ?? NO_ORG)
-      .eq('is_active', true)
-    const ofLanguage = ((activeRows ?? []) as Record<string, any>[])
-      .filter(r => sameGuideLanguage(r.guide_language, language) && rateGuideMode(r) === mode)
-
-    // 1. Exact grade + duration in guide_rates.
-    let rawGuideRate: Record<string, any> | null =
-      ofLanguage.find(r => r.guide_type === grade && r.tour_duration === duration) ?? null
-
-    // 2. Default ask only: the pre-grades behaviour (first active row of the
-    //    language, any type/duration) so nothing priced yesterday holes today.
-    if (!rawGuideRate && grade === 'egyptologist' && duration === 'full_day' && mode === 'spot') {
-      rawGuideRate = ofLanguage[0] ?? null
-    }
+    // 1. Exact grade + duration; 2. for the default ask only, any rate of the
+    //    language (the pre-grades behaviour, so nothing priced yesterday
+    //    holes today). Within either: valid on the date, the day's city and
+    //    the chosen guide first, then a fixed order — lib/pricing/service-rates.
+    //    It took the first row in database order, any city, any period.
+    const activeRows = opts?.rows ?? await fetchGuideRows(orgId)
+    const rawGuideRate = pickGuideRate(activeRows, {
+      language, grade, duration, mode,
+      city: opts?.city, date: opts?.date, supplierId: opts?.supplierId,
+    })
     const guideRate = normalizer && rawGuideRate
       ? (await normalizer.normalize('guide_rates', [rawGuideRate]))?.[0]
       : rawGuideRate
@@ -2195,52 +2207,44 @@ export async function getMealRates(
   tier: ServiceTier,
   /** Converts rows entered in another currency into the run currency —
    *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
-  normalizer?: RateNormalizer
-): Promise<{ lunch: number; dinner: number } | null> {
+  normalizer?: RateNormalizer,
+  /** The city and date to price for (lib/pricing/service-rates pickMealRate). */
+  opts?: { city?: string | null; date?: string | null }
+): Promise<{ lunch: number; dinner: number; lunchMeal: PickedMeal | null; dinnerMeal: PickedMeal | null } | null> {
   try {
-    // The meals rates UI (app/rates/meals) writes rows shaped
-    // { meal_type, base_rate_eur, tier } — it never populates the legacy
-    // lunch_rate_eur/dinner_rate_eur columns, so reading only those priced
-    // UI-managed rows at €0 without flagging a hole. Resolve via
-    // meal_type/base_rate_eur (same as the land path in lib/ai/service-creation),
-    // falling back to the legacy columns for pre-UI rows.
-    let { data: mealRows } = await supabaseAdmin
-      .from('meal_rates')
-      .select('*')
-      .eq('org_id', orgId ?? NO_ORG)
-      .eq('is_active', true)
-      .eq('tier', tier)
-    if (normalizer && mealRows) mealRows = await normalizer.normalize('meal_rates', mealRows) as typeof mealRows
+    const mealRows = await fetchMealRows(orgId, tier, normalizer)
+    if (mealRows.length === 0) return null
 
-    if (!mealRows || mealRows.length === 0) {
-      return null
-    }
-
-    const rateFor = (mealType: string): number => {
-      const typed = mealRows.filter(
-        (r: any) => r.meal_type?.toLowerCase() === mealType && (r.base_rate_eur || 0) > 0
-      )
-      if (typed.length > 0) {
-        return typed.reduce((sum: number, r: any) => sum + (r.base_rate_eur || 0), 0) / typed.length
-      }
-      // Legacy rows: per-meal columns on a single row
-      const legacyCol = mealType === 'lunch' ? 'lunch_rate_eur' : 'dinner_rate_eur'
-      const legacy = mealRows.find((r: any) => (r[legacyCol] || 0) > 0)
-      return legacy ? legacy[legacyCol] : 0
-    }
-
-    const lunch = rateFor('lunch')
-    const dinner = rateFor('dinner')
+    // ONE restaurant's rate per meal, never an average across restaurants
+    // and cities (it averaged every lunch row of the tier). The meals page
+    // writes { meal_type, base_rate_eur }; rows from before it carry
+    // lunch_rate_eur / dinner_rate_eur and still price.
+    const lunchMeal = pickMealRate(mealRows, { mealType: 'lunch', city: opts?.city, date: opts?.date })
+    const dinnerMeal = pickMealRate(mealRows, { mealType: 'dinner', city: opts?.city, date: opts?.date })
 
     // No usable rate on any row → hole (caller flags it) instead of silent €0
-    if (!lunch && !dinner) {
-      return null
-    }
+    if (!lunchMeal && !dinnerMeal) return null
 
-    return { lunch, dinner }
+    return { lunch: lunchMeal?.rate ?? 0, dinner: dinnerMeal?.rate ?? 0, lunchMeal, dinnerMeal }
   } catch (err) {
     return null
   }
+}
+
+/** This company's active meal rates of one tier, in the run currency. */
+export async function fetchMealRows(
+  orgId: string | null | undefined,
+  tier: ServiceTier,
+  normalizer?: RateNormalizer
+): Promise<Record<string, any>[]> {
+  let { data: mealRows } = await supabaseAdmin
+    .from('meal_rates')
+    .select('*')
+    .eq('org_id', orgId ?? NO_ORG)
+    .eq('is_active', true)
+    .eq('tier', tier)
+  if (normalizer && mealRows) mealRows = await normalizer.normalize('meal_rates', mealRows) as typeof mealRows
+  return (mealRows ?? []) as Record<string, any>[]
 }
 
 /**
@@ -2845,8 +2849,8 @@ export async function calculateDayBasedPricing(
     hotelStays,
     ticketRates,
     airports,
-    guideRate,
-    mealRates,
+    guideRows,
+    mealRows,
     tippingRates,
     fixedDailyCosts,
     entranceFeeCache,
@@ -2864,8 +2868,8 @@ export async function calculateDayBasedPricing(
     Promise.all(hotelCities.map(city => resolveHotelStay(orgId, city, tier, isEurPassport, params.travelDate, rateNormalizer, propertyChoices.hotelByCity.get(city.toLowerCase())))),
     fetchTicketRates(orgId, ticketLegs, rateNormalizer),
     fetchAirports(params.orgId),
-    getGuideRate(orgId, language, tier, rateNormalizer, { grade: guideGrade, mode: guideMode }),
-    getMealRates(orgId, tier, rateNormalizer),
+    fetchGuideRows(orgId),
+    fetchMealRows(orgId, tier, rateNormalizer),
     getItemizedTips(orgId, tier, rateNormalizer),
     // Water cost from DB (fixed_daily_costs table) instead of hardcoding
     import('@/lib/fixed-costs').then(m => m.getFixedDailyCosts(orgId, rateNormalizer)),
@@ -3005,13 +3009,44 @@ export async function calculateDayBasedPricing(
     return { rate: null, rowExists: false, via: 'dedicated', basis: 'flat', capacity: null }
   }
 
+  // The date a day is priced on: rates outside their validity period are not
+  // used (lib/pricing/service-rates). Without a travel date, today.
+  const priceDateFor = (dayNumber?: number | null): string => dateForDay(dayNumber) ?? todayIso()
+  const tourType = (template as { tour_type?: string }).tour_type ?? null
+
+  // The trip's guide rate — the hole check and the fallback for a day whose
+  // own city has none. Each day then prices from the rate of ITS city and
+  // date (dayGuideRate below); this took the first row of the language, any
+  // city, any period, for the whole trip.
+  const guideRate = await getGuideRate(orgId, language, tier, rateNormalizer, { grade: guideGrade, mode: guideMode, date: priceDateFor(1), rows: guideRows })
+
   // Throughout mode ("+1"): the guide is with the group every day, so the
   // meet/assist-day rate is fetched too — arrival and departure days with no
   // sightseeing bill at it, not at the full guiding day (operator, 2026-09-04).
   const hasSightseeingDay = (d: (typeof itinerary)[number]) => d.services.guide_required || d.attractions.length > 0
   const meetGreetGuideRate = guideMode === 'throughout'
-    ? await getGuideRate(orgId, language, tier, rateNormalizer, { grade: guideGrade, duration: 'meet_greet', mode: 'throughout' })
+    ? await getGuideRate(orgId, language, tier, rateNormalizer, { grade: guideGrade, duration: 'meet_greet', mode: 'throughout', date: priceDateFor(1), rows: guideRows })
     : null
+
+  /** One day's guide rate: that day's city and date, the duration it asks. */
+  const dayGuideRate = async (day: ItineraryDay, duration: GuideAskDuration): Promise<{ id: string; name: string; dailyRate: number } | null> => {
+    const raw = pickGuideRate(guideRows, { language, grade: guideGrade, duration, mode: guideMode, city: day.city, date: priceDateFor(day.day) })
+    if (!raw) return null
+    const row = (await rateNormalizer.normalize('guide_rates', [raw]))?.[0] as Record<string, any> | undefined
+    const dailyRate = Number(row?.base_rate_eur || row?.rate_eur) || 0
+    return row && dailyRate > 0 ? { id: row.id, name: `${guideLanguageWord(language)} Speaking Guide`, dailyRate } : null
+  }
+  /** A guiding day's rate: the half-day rate when the trip marks the day half
+   *  (isHalfDayGuiding) and one exists, else the full day — and say so. */
+  const sightseeingGuideRate = async (day: ItineraryDay): Promise<{ rate: { id: string; name: string; dailyRate: number } | null; note?: string }> => {
+    if (isHalfDayGuiding(day, tourType)) {
+      const half = await dayGuideRate(day, 'half_day')
+      if (half) return { rate: half, note: 'Half day' }
+      const full = (await dayGuideRate(day, 'full_day')) ?? guideRate
+      return { rate: full, note: full ? 'Half day — no half-day rate, priced at the full-day rate' : undefined }
+    }
+    return { rate: (await dayGuideRate(day, 'full_day')) ?? guideRate }
+  }
 
   // Flag missing rates that the itinerary actually needs (no fabrication).
   const needsGuide = guideMode === 'throughout' || itinerary.some(hasSightseeingDay)
@@ -3035,18 +3070,22 @@ export async function calculateDayBasedPricing(
       message: noMeetGreetRateMessage,
     })
   }
+  // One restaurant rate per day and meal: the day's city and date, the
+  // starred restaurant first (lib/pricing/service-rates pickMealRate). It
+  // averaged every row of the tier across restaurants and cities, and
+  // charged a per-group price per person.
+  const mealFor = (day: ItineraryDay, meal: 'lunch' | 'dinner'): PickedMeal | null =>
+    pickMealRate(mealRows, { mealType: meal, city: day.city, date: priceDateFor(day.day) })
   // One hole per meal TYPE the trip needs and cannot price — a tier with
   // lunch rates but no dinner rate used to price every dinner at 0 with no
   // hole at all (rateFor returns 0, and only a both-zero result was null).
-  const needsMeal = (meal: 'lunch' | 'dinner') => itinerary.some(d => d.meals[meal] === 'external')
-  const mealRateFor = (meal: 'lunch' | 'dinner'): number => usableRate(mealRates?.[meal]) ?? 0
   const noMealRateMessage = (meal: 'lunch' | 'dinner') =>
     `No ${tier} ${meal} rate. Add one in Rates → Meals.`
   for (const meal of ['lunch', 'dinner'] as const) {
-    if (needsMeal(meal) && mealRateFor(meal) <= 0) {
+    if (itinerary.some(d => d.meals[meal] === 'external' && !mealFor(d, meal))) {
       addHole({
         kind: 'meal',
-        reason: mealRates ? 'unpriced' : 'missing',
+        reason: mealRows.length ? 'unpriced' : 'missing',
         lookupAttempted: `meal_rates meal_type=${meal} tier=${tier}`,
         message: noMealRateMessage(meal),
       })
@@ -3124,12 +3163,17 @@ export async function calculateDayBasedPricing(
     const hasSightseeing = day.services.guide_required || day.attractions.length > 0
 
     // ----- GUIDE (fixed per day) -----
+    // Each day's rate is its own city's and date's, half a day when the trip
+    // marks the day half (sightseeingGuideRate above).
+    const sightseeingGuide = hasSightseeing ? await sightseeingGuideRate(day) : { rate: null }
+    const todaysGuide = sightseeingGuide.rate
     if (guideMode === 'throughout') {
       // The "+1" travels day one to the end: a full guiding fee on
       // sightseeing days, the meet/assist rate on every other day (arrival,
       // departure, transit — he escorts either way).
-      if (hasSightseeing && guideRate) {
-        fixedCosts += guideRate.dailyRate
+      const meetGreetToday = !hasSightseeing ? ((await dayGuideRate(day, 'meet_greet')) ?? meetGreetGuideRate) : null
+      if (hasSightseeing && todaysGuide) {
+        fixedCosts += todaysGuide.dailyRate
         services.push({
           id: `day${day.day}-guide`,
           dayNumber: day.day,
@@ -3137,14 +3181,15 @@ export async function calculateDayBasedPricing(
           serviceName: `Throughout Guide — ${language}`,
           quantity: 1,
           quantityMode: 'fixed',
-          unitCost: guideRate.dailyRate,
-          lineTotal: guideRate.dailyRate,
+          unitCost: todaysGuide.dailyRate,
+          lineTotal: todaysGuide.dailyRate,
           rateSource: 'guides',
           isPerPax: false,
-          isOptional: false
+          isOptional: false,
+          ...(sightseeingGuide.note ? { notes: sightseeingGuide.note } : {}),
         })
-      } else if (!hasSightseeing && meetGreetGuideRate) {
-        fixedCosts += meetGreetGuideRate.dailyRate
+      } else if (!hasSightseeing && meetGreetToday) {
+        fixedCosts += meetGreetToday.dailyRate
         services.push({
           id: `day${day.day}-guide`,
           dayNumber: day.day,
@@ -3152,8 +3197,8 @@ export async function calculateDayBasedPricing(
           serviceName: `Throughout Guide — ${language} (meet/assist day)`,
           quantity: 1,
           quantityMode: 'fixed',
-          unitCost: meetGreetGuideRate.dailyRate,
-          lineTotal: meetGreetGuideRate.dailyRate,
+          unitCost: meetGreetToday.dailyRate,
+          lineTotal: meetGreetToday.dailyRate,
           rateSource: 'guides',
           isPerPax: false,
           isOptional: false
@@ -3163,10 +3208,10 @@ export async function calculateDayBasedPricing(
       } else {
         listUnpricedLine({ id: `day${day.day}-guide`, dayNumber: day.day, serviceType: 'guide', serviceName: `Throughout Guide — ${language} (meet/assist day)`, isPerPax: false }, noMeetGreetRateMessage)
       }
-    } else if (hasSightseeing && !guideRate) {
+    } else if (hasSightseeing && !todaysGuide) {
       listUnpricedLine({ id: `day${day.day}-guide`, dayNumber: day.day, serviceType: 'guide', serviceName: `${language} Speaking Guide`, isPerPax: false }, noGuideRateMessage)
-    } else if (hasSightseeing && guideRate) {
-      fixedCosts += guideRate.dailyRate
+    } else if (hasSightseeing && todaysGuide) {
+      fixedCosts += todaysGuide.dailyRate
       services.push({
         id: `day${day.day}-guide`,
         dayNumber: day.day,
@@ -3174,11 +3219,12 @@ export async function calculateDayBasedPricing(
         serviceName: `${language} Speaking Guide`,
         quantity: 1,
         quantityMode: 'fixed',
-        unitCost: guideRate.dailyRate,
-        lineTotal: guideRate.dailyRate,
+        unitCost: todaysGuide.dailyRate,
+        lineTotal: todaysGuide.dailyRate,
         rateSource: 'guides',
         isPerPax: false,
-        isOptional: false
+        isOptional: false,
+        ...(sightseeingGuide.note ? { notes: sightseeingGuide.note } : {}),
       })
     }
 
@@ -4072,7 +4118,11 @@ export async function calculateDayBasedPricing(
   // attractions are matched in memory here — was a per-attraction query
   // (+ full-table scan on each miss) inside the loop below.
 
-  const resolved = resolveAttractions(itinerary, entranceFeeCache, attractionAliases, isEurPassport)
+  // Only fees valid on the trip's first day price (a fee's Valid From / Valid
+  // To): next year's price takes over on its date, an expired one stops.
+  const feeDate = priceDateFor(1)
+  const feesOnDate = entranceFeeCache.filter(f => rateValidOn(f, feeDate))
+  const resolved = resolveAttractions(itinerary, feesOnDate, attractionAliases, isEurPassport)
   for (const fee of resolved.tickets) {
     processedAttractions.add(fee.name.toLowerCase())
     // A free site (rate 0, e.g. Colossi of Memnon) is a resolved visit with
@@ -4112,15 +4162,23 @@ export async function calculateDayBasedPricing(
     ))
   })
   resolved.missingIds.forEach((miss, i) => {
-    warnings.push(`Day ${miss.day}: picked attraction ${miss.id} is no longer in the entrance fees table`)
+    // Still in the table, but its validity period does not cover the trip.
+    const outOfDate = entranceFeeCache.find(f => f.id === miss.id)
+    warnings.push(outOfDate
+      ? `Day ${miss.day}: picked attraction "${outOfDate.attraction_name}" has no fee valid on ${feeDate}`
+      : `Day ${miss.day}: picked attraction ${miss.id} is no longer in the entrance fees table`)
     services.push(zeroLine(
-      { id: `day${miss.day}-entrance-missing-${i}`, dayNumber: miss.day, serviceType: 'entrance', serviceName: 'Picked ticket', isPerPax: true },
-      { issue: 'The ticket picked for this day is no longer in Rates → Entrance Fees. Pick it again on the day.' },
+      { id: `day${miss.day}-entrance-missing-${i}`, dayNumber: miss.day, serviceType: 'entrance', serviceName: outOfDate?.attraction_name ?? 'Picked ticket', isPerPax: true },
+      { issue: outOfDate
+        ? `This ticket's fee is not valid on ${feeDate}. Add the fee for that period in Rates → Attractions.`
+        : 'The ticket picked for this day is no longer in Rates → Entrance Fees. Pick it again on the day.' },
     ))
   })
 
   // ----- External Meals (per pax) -----
   let externalMealsPerPax = 0
+  /** Per-person meals with a minimum group (meal_rates.minimum_pax). */
+  const mealMinimums: Array<{ rate: number; minimumPax: number }> = []
 
   const MEAL_LABEL = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' } as const
   const includedMealReason = (day: ItineraryDay, meal: 'breakfast' | 'lunch' | 'dinner'): string => {
@@ -4141,17 +4199,38 @@ export async function calculateDayBasedPricing(
       // There is no breakfast rate to buy: an "external" breakfast has never
       // priced, and still does not.
       if (status !== 'external' || meal === 'breakfast') continue
-      const rate = mealRateFor(meal)
-      if (rate > 0) {
-        externalMealsPerPax += rate
+      const picked = mealFor(day, meal)
+      if (picked && !picked.perPerson) {
+        // One price for the whole group (Per Person Rate unticked): a fixed
+        // cost like a guide — it was multiplied by every traveller.
+        fixedCosts += picked.rate
+        services.push({
+          ...line,
+          isPerPax: false,
+          quantity: 1,
+          quantityMode: 'fixed',
+          unitCost: picked.rate,
+          lineTotal: picked.rate,
+          rateSource: 'meal_rates',
+          isOptional: false,
+          notes: `${picked.row.restaurant_name ?? 'Restaurant'} — per group`,
+        })
+      } else if (picked) {
+        externalMealsPerPax += picked.rate
+        // A smaller group still pays the restaurant's minimum: the shortfall
+        // is added per group size in the pax table (mealMinimumsAt below).
+        if (picked.minimumPax > 1) mealMinimums.push({ rate: picked.rate, minimumPax: picked.minimumPax })
         services.push({
           ...line,
           quantity: 1,
           quantityMode: 'per_pax',
-          unitCost: rate,
-          lineTotal: rate,
+          unitCost: picked.rate,
+          lineTotal: picked.rate,
           rateSource: 'meal_rates',
           isOptional: false,
+          ...(picked.row.restaurant_name || picked.minimumPax > 1
+            ? { notes: [picked.row.restaurant_name, picked.minimumPax > 1 ? `minimum ${picked.minimumPax} people` : ''].filter(Boolean).join(' — ') }
+            : {}),
         })
       } else {
         // The hole was recorded once per meal type above.
@@ -4166,13 +4245,15 @@ export async function calculateDayBasedPricing(
   // the REQUESTED group size — the multi-pax sheet below keeps this fixed
   // line at every pax count, a known approximation the quote's own pax never
   // suffers from.
-  if (guideMode === 'throughout' && (params.numPax ?? 2) <= 3 && mealRates) {
+  if (guideMode === 'throughout' && (params.numPax ?? 2) <= 3 && mealRows.length) {
     for (const day of itinerary) {
       for (const meal of ['lunch', 'dinner'] as const) {
         if (day.meals[meal] !== 'external') continue
-        const rate = mealRateFor(meal)
+        const picked = mealFor(day, meal)
         // No rate for this meal: the customer's own line already shows it.
-        if (rate <= 0) continue
+        // A per-group price already feeds the guide.
+        if (!picked || !picked.perPerson) continue
+        const rate = picked.rate
         fixedCosts += rate
         services.push({
           id: `day${day.day}-guide-${meal}`,
@@ -4442,6 +4523,10 @@ export async function calculateDayBasedPricing(
   /** Per-unit airport / hotel assistance at a group size (migration 20261104). */
   const staffUnitsAt = (pax: number): number =>
     staffUnitLines.reduce((sum, l) => sum + l.rate * unitsFor(pax, l.capacity), 0)
+  /** What a group smaller than a restaurant's minimum still pays: the empty
+   *  seats (lib/pricing/service-rates mealCostForGroup, less the per-person part). */
+  const mealMinimumsAt = (pax: number): number =>
+    mealMinimums.reduce((sum, m) => sum + mealCostForGroup({ ...m, perPerson: true }, pax) - m.rate * Math.max(1, Math.floor(pax) || 1), 0)
 
   const transportAtPax = (pax: number): number => {
     let total = 0
@@ -4485,9 +4570,10 @@ export async function calculateDayBasedPricing(
     // pax+1, the same treatment the tour-leader variant already gets inside
     // priceAcrossPax (both riding = both counted).
     // Per-unit assistance (a room of 2) steps with the group like transport.
+    // So does a restaurant's minimum group (a per-person meal for 10 at 4 pax).
     transportAt: guideMode === 'throughout'
-      ? (pax: number) => transportAtPax(pax + 1) + staffUnitsAt(pax)
-      : (pax: number) => transportAtPax(pax) + staffUnitsAt(pax),
+      ? (pax: number) => transportAtPax(pax + 1) + staffUnitsAt(pax) + mealMinimumsAt(pax)
+      : (pax: number) => transportAtPax(pax) + staffUnitsAt(pax) + mealMinimumsAt(pax),
     // The leader rides the ticket legs at customer fare, like everything else he consumes.
     tourLeaderCost: accommodationPPD + singleSupplement + entranceFeesPerPax + externalMealsPerPax + waterPerPax + ticketsPerPax + staffPerPax,
     accommodationAt,

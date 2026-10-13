@@ -4,6 +4,8 @@ import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-suppl
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
+import { validateRatePayload } from '@/lib/rate-validation'
+import { rateInUse, rateInUseMessage } from '@/lib/rates/service-rate-in-use'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
@@ -47,6 +49,12 @@ export async function PUT(
     const { id } = await params
     if (!(await rowInOrg(supabaseAdmin, 'meal_rates', id, orgId))) return notFoundInOrg('Rate')
     const body = await request.json()
+
+    // The same money checks as a create: an edit could save a negative rate.
+    const _rateCheck = validateRatePayload(body)
+    if (!_rateCheck.ok) {
+      return NextResponse.json({ success: false, error: 'Invalid rate values', violations: _rateCheck.errors }, { status: 400 })
+    }
 
     // Validate supplier fields only when the client touched them.
     const supplierFieldPresent = 'supplier_id' in body || 'supplier_name' in body
@@ -193,6 +201,10 @@ export async function DELETE(
     if (!orgId) return noOrgResponse()
     const { id } = await params
     if (!(await rowInOrg(supabaseAdmin, 'meal_rates', id, orgId))) return notFoundInOrg('Rate')
+
+    // Refused, with the reason, while a trip, variation or tour still uses it.
+    const use = await rateInUse(supabaseAdmin, 'meal_rates', id, orgId)
+    if (use) return NextResponse.json({ success: false, error: rateInUseMessage(use) }, { status: 409 })
 
     const { error } = await supabaseAdmin
       .from('meal_rates')

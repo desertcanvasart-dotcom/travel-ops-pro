@@ -112,9 +112,11 @@ export default function ToursRatesPage() {
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">EU vs Non-EU Pricing</h3>
         <p className="text-gray-600 mb-6">
-          Many rates have different prices for European passport holders and everyone else. Hotels
-          and Nile cruises carry both prices in every dated period. Sleeping trains and hotel
-          services carry one price for everybody.
+          Hotels and Nile cruises carry a price for EU and for non-EU passport holders in every
+          dated period. Every other rate takes one price for everybody: sleeping trains and hotel
+          services, transport (one price per vehicle), flights (one fare per period), and guides,
+          meals, attractions and activities (one <strong>Rate</strong>; their CSV still has a{' '}
+          <strong>Rate (non-EU passport, legacy)</strong> column for old sheets).
         </p>
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Accommodation: hotels, ships, sleeper trains and hotel assistants</h3>
@@ -252,6 +254,116 @@ export default function ToursRatesPage() {
           If your team calls a guide a &ldquo;lecturer&rdquo; or a tour a &ldquo;programme&rdquo;,
           relabel it once and the Rates Hub reads in your words.
         </p>
+      </section>
+
+      {/* Guides & Services */}
+      <section id="guides-services" className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Guides &amp; Services</h2>
+        <p className="text-gray-600 mb-4">
+          Four pages under <strong>Home › Suppliers &amp; Rates › Guides &amp; Services</strong>:{' '}
+          <strong>Tour Guides</strong>, <strong>Meals</strong>, <strong>Attractions</strong> and{' '}
+          <strong>Activities</strong>. Admins and managers see them (the owner always does). Agents do not
+          see these pages, but they pick from these rates on trips and vouchers. Viewers cannot read them.
+          Each company sees, prices and imports only its own rates.
+        </p>
+
+        <h3 className="text-lg font-medium text-gray-900 mb-3">On every page</h3>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li><strong>Add Rate</strong> (<strong>Add Attraction</strong> on Attractions) opens the form. Each row has Edit, Duplicate (opens the form filled in, with the service code cleared) and Delete.</li>
+          <li><strong>Import/Export</strong> loads or downloads the table as CSV. A panel shows the change history of the rates.</li>
+          <li><strong>Rate currency</strong> is the currency the supplier&apos;s contract is written in. Leave it on <strong>Organisation default</strong> for your company&apos;s rate currency. A row in another currency is listed in that currency with a badge; pricing, the Pricing Grid, the trip rate picker and supplier vouchers convert it into your rate currency at your exchange rates. A row that cannot be converted has no price there.</li>
+          <li><strong>Valid From</strong> and <strong>Valid To</strong> are used. Pricing only uses a rate whose period covers the day being priced (the trip&apos;s first day for entrance fees). A rate with no dates is always valid. Without a travel date, today is used.</li>
+          <li>The list loads every rate, inactive ones too. The <strong>Active Only</strong> / <strong>Show All</strong> button filters the list on the page. The tiles count every rate, including inactive ones; <strong>Active</strong> counts the active ones.</li>
+        </ul>
+
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Duplicates</h3>
+        <p className="text-gray-600 mb-3">
+          A new rate that matches an existing one is refused with &ldquo;already exists&rdquo;, and you
+          edit that rate instead. A rate matches when all of these are the same:
+        </p>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li><strong>Tour Guides:</strong> language, guide type, tour duration, guide mode, city, linked guide and validity period.</li>
+          <li><strong>Meals:</strong> restaurant, city, meal type and validity period.</li>
+          <li><strong>Attractions:</strong> name, city and validity period.</li>
+          <li><strong>Activities:</strong> name, city, supplier and validity period.</li>
+        </ul>
+        <p className="text-gray-600 mt-3">
+          So next year&apos;s price is a second rate with next year&apos;s dates: Duplicate the rate,
+          change Valid From and Valid To, and save. Pricing moves to it on its start date.
+        </p>
+
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Tour Guides</h3>
+        <p className="text-gray-600 mb-3">
+          Fields: Service Code, Language (from Settings › Vocabulary › Guide languages), Guide Type
+          (Egyptologist or Senior Egyptologist), Guide mode (Spot guide or Throughout guide), City, Link to
+          Guide (optional), Tour Duration, Rate, Rate currency, Season, Valid From, Valid To, Notes, Active.
+          Tiles: Total Rates, Active, Linked to Guide, Avg. Daily Rate (averaged within each currency), Cities.
+        </p>
+        <p className="text-gray-600 mb-3">How automatic pricing picks a guide rate for a day:</p>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>The rate&apos;s language, guide type and guide mode must match the quote. A throughout quote is priced only from Throughout rates; with none, the guide shows as &ldquo;No rate&rdquo;.</li>
+          <li>A rate for the day&apos;s city comes first, then a rate with no city, then another city&apos;s rate.</li>
+          <li><strong>Full Day</strong> prices an ordinary guiding day. <strong>Half Day</strong> prices a day only when the trip marks it as a half day (a half-day tour, or a day whose transport is set to a half day). With no Half Day rate, that day is priced at the Full Day rate and the line says so.</li>
+          <li><strong>Meet &amp; Assist day</strong> prices a throughout guide&apos;s days without sightseeing (arrival and departure).</li>
+          <li><strong>Extended</strong> and <strong>Hourly</strong> rates are never used by automatic pricing. You can pick them on supplier vouchers and in the Pricing Grid.</li>
+          <li>The throughout guide&apos;s bed is not here. Enter it as <strong>Guide bed / night</strong> on the hotel&apos;s rate periods in Rates › Hotels.</li>
+        </ul>
+
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Meals</h3>
+        <p className="text-gray-600 mb-3">
+          Fields: Restaurant name, Meal type, Cuisine, Restaurant type, City, Tier, Meal category, Dietary
+          options, Rate, Rate currency, Per Person Rate, Minimum Pax, Season, Valid From, Valid To, Supplier,
+          Notes, Active and Preferred (the star). Tiles: Total Rates, Active, Linked, Avg. rate, Cities.
+        </p>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>Automatic pricing prices each lunch or dinner the trip buys at <strong>one</strong> restaurant&apos;s rate of the trip&apos;s tier: the day&apos;s city first, a starred (Preferred) restaurant first, then by restaurant name. It does not average restaurants.</li>
+          <li>With <strong>Per Person Rate</strong> unticked, the rate is one price for the whole group. Ticked, it is per traveller, and a group smaller than <strong>Minimum Pax</strong> still pays for the minimum.</li>
+          <li>A supplier voucher charges a per-group meal once and a per-person meal for the party, at least the minimum. The Pricing Grid charges a per-group meal once, but shows the minimum only as a note.</li>
+        </ul>
+
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Attractions</h3>
+        <p className="text-gray-600 mb-3">
+          The page is <strong>Attractions &amp; Entrance Fees</strong>. Fields: Attraction Name, Service Code,
+          Supplier, City, Category, Fee Type, Season, Rate, Rate currency, Valid From, Valid To, the
+          <strong> Pricing &amp; sale</strong> box, Notes and Active. Tiles: Total Attractions, Active,
+          Standard, Add-ons, Cities, Avg. rate. A fee of type free shows FREE.
+        </p>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>Pricing charges the tickets picked on a programme day. A day with no picked ticket is matched by its wording, through the alias table and then by name. Each ticket is charged once per trip.</li>
+          <li><strong>Not included in the automatic price</strong> marks an add-on. An add-on is never matched from a day&apos;s wording; it is charged only when picked on the day. <strong>Offer as a paid extra at booking</strong> is a separate setting.</li>
+          <li>Child prices use the engine&apos;s one fixed child discount (50%). There is no child or student discount per ticket.</li>
+          <li>In a Japanese session, editing saves the name and notes as the Japanese version and leaves the English name alone.</li>
+        </ul>
+
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Activities</h3>
+        <p className="text-gray-600 mb-3">
+          The page is <strong>Activities &amp; Add-ons Rates</strong>. Pricing Type is one of Per Person
+          (rate × travellers), Per Unit (per boat, vehicle or ride, with a unit label and a maximum
+          capacity), Flat Rate (one price for the group) or Tiered (Volume Discount): bands of group size,
+          each with its own per-person rate. Tiles: Total Rates, Active, Per Person (tiered rates included),
+          Per Unit, Flat Rate, Cities.
+        </p>
+        <p className="text-gray-600">
+          The Pricing Grid offers boat, felucca and motor-boat activities in its boat slot and the rest as
+          experiences, priced by their pricing type.
+        </p>
+
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Deleting a rate</h3>
+        <p className="text-gray-600">
+          A delete is refused, with the reason, while the rate is used: by a line on a trip&apos;s Pricing
+          Grid, by a tour variation&apos;s service list, by a day of a tour, or (for an attraction) as a
+          picked ticket on a programme day or a trip line with the same name. Deactivate the rate instead;
+          it stops pricing and stays on file.
+        </p>
+
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">What it does not do</h3>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>Automatic pricing never uses Extended or Hourly guide rates.</li>
+          <li>Pricing does not choose a guide or restaurant supplier for you: with several rates for one city, the fixed order above decides.</li>
+          <li>The Pricing Grid does not add a restaurant&apos;s minimum group; check the note on the option.</li>
+          <li>Entrance fees are priced at the fee valid on the trip&apos;s first day, not day by day.</li>
+          <li>There is no Egyptian-resident or student price.</li>
+        </ul>
       </section>
     </div>
   )

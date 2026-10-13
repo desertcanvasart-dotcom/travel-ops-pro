@@ -4696,7 +4696,8 @@
         "cancel": "Cancel",
         "update": "Update Rate",
         "create": "Create Rate",
-        "guideMode": "Guide mode"
+        "guideMode": "Guide mode",
+        "durationHint": "Automatic pricing uses Full Day, Half Day (on days the trip marks as a half day) and Meet & Assist day (a throughout guide's arrival and departure days). Extended and Hourly rates are for vouchers and the Pricing Grid only."
       },
       "table": {
         "language": "Language",
