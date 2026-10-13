@@ -196,8 +196,9 @@ describe('pricing follows the choice', () => {
 describe('the editor and the engine read the same list', () => {
   it('the engine picks through lib/pricing/property-candidates, not its own query', () => {
     const src = readFileSync('lib/auto-pricing-service.ts', 'utf8')
-    expect(src).toContain('hotelCandidates(supabaseAdmin, orgId, city, tier)')
-    expect(src).toContain('cruiseCandidates(supabaseAdmin, orgId, tier, embarkCity, nights)')
+    // The engine passes the travel date: a rate sheet valid on it ranks first.
+    expect(src).toContain('hotelCandidates(supabaseAdmin, orgId, city, tier, travelDate)')
+    expect(src).toContain('cruiseCandidates(supabaseAdmin, orgId, tier, embarkCity, nights, travelDate)')
     expect(src).not.toMatch(/from\('accommodation_rates'\)\s*\.select\('\*'\)\s*\.eq\('tier'/)
     const route = readFileSync('app/api/b2b/accommodation-options/route.ts', 'utf8')
     expect(route).toContain('hotelCandidates(db, orgId, city, tier)')

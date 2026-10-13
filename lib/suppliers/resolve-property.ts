@@ -71,14 +71,14 @@ export async function resolveRateProperties(
   const explicitIds = Array.from(
     new Set(requests.map(r => norm(r.propertyId)).filter(Boolean)),
   )
-  const byId = new Map<string, { id: string; name: string }>()
+  const byId = new Map<string, { id: string; name: string; supplier_id: string | null }>()
   if (explicitIds.length > 0) {
     const { data } = await db
       .from('supplier_properties')
       .select('id, name, supplier_id')
       .in('id', explicitIds)
       .eq('org_id', org)
-    for (const p of data ?? []) byId.set(p.id, { id: p.id, name: p.name })
+    for (const p of data ?? []) byId.set(p.id, { id: p.id, name: p.name, supplier_id: p.supplier_id ?? null })
   }
 
   // Everything that still needs resolving by name, deduplicated: a sheet of
@@ -86,7 +86,9 @@ export async function resolveRateProperties(
   const pending = new Map<string, { req: PropertyRequest; indices: number[]; supplierId: string; name: string }>()
   requests.forEach((req, i) => {
     const explicit = norm(req.propertyId)
-    if (explicit && byId.has(explicit)) {
+    // ...and only when it is the RATE'S supplier's property: a rate under
+    // supplier X linked to supplier Y's hotel would book X and show Y.
+    if (explicit && byId.has(explicit) && byId.get(explicit)!.supplier_id === (norm(req.supplierId) || null)) {
       const p = byId.get(explicit)!
       out[i] = { property_id: p.id, name: p.name }
       return

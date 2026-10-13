@@ -5,6 +5,9 @@ import { validateRatePayload } from '@/lib/rate-validation'
 import { cleanPricingBasisFields } from '@/lib/pricing/pricing-basis'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { sanitizeRateUpdate } from '@/lib/rates/update-payload'
+import { pickHotelServiceColumns } from '@/lib/rates/accommodation-payload'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 
 export async function GET() {
   try {
@@ -43,14 +46,26 @@ export async function POST(request: NextRequest) {
       body.destination = null
     }
 
-    // An unpicked supplier arrives from the form as '' and the column is a
-    // uuid, which would fail the insert. Absent is null, not empty.
+    // The form's columns only, '' read as absent on uuid/date/CHECKed ones
+    // (lib/rates/update-payload) — never `id`, `created_at` or an unknown key.
+    const clean = sanitizeRateUpdate(pickHotelServiceColumns(body))
+    if (!clean.ok) {
+      return NextResponse.json({ success: false, error: clean.error, violations: clean.violations }, { status: clean.status })
+    }
+
+    // Only one of the caller's company's suppliers: another company's id is
+    // refused (400), never saved onto the rate and copied onto trip lines.
+    const supplierCheck = await validateAndResolveSupplierFields({ supplier_id: body.supplier_id }, supabase)
+    if (!supplierCheck.ok) {
+      return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+    }
+
     // Per group / per person / per unit (migration 20261104).
     const basis = cleanPricingBasisFields(body)
     if (!basis.ok) {
       return NextResponse.json({ success: false, error: basis.error }, { status: 400 })
     }
-    const payload = { ...body, supplier_id: body.supplier_id || null, ...basis.fields }
+    const payload = { ...clean.payload, supplier_id: supplierCheck.supplier_id, ...basis.fields }
 
     // Check for existing rate with same natural key
     let existingQuery = supabase
@@ -88,7 +103,7 @@ export async function POST(request: NextRequest) {
     if (existing?.length) {
       return NextResponse.json({
         success: false,
-        error: 'A rate with these details already exists. Edit that rate, or change what makes this one different (supplier, period, class, city) before saving.',
+        error: 'A rate with the same service type, hotel category, destination and supplier already exists. Edit that rate, or change one of those before saving.',
         existing: existing[0],
       }, { status: 409 })
     }
