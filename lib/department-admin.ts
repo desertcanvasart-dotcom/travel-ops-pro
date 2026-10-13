@@ -32,6 +32,27 @@ export async function findServiceTypeConflict(
   return null
 }
 
+export const DUPLICATE_DEPARTMENT_NAME = 'A department with that name already exists'
+
+/** The department (other than `excludeId`) that already has this name, ignoring
+ *  case and surrounding spaces — the table's unique key is case-sensitive, so
+ *  "Reservation" and "reservation" would both save and read as one. */
+export function findDepartmentNameClash<R extends { id: string; name: string }>(
+  rows: readonly R[],
+  name: string,
+  excludeId?: string | null
+): R | null {
+  const wanted = name.trim().toLowerCase()
+  return rows.find(r => r.id !== excludeId && r.name.trim().toLowerCase() === wanted) ?? null
+}
+
+/** Does another department of this organisation already have this name? */
+export async function departmentNameTaken(name: string, excludeId: string | null, orgId: string): Promise<boolean> {
+  const { data, error } = await supabaseAdmin.from('departments').select('id, name').eq('org_id', orgId)
+  if (error) throw error
+  return !!findDepartmentNameClash((data ?? []) as { id: string; name: string }[], name, excludeId)
+}
+
 export function sanitizeServiceTypes(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return [...new Set(

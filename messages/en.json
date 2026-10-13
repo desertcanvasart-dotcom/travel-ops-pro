@@ -7140,6 +7140,8 @@
     "country": "Country",
     "selectCountry": "Select...",
     "defaultMargin": "Default Margin (%)",
+    "commissionPercent": "Commission (%)",
+    "tableCommission": "Commission",
     "partnerIsActive": "Partner is active",
     "cancel": "Cancel",
     "update": "Update",
@@ -7857,7 +7859,12 @@
     "sysRoleViewer": "Viewer — read-only",
     "sendInvitation": "Send invitation",
     "sending": "Sending…",
-    "inviteFailed": "Could not send the invitation"
+    "inviteFailed": "Could not send the invitation",
+    "inviteAdminOnly": "Only an admin can invite people to the system.",
+    "failedToLoad": "Could not load team members",
+    "failedToSave": "Could not save the team member",
+    "failedToDeactivate": "Could not deactivate the team member",
+    "failedToReactivate": "Could not reactivate the team member"
   },
   "tasks": {
     "title": "Tasks",
@@ -8165,8 +8172,10 @@
   "departments": {
     "loading": "Loading departments…",
     "title": "Departments",
-    "subtitle": "Each service type routes to one department; generated tasks land on the people in it.",
-    "memberCount": "{count} members",
+    "subtitle": "Each service type routes to one department. Members are for reference: you choose who takes each department's tasks when you generate them for a trip.",
+    "memberCount": "{count, plural, one {# active member} other {# active members}}",
+    "newTypesPlaceholder": "Service types (optional, comma separated)",
+    "reactivateConflict": "Switching this department back on will be rejected: {types} now belongs to {names}. Remove it from this card, or from {names}, first.",
     "active": "Active",
     "descriptionPlaceholder": "Description (optional)",
     "routedTypes": "Routed service types",

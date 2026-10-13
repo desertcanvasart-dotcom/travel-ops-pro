@@ -100,7 +100,8 @@ interface B2BPartner {
   id: string
   company_name: string
   partner_code: string
-  commission_percent: number
+  // The partner's own commission_percent (Partners page); null when none is set.
+  commission_percent: number | null
 }
 
 // PackageType imported from '@/lib/package-types'
@@ -894,7 +895,8 @@ function WhatsAppParserContent() {
   const [showAddPartner, setShowAddPartner] = useState(false)
   const [newPartnerName, setNewPartnerName] = useState('')
   const [newPartnerCode, setNewPartnerCode] = useState('')
-  const [newPartnerCommission, setNewPartnerCommission] = useState('10')
+  const [newPartnerCommission, setNewPartnerCommission] = useState('')
+  const [partnerError, setPartnerError] = useState<string | null>(null)
   const [isCreatingPartner, setIsCreatingPartner] = useState(false)
 
   const itinerarySuccessRef = useRef<HTMLDivElement>(null)
@@ -1019,11 +1021,16 @@ function WhatsAppParserContent() {
               id: p.id,
               company_name: p.company_name,
               partner_code: p.partner_code,
-              commission_percent: p.default_margin_percent || 10
+              // commission_percent, not default_margin_percent: the margin is a
+              // markup on cost, the commission is what the partner earns.
+              commission_percent: p.commission_percent ?? null
             })))
+          } else {
+            setPartnerError(data.error || 'Could not load partners')
           }
         } catch (err) {
           console.error('Error fetching B2B partners:', err)
+          setPartnerError('Could not load partners')
         }
       }
       fetchPartners()
@@ -1038,36 +1045,46 @@ function WhatsAppParserContent() {
   const handleCreatePartner = async () => {
     if (!newPartnerName.trim()) return
 
+    setPartnerError(null)
     setIsCreatingPartner(true)
     try {
+      const commission = newPartnerCommission.trim()
       const response = await fetch('/api/b2b/partners', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        // No partner_code unless one was typed: the server numbers it within
+        // the company. The first three letters of the name collided on the
+        // second "ABC...". The margin is left unset (the company's default
+        // applies); what is typed here is the commission.
         body: JSON.stringify({
           company_name: newPartnerName.trim(),
-          partner_code: newPartnerCode.trim() || newPartnerName.trim().substring(0, 3).toUpperCase(),
-          default_margin_percent: parseFloat(newPartnerCommission) || 10,
+          ...(newPartnerCode.trim() ? { partner_code: newPartnerCode.trim() } : {}),
+          default_margin_percent: null,
+          commission_percent: commission === '' ? null : Number(commission),
           is_active: true
         })
       })
 
-      const data = await response.json()
-      if (data.success && data.data) {
+      const data = await response.json().catch(() => ({}))
+      if (response.ok && data.success && data.data) {
         const newPartner: B2BPartner = {
           id: data.data.id,
           company_name: data.data.company_name,
           partner_code: data.data.partner_code,
-          commission_percent: data.data.default_margin_percent || 10
+          commission_percent: data.data.commission_percent ?? null
         }
         setB2bPartners(prev => [...prev, newPartner])
         setSelectedPartnerId(newPartner.id)
         setShowAddPartner(false)
         setNewPartnerName('')
         setNewPartnerCode('')
-        setNewPartnerCommission('10')
+        setNewPartnerCommission('')
+      } else {
+        setPartnerError(data.error || 'Could not create the partner')
       }
     } catch (err) {
       console.error('Error creating partner:', err)
+      setPartnerError('Could not create the partner')
     } finally {
       setIsCreatingPartner(false)
     }
@@ -1876,11 +1893,14 @@ function WhatsAppParserContent() {
                             <option value="">{t('selectPartner') || '-- Select Partner --'}</option>
                             {b2bPartners.map((partner) => (
                               <option key={partner.id} value={partner.id}>
-                                {partner.company_name} ({partner.partner_code}) - {partner.commission_percent}%
+                                {partner.company_name} ({partner.partner_code}){partner.commission_percent != null ? ` - ${partner.commission_percent}%` : ''}
                               </option>
                             ))}
                           </select>
 
+                          {partnerError && (
+                            <p role="alert" className="text-xs text-red-600">{partnerError}</p>
+                          )}
                           <button
                             type="button"
                             onClick={() => setShowAddPartner(true)}
@@ -1904,7 +1924,7 @@ function WhatsAppParserContent() {
                               type="text"
                               value={newPartnerCode}
                               onChange={(e) => setNewPartnerCode(e.target.value.toUpperCase())}
-                              placeholder={t('newPartnerCode') || 'Code (e.g., ABC)'}
+                              placeholder={t('newPartnerCode') || 'Code (optional)'}
                               maxLength={10}
                               className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent uppercase"
                             />
@@ -1918,14 +1938,18 @@ function WhatsAppParserContent() {
                               className="w-24 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                             />
                           </div>
+                          {partnerError && (
+                            <p role="alert" className="text-xs text-red-600">{partnerError}</p>
+                          )}
                           <div className="flex gap-2">
                             <button
                               type="button"
                               onClick={() => {
                                 setShowAddPartner(false)
+                                setPartnerError(null)
                                 setNewPartnerName('')
                                 setNewPartnerCode('')
-                                setNewPartnerCommission('10')
+                                setNewPartnerCommission('')
                               }}
                               className="flex-1 px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
                             >
@@ -1957,7 +1981,7 @@ function WhatsAppParserContent() {
                             </span>
                           </div>
                           <p className="text-xs text-indigo-600 mt-1">
-                            {t('commissionRate') || 'Commission'}: {b2bPartners.find(p => p.id === selectedPartnerId)?.commission_percent}%
+                            {t('commissionRate') || 'Commission'}: {b2bPartners.find(p => p.id === selectedPartnerId)?.commission_percent ?? 0}%
                           </p>
                         </div>
                       )}
