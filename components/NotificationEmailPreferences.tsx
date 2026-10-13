@@ -4,7 +4,8 @@
 // gets notifications, so every role can reach this (the Notifications page);
 // Settings is manager-and-above. /api/settings/notifications reads and writes
 // only the signed-in user's row, and the send path (lib/notifications.ts)
-// honours it.
+// honours it. The choices are kept per company: a person in both companies
+// sets each one while working in it (lib/notification-preferences).
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'

@@ -28,6 +28,7 @@ export type NotificationType =
   | 'task_completed'
   | 'trip_assigned'
   | 'whatsapp_assigned'
+  | 'email_assigned'
   | 'whatsapp_new_message'
 
 export interface CreateNotificationInput {
@@ -120,7 +121,7 @@ export async function createNotification(
     user_id ?? (notification as { team_member?: { user_id?: string | null } }).team_member?.user_id ?? null
   let emailWanted = send_email
   if (emailWanted && prefsUserId) {
-    const prefs = await getNotificationPreferences(supabaseAdmin, prefsUserId)
+    const prefs = await getNotificationPreferences(supabaseAdmin, prefsUserId, org_id)
     emailWanted = shouldEmailForType(prefs, String(type))
   }
 
@@ -191,6 +192,7 @@ const TYPE_STYLES: Record<string, TypeStyle> = {
   trip_assigned: { color: '#647C47', icon: '🗺️', label: 'Trip Assigned To You', buttonText: 'Open Trip' },
   whatsapp_assigned: { color: '#25D366', icon: '💬', label: 'WhatsApp Chat Assigned', buttonText: 'Open Chat' },
   whatsapp_new_message: { color: '#25D366', icon: '📱', label: 'New WhatsApp Message', buttonText: 'View Message' },
+  email_assigned: { color: '#2563EB', icon: '✉️', label: 'Email Conversation Assigned', buttonText: 'Open Conversation' },
 }
 
 /** Escape user/DB-sourced text before it goes into the email HTML. */

@@ -4083,6 +4083,7 @@
       "task_overdue": "期限超過",
       "task_completed": "完了",
       "whatsapp_assigned": "チャット割当",
+      "email_assigned": "メール割当",
       "whatsapp_new_message": "新着メッセージ",
       "whatsapp_mention": "メンション",
       "invoice_paid": "支払い",

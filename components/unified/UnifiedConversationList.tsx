@@ -472,17 +472,33 @@ export function UnifiedConversationList({
     return Mail
   }
 
-  // A notification's link (?conversation=<id>) opens that conversation once
-  // it is in the list — once, so the user can then move on to another.
+  // A notification's link (?conversation=<id>) opens that conversation —
+  // once, so the user can then move on to another. When it is not among the
+  // newest loaded (an older or archived conversation), it is fetched by id
+  // and opened all the same; it was simply never opened before.
   const openedRef = useRef<string | null>(null)
+  const lookedUpRef = useRef<string | null>(null)
   useEffect(() => {
     if (!openConversationId || openedRef.current === openConversationId) return
     const target = conversations.find(c => c.id === openConversationId)
     if (target) {
       openedRef.current = openConversationId
       onSelectConversation(target)
+      return
     }
-  }, [openConversationId, conversations, onSelectConversation])
+    if (loading || lookedUpRef.current === openConversationId) return
+    lookedUpRef.current = openConversationId
+    const id = openConversationId
+    fetch(`/api/unified/conversations?conversation_id=${encodeURIComponent(id)}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        const found: UnifiedConversation | undefined = data?.conversations?.find((c: UnifiedConversation) => c.id === id)
+        if (!found || openedRef.current === id) return
+        openedRef.current = id
+        onSelectConversation(found)
+      })
+      .catch(err => console.error('Could not open the linked conversation:', err))
+  }, [openConversationId, conversations, loading, onSelectConversation])
 
   // Count summaries. The tab counts are the server's, over every channel —
   // counting the loaded list showed 0 on every tab but the chosen one.

@@ -3672,6 +3672,7 @@
       "task_overdue": "Task overdue",
       "trip_assigned": "Trip assigned",
       "whatsapp_assigned": "WhatsApp chat assigned",
+      "email_assigned": "Email conversation assigned",
       "whatsapp_new_message": "New WhatsApp message",
       "rate_changed": "Rates changed",
       "order_received": "Order received",

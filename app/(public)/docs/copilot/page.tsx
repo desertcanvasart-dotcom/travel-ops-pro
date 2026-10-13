@@ -47,10 +47,10 @@ export default function CopilotDocsPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">When Drafts Are Written</h2>
         <p className="text-gray-600 mb-3">
-          Drafts are written by the Copilot screen itself. While someone has it open, it checks every 10 seconds and writes a draft for any of the 10 most recently active threads whose latest message has waited more than 15 seconds. A message that already has a draft is not drafted twice.
+          Drafts are written on the server, whether or not anyone has the Copilot screen open. Every minute it drafts the messages still waiting, oldest first, up to 5 at a time, so a busy moment is worked through over the next few minutes. Every thread of every company is covered, not only the most recent ones. A message that already has a draft is not drafted twice.
         </p>
         <Tip>
-          If nobody has the Copilot open, messages wait as <strong>Generating...</strong>. Their drafts are written when someone next opens the screen.
+          Messages that arrived more than 48 hours before they could be drafted are left as they are, so the first run never drafts an old backlog. Press <strong>Generate draft reply</strong> on one of them if you need it.
         </Tip>
       </section>
 
@@ -60,7 +60,7 @@ export default function CopilotDocsPage() {
           <li><strong>The customer&apos;s message</strong> and the last 10 messages of the conversation.</li>
           <li><strong>The customer</strong>, when the thread is linked to a client: name, email, phone, nationality, language, internal notes and number of bookings; their 3 most recent itineraries (trip name, dates, status, travellers, price); their 5 most recent invoices; and their 10 most recent recorded payments.</li>
           <li><strong>Your knowledge</strong>: the 6 Copilot Knowledge entries closest in meaning to the message (weak matches are dropped). Only active entries of your company are searched.</li>
-          <li><strong>Your tone</strong>: the tone you picked on the Copilot Knowledge page (Professional, Friendly or Formal). It is always the tone of the person whose screen asks for the draft, never a colleague&apos;s. Without a choice, drafts are Professional.</li>
+          <li><strong>Your tone</strong>: the tone you picked on the Copilot Knowledge page (Professional, Friendly or Formal). Drafts written automatically for new messages are always Professional, because no one is signed in when they are written. <strong>Regenerate</strong> and <strong>Generate draft reply</strong> use the tone of the person who presses them, never a colleague&apos;s. Without a choice, that is Professional too.</li>
         </ul>
         <p className="text-gray-600 mt-3">
           Open <strong>Context Used by AI</strong> under a draft to see the client, itineraries, invoices, payments and history it was given.
@@ -97,7 +97,6 @@ export default function CopilotDocsPage() {
           <li>It never sends anything on its own. Every reply needs <strong>Approve</strong> and then <strong>Send</strong>.</li>
           <li>It does not answer questions you type to it. It only drafts replies to customer messages.</li>
           <li>It does not learn from the replies you send. Sent replies are not added to Copilot Knowledge; only entries you add yourself are used.</li>
-          <li>Drafts are not written in the background. Someone must have the Copilot screen open.</li>
           <li>The draft does not list which knowledge entries it used.</li>
           <li>Agent memory is not used for Copilot drafts.</li>
         </ul>

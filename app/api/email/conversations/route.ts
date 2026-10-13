@@ -9,6 +9,7 @@ import { pickConversationUpdates } from '@/lib/email/conversation-updates'
 import { moveThreadInGmail, labelThreadInGmail, type ThreadLabelAction } from '@/lib/email/conversation-trash'
 import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
 import { emailConversationInOrg } from '@/lib/email/conversation-access'
+import { notifyEmailAssignee } from '@/lib/email/assignment-notice'
 import type { EmailConversation } from '@/types/unified'
 
 // Use service role for API routes to bypass RLS
@@ -181,6 +182,8 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    // Who held it before, read before the update (for the assignment notice).
+    const previousAssigneeId = existing.assigned_team_member_id ?? null
     let updateData: any = { updated_at: new Date().toISOString() }
 
     if (action === 'mark_read') {
@@ -253,6 +256,25 @@ export async function PATCH(request: NextRequest) {
     if (labelAction && data) {
       const gmail = await labelThreadInGmail(data.user_id, data.thread_id, labelAction, orgId)
       if (!gmail.ok) warning = 'Done here, but Gmail could not be updated. An admin or manager can reconnect Gmail in Settings › Email.'
+    }
+
+    // The new assignee hears about it, as for WhatsApp (lib/email/
+    // assignment-notice). A failed notice never fails the assignment.
+    if (data && 'assigned_team_member_id' in updateData) {
+      try {
+        await notifyEmailAssignee(supabase, {
+          orgId,
+          conversationId: existing.id,
+          previousAssigneeId,
+          newAssigneeId: updateData.assigned_team_member_id,
+          actorUserId: await getCurrentUserId(),
+          clientName: data.client_name,
+          clientEmail: data.client_email,
+          subject: data.subject,
+        })
+      } catch (e) {
+        console.error('Email assignment notification failed:', e)
+      }
     }
 
     // No conversation_activity row: that log belongs to WhatsApp

@@ -178,6 +178,7 @@ export default function NotificationBell() {
       case 'task_completed': return '✅'
       case 'whatsapp_assigned': return '💬'
       case 'whatsapp_new_message': return '📱'
+      case 'email_assigned': return '✉️'
       case 'whatsapp_mention': return '🔔'
       case 'invoice_paid': return '💰'
       case 'booking_confirmed': return '🎉'

@@ -37,6 +37,13 @@ export async function GET(request: NextRequest) {
     const search = sanitizeSearchTerm(searchParams.get('search')) || ''
     // Communicate's Trash: the deleted email conversations only (is_hidden).
     const trash = searchParams.get('trash') === 'true'
+    // One conversation by id, whichever channel and however old: a
+    // notification's link (/communications?conversation=<id>) opens it even
+    // when it is not among the newest loaded. Still this company's only.
+    const conversationId = searchParams.get('conversation_id')
+    if (conversationId !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId)) {
+      return NextResponse.json({ conversations: [], total: 0, counts: channelCounts([]), success: true })
+    }
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
 
@@ -87,6 +94,7 @@ export async function GET(request: NextRequest) {
         waQuery = waQuery.eq('status', status)
       }
 
+      if (conversationId) waQuery = waQuery.eq('id', conversationId)
       if (clientId) waQuery = waQuery.eq('client_id', clientId)
       if (agentId) waQuery = waQuery.eq('assigned_team_member_id', agentId)
       if (unassignedOnly) waQuery = waQuery.is('assigned_team_member_id', null)
@@ -177,6 +185,7 @@ export async function GET(request: NextRequest) {
       // way a WhatsApp or email conversation can. Filtering by client simply
       // returns no portal rows rather than the wrong ones.
       if (clientId) portalQuery = portalQuery.limit(0)
+      if (conversationId) portalQuery = portalQuery.eq('id', conversationId)
 
       const { data: portalData, error: portalError } = await portalQuery.limit(limit)
       if (portalError) throw portalError
@@ -251,10 +260,12 @@ export async function GET(request: NextRequest) {
       const orgId = await getCurrentOrgId()
       if (!orgId) return
       const TRIP_WINDOW = 1000
-      const { data: rows, error: tripError } = await supabase
+      let tripQuery = supabase
         .from('trip_messages')
         .select('itinerary_id, direction, content, sender_name, is_read, created_at')
         .eq('org_id', orgId)
+      if (conversationId) tripQuery = tripQuery.eq('itinerary_id', conversationId)
+      const { data: rows, error: tripError } = await tripQuery
         .order('created_at', { ascending: false })
         .limit(TRIP_WINDOW)
       // One channel failing must not take the inbox down with it: before the
@@ -355,6 +366,7 @@ export async function GET(request: NextRequest) {
           emailQuery = emailQuery.eq('status', status)
         }
 
+        if (conversationId) emailQuery = emailQuery.eq('id', conversationId)
         if (clientId) emailQuery = emailQuery.eq('client_id', clientId)
         if (agentId) emailQuery = emailQuery.eq('assigned_team_member_id', agentId)
         if (unassignedOnly) emailQuery = emailQuery.is('assigned_team_member_id', null)

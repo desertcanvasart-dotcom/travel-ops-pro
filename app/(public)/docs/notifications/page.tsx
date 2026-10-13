@@ -69,6 +69,11 @@ export default function NotificationsPage() {
                 <td className="px-4 py-2.5">A WhatsApp conversation is assigned to someone</td>
                 <td className="px-4 py-2.5">That person</td>
               </tr>
+              <tr className="border-b border-gray-100">
+                <td className="px-4 py-2.5 font-medium">Email conversation assigned</td>
+                <td className="px-4 py-2.5">An email conversation is assigned to someone else in the Unified Inbox</td>
+                <td className="px-4 py-2.5">That person</td>
+              </tr>
               <tr className="border-b border-gray-100 bg-gray-50/50">
                 <td className="px-4 py-2.5 font-medium">Order received</td>
                 <td className="px-4 py-2.5">An order arrives through the public order form or order intake</td>
@@ -141,7 +146,8 @@ export default function NotificationsPage() {
           <li>Every other type is emailed whenever the master switch is on.</li>
         </ul>
         <Tip>
-          The choice is yours personally and applies in every company you work in. It only affects email: every
+          The choice is yours and is kept separately for each company you work in: switch company to set the other
+          one. Until you save a choice in a company, it starts from the one you saved before. It only affects email: every
           notification still appears in the bell and on this page.
         </Tip>
       </section>

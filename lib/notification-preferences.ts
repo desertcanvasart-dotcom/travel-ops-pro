@@ -17,6 +17,13 @@
 // user_settings already has a per-user `user_id` column (UNIQUE, FK to
 // auth.users) — it was simply never used. Preferences are now keyed on it, and
 // the send path (lib/notifications.ts) consults this module before emailing.
+//
+// Per company: a person in both companies chooses separately for each. The
+// row stays one per login (user_id is UNIQUE); the choices live in the same
+// JSON column under by_org[<org id>]. The top-level flags are what was saved
+// before this split and are the starting point for a company with no choice
+// of its own yet — so nobody's saved setting is lost, and no migration is
+// needed.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -51,14 +58,38 @@ export function normalizePreferences(
   }
 }
 
+type StoredPreferences = Partial<Record<keyof NotificationPreferences, unknown>> & {
+  by_org?: Record<string, Partial<Record<keyof NotificationPreferences, unknown>>>
+}
+
+/** The choices that apply in one company (see the note at the top). */
+export function preferencesForOrg(raw: unknown, orgId: string | null | undefined): NotificationPreferences {
+  const stored = (raw && typeof raw === 'object' ? raw : {}) as StoredPreferences
+  const own = orgId ? stored.by_org?.[orgId] : undefined
+  return normalizePreferences(own && typeof own === 'object' ? own : stored)
+}
+
+/** The stored JSON with one company's choices replaced; every other
+ *  company's, and the pre-split top-level flags, kept as they were. */
+export function withOrgPreferences(
+  raw: unknown,
+  orgId: string,
+  prefs: NotificationPreferences
+): StoredPreferences {
+  const stored = (raw && typeof raw === 'object' ? raw : {}) as StoredPreferences
+  const byOrg = stored.by_org && typeof stored.by_org === 'object' ? stored.by_org : {}
+  return { ...stored, by_org: { ...byOrg, [orgId]: { ...prefs } } }
+}
+
 /**
- * Read a user's notification preferences. Returns defaults when the user has
+ * Read a user's notification preferences in one company. Returns defaults when the user has
  * none saved, or when the lookup fails — a missing row must never turn a
  * courtesy email into an error on the request that triggered it.
  */
 export async function getNotificationPreferences(
   db: Pick<SupabaseClient<any, any, any, any, any>, 'from'>,
-  userId: string
+  userId: string,
+  orgId: string | null
 ): Promise<NotificationPreferences> {
   try {
     const { data } = await db
@@ -66,9 +97,9 @@ export async function getNotificationPreferences(
       .select('notification_preferences')
       .eq('user_id', userId)
       .maybeSingle()
-    return normalizePreferences(
-      (data as { notification_preferences?: Partial<NotificationPreferences> } | null)
-        ?.notification_preferences
+    return preferencesForOrg(
+      (data as { notification_preferences?: unknown } | null)?.notification_preferences,
+      orgId
     )
   } catch {
     return { ...DEFAULT_NOTIFICATION_PREFERENCES }

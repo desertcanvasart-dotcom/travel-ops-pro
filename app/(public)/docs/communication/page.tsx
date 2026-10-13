@@ -75,7 +75,7 @@ export default function CommunicationPage() {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Assigning conversations</h2>
         <p className="text-gray-600 mb-3">
           WhatsApp and email conversations can be assigned to an agent from the conversation header. The person assigned a
-          WhatsApp conversation gets a notification that opens it here. The list shows each agent&apos;s number of open
+          conversation gets a notification that opens it here, unless they assigned it to themselves. The list shows each agent&apos;s number of open
           chats: active, not deleted WhatsApp conversations assigned to them, counted live. There is no cap per agent.
         </p>
         <p className="text-gray-600 mb-3">
@@ -124,8 +124,7 @@ export default function CommunicationPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li>It does not page through older conversations: only the newest 50 are listed. Use search to find an older one.</li>
-          <li>A notification link opens its conversation only when that conversation is in the current list.</li>
+          <li>It does not page through older conversations: only the newest 50 are listed. Use search to find an older one. A notification link still opens its conversation, however old.</li>
           <li>Portal and trip conversations cannot be assigned, archived or deleted here.</li>
           <li>Suggested AI replies are not shown in this inbox. See <Link href="/docs/whatsapp-agent" className="text-primary-600 hover:underline">WhatsApp AI Agent</Link>.</li>
           <li>Nothing in the app marks a conversation as spam yet, so the Spam status filter is normally empty. Gmail&apos;s own spam folder is in the <Link href="/docs/email-inbox" className="text-primary-600 hover:underline">Email Inbox</Link>.</li>
