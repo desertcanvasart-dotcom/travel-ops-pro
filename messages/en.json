@@ -472,12 +472,21 @@
     "attnDismiss": "Dismiss",
     "attnDismissHint": "Hide for the whole office until something changes — the customer writes again, the balance or deadline moves, more forms come in",
     "attnDismissedCount": "{count} dismissed",
-    "attnUndo": "Undo"
+    "attnUndo": "Undo",
+    "attnExtraRequest": "{status, select, accepted {Option accepted, not yet secured: {title}} other {Traveller asked for an option: {title}}}",
+    "attnBalanceDueNoAmount": "Balance due {date}",
+    "attnBalanceOverdueNoAmount": "Balance OVERDUE",
+    "refundsCount": "{count} refunds netted out"
   },
   "analytics": {
     "title": "Analytics Dashboard",
     "subtitle": "Business performance and insights",
     "loading": "Loading analytics...",
+    "error": {
+      "title": "Analytics could not be loaded",
+      "description": "The figures could not be loaded. Nothing below is shown until they can be.",
+      "retry": "Try again"
+    },
     "timeRange": {
       "7d": "Last 7 Days",
       "30d": "Last 30 Days",
@@ -512,15 +521,15 @@
       "pending": "Pending",
       "cancelled": "Cancelled",
       "confirmed": "Confirmed",
-      "completed": "Completed"
+      "completed": "Completed",
+      "allTimeNote": "Leads and Follow-ups are current totals for all time. Pending, Cancelled, Confirmed and Completed count trips created in the selected range."
     },
     "highlights": {
-      "title": "Highlights This Month",
+      "title": "Highlights for this period",
       "newClients": "New clients",
       "pendingBookings": "Pending bookings",
       "avgDealSize": "Avg deal size",
       "topDestination": "Top destination",
-      "bestChannel": "Best channel",
       "na": "N/A"
     },
     "charts": {
@@ -528,7 +537,6 @@
       "topDestinations": "Top Destinations",
       "allDestinations": "All Destinations",
       "bookingStatus": "Booking Status",
-      "allStatus": "All Status",
       "revenueByDestination": "Revenue by Destination",
       "revenue": "Revenue",
       "bookings": "Bookings"
@@ -554,8 +562,8 @@
       "noRevenueData": "No revenue data available yet. Start adding confirmed bookings!",
       "noBookingInsights": "Start adding bookings to see insights.",
       "noConversionData": "Conversion data will appear once you have bookings.",
-      "busiestPeriod": "Your busiest period was {period} with {amount} in revenue.",
-      "pendingPercentage": "{percent}% of active bookings are still pending — consider follow-ups.",
+      "busiestWeek": "Your busiest week was the week of {week}, with {amount} in revenue.",
+      "pendingPercentage": "{percent}% of bookings in this range are still pending (draft or sent) — consider follow-ups.",
       "strongConversion": "Strong conversion rate! Your sales process is working well.",
       "lowConversion": "Conversion rate needs attention. Review your sales funnel.",
       "addBookingsForInsights": "Add bookings to see conversion insights.",
@@ -875,7 +883,7 @@
     "emailOptional": "Email (optional)",
     "noAgentsYet": "No agents yet. Add one above.",
     "noEmail": "No email",
-    "activeChats": "active chats",
+    "activeChats": "open chats",
     "available": "Available",
     "away": "Away",
     "deleteAgent": "Delete agent",
@@ -903,7 +911,7 @@
     "chats": "chats",
     "willSend": "Will send:",
     "portalNotifyNoRecipient": "Reply saved, but no email went out: nobody on this booking has an email address. Add one to notify them.",
-    "portalNotifyNoAccount": "Reply saved, but no email went out: mail is not connected. Connect Gmail in Settings → Email.",
+    "portalNotifyNoAccount": "Reply saved, but no email went out: mail is not connected. An admin or manager can connect Gmail in Settings → Email.",
     "portalNotifyNoLink": "Reply saved, but no email went out: this booking has no active portal link. Create one to notify them.",
     "portalNotifyFailed": "Reply saved, but the notification email failed. The traveller will only see it if they reopen their link.",
     "awaitingReplyOnly": "Awaiting reply",
@@ -927,7 +935,22 @@
     "deleteFailedTitle": "Could not delete",
     "deleteFailed": "The conversation could not be deleted. Please try again.",
     "restoreFailedTitle": "Could not restore",
-    "restoreFailed": "The conversation could not be restored. Please try again."
+    "restoreFailed": "The conversation could not be restored. Please try again.",
+    "syncNotConnected": "You have no Gmail of your own connected for this company. The company's connected mailboxes still sync on their own; an admin or manager can connect Gmail in Settings › Email.",
+    "statusActive": "Active",
+    "statusArchived": "Archived",
+    "statusSpam": "Spam",
+    "moveToInbox": "Move to inbox",
+    "sendFailed": "The message could not be sent. Please try again.",
+    "assignFailed": "The conversation could not be assigned. Please try again.",
+    "actionFailed": "That did not work. Please try again.",
+    "agentsManagersOnly": "Only admins and managers can add or deactivate agents.",
+    "agentAddedLinked": "Agent added and linked to their login.",
+    "agentAddedNoLogin": "Agent added without a login: they can be assigned chats, but will not see them as their own.",
+    "agentAddFailed": "The agent could not be added.",
+    "agentUpdateFailed": "The agent could not be updated.",
+    "agentNoLogin": "No login",
+    "agentLoginHint": "Use the email of a login in this company to link the agent to it. Without a login the agent can still be assigned chats."
   },
   "pdf": {
     "paymentTermsHeading": "PAYMENT TERMS",
@@ -3020,6 +3043,11 @@
       "all": "All",
       "en": "EN",
       "ja": "JA"
+    },
+    "errors": {
+      "saveFailed": "The template was not saved",
+      "deleteFailed": "The template was not deleted",
+      "tryAgain": "Something went wrong. Please try again."
     }
   },
   "settings": {
@@ -3644,9 +3672,24 @@
       "task_overdue": "Task overdue",
       "trip_assigned": "Trip assigned",
       "whatsapp_assigned": "WhatsApp chat assigned",
-      "whatsapp_new_message": "New WhatsApp message"
+      "email_assigned": "Email conversation assigned",
+      "whatsapp_new_message": "New WhatsApp message",
+      "rate_changed": "Rates changed",
+      "order_received": "Order received",
+      "booking_change_request": "Customer request"
     },
-    "unread": "Unread"
+    "unread": " unread",
+    "emailPrefs": {
+      "title": "Email me about notifications",
+      "help": "Every notification appears here and in the bell. Choose which ones also arrive by email. This is your own setting, for every company you work in.",
+      "emailEnabled": "Send notifications to my email",
+      "task_assigned": "Task assigned to me",
+      "task_due_soon": "My task is due soon",
+      "task_overdue": "My task is overdue",
+      "save": "Save",
+      "saved": "Saved",
+      "error": "Could not save. Please try again."
+    }
   },
   "validation": {
     "required": "{field} is required",
@@ -5636,6 +5679,7 @@
     "notifications": "Notifications",
     "markAllRead": "Mark all read",
     "clearAll": "Clear all",
+    "clearAllConfirm": "Delete all of your notifications in this company? This cannot be undone.",
     "noNotificationsYet": "No notifications yet",
     "deleteNotification": "Delete notification",
     "view": "View",
@@ -6032,7 +6076,14 @@
     "name": "Name",
     "type": "Type",
     "totalEarned": "Total Earned",
-    "noCommissionData": "No commission data"
+    "noCommissionData": "No commission data",
+    "loadFailed": "Could not load the financial report for {year}. No figures are shown rather than figures from another year.",
+    "retry": "Retry",
+    "fxHolesTitle": "{count, plural, one {# line is} other {# lines are}} not included in these figures",
+    "fxHolesBody": "No exchange rate was on file to state them in {currency}. They are excluded rather than added at face value, so the totals are understated.",
+    "fxHolesMore": "…and {count} more",
+    "demoExcluded": "{count, plural, one {# demo record is} other {# demo records are}} left out of these figures (DEMO- trips and the invoices, expenses and payments linked to them).",
+    "currencyFallback": "Figures are shown in {currency}: {requested} is not a supported reporting currency."
   },
   "expenses": {
     "expenses": "Expenses",
@@ -6378,12 +6429,14 @@
     "startBuildingLibrary": "Start building your content library",
     "addFirstContent": "Add First Content",
     "allTiers": "All Tiers",
-    "tierCount": "{count}/4 tiers",
+    "tierCount": "{count}/{total} tiers",
     "deleteContentTitle": "Delete content?",
     "deleteContentConfirmation": "This content and all tier variations will be permanently deleted. This action cannot be undone.",
     "cancel": "Cancel",
     "delete": "Delete",
     "tierAvailable": "Available",
+    "includeInactive": "Include inactive content",
+    "inactive": "Inactive",
     "tierNotAvailable": "Not available",
     "tiers": {
       "budget": "Budget",
@@ -6400,7 +6453,9 @@
     "fillRequiredFields": "Please fill in the required fields",
     "errorSaving": "Error saving content",
     "newContent": "New Content",
-    "tierVariations": "{count}/4 tier variations",
+    "tierVariations": "{count}/{total} tier variations",
+    "active": "Active",
+    "activeHint": "Inactive content stays in the library but the AI does not use it when writing itineraries.",
     "save": "Save",
     "basicInformation": "Basic Information",
     "category": "Category",
@@ -6539,6 +6594,15 @@
     "failedToDelete": "Failed to delete",
     "ruleDeleted": "Rule deleted",
     "failedToDeleteRule": "Failed to delete rule",
+    "active": "Active",
+    "inactive": "Inactive",
+    "inactiveHint": "Inactive rules are kept but not given to the AI.",
+    "ruleActivated": "Rule turned on",
+    "ruleDeactivated": "Rule turned off",
+    "failedToToggle": "Could not change the rule",
+    "emptyTitle": "No writing rules yet",
+    "emptyHint": "Add a rule to tell the AI how your itineraries should read.",
+    "emptyFiltered": "No rules in this category.",
     "categories": {
       "tone": "Tone",
       "vocabulary": "Vocabulary",
@@ -6843,6 +6907,7 @@
     }
   },
   "b2bQuotes": {
+    "versionFailed": "The language version was not created",
     "title": "B2B Quotes",
     "subtitle": "Manage saved quotations",
     "newQuote": "New Quote from Tour",

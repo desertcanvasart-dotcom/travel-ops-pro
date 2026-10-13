@@ -123,6 +123,6 @@ describe('roster-addressed notifications honour the linked login\'s email choice
   it('preferences are read for team_member.user_id when no user_id is given', () => {
     const s = src('lib/notifications.ts')
     expect(s).toContain("team_member:team_members(id, name, email, user_id)")
-    expect(s).toContain('getNotificationPreferences(supabaseAdmin, prefsUserId)')
+    expect(s).toContain('getNotificationPreferences(supabaseAdmin, prefsUserId, org_id)')
   })
 })

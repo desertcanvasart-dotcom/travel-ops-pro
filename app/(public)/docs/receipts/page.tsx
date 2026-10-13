@@ -67,18 +67,6 @@ export default function ReceiptsPage() {
           If a payment has no phone number on file, the WhatsApp button stays disabled &mdash; add the client&apos;s phone to their record to enable instant receipt delivery.
         </Tip>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link href="/docs" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          All Docs
-        </Link>
-        <Link href="/docs/financial-reports" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          Next: Financial Reports
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }

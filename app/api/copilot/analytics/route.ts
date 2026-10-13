@@ -1,17 +1,20 @@
 // ============================================
 // GET /api/copilot/analytics?period=30d
 // Copilot performance: volume, accept rate, edit rate, RAG hit rate,
-// top-retrieved knowledge, per-user breakdown. Admin / manager only.
+// top-retrieved knowledge, per-user breakdown. Admin / manager / agent (the
+// roles the menu shows Home › Copilot Analytics to; the owner always passes).
 //
-// Ported from the sibling app (autoura-saas). Adapted to ours: single-org
-// (communication_drafts has no org_id), service-role aggregation like our
-// other copilot routes, and per-user emails resolved from user_profiles.
+// Ported from the sibling app (autoura-saas). Adapted to ours: service-role
+// aggregation like our other copilot routes, per-user emails resolved from
+// user_profiles. Service-role bypasses RLS, so every query is scoped to the
+// caller's org here: copilot_knowledge by its own org_id, drafts through
+// their thread (communication_drafts has no org_id of its own).
 // ============================================
 
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
-import { requireRole } from '@/lib/auth/current-org'
+import { requireRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,6 +22,16 @@ const supabaseAdmin = createClient(
 )
 
 type Period = '7d' | '30d' | '90d' | 'all'
+
+// The screen reads at most this many drafts (newest first). Past it the
+// figures describe only the newest DRAFT_CAP, and the page has to say so.
+export const DRAFT_CAP = 5000
+
+/** Trim a capped fetch. The query asks for one row more than the cap, so a
+ *  full page of exactly `cap` rows is not mistaken for a truncated one. */
+export function capRows<T>(rows: T[], cap: number = DRAFT_CAP): { rows: T[]; truncated: boolean } {
+  return rows.length > cap ? { rows: rows.slice(0, cap), truncated: true } : { rows, truncated: false }
+}
 
 function periodStartISO(period: Period): string | null {
   const now = Date.now()
@@ -28,25 +41,31 @@ function periodStartISO(period: Period): string | null {
 }
 
 export async function GET(request: NextRequest) {
-  const denied = await requireRole(['admin', 'manager', 'owner'])
+  const denied = await requireRole(['admin', 'manager', 'agent'])
   if (denied) return denied
+  const orgId = await getCurrentOrgId()
+  if (!orgId) return noOrgResponse()
 
   const period = (request.nextUrl.searchParams.get('period') || '30d') as Period
   const startIso = periodStartISO(period)
 
   // ---------- Pull all drafts for the period ----------
+  // Drafts carry no org_id; their thread does. The !inner join drops every
+  // draft whose thread is another org's — and also any whose thread still has
+  // a NULL org_id, until the G1 backfill (DEFERRED_GATES.md) stamps them.
   let draftsQuery = supabaseAdmin
     .from('communication_drafts')
-    .select('id, status, send_channel, ai_flags, ai_confidence, context_used, was_edited, reviewed_by, created_at, sent_at')
+    .select('id, status, send_channel, ai_flags, ai_confidence, context_used, was_edited, reviewed_by, created_at, sent_at, communication_threads!inner(org_id)')
+    .eq('communication_threads.org_id', orgId)
     .order('created_at', { ascending: false })
-    .limit(5000)
+    .limit(DRAFT_CAP + 1)
 
   if (startIso) draftsQuery = draftsQuery.gte('created_at', startIso)
 
   const { data: drafts, error: draftsErr } = await draftsQuery
   if (draftsErr) return NextResponse.json({ success: false, error: clientMessage(draftsErr, 'Internal server error') }, { status: 500 })
 
-  const rows = (drafts || []) as any[]
+  const { rows, truncated } = capRows((drafts || []) as any[])
   const total = rows.length
 
   // ---------- Totals by status ----------
@@ -143,6 +162,7 @@ export async function GET(request: NextRequest) {
     const { data: entries } = await supabaseAdmin
       .from('copilot_knowledge')
       .select('id, title, source_type, query_text')
+      .eq('org_id', orgId)
       .in('id', topIds)
 
     topKnowledge = topIds.map((id) => {
@@ -198,12 +218,17 @@ export async function GET(request: NextRequest) {
   const { count: kbTotal } = await supabaseAdmin
     .from('copilot_knowledge')
     .select('id', { count: 'exact', head: true })
+    .eq('org_id', orgId)
     .eq('is_active', true)
     .is('parent_id', null)
 
   return NextResponse.json({
     success: true,
     period,
+    // True when the period held more than DRAFT_CAP drafts and every figure
+    // below covers only the newest DRAFT_CAP of them.
+    truncated,
+    draft_cap: DRAFT_CAP,
     summary: {
       total_generated: total,
       total_sent: sentCount,

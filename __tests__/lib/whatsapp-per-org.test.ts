@@ -4,7 +4,7 @@
 // webhook's refusal to file a message under a guessed org, and the org filter
 // on every inbox route (all service-role: nothing else filters them).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 // ---------------------------------------------------------------------------
@@ -304,14 +304,16 @@ describe('inbox routes are scoped to the caller org', () => {
     expect(c).toMatch(/\.eq\('id', conversationId\)\s*\n\s*\.eq\('org_id', orgId\)\s*$/m)
   })
 
-  it('unified inbox, client view, dashboard, reindex and suggestions filter WhatsApp by org', () => {
+  it('unified inbox, client view, dashboard and suggestions filter WhatsApp by org', () => {
     expect(code('app/api/unified/conversations/route.ts'))
       .toMatch(/from\('whatsapp_conversations'\)[\s\S]*?\.eq\('org_id', orgId\)[\s\S]*?portal_message_threads/)
     const client = scoped('app/api/unified/client/[clientId]/route.ts')
     expect(client).toMatch(/from\('whatsapp_conversations'\)[\s\S]*?\.eq\('org_id', orgId\)\s*\n\s*\.eq\('client_id', clientId\)/)
     expect(code('app/api/dashboard/summary/route.ts'))
       .toMatch(/from\('whatsapp_conversations'\)\s*\n\s*\.select\('unread_count'\)\s*\n\s*\.eq\('org_id', orgId\)/)
-    expect(code('app/api/copilot/knowledge/reindex/route.ts')).toContain(".eq('conversation.org_id', orgId)")
+    // The copilot reindex route is gone: it selected columns whatsapp_messages
+    // does not have and could only ever 500 (K3).
+    expect(existsSync(join(process.cwd(), 'app/api/copilot/knowledge/reindex/route.ts'))).toBe(false)
     expect(code('app/api/ai/suggest-reply/route.ts').match(/resolveThread\(conversationId, orgId\)/g)).toHaveLength(2)
     expect(code('app/api/clients/route.ts')).toMatch(/\.eq\('org_id', orgId\)\s*\n\s*\.eq\('phone_number', body\.link_whatsapp_phone\)/)
   })

@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
 import { categoryInOrg, contentSession, destinationInOrg, withoutOwnedColumns } from '@/lib/content-library/session'
+import { isWrittenVariation, planVariationWrites, type VariationInput } from '@/lib/content-library/variations'
 
 // One content item — the caller's ACTIVE company's, else 404
 // (lib/content-library/session.ts).
@@ -46,10 +47,12 @@ export async function GET(
 
     // Calculate missing tiers against the agency's own ladder
     const TIERS = await tierLadderForCurrentOrg()
-    const existingTiers = data.variations?.map((v: { tier: string }) => v.tier) || []
+    // Written tiers only (a blank-description row is not a variation).
+    const written = (data.variations || []).filter(isWrittenVariation)
+    const existingTiers = written.map((v: { tier: string }) => v.tier)
     const enrichedData = {
       ...data,
-      variation_count: data.variations?.length || 0,
+      variation_count: written.length,
       missing_tiers: TIERS.filter(t => !existingTiers.includes(t))
     }
 
@@ -107,7 +110,9 @@ export async function PUT(
         duration,
         tags: tags || [],
         metadata: metadata || {},
-        is_active: is_active ?? true,
+        // Only when sent: a save that leaves it out must not switch a
+        // deactivated item back on.
+        ...(typeof is_active === 'boolean' ? { is_active } : {}),
         ...(body.destination_id !== undefined ? { destination_id: body.destination_id || null } : {}),
         updated_by: userId
       })
@@ -120,56 +125,61 @@ export async function PUT(
       return NextResponse.json({ error: 'Content not found' }, { status: 404 })
     }
     if (contentError) {
+      if (contentError.code === '23505') {
+        // Slugs are unique per company (20261208), across its categories.
+        return NextResponse.json(
+          { error: 'Your company already has content with this slug. Change the name or the slug.' },
+          { status: 409 }
+        )
+      }
       console.error('Error updating content:', contentError)
       return NextResponse.json({ error: clientMessage(contentError, 'Internal server error') }, { status: 500 })
     }
 
-    // Update variations if provided
+    // Update variations if provided — only written tiers are kept, and a
+    // tier the editor cleared is removed (lib/content-library/variations.ts).
+    // A failed write is an error: it used to be ignored and the save
+    // reported success with the variation unchanged.
     if (variations && Array.isArray(variations)) {
-      // Get existing variations
-      const { data: existingVariations } = await supabase
+      const { data: existingVariations, error: existingError } = await supabase
         .from('content_variations')
         .select('id, tier')
         .eq('content_id', id)
+      if (existingError) {
+        console.error('Error reading variations:', existingError)
+        return NextResponse.json({ error: clientMessage(existingError, 'Could not save the tier variations') }, { status: 500 })
+      }
 
-      const existingTierMap = new Map(
-        existingVariations?.map(v => [v.tier, v.id]) || []
-      )
-
-      for (const variation of variations) {
-        const existingId = existingTierMap.get(variation.tier)
-        
-        if (existingId) {
-          // Update existing
-          await supabase
+      const plan = planVariationWrites(existingVariations || [], variations as VariationInput[])
+      const fields = (v: VariationInput) => ({
+        title: v.title || null,
+        description: v.description,
+        highlights: v.highlights || [],
+        inclusions: v.inclusions || [],
+        internal_notes: v.internal_notes || null,
+        updated_by: userId
+      })
+      const results = await Promise.all([
+        ...plan.update.map(({ id: variationId, variation }) =>
+          supabase
             .from('content_variations')
-            .update({
-              title: variation.title || null,
-              description: variation.description,
-              highlights: variation.highlights || [],
-              inclusions: variation.inclusions || [],
-              internal_notes: variation.internal_notes || null,
-              is_active: variation.is_active ?? true,
-              updated_by: userId
-            })
-            .eq('id', existingId)
+            .update({ ...fields(variation), is_active: variation.is_active ?? true })
+            .eq('id', variationId)
             .eq('content_id', id)
-        } else {
-          // Insert new
-          await supabase
-            .from('content_variations')
-            .insert({
-              content_id: id,
-              tier: variation.tier,
-              title: variation.title || null,
-              description: variation.description,
-              highlights: variation.highlights || [],
-              inclusions: variation.inclusions || [],
-              internal_notes: variation.internal_notes || null,
-              created_by: userId,
-              updated_by: userId
-            })
-        }
+        ),
+        ...(plan.insert.length > 0
+          ? [supabase.from('content_variations').insert(plan.insert.map(v => ({
+              content_id: id, tier: v.tier, ...fields(v), created_by: userId
+            })))]
+          : []),
+        ...(plan.remove.length > 0
+          ? [supabase.from('content_variations').delete().in('id', plan.remove).eq('content_id', id)]
+          : []),
+      ])
+      const failed = results.find(r => r.error)?.error
+      if (failed) {
+        console.error('Error saving variations:', failed)
+        return NextResponse.json({ error: clientMessage(failed, 'Could not save the tier variations') }, { status: 500 })
       }
     }
 

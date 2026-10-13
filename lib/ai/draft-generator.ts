@@ -280,7 +280,7 @@ No matching client found in database. This may be a new inquiry.`)
   // Payments
   if (context.payments.length > 0) {
     const payLines = context.payments.map((p) =>
-      `- ${p.currency || ''} ${p.amount || 0} via ${p.payment_method || '?'} | Status: ${p.status || '?'} | Date: ${p.paid_at || '?'}`
+      `- ${p.currency || ''} ${p.amount || 0} via ${p.payment_method || '?'} | Date: ${p.paid_at || '?'}`
     ).join('\n')
     sections.push(`== RECENT PAYMENTS ==\n${payLines}`)
   }

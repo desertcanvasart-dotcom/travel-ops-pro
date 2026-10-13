@@ -107,7 +107,6 @@ export default function ResourcesDocumentsPage() {
           <li><strong>Tour descriptions</strong> &mdash; Reusable descriptions for popular destinations</li>
           <li><strong>Email templates</strong> &mdash; Pre-written emails for common scenarios</li>
           <li><strong>Itinerary text blocks</strong> &mdash; Standard day descriptions you use repeatedly</li>
-          <li><strong>AI Prompts</strong> &mdash; Custom prompts for generating content</li>
           <li><strong>Writing Rules</strong> &mdash; Style guidelines so AI-generated content matches your brand voice</li>
         </ul>
 
@@ -119,24 +118,6 @@ export default function ResourcesDocumentsPage() {
           <li>Copy content into itineraries, emails, or other documents</li>
         </ol>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link
-          href="/docs/tours-rates"
-          className="inline-flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
-        >
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          Tours &amp; Rates
-        </Link>
-        <Link
-          href="/docs/message-templates"
-          className="inline-flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
-        >
-          Next: Message Templates
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }

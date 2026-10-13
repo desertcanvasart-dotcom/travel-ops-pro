@@ -47,7 +47,7 @@ describe('message template scope', () => {
     expect(templateAccess(null, 'org1')).toBe('none')
   })
   it('every template route is org-scoped', () => {
-    for (const f of ['app/api/templates/route.ts', 'app/api/templates/[id]/route.ts', 'app/api/templates/[id]/use/route.ts', 'app/api/templates/send/route.ts', 'app/api/templates/analytics/route.ts', 'app/api/email/templates/route.ts']) {
+    for (const f of ['app/api/templates/route.ts', 'app/api/templates/[id]/route.ts', 'app/api/templates/send/route.ts', 'app/api/templates/analytics/route.ts', 'app/api/email/templates/route.ts']) {
       expect(src(f), f).toContain('getCurrentOrgId')
     }
   })

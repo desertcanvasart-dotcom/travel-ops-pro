@@ -18,7 +18,7 @@ import ConvertToBookingCard from '@/app/components/ConvertToBookingCard'
 import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
-import { useConfirm } from '@/components/ConfirmDialog'
+import { useConfirm, useConfirmDialog } from '@/components/ConfirmDialog'
 import { quoteCompleteness, describeGaps } from '@/lib/pricing/quote-completeness'
 
 // ============================================
@@ -108,6 +108,7 @@ export default function QuoteDetailPage() {
   const quoteId = params?.id as string
   const t = useTranslations('b2bQuotes')
   const confirmDialog = useConfirm()
+  const dialog = useConfirmDialog()
 
   const [quote, setQuote] = useState<Quote | null>(null)
   const [loading, setLoading] = useState(true)
@@ -211,9 +212,12 @@ export default function QuoteDetailPage() {
       if (data.success) {
         // Refresh quote to get the new version
         fetchQuote()
+      } else {
+        await dialog.alert(t('versionFailed'), data.error || t('versionFailed'), 'warning')
       }
     } catch (err) {
       console.error('Failed to create version:', err)
+      await dialog.alert(t('versionFailed'), t('versionFailed'), 'warning')
     }
   }
 
@@ -230,9 +234,13 @@ export default function QuoteDetailPage() {
         // Refresh quote to get the new version
         fetchQuote()
         setActiveLanguage(lang)
+      } else {
+        // A failed translation used to leave the button doing nothing.
+        await dialog.alert(t('versionFailed'), data.error || t('versionFailed'), 'warning')
       }
     } catch (err) {
       console.error('Failed to copy and translate:', err)
+      await dialog.alert(t('versionFailed'), t('versionFailed'), 'warning')
     }
   }
 

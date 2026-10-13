@@ -15,6 +15,13 @@ export default function UnifiedCommunicationsPage() {
   // Bumped after a conversation is deleted so the list refetches immediately
   // instead of waiting for its 30s auto-refresh.
   const [listRefreshKey, setListRefreshKey] = useState(0)
+  // The assignment notification links here with ?conversation=<id>; the list
+  // opens it once it has loaded. This was never read, so the link opened the
+  // inbox with nothing selected.
+  const [openConversationId, setOpenConversationId] = useState<string | null>(null)
+  useEffect(() => {
+    setOpenConversationId(new URLSearchParams(window.location.search).get('conversation'))
+  }, [])
 
   // Check Gmail connection before enabling polling (matches Email Inbox
   // pattern): the mailbox this user works in for the ACTIVE company (lib/
@@ -64,6 +71,7 @@ export default function UnifiedCommunicationsPage() {
           selectedConversationId={selectedConversation?.id}
           userId={user?.id}
           refreshKey={listRefreshKey}
+          openConversationId={openConversationId}
         />
         {/* Compose Email FAB */}
         <button

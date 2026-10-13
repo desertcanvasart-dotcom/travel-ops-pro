@@ -219,6 +219,9 @@ export async function fetchContentLibrary(
         )
       `)
       .eq('content_library.org_id', orgId ?? NO_ORG)
+      // A deactivated item is not used (Content Library › Active); the
+      // variation's own flag alone let it through.
+      .eq('content_library.is_active', true)
       .eq('tier', tier)
       .eq('is_active', true)
 
@@ -319,22 +322,56 @@ function ruleLine(r: WritingRule): string | null {
   return name || description || null
 }
 
+/** Whether a rule is meant for itineraries: its applies_to names 'itinerary'
+ *  or 'all'. A rule saved with no applies_to (the API stored [] before it
+ *  defaulted to ['all']) counts as 'all'. */
+export function ruleAppliesToItinerary(r: WritingRule): boolean {
+  const to = Array.isArray(r.applies_to) ? r.applies_to : []
+  return to.length === 0 || to.includes('all') || to.includes('itinerary')
+}
+
+const EXAMPLE_MAX = 160
+const clip = (s: string) => (s.length > EXAMPLE_MAX ? `${s.slice(0, EXAMPLE_MAX - 1)}…` : s)
+
+/** The rule's first good and first bad example, as one indented line under
+ *  it — one each, so the prompt stays bounded however many a rule has. */
+function exampleLine(r: WritingRule): string | null {
+  const ex = (r.examples && typeof r.examples === 'object' ? r.examples : {}) as { good?: unknown; bad?: unknown }
+  const first = (v: unknown) =>
+    Array.isArray(v) ? v.find((x): x is string => typeof x === 'string' && x.trim() !== '')?.trim() : undefined
+  const good = first(ex.good)
+  const bad = first(ex.bad)
+  const parts = [good && `write "${clip(good)}"`, bad && `not "${clip(bad)}"`].filter(Boolean)
+  return parts.length ? `  e.g. ${parts.join('; ')}` : null
+}
+
+// Per section, highest priority first (fetchWritingRules orders by it).
+// Preferred rules come last and fewer: they are soft guidance, and the
+// prompt is long already.
+const RULE_SECTIONS: { type: string; heading: string; max: number }[] = [
+  { type: 'enforce', heading: 'MUST follow:', max: 5 },
+  { type: 'avoid', heading: 'AVOID:', max: 5 },
+  { type: 'prefer', heading: 'PREFER where it fits:', max: 3 },
+]
+
 export function buildWritingRulesContext(rules: WritingRule[]): string {
-  if (rules.length === 0) return ''
+  // The itinerary generator is the only caller: rules for emails or WhatsApp
+  // only are not its business.
+  const forItinerary = rules.filter(ruleAppliesToItinerary)
+  if (forItinerary.length === 0) return ''
 
   let context = '\n\nWRITING STYLE:\n'
 
-  const enforceRules = rules.filter(r => r.rule_type === 'enforce').slice(0, 5)
-  const avoidRules = rules.filter(r => r.rule_type === 'avoid').slice(0, 5)
-
-  if (enforceRules.length > 0) {
-    context += 'MUST follow:\n'
-    enforceRules.forEach(r => { const line = ruleLine(r); if (line) context += `- ${line}\n` })
-  }
-
-  if (avoidRules.length > 0) {
-    context += 'AVOID:\n'
-    avoidRules.forEach(r => { const line = ruleLine(r); if (line) context += `- ${line}\n` })
+  for (const section of RULE_SECTIONS) {
+    const lines: string[] = []
+    for (const r of forItinerary.filter(r => r.rule_type === section.type).slice(0, section.max)) {
+      const line = ruleLine(r)
+      if (!line) continue
+      lines.push(`- ${line}`)
+      const example = exampleLine(r)
+      if (example) lines.push(example)
+    }
+    if (lines.length > 0) context += `${section.heading}\n${lines.join('\n')}\n`
   }
 
   return context

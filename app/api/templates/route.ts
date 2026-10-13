@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
+import { templatePlaceholders } from '@/lib/templates/template-send'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
-import { orgReplacedDefaults, visibleToOrg, withOrgCopies } from '@/lib/templates/template-scope'
+import { orgReplacedDefaults, templateSaveFailure, visibleToOrg, withOrgCopies } from '@/lib/templates/template-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -76,9 +77,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Name and body are required' }, { status: 400 })
     }
 
-    // Extract placeholders from body
-    const placeholderMatches = templateBody.match(/\{\{[^}]+\}\}/g) || []
-    const placeholders = [...new Set(placeholderMatches)]
+    // Placeholders from the body and the subject — a subject-only one is
+    // still something the sender must fill.
+    const placeholders = templatePlaceholders(templateBody, subject)
 
     const { data, error } = await supabase
       .from('message_templates')
@@ -99,9 +100,12 @@ export async function POST(request: NextRequest) {
       .select()
       .single()
 
-    if (error) {
-      console.error('Error creating template:', error)
-      return NextResponse.json({ success: false, error: 'Failed to create template' }, { status: 500 })
+    // A second template with the same name, channel and language in this
+    // org is a 409 the page can show, not a generic 500.
+    const failed = templateSaveFailure(error, 'Failed to create template')
+    if (failed) {
+      if (failed.status === 500) console.error('Error creating template:', error)
+      return NextResponse.json({ success: false, error: failed.error }, { status: failed.status })
     }
 
     return NextResponse.json({ success: true, data })

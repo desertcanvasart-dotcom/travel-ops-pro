@@ -38,3 +38,39 @@ export async function moveThreadInGmail(
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 }
+
+// ── Archive and read state, the same way ─────────────────────────────────────
+// Archive and mark read / unread in Communicate change the stored
+// conversation (status, unread_count — what the list shows) and the thread's
+// labels in the conversation's own mailbox. They used to change only the
+// labels, and in the VIEWER's mailbox: the stored conversation stayed active
+// and unread, so an archived conversation was back on the next refresh.
+
+export type ThreadLabelAction = 'archive' | 'unarchive' | 'markRead' | 'markUnread'
+
+const THREAD_LABELS: Record<ThreadLabelAction, { addLabelIds?: string[]; removeLabelIds?: string[] }> = {
+  archive: { removeLabelIds: ['INBOX'] },
+  unarchive: { addLabelIds: ['INBOX'] },
+  markRead: { removeLabelIds: ['UNREAD'] },
+  markUnread: { addLabelIds: ['UNREAD'] },
+}
+
+export async function labelThreadInGmail(
+  mailboxUserId: string | null | undefined,
+  threadId: string | null | undefined,
+  action: ThreadLabelAction,
+  orgId: string,
+): Promise<GmailTrashResult> {
+  if (!mailboxUserId || !threadId) return { ok: false, error: 'This conversation has no Gmail thread.' }
+  try {
+    const { gmail, orgId: mailboxOrg } = await getAuthenticatedGmail(mailboxUserId)
+    if (mailboxOrg !== orgId) return { ok: false, error: 'The mailbox this conversation came from is connected to another company.' }
+    await gmail.users.threads.modify({ userId: 'me', id: threadId, requestBody: { ...THREAD_LABELS[action] } })
+    return { ok: true }
+  } catch (err) {
+    const status = (err as { code?: unknown; response?: { status?: unknown } })?.response?.status ?? (err as { code?: unknown })?.code
+    if (status === 404) return { ok: true }
+    console.error(`[email labels] Gmail ${action} failed for thread ${threadId}:`, err)
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}

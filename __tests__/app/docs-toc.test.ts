@@ -9,9 +9,11 @@
 // directions, so adding a doc page without listing it (or listing one that
 // does not exist) fails here instead of on a customer.
 import { describe, it, expect } from 'vitest'
-import { readdirSync, statSync, readFileSync } from 'node:fs'
+import { readdirSync, statSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { CATEGORIES } from '@/app/(public)/docs/toc'
+import { CATEGORIES, DOC_PAGES, adjacentDocs } from '@/app/(public)/docs/toc'
+import { navigationConfig } from '@/components/nav/navigation-config'
+import en from '@/messages/en.json'
 
 const DOCS_DIR = join(process.cwd(), 'app/(public)/docs')
 
@@ -29,6 +31,10 @@ describe('docs table of contents', () => {
     expect(tocHrefs.filter(h => !pageDirs.includes(h))).toEqual([])
   })
 
+  it('every page directory holds a page.tsx', () => {
+    expect(pageDirs.filter(d => !existsSync(join(DOCS_DIR, d.replace('/docs/', ''), 'page.tsx')))).toEqual([])
+  })
+
   it('no entry is listed twice', () => {
     expect(tocHrefs.length).toBe(new Set(tocHrefs).size)
   })
@@ -41,5 +47,87 @@ describe('docs table of contents', () => {
       expect(src, `${file} must import the shared TOC`).toContain("from './toc'")
       expect(src, `${file} must not define its own list`).not.toMatch(/const (CATEGORIES|NAV_ITEMS)\s*[:=]/)
     }
+  })
+})
+
+// ============================================
+// The docs follow the app's side menu
+// ============================================
+// The docs groups drifted from the menu: when Communicate moved to second
+// place in the menu it stayed eighth in the docs, and four menu items had no
+// page at all. These pin the docs to components/nav/navigation-config.ts.
+describe('docs table of contents follows the app menu', () => {
+  const navLabels = en.navigation as Record<string, string>
+
+  it('the docs groups are the menu groups, in menu order, with the menu labels', () => {
+    const docsGroups = CATEGORIES.filter(c => c.menuSection).map(c => [c.menuSection, c.label])
+    const menuGroups = navigationConfig.map(s => [s.key, navLabels[s.titleKey]])
+    expect(docsGroups).toEqual(menuGroups)
+  })
+
+  it('Getting Started comes first and is the only docs-only group', () => {
+    expect(CATEGORIES.filter(c => !c.menuSection).map(c => c.label)).toEqual(['Getting Started'])
+    expect(CATEGORIES[0].label).toBe('Getting Started')
+  })
+
+  it('every menu item is documented by a page in its own group', () => {
+    const uncovered: string[] = []
+    for (const section of navigationConfig) {
+      const group = CATEGORIES.find(c => c.menuSection === section.key)
+      const covered = new Set(group?.items.flatMap(i => i.covers ?? []) ?? [])
+      for (const item of section.items) {
+        for (const href of [item.href, ...(item.children ?? []).map(c => c.href)]) {
+          if (!covered.has(href)) uncovered.push(`${section.key}: ${href}`)
+        }
+      }
+    }
+    expect(uncovered).toEqual([])
+  })
+
+  it('every route a page claims to cover is a real app page', () => {
+    const missing = DOC_PAGES.flatMap(p => p.covers ?? [])
+      .map(route => route.split('#')[0])
+      .filter(route => !existsSync(join(process.cwd(), 'app', route, 'page.tsx')))
+    expect(missing).toEqual([])
+  })
+})
+
+// ============================================
+// Previous / next come from the table of contents
+// ============================================
+// 39 pages hand-coded their own previous/next links. They followed an old
+// menu order with stale titles, 20 pages had none, and two pointed at each
+// other (tasks ⇄ notifications). The layout now renders one pager for every
+// page, from the table of contents.
+describe('docs pager', () => {
+  it('walks every page once, in table-of-contents order', () => {
+    const walked: string[] = []
+    let href: string | undefined = DOC_PAGES[0].href
+    while (href) {
+      walked.push(href)
+      href = adjacentDocs(href)?.next?.href
+    }
+    expect(walked).toEqual(tocHrefs)
+  })
+
+  it('links each page to its neighbours both ways', () => {
+    for (const [i, page] of DOC_PAGES.entries()) {
+      const adjacent = adjacentDocs(page.href)!
+      expect(adjacent.prev?.href ?? null).toBe(DOC_PAGES[i - 1]?.href ?? null)
+      expect(adjacent.next?.href ?? null).toBe(DOC_PAGES[i + 1]?.href ?? null)
+    }
+  })
+
+  it('has nothing for a path outside the table of contents', () => {
+    expect(adjacentDocs('/docs')).toBeNull()
+  })
+
+  it('the docs layout renders it, and no page carries its own', () => {
+    expect(readFileSync(join(DOCS_DIR, 'layout.tsx'), 'utf8')).toContain('<DocsPager href={pathname} />')
+    const handCoded = pageDirs.filter(d => {
+      const src = readFileSync(join(DOCS_DIR, d.replace('/docs/', ''), 'page.tsx'), 'utf8')
+      return /Next:\s/.test(src) || src.includes('border-t border-gray-200 flex justify-between')
+    })
+    expect(handCoded).toEqual([])
   })
 })

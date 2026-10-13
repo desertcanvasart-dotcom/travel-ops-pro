@@ -184,8 +184,8 @@ export interface UnifiedConversation {
     email: string | null
     avatar_url: string | null
     is_available: boolean
-    current_conversations: number
-    max_conversations: number
+    current_conversations?: number
+    max_conversations?: number
   } | null
 }
 

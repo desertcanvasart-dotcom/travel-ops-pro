@@ -199,8 +199,10 @@ describe('WhatsApp team members (fix 6)', () => {
   it("GET lists only the org's team — never another company's", async () => {
     const r = await (await agents.GET(req('/api/whatsapp/agents'))).json()
     expect(r.agents.map((a: { id: string }) => a.id)).toEqual(['tm-a'])
-    // The login is not shown (the mock returns whole rows, so read the select).
-    expect(src('app/api/whatsapp/agents/route.ts')).toMatch(/\.select\('id, name, email, phone, avatar_url, role, is_active/)
+    // The login is not shown — only whether there is one (user_id is read to
+    // say who "me" is and is stripped from every row).
+    expect(r.agents[0]).not.toHaveProperty('user_id')
+    expect(r.agents[0]).toHaveProperty('has_login')
   })
 
   it("PATCH and DELETE of another company's member are 404 and change nothing", async () => {

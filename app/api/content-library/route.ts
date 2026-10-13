@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
+import { isWrittenVariation, type VariationInput } from '@/lib/content-library/variations'
 import { categoryInOrg, contentSession, destinationInOrg, withoutOwnedColumns } from '@/lib/content-library/session'
 
 // Every read is filtered by, and every insert stamped with, the caller's
@@ -80,10 +81,14 @@ export async function GET(request: NextRequest) {
 
     // Fetch variations for all content items
     const contentIds = contentItems.map(c => c.id)
+    // Written tiers only: rows saved with a blank description (before saves
+    // dropped them) are not a variation, and counting them made the list say
+    // "All Tiers" for content written for one.
     const { data: variations } = await supabase
       .from('content_variations')
       .select('id, content_id, tier, is_active')
       .in('content_id', contentIds)
+      .neq('description', '')
 
     // Group variations by content_id
     const variationMap = new Map<string, { id: string; tier: string; is_active: boolean }[]>()
@@ -190,7 +195,8 @@ export async function POST(request: NextRequest) {
     if (contentError) {
       if (contentError.code === '23505') {
         return NextResponse.json(
-          { error: 'Content with this slug already exists' },
+          // Slugs are unique per company (20261208), across its categories.
+          { error: 'Your company already has content with this slug. Change the name or the slug.' },
           { status: 409 }
         )
       }
@@ -198,16 +204,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: clientMessage(contentError, 'Internal server error') }, { status: 500 })
     }
 
-    // Create variations if provided
-    if (variations && variations.length > 0 && content) {
-      const variationsToInsert = variations.map((v: {
-        tier: string
-        title?: string
-        description: string
-        highlights?: string[]
-        inclusions?: string[]
-        internal_notes?: string
-      }) => ({
+    // Create variations if provided — only the tiers actually written (the
+    // editor sends a blank slot for every tier on the ladder).
+    const written = Array.isArray(variations) ? (variations as VariationInput[]).filter(isWrittenVariation) : []
+    if (written.length > 0 && content) {
+      const variationsToInsert = written.map(v => ({
         content_id: content.id,
         tier: v.tier,
         title: v.title || null,

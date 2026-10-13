@@ -3,7 +3,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { requireRole, getCurrentUserRole, getCurrentUserId, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { roleAllows } from '@/lib/auth/roles'
-import { teamMemberInOrg } from '@/lib/whatsapp-org'
+import { teamMemberInOrg, openChatsByMember, orgLoginForEmail } from '@/lib/whatsapp-org'
 import { isOrgMember } from '@/lib/auth/org-members'
 
 // team_members is the same table /api/team-members manages behind the
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('team_members')
-      .select('id, name, email, phone, avatar_url, role, is_active, is_available, max_conversations, current_conversations, last_assigned_at, created_at, updated_at')
+      .select('id, user_id, name, email, phone, avatar_url, role, is_active, is_available, last_assigned_at, created_at, updated_at')
       .eq('org_id', orgId)
       .order('name', { ascending: true })
 
@@ -46,11 +46,32 @@ export async function GET(request: NextRequest) {
     const { data: rows, error } = await query
 
     if (error) throw error
-    const data = rows ?? []
 
-    return NextResponse.json({ 
-      success: true, 
+    // The open-chat figure is counted from the conversations, not read from
+    // team_members.current_conversations (lib/whatsapp-org openChatsByMember).
+    // There is no per-agent cap: max_conversations is not enforced anywhere,
+    // so it is not shown as if it were.
+    const { data: assigned } = await supabase
+      .from('whatsapp_conversations')
+      .select('assigned_team_member_id, status, is_hidden')
+      .eq('org_id', orgId)
+      .not('assigned_team_member_id', 'is', null)
+    const open = openChatsByMember(assigned ?? [])
+
+    // The signed-in user's own team member in this org, so the WhatsApp
+    // inbox knows who "me" is (Mine, Claim, reply logging).
+    const userId = await getCurrentUserId()
+    const data = (rows ?? []).map(({ user_id, ...agent }: { user_id: string | null } & Record<string, unknown>) => ({
+      ...agent,
+      has_login: !!user_id,
+      current_conversations: open.get(agent.id as string) ?? 0,
+    }))
+    const mine = userId ? (rows ?? []).find((r: { user_id: string | null }) => r.user_id === userId) : null
+
+    return NextResponse.json({
+      success: true,
       agents: data,
+      current_team_member_id: (mine as { id: string } | null | undefined)?.id ?? null,
       count: data.length
     })
   } catch (error: any) {
@@ -69,11 +90,17 @@ export async function POST(request: NextRequest) {
     if (!orgId) return noOrgResponse()
     const body = await request.json()
 
-    const { name, email, phone, user_id, avatar_url, max_conversations, role } = body
+    const { name, email, phone, avatar_url, max_conversations, role } = body
+    let { user_id } = body
 
     if (!name) {
       return NextResponse.json({ error: 'Agent name is required' }, { status: 400 })
     }
+
+    // Manage Agents sends a name and an email, never a login. An email that
+    // is a login of this org links the agent to it — otherwise the agent
+    // could be assigned chats but never see them as their own.
+    if (!user_id && email) user_id = await orgLoginForEmail(supabase, orgId, email)
 
     // A login, when given, must be one of this org's: another company's login
     // linked here would see this org's conversations as theirs. No login is
@@ -129,9 +156,10 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       agent: data,
+      linked_login: !!data?.user_id,
       message: 'Agent created successfully'
     })
   } catch (error: any) {
@@ -176,6 +204,18 @@ export async function PATCH(request: NextRequest) {
     if (!isManager) {
       const userId = await getCurrentUserId()
       if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      // Said plainly: the filtered update below matched no row and .single()
+      // turned that into a bare "Internal server error".
+      const { data: own } = await supabase
+        .from('team_members')
+        .select('id')
+        .eq('id', id)
+        .eq('org_id', orgId)
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (!own) {
+        return NextResponse.json({ error: 'You can only change your own availability' }, { status: 403 })
+      }
       query = query.eq('user_id', userId)
     }
     const { data, error } = await query

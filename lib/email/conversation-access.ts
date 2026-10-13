@@ -17,6 +17,7 @@ export interface OwnedEmailConversation {
   mailbox_email: string | null
   status: string | null
   is_hidden: boolean | null
+  assigned_team_member_id?: string | null
 }
 
 /** The conversation, or null when it does not exist or is another organisation's. */
@@ -27,7 +28,7 @@ export async function emailConversationInOrg(
 ): Promise<OwnedEmailConversation | null> {
   const { data, error } = await db
     .from('email_conversations')
-    .select('id, org_id, user_id, thread_id, mailbox_email, status, is_hidden')
+    .select('id, org_id, user_id, thread_id, mailbox_email, status, is_hidden, assigned_team_member_id')
     .eq('id', conversationId)
     .eq('org_id', orgId)
     .maybeSingle()

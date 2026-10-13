@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { orgAuth } from '@/lib/auth/org-auth'
+import { requireRole } from '@/lib/auth/current-org'
 import { cleanClientText } from '@/lib/itinerary-share'
 import { notifyTravellerOfTripReply } from '@/lib/trip-chat/notify-traveller'
 
@@ -18,6 +19,11 @@ import { notifyTravellerOfTripReply } from '@/lib/trip-chat/notify-traveller'
 const MAX_MESSAGE = 2000
 
 async function auth(id: string) {
+  // Staff only, READS INCLUDED: the traveller's messages are customer
+  // conversation like the rest of Communicate. The /api/itineraries gate in
+  // middleware covers writes only, so a viewer could read the thread.
+  const denied = await requireRole(['admin', 'manager', 'agent'])
+  if (denied) return { response: denied }
   const a = await orgAuth()
   if (a.error || !a.supabase || !a.org_id) {
     return { response: NextResponse.json({ success: false, error: a.error ?? 'Unauthorized' }, { status: a.status }) }

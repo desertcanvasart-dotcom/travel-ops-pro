@@ -40,6 +40,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // Admin, Manager, Agent
   '/clients': ['admin', 'manager', 'agent'],
   '/itineraries': ['admin', 'manager', 'agent'],
+  '/bookings': ['admin', 'manager', 'agent'],
   '/invoices': ['admin', 'manager', 'agent'],
   '/payments': ['admin', 'manager', 'agent'],
   '/tasks': ['admin', 'manager', 'agent'],
@@ -57,10 +58,19 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/copilot': ['admin', 'manager', 'agent'],
   '/copilot-knowledge': ['admin', 'manager', 'agent'],
   '/concierge-briefs': ['admin', 'manager', 'agent'],
-  
+  // Message templates send to real customers and partners — the menu shows
+  // the screen to agents and above; a viewer opened it by URL.
+  '/templates': ['admin', 'manager', 'agent'],
+  // Content library and writing rules (/content-library/rules): the menu
+  // shows them to managers and above, and their API is admin/manager.
+  '/content-library': ['admin', 'manager'],
+
   // All authenticated users (including viewer)
   '/dashboard': ['admin', 'manager', 'agent', 'viewer'],
   '/analytics': ['admin', 'manager'],
+  // The menu shows it to agents and above; with no entry here a viewer could
+  // open it by URL (its data is behind the staff-only /api/copilot gate).
+  '/copilot-analytics': ['admin', 'manager', 'agent'],
   '/calendar': ['admin', 'manager', 'agent', 'viewer'],
   '/notifications': ['admin', 'manager', 'agent', 'viewer'],
 }
@@ -119,6 +129,11 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   // Email, notification and WhatsApp-AI settings are operating configuration,
   // not organisation administration: manager and above, like the rate
   // tables. Payment terms keep their own owner-only check in-route.
+  // Except your OWN notification email preferences: every role gets
+  // notifications, so every role chooses whether they also arrive by email
+  // (the /notifications page). The route writes only the caller's row. MUST
+  // precede '/api/settings' — .find() takes the first match.
+  { prefix: '/api/settings/notifications', roles: ['admin', 'manager', 'agent', 'viewer'] },
   { prefix: '/api/settings', roles: ['admin', 'manager'] },
   { prefix: '/api/integrations', roles: ['admin'] },
   { prefix: '/api/partners', roles: ['admin', 'manager'] },
@@ -237,6 +252,10 @@ const STAFF_ONLY_API_PREFIXES = [
   '/api/gmail',
   '/api/ai',
   '/api/translate',
+  // Message templates: the wording staff send to customers and partners, and
+  // the template-data routes fill them with client and trip details. The
+  // /templates screen is agent-and-above.
+  '/api/templates',
   // Rates, suppliers and pricing: costs. Agents price trips with them; a
   // viewer's pages (dashboard, calendar, notifications) use none of them.
   // (/api/guides and /api/vehicles stay open: the calendar lists them.)
@@ -246,6 +265,12 @@ const STAFF_ONLY_API_PREFIXES = [
   '/api/suppliers',
   '/api/resources',
   '/api/cruises',
+  // Read by the Email Inbox and Communicate (agent and above) only: the
+  // signed-in user's mailbox status and signature, and the partner contacts
+  // the inbox's "insert partner" picker lists. Writes stay manager-and-above
+  // (the '/api/settings' and '/api/partners' entries above).
+  '/api/settings/email',
+  '/api/partners',
 ]
 
 export async function middleware(request: NextRequest, event: NextFetchEvent) {

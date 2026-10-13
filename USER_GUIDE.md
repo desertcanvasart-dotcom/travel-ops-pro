@@ -712,7 +712,6 @@ Store and reuse frequently used content.
 - **Tour descriptions** - Reusable descriptions for popular destinations
 - **Email templates** - Pre-written emails for common scenarios
 - **Itinerary text blocks** - Standard day descriptions you use repeatedly
-- **AI Prompts** - Custom prompts for generating content
 - **Writing Rules** - Style guidelines so AI-generated content matches your brand voice
 
 ### Using the Content Library

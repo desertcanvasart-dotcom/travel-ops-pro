@@ -103,8 +103,9 @@ function twoCompanies() {
     variation_daily_itinerary: [],
     variation_services: [],
     tour_day_activities: [
-      // The mock returns rows verbatim: the embedded content is on the row, as
-      // PostgREST would hand it back — here another company's item.
+      // An activity pointing at another company's item. The route reads the
+      // content with its own query (no FK to embed through) and must not
+      // return it — nor this stale copy on the row.
       { id: 'act-a', template_id: 'tpl-a', day_number: 1, sequence_order: 1, content_id: 'content-b', activity_type: 'attraction', activity_name: 'Pyramids',
         content_library: { id: 'content-b', org_id: 'org-b', name: 'B secret write-up' } },
     ],

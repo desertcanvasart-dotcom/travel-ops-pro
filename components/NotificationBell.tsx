@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { Bell, Check, X, ExternalLink, Loader2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 interface Notification {
   id: string
@@ -18,6 +19,7 @@ interface Notification {
 
 export default function NotificationBell() {
   const t = useTranslations('notificationBell')
+  const confirmDialog = useConfirm()
   const [isOpen, setIsOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(false)
@@ -34,7 +36,10 @@ export default function NotificationBell() {
         const data = await response.json()
         if (data.success) {
           setNotifications(data.data || [])
-          setUnreadCount((data.data || []).filter((n: Notification) => !n.is_read).length)
+          // The server's count covers every unread row, not just the ten loaded.
+          setUnreadCount(typeof data.unreadCount === 'number'
+            ? data.unreadCount
+            : (data.data || []).filter((n: Notification) => !n.is_read).length)
         }
       }
     } catch (error) {
@@ -134,22 +139,18 @@ export default function NotificationBell() {
     }
   }
 
-  // Clear all notifications
+  // Clear all: every one of your notifications in this company, not just the
+  // ten shown here — so it asks first, and the count comes back from the server.
   const clearAllNotifications = async () => {
     if (notifications.length === 0) return
-    
+    if (!(await confirmDialog(t('clearAllConfirm')))) return
+
     try {
-      // Delete all notifications one by one (or you can create a bulk delete endpoint)
-      const deletePromises = notifications.map(n => 
-        fetch(`/api/notifications/${n.id}`, { method: 'DELETE' })
-      )
-      
-      await Promise.all(deletePromises)
-      setNotifications([])
-      setUnreadCount(0)
+      await fetch('/api/notifications', { method: 'DELETE' })
     } catch (error) {
       console.error('Error clearing all notifications:', error)
     }
+    await fetchNotifications()
   }
 
   // Format relative time
@@ -177,6 +178,7 @@ export default function NotificationBell() {
       case 'task_completed': return '✅'
       case 'whatsapp_assigned': return '💬'
       case 'whatsapp_new_message': return '📱'
+      case 'email_assigned': return '✉️'
       case 'whatsapp_mention': return '🔔'
       case 'invoice_paid': return '💰'
       case 'booking_confirmed': return '🎉'

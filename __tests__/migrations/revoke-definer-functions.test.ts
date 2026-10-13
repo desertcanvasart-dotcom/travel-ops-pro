@@ -63,7 +63,11 @@ afterAll(async () => {
 
 describe('before the migration', () => {
   it('a signed-in user could call every one of them (the hole is real)', async () => {
-    for (const fn of SERVER_ONLY) expect(await can('authenticated', fn), fn).toBe(true)
+    // 20261210 replaces get_org_agent_memories and restates this revoke for it,
+    // and the replay above includes every later file — so it is closed already.
+    for (const fn of SERVER_ONLY.filter(f => !f.startsWith('public.get_org_agent_memories('))) {
+      expect(await can('authenticated', fn), fn).toBe(true)
+    }
   })
 })
 

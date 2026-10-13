@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createNotification } from '@/lib/notifications'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
-import { linkedTeamMemberIds, notificationScopeFilter } from '@/lib/notifications-scope'
+import { deleteOwnNotifications, linkedTeamMemberIds, notificationScopeFilter } from '@/lib/notifications-scope'
 import { teamMemberInOrg } from '@/lib/whatsapp-org'
 import { rowInOrg } from '@/lib/api/org-scope'
 
@@ -161,8 +161,32 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Notification types reference:
-// - task_assigned / task_due_soon / task_overdue / task_completed
+// DELETE - Clear all: every one of the signed-in user's notifications in the
+// active organisation (lib/notifications-scope deleteOwnNotifications). The
+// bell used to delete only the ten it had loaded, one request each.
+export async function DELETE(_request: NextRequest) {
+  try {
+    const userId = await getCurrentUserId()
+    if (!userId) {
+      return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
+    }
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const count = await deleteOwnNotifications(supabase, userId, orgId)
+    return NextResponse.json({ success: true, count })
+  } catch (error) {
+    console.error('Error clearing notifications:', error)
+    return NextResponse.json(
+      { success: false, error: 'Failed to clear notifications' },
+      { status: 500 }
+    )
+  }
+}
+
+// Notification types the app creates:
+// - task_assigned (Tasks screen, generate-tasks) / task_due_soon / task_overdue (task-reminders cron)
 // - trip_assigned: An itinerary was assigned to this user
-// - whatsapp_assigned / whatsapp_new_message
-// - booking_change_request: a customer asked for a change on the portal (managers)
+// - whatsapp_assigned: a WhatsApp conversation was assigned to this user
+// - rate_changed: the daily rate-change digest (managers)
+// - order_received: a web order form or order intake arrived (managers)
+// - booking_change_request: portal change requests, extras and portal messages (managers)

@@ -733,7 +733,9 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
         router.push('/content-library')
       } else {
         const error = await res.json()
-        await dialog.alert(t('error'), error.message || t('errorSaving'), 'warning')
+        // The API answers { error }, not { message }: the reason (a taken
+        // slug, a failed tier save) was never shown.
+        await dialog.alert(t('error'), error.error || t('errorSaving'), 'warning')
       }
     } catch (error) {
       console.error('Error saving:', error)
@@ -778,7 +780,10 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
                 {isNew ? t('newContent') : formData.name}
               </h1>
               <p className="text-sm text-gray-500">
-                {t('tierVariations', { count: formData.variations.filter(v => v.description).length })}
+                {t('tierVariations', {
+                  count: formData.variations.filter(v => tierKeys.includes(v.tier) && v.description?.trim()).length,
+                  total: tierKeys.length,
+                })}
               </p>
             </div>
           </div>
@@ -830,6 +835,20 @@ export default function ContentEditorPage({ params }: { params: Promise<{ id: st
                     ))}
                   </select>
                 </div>
+
+                {/* Active — an inactive item stays here but the AI does not use it */}
+                <label className="flex items-start gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_active}
+                    onChange={(e) => setFormData(prev => ({ ...prev, is_active: e.target.checked }))}
+                    className="mt-0.5 accent-[#647C47]"
+                  />
+                  <span>
+                    {t('active')}
+                    <span className="block text-xs text-gray-500">{t('activeHint')}</span>
+                  </span>
+                </label>
 
                 {/* Name */}
                 <div>

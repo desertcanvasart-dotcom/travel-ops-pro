@@ -4,6 +4,7 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
 import { translateFields, QUOTE_TRANSLATION_FIELDS } from '@/lib/translation-utils'
 import type { Language } from '@/types/multilingual'
+import { detectContentLanguage } from '@/lib/itineraries/content-language'
 import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
 
 const supabaseAdmin = createClient(
@@ -75,6 +76,18 @@ export async function POST(
         )
       }
 
+      // The quote's notes are in whatever language the office wrote them in.
+      // They used to be assumed English, so a Japanese quote was "translated"
+      // en→ja into Japanese again. Read it off the text, as itineraries do;
+      // with no text to judge, English.
+      const baseLanguage: Language = detectContentLanguage([quote.notes]) ?? 'en'
+      if (baseLanguage === targetLanguage) {
+        return NextResponse.json(
+          { success: false, error: `This quote is already written in ${targetLanguage.toUpperCase()} — it is the source language` },
+          { status: 400 }
+        )
+      }
+
       // Use quote as source - create a minimal source object
       const sourceContent = {
         title: `Quote ${quote.quote_number}`,
@@ -86,7 +99,7 @@ export async function POST(
       const translatedContent = await translateFields(
         sourceContent,
         QUOTE_TRANSLATION_FIELDS,
-        'en' as Language, // Assume original content is English
+        baseLanguage,
         targetLanguage as Language
       )
 
@@ -109,7 +122,7 @@ export async function POST(
         success: true,
         data: newVersion,
         translated: true,
-        sourceLanguage: 'en',
+        sourceLanguage: baseLanguage,
         targetLanguage
       })
     }

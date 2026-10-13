@@ -103,16 +103,26 @@ export default function ConciergeBriefsPage() {
   const [tab, setTab] = useState<'all' | StatusKey>('needs_review')
   const [updating, setUpdating] = useState<string | null>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
+  // Counted by the API over every brief, not from the (capped) list.
+  const [serverCounts, setServerCounts] = useState<Record<string, number> | null>(null)
+  const [total, setTotal] = useState<number | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const fetchBriefs = useCallback(async () => {
     try {
       const res = await fetch('/api/concierge-briefs')
-      if (res.ok) {
-        const result = await res.json()
-        if (result.success) setBriefs(result.data)
+      const result = await res.json().catch(() => ({}))
+      if (res.ok && result.success) {
+        setBriefs(result.data)
+        setServerCounts(result.counts ?? null)
+        setTotal(typeof result.total === 'number' ? result.total : null)
+        setLoadError(null)
+      } else {
+        setLoadError(result.error || 'Could not load concierge briefs')
       }
     } catch (e) {
       console.error('Error fetching concierge briefs:', e)
+      setLoadError('Could not load concierge briefs')
     } finally {
       setLoading(false)
     }
@@ -131,7 +141,11 @@ export default function ConciergeBriefsPage() {
         body: JSON.stringify({ review_status: to }),
       })
       if (res.ok) {
+        const from = briefs.find(b => b.id === id)?.review_status
         setBriefs(prev => prev.map(b => (b.id === id ? { ...b, review_status: to } : b)))
+        if (from && from !== to) {
+          setServerCounts(prev => prev && { ...prev, [from]: Math.max(0, (prev[from] || 0) - 1), [to]: (prev[to] || 0) + 1 })
+        }
       }
     } catch (e) {
       console.error('Error updating brief:', e)
@@ -140,10 +154,11 @@ export default function ConciergeBriefsPage() {
     }
   }
 
-  const counts = briefs.reduce<Record<string, number>>((acc, b) => {
+  const counts = serverCounts ?? briefs.reduce<Record<string, number>>((acc, b) => {
     acc[b.review_status] = (acc[b.review_status] || 0) + 1
     return acc
   }, {})
+  const allCount = total ?? briefs.length
 
   const visible = tab === 'all' ? briefs : briefs.filter(b => b.review_status === tab)
 
@@ -182,7 +197,7 @@ export default function ConciergeBriefsPage() {
       {/* Status tabs */}
       <div className="flex flex-wrap gap-2 border-b border-gray-200">
         {TABS.map(t => {
-          const count = t.key === 'all' ? briefs.length : counts[t.key] || 0
+          const count = t.key === 'all' ? allCount : counts[t.key] || 0
           const active = tab === t.key
           return (
             <button
@@ -202,6 +217,16 @@ export default function ConciergeBriefsPage() {
           )
         })}
       </div>
+
+      {loadError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-2">{loadError}</div>
+      )}
+
+      {total !== null && total > briefs.length && (
+        <p className="text-xs text-gray-500">
+          Showing the newest {briefs.length} of {total} briefs. Counts include every brief; older ones are not listed here.
+        </p>
+      )}
 
       {/* List */}
       {visible.length === 0 ? (

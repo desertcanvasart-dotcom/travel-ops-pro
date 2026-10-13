@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { ScreenshotPlaceholder } from '../layout'
 
 export default function CapacityDeparturesPage() {
   return (
@@ -72,30 +72,12 @@ export default function CapacityDeparturesPage() {
 
       {/* WhatsApp AI Agent & Resource Assignment */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Used by the AI Agent &amp; Resource Assignment</h2>
-        <p className="text-gray-600 mb-3">
-          Availability is not just a screen for your team &mdash; it feeds automated workflows:
-        </p>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Where else these numbers are used</h2>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>WhatsApp AI agent</strong> &mdash; When a customer asks about dates, the agent checks live capacity and departures and replies accurately, suggesting alternatives or a private tour when a date is full, so it never confirms something you cannot deliver.</li>
           <li><strong>Resource assignment</strong> &mdash; Booked counts feed back into capacity, so the system reflects real load and helps avoid double&#8209;booking guides and vehicles.</li>
+          <li><strong>WhatsApp AI agent</strong> &mdash; The reply engine built for WhatsApp can read live capacity and departures, but its suggestions are not shown anywhere in the app yet, so customers are not answered from these numbers automatically. See <Link href="/docs/whatsapp-agent" className="text-primary-600 hover:underline">WhatsApp AI Agent</Link>.</li>
         </ul>
-        <Tip>
-          <strong>No overbooking by design:</strong> Because the AI agent reads the same live numbers your operations team does, its availability answers stay in sync &mdash; busy and blackout dates are surfaced before a booking is ever confirmed.
-        </Tip>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link href="/docs" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          All Docs
-        </Link>
-        <Link href="/docs/quote-revisions" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          Next: Quote Revisions
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }

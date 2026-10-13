@@ -74,7 +74,9 @@ async function fetchClient(
 ): Promise<CopilotContextClient | null> {
   const { data: client, error } = await supabase
     .from('clients')
-    .select('id, first_name, last_name, email, phone, nationality, preferred_language, notes')
+    // clients has internal_notes, not notes — a missing column fails the
+    // whole select and the draft never saw the client at all.
+    .select('id, first_name, last_name, email, phone, nationality, preferred_language, internal_notes')
     .eq('id', clientId)
     .single()
 
@@ -93,7 +95,7 @@ async function fetchClient(
     phone: client.phone,
     nationality: client.nationality,
     language: client.preferred_language,
-    notes: client.notes,
+    notes: client.internal_notes,
     total_bookings: count || 0,
   }
 }
@@ -104,7 +106,7 @@ async function fetchItineraries(
 ): Promise<CopilotContextItinerary[]> {
   const { data, error } = await supabase
     .from('itineraries')
-    .select('id, itinerary_code, tour_name, destination, start_date, end_date, status, number_of_adults, number_of_children, total_cost, currency')
+    .select('id, itinerary_code, trip_name, destinations, start_date, end_date, status, num_adults, num_children, total_cost, currency')
     .eq('client_id', clientId)
     .order('start_date', { ascending: false })
     .limit(3)
@@ -114,12 +116,12 @@ async function fetchItineraries(
   return data.map((it) => ({
     id: it.id,
     reference: it.itinerary_code,
-    tour_name: it.tour_name,
-    destination: it.destination,
+    tour_name: it.trip_name,
+    destination: it.destinations,
     start_date: it.start_date,
     end_date: it.end_date,
     status: it.status,
-    pax: (it.number_of_adults || 0) + (it.number_of_children || 0),
+    pax: (it.num_adults || 0) + (it.num_children || 0),
     quoted_amount: it.total_cost,
     currency: it.currency,
   }))
@@ -167,7 +169,8 @@ async function fetchPayments(
 
   const { data, error } = await supabase
     .from('invoice_payments')
-    .select('id, amount, currency, payment_method, status, payment_date')
+    // invoice_payments has no status column: every row is a recorded payment.
+    .select('id, amount, currency, payment_method, payment_date')
     .in('invoice_id', ids)
     .order('payment_date', { ascending: false })
     .limit(10)
@@ -179,7 +182,6 @@ async function fetchPayments(
     amount: p.amount,
     currency: p.currency,
     payment_method: p.payment_method,
-    status: p.status,
     paid_at: p.payment_date,
   }))
 }

@@ -28,6 +28,7 @@ import {
   Calendar
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { itineraryPlaceholderValues, recipientKind, recipientPlaceholderValues, templatePlaceholders } from '@/lib/templates/template-send'
 
 // ============================================
 // TYPES
@@ -63,7 +64,8 @@ interface Recipient {
   name: string
   email?: string
   phone?: string
-  type: 'client' | 'hotel' | 'cruise' | 'transport' | 'guide'
+  contactName?: string | null
+  type: 'client' | 'partner' | 'hotel' | 'cruise' | 'transport' | 'guide'
 }
 
 interface ItineraryOption {
@@ -239,8 +241,6 @@ export default function TemplatesPage() {
     await navigator.clipboard.writeText(text)
     setCopied(template.id)
     setTimeout(() => setCopied(null), 2000)
-    
-    fetch(`/api/templates/${template.id}/use`, { method: 'POST' })
   }
 
   const handlePreview = (template: Template) => {
@@ -279,9 +279,14 @@ export default function TemplatesPage() {
 
       if (response.ok) {
         setTemplates(templates.filter(t => t.id !== template.id))
+      } else {
+        // e.g. a shared default, which only its copy can replace
+        const data = await response.json().catch(() => ({}))
+        await dialog.alert(t('errors.deleteFailed'), data.error || t('errors.tryAgain'), 'warning')
       }
     } catch (error) {
       console.error('Error deleting template:', error)
+      await dialog.alert(t('errors.deleteFailed'), t('errors.tryAgain'), 'warning')
     }
   }
 
@@ -314,9 +319,15 @@ export default function TemplatesPage() {
           subject: '',
           body: '',
         })
+      } else {
+        // e.g. a 409: this org already has a template with that name,
+        // channel and language. The form stays open so it can be renamed.
+        const data = await response.json().catch(() => ({}))
+        await dialog.alert(t('errors.saveFailed'), data.error || t('errors.tryAgain'), 'warning')
       }
     } catch (error) {
       console.error('Error saving template:', error)
+      await dialog.alert(t('errors.saveFailed'), t('errors.tryAgain'), 'warning')
     } finally {
       setSaving(false)
     }
@@ -831,8 +842,9 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
   const [loadingItineraryData, setLoadingItineraryData] = useState(false)
 
   // Determine recipient type based on template
-  const isPartnerTemplate = template.category === 'partner'  // B2B partners (travel agencies)
-  const isSupplierTemplate = template.category === 'supplier'  // Service providers (hotels, transport, guides)
+  // 'partner' and 'b2b' both go to a B2B partner (lib/templates/template-send)
+  const isPartnerTemplate = recipientKind(template.category) === 'partner'  // B2B partners (travel agencies)
+  const isSupplierTemplate = recipientKind(template.category) === 'supplier'  // Service providers (hotels, transport, guides)
   const supplierType = SUBCATEGORY_TO_PARTNER_TYPE[template.subcategory] || 'supplier'
 
   const getRecipientLabel = () => {
@@ -900,10 +912,7 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
           const data = await response.json()
           if (data.success && data.placeholderData) {
             // Convert placeholder data to {{key}} format and merge with existing values
-            const values: Record<string, string> = {}
-            Object.entries(data.placeholderData).forEach(([key, value]) => {
-              values[`{{${key}}}`] = value as string
-            })
+            const values = itineraryPlaceholderValues(template.category, data.placeholderData)
             setFilledValues(prev => ({ ...values, ...prev }))
           }
         }
@@ -920,37 +929,10 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
   useEffect(() => {
     // Auto-fill from selected recipient
     if (selectedRecipient) {
-      const values: Record<string, string> = {}
-
-      if (isPartnerTemplate) {
-        // B2B Partner placeholders (travel agencies)
-        values['{{PartnerName}}'] = selectedRecipient.name || ''
-        values['{{PartnerCompany}}'] = selectedRecipient.name || ''
-        values['{{PartnerEmail}}'] = selectedRecipient.email || ''
-        values['{{PartnerPhone}}'] = selectedRecipient.phone || ''
-        values['{{ContactName}}'] = selectedRecipient.name || ''
-      } else if (isSupplierTemplate) {
-        // Supplier placeholders (hotels, transport, guides, etc.)
-        values['{{ProviderName}}'] = selectedRecipient.name || ''
-        values['{{HotelName}}'] = selectedRecipient.name || ''
-        values['{{CruiseName}}'] = selectedRecipient.name || ''
-        values['{{SupplierName}}'] = selectedRecipient.name || ''
-        values['{{GuideName}}'] = selectedRecipient.name || ''
-        values['{{SupplierEmail}}'] = selectedRecipient.email || ''
-        values['{{SupplierPhone}}'] = selectedRecipient.phone || ''
-        values['{{SupplierWhatsApp}}'] = selectedRecipient.phone || ''
-        values['{{ContactName}}'] = selectedRecipient.name || ''
-      } else {
-        // Client placeholders
-        values['{{GuestName}}'] = selectedRecipient.name || ''
-        values['{{ClientName}}'] = selectedRecipient.name || ''
-        values['{{ClientPhone}}'] = selectedRecipient.phone || ''
-        values['{{ClientEmail}}'] = selectedRecipient.email || ''
-      }
-
+      const values = recipientPlaceholderValues(template.category, selectedRecipient)
       setFilledValues(prev => ({ ...prev, ...values }))
     }
-  }, [selectedRecipient, isPartnerTemplate, isSupplierTemplate])
+  }, [selectedRecipient, template.category])
 
   useEffect(() => {
     // Generate preview
@@ -1015,6 +997,7 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
           name: item.company_name || item.name || item.hotel_name || item.cruise_name || item.supplier_name || 'Unknown',
           email: item.email || item.contact_email || item.reservations_email,
           phone: item.phone || item.contact_phone || item.whatsapp_number || item.whatsapp,
+          contactName: item.contact_name || null,
           type: isPartnerTemplate ? 'partner' : isSupplierTemplate ? supplierType as any : 'client'
         }))
 
@@ -1028,9 +1011,9 @@ function SendTemplateModal({ template, onClose, placeholders }: SendTemplateModa
     }
   }
 
-  // Extract placeholders from template
-  const templatePlaceholders = template.body.match(/\{\{[^}]+\}\}/g) || []
-  const uniquePlaceholders = [...new Set(templatePlaceholders)]
+  // Placeholders from the body AND the subject — a subject-only one used to
+  // get no field, so it could only be sent unfilled.
+  const uniquePlaceholders = templatePlaceholders(template.body, template.subject)
 
   const handleSend = async () => {
     if (!selectedRecipient) {

@@ -15,9 +15,9 @@ import {
   MessageSquare, Mail, UserPlus, UserX, ChevronDown,
   ExternalLink, Languages, Sparkles, Trash2, Archive, MailOpen, X, Plane, Route, RotateCcw
 } from 'lucide-react'
-import { useAuth } from '@/app/contexts/AuthContext'
 import { sanitizeHtml } from '@/lib/sanitize-html'
 import { escapeHtml } from '@/lib/html-escape'
+import { createClientHref as clientFormHref } from '@/lib/unified/create-client-link'
 import { ChannelBadge } from './ChannelBadge'
 import { UnifiedConversation, UnifiedMessage, ConversationChannel, EmailAttachment } from '@/types/unified'
 
@@ -172,8 +172,8 @@ interface Agent {
   email: string | null
   avatar_url: string | null
   is_available: boolean
+  /** Open WhatsApp chats, counted from the conversations (/api/whatsapp/agents). */
   current_conversations: number
-  max_conversations: number
 }
 
 // Agent avatar component
@@ -236,7 +236,6 @@ export function UnifiedMessageThread({
   onConversationDeleted,
 }: UnifiedMessageThreadProps) {
   const router = useRouter()
-  const { user } = useAuth()
   const t = useTranslations('communications')
   const tCommon = useTranslations('common')
   // A portal conversation belongs to a BOOKING, a trip chat to an ITINERARY.
@@ -569,9 +568,16 @@ export function UnifiedMessageThread({
           }
         }
         fetchMessages(false)
+      } else {
+        // Said, not swallowed: a refused send (no WhatsApp number for this
+        // company, a closed 24-hour window, …) left the text in the box and
+        // looked like nothing had happened.
+        const json = await res.json().catch(() => null)
+        setSendNotice(json?.error || t('sendFailed'))
       }
     } catch (error) {
       console.error('Error sending message:', error)
+      setSendNotice(t('sendFailed'))
     } finally {
       setSending(false)
     }
@@ -601,14 +607,24 @@ export function UnifiedMessageThread({
         ),
       })
 
+      const data = await res.json().catch(() => ({}))
       if (res.ok) {
-        const data = await res.json()
-        if (onConversationUpdate && data.conversation) {
-          onConversationUpdate(data.conversation)
-        }
+        // The routes answer with their own table's row (no `channel`, and
+        // for email no assignee embed of this shape): keep the unified
+        // conversation and change only who holds it. Passing the raw row on
+        // made a WhatsApp thread render as an email one.
+        onConversationUpdate?.({
+          ...conversation,
+          assigned_team_member_id: agentId,
+          assigned_at: agentId ? new Date().toISOString() : null,
+          assigned_agent: agentId ? (data.conversation?.assigned_agent ?? agents.find(a => a.id === agentId) ?? null) : null,
+        })
+      } else {
+        setSendNotice(data.error || t('assignFailed'))
       }
     } catch (error) {
       console.error('Error assigning conversation:', error)
+      setSendNotice(t('assignFailed'))
     } finally {
       setAssigningAgent(false)
       setShowAgentSelector(false)
@@ -667,26 +683,41 @@ export function UnifiedMessageThread({
     }
   }
 
-  // Archive conversation (Email only)
+  // An email conversation action through /api/email/conversations: it
+  // changes the STORED conversation (what this list shows) and the thread's
+  // labels in the conversation's own mailbox. Going straight to Gmail changed
+  // only the labels — in the viewer's mailbox — so an archived conversation
+  // was back on the next refresh and read state never reached the list.
+  const patchEmailConversation = async (action: 'archive' | 'unarchive' | 'mark_read' | 'mark_unread'): Promise<boolean> => {
+    if (!conversation) return false
+    const res = await fetch('/api/email/conversations', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversation_id: conversation.id, action }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || data.success === false) {
+      setSendNotice(data.error || t('actionFailed'))
+      return false
+    }
+    if (data.warning) setSendNotice(data.warning)
+    return true
+  }
+
+  // Archive / move back to the inbox (Email only). Archived conversations
+  // are under the status filter's "Archived"; new mail brings one back.
   const handleArchiveConversation = async () => {
-    if (!conversation || conversation.channel !== 'email' || !user) return
+    if (!conversation || conversation.channel !== 'email') return
     setActionLoading(true)
     try {
-      const res = await fetch('/api/gmail/actions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          // The identifier is the Gmail THREAD id — act on the whole thread.
-          threadIds: [conversation.identifier],
-          action: 'archive'
-        }),
-      })
-      if (res.ok && onConversationDeleted) {
-        onConversationDeleted(conversation.id)
+      const archived = conversation.status === 'archived'
+      if (await patchEmailConversation(archived ? 'unarchive' : 'archive')) {
+        // Off the list it was on, like a delete.
+        onConversationDeleted?.(conversation.id)
       }
     } catch (error) {
       console.error('Error archiving conversation:', error)
+      setSendNotice(t('actionFailed'))
     } finally {
       setActionLoading(false)
     }
@@ -698,29 +729,31 @@ export function UnifiedMessageThread({
     setActionLoading(true)
     try {
       if (conversation.channel === 'whatsapp') {
-        await fetch('/api/whatsapp/conversations', {
+        const res = await fetch('/api/whatsapp/conversations', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ conversation_id: conversation.id, action: 'mark_read' })
         })
-      } else if (user) {
-        await fetch('/api/gmail/actions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.id,
-            // The identifier is the Gmail THREAD id — act on the whole thread.
-          threadIds: [conversation.identifier],
-            action: 'markRead'
-          }),
-        })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          setSendNotice(data.error || t('actionFailed'))
+          return
+        }
+      } else if (conversation.channel === 'email') {
+        if (!(await patchEmailConversation('mark_read'))) return
+      } else if (conversation.channel === 'trip') {
+        const res = await fetch(`/api/itineraries/${conversation.id}/messages`, { method: 'PATCH' })
+        if (!res.ok) {
+          setSendNotice(t('actionFailed'))
+          return
+        }
       }
-      // Update local state
-      if (onConversationUpdate) {
-        onConversationUpdate({ ...conversation, unread_count: 0 })
-      }
+      // A portal thread is marked read by opening it (/api/portal-chat/messages
+      // GET); it used to be sent to Gmail with its booking code as a thread id.
+      onConversationUpdate?.({ ...conversation, unread_count: 0 })
     } catch (error) {
       console.error('Error marking as read:', error)
+      setSendNotice(t('actionFailed'))
     } finally {
       setActionLoading(false)
     }
@@ -728,24 +761,15 @@ export function UnifiedMessageThread({
 
   // Mark conversation as unread (Email only)
   const handleMarkAsUnread = async () => {
-    if (!conversation || conversation.channel !== 'email' || !user) return
+    if (!conversation || conversation.channel !== 'email') return
     setActionLoading(true)
     try {
-      await fetch('/api/gmail/actions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-          // The identifier is the Gmail THREAD id — act on the whole thread.
-          threadIds: [conversation.identifier],
-          action: 'markUnread'
-        }),
-      })
-      if (onConversationUpdate) {
-        onConversationUpdate({ ...conversation, unread_count: 1 })
+      if (await patchEmailConversation('mark_unread')) {
+        onConversationUpdate?.({ ...conversation, unread_count: 1 })
       }
     } catch (error) {
       console.error('Error marking as unread:', error)
+      setSendNotice(t('actionFailed'))
     } finally {
       setActionLoading(false)
     }
@@ -929,15 +953,9 @@ export function UnifiedMessageThread({
     }
   }
 
-  const createClientHref = (): string => {
-    const params = new URLSearchParams()
-    params.set(conversation.channel === 'whatsapp' ? 'phone' : 'email', conversation.contact_info || '')
-    const name = senderName()
-    if (name) params.set('name', name)
-    params.set('source', conversation.channel)
-    if (conversation.subject) params.set('subject', conversation.subject)
-    return `/clients/new?${params.toString()}`
-  }
+  // Portal and trip threads: the client's email, not the booking code
+  // (lib/unified/create-client-link).
+  const createClientHref = (): string => clientFormHref(conversation, senderName())
 
   return (
     <div className="flex-1 flex flex-col bg-white">
@@ -1066,7 +1084,7 @@ export function UnifiedMessageThread({
                           <div className="flex-1 text-left">
                             <p className="font-medium">{agent.name}</p>
                             <p className="text-xs text-gray-500">
-                              {agent.current_conversations}/{agent.max_conversations} {t('chats')}
+                              {agent.current_conversations} {t('activeChats')}
                             </p>
                           </div>
                           {conversation.assigned_agent?.id === agent.id && (
@@ -1145,7 +1163,7 @@ export function UnifiedMessageThread({
                 onClick={handleArchiveConversation}
                 disabled={actionLoading}
                 className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors disabled:opacity-50"
-                title={t('archive')}
+                title={conversation.status === 'archived' ? t('moveToInbox') : t('archive')}
               >
                 {actionLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
               </button>

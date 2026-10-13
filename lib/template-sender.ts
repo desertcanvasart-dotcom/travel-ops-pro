@@ -48,3 +48,13 @@ export async function templateSender(db: unknown, orgId: string, userId: string 
   }
   return senderPlaceholders(identity, agentName)
 }
+
+/**
+ * The currency a template's money placeholders are written in: the trip's
+ * own, else the company's (organizations.default_currency), else EUR — the
+ * app's default elsewhere. It used to fall back to USD for every company,
+ * labelling a JPY company's totals in dollars.
+ */
+export function templateCurrency(itineraryCurrency: string | null | undefined, orgCurrency: string | null | undefined): string {
+  return itineraryCurrency || orgCurrency || 'EUR'
+}

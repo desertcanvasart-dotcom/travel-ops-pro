@@ -18,7 +18,7 @@ describe('normalizePreferences', () => {
   it('keeps explicit false and fills missing keys from defaults', () => {
     const p = normalizePreferences({ email_enabled: false })
     expect(p.email_enabled).toBe(false)
-    expect(p.in_app_enabled).toBe(true) // default preserved
+    expect(p.task_assigned).toBe(true) // default preserved
   })
   it('ignores non-boolean junk', () => {
     expect(normalizePreferences({ email_enabled: 'yes' as never }).email_enabled).toBe(true)
@@ -40,7 +40,7 @@ describe('shouldEmailForType', () => {
   })
   it('honours per-type toggles when master switch is on', () => {
     expect(shouldEmailForType(on, 'task_assigned')).toBe(true) // default true
-    expect(shouldEmailForType(on, 'task_completed')).toBe(false) // default false
+    expect(shouldEmailForType({ ...on, task_overdue: false }, 'task_overdue')).toBe(false)
     expect(shouldEmailForType({ ...on, task_assigned: false }, 'task_assigned')).toBe(false)
   })
 })

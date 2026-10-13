@@ -134,6 +134,16 @@ export function dayTranslationStatus(source: DayText, target: DayVersionRow | nu
   return 'translated'
 }
 
+/**
+ * Which existing day translations a forced re-translate may replace: only
+ * machine text. A day a person saved ('reviewed') — or one from before
+ * translations were tracked, whose author is unknown — is kept, and the
+ * re-translate skips it (it only fills days with no text in that language).
+ */
+export function replaceableDayVersionIds(rows: Array<{ id: string; status?: string | null }>): string[] {
+  return rows.filter(r => r.status === 'machine').map(r => r.id)
+}
+
 export type LanguageStatus = 'source' | 'missing' | 'outdated' | 'machine' | 'reviewed' | 'partial'
 
 export interface LanguageSummary {

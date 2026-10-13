@@ -122,6 +122,8 @@ describe('API mutation gate — coverage', () => {
   const VIEWER_MAY_POST: Record<string, string> = {
     '/api/organizations/mine':
       'sets the active-workspace cookie for your own session; the resolver honours it only where the membership is real, so it grants nothing and changes no agency data',
+    '/api/settings/notifications':
+      'saves whether your own notifications also arrive by email; the route writes only the signed-in user\'s user_settings row, so it changes no agency data',
   }
 
   it('never grants a viewer a mutation', () => {
@@ -200,8 +202,18 @@ describe('page gate — a manager sees everything', () => {
     }
   })
 
-  it('operating settings (email, notifications, WhatsApp-AI) are manager-and-above', () => {
+  it('operating settings (email, WhatsApp-AI) are manager-and-above', () => {
     expect(roleAllows('manager', rolesFor('/api/settings/email')!)).toBe(true)
+    expect(roleAllows('agent', rolesFor('/api/settings/email')!)).toBe(false)
+  })
+
+  // Your own notification email preferences are not operating configuration:
+  // every role gets notifications, so every role chooses whether they also
+  // come by email (the route writes only the caller's row).
+  it('every role may save their own notification email preferences', () => {
+    for (const role of ['owner', 'admin', 'manager', 'agent', 'viewer']) {
+      expect(roleAllows(role, rolesFor('/api/settings/notifications')!), role).toBe(true)
+    }
   })
 })
 
