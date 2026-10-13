@@ -100,12 +100,20 @@ describe('importing an untouched template', () => {
     // The example row is skipped; genuine rows are still held to the rule that
     // an unresolvable supplier is refused rather than imported unlinked. This
     // is the half of the behaviour the fix must not have loosened.
+    //
+    // Refused as a ROW now, not as the file: the import writes the valid rows
+    // and names the skipped ones — what its preview promised (it used to
+    // refuse the whole file after offering to import the valid rows).
     const config = RATE_TABLE_CONFIGS.accommodation_rates
     const row = { ...buildTemplateRow(config), service_code: 'HTL-REAL-001' }
     const csv = Papa.unparse({ fields: getTemplateHeaders(config), data: [row] })
     const res = await POST({ json: async () => ({ table: 'accommodation_rates', csvData: csv }) } as any)
     const json = await res.json()
-    expect(json.success).toBe(false)
-    expect(JSON.stringify(json.errors)).toContain('supplierName')
+    expect(json.inserted).toBe(0)
+    expect(json.skipped).toBe(1)
+    expect(JSON.stringify(json.skippedErrors)).toContain('supplierName')
+    const { createMockClient } = await import('../_mock-supabase')
+    const { data } = await (createMockClient().from('accommodation_rates') as any).select('*')
+    expect(data ?? []).toEqual([])
   })
 })

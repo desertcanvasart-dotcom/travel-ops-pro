@@ -25,6 +25,7 @@ import { getOrgRateCurrency, type RateCurrency } from '@/lib/org-rate-currency'
 import { pricingBasisLabel, toPricingBasis } from '@/lib/pricing/pricing-basis'
 import { vehicleBands, vehicleKeyLabel } from '@/lib/rates/vehicle-bands'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
+import { tipGridOption } from '@/lib/tipping-utils'
 import type { AllRates, RateOption } from '@/app/pricing-grid/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -247,17 +248,23 @@ export async function loadGridRateOptions(
       }
     }),
 
-    tipping: (nTipping || []).map((r: any) => ({
-      id: r.id,
-      // `r.role` is not a column: every tip without a service code was
-      // listed as just "Tip". The description says whose it is.
-      name: r.description || r.service_code || [r.role_type, r.context].filter(Boolean).join(' – ') || 'Tip',
-      // Whose tip — the guide's are dropped when the guide is off (guide-rule.ts).
-      tip_role: r.role_type ?? null,
-      rateEur: toNum(r.rate_eur || r.amount_eur),
-      rateNonEur: toNum(r.rate_eur || r.amount_eur),
-      details: r.description,
-    })),
+    tipping: (nTipping || []).map((r: any) => {
+      // The tip's own Rate Unit: a per-person tip is charged per traveller,
+      // not split across the group (lib/tipping-utils tipGridOption).
+      const { unitLabel, ...basis } = tipGridOption(r.rate_unit)
+      return {
+        id: r.id,
+        // `r.role` is not a column: every tip without a service code was
+        // listed as just "Tip". The description says whose it is.
+        name: r.description || r.service_code || [r.role_type, r.context].filter(Boolean).join(' – ') || 'Tip',
+        // Whose tip — the guide's are dropped when the guide is off (guide-rule.ts).
+        tip_role: r.role_type ?? null,
+        rateEur: toNum(r.rate_eur || r.amount_eur),
+        rateNonEur: toNum(r.rate_eur || r.amount_eur),
+        details: [unitLabel, r.description].filter(Boolean).join(' | ') || undefined,
+        ...basis,
+      }
+    }),
 
     boat_rides: (nActivities || [])
       .filter((r: any) => /boat|felucca|motor/i.test(r.activity_name || r.category || ''))

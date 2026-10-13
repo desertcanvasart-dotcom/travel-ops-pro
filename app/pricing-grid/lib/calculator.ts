@@ -95,7 +95,8 @@ export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
     // Airport / hotel services and activities: each item by its own rate's
     // basis — per group, per person or per unit (item-basis.ts).
     if (BASIS_SLOTS.has(slot.slotId) && !(slot.customAmount > 0)) {
-      for (const item of slot.selectedItems) {
+      // Only what is sold: guide off drops the guide's tips (guide-rule.ts).
+      for (const item of soldItems(slot, config.withGuide)) {
         const part = itemCost(slot.slotId, item, getRate(item, passport, on), pax)
         groupTotal += part.group
         perPersonTotal += part.perPerson
@@ -327,7 +328,7 @@ function aggregateNonTransport(days: GridDay[], config: GridConfig) {
       // per person; per unit depends on the group size, so unitCostsForPax
       // adds it at each count.
       if (BASIS_SLOTS.has(slot.slotId) && !(slot.customAmount > 0)) {
-        for (const item of slot.selectedItems) {
+        for (const item of soldItems(slot, withGuide)) {
           const basis = itemBasis(slot.slotId, item)
           const rate = getRate(item, passport, on)
           if (basis === 'per_person') perPerson += rate

@@ -5,6 +5,7 @@ import { createServerClient } from '@/lib/supabase-server'
 import { sanitizeRateUpdate } from '@/lib/rates/update-payload'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
+import { uniqueViolationMessage } from '@/lib/db/unique-violation'
 
 export async function PUT(
   request: NextRequest,
@@ -36,7 +37,12 @@ export async function PUT(
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      if ((error as { code?: string }).code === '23505') {
+        return NextResponse.json({ success: false, error: uniqueViolationMessage(error, { subject: 'tipping rate', visibleFields: Object.keys(clean.payload) }) }, { status: 409 })
+      }
+      throw error
+    }
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {

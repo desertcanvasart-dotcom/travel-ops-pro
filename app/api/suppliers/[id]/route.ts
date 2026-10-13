@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { SUPPLIER_REFERENCE_CHECKS, describeBlockers } from '@/lib/suppliers/delete-guard'
+import { SUPPLIER_REFERENCE_CHECKS, blockingCounts, describeBlockers, isMissingRelation } from '@/lib/suppliers/delete-guard'
+import { uniqueViolationMessage } from '@/lib/db/unique-violation'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
@@ -8,7 +9,7 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-import { SUPPLIER_WRITABLE_FIELDS } from '@/lib/suppliers/fields'
+import { SUPPLIER_WRITABLE_FIELDS, commissionFieldError } from '@/lib/suppliers/fields'
 import { allowedSupplierTypeKeys, unknownSupplierTypeError, unknownSupplierTypes } from '@/lib/supplier-types'
 import { supplierTypesForCurrentOrg } from '@/lib/vocabulary-server'
 
@@ -86,6 +87,10 @@ export async function PUT(
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
     }
 
+    // The Commissions page checks 0–100; a direct PUT must not store -50.
+    const commissionError = commissionFieldError(updateData)
+    if (commissionError) return NextResponse.json({ error: commissionError }, { status: 400 })
+
     // Same rule as create: roles are the agency's supplier types.
     if (Array.isArray(updateData.types)) {
       const unknown = unknownSupplierTypes(updateData.types, allowedSupplierTypeKeys(await supplierTypesForCurrentOrg()))
@@ -104,6 +109,14 @@ export async function PUT(
 
     if (error) {
       console.error('Error updating supplier:', error)
+      // A code another supplier of this company holds: name the clash, as
+      // create does — not a bare "Failed to update supplier" 500.
+      if ((error as { code?: string }).code === '23505') {
+        return NextResponse.json(
+          { error: uniqueViolationMessage(error, { subject: 'supplier', visibleFields: Object.keys(updateData) }) },
+          { status: 409 }
+        )
+      }
       return NextResponse.json({ error: 'Failed to update supplier' }, { status: 500 })
     }
 
@@ -139,17 +152,24 @@ export async function DELETE(
       return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
     }
 
-    // Money and records must not lose their supplier. Refuse with the reason
-    // rather than letting the foreign key decide (a 500, or a quiet orphan).
+    // Nothing that points at the supplier may lose it — properties, rates,
+    // trip assignments, bookings, money, vouchers (lib/suppliers/delete-guard).
+    // Refuse with the counts rather than letting the foreign key decide (a
+    // cascade, a quiet SET NULL, or an id left pointing at nothing).
     const counts = await Promise.all(
       SUPPLIER_REFERENCE_CHECKS.map(async ({ table, column, label }) => {
-        const { count } = await supabaseAdmin.from(table).select('*', { count: 'exact', head: true }).eq(column, id)
-        return { label, count: count ?? 0 }
+        const { count, error } = await supabaseAdmin.from(table).select('*', { count: 'exact', head: true }).eq(column, id)
+        if (error && !isMissingRelation(error)) return { label, count: 0, failed: true }
+        return { label, count: count ?? 0, failed: false }
       })
     )
+    if (counts.some(c => c.failed)) {
+      // A check that could not run is not a check that found nothing.
+      return NextResponse.json({ error: 'Could not check what uses this supplier — try again, or deactivate it instead' }, { status: 500 })
+    }
     const blocked = describeBlockers(counts)
     if (blocked) {
-      return NextResponse.json({ error: blocked, blocked: true }, { status: 409 })
+      return NextResponse.json({ error: blocked, blocked: true, references: blockingCounts(counts) }, { status: 409 })
     }
 
     const { error } = await supabaseAdmin

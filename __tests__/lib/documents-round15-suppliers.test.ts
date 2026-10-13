@@ -72,8 +72,10 @@ describe('wide rate CSV: dates and row numbers', () => {
     const p = validateImportData([{ ...required, [firstRequired.name]: '' }, { ...required }], cfg)
     expect(p.parsedValidRowNumbers).toEqual([3])
     const route = src('app/api/rates/bulk/import/route.ts')
-    expect(route).toContain('const rowNum = sheetRowOf.get(row) ?? idx + 2')
-    expect(route).toContain('row: sheetRowOf.get(record) ?? idx + 2')
+    // The supplier check and the per-row checks before the preview (key,
+    // vehicle bands, money values — which used to run at commit) both report
+    // the sheet row.
+    expect(route.split('const rowNum = sheetRowOf.get(row) ?? idx + 2').length - 1).toBeGreaterThanOrEqual(2)
     expect(route).toContain('parsedValidRowNumbers: _rows')
   })
 })

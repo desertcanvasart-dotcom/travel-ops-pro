@@ -5,6 +5,7 @@ import { blankToNull } from '@/lib/blank-to-null'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { uniqueViolationMessage } from '@/lib/db/unique-violation'
 
 export async function GET() {
   try {
@@ -88,7 +89,14 @@ export async function POST(request: NextRequest) {
       error = result.error
     }
 
-    if (error) throw error
+    if (error) {
+      // The service code another tip of this company already has: a 409
+      // that names it, not "Internal server error".
+      if ((error as { code?: string }).code === '23505') {
+        return NextResponse.json({ success: false, error: uniqueViolationMessage(error, { subject: 'tipping rate', visibleFields: Object.keys(body) }) }, { status: 409 })
+      }
+      throw error
+    }
 
     return NextResponse.json({ success: true, data, updated: false })
   } catch (error: any) {
