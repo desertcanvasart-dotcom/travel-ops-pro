@@ -3615,7 +3615,9 @@
       "medium": "Medium",
       "high": "High",
       "urgent": "Urgent"
-    }
+    },
+    "failedToLoad": "Could not load follow-ups. Reload the page to try again.",
+    "listTruncated": "Showing the {shown} soonest of {matched} pending follow-ups. The cards count all of them."
   },
   "confirmations": {
     "deleteTitle": "Delete Confirmation",
@@ -7907,7 +7909,7 @@
     "saving": "Saving...",
     "update": "Update",
     "confirmDelete": "Delete task \"{title}\"?",
-    "confirmBulkArchive": "Archive {count} completed task(s)?",
+    "confirmBulkArchive": "Archive all {count} done task(s) in this company? Filters do not apply.",
     "priorityLow": "Low",
     "priorityMedium": "Medium",
     "priorityHigh": "High",
@@ -7952,7 +7954,9 @@
     "checklistUnpriced": "Not priced",
     "checklistUnpricedCount": "{count} not priced",
     "checklistUnpricedHint": "The itinerary's day calls for this, but no priced service covers it yet. Book it here, or add it to the itinerary's pricing.",
-    "statusChangeFailed": "Could not change the status"
+    "statusChangeFailed": "Could not change the status",
+    "saveFailed": "Could not save the task",
+    "listTruncated": "Showing the newest {shown} of {matched} matching tasks. Narrow the filters to see older ones."
   },
   "resourceSummary": {
     "noResourcesAssigned": "No Resources Assigned",

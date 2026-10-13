@@ -2,7 +2,6 @@
 
 import { todayLocal } from '@/lib/today'
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useAuth } from '@/app/contexts/AuthContext'
@@ -33,8 +32,6 @@ import {
   Receipt,
   X,
 } from 'lucide-react'
-
-const supabase = createClient()
 
 interface DashboardStats {
   totalClients: number
@@ -146,21 +143,13 @@ export default function DashboardPage() {
       setDismissedCount(Number(attentionData?.dismissed) || 0)
 
       // Upcoming follow-ups list
-      const { data: upcoming } = await supabase
-        .from('client_followups')
-        .select(`
-          *,
-          clients (
-            id,
-            first_name,
-            last_name,
-            email
-          )
-        `)
-        .eq('status', 'pending')
-        .gte('due_date', new Date().toISOString())
-        .order('due_date', { ascending: true })
-        .limit(5)
+      // The active company's five soonest from today, through the API: the
+      // browser read listed every company the person belongs to. A viewer
+      // gets a 403 and an empty list (the table's RLS gave them none either).
+      const upcomingRes = await fetch(`/api/followups?today=${todayLocal()}&from=${todayLocal()}&limit=5`)
+      const upcoming = upcomingRes.ok
+        ? ((await upcomingRes.json()).data || []).map((f: any) => ({ ...f, clients: f.client }))
+        : []
 
       // Recent quotes list — the five newest, from the summary (staff only;
       // empty for a viewer, as the itineraries API it replaced was)

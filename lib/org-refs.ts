@@ -72,3 +72,17 @@ export async function taskRefsInOrg(
   }
   return true
 }
+
+export const INACTIVE_ASSIGNEE = 'That team member is no longer active. Choose someone else to assign the task to.'
+
+/**
+ * True when the id is this org's team member and they have been deactivated
+ * (removed from the team). taskRefsInOrg only proves the member is the org's;
+ * the screen offers active members only, but the API took any. The task
+ * reminder cron skips inactive members, so such a task reminded nobody.
+ */
+export async function teamMemberInactive(supabase: DbClient, orgId: string, id: unknown): Promise<boolean> {
+  if (typeof id !== 'string' || !id) return false
+  const { data } = await supabase.from('team_members').select('id, is_active').eq('id', id).eq('org_id', orgId).maybeSingle()
+  return !!data && data.is_active === false
+}
