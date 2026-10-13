@@ -50,6 +50,20 @@ export default function InvoicesPaymentsPage() {
         </ul>
       </section>
 
+      {/* VAT */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">VAT</h2>
+        <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li>New Invoice has an <strong>Apply VAT (14%)</strong> box instead of a tax-rate field. It is off unless you tick it, or unless the trip you pick carries VAT from its quote.</li>
+          <li>VAT is added on top of the invoice&apos;s net (subtotal minus discount): VAT = net &times; your company&apos;s rate (Settings &rsaquo; Company Profile), rounded to the currency. Total = net + VAT. The server works it out; the figure in the form is a preview.</li>
+          <li>A deposit invoice and its final invoice each carry VAT on their own part, so together they carry the VAT on the whole trip. A final invoice follows its deposit&apos;s VAT choice.</li>
+          <li>An invoice raised from a trip that carries VAT starts with VAT on.</li>
+          <li>On the invoice page you can switch VAT on or off until a payment has been recorded against it. After that the invoice keeps its VAT; issue a new invoice to change it.</li>
+          <li>The rate and amount are recorded on the invoice when it is issued. Invoices made before VAT existed that already carried a tax amount count as VAT applied, at the rate and amount they recorded.</li>
+          <li>The invoice page, the PDF, the WhatsApp message and payment reminder emails all state the VAT line.</li>
+        </ul>
+      </section>
+
       {/* Invoice Detail */}
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Invoice Detail Page</h2>
@@ -58,7 +72,7 @@ export default function InvoicesPaymentsPage() {
           <li>Invoice number and status</li>
           <li>Client information</li>
           <li>Line items with quantities, prices, and totals</li>
-          <li>Tax calculation (if applicable)</li>
+          <li>VAT: <strong>VAT 14% included: &lt;amount&gt;</strong> or <strong>VAT not applied</strong>, always shown</li>
           <li>Discount (if applicable)</li>
           <li><strong>Payment Progress Bar</strong> showing how much has been paid</li>
           <li>Payment history with dates, amounts, and methods</li>

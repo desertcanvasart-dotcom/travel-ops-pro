@@ -91,7 +91,10 @@ describe('API mutation gate — coverage', () => {
     '/api/b2b/quotes',
     '/api/b2b/quotes/abc-123',
     '/api/b2b/quotes/bulk-delete',
-    '/api/b2c/quotes',
+    // Sell (2026-10-13): agents price on the grid and take orders.
+    '/api/pricing-grid/save',
+    '/api/intake/order-form',
+    '/api/intake/web-orders',
     // A viewer could PATCH a concierge brief's review status.
     '/api/concierge-briefs',
     '/api/concierge-briefs/abc-123',
@@ -100,6 +103,16 @@ describe('API mutation gate — coverage', () => {
     expect(roles, `${path} has no entry in API_MUTATION_PERMISSIONS`).not.toBeNull()
     expect(roles).toEqual(expect.arrayContaining(['admin', 'manager', 'agent']))
     expect(roles).not.toContain('viewer')
+  })
+
+  it.each([
+    // B2C Quotes and Rates › Extras are the managers' screens in the menu.
+    '/api/b2c/quotes',
+    '/api/b2c/quotes/abc-123',
+    '/api/extras-catalogue',
+    '/api/extras-catalogue/abc-123',
+  ])('%s is manager-and-above', path => {
+    expect(rolesFor(path)).toEqual(['admin', 'manager'])
   })
 
   it('leaves self-service routes ungated so a viewer can still edit their own profile', () => {
@@ -383,6 +396,19 @@ describe('rate reads', () => {
   ])('%s — a picker agents build trips with — stays agent-readable, never viewer', path => {
     expect(managerOnly(path)).toBe(false)
     expect(staffOnly(path)).toBe(true)
+  })
+
+  it.each([
+    '/api/itineraries', '/api/itineraries/abc', '/api/bookings', '/api/bookings/abc', '/api/itinerary-resources',
+    '/api/trip-events/today', '/api/b2b/quotes', '/api/b2b/quotes/abc/pdf', '/api/intake/web-orders',
+    '/api/extras-catalogue', '/api/pricing-grid/rates',
+  ])('%s (Sell) is staff-readable, never viewer', path => {
+    expect(staffOnly(path)).toBe(true)
+  })
+
+  it('B2C offers are manager-and-above, reads included', () => {
+    expect(managerOnly('/api/b2c/quotes')).toBe(true)
+    expect(managerOnly('/api/b2c/quotes/abc')).toBe(true)
   })
 
   it('the calendar’s guide and vehicle lists stay open to a viewer', () => {

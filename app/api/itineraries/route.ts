@@ -3,23 +3,12 @@ import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { reassertClientId } from '@/lib/itineraries/reassert-client'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
-
-// Generate unique itinerary code
-function generateItineraryCode(): string {
-  const year = new Date().getFullYear()
-  const random = Math.floor(Math.random() * 9000) + 1000
-  return `ITN-${year}-${random}`
-}
-
-// Calculate days between two dates
-function calculateTotalDays(startDate: string, endDate: string): number {
-  if (!startDate || !endDate) return 1
-  const start = new Date(startDate)
-  const end = new Date(endDate)
-  const diffTime = Math.abs(end.getTime() - start.getTime())
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-  return diffDays + 1 // Include both start and end day
-}
+import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
+import { newTripRow } from '@/lib/itineraries/new-trip'
+import { foreignTripRef, TRIP_REF_LABELS } from '@/lib/itineraries/trip-refs'
+import { insertItineraryWithCode, itineraryCode } from '@/lib/itineraries/itinerary-code'
+import { getOrgDefaultCurrency } from '@/lib/org-default-currency'
+import { ITINERARY_STATUSES } from '@/lib/itineraries/statuses'
 
 export async function GET(request: NextRequest) {
   try {
@@ -48,12 +37,23 @@ export async function GET(request: NextRequest) {
     // before the migration runs, PostgREST rejects the whole select and the
     // itineraries list — the app's main page — goes blank. Falling back to the
     // owner-less shape degrades one column instead of the page.
-    const BASE_COLUMNS = 'id, itinerary_code, client_name, client_email, trip_name, start_date, end_date, total_days, num_adults, num_children, total_cost, total_paid, payment_status, currency, status, created_at, assigned_guide_id, assigned_vehicle_id'
-    const OWNER_COLUMNS = 'id, itinerary_code, client_name, client_email, trip_name, start_date, end_date, total_days, num_adults, num_children, total_cost, total_paid, payment_status, currency, status, created_at, assigned_guide_id, assigned_vehicle_id, assigned_to, assignee:team_members!itineraries_assigned_to_fkey(id, name)'
+    const BASE_COLUMNS = 'id, itinerary_code, client_name, client_email, trip_name, start_date, end_date, total_days, num_adults, num_children, total_cost, total_paid, payment_status, currency, status, source, created_at, assigned_guide_id, assigned_vehicle_id'
+    const OWNER_COLUMNS = 'id, itinerary_code, client_name, client_email, trip_name, start_date, end_date, total_days, num_adults, num_children, total_cost, total_paid, payment_status, currency, status, source, created_at, assigned_guide_id, assigned_vehicle_id, assigned_to, assignee:team_members!itineraries_assigned_to_fkey(id, name)'
 
     // ?assignedTo=<team_member_id> for one person's trips, or ?assignedTo=none
     // for the trips nobody owns — the query an ops lead actually wants.
     const assignedTo = searchParams.get('assignedTo')
+
+    // The list page searches and filters on the server, so a search finds a
+    // trip that is not among the rows loaded so far, and its status cards
+    // count the whole company rather than the loaded page.
+    const search = sanitizeSearchTerm(searchParams.get('search'))
+    const statusParam = searchParams.get('status')
+    const status = statusParam && (ITINERARY_STATUSES as readonly string[]).includes(statusParam) ? statusParam : null
+    const withCounts = searchParams.get('counts') === 'true'
+    const searchFilter = search
+      ? `client_name.ilike.%${search}%,trip_name.ilike.%${search}%,itinerary_code.ilike.%${search}%,client_email.ilike.%${search}%`
+      : null
 
     // The two selects are written out separately rather than parameterised:
     // passing a `string` variable to .select() erases the row type and the
@@ -68,6 +68,8 @@ export async function GET(request: NextRequest) {
       if (!includeB2B) q = q.not('source', 'eq', 'b2b_custom')
       if (assignedTo === 'none') q = q.is('assigned_to', null)
       else if (assignedTo) q = q.eq('assigned_to', assignedTo)
+      if (status) q = q.eq('status', status)
+      if (searchFilter) q = q.or(searchFilter)
       return q
     }
 
@@ -79,6 +81,8 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: false })
         .range(from, from + limit - 1)
       if (!includeB2B) q = q.not('source', 'eq', 'b2b_custom')
+      if (status) q = q.eq('status', status)
+      if (searchFilter) q = q.or(searchFilter)
       return q
     }
 
@@ -149,14 +153,30 @@ export async function GET(request: NextRequest) {
       available_languages: versionsMap[itinerary.id] || []
     })) || []
 
-    console.log('✅ Found itineraries:', dataWithLanguages.length)
+    // ?counts=true: how many of the company's trips are in each status (the
+    // list's cards), over every trip the list can show — not this page, and
+    // not narrowed by the search or the status filter.
+    let statusCounts: Record<string, number> | undefined
+    if (withCounts) {
+      const countOf = async (st: string | null) => {
+        let q = supabase.from('itineraries').select('id', { count: 'exact', head: true }).eq('org_id', orgId)
+        if (!includeB2B) q = q.not('source', 'eq', 'b2b_custom')
+        if (st) q = q.eq('status', st)
+        const { count: n } = await q
+        return n ?? 0
+      }
+      const [total, ...perStatus] = await Promise.all([countOf(null), ...ITINERARY_STATUSES.map(st => countOf(st))])
+      statusCounts = { total }
+      ITINERARY_STATUSES.forEach((st, i) => { statusCounts![st] = perStatus[i] })
+    }
 
     return NextResponse.json({
       success: true,
       data: dataWithLanguages,
       count: count ?? dataWithLanguages.length,
       page,
-      limit
+      limit,
+      ...(statusCounts ? { status_counts: statusCounts } : {}),
     })
   } catch (error: any) {
     console.error('❌ API error:', error)
@@ -173,70 +193,56 @@ export async function POST(request: NextRequest) {
     if (!orgId) return noOrgResponse()
 
     const supabase = createServerClient()
-    const body = await request.json()
-    body.org_id = orgId
-
-    // Generate itinerary_code if not provided
-    if (!body.itinerary_code) {
-      body.itinerary_code = generateItineraryCode()
+    const body = await request.json().catch(() => null)
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 })
     }
 
-    // Calculate total_days from dates if not provided
-    if (!body.total_days && body.start_date && body.end_date) {
-      body.total_days = calculateTotalDays(body.start_date, body.end_date)
-    } else if (!body.total_days) {
-      body.total_days = 1
+    // Only the fields a new trip is made of (never id, payments, FX or
+    // status), in the currency the company bills in when none is given.
+    const built = newTripRow(body, { orgId, defaultCurrency: await getOrgDefaultCurrency(supabase, orgId) })
+    if ('error' in built) return NextResponse.json({ success: false, error: built.error }, { status: 400 })
+    const row = built.row
+
+    // The client, programme and destination must be this company's own.
+    const foreign = await foreignTripRef(supabase, orgId, {
+      client_id: row.client_id,
+      template_id: row.template_id,
+      destination_id: row.destination_id,
+    })
+    if (foreign) {
+      return NextResponse.json({ success: false, error: `${TRIP_REF_LABELS[foreign]} not found` }, { status: 404 })
     }
 
-    // Set default status if not provided
-    if (!body.status) {
-      body.status = 'draft'
-    }
+    // The code is unique: a clash draws another rather than failing.
+    const year = new Date().getFullYear()
+    const { data, error } = await insertItineraryWithCode<{ id: string; [key: string]: any }>(supabase, row, () => itineraryCode(year))
 
-    // Set default values for other required fields
-    body.num_adults = body.num_adults || 1
-    body.num_children = body.num_children || 0
-    body.total_cost = body.total_cost || 0
-    body.currency = body.currency || 'USD'
-
-    // Set timestamps
-    const now = new Date().toISOString()
-    body.created_at = body.created_at || now
-    body.updated_at = now
-
-    const { data, error } = await supabase
-      .from('itineraries')
-      .insert([body])
-      .select()
-      .single()
-
-    if (error) {
+    if (error || !data) {
       console.error('Error creating itinerary:', error)
-      throw error
+      throw error ?? new Error('The itinerary was not created')
     }
 
     // The database drops client_id on INSERT (prod-only rewrite, see the
     // helper) — re-assert it so a trip created from a client's page stays
     // on that client's page.
-    await reassertClientId(supabase, data, body.client_id)
+    await reassertClientId(supabase, data, row.client_id as string | null | undefined)
 
     // Create English version automatically
-    if (data) {
-      const { error: versionError } = await supabase
-        .from('itinerary_versions')
-        .insert({
-          itinerary_id: data.id,
-          language: 'en',
-          trip_name: body.trip_name || 'Untitled Trip',
-          notes: body.notes || null,
-          pickup_location: body.pickup_location || null,
-          guide_notes: body.guide_notes || null,
-          vehicle_notes: body.vehicle_notes || null
-        })
+    const { error: versionError } = await supabase
+      .from('itinerary_versions')
+      .insert({
+        itinerary_id: data.id,
+        language: 'en',
+        trip_name: (row.trip_name as string) || 'Untitled Trip',
+        notes: row.notes || null,
+        pickup_location: row.pickup_location || null,
+        guide_notes: row.guide_notes || null,
+        vehicle_notes: row.vehicle_notes || null
+      })
 
-      if (versionError) {
-        console.warn('Warning: Could not create English version:', versionError)
-      }
+    if (versionError) {
+      console.warn('Warning: Could not create English version:', versionError)
     }
 
     return NextResponse.json({

@@ -16,6 +16,25 @@ import { computeAddTravellerReprice } from '@/lib/reprice-add-traveller'
 export const dynamic = 'force-dynamic'
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Db = { from: (table: string) => any }
+
+/** Resolve the request if — and only if — it is still pending. True when this call did. */
+export async function claimPendingRequest(db: Db, cid: string, orgId: string, status: 'approved' | 'rejected'): Promise<boolean> {
+  const { data } = await db
+    .from('booking_change_requests')
+    .update({ status, resolved_at: new Date().toISOString() })
+    .eq('id', cid)
+    .eq('org_id', orgId)
+    .eq('status', 'pending')
+    .select('id')
+  return Array.isArray(data) && data.length > 0
+}
+
+async function releaseRequest(db: Db, cid: string): Promise<void> {
+  await db.from('booking_change_requests').update({ status: 'pending', resolved_at: null }).eq('id', cid)
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; cid: string }> }
@@ -42,10 +61,16 @@ export async function POST(
     return NextResponse.json({ error: 'Request already resolved' }, { status: 409 })
   }
 
+  // Claim the request first, and only while it is still pending: two quick
+  // clicks (or two people) used to both pass the check above, and an approval
+  // then added the travellers twice and raised the price twice. Whoever
+  // claims it goes on; the other is told it is already resolved.
+  const claimed = await claimPendingRequest(admin, cid, orgId, action === 'approve' ? 'approved' : 'rejected')
+  if (!claimed) {
+    return NextResponse.json({ error: 'Request already resolved' }, { status: 409 })
+  }
+
   if (action === 'reject') {
-    await admin.from('booking_change_requests')
-      .update({ status: 'rejected', resolved_at: new Date().toISOString() })
-      .eq('id', cid)
     return NextResponse.json({ success: true, status: 'rejected' })
   }
 
@@ -61,7 +86,10 @@ export async function POST(
     .eq('id', id)
     .eq('org_id', orgId)
     .maybeSingle()
-  if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+  if (!booking) {
+    await releaseRequest(admin, cid)
+    return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+  }
 
   const oldPax = (booking.num_adults ?? 0) + (booking.num_children ?? 0)
   const newAdults = (booking.num_adults ?? 0) + req.requested_count
@@ -100,16 +128,16 @@ export async function POST(
     .from('bookings')
     .update(bookingUpdate)
     .eq('id', id)
-  if (bumpErr) return NextResponse.json({ error: clientMessage(bumpErr, 'Could not update booking') }, { status: 500 })
+  if (bumpErr) {
+    // Nothing changed on the booking: hand the request back so it can be approved again.
+    await releaseRequest(admin, cid)
+    return NextResponse.json({ error: clientMessage(bumpErr, 'Could not update booking') }, { status: 500 })
+  }
 
   const rows = Array.from({ length: req.requested_count }, () => ({
     org_id: orgId, booking_id: id, first_name: '', last_name: '', passenger_type: 'adult', is_lead_passenger: false,
   }))
   await admin.from('booking_passengers').insert(rows)
-
-  await admin.from('booking_change_requests')
-    .update({ status: 'approved', resolved_at: new Date().toISOString() })
-    .eq('id', cid)
 
   return NextResponse.json({
     success: true,

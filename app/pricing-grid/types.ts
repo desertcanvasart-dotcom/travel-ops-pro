@@ -39,9 +39,18 @@ export interface GridConfig {
    *  word). A parsed trip's guides follow it; '' or unset = taken from the
    *  guides most days already have (lib/guide-language.ts). */
   guideLanguage?: string
+  /** The currency the operator chose to SEE the figures in. Display only:
+   *  the save stores the trip in the org's rate currency (save route). */
   currency: string
   marginPercent: number
-  exchangeRate: number | null  // EUR → target currency
+  /** Derived each render, never trusted (display-fx.ts): the org's rate
+   *  currency → `shownCurrency`; null = no conversion. */
+  exchangeRate: number | null
+  /** The org's rate currency — what every rate, line and total is in. */
+  rateCurrency?: string | null
+  /** The currency the figures are actually shown in: `currency`, or the rate
+   *  currency when there is no rate to convert by. Derived, display only. */
+  shownCurrency?: string | null
   startDate: string  // ISO date string (YYYY-MM-DD) — for seasonality pricing
   // Client & trip info (maps to itineraries table)
   clientName: string
@@ -55,6 +64,9 @@ export interface GridConfig {
   // B2B partner (when clientType === 'b2b')
   partnerId: string | null
   partnerName: string
+  /** The client record the trip is priced for (the inbox hands it over);
+   *  the save links the itinerary to it when it is this company's. */
+  clientId?: string | null
 }
 
 // --- Day Type Preset + Component Model (consolidation Phase B / rich gate) ---
@@ -191,6 +203,13 @@ export interface SelectedItem {
   pricingBasis?: PricingBasis
   /** per_unit only: people per unit. */
   unitCapacity?: number | null
+  /** A line loaded from a saved itinerary: its itinerary_services row id.
+   *  The save reads that row's stored price when the line has no current
+   *  rate (lib/saved-price.ts). */
+  serviceId?: string
+  /** The price is the one the line was saved with, not a current rate's —
+   *  shown as such. Only the save's own lookup sets it on what it stores. */
+  savedPrice?: boolean
 }
 
 export interface SlotValue {
@@ -320,6 +339,9 @@ export interface DayCalc {
   groupPerPerson: number
   dailyPerPerson: number
   dailyTotal: number
+  /** The day's whole cost, unrounded (group + per person × pax) — what the
+   *  grand totals add up, as the save adds its lines. */
+  exactTotal: number
 }
 
 export interface GridTotals {

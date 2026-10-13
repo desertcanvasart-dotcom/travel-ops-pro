@@ -1,4 +1,13 @@
 {
+  "vat": {
+    "applied": "VAT {rate}% included: {amount}",
+    "notApplied": "VAT not applied",
+    "apply": "Apply VAT ({rate}%)",
+    "applyHint": "Adds VAT on top of the net price at the company's rate (Settings › Company Profile). The rate and amount are recorded on this document.",
+    "net": "Net price",
+    "totalInclVat": "Total incl. VAT",
+    "lockedHint": "VAT is recorded with the price and no longer changes on this document."
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",
@@ -1230,6 +1239,7 @@
       "editContentHint": "Edit itinerary content",
       "eurNonEur": "EU / non-EU passport",
       "failedToSaveDraft": "Failed to save draft",
+      "fxUnavailable": "The exchange rate from {from} to {to} could not be loaded, so this line was not repriced. Try again in a moment.",
       "failedToUpdateStatus": "Failed to update status",
       "from": "From",
       "guide": "Guide",
@@ -1374,6 +1384,8 @@
     },
     "delete": "Delete",
     "clickToConfirm": "Click again to confirm",
+    "deleteConfirmTitle": "Delete this itinerary?",
+    "deleteConfirmMessage": "{code} {trip} and its days and services will be deleted. This cannot be undone. A trip with a booking, payments, invoices or sent supplier documents cannot be deleted — cancel it instead.",
     "noItinerariesFound": "No itineraries found",
     "tryAdjusting": "Try adjusting your search or filters",
     "errorDeleteFailed": "Failed to delete itinerary",
@@ -2845,7 +2857,10 @@
       "partiallyPaid": "Partially Paid",
       "partial": "Partial",
       "paid": "Paid",
-      "completed": "Completed"
+      "completed": "Completed",
+      "quote": "Quote (not sold)",
+      "noBooking": "No booking yet",
+      "refunded": "Refunded"
     },
     "filters": {
       "title": "Filters",
@@ -3227,6 +3242,8 @@
       "defaultMargin": "Default margin (%)",
       "defaultMarginUnset": "Not set — 25% applies",
       "defaultMarginHint": "The margin the company sells at. Colleagues who have set no margin of their own inherit it; each quote can still override it.",
+      "vatRate": "VAT rate (%)",
+      "vatRateHint": "Added on top of the net price on every quote or invoice where \"Apply VAT\" is ticked. Each document records the rate it was issued at, so changing this never alters a document already made.",
       "rateChangeAlerts": "Rate-change alerts",
       "rateChangeAlertsInApp": "In the app",
       "rateChangeAlertsInAppEmail": "In the app + e-mail",
@@ -5524,7 +5541,10 @@
       "cancel": "Cancel",
       "loadFailed": "Could not load extras. Please refresh.",
       "saveFailed": "Could not save the extra.",
-      "deleteFailed": "Could not delete the extra."
+      "deleteFailed": "Could not delete the extra.",
+      "inUse": "“{name}” cannot be deleted: {count, plural, one {# saved quote uses it} other {# saved quotes use it}} ({numbers}). Deactivate it instead — it is no longer offered, and those quotes keep it.",
+      "deactivate": "Deactivate",
+      "deactivateFailed": "Could not deactivate the extra."
     }
   },
   "profitLoss": {
@@ -6059,7 +6079,7 @@
     "grossRevenue": "Gross Revenue",
     "deductibleExpenses": "Deductible Expenses",
     "taxableIncome": "Taxable Income",
-    "vatSummary": "VAT Summary (Est. 14%)",
+    "vatSummary": "VAT Summary (as recorded on issued invoices)",
     "vatCollected": "VAT Collected",
     "vatPaid": "VAT Paid",
     "netVat": "Net VAT",
@@ -7189,6 +7209,9 @@
     "tablePerPerson": "Per Person",
     "saveQuote": "Save Quote",
     "partnerOptional": "Partner (Optional)",
+    "partnerMarginApplied": "Priced at this partner's margin: {percent}%.",
+    "partnerMarginYours": "Priced at the margin you set: {percent}%. It takes the place of the partner's.",
+    "repricingForPartner": "Re-pricing for this partner…",
     "noPartnerDirect": "No partner / Direct client",
     "clientDetailsOptional": "Client Details (Optional)",
     "clientName": "Client Name",
@@ -7382,6 +7405,7 @@
     "subtitle": "Manage confirmed trips and operational tracking",
     "searchPlaceholder": "Search by code, client, or trip name...",
     "noBookingsFound": "No bookings found",
+    "loadMore": "Load more",
     "adults": "adults",
     "children": "children",
     "bookingNotFound": "Booking not found",
@@ -8286,6 +8310,9 @@
     "departureFound": "Departure on this date: seats will be held (pending)",
     "departureNone": "No departure loaded for this date — quote only",
     "departureHeld": "Seats held on the departure, pending your confirmation.",
+    "departureSeatsFree": "{free} seat(s) free on this departure.",
+    "departureNoRoom": "Only {free} seat(s) free on this departure for a party of {requested}: no seats will be held.",
+    "departureFull": "No seats held: the departure has {free} seat(s) free for a party of {requested}. Add seats on the departure or hold them by hand.",
     "fromWebsiteOrder": "Website order received {date}: {reason}",
     "dismiss": "Dismiss",
     "dismissConfirm": "Remove this order from the list? Nothing is created or deleted.",
@@ -8359,6 +8386,10 @@
     "saved": "Saved",
     "savedFixed": "Saved — {messages} stored messages were ours, {conversations} conversations updated",
     "saveFailed": "Could not save"
+  },
+  "pricingGrid": {
+    "savedPrice": "saved price — not linked to a current rate",
+    "savedPriceHint": "This line has no current rate, so it keeps the price it was saved with. Pick a rate to price it from your rates."
   },
   "blogAdmin": {
     "title": "Blog",

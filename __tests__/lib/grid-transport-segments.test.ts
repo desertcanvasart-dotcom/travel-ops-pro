@@ -5,7 +5,7 @@
 // retired 'intercity_transfer'.
 import { describe, it, expect } from 'vitest'
 import { gridCompleteness, transportSegments } from '@/app/pricing-grid/lib/grid-completeness'
-import { attachPricingBasis } from '@/app/pricing-grid/lib/attach-basis'
+import { hydrateDays } from '@/app/pricing-grid/lib/hydrate-items'
 import { DAY_TYPE_LABELS, type GridDay, type GridConfig } from '@/app/pricing-grid/types'
 
 const route = (serviceType: string, tripShape?: string) =>
@@ -41,10 +41,12 @@ describe('the gate counts it', () => {
 })
 
 describe('a reloaded transport line', () => {
-  it('shows its rate’s current name, at the price it was saved at', () => {
+  // Rebuilt from its rate (hydrate-items.ts): the name AND the price are the
+  // rate's today — the save prices from the stored rate, so the screen does.
+  it('shows its rate’s current name and price', () => {
     const loaded = [day([{ slotId: 'route', selectedItems: [{ rateId: 'r1__sedan', name: 'Old name', rateEur: 93.38, rateNonEur: 93.38 }], customAmount: 0 }])]
-    const { days } = attachPricingBasis(loaded, { route: [{ id: 'r1__sedan', name: 'Sedan (1-2 pax) — Cairo → Alexandria · Intercity, day trip, back the same day', rateEur: 120, rateNonEur: 120 }] } as never)
-    expect(days[0].slots[0].selectedItems[0]).toMatchObject({ name: 'Sedan (1-2 pax) — Cairo → Alexandria · Intercity, day trip, back the same day', rateEur: 93.38 })
+    const { days } = hydrateDays(loaded, { route: [{ id: 'r1__sedan', name: 'Sedan (1-2 pax) — Cairo → Alexandria · Intercity, day trip, back the same day', rateEur: 120, rateNonEur: 120, capacity_min: 1, capacity_max: 2 }] } as never, 2)
+    expect(days[0].slots[0].selectedItems[0]).toMatchObject({ name: 'Sedan (1-2 pax) — Cairo → Alexandria · Intercity, day trip, back the same day', rateEur: 120 })
   })
 })
 

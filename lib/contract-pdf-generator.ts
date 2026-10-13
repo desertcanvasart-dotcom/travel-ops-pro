@@ -15,6 +15,7 @@
 import { jsPDF } from 'jspdf'
 import { contractPrice } from '@/lib/contract-facts'
 import { ENGLISH_CONTRACT_LABELS, type ContractDocument } from '@/lib/contract-document'
+import { vatMarker, vatOnLiveNet } from '@/lib/vat'
 
 interface ContractData {
   /**
@@ -39,6 +40,8 @@ interface ContractData {
   /** null = no price yet: prints "To be confirmed". */
   totalCost: number | null
   currency: string
+  /** The trip's VAT choice and recorded rate (lib/vat.ts). Absent = no VAT. */
+  vat?: { vat_applied?: boolean | null; vat_rate?: number | null } | null
   /** The contract as the page shows it; each part left out is left out. */
   document?: ContractDocument
 }
@@ -53,6 +56,11 @@ export interface ContractPdfOptions {
 }
 
 const BRAND: [number, number, number] = [100, 124, 71]
+
+/** The contract's VAT line (exported for tests). */
+export function contractVatLine(vat: ContractData['vat'], total: number, currency: string): string {
+  return vatMarker(vatOnLiveNet(vat ?? null, total, currency), currency)
+}
 
 export async function generateContractPDF(data: ContractData, options: ContractPdfOptions = {}): Promise<Uint8Array> {
   const doc = data.document ?? {}
@@ -178,6 +186,15 @@ export async function generateContractPDF(data: ContractData, options: ContractP
   pdf.setTextColor(...BRAND)
   pdf.text(contractPrice(total, data.currency), margin + 42, y + 0.5)
   y += 7
+  // VAT, always stated beside the price: on top of it at the trip's rate, or
+  // "VAT not applied" (lib/vat.ts).
+  if (typeof total === 'number') {
+    pdf.setFont(FONT, 'normal')
+    pdf.setFontSize(9.5)
+    pdf.setTextColor(80, 80, 80)
+    pdf.text(contractVatLine(data.vat, total, data.currency), margin + 42, y)
+    y += 6
+  }
   if (doc.paymentTerms?.trim()) line(L.paymentTerms, doc.paymentTerms)
   y += 4
 

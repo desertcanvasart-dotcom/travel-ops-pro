@@ -8,10 +8,13 @@
 //   - each line at its rate's BASE price, not the period covering its day;
 //   - the throughout guide's bed / seats / meals were never written;
 //   - the season premium was dropped from the stored total.
+// Every price comes from the company's stored rates now (rate-options.ts,
+// mocked here as RATES), not from the request: the items below post the same
+// prices the rates hold, except where a test says otherwise.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // totalUpdate: the trip's total as finally stored — inserted, then reconciled.
-const state: { rpcDays: any[]; totalUpdate: number | null; inserted: any } = { rpcDays: [], totalUpdate: null, inserted: null }
+const state: { rpcDays: any[]; totalUpdate: number | null; inserted: any; seasons: any[] } = { rpcDays: [], totalUpdate: null, inserted: null, seasons: [] }
 const tipRoles: Record<string, string> = {}
 const MENA = '55555555-5555-4555-8555-555555555555'
 const HOTEL_CITY: Record<string, string> = { [MENA]: 'Cairo' }
@@ -33,7 +36,9 @@ function fakeDb() {
     from(table: string) {
       if (table in OFFICE) return { select: () => readChain(OFFICE[table]) }
       return {
-        insert(rows: any[]) {
+        insert(input: any) {
+          // A row or a list of rows (the trip goes through insertItineraryWithCode).
+          const rows = Array.isArray(input) ? input : [input]
           if (table === 'itineraries') { state.inserted = rows[0]; state.totalUpdate = rows[0].total_cost }
           return { select: () => ({ single: async () => ({ data: { id: 'itn-1', itinerary_code: 'ITN-S-1' }, error: null }) }), then: (r: any) => r({ error: null }) }
         },
@@ -49,14 +54,18 @@ function fakeDb() {
             ? ids.filter(id => tipRoles[id]).map(id => ({ id, role_type: tipRoles[id] }))
             : table === 'accommodation_rates'
               ? ids.filter(id => HOTEL_CITY[id]).map(id => ({ id, city: HOTEL_CITY[id] }))
-              : []
+              : table === 'pricing_season_dates' ? state.seasons
+                : []
           const q: any = {
             ids: [] as string[],
             foreign: false,
             eq: () => q,
+            lte: () => q,
+            gte: () => q,
             in: (_col: string, ids: string[]) => { q.ids = ids; return q },
             neq: () => { q.foreign = true; return q },
             limit: () => q,
+            maybeSingle: async () => ({ data: null, error: null }),
             then: (r: any) => r({ data: q.foreign ? [] : rowsFor(q.ids), error: null }),
           }
           return q
@@ -70,6 +79,11 @@ function fakeDb() {
 vi.mock('@/lib/supabase-server', () => ({ createServerClient: () => fakeDb() }))
 vi.mock('@/lib/auth/current-org', () => ({ getCurrentOrgId: async () => 'org-1' }))
 vi.mock('@/lib/org-default-margin', () => ({ getOrgDefaultMargin: async () => 0, resolveMarginPercent: ({ requested }: any) => Number(requested) || 0 }))
+// The company's rate options, as the grid lists them.
+const RATES = vi.hoisted(() => ({ current: {} as Record<string, any[]> }))
+vi.mock('@/app/api/pricing-grid/rate-options', () => ({
+  loadGridRateOptions: async () => ({ rates: RATES.current, rateCurrency: 'EUR' }),
+}))
 
 import { POST } from '@/app/api/pricing-grid/save/route'
 
@@ -83,6 +97,22 @@ const config = (over: Record<string, unknown> = {}) => ({
 })
 const hotel = { rateId: 'h1', name: 'Mena House', rateEur: 100, rateNonEur: 100, guideRate: 40 }
 const supp = { rateId: 'h1_supp', name: 'Single Supplement', rateEur: 50, rateNonEur: 50 }
+const DEC_PERIODS = [
+  { from: '2026-06-01', to: '2026-09-30', rateEur: 100, rateNonEur: 100, name: 'Summer' },
+  { from: '2026-12-01', to: '2027-01-31', rateEur: 160, rateNonEur: 170, name: 'Winter' },
+]
+const ratesNow = () => ({
+  guide: [{ id: 'g1', name: 'Guide', rateEur: 75, rateNonEur: 75 }],
+  tipping: [
+    { id: GUIDE_TIP, name: 'Guide tip', rateEur: 10, rateNonEur: 10 },
+    { id: DRIVER_TIP, name: 'Driver tip', rateEur: 5, rateNonEur: 5 },
+  ],
+  accommodation: [
+    { id: 'h1', name: 'Mena House', rateEur: 100, rateNonEur: 100, guide_rate: 40, single_supp_eur: 50, single_supp_non_eur: 50 },
+    { id: 'h-dec', name: 'Winter Palace', rateEur: 100, rateNonEur: 100, periods: DEC_PERIODS },
+    { id: MENA, name: 'Mena House', rateEur: 100, rateNonEur: 100 },
+  ],
+})
 
 async function save(days: any[], cfg = config(), totals?: any) {
   state.rpcDays = []; state.totalUpdate = null
@@ -93,7 +123,7 @@ async function save(days: any[], cfg = config(), totals?: any) {
 }
 const names = (services: any[]) => services.map((s: any) => s.service_name)
 
-beforeEach(() => { tipRoles[GUIDE_TIP] = 'guide'; tipRoles[DRIVER_TIP] = 'driver' })
+beforeEach(() => { tipRoles[GUIDE_TIP] = 'guide'; tipRoles[DRIVER_TIP] = 'driver'; RATES.current = ratesNow(); state.seasons = [] })
 
 describe('guide off', () => {
   const days = [{ dayNumber: 1, slots: [
@@ -135,10 +165,8 @@ describe('the single supplement', () => {
 
 describe('each line at the rate of its own day', () => {
   it('a December day takes the December period, not the base (first-period) price', async () => {
-    const dated = { ...hotel, periods: [
-      { from: '2026-06-01', to: '2026-09-30', rateEur: 100, rateNonEur: 100, name: 'Summer' },
-      { from: '2026-12-01', to: '2027-01-31', rateEur: 160, rateNonEur: 170, name: 'Winter' },
-    ] }
+    // Posted with no periods at all (a reloaded trip): the rate has them.
+    const dated = { rateId: 'h-dec', name: 'Winter Palace', rateEur: 100, rateNonEur: 100 }
     const [line] = await save([{ dayNumber: 1, slots: [slot('accommodation', [dated])] }])
     expect(line).toMatchObject({ rate_eur: 160, rate_non_eur: 170, total_cost: 340 })
   })
@@ -157,8 +185,12 @@ describe('the throughout guide', () => {
 })
 
 describe('the season premium', () => {
-  it('stays in the stored total', async () => {
+  it("stays in the stored total — from the company's calendar, not the request", async () => {
+    state.seasons = [{ season_id: 's1', start_date: '2026-12-15', end_date: '2027-01-05', pricing_seasons: { name: 'Christmas', uplift_percent: 15, is_active: true } }]
+    // The request claims a 30 premium; the calendar says 15% of 200.
     await save([{ dayNumber: 1, slots: [slot('accommodation', [hotel])] }], config(), { sellingPriceTotal: 230, seasonUplift: 30 })
+    expect(state.totalUpdate).toBe(230)
+    await save([{ dayNumber: 1, slots: [slot('accommodation', [hotel])] }], config(), { sellingPriceTotal: 999, seasonUplift: 799 })
     expect(state.totalUpdate).toBe(230)
   })
 })

@@ -8,8 +8,11 @@ import { loadSeasonWindows } from '@/lib/auto-pricing-service'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { currencySymbol } from '@/lib/currency-totals'
+import { getOrgVatRate, parseVatApplied, vatColumns, vatInsertColumns } from '@/lib/vat'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { quoteMarginPercent } from '@/lib/b2b/partner-margin'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { createInitialQuoteRevision } from '@/lib/quotes/initial-revision'
 import { quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
 import { getExchangeRate, type ExchangeRates } from '@/lib/currency-service'
 import { parseFrozenFx, frozenToExchangeRates } from '@/lib/itinerary-fx'
@@ -255,8 +258,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 3. Determine partner margin override
-    let effectiveMargin = margin_percent
+    // 3. The margin: the one the operator set wins, then the partner's, then
+    // the company's (lib/b2b/partner-margin — the calculator's rule too). The
+    // partner's default used to override a margin the operator had typed.
+    let partnerDefault: unknown = null
     if (partner_id) {
       const { data: partner } = await supabaseAdmin
         .from('b2b_partners')
@@ -264,11 +269,9 @@ export async function POST(request: NextRequest) {
         .eq('id', partner_id)
         .eq('org_id', orgId)
         .maybeSingle()
-
-      if (partner?.default_margin_percent) {
-        effectiveMargin = partner.default_margin_percent
-      }
+      partnerDefault = partner?.default_margin_percent ?? null
     }
+    const effectiveMargin = quoteMarginPercent({ requested: requestedMargin, partnerDefault, orgDefault: margin_percent })
 
     const tier = itinerary.tier || 'standard'
     const numPax = (itinerary.num_adults || 2) + (itinerary.num_children || 0)
@@ -542,6 +545,15 @@ export async function POST(request: NextRequest) {
     const validUntil = new Date()
     validUntil.setDate(validUntil.getDate() + 30)
 
+    // VAT on top of the net (lib/vat.ts): as asked, else as the trip carries
+    // it; the company's rate today, recorded on the quote.
+    const vat = vatColumns({
+      applied: parseVatApplied(body.vat_applied) ?? itinerary.vat_applied === true,
+      net: sellingPrice,
+      rate: await getOrgVatRate(supabaseAdmin, orgId),
+      currency: rateCurrency,
+    })
+
     const { data: quote, error: quoteError } = await supabaseAdmin
       .from('tour_quotes')
       .insert({
@@ -571,6 +583,7 @@ export async function POST(request: NextRequest) {
         season_name: season?.name ?? null,
         season_uplift_percent: season?.upliftPercent ?? 0,
         season_uplift_amount: seasonUplift,
+        ...vatInsertColumns(vat),
         // Every line in services_snapshot is in the RATE currency (B2B rate
         // tables + the normalized kept lines above) — saving the itinerary's
         // display currency here mislabeled the amounts whenever it differed.
@@ -604,6 +617,10 @@ export async function POST(request: NextRequest) {
       console.warn('Warning: Could not create English version:', versionError)
     }
 
+    // Its history starts here, like a calculator quote's: the price it was
+    // created at is version 1, to compare with and revert to.
+    await createInitialQuoteRevision(supabaseAdmin, quote.id, await getCurrentUserId())
+
     console.log('✅ B2B Quote created from itinerary:', {
       quoteNumber: quote.quote_number,
       itineraryCode: itinerary.itinerary_code,
@@ -632,6 +649,7 @@ export async function POST(request: NextRequest) {
         season_name: season?.name ?? null,
         season_uplift_percent: season?.upliftPercent ?? 0,
         season_uplift_amount: seasonUplift,
+        ...vat,
         services_count: servicesSnapshot.length,
       }
     }, { status: 201 })

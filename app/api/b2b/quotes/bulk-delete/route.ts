@@ -1,12 +1,14 @@
 // ============================================
 // DELETE /api/b2b/quotes/bulk-delete
 // Bulk-delete B2B quotes. Manager+ only. body: { quote_ids: string[] }
+// Converted or booked quotes are skipped (skipped_count), never deleted.
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { quoteLockReason } from '@/lib/quotes/lock'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,12 +36,32 @@ export async function DELETE(request: NextRequest) {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
-    const { data, error } = await supabaseAdmin
+    // A converted or booked quote stays (lib/quotes/lock.ts): the trip and the
+    // booking keep it as the record of the price they were made at. Those are
+    // skipped and counted, never deleted with the rest.
+    const { data: candidates } = await supabaseAdmin
       .from('tour_quotes')
-      .delete()
+      .select('id, status, converted_to_itinerary_id')
       .in('id', quote_ids)
       .eq('org_id', orgId)
-      .select('id')
+    const ids = (candidates || []).map((q: { id: string }) => q.id)
+    const { data: booked } = ids.length
+      ? await supabaseAdmin.from('bookings').select('quote_id').eq('quote_type', 'b2b').in('quote_id', ids)
+      : { data: [] }
+    const bookedIds = new Set((booked || []).map((b: { quote_id: string }) => b.quote_id))
+    const deletable = (candidates || [])
+      .filter((q: { id: string; status: string | null; converted_to_itinerary_id: string | null }) => !quoteLockReason(q, bookedIds.has(q.id) ? 1 : 0))
+      .map((q: { id: string }) => q.id)
+    const kept = ids.length - deletable.length
+
+    const { data, error } = deletable.length
+      ? await supabaseAdmin
+        .from('tour_quotes')
+        .delete()
+        .in('id', deletable)
+        .eq('org_id', orgId)
+        .select('id')
+      : { data: [], error: null }
 
     if (error) {
       console.error('Error bulk deleting quotes:', error)
@@ -49,7 +71,8 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({
       success: true,
       deleted_count: data?.length || 0,
-      message: `Successfully deleted ${data?.length || 0} quote(s)`,
+      skipped_count: kept,
+      message: `Deleted ${data?.length || 0} quote(s)` + (kept ? `; ${kept} converted or booked quote(s) kept` : ''),
     })
   } catch (error: any) {
     console.error('Bulk delete error:', error)

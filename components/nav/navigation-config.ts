@@ -114,10 +114,10 @@ export const navigationConfig: NavConfig[] = [
     key: 'sell',
     roles: ['admin', 'manager', 'agent'],
     items: [
-      { labelKey: 'pricingGrid', href: '/pricing-grid', icon: Calculator, roles: ['admin', 'manager'] },
+      { labelKey: 'pricingGrid', href: '/pricing-grid', icon: Calculator, roles: ['admin', 'manager', 'agent'] },
       { labelKey: 'b2cQuotes', href: '/b2c/quotes', icon: FileText, roles: ['admin', 'manager'] },
-      { labelKey: 'b2bQuotes', href: '/b2b/quotes', icon: FileText, roles: ['admin', 'manager'] },
-      { labelKey: 'orderIntake', href: '/intake/order', icon: ClipboardPaste, roles: ['admin', 'manager'] },
+      { labelKey: 'b2bQuotes', href: '/b2b/quotes', icon: FileText, roles: ['admin', 'manager', 'agent'] },
+      { labelKey: 'orderIntake', href: '/intake/order', icon: ClipboardPaste, roles: ['admin', 'manager', 'agent'] },
       { labelKey: 'itineraries', href: '/itineraries', icon: Route, roles: ['admin', 'manager', 'agent'] },
       { labelKey: 'bookings', href: '/bookings', icon: Briefcase, roles: ['admin', 'manager', 'agent'] },
       { labelKey: 'calendar', href: '/calendar', icon: Calendar, roles: ['admin', 'manager', 'agent'] },

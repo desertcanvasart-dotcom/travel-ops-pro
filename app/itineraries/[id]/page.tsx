@@ -1,5 +1,7 @@
 'use client'
 
+import { vatMarker, vatOnLiveNet } from '@/lib/vat'
+import { VatToken } from '@/app/components/Vat'
 import { clientTotalOfDays, seasonSupplementOf, tripClientTotal } from '@/lib/itinerary-client-price'
 import { addDays } from '@/lib/payment-schedule'
 import { overnightLabel, overnightProperty } from '@/lib/itineraries/overnight-property'
@@ -58,6 +60,7 @@ import ComposeEmailModal from '@/components/unified/ComposeEmailModal'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { formatPhoneForWhatsApp, generateWhatsAppLink } from '@/lib/whatsapp-link'
 import { withReturnTo } from '@/lib/nav/return-to'
+import { useRole } from '@/hooks/useRole'
 
 const ItineraryMap = dynamic(() => import('@/components/ItineraryMap'), {
   ssr: false,
@@ -100,6 +103,9 @@ interface Itinerary {
   num_infants: number    // Ages 0-3: FREE except flights
   currency: string
   total_cost: number
+  /** VAT carried from the quote (lib/vat.ts): flag and recorded rate. */
+  vat_applied?: boolean
+  vat_rate?: number | null
   /** What the trip costs us, when the pricing engine has stored it. */
   supplier_cost?: number | null
   status: string
@@ -227,6 +233,9 @@ export default function ViewItineraryPage() {
   const router = useRouter()
   const supabase = createClient()
   const intlLocale = useLocale() as Language
+  // Generating commissions is a manager's action (the route refuses agents).
+  const { canAccess } = useRole()
+  const canGenerateCommissions = canAccess(['admin', 'manager'])
 
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [days, setDays] = useState<DayWithServices[]>([])
@@ -715,10 +724,10 @@ export default function ViewItineraryPage() {
           client_email: itinerary.client_email,
           line_items: lineItems,
           subtotal: effectiveTotalCost,
-          tax_rate: 0,
-          tax_amount: 0,
           discount_amount: 0,
+          // The NET; the server adds VAT when the trip carries it (lib/vat.ts).
           total_amount: effectiveTotalCost,
+          vat_applied: itinerary.vat_applied === true,
           currency: itinerary.currency || 'EUR',
           issue_date: todayLocal(),
           // Fourteen days from the office's today — toISOString is UTC, a day
@@ -1402,6 +1411,8 @@ export default function ViewItineraryPage() {
     const data = await res.json().catch(() => ({}))
     if (!res.ok || !data.success) throw new Error(data.error || tStage('statusFailed'))
     setItinerary(prev => (prev ? { ...prev, status } : prev))
+    // Confirmed, but the booking it should have made was not: say so.
+    if (data.booking_error) await dialog.alert(tCommon('error'), data.booking_error, 'warning')
   }
 
   const closeOut = async () => {
@@ -1526,7 +1537,8 @@ export default function ViewItineraryPage() {
         name: itinerary.client_name || '',
         trip: splitTourCode(content.trip_name).title,
         dates,
-        price: formatMoney(effectiveTotalCost, itinerary.currency),
+        // The price and whether VAT is on it — never silent (lib/vat.ts).
+        price: `${formatMoney(effectiveTotalCost, itinerary.currency)} (${vatMarker(vatOnLiveNet(itinerary, effectiveTotalCost, itinerary.currency), itinerary.currency, lang === 'ja' ? 'ja' : 'en')})`,
         link: data.url,
         company: company?.name ?? '',
       })
@@ -1745,7 +1757,9 @@ export default function ViewItineraryPage() {
                   { label: tStage('editItinerary'), icon: <Edit2 className="w-4 h-4" />, href: `/itineraries/${itinerary.id}/edit` },
                   { label: tStage('addExpense'), icon: <Receipt className="w-4 h-4" />, onSelect: () => setExpenseSignal(n => n + 1) },
                   { label: generatingTasks ? t('generating') : t('operationsTasks'), icon: <ClipboardList className="w-4 h-4" />, onSelect: handleOpenTaskDialog, disabled: generatingTasks, title: t('generateOperationsTasks') },
-                  { label: generatingCommissions ? t('generating') : tStage('generateCommissions'), icon: <Handshake className="w-4 h-4" />, onSelect: handleGenerateCommissions, disabled: generatingCommissions },
+                  ...(canGenerateCommissions
+                    ? [{ label: generatingCommissions ? t('generating') : tStage('generateCommissions'), icon: <Handshake className="w-4 h-4" />, onSelect: handleGenerateCommissions, disabled: generatingCommissions }]
+                    : []),
                   { label: duplicating ? tStage('duplicating') : tStage('duplicate'), icon: <Copy className="w-4 h-4" />, onSelect: duplicateTrip, disabled: duplicating, title: tStage('duplicateHint') },
                   itinerary.status === 'cancelled'
                     ? { label: tStage('reopen'), icon: <RotateCcw className="w-4 h-4" />, onSelect: reopenTrip }
@@ -2052,6 +2066,8 @@ export default function ViewItineraryPage() {
                 </span>
               </div>
               <p className="text-xl font-bold text-gray-900">{formatMoney(effectiveTotalCost, itinerary.currency)}</p>
+              {/* VAT at the rate the trip recorded from its quote (lib/vat.ts). */}
+              <VatToken vat={vatOnLiveNet(itinerary, effectiveTotalCost, itinerary.currency)} currency={itinerary.currency} />
               <p className="text-xs text-gray-500">{tStage('daysTravellers', { days: itinerary.total_days, travellers: itinerary.num_adults + (itinerary.num_children || 0) + (itinerary.num_infants || 0) })}</p>
               {actualPnl && (
                 <dl className="pt-2 mt-2 border-t border-gray-100 text-xs grid grid-cols-2 gap-y-1">

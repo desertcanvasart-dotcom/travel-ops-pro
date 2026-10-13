@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { normaliseMargin } from '@/lib/org-default-margin'
+import { DEFAULT_VAT_RATE, normaliseVatRate } from '@/lib/vat'
 import { createClient } from '@supabase/supabase-js'
 import { orgAuth } from '@/lib/auth/org-auth'
 import { currentUser, isPlatformAdmin } from '@/lib/blog/platform-admin'
@@ -53,13 +54,17 @@ const FIELDS = [
   // to it land in this org's inbox, and its replies go out from it
   // (lib/whatsapp-org). E.164, unique across organizations.
   'whatsapp_number',
+  // The company's VAT rate in percent (migration 20261214, default 14). A
+  // quote or invoice copies it when VAT is applied to it, so changing it here
+  // never re-prices a document already made (lib/vat.ts).
+  'vat_rate',
 ] as const
 
 /** The columns migration 20261115 adds. Until it is applied, reads and
  *  writes go on without them rather than failing the whole profile. */
 const CONTRACT_FIELDS = ['operating_country', 'contract_governing_law'] as const
-/** Likewise whatsapp_number (20261125). */
-const PENDING_FIELDS = [...CONTRACT_FIELDS, 'whatsapp_number'] as const
+/** Likewise whatsapp_number (20261125) and vat_rate (20261214). */
+const PENDING_FIELDS = [...CONTRACT_FIELDS, 'whatsapp_number', 'vat_rate'] as const
 function missingContractColumns(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false
   const undefinedColumn = error.code === '42703' || error.code === 'PGRST204'
@@ -142,12 +147,19 @@ export async function PUT(request: NextRequest) {
               : {}
             : field === 'default_margin_percent'
             ? normaliseMargin(body.default_margin_percent)
+            : field === 'vat_rate'
+            ? (body.vat_rate === '' || body.vat_rate === null ? DEFAULT_VAT_RATE : normaliseVatRate(body.vat_rate))
             : field === 'rate_change_alerts'
             ? (['off', 'in_app', 'in_app_email'].includes(body.rate_change_alerts) ? body.rate_change_alerts : 'in_app')
             : typeof body[field] === 'string'
               ? body[field].trim() || null
               : null
       }
+    }
+    // A rate that is not a percentage is refused rather than stored as the
+    // default: the next quote would otherwise carry a VAT nobody chose.
+    if ('vat_rate' in update && update.vat_rate === null) {
+      return NextResponse.json({ success: false, error: 'VAT rate must be a percentage between 0 and 100' }, { status: 400 })
     }
     // The org NAME is identity, not decoration — never blank it from here.
     if ('name' in update && !update.name) delete update.name

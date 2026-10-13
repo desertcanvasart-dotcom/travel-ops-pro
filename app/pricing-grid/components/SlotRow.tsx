@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import type { SlotDefinition, SlotValue, RateOption, SelectedItem, PassportType } from '../types'
 import { supplementItemId, isSupplementItem } from '../types'
@@ -26,6 +27,18 @@ interface SlotRowProps {
   onApplyToAllDays?: () => void
   /** Group size: the transport list shows each route at the vehicle that seats it. */
   pax?: number
+}
+
+/** A line of a saved itinerary with no current rate, at the price it was
+ *  saved with (lib/saved-price.ts) — not a rate's price, so it says so. */
+function SavedPriceMark({ item }: { item: SelectedItem }) {
+  const t = useTranslations('pricingGrid')
+  if (!item.savedPrice) return null
+  return (
+    <span className="ml-1 px-1 rounded bg-amber-100 text-amber-800 text-[10px]" title={t('savedPriceHint')} data-testid="saved-price-mark">
+      {t('savedPrice')}
+    </span>
+  )
 }
 
 export default function SlotRow({ definition, value, options, allOptions, passport, onChange, hidden, onApplyToAllDays, pax = 2 }: SlotRowProps) {
@@ -272,6 +285,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
                   >
                     {selected.name.length > 60 ? selected.name.substring(0, 60) + '…' : selected.name}
                     {' '}{rateSymbol}{selected[rateKey].toFixed(2)}
+                    <SavedPriceMark item={selected} />
                     <span className="font-bold ml-0.5 text-[10px]">×</span>
                   </span>
                 )}
@@ -363,6 +377,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
                   </option>
                 ))}
               </select>
+              {selected && <SavedPriceMark item={selected} />}
               {onApplyToAllDays && selected && (
                 <button
                   type="button"
@@ -425,6 +440,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
                       return shown.length > 48 ? shown.substring(0, 48) + '…' : shown
                     })()}
                     {' '}{rateSymbol}{item[rateKey].toFixed(2)}
+                    <SavedPriceMark item={item} />
                     {item.pricingBasis === 'per_person' && <span className="opacity-70">/person</span>}
                     {item.pricingBasis === 'per_unit' && (
                       <span className="opacity-70">/unit{item.unitCapacity ? ` of ${item.unitCapacity}` : ''}</span>

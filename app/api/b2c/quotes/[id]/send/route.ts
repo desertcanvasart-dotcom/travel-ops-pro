@@ -10,8 +10,10 @@ import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserRole, getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { sendEmailInternal } from '@/lib/email-send'
+import { effectiveQuoteStatus } from '@/lib/quotes/validity'
 import { orgIdentity } from '@/lib/org-identity'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
+import { readVat, vatTextLines } from '@/lib/vat'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -36,6 +38,7 @@ export async function POST(
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
+    const actor = await getCurrentUserId()
     const body = await request.json().catch(() => ({}))
     const sendVia: 'email' | 'whatsapp' = body.send_via === 'whatsapp' ? 'whatsapp' : 'email'
 
@@ -51,6 +54,19 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Quote not found' }, { status: 404 })
     }
 
+    // A rejected offer, or one past its valid-until date, is not sent again
+    // as if it stood: the customer would accept a price the office no longer
+    // offers. Set it back to draft, or extend the date, first.
+    const shownStatus = effectiveQuoteStatus(quote.status, quote.valid_until)
+    if (shownStatus === 'rejected' || shownStatus === 'expired') {
+      return NextResponse.json({
+        success: false,
+        error: shownStatus === 'rejected'
+          ? 'This offer was rejected. Set it back to draft before sending it again.'
+          : 'This offer has expired. Extend "Valid until" before sending it again.',
+      }, { status: 409 })
+    }
+
     const itin = (quote as any).itineraries || {}
     const clientEmail = itin.client_email
     const clientName = itin.client_name || 'Valued Customer'
@@ -64,6 +80,9 @@ export async function POST(
       `Reference: ${quote.quote_number}`,
       `Travellers: ${quote.num_travelers}`,
       `Total: ${money(quote.selling_price, currency)}  (${money(quote.price_per_person, currency)} per person)`,
+      // Never silent about VAT: "VAT 14% included: …" and the total with it,
+      // or "VAT not applied" (lib/vat.ts).
+      ...vatTextLines(readVat(quote), quote.selling_price, currency),
       // "8 November 2026", never the raw "2026-11-08".
       quote.valid_until ? `Valid until: ${new Date(`${String(quote.valid_until).slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}` : '',
       quote.client_notes ? `\n${quote.client_notes}` : '',
@@ -91,7 +110,7 @@ export async function POST(
       const html = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222;white-space:pre-wrap;line-height:1.6">${
         messageText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       }</div>`
-      const result = await sendEmailInternal({ to: clientEmail, subject, html, orgId, senderUserId: await getCurrentUserId() })
+      const result = await sendEmailInternal({ to: clientEmail, subject, html, orgId, senderUserId: actor })
       if (!result.success) {
         return NextResponse.json({ success: false, error: result.error || 'Email send failed' }, { status: 502 })
       }
@@ -114,7 +133,8 @@ export async function POST(
     try {
       await supabaseAdmin.rpc('create_b2c_quote_revision', {
         p_quote_id: id,
-        p_changed_by: null,
+        // Who sent it — the signed-in user (it was recorded as nobody).
+        p_changed_by: actor,
         p_change_reason: `Sent via ${sendVia}`,
       })
     } catch { /* non-fatal */ }

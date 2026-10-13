@@ -24,7 +24,7 @@ import {
 } from 'lucide-react'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
-import { formatMoney, currencyDecimals, roundToCurrency } from '@/lib/currency-totals'
+import { formatMoney, formatTotals, currencyDecimals, roundToCurrency } from '@/lib/currency-totals'
 
 interface MonthlyData {
   month: string
@@ -72,9 +72,12 @@ interface TaxSummary {
   deductible_expenses: number
   taxable_income: number
   expense_breakdown: CategoryExpense[]
-  estimated_vat_collected: number
-  estimated_vat_paid: number
+  /** VAT recorded on the year's issued invoices / expenses (lib/vat.ts). */
+  vat_collected: number
+  vat_paid: number
   net_vat: number
+  /** The collected VAT in each invoice's own currency. */
+  vat_collected_by_currency?: Record<string, number>
 }
 
 interface CommissionRecipient {
@@ -775,11 +778,14 @@ export default function FinancialReportsPage() {
             <div className="grid grid-cols-3 gap-4">
               <div className="p-4 bg-blue-50 rounded-lg">
                 <p className="text-xs text-blue-600 mb-1">{t('vatCollected')}</p>
-                <p className="text-lg font-semibold text-blue-700">{fmt(taxSummary.estimated_vat_collected)}</p>
+                <p className="text-lg font-semibold text-blue-700">{fmt(taxSummary.vat_collected)}</p>
+                {taxSummary.vat_collected_by_currency && Object.keys(taxSummary.vat_collected_by_currency).length > 1 && (
+                  <p className="text-xs text-blue-600 mt-1">{formatTotals(taxSummary.vat_collected_by_currency)}</p>
+                )}
               </div>
               <div className="p-4 bg-red-50 rounded-lg">
                 <p className="text-xs text-red-600 mb-1">{t('vatPaid')}</p>
-                <p className="text-lg font-semibold text-red-700">{fmt(taxSummary.estimated_vat_paid)}</p>
+                <p className="text-lg font-semibold text-red-700">{fmt(taxSummary.vat_paid)}</p>
               </div>
               <div className={`p-4 rounded-lg ${taxSummary.net_vat >= 0 ? 'bg-green-50' : 'bg-orange-50'}`}>
                 <p className={`text-xs mb-1 ${taxSummary.net_vat >= 0 ? 'text-green-600' : 'text-orange-600'}`}>

@@ -1,4 +1,13 @@
 {
+  "vat": {
+    "applied": "VAT（{rate}%）適用：{amount}",
+    "notApplied": "VAT 不適用",
+    "apply": "VAT（{rate}%）を適用",
+    "applyHint": "会社の税率（設定 › 会社情報）で、税抜価格に VAT を上乗せします。税率と税額はこの書類に記録されます。",
+    "net": "税抜価格",
+    "totalInclVat": "VAT込み合計",
+    "lockedHint": "VAT は価格とともに記録済みのため、この書類では変更できません。"
+  },
   "common": {
     "save": "保存",
     "cancel": "キャンセル",
@@ -947,7 +956,7 @@
     "grossRevenue": "総収益",
     "deductibleExpenses": "控除可能経費",
     "taxableIncome": "課税所得",
-    "vatSummary": "VAT概要（推定14%）",
+    "vatSummary": "VAT概要（発行済み請求書の記録額）",
     "vatCollected": "VAT徴収額",
     "vatPaid": "VAT支払額",
     "netVat": "純VAT",
@@ -1663,6 +1672,7 @@
       "newService": "新しいサービス",
       "failedToSave": "保存に失敗しました：{error}",
       "failedToSaveDraft": "下書きの保存に失敗しました。もう一度お試しください。",
+      "fxUnavailable": "{from} から {to} への為替レートを取得できなかったため、この行の金額は更新されていません。しばらくしてからもう一度お試しください。",
       "pricingCalculationFailed": "料金計算に失敗しました",
       "failedToCalculatePricing": "料金の計算に失敗しました：{error}",
       "itineraryNotFound": "旅程が見つかりません",
@@ -1830,6 +1840,8 @@
     },
     "delete": "削除",
     "clickToConfirm": "確認のためもう一度クリック",
+    "deleteConfirmTitle": "この旅程を削除しますか？",
+    "deleteConfirmMessage": "{code} {trip} と、その日程・サービスがすべて削除されます。元に戻すことはできません。予約・入金・請求書・送付済みの手配書がある旅程は削除できません。キャンセルしてください。",
     "noItinerariesFound": "旅程が見つかりません",
     "tryAdjusting": "検索条件やフィルターを調整してください",
     "errorDeleteFailed": "旅程の削除に失敗しました",
@@ -3615,7 +3627,10 @@
       "partiallyPaid": "一部支払い済み",
       "partial": "一部",
       "paid": "支払い済み",
-      "completed": "完了"
+      "completed": "完了",
+      "quote": "見積り（未成約）",
+      "noBooking": "予約未作成",
+      "refunded": "返金済み"
     },
     "filters": {
       "title": "フィルター",
@@ -3997,6 +4012,8 @@
       "defaultMargin": "標準マージン（%）",
       "defaultMarginUnset": "未設定 — 25%が適用されます",
       "defaultMarginHint": "貴社の標準の販売マージンです。個人設定のないメンバーはこの値を引き継ぎます。見積りごとに変更できます。",
+      "vatRate": "VAT 税率（%）",
+      "vatRateHint": "「VAT を適用」にチェックした見積り・請求書で、税抜価格に上乗せされます。税率は各書類の発行時点の値で記録されるため、ここを変更しても発行済みの書類は変わりません。",
       "rateChangeAlerts": "料金変更の通知",
       "rateChangeAlertsInApp": "アプリ内",
       "rateChangeAlertsInAppEmail": "アプリ内＋メール",
@@ -6371,7 +6388,10 @@
       "cancel": "キャンセル",
       "loadFailed": "オプションを読み込めませんでした。再読み込みしてください。",
       "saveFailed": "オプションを保存できませんでした。",
-      "deleteFailed": "オプションを削除できませんでした。"
+      "deleteFailed": "オプションを削除できませんでした。",
+      "inUse": "「{name}」は保存済みの見積もり {count} 件で使われているため削除できません（{numbers}）。代わりに無効にしてください。今後は提案されなくなり、それらの見積もりはそのまま残ります。",
+      "deactivate": "無効にする",
+      "deactivateFailed": "オプションを無効にできませんでした。"
     }
   },
   "profitLoss": {
@@ -7774,6 +7794,9 @@
     "tablePerPerson": "1人あたり",
     "saveQuote": "見積りを保存",
     "partnerOptional": "パートナー（オプション）",
+    "partnerMarginApplied": "このパートナーのマージン {percent}% で計算しています。",
+    "partnerMarginYours": "設定したマージン {percent}% で計算しています（パートナーのマージンより優先）。",
+    "repricingForPartner": "このパートナーで再計算しています…",
     "noPartnerDirect": "パートナーなし / 直接クライアント",
     "clientDetailsOptional": "クライアント詳細（オプション）",
     "clientName": "クライアント名",
@@ -7967,6 +7990,7 @@
     "subtitle": "確定済みの旅行と運営管理",
     "searchPlaceholder": "コード、顧客名、旅行名で検索...",
     "noBookingsFound": "予約が見つかりません",
+    "loadMore": "さらに読み込む",
     "adults": "大人",
     "children": "子供",
     "bookingNotFound": "予約が見つかりません",
@@ -8871,6 +8895,9 @@
     "departureFound": "この日の出発があります：座席を仮押さえします",
     "departureNone": "この日の出発は未登録です（見積りのみ作成）",
     "departureHeld": "出発の座席を仮押さえしました（確認待ち）。",
+    "departureSeatsFree": "この出発の空席：{free} 席",
+    "departureNoRoom": "この出発の空席は {free} 席で、{requested} 名には足りません。座席は仮押さえしません。",
+    "departureFull": "座席は仮押さえしていません：出発の空席 {free} 席に対し {requested} 名です。出発の定員を増やすか、手動で座席を確保してください。",
     "fromWebsiteOrder": "{date} 受信のウェブ注文：{reason}",
     "dismiss": "対応済みにする",
     "dismissConfirm": "この注文を一覧から外しますか？何も作成・削除されません。",
@@ -8944,6 +8971,10 @@
     "saved": "保存しました",
     "savedFixed": "保存しました — 保存済みメール{messages}件を当社の送信に訂正、{conversations}件の会話を更新",
     "saveFailed": "保存できませんでした"
+  },
+  "pricingGrid": {
+    "savedPrice": "保存時の価格 — 現在の料金に未連携",
+    "savedPriceHint": "この行には現在の料金がないため、保存時の価格のままです。料金を選ぶと料金表から計算されます。"
   },
   "blogAdmin": {
     "title": "ブログ",

@@ -846,6 +846,8 @@ function WhatsAppParserContent() {
 
   const [userPreferences, setUserPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES)
   const [preferencesLoaded, setPreferencesLoaded] = useState(false)
+  // True once the currency came from the server (person → company default).
+  const [preferencesFromServer, setPreferencesFromServer] = useState(false)
 
   const [conversation, setConversation] = useState('')
   const [parsedMessages, setParsedMessages] = useState<ReturnType<typeof parseConversation>>([])
@@ -935,6 +937,7 @@ function WhatsAppParserContent() {
             default_currency: data.default_currency || 'USD'
           }
           setUserPreferences(prefs)
+          setPreferencesFromServer(!!data.default_currency)
           setSelectedTier(prefs.default_tier)
         }
       } catch (err) {
@@ -1336,8 +1339,13 @@ function WhatsAppParserContent() {
         ? b2bPartners.find(p => p.id === selectedPartnerId)
         : null
 
-      // Determine currency: Euro passport holders get EUR, others use user preference
-      const effectiveCurrency = data.is_euro_passport === true ? 'EUR' : userPreferences.default_currency
+      // The currency the company bills in — the person's preference, else the
+      // company's default, as /api/user-preferences resolved it. Never from the
+      // passport: that only picks the EU / non-EU price tier, which is the
+      // server's rule too (an ATS yen quote for a French traveller came out in
+      // EUR). Preferences that failed to load send none, and the server
+      // resolves the same answer itself.
+      const effectiveCurrency = preferencesFromServer ? userPreferences.default_currency : undefined
 
       // Generate idempotency key to prevent duplicate itineraries on retry/double-click
       const idempotencyKey = crypto.randomUUID()

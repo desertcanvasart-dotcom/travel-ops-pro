@@ -20,6 +20,7 @@ import {
   MapPin
 } from 'lucide-react'
 import { generateReceiptPDF, receiptBrand, downloadReceiptPDF, receiptNumberFor } from '@/lib/receipt-pdf-generator'
+import { vatInsideGross } from '@/lib/vat'
 import { japaneseFontData } from '@/lib/pdf-fonts'
 import { useCompanyInfo } from '@/lib/use-company-info'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
@@ -42,6 +43,8 @@ interface UnifiedPayment {
   transaction_reference: string | null
   notes: string | null
   created_at: string
+  /** An invoice payment: the invoice's recorded VAT, for the receipt's VAT line. */
+  invoice_vat?: { vat_applied?: boolean; tax_rate?: number | null; tax_amount?: number | null; total_amount?: number }
 }
 
 export default function ReceiptsPage() {
@@ -122,7 +125,13 @@ export default function ReceiptsPage() {
                 payment_date: p.payment_date,
                 transaction_reference: p.transaction_reference,
                 notes: p.notes,
-                created_at: p.created_at
+                created_at: p.created_at,
+                invoice_vat: {
+                  vat_applied: invoice.vat_applied,
+                  tax_rate: invoice.tax_rate,
+                  tax_amount: invoice.tax_amount,
+                  total_amount: Number(invoice.total_amount) || 0,
+                },
               })
             })
           }
@@ -160,6 +169,16 @@ export default function ReceiptsPage() {
     try {
       const receiptNumber = receiptNumberFor(payment)
 
+      // The VAT the receipt states (lib/vat.ts): an invoice payment's share of
+      // its invoice's recorded VAT; an itinerary payment's VAT inside the
+      // amount at its trip's rate, read from the payment's own record.
+      let vatSource: { vat_applied?: boolean; tax_rate?: number | null; tax_amount?: number | null; total_amount?: number } = payment.invoice_vat ?? {}
+      if (payment.source === 'itinerary') {
+        const res = await fetch(`/api/payments/${payment.id}`).then(r => r.json()).catch(() => null)
+        const vat = vatInsideGross(payment.amount, res?.data, payment.currency)
+        vatSource = { vat_applied: vat.vat_applied, tax_rate: vat.vat_rate, tax_amount: vat.vat_amount, total_amount: payment.amount }
+      }
+
       const doc = generateReceiptPDF({
         receiptNumber,
         invoiceNumber: payment.source_reference,
@@ -175,7 +194,8 @@ export default function ReceiptsPage() {
         invoice_number: payment.source_reference,
         client_name: payment.client_name,
         total_amount: payment.amount,
-        currency: payment.currency
+        currency: payment.currency,
+        ...vatSource,
       }, receiptBrand(company), await japaneseFontData())
 
       const blob = doc.output('blob')

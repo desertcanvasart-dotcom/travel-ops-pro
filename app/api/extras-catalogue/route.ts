@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { rowInOrg } from '@/lib/api/org-scope'
+import { extraInputError } from './validate'
 
 export const dynamic = 'force-dynamic'
 
@@ -74,13 +75,12 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient()
 
     const body = await request.json()
+    const invalid = extraInputError(body)
+    if (invalid) return NextResponse.json({ success: false, error: invalid }, { status: 400 })
     const record = pickWritable(body)
     const name = String(record.name ?? '').trim()
     if (!name) {
       return NextResponse.json({ success: false, error: 'Name is required' }, { status: 400 })
-    }
-    if (record.unit !== undefined && !['per_person', 'per_booking'].includes(String(record.unit))) {
-      return NextResponse.json({ success: false, error: 'Unit must be per_person or per_booking' }, { status: 400 })
     }
 
     // One of this company's suppliers (suppliers.org_id, 20261205).

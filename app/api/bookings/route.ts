@@ -14,6 +14,31 @@ import {
   populateSuppliersFromItinerary,
   DEFAULT_DEPOSIT_PERCENT,
 } from '@/lib/booking-creation'
+import { insertBookingWithCode } from '@/lib/bookings/booking-code'
+import { checkAmountDeliverable } from '@/lib/pricing-guards'
+
+/** Rows per page of the list: default 20, never more than 200. */
+export function bookingsPageSize(raw: string | null): number {
+  const n = parseInt(raw || '20')
+  return Number.isFinite(n) ? Math.min(Math.max(n, 1), 200) : 20
+}
+
+/**
+ * Why this trip may not become a booking yet, or null. A draft is a quote
+ * nobody has agreed to and a cancelled trip is over; a trip with no usable
+ * price would put a zero deposit in front of the client — the same price
+ * gate /api/bookings/from-quote runs on a quote.
+ */
+export function tripNotBookable(itinerary: { status?: unknown; total_cost?: unknown; currency?: unknown }): { error: string; violations?: string[] } | null {
+  if (itinerary.status === 'draft') return { error: 'This trip is still a draft. Send or confirm it before booking it.' }
+  if (itinerary.status === 'cancelled') return { error: 'This trip is cancelled and cannot be booked.' }
+  const amount = itinerary.total_cost == null || itinerary.total_cost === '' ? null : Number(itinerary.total_cost)
+  const check = checkAmountDeliverable(amount, { currency: (itinerary.currency as string | null) ?? null })
+  if (!check.ok) {
+    return { error: 'This trip has no usable price yet, so it cannot be booked. Price it first.', violations: check.violations }
+  }
+  return null
+}
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -40,16 +65,19 @@ export async function GET(request: NextRequest) {
     const itineraryId = searchParams.get('itinerary_id')
 
     // Pagination
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '20')
+    const requestedPage = parseInt(searchParams.get('page') || '1')
+    const page = Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1
+    const limit = bookingsPageSize(searchParams.get('limit'))
     const offset = (page - 1) * limit
 
-    // Build query
+    // Newest first: the list showed the 20 OLDEST bookings (start date
+    // ascending), so once there were more than 20, the upcoming trips — the
+    // ones anyone opens the list for — never appeared.
     let query = supabaseAdmin
       .from('bookings')
       .select('*', { count: 'exact' })
       .eq('org_id', orgId)
-      .order('start_date', { ascending: true })
+      .order('created_at', { ascending: false })
 
     // Apply filters
     if (status && status !== 'all') {
@@ -152,13 +180,18 @@ export async function POST(request: NextRequest) {
     // Fetch itinerary data with partner info if linked
     const { data: itinerary, error: itineraryError } = await supabaseAdmin
       .from('itineraries')
-      .select('*, b2b_partners(id, company_name, partner_code)')
+      .select('*, b2b_partners(id, company_name, partner_code, org_id)')
       .eq('id', itinerary_id)
       .eq('org_id', orgId)
       .single()
 
     if (itineraryError || !itinerary) {
       return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
+    }
+
+    const notBookable = tripNotBookable(itinerary)
+    if (notBookable) {
+      return NextResponse.json({ success: false, code: 'not_bookable', ...notBookable }, { status: 422 })
     }
 
     // The operator's payment terms. A missing row or missing columns fall back
@@ -169,12 +202,11 @@ export async function POST(request: NextRequest) {
       .eq('id', orgId)
       .maybeSingle()
 
-    // Extract partner info if linked
-    const partnerInfo = itinerary.b2b_partners as { id: string; company_name: string; partner_code: string } | null
-
-    // Generate booking code
-    const { data: codeData } = await supabaseAdmin.rpc('generate_booking_code')
-    const bookingCode = codeData || `BKG-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`
+    // Extract partner info if linked — this company's partner only. The trip
+    // routes refuse a foreign partner_id now; a trip saved before that could
+    // still carry one, and its name must not reach this company's booking.
+    const linkedPartner = itinerary.b2b_partners as { id: string; company_name: string; partner_code: string; org_id?: string } | null
+    const partnerInfo = linkedPartner && linkedPartner.org_id === orgId ? linkedPartner : null
 
     // Row shape (and the deposit/balance arithmetic) is shared with
     // /api/bookings/from-quote so the two entry points cannot drift.
@@ -183,24 +215,23 @@ export async function POST(request: NextRequest) {
     // record_booking_payment() recomputes it as greatest(0, total_cost -
     // total_paid), so the old value showed 70% owed on a booking where nothing
     // had been paid, then jumped up on the first payment.
-    const { data: booking, error: createError } = await supabaseAdmin
-      .from('bookings')
-      .insert(
-        buildBookingRow({
-          orgId,
-          bookingCode,
-          itinerary,
-          // No caller percentage on this path, so the operator's own rule
-          // decides — not a constant that happens to say something else.
-          depositPercent: paymentRuleFrom(org).deposit_percent,
-          partnerName: partnerInfo?.company_name ?? null,
-          paymentRule: paymentRuleFrom(org),
-        })
-      )
-      .select()
-      .single()
+    // The code is numbered per company; one that is taken draws another.
+    const { data: booking, error: createError } = await insertBookingWithCode<{ id: string; [key: string]: unknown }>(
+      supabaseAdmin,
+      orgId,
+      bookingCode => buildBookingRow({
+        orgId,
+        bookingCode,
+        itinerary,
+        // No caller percentage on this path, so the operator's own rule
+        // decides — not a constant that happens to say something else.
+        depositPercent: paymentRuleFrom(org).deposit_percent,
+        partnerName: partnerInfo?.company_name ?? null,
+        paymentRule: paymentRuleFrom(org),
+      })
+    )
 
-    if (createError) {
+    if (createError || !booking) {
       console.error('Error creating booking:', createError)
       return NextResponse.json({ success: false, error: clientMessage(createError, 'Internal server error') }, { status: 500 })
     }

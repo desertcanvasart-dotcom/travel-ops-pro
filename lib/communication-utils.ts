@@ -1,5 +1,6 @@
 // Email and WhatsApp integration utilities
 
+import { vatOnLiveNet, vatTextLines } from '@/lib/vat'
 import { lookupServerMessage } from '@/lib/i18n/server-messages'
 import { escapeHtml } from '@/lib/html-escape'
 import { formatMoney } from '@/lib/currency-totals'
@@ -43,7 +44,9 @@ export function generateEmailTemplate(
   totalCost: string,
   currency: string,
   locale: RecipientLocale = 'en',
-  identity: OrgIdentity = businessIdentity()
+  identity: OrgIdentity = businessIdentity(),
+  /** The trip's VAT choice and recorded rate (lib/vat.ts); absent = none. */
+  vat: { vat_applied?: unknown; vat_rate?: unknown } | null = null
 ): string {
   // Client-facing copy is localized to the recipient's language (email.itinerary.*).
   // Brand constants (COMPANY_INFO), colors and layout stay as-is.
@@ -53,6 +56,10 @@ export function generateEmailTemplate(
   // the price is money in its currency — "JPY 450000.00" was how yen read.
   const amount = Number(totalCost)
   const totalLabel = Number.isFinite(amount) ? formatMoney(amount, currency) : `${currency} ${totalCost}`
+  // VAT, always stated under the total (lib/vat.ts).
+  const vatLines = Number.isFinite(amount)
+    ? vatTextLines(vatOnLiveNet(vat, amount, currency), amount, currency, locale === 'ja' ? 'ja' : 'en')
+    : []
   // HTML-escaped: the organization's fields are typed in Settings.
   const info = companyInfo(htmlIdentity(identity))
   return `
@@ -112,6 +119,7 @@ export function generateEmailTemplate(
       <p><strong>${t('quoteRef')}</strong> ${escapeHtml(itineraryCode)}</p>
       <p><strong>${t('tour')}</strong> ${escapeHtml(tripName)}</p>
       <p><strong>${t('totalInvestment')}</strong> ${escapeHtml(totalLabel)}</p>
+      ${vatLines.map(l => `<p style="margin-top: -8px; color: #4b5563;">${escapeHtml(l)}</p>`).join('')}
     </div>
 
     <p>${t('pdfIntro')}</p>

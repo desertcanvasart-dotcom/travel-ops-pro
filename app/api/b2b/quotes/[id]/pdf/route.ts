@@ -9,6 +9,7 @@ import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages
 import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
 import { formatMoney } from '@/lib/currency-totals'
 import { partnerSingleSupplement } from '@/lib/b2b/partner-prices'
+import { quotePdfTotalsHtml } from '@/lib/b2b/quote-pdf-totals'
 import { paymentRuleFrom, type PaymentRule } from '@/lib/payment-schedule'
 import { escapeHtml as esc } from '@/lib/html-escape'
 import { businessIdentity, identityFromOrg, mergeIdentity, monogram, type OrgIdentity } from '@/lib/org-identity'
@@ -561,13 +562,10 @@ async function generateQuoteHTML(quote: any, locale: 'en' | 'ja', labels: Record
     </div>
     ` : ''}
 
-    <!-- Pricing Summary: the price only. -->
+    <!-- Pricing Summary: the price only, and whether VAT is on it (lib/vat.ts). -->
     <div class="section-header">${labels.pricingSummary}</div>
     <div class="totals-section">
-      <div class="totals-row highlight">
-        <span class="label">${labels.tableTotal.toUpperCase()}</span>
-        <span class="value">${money(quote.selling_price)}</span>
-      </div>
+      ${quotePdfTotalsHtml(quote, locale, labels.tableTotal)}
     </div>
 
     <div class="per-person-note">

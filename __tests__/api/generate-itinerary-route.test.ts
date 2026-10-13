@@ -122,6 +122,8 @@ describe('generate-itinerary route — idempotency', () => {
     total_cost: 100,
     supplier_cost: 80,
     status: 'draft',
+    // The caller's company's trip: both look-ups are org-scoped (20261212).
+    org_id: 'org-test-1',
   }
 
   it('returns the existing itinerary for a repeated idempotency_key without inserting', async () => {
@@ -151,12 +153,45 @@ describe('generate-itinerary route — idempotency', () => {
   it("does not resolve another org's thread from its whatsapp_conversation_id", async () => {
     seed({
       communication_threads: [{ id: 'thread-x', whatsapp_conversation_id: 'wa-conv-x', org_id: 'org-other' }],
-      itineraries: [{ ...EXISTING, thread_id: 'thread-x' }],
+      itineraries: [{ ...EXISTING, thread_id: 'thread-x', org_id: 'org-other' }],
     })
     const res = await POST(makeRequest({ ...VALID_BODY, whatsapp_conversation_id: 'wa-conv-x' }))
     const json = await res.json()
     expect(json.data?.deduplicated).not.toBe(true)
     expect(json.data?.id).not.toBe('itin-existing-1')
+  })
+
+  it("never answers with another company's itinerary for its idempotency key", async () => {
+    seed({ itineraries: [{ ...EXISTING, idempotency_key: 'idem-x', org_id: 'org-other' }] })
+    const res = await POST(makeRequest({ ...VALID_BODY, idempotency_key: 'idem-x' }))
+    const json = await res.json()
+    expect(json.data?.deduplicated).not.toBe(true)
+    expect(json.data?.id).not.toBe('itin-existing-1')
+  })
+})
+
+describe("generate-itinerary route — the other company's ids are refused", () => {
+  it.each([
+    ['client_id', 'clients', 'Client'],
+    ['partner_id', 'b2b_partners', 'Partner'],
+    ['destination_id', 'destinations', 'Destination'],
+    ['thread_id', 'communication_threads', 'Conversation'],
+  ])('%s of another company → 404 before any AI work, nothing inserted', async (field, table, label) => {
+    seed({ [table]: [{ id: 'foreign-1', org_id: 'org-other' }] })
+    const res = await POST(makeRequest({ ...VALID_BODY, [field]: 'foreign-1' }))
+    expect(res.status).toBe(404)
+    expect((await res.json()).error).toBe(`${label} not found`)
+    expect(mockedCreative).not.toHaveBeenCalled()
+    const { data } = await (await import('../_mock-supabase')).createMockClient().from('itineraries').select()
+    expect(data).toHaveLength(0)
+  })
+
+  it("the company's own client is accepted and stored", async () => {
+    seed({ clients: [{ id: 'own-client', org_id: 'org-test-1' }] })
+    const res = await POST(makeRequest({ ...VALID_BODY, client_id: 'own-client' }))
+    expect(res.status).toBe(200)
+    const { data } = await (await import('../_mock-supabase')).createMockClient().from('itineraries').select()
+    expect(data![0].client_id).toBe('own-client')
   })
 })
 

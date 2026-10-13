@@ -57,6 +57,9 @@ import { useConfirm } from '@/components/ConfirmDialog'
 import { isSupplierBacked } from '@/lib/bookings/supplier-backing'
 import { BackLink, TripBreadcrumb } from '@/components/nav/TripNav'
 import { withReturnTo } from '@/lib/nav/return-to'
+import { useRole } from '@/hooks/useRole'
+import { vatOnLiveNet } from '@/lib/vat'
+import { VatToken } from '@/app/components/Vat'
 
 type TabType = 'overview' | 'suppliers' | 'payments' | 'passengers' | 'notes'
 
@@ -84,6 +87,10 @@ const EXPENSE_STATE: Record<string, { label: string; style: string }> = {
 export default function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const t = useTranslations('bookings')
+  // Sending the confirmation messages the customer: owner, admin and manager
+  // (the route refuses agents), so agents are not offered the button.
+  const { canAccess } = useRole()
+  const canSendConfirmation = canAccess(['admin', 'manager'])
   // The Add Supplier modal offers the agency's supplier types (Settings → Vocabulary), grouped.
   const supplierTypeGroups = supplierTypeGroupsFor(useSupplierTypes().options)
   const tCommon = useTranslations('common')
@@ -516,7 +523,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
               {t('actions.viewItinerary')}
             </Link>
 
-            <SendConfirmationButton bookingId={resolvedParams.id} />
+            {canSendConfirmation && <SendConfirmationButton bookingId={resolvedParams.id} />}
           </div>
         )}
       </div>
@@ -618,6 +625,10 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">{t('fields.totalCost')}</span>
                     <span className="font-bold">{formatCurrency(booking.total_cost, booking.currency)}</span>
+                  </div>
+                  {/* The trip's VAT (lib/vat.ts): the booking total is the net. */}
+                  <div className="flex justify-end">
+                    <VatToken vat={vatOnLiveNet(booking.itinerary, booking.total_cost, booking.currency)} currency={booking.currency} />
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">{t('fields.depositAmount')}</span>

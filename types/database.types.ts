@@ -1452,6 +1452,9 @@ export interface Database {
           season_name: string | null
           season_uplift_percent: number
           season_uplift_amount: number
+          vat_applied: boolean
+          vat_rate: number | null
+          vat_amount: number
         }
         Insert: {
           id?: string
@@ -1484,6 +1487,9 @@ export interface Database {
           season_name?: string | null
           season_uplift_percent?: number
           season_uplift_amount?: number
+          vat_applied?: boolean
+          vat_rate?: number | null
+          vat_amount?: number
         }
         Update: {
           id?: string
@@ -1516,6 +1522,9 @@ export interface Database {
           season_name?: string | null
           season_uplift_percent?: number
           season_uplift_amount?: number
+          vat_applied?: boolean
+          vat_rate?: number | null
+          vat_amount?: number
         }
         Relationships: [
           {
@@ -1537,6 +1546,32 @@ export interface Database {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      booking_code_counters: {
+        Row: {
+          last_value: number
+          org_id: string
+          year: number
+        }
+        Insert: {
+          last_value: number
+          org_id: string
+          year: number
+        }
+        Update: {
+          last_value?: number
+          org_id?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_code_counters_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -6486,6 +6521,7 @@ export interface Database {
           parent_invoice_id: string | null
           org_id: string
           full_trip_cost: number | null
+          vat_applied: boolean
         }
         Insert: {
           id?: string
@@ -6522,6 +6558,7 @@ export interface Database {
           parent_invoice_id?: string | null
           org_id: string
           full_trip_cost?: number | null
+          vat_applied?: boolean
         }
         Update: {
           id?: string
@@ -6558,6 +6595,7 @@ export interface Database {
           parent_invoice_id?: string | null
           org_id?: string
           full_trip_cost?: number | null
+          vat_applied?: boolean
         }
         Relationships: [
           {
@@ -6658,6 +6696,8 @@ export interface Database {
           template_id: string | null
           fx_frozen: Json | null
           destination_id: string | null
+          vat_applied: boolean
+          vat_rate: number | null
         }
         Insert: {
           id?: string
@@ -6726,6 +6766,8 @@ export interface Database {
           template_id?: string | null
           fx_frozen?: Json | null
           destination_id?: string | null
+          vat_applied?: boolean
+          vat_rate?: number | null
         }
         Update: {
           id?: string
@@ -6794,6 +6836,8 @@ export interface Database {
           template_id?: string | null
           fx_frozen?: Json | null
           destination_id?: string | null
+          vat_applied?: boolean
+          vat_rate?: number | null
         }
         Relationships: [
           {
@@ -8536,6 +8580,7 @@ export interface Database {
           support_hours: Json | null
           office_email_addresses: string[]
           whatsapp_number: string | null
+          vat_rate: number
         }
         Insert: {
           id?: string
@@ -8567,6 +8612,7 @@ export interface Database {
           support_hours?: Json | null
           office_email_addresses: string[]
           whatsapp_number?: string | null
+          vat_rate?: number
         }
         Update: {
           id?: string
@@ -8598,6 +8644,7 @@ export interface Database {
           support_hours?: Json | null
           office_email_addresses?: string[]
           whatsapp_number?: string | null
+          vat_rate?: number
         }
         Relationships: []
       }
@@ -9064,6 +9111,35 @@ export interface Database {
         Relationships: [
           {
             foreignKeyName: "push_subscriptions_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quote_number_counters: {
+        Row: {
+          org_id: string
+          kind: string
+          year: number
+          last_value: number
+        }
+        Insert: {
+          org_id: string
+          kind: string
+          year: number
+          last_value?: number
+        }
+        Update: {
+          org_id?: string
+          kind?: string
+          year?: number
+          last_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_number_counters_org_id_fkey"
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -11189,6 +11265,9 @@ export interface Database {
           org_id: string
           guide_grade: string | null
           guide_mode: string | null
+          vat_applied: boolean
+          vat_rate: number | null
+          vat_amount: number
         }
         Insert: {
           id?: string
@@ -11234,6 +11313,9 @@ export interface Database {
           org_id: string
           guide_grade?: string | null
           guide_mode?: string | null
+          vat_applied?: boolean
+          vat_rate?: number | null
+          vat_amount?: number
         }
         Update: {
           id?: string
@@ -11279,6 +11361,9 @@ export interface Database {
           org_id?: string
           guide_grade?: string | null
           guide_mode?: string | null
+          vat_applied?: boolean
+          vat_rate?: number | null
+          vat_amount?: number
         }
         Relationships: [
           {
@@ -13173,7 +13258,9 @@ export interface Database {
         Returns: any
       }
       generate_booking_code: {
-        Args: Record<PropertyKey, never>
+        Args: {
+          p_org_id?: string
+        }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any
       }
@@ -13197,6 +13284,18 @@ export interface Database {
       }
       get_user_role: {
         Args: Record<PropertyKey, never>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Returns: any
+      }
+      hold_departure_seats: {
+        Args: {
+          p_client_id?: string
+          p_client_name?: string
+          p_departure_id?: string
+          p_notes?: string
+          p_org_id?: string
+          p_pax?: number
+        }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any
       }
@@ -13302,6 +13401,15 @@ export interface Database {
           p_days?: Json
           p_itinerary_id?: string
           p_services?: Json
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Returns: any
+      }
+      shift_itinerary_dates: {
+        Args: {
+          p_days?: number
+          p_itinerary_id?: string
+          p_org_id?: string
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any

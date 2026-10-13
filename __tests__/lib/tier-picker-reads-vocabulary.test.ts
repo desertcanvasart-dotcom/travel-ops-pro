@@ -207,7 +207,7 @@ describe('transportation routes write vehicles through the one helper', () => {
   // list through the one reader, so an agency-added vehicle shows where it
   // is priced.
   for (const rel of [
-    'app/api/pricing-grid/rates/route.ts',
+    'app/api/pricing-grid/rate-options.ts',
     'app/api/rates/available/route.ts',
     'app/api/tours/variations/[id]/services/route.ts',
     'app/rates/page.tsx',

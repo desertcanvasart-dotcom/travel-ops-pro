@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { recordsInOrg } from '@/lib/org-refs'
 import { roundToCurrency } from '@/lib/currency-totals'
+import { switchInvoiceVat } from '@/lib/invoices/totals'
+import { getOrgVatRate, parseVatApplied } from '@/lib/vat'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -70,12 +72,15 @@ export async function PUT(
     }
 
     // List of allowed fields to update.
+    // tax_rate / tax_amount are the invoice's recorded VAT (lib/vat.ts): the
+    // server works them out when VAT is switched (vat_applied, below) and never
+    // takes them from the body.
     // amount_paid / balance_due / paid_at are DERIVED from payment activity (see
     // the payments routes) and are intentionally excluded — otherwise a caller
     // could mark an invoice paid or zero out the balance via this edit endpoint.
     const allowedFields = [
       'client_id', 'itinerary_id', 'client_name', 'client_email',
-      'line_items', 'subtotal', 'tax_rate', 'tax_amount', 'discount_amount',
+      'line_items', 'subtotal', 'discount_amount',
       'total_amount', 'currency', 'status',
       'issue_date', 'due_date', 'notes', 'payment_terms', 'payment_instructions',
       'sent_at'
@@ -89,6 +94,28 @@ export async function PUT(
 
     if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updateData.itinerary_id, client_id: updateData.client_id }))) {
       return NextResponse.json({ error: 'Itinerary or client not found' }, { status: 404 })
+    }
+
+    // VAT switched on or off: re-worked from the invoice's own net at the
+    // company's rate today. Not together with a new total — which figure the
+    // VAT is on would be a guess.
+    const vatWanted = parseVatApplied(body.vat_applied)
+    if (vatWanted !== undefined) {
+      if (updateData.total_amount !== undefined || updateData.currency !== undefined) {
+        return NextResponse.json({ error: 'Switch VAT on its own, not together with a new total or currency' }, { status: 400 })
+      }
+      const { data: currentInvoice } = await supabaseAdmin
+        .from('invoices')
+        .select('*')
+        .eq('id', id)
+        .eq('org_id', orgId)
+        .maybeSingle()
+      if (!currentInvoice) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+      if (vatWanted !== (currentInvoice.vat_applied === true)) {
+        const switched = switchInvoiceVat(currentInvoice, vatWanted, vatWanted ? await getOrgVatRate(supabaseAdmin, orgId) : 0)
+        if (!switched.ok) return NextResponse.json({ error: switched.error }, { status: 409 })
+        Object.assign(updateData, switched.updates)
+      }
     }
 
     // A new total or currency re-derives what the payments leave owing.

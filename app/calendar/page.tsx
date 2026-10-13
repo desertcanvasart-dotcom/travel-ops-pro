@@ -58,25 +58,21 @@ import {
   useDroppable,
   useDraggable
 } from '@dnd-kit/core'
-import { addToTotals, emptyTotals, formatTotals, type CurrencyTotals } from '@/lib/currency-totals'
+import { emptyTotals, formatTotals, type CurrencyTotals } from '@/lib/currency-totals'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import {
+  calendarStats,
+  findConflicts,
+  listFrom,
+  toCalendarTrips,
+  type CalendarBookingRow,
+  type CalendarSourceRow,
+  type CalendarTrip,
+} from '@/lib/calendar/trips'
 
-interface Booking {
-  id: string
-  itinerary_code: string
-  client_name: string
-  start_date: string
-  end_date: string
-  num_travelers: number
-  payment_status: string
-  currency?: string | null
-  total_cost: number
-  destinations: string
-  assigned_guide_id?: string | null
-  assigned_vehicle_id?: string | null
-  guide_name?: string
-  vehicle_name?: string
-}
+// A trip on the calendar, built from the trip, its booking and the guide and
+// vehicle lists (lib/calendar/trips).
+type Booking = CalendarTrip
 
 interface Guide {
   id: string
@@ -196,27 +192,21 @@ export default function CalendarPage() {
       // Walk every page — the calendar needs every date-ranged trip, and a
       // one-shot request silently truncates past the API's 1000-row page cap
       // The three loads are independent — fetched together, not one by one.
-      const [allBookings, guidesResponse, vehiclesResponse] = await Promise.all([
-        fetchAllPages<Booking>('/api/itineraries'),
+      // Partner (B2B) trips included: they use the same guides and vehicles.
+      // The bookings give each trip its payment state.
+      const [allTrips, allBookings, guidesResponse, vehiclesResponse] = await Promise.all([
+        fetchAllPages<CalendarSourceRow>('/api/itineraries?include_b2b=true'),
+        fetchAllPages<CalendarBookingRow & { id: string }>('/api/bookings', { pageSize: 200 }).catch(() => []),
         fetch('/api/guides?is_active=true'),
         fetch('/api/vehicles?is_active=true'),
       ])
-      const validBookings = allBookings.filter((b: Booking) => b.start_date && b.end_date)
-      setBookings(validBookings)
 
-      if (guidesResponse.ok) {
-        const guidesData = await guidesResponse.json()
-        if (guidesData.success) {
-          setGuides(guidesData.data)
-        }
-      }
-
-      if (vehiclesResponse.ok) {
-        const vehiclesData = await vehiclesResponse.json()
-        if (vehiclesData.success) {
-          setVehicles(vehiclesData.data)
-        }
-      }
+      // /api/guides answers with a bare array, /api/vehicles with { success, data }.
+      const guideList = guidesResponse.ok ? listFrom<Guide>(await guidesResponse.json()) : []
+      const vehicleList = vehiclesResponse.ok ? listFrom<Vehicle>(await vehiclesResponse.json()) : []
+      setGuides(guideList)
+      setVehicles(vehicleList)
+      setBookings(toCalendarTrips(allTrips, { guides: guideList, vehicles: vehicleList, bookings: allBookings }))
     } catch (error) {
       console.error('Error fetching data:', error)
     } finally {
@@ -224,71 +214,23 @@ export default function CalendarPage() {
     }
   }
 
+  // Clashes between SOLD trips only — a quote or a draft is not a clash.
   const detectConflicts = () => {
+    const found = findConflicts(bookings)
     const conflictIds = new Set<string>()
-    const details: ConflictDetail[] = []
-
-    // Sort by start, then only compare each trip with the ones that start
-    // before it ends: the scan stops at the first later trip that cannot
-    // overlap. Same pairs as the old all-pairs loop (every overlap is still
-    // found), without comparing every trip with every other trip.
-    const sorted = bookings
-      .map(b => ({ b, start: parseISO(b.start_date), end: parseISO(b.end_date) }))
-      .sort((x, y) => x.start.getTime() - y.start.getTime())
-
-    for (let i = 0; i < sorted.length; i++) {
-      for (let j = i + 1; j < sorted.length && sorted[j].start <= sorted[i].end; j++) {
-        const { b: b1, start: start1, end: end1 } = sorted[i]
-        const { b: b2, start: start2, end: end2 } = sorted[j]
-
-        const overlaps = (start1 <= end2 && end1 >= start2)
-
-        if (overlaps) {
-          conflictIds.add(b1.id)
-          conflictIds.add(b2.id)
-
-          const overlapStart = format(start1 > start2 ? start1 : start2, 'MMM d')
-          const overlapEnd = format(end1 < end2 ? end1 : end2, 'MMM d, yyyy')
-
-          // Check for shared guide
-          if (b1.assigned_guide_id && b2.assigned_guide_id && b1.assigned_guide_id === b2.assigned_guide_id) {
-            details.push({
-              bookingA: b1.id, bookingB: b2.id,
-              bookingACode: b1.itinerary_code, bookingBCode: b2.itinerary_code,
-              clientA: b1.client_name, clientB: b2.client_name,
-              resourceType: 'guide',
-              resourceName: b1.guide_name || 'Unknown Guide',
-              overlapStart, overlapEnd,
-            })
-          }
-          // Check for shared vehicle
-          if (b1.assigned_vehicle_id && b2.assigned_vehicle_id && b1.assigned_vehicle_id === b2.assigned_vehicle_id) {
-            details.push({
-              bookingA: b1.id, bookingB: b2.id,
-              bookingACode: b1.itinerary_code, bookingBCode: b2.itinerary_code,
-              clientA: b1.client_name, clientB: b2.client_name,
-              resourceType: 'vehicle',
-              resourceName: b1.vehicle_name || 'Unknown Vehicle',
-              overlapStart, overlapEnd,
-            })
-          }
-          // If no shared resource, it's a date overlap
-          if (
-            !(b1.assigned_guide_id && b2.assigned_guide_id && b1.assigned_guide_id === b2.assigned_guide_id) &&
-            !(b1.assigned_vehicle_id && b2.assigned_vehicle_id && b1.assigned_vehicle_id === b2.assigned_vehicle_id)
-          ) {
-            details.push({
-              bookingA: b1.id, bookingB: b2.id,
-              bookingACode: b1.itinerary_code, bookingBCode: b2.itinerary_code,
-              clientA: b1.client_name, clientB: b2.client_name,
-              resourceType: 'date_overlap',
-              resourceName: '',
-              overlapStart, overlapEnd,
-            })
-          }
-        }
+    const details: ConflictDetail[] = found.map(c => {
+      conflictIds.add(c.a.id)
+      conflictIds.add(c.b.id)
+      return {
+        bookingA: c.a.id, bookingB: c.b.id,
+        bookingACode: c.a.itinerary_code, bookingBCode: c.b.itinerary_code,
+        clientA: c.a.client_name, clientB: c.b.client_name,
+        resourceType: c.resourceType,
+        resourceName: c.resourceName || (c.resourceType === 'guide' ? t('filters.unassigned') : c.resourceType === 'vehicle' ? t('filters.unassigned') : ''),
+        overlapStart: format(parseISO(c.overlapStart), 'MMM d'),
+        overlapEnd: format(parseISO(c.overlapEnd), 'MMM d, yyyy'),
       }
-    }
+    })
 
     setConflicts([...conflictIds])
     setConflictDetails(details)
@@ -302,11 +244,11 @@ export default function CalendarPage() {
     }
 
     if (filters.guideId) {
-      filtered = filtered.filter(b => b.assigned_guide_id === filters.guideId)
+      filtered = filtered.filter(b => filters.guideId === 'unassigned' ? !b.assigned_guide_id : b.assigned_guide_id === filters.guideId)
     }
 
     if (filters.vehicleId) {
-      filtered = filtered.filter(b => b.assigned_vehicle_id === filters.vehicleId)
+      filtered = filtered.filter(b => filters.vehicleId === 'unassigned' ? !b.assigned_vehicle_id : b.assigned_vehicle_id === filters.vehicleId)
     }
 
     if (filters.searchQuery) {
@@ -314,7 +256,7 @@ export default function CalendarPage() {
       filtered = filtered.filter(b => 
         b.client_name.toLowerCase().includes(query) ||
         b.itinerary_code.toLowerCase().includes(query) ||
-        b.destinations?.toLowerCase().includes(query) ||
+        b.trip_name.toLowerCase().includes(query) ||
         b.guide_name?.toLowerCase().includes(query) ||
         b.vehicle_name?.toLowerCase().includes(query)
       )
@@ -341,37 +283,15 @@ export default function CalendarPage() {
     }
 
     if (filters.hideCompleted) {
-      filtered = filtered.filter(b => b.payment_status !== 'completed')
+      filtered = filtered.filter(b => b.status !== 'completed')
     }
 
     setFilteredBookings(filtered)
   }
 
   const calculateStats = () => {
-    const totalBookings = filteredBookings.length
-    const totalRevenue = emptyTotals()
-    for (const b of filteredBookings) addToTotals(totalRevenue, b.total_cost || 0, b.currency || 'EUR')
-    const totalTravelers = filteredBookings.reduce((sum, b) => sum + (b.num_travelers || 0), 0)
-    
-    const statusBreakdown: { [key: string]: number } = {}
-    filteredBookings.forEach(b => {
-      statusBreakdown[b.payment_status] = (statusBreakdown[b.payment_status] || 0) + 1
-    })
-
-    const today = startOfDay(new Date())
-    const upcomingBookings = filteredBookings.filter(b => {
-      const bookingStart = parseISO(b.start_date)
-      return isAfter(bookingStart, today) || isSameDay(bookingStart, today)
-    }).length
-
-    setStats({
-      totalBookings,
-      totalRevenue,
-      totalTravelers,
-      statusBreakdown,
-      upcomingBookings,
-      conflictCount: conflicts.length
-    })
+    const computed = calendarStats(filteredBookings, format(new Date(), 'yyyy-MM-dd'))
+    setStats({ ...computed, conflictCount: conflicts.length })
   }
 
   const clearFilters = () => {
@@ -400,23 +320,25 @@ export default function CalendarPage() {
   }
 
   const exportToCSV = () => {
-    const headers = ['Code', 'Client', 'Start Date', 'End Date', 'Travelers', 'Payment Status', 'Total Cost', 'Destinations', 'Guide', 'Vehicle']
+    const headers = ['Code', 'Client', 'Trip', 'Status', 'Start Date', 'End Date', 'Travelers', 'Payment Status', 'Currency', 'Total Cost', 'Guide', 'Vehicle']
     const rows = filteredBookings.map(b => [
       b.itinerary_code,
       b.client_name,
+      b.trip_name,
+      b.status,
       b.start_date,
       b.end_date,
       b.num_travelers,
-      b.payment_status,
+      getStatusLabel(b.payment_status),
+      b.currency || '',
       b.total_cost,
-      b.destinations || '',
-      b.guide_name || 'Unassigned',
-      b.vehicle_name || 'Unassigned'
+      b.guide_name || (b.assigned_guide_id ? b.assigned_guide_id : 'Unassigned'),
+      b.vehicle_name || (b.assigned_vehicle_id ? b.assigned_vehicle_id : 'Unassigned')
     ])
 
     const csvContent = [
       headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ...rows.map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
     ].join('\n')
 
     const blob = new Blob([csvContent], { type: 'text/csv' })
@@ -447,24 +369,29 @@ export default function CalendarPage() {
     }).join('\n')
   }
 
+  // The booking's payment state (bookings.payment_status), or quote / no booking.
   const getStatusColor = (status: string) => {
-    const colors: any = {
-      'not_paid': 'bg-gray-400',
-      'deposit_received': 'bg-blue-500',
-      'partially_paid': 'bg-yellow-500',
-      'paid': 'bg-green-500',
-      'completed': 'bg-green-600'
+    const colors: Record<string, string> = {
+      quote: 'bg-gray-300',
+      no_booking: 'bg-gray-500',
+      pending: 'bg-amber-500',
+      deposit_received: 'bg-blue-500',
+      partial: 'bg-yellow-500',
+      paid: 'bg-green-500',
+      refunded: 'bg-red-400',
     }
     return colors[status] || 'bg-gray-400'
   }
 
   const getStatusLabel = (status: string) => {
-    const labels: any = {
-      'not_paid': t('status.notPaid'),
-      'deposit_received': t('status.deposit'),
-      'partially_paid': t('status.partial'),
-      'paid': t('status.paid'),
-      'completed': t('status.completed')
+    const labels: Record<string, string> = {
+      quote: t('status.quote'),
+      no_booking: t('status.noBooking'),
+      pending: t('status.notPaid'),
+      deposit_received: t('status.deposit'),
+      partial: t('status.partial'),
+      paid: t('status.paid'),
+      refunded: t('status.refunded'),
     }
     return labels[status] || status
   }
@@ -517,26 +444,25 @@ export default function CalendarPage() {
     const currentEnd = parseISO(booking.end_date)
     const duration = differenceInDays(currentEnd, currentStart)
     const newEndDate = addDays(newDate, duration)
-    
+
     try {
-      const response = await fetch(`/api/itineraries/${bookingId}`, {
-        method: 'PUT',
+      // The trip, its days and its guide/vehicle assignments move together; a
+      // trip with a booking or supplier documents is refused with the reason.
+      const response = await fetch(`/api/itineraries/${bookingId}/reschedule`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          start_date: format(newDate, 'yyyy-MM-dd'),
-          end_date: format(newEndDate, 'yyyy-MM-dd')
-        })
+        body: JSON.stringify({ start_date: format(newDate, 'yyyy-MM-dd') })
       })
-      
+
       const data = await response.json()
-      
+
       if (data.success) {
         setBookings(prev => prev.map(b =>
           b.id === bookingId
             ? {
                 ...b,
-                start_date: format(newDate, 'yyyy-MM-dd'),
-                end_date: format(newEndDate, 'yyyy-MM-dd')
+                start_date: data.data?.start_date ?? format(newDate, 'yyyy-MM-dd'),
+                end_date: data.data?.end_date ?? format(newEndDate, 'yyyy-MM-dd')
               }
             : b
         ))
@@ -544,7 +470,9 @@ export default function CalendarPage() {
         setShowConfirmModal(false)
         setPendingMove(null)
       } else {
-        await dialog.alert(t('alerts.error'), t('alerts.failedToUpdate') + ': ' + data.error, 'warning')
+        setShowConfirmModal(false)
+        setPendingMove(null)
+        await dialog.alert(t('alerts.error'), data.error || t('alerts.failedToUpdate'), 'warning')
       }
     } catch (error) {
       console.error('Error updating booking:', error)
@@ -862,11 +790,13 @@ export default function CalendarPage() {
                   className="w-full p-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent"
                   style={{ height: '38px' }}
                 >
-                  <option value="not_paid">{t('status.notPaid')}</option>
+                  <option value="quote">{t('status.quote')}</option>
+                  <option value="no_booking">{t('status.noBooking')}</option>
+                  <option value="pending">{t('status.notPaid')}</option>
                   <option value="deposit_received">{t('status.depositReceived')}</option>
-                  <option value="partially_paid">{t('status.partiallyPaid')}</option>
+                  <option value="partial">{t('status.partiallyPaid')}</option>
                   <option value="paid">{t('status.paid')}</option>
-                  <option value="completed">{t('status.completed')}</option>
+                  <option value="refunded">{t('status.refunded')}</option>
                 </select>
                 <p className="text-xs text-gray-500 mt-1">{t('filters.multiSelectHint')}</p>
               </div>
@@ -1109,7 +1039,7 @@ export default function CalendarPage() {
                   <div className="text-xs opacity-90">{booking.itinerary_code}</div>
                   <div className="flex items-center justify-between mt-1.5 text-xs opacity-75">
                     <span>{booking.num_travelers} pax</span>
-                    <span>{booking.destinations}</span>
+                    <span className="truncate ml-2">{booking.trip_name}</span>
                   </div>
                   {conflicts.includes(booking.id) && (
                     <div className="flex items-center gap-1 mt-1.5 text-xs bg-white/20 rounded px-1.5 py-0.5">

@@ -37,6 +37,7 @@ import {
 } from '@/lib/booking-portal'
 import { toClientItinerary } from '@/lib/itinerary-share'
 import { formatMoney } from '@/lib/currency-totals'
+import { vatMarker, vatOnLiveNet } from '@/lib/vat'
 import { tripDays, type PremiumBand } from '@/lib/insurance'
 import TravellerForm from './TravellerForm'
 import ChangeRequestForm from './ChangeRequestForm'
@@ -90,6 +91,8 @@ async function resolve(token: string): Promise<{
   scopedPassengerId: string | null
   isLeadCoordinator: boolean
   requireCode: boolean
+  /** The trip's VAT flag and recorded rate (lib/vat.ts). */
+  tripVat: { vat_applied: boolean; vat_rate: unknown }
 } | null> {
   if (!isValidPortalToken(token)) return null
   const supabase = admin()
@@ -279,6 +282,9 @@ async function resolve(token: string): Promise<{
 
   return {
     insuranceBands,
+    // The trip's VAT choice and recorded rate (lib/vat.ts), carried from its
+    // quote; stated under ご旅行代金.
+    tripVat: { vat_applied: (itin as { vat_applied?: unknown } | null)?.vat_applied === true, vat_rate: (itin as { vat_rate?: unknown } | null)?.vat_rate ?? null },
     tripDays: tripDays(booking.start_date, booking.end_date),
     scopedPassengerId,
     isLeadCoordinator,
@@ -329,7 +335,7 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
   const resolved = await resolve(token)
   if (!resolved) notFound()
 
-  const { booking, operator, insuranceBands, tripDays: days, scopedPassengerId, isLeadCoordinator, requireCode } = resolved
+  const { booking, operator, insuranceBands, tripDays: days, scopedPassengerId, isLeadCoordinator, requireCode, tripVat } = resolved
 
   // CONFIRMATION GATE: the link alone shows nothing. One fact the traveller
   // knows (booking number or the lead family name) sets the cookie; until
@@ -383,6 +389,10 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
           <div className="row total">
             <span>ご旅行代金</span>
             <b>{money(payment.total)}</b>
+          </div>
+          {/* VAT, always stated: 「VAT（14%）適用：…」 or 「VAT 不適用」 (lib/vat.ts). */}
+          <div className="row vat" data-vat={tripVat.vat_applied ? 'applied' : 'not-applied'}>
+            <span>{vatMarker(vatOnLiveNet(tripVat, payment.total, payment.currency), payment.currency, 'ja')}</span>
           </div>
 
           {payment.singlePayment ? (

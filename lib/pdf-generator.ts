@@ -3,6 +3,7 @@
 // File: lib/pdf-generator.ts
 // ============================================
 
+import { vatOnLiveNet, vatTextLines } from '@/lib/vat'
 import { seasonSupplementOf, serviceClientPrice } from '@/lib/itinerary-client-price'
 import { overnightLabel, overnightProperty } from '@/lib/itineraries/overnight-property'
 import { jsPDF } from 'jspdf'
@@ -55,6 +56,9 @@ interface Itinerary {
   total_cost: number
   /** The grid's season premium, charged on top of the lines. */
   season_uplift_amount?: number | null
+  /** VAT carried from the trip's quote (lib/vat.ts): flag and recorded rate. */
+  vat_applied?: boolean | null
+  vat_rate?: number | null
   status: string
   notes?: string
   tier?: string
@@ -644,6 +648,20 @@ export async function generateItineraryPDF(
       const perPerson = totalPrice / totalPax
       doc.text((labels.perPersonParen ?? FALLBACK_LABELS_EN.perPersonParen!)(formatCurrency(perPerson, currency)), pageWidth - margin, yPos, { align: 'right' })
       yPos += 10
+    }
+
+    // VAT, always stated beside the total, in the document's language: on top
+    // at the trip's recorded rate, with the total including it, or "VAT not
+    // applied" (lib/vat.ts).
+    if (totalPrice > 0) {
+      doc.setFontSize(9)
+      doc.setFont(fontFamily, 'normal')
+      doc.setTextColor(80, 80, 80)
+      for (const line of vatTextLines(vatOnLiveNet(itinerary, totalPrice, currency), totalPrice, currency, locale)) {
+        doc.text(line, pageWidth - margin, yPos, { align: 'right' })
+        yPos += 5
+      }
+      yPos += 5
     }
     
     // (No inclusions / exclusions: the office does not send them — removed

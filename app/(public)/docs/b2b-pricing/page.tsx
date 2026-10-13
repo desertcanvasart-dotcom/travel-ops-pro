@@ -124,6 +124,12 @@ export default function B2BPricingPage() {
         <p className="text-gray-600 mb-3">
           After calculating a price, click <strong>Save as Quote</strong> to create a B2B quote. See the <Link href="/docs/b2b-quotes" className="text-primary-600 hover:underline">B2B Quotes</Link> documentation for details on managing and exporting quotes.
         </p>
+        <p className="text-gray-600 mb-3">
+          The server prices the quote again with the same choices (party, date, passport, margin, tier, guide, tour
+          leader, options and extras) and saves its own figures, including the season premium. If that price is not the
+          one on your screen, because a rate or a season changed after you calculated, the save is refused: calculate
+          again, then save. Changing the party or the date after calculating also needs a new calculation before saving.
+        </p>
       </section>
     </div>
   )

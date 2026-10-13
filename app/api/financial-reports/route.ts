@@ -16,6 +16,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { loadFxIndex, convertLine, buildFxMeta, emptyFxSummary, type FxHole } from '@/lib/fx-report'
 import { SUPPORTED_CURRENCIES } from '@/lib/exchange-rate-api'
+import { sumByCurrency } from '@/lib/currency-totals'
 import {
   invoiceCountsAsRevenue,
   tripCounts,
@@ -71,6 +72,18 @@ interface CommissionData {
   expenses: any[]
 }
 
+/**
+ * A recorded tax amount in the reporting currency: its share of the line it
+ * belongs to, at that line's own converted total — the same rate and date,
+ * and no second conversion to count.
+ */
+export function convertedShare(convertedTotal: number, recorded: unknown, originalTotal: unknown): number {
+  const r = Number(recorded) || 0
+  const t = Number(originalTotal) || 0
+  if (!r || !t) return 0
+  return (convertedTotal * r) / t
+}
+
 export async function GET(request: NextRequest) {
   try {
     // TENANT BOUNDARY. supabaseAdmin is the service-role client and bypasses
@@ -107,7 +120,7 @@ export async function GET(request: NextRequest) {
 
     const { data: invoices, error: invError } = await supabaseAdmin
       .from('invoices')
-      .select('invoice_number, issue_date, total_amount, amount_paid, balance_due, currency, status, itinerary_id')
+      .select('invoice_number, issue_date, total_amount, amount_paid, balance_due, currency, status, itinerary_id, tax_amount')
       .eq('org_id', orgId)
       .gte('issue_date', rangeStart)
       .lte('issue_date', rangeEnd)
@@ -115,7 +128,7 @@ export async function GET(request: NextRequest) {
 
     const { data: expenses, error: expError } = await supabaseAdmin
       .from('expenses')
-      .select('expense_number, expense_date, amount, status, category, supplier_name, currency, itinerary_id')
+      .select('expense_number, expense_date, amount, status, category, supplier_name, currency, itinerary_id, tax_amount')
       .eq('org_id', orgId)
       .gte('expense_date', rangeStart)
       .lte('expense_date', rangeEnd)
@@ -261,6 +274,10 @@ export async function GET(request: NextRequest) {
           ...inv,
           total_amount: total.amount ?? 0,
           amount_paid: paid.amount ?? 0,
+          // The VAT the invoice RECORDED, at the total's own rate (lib/vat.ts),
+          // and as recorded in its own currency for the per-currency figure.
+          tax_amount: convertedShare(total.amount ?? 0, inv.tax_amount, inv.total_amount),
+          recorded_tax_amount: Number(inv.tax_amount) || 0,
         }
       })
       .filter((inv): inv is NonNullable<typeof inv> => inv !== null)
@@ -279,7 +296,7 @@ export async function GET(request: NextRequest) {
           fxHoles.push(converted.hole)
           return null
         }
-        return { ...exp, amount: converted.amount ?? 0 }
+        return { ...exp, amount: converted.amount ?? 0, tax_amount: convertedShare(converted.amount ?? 0, exp.tax_amount, exp.amount) }
       })
       .filter((exp): exp is NonNullable<typeof exp> => exp !== null)
 
@@ -446,16 +463,27 @@ export async function GET(request: NextRequest) {
     const totalRevenue = yearInvoices.reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0)
     const totalExpensesAmount = yearExpenses.reduce((sum, exp) => sum + Number(exp.amount || 0), 0)
 
+    // VAT as RECORDED (owner's decision, 2026-10-13; lib/vat.ts): the VAT on
+    // the year's issued invoices — never drafts or cancelled ones, filtered
+    // above — and the tax recorded on its expenses. It was 14% of all revenue
+    // and of all costs, a figure no document ever charged.
+    const vatCollected = yearInvoices.reduce((sum, inv) => sum + Number(inv.tax_amount || 0), 0)
+    const vatPaid = yearExpenses.reduce((sum, exp) => sum + Number(exp.tax_amount || 0), 0)
     const taxSummary = {
       gross_revenue: totalRevenue,
       total_expenses: totalExpensesAmount,
       deductible_expenses: deductibleTotal,
       taxable_income: totalRevenue - deductibleTotal,
       expense_breakdown: categoryBreakdown,
-      // Estimated tax (simplified - would need actual tax rates)
-      estimated_vat_collected: totalRevenue * 0.14, // 14% Egypt VAT example
-      estimated_vat_paid: totalExpensesAmount * 0.14,
-      net_vat: (totalRevenue - totalExpensesAmount) * 0.14
+      vat_collected: vatCollected,
+      vat_paid: vatPaid,
+      net_vat: vatCollected - vatPaid,
+      // The same VAT in each invoice's own currency, unconverted.
+      vat_collected_by_currency: sumByCurrency(
+        yearInvoices.filter(inv => inv.recorded_tax_amount > 0),
+        inv => inv.recorded_tax_amount,
+        inv => inv.currency,
+      ),
     }
 
     // Commission reports (for guides, drivers, etc.)

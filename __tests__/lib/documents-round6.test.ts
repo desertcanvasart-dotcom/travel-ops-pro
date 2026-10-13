@@ -60,7 +60,8 @@ describe('final invoice', () => {
     expect(deposit).toBe(370873)
     expect((deposit * 100) / 20).toBe(1854365)
     expect(roundToCurrency(1854367 * 0.2, 'JPY')).toBe(deposit)
-    expect(src('app/api/invoices/route.ts')).toContain("select('total_amount, currency, full_trip_cost')")
+    // tax_amount since VAT (20261214): a deposit carrying VAT is compared by its net.
+    expect(src('app/api/invoices/route.ts')).toContain("select('total_amount, tax_amount, currency, full_trip_cost')")
   })
 })
 
