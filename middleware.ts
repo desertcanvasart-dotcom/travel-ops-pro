@@ -64,6 +64,16 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // Content library and writing rules (/content-library/rules): the menu
   // shows them to managers and above, and their API is admin/manager.
   '/content-library': ['admin', 'manager'],
+  // Sell. The menu shows Pricing Grid, B2B Quotes and Order Intake to agents
+  // and above (decided 2026-10-13: agents price and quote, reaching the grid
+  // from the inboxes and the trip editor, and the B2B calculator from the
+  // WhatsApp parser), B2C Quotes to managers and above. With no entry here a
+  // viewer opened all of them by URL.
+  '/pricing-grid': ['admin', 'manager', 'agent'],
+  '/b2b/quotes': ['admin', 'manager', 'agent'],
+  '/b2b/calculator': ['admin', 'manager', 'agent'],
+  '/intake/order': ['admin', 'manager', 'agent'],
+  '/b2c/quotes': ['admin', 'manager'],
 
   // All authenticated users (including viewer)
   '/dashboard': ['admin', 'manager', 'agent', 'viewer'],
@@ -71,7 +81,8 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // The menu shows it to agents and above; with no entry here a viewer could
   // open it by URL (its data is behind the staff-only /api/copilot gate).
   '/copilot-analytics': ['admin', 'manager', 'agent'],
-  '/calendar': ['admin', 'manager', 'agent', 'viewer'],
+  // The menu shows the Calendar (Sell) to agents and above.
+  '/calendar': ['admin', 'manager', 'agent'],
   '/notifications': ['admin', 'manager', 'agent', 'viewer'],
 }
 
@@ -90,6 +101,11 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   { prefix: '/api/expenses', roles: ['admin', 'manager', 'agent'] },
   // The season calendar sets what customers are charged on the operator's own
   // high dates — a pricing decision, same audience as the rate tables.
+  // The Pricing Grid prices and saves a trip from the stored rates: agents
+  // and above, like the menu (Sell). It writes no rate. MUST precede
+  // '/api/pricing' — .find() takes the first match, and that prefix also
+  // matches '/api/pricing-grid'.
+  { prefix: '/api/pricing-grid', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/pricing', roles: ['admin', 'manager'] },
 
   // ---- Cost base (manager and above) ----
@@ -100,7 +116,6 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   // tables the whole pricing engine reads from.
   { prefix: '/api/rates', roles: ['admin', 'manager'] },
   { prefix: '/api/supplier-rates', roles: ['admin', 'manager'] },
-  { prefix: '/api/pricing-grid', roles: ['admin', 'manager'] },
   { prefix: '/api/suppliers', roles: ['admin', 'manager'] },
   { prefix: '/api/vehicles', roles: ['admin', 'manager'] },
   { prefix: '/api/guides', roles: ['admin', 'manager'] },
@@ -151,7 +166,14 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   { prefix: '/api/b2b/pricing-rules', roles: ['admin', 'manager'] },
   { prefix: '/api/b2b/transport-packages', roles: ['admin', 'manager'] },
   { prefix: '/api/b2b', roles: ['admin', 'manager', 'agent'] },
-  { prefix: '/api/b2c', roles: ['admin', 'manager', 'agent'] },
+  // B2C offers are the managers' (the menu's B2C Quotes).
+  { prefix: '/api/b2c', roles: ['admin', 'manager'] },
+  // Order Intake turns an order into a client, a quote and seat holds; the
+  // Email Inbox lists and dismisses website orders. It had no entry, so a
+  // viewer could do all of it.
+  { prefix: '/api/intake', roles: ['admin', 'manager', 'agent'] },
+  // Rates › Extras is a manager screen; the B2B calculator only reads it.
+  { prefix: '/api/extras-catalogue', roles: ['admin', 'manager'] },
   { prefix: '/api/itineraries', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/bookings', roles: ['admin', 'manager', 'agent'] },
   // Building the catalogue — templates, variations, their days and the bulk
@@ -232,6 +254,9 @@ const FINANCIAL_API_PREFIXES = [
   '/api/rates/cruises',
   '/api/suppliers/export',
   '/api/suppliers/import',
+  // B2C offers: cost, margin and the client's details. The B2C Quotes screen
+  // is the only reader, and the menu shows it to managers and above.
+  '/api/b2c',
 ]
 
 // Staff-only, READS INCLUDED (agent and above). Customer conversations are
@@ -271,6 +296,16 @@ const STAFF_ONLY_API_PREFIXES = [
   // (the '/api/settings' and '/api/partners' entries above).
   '/api/settings/email',
   '/api/partners',
+  // Sell: trips, bookings, quotes and orders carry cost, margin and customer
+  // details. Only writes were gated, so a viewer — whose screens (dashboard,
+  // notifications) read none of these — could GET them all.
+  '/api/itineraries',
+  '/api/bookings',
+  '/api/itinerary-resources',
+  '/api/trip-events',
+  '/api/b2b',
+  '/api/intake',
+  '/api/extras-catalogue',
 ]
 
 export async function middleware(request: NextRequest, event: NextFetchEvent) {
