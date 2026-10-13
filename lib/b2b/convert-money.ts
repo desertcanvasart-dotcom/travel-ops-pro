@@ -38,3 +38,35 @@ export function quoteAmountsInTripCurrency(
     currency: to,
   }
 }
+
+/**
+ * What the client pays for each line of a converted template quote, so that
+ * the lines add up to exactly the quote's selling price.
+ *
+ * Each line's client price was its cost × (1 + margin), with
+ * `margin_percent || 25` — a 0% quote's lines came out 25% dearer — and no
+ * season premium, tour leader or chosen-option pricing at all. The itinerary
+ * header carried the quote's selling price, and the edit page recomputes the
+ * total from the lines on first save, so the trip silently re-priced. Now the
+ * selling price is shared out across the lines in proportion to their cost
+ * (margin, premium and the rest ride along on the same share), in whole
+ * minor units of the currency; the rounding remainder goes to the dearest
+ * line. Lines that cost nothing (no rate) get nothing. If every line costs
+ * nothing there is nothing to share by, and the lines stay at 0.
+ */
+export function allocateClientPrices(lineCosts: number[], sellingPrice: number, currency: string): number[] {
+  const costs = lineCosts.map((c) => Math.max(0, Number(c) || 0))
+  const sum = costs.reduce((a, b) => a + b, 0)
+  if (!(sum > 0) || !(Number(sellingPrice) > 0)) return costs.map(() => 0)
+  const minor = roundToCurrency(1.23, currency) === 1 ? 1 : 100
+  const target = Math.round(Number(sellingPrice) * minor)
+  const shares = costs.map((c) => Math.floor((c / sum) * target))
+  let rest = target - shares.reduce((a, b) => a + b, 0)
+  // Remainder to the dearest lines first, one minor unit each.
+  const order = costs.map((c, i) => [c, i] as const).sort((a, b) => b[0] - a[0]).map(([, i]) => i)
+  for (let k = 0; rest > 0 && k < order.length * 2; k++) {
+    const i = order[k % order.length]
+    if (costs[i] > 0) { shares[i] += 1; rest -= 1 }
+  }
+  return shares.map((s) => s / minor)
+}

@@ -5,14 +5,14 @@ import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { allowsIncomplete } from '@/lib/pricing/quote-completeness'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { paymentRuleFrom } from '@/lib/payment-schedule'
 import { computeDeposit } from '@/lib/booking-creation'
 import { roundToCurrency } from '@/lib/currency-totals'
 import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
 import { parseFrozenFx, frozenToExchangeRates } from '@/lib/itinerary-fx'
-import { quoteAmountsInTripCurrency } from '@/lib/b2b/convert-money'
-import { templateDaysToItineraryDays, packageTypeForTemplate, serviceLineForItinerary } from '@/lib/itineraries/template-days'
+import { quoteAmountsInTripCurrency, allocateClientPrices } from '@/lib/b2b/convert-money'
+import { templateDaysToItineraryDays, packageTypeForTemplate, serviceLineForItinerary, type ItineraryServiceRow } from '@/lib/itineraries/template-days'
 
 // ============================================
 // B2B QUOTE CONVERT TO ITINERARY API
@@ -30,8 +30,11 @@ export async function POST(
 ) {
   try {
     const { id } = await params
-    const body = await request.json()
-    const { user_id } = body
+    const body = await request.json().catch(() => ({}))
+    // The itinerary's author is the signed-in user. It was taken from the
+    // body (the page sent nothing, so it was NULL, and a crafted request
+    // could name anyone).
+    const user_id = await getCurrentUserId()
 
     // M3 Phase 2A — itineraries.org_id is NOT NULL. Resolve from session.
     const orgId = await getCurrentOrgId()
@@ -86,6 +89,16 @@ export async function POST(
       return NextResponse.json(
         { error: 'Quote already converted', itinerary_id: quote.converted_to_itinerary_id },
         { status: 400 }
+      )
+    }
+
+    // Only an accepted offer becomes a trip. The page showed the button only
+    // for accepted quotes, but the route converted a draft or a rejected one
+    // for anyone who called it.
+    if (quote.status !== 'accepted') {
+      return NextResponse.json(
+        { error: `Only an accepted quote can be converted (this one is ${quote.status || 'draft'}). Mark it accepted first.` },
+        { status: 409 }
       )
     }
 
@@ -304,6 +317,9 @@ export async function POST(
           // the office holds contracts for; the edit page can still change it.
           tier: 'standard',
           total_cost: quote.selling_price,
+          // The premium inside selling_price, as its own figure — the lines
+          // below carry the rest (see the share-out further down).
+          season_uplift_amount: Number(quote.season_uplift_amount) || 0,
           supplier_cost: quote.total_cost,
           profit: quote.margin_amount,
           margin_percent: quote.margin_percent,
@@ -353,7 +369,31 @@ export async function POST(
     const insertedDayIds: string[] = []
     let conversionError: string | null = null
 
-    for (const planned of plannedDays) {
+    // Every line first, so the client prices can be shared out over all of
+    // them. A trip's client total is its lines plus its season premium, kept
+    // on its own (itineraries.season_uplift_amount, lib/itinerary-client-price),
+    // so the lines share out the selling price less the premium — the quote's
+    // margin (0% stays 0%) and tour leader included — and the premium goes
+    // across as the trip's premium (allocateClientPrices, lib/b2b/convert-money).
+    const quoteCurrency = quote.currency || 'EUR'
+    const premium = Number(quote.season_uplift_amount) || 0
+    const linesByDay: ItineraryServiceRow[][] = plannedDays.map((planned) => servicesSnapshot
+      .filter((service: any) => {
+        if (service.day_number && service.day_number !== planned.day_number) return false
+        if (!service.day_number && planned.day_number > 1) return false
+        return true
+      })
+      .map((service: any) => serviceLineForItinerary(service, {
+        dayId: '',
+        pax: (quote.num_adults || 0) + (quote.num_children || 0),
+        marginPercent: quote.margin_percent ?? 0,
+        currency: quoteCurrency,
+      })))
+    const allLines = linesByDay.flat()
+    const clientPrices = allocateClientPrices(allLines.map((l) => l.total_cost), (Number(quote.selling_price) || 0) - premium, quoteCurrency)
+    allLines.forEach((line, i) => { line.client_price = clientPrices[i] })
+
+    for (const [index, planned] of plannedDays.entries()) {
       const dayNum = planned.day_number
 
       const { data: itinDay, error: dayError } = await supabaseAdmin
@@ -368,13 +408,8 @@ export async function POST(
       }
       insertedDayIds.push(itinDay.id)
 
-      const dayServices = servicesSnapshot.filter((service: any) => {
-        if (service.day_number && service.day_number !== dayNum) return false
-        if (!service.day_number && dayNum > 1) return false
-        return true
-      })
-
-      if (dayServices.length > 0) {
+      const dayLines = linesByDay[index]
+      if (dayLines.length > 0) {
         const { error: svcError } = await supabaseAdmin
           .from('itinerary_services')
           // The columns itinerary_services actually has (types/database.types.ts):
@@ -385,12 +420,7 @@ export async function POST(
           // One row per quote line, per-person lines multiplied by the party
           // (lib/itineraries/template-days.ts — the fifth failure in this route
           // was a $793 itinerary for a $1,317 quote).
-          .insert(dayServices.map((service: any) => serviceLineForItinerary(service, {
-            dayId: itinDay.id,
-            pax: (quote.num_adults || 0) + (quote.num_children || 0),
-            marginPercent: quote.margin_percent || 25,
-            currency: quote.currency || 'EUR',
-          })))
+          .insert(dayLines.map((line) => ({ ...line, itinerary_day_id: itinDay.id })))
         if (svcError) {
           conversionError = svcError.message
           break

@@ -6,12 +6,12 @@ import { useTranslations } from 'next-intl'
 import {
   FileText, Search, Download, Trash2, Eye,
   Building2, Loader2, Plus, RefreshCw,
-  CheckCircle2, Clock, XCircle, Send
+  CheckCircle2, Clock, XCircle, Send, ArrowRightCircle
 } from 'lucide-react'
 import { LanguageIndicator } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
 import { useConfirm } from '@/components/ConfirmDialog'
-import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { formatMoney } from '@/lib/currency-totals'
 
 // ============================================
 // B2B QUOTES LIST PAGE
@@ -27,6 +27,7 @@ interface Quote {
   tour_leader_included: boolean
   selling_price: number
   price_per_person: number
+  currency: string | null
   status: string
   created_at: string
   trip_name: string | null
@@ -51,7 +52,6 @@ interface Quote {
 }
 
 export default function QuotesListPage() {
-  const { rateSymbol } = useCurrency()
   const t = useTranslations('b2bQuotes')
   const confirmDialog = useConfirm()
   const [quotes, setQuotes] = useState<Quote[]>([])
@@ -62,6 +62,8 @@ export default function QuotesListPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkStatus, setBulkStatus] = useState('')
+  // The company's whole book, counted by the server — not the rows loaded.
+  const [counts, setCounts] = useState<{ total: number; draft: number; sent: number; accepted: number } | null>(null)
 
   useEffect(() => {
     fetchQuotes()
@@ -87,6 +89,8 @@ export default function QuotesListPage() {
       })
       const data = await res.json()
       if (data.success) {
+        // Converted and booked quotes are kept; say so rather than look deleted.
+        if (data.skipped_count > 0) alert(`${data.skipped_count} quote(s) kept — converted or booked quotes cannot be deleted.`)
         setSelected(new Set())
         await fetchQuotes()
       } else {
@@ -110,7 +114,7 @@ export default function QuotesListPage() {
       const data = await res.json()
       if (data.success) {
         // Converted quotes keep their status; say so rather than look updated.
-        if (data.skipped_count > 0) alert(`${data.skipped_count} quote(s) skipped — converted quotes keep their status.`)
+        if (data.skipped_count > 0) alert(`${data.skipped_count} quote(s) skipped — converted or booked quotes keep their status, and an offer past its valid-until date is not accepted.`)
         setSelected(new Set())
         setBulkStatus('')
         await fetchQuotes()
@@ -133,6 +137,7 @@ export default function QuotesListPage() {
       const data = await res.json()
       if (data.success) {
         setQuotes(data.data || [])
+        if (data.counts) setCounts(data.counts)
       }
     } catch (err) {
       console.error('Failed to fetch quotes:', err)
@@ -150,6 +155,11 @@ export default function QuotesListPage() {
       const data = await res.json()
       if (data.success) {
         setQuotes(quotes.filter(q => q.id !== id))
+        setCounts(null)
+        void fetchQuotes()
+      } else {
+        // Refused (converted or booked, or not a manager): the reason, not silence.
+        alert(data.error || t('delete'))
       }
     } catch (err) {
       console.error('Failed to delete quote:', err)
@@ -165,6 +175,7 @@ export default function QuotesListPage() {
       accepted: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle2, label: t('statusAccepted') },
       rejected: { bg: 'bg-red-100', text: 'text-red-700', icon: XCircle, label: t('statusRejected') },
       expired: { bg: 'bg-amber-100', text: 'text-amber-700', icon: Clock, label: t('statusExpired') },
+      converted: { bg: 'bg-purple-100', text: 'text-purple-700', icon: ArrowRightCircle, label: t('statusConverted') },
     }
     const style = styles[status] || styles.draft
     const Icon = style.icon
@@ -193,12 +204,9 @@ export default function QuotesListPage() {
     )
   })
 
-  const stats = {
-    total: quotes.length,
-    draft: quotes.filter(q => q.status === 'draft').length,
-    sent: quotes.filter(q => q.status === 'sent').length,
-    accepted: quotes.filter(q => q.status === 'accepted').length,
-  }
+  const stats = counts ?? { total: 0, draft: 0, sent: 0, accepted: 0 }
+  // Each quote in its own currency and that currency's decimals (no ¥…​.00).
+  const money = (q: Quote, v: number | null | undefined) => formatMoney(Number(v) || 0, q.currency || 'EUR')
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -258,6 +266,8 @@ export default function QuotesListPage() {
           <option value="sent">{t('statusSent')}</option>
           <option value="accepted">{t('statusAccepted')}</option>
           <option value="rejected">{t('statusRejected')}</option>
+          <option value="expired">{t('statusExpired')}</option>
+          <option value="converted">{t('statusConverted')}</option>
         </select>
       </div>
 
@@ -345,8 +355,8 @@ export default function QuotesListPage() {
                   <td className="px-4 py-3 text-center text-sm">{quote.num_adults}{quote.tour_leader_included && <span className="text-xs text-blue-500 ml-1">(+1)</span>}</td>
                   <td className="px-4 py-3 text-center text-sm">{quote.travel_date ? formatDate(quote.travel_date) : '-'}</td>
                   <td className="px-4 py-3 text-right">
-                    <p className="text-sm font-bold text-[#647C47]">{rateSymbol}{quote.selling_price?.toFixed(2)}</p>
-                    <p className="text-xs text-gray-500">{rateSymbol}{quote.price_per_person?.toFixed(2)}{t('perPerson')}</p>
+                    <p className="text-sm font-bold text-[#647C47]">{money(quote, quote.selling_price)}</p>
+                    <p className="text-xs text-gray-500">{money(quote, quote.price_per_person)}{t('perPerson')}</p>
                   </td>
                   <td className="px-4 py-3 text-center">
                     <LanguageIndicator availableLanguages={quote.available_languages || []} size="sm" />

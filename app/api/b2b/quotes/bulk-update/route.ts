@@ -9,6 +9,7 @@ import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserRole, getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { todayIso } from '@/lib/quotes/validity'
 
 // The statuses a person sets. 'converted' is set by convert only (a bulk
 // 'converted' let from-quote book a quote that was never accepted).
@@ -47,14 +48,21 @@ export async function PUT(request: NextRequest) {
 
     // A converted quote keeps its status (its trip and booking hang off it);
     // the detail page locks it, and a select-all here no longer unlocks it.
-    const { data, error } = await supabaseAdmin
+    // So does a booked one (lib/quotes/lock.ts), and an offer past its
+    // valid-until date is not accepted in bulk any more than one at a time.
+    const { data: booked } = await supabaseAdmin
+      .from('bookings').select('quote_id').eq('quote_type', 'b2b').in('quote_id', quote_ids)
+    const bookedIds = (booked || []).map((b: { quote_id: string }) => b.quote_id).filter(Boolean)
+    let query = supabaseAdmin
       .from('tour_quotes')
       .update({ status, updated_at: new Date().toISOString(), last_modified_by: actor })
       .in('id', quote_ids)
       .eq('org_id', orgId)
       .or('status.is.null,status.neq.converted')
       .is('converted_to_itinerary_id', null)
-      .select('id')
+    if (bookedIds.length) query = query.not('id', 'in', `(${bookedIds.join(',')})`)
+    if (status === 'accepted') query = query.or(`valid_until.is.null,valid_until.gte.${todayIso()}`)
+    const { data, error } = await query.select('id')
 
     if (error) {
       console.error('Error bulk updating quotes:', error)

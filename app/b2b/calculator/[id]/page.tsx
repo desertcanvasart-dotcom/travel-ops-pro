@@ -9,7 +9,6 @@ import React, { useState, useEffect, useRef, Fragment, Suspense } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { isBookableLine } from '@/lib/pricing/breakdown-order'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { useTierLabel } from '@/hooks/useTierLabel'
 import { useTierOptions } from '@/hooks/useTierOptions'
@@ -804,32 +803,23 @@ function TourPriceCalculatorInner() {
           travel_date: travelDate,
           num_adults: numPax,
           num_children: 0,
-          // The CHOSEN optional services travel with the quote. Without them
-          // the itinerary built at conversion carries their money in
-          // selling_price and none of the services, and the first save on the
-          // edit page recomputes the total from the services it can see and
-          // loses the difference (docs/plans/extras-and-upgrades.md §5a).
-          services_snapshot: [
-            ...result.services.filter(isBookableLine),
-            ...(result.optional_services || []).filter(s => s.is_selected),
-          ],
-          // The currency the engine priced in (the org's rate currency). Without
-          // it the quotes route used to default to EUR.
-          currency: result.currency,
-          total_cost: result.total_cost,
-          margin_percent: result.margin_percent,
-          margin_amount: result.margin_amount,
-          selling_price: result.selling_price,
-          price_per_person: result.price_per_person,
+          // The server prices the quote itself, with the same engine and these
+          // same inputs (lib/b2b/quote-pricing.ts): the chosen options and
+          // extras, the margin, tier, guide, passport and tour leader. The
+          // prices on screen are not stored from here — selling_price is sent
+          // only so the server can refuse a save whose price moved since it
+          // was calculated. The season premium is the engine's and is stored
+          // with the quote.
+          is_eur_passport: isEurPassport,
+          margin_percent: marginPercent,
+          selected_optional_ids: selectedOptionals,
+          extras: selectedExtraIds,
           tour_leader_included: tourLeaderIncluded,
-          tour_leader_cost: result.tour_leader_cost || null,
           guide_grade: guideGrade,
           guide_mode: guideMode,
-          single_supplement: result.single_supplement || null,
-          is_eur_passport: isEurPassport,
-          // What the quote was priced in, if anything — the operator's own
-          // season, not a guess from the month.
-          season: result.season_uplift?.season_name ?? null,
+          tier: variationTier,
+          language: guideLanguage || 'English',
+          selling_price: result.selling_price,
           notes: quoteForm.notes || null
         })
       })

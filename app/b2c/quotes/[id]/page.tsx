@@ -28,6 +28,8 @@ interface B2CQuote {
   sent_at: string | null
   internal_notes: string | null
   client_notes: string | null
+  /** 'booked' once a booking was made from it: only the notes can change. */
+  locked?: 'booked' | 'converted' | null
   itineraries?: { id: string; trip_name: string | null; itinerary_code: string | null; client_name: string | null; client_email: string | null; client_phone?: string | null } | null
 }
 
@@ -45,7 +47,6 @@ export default function B2CQuoteDetail({ params }: { params: Promise<{ id: strin
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [margin, setMargin] = useState(0)
-  const [travelers, setTravelers] = useState(2)
   const [msg, setMsg] = useState<string | null>(null)
 
   const load = async () => {
@@ -56,7 +57,6 @@ export default function B2CQuoteDetail({ params }: { params: Promise<{ id: strin
       if (data.success) {
         setQuote(data.data)
         setMargin(Number(data.data.margin_percent) || 0)
-        setTravelers(Number(data.data.num_travelers) || 1)
       }
     } finally {
       setLoading(false)
@@ -149,12 +149,18 @@ export default function B2CQuoteDetail({ params }: { params: Promise<{ id: strin
               <div><span className="text-gray-400">Per person</span><p className="font-medium">{money(quote.price_per_person)} × {quote.num_travelers}</p></div>
             </div>
 
-            {/* Re-price */}
-            <div className="mt-5 border-t pt-4 flex flex-wrap items-end gap-3">
-              <div><label className="block text-xs text-gray-500 mb-1">Travellers</label><input type="number" min={1} value={travelers} onChange={(e) => setTravelers(Number(e.target.value))} className="w-24 border rounded-lg px-3 py-2 text-sm" /></div>
-              <div><label className="block text-xs text-gray-500 mb-1">Margin %</label><input type="number" min={0} value={margin} onChange={(e) => setMargin(Number(e.target.value))} className="w-24 border rounded-lg px-3 py-2 text-sm" /></div>
-              <button onClick={() => patch({ margin_percent: margin, num_travelers: travelers }, 'Re-priced')} disabled={busy} className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] disabled:opacity-50"><Save className="w-4 h-4" /> Re-price</button>
-            </div>
+            {/* Re-price: from the itinerary as it stands now (its supplier cost,
+                its party, its currency) at this margin. The travellers are the
+                itinerary's; for another party size, re-price the itinerary. */}
+            {quote.locked ? (
+              <p className="mt-5 border-t pt-4 text-sm text-gray-500">This offer has been booked; its price and status no longer change. Notes can still be edited.</p>
+            ) : (
+              <div className="mt-5 border-t pt-4 flex flex-wrap items-end gap-3">
+                <div><label className="block text-xs text-gray-500 mb-1">Margin %</label><input type="number" min={0} max={100} step="0.01" value={margin} onChange={(e) => setMargin(Number(e.target.value))} className="w-24 border rounded-lg px-3 py-2 text-sm" /></div>
+                <button onClick={() => patch({ margin_percent: margin }, 'Re-priced')} disabled={busy} className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] disabled:opacity-50"><Save className="w-4 h-4" /> Re-price</button>
+                <p className="w-full text-xs text-gray-400">Re-reads the itinerary's cost and party ({quote.num_travelers} traveller(s)).</p>
+              </div>
+            )}
           </div>
 
           {/* Client notes */}
@@ -172,8 +178,8 @@ export default function B2CQuoteDetail({ params }: { params: Promise<{ id: strin
               <button onClick={() => send('email')} disabled={busy} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] disabled:opacity-50"><Mail className="w-4 h-4" /> Send by email</button>
               <button onClick={() => send('whatsapp')} disabled={busy} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium border border-[#647C47] text-[#647C47] rounded-lg hover:bg-[#647C47]/10 disabled:opacity-50"><MessageCircle className="w-4 h-4" /> Send by WhatsApp</button>
               <div className="grid grid-cols-2 gap-2 pt-1">
-                <button onClick={() => patch({ status: 'accepted' }, 'Marked accepted')} disabled={busy} className="inline-flex items-center justify-center gap-1 px-3 py-2 text-sm border border-green-300 text-green-700 rounded-lg hover:bg-green-50 disabled:opacity-50"><CheckCircle2 className="w-4 h-4" /> Accept</button>
-                <button onClick={() => patch({ status: 'rejected' }, 'Marked rejected')} disabled={busy} className="inline-flex items-center justify-center gap-1 px-3 py-2 text-sm border border-red-300 text-red-700 rounded-lg hover:bg-red-50 disabled:opacity-50"><XCircle className="w-4 h-4" /> Reject</button>
+                <button onClick={() => patch({ status: 'accepted' }, 'Marked accepted')} disabled={busy || !!quote.locked} className="inline-flex items-center justify-center gap-1 px-3 py-2 text-sm border border-green-300 text-green-700 rounded-lg hover:bg-green-50 disabled:opacity-50"><CheckCircle2 className="w-4 h-4" /> Accept</button>
+                <button onClick={() => patch({ status: 'rejected' }, 'Marked rejected')} disabled={busy || !!quote.locked} className="inline-flex items-center justify-center gap-1 px-3 py-2 text-sm border border-red-300 text-red-700 rounded-lg hover:bg-red-50 disabled:opacity-50"><XCircle className="w-4 h-4" /> Reject</button>
               </div>
             </div>
           </div>
@@ -181,6 +187,12 @@ export default function B2CQuoteDetail({ params }: { params: Promise<{ id: strin
           <div className="bg-gray-50 rounded-lg border p-4 text-sm">
             <p className="text-xs text-gray-500">Valid until</p>
             <p className="font-medium">{quote.valid_until || '—'}</p>
+            {/* Extending the date is how an expired offer is reopened. */}
+            {!quote.locked && (
+              <input type="date" aria-label="Valid until" defaultValue={quote.valid_until?.slice(0, 10) ?? ''} disabled={busy}
+                onBlur={(e) => { if (e.target.value && e.target.value !== quote.valid_until) patch({ valid_until: e.target.value }, 'Valid-until changed') }}
+                className="mt-2 w-full border rounded-lg px-2 py-1 text-sm bg-white" />
+            )}
             {quote.sent_at && <p className="text-xs text-gray-400 mt-2">Sent via {quote.sent_via} on {new Date(quote.sent_at).toLocaleDateString()}</p>}
           </div>
 

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { Tip } from '../layout'
 
 export default function QuoteRevisionsPage() {
   return (
@@ -14,74 +14,78 @@ export default function QuoteRevisionsPage() {
 
       <h1 className="text-3xl font-bold text-gray-900 mb-4">Quote Revisions</h1>
       <p className="text-gray-600 mb-8">
-        Every B2B quote keeps a complete, versioned revision history. Each time a quote changes, the system snapshots the full quote as a new version &mdash; so you can review what changed, compare any two versions side&#8209;by&#8209;side, and revert to an earlier one without losing anything.
+        Every <Link href="/docs/b2b-quotes" className="text-primary-600 hover:underline">B2B quote</Link> and{' '}
+        <Link href="/docs/b2c-quotes" className="text-primary-600 hover:underline">B2C offer</Link> keeps a numbered
+        history of itself. The <strong>Revision history</strong> panel is in the side column of the quote&apos;s page.
       </p>
 
-      {/* How revisions are captured */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">How Revisions Are Captured</h2>
-        <p className="text-gray-600 mb-3">
-          A new revision is recorded automatically whenever a quote is edited or its status changes. Each snapshot is numbered sequentially and stores the entire quote at that point in time, including:
-        </p>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">When a revision is taken</h2>
+        <p className="text-gray-600 mb-3">A copy of the whole quote is saved as the next version when:</p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>Pricing</strong> &mdash; Total cost, margin percent &amp; amount, selling price, and price per person</li>
-          <li><strong>Trip &amp; Client</strong> &mdash; Trip name, client name, travel date, adults and children</li>
-          <li><strong>Terms</strong> &mdash; Currency, season, EUR passport flag, single supplement, tour leader, and valid&#8209;until date</li>
-          <li><strong>Service Snapshot</strong> &mdash; The complete services breakdown as calculated at that version</li>
-          <li><strong>Audit Trail</strong> &mdash; Who made the change, when, and a change reason or summary</li>
+          <li>a B2B quote is saved from the calculator, or a B2C offer is made (quotes from the Pricing Grid and Order Intake start their history at their first change);</li>
+          <li>it is edited on its page (status, notes, valid-until date, and for a B2C offer a re-price);</li>
+          <li>its status is changed in bulk from the B2B list;</li>
+          <li>a B2C offer is sent by email or WhatsApp;</li>
+          <li>it is reverted to an earlier version.</li>
         </ul>
         <p className="text-gray-600 mt-3">
-          The most recent revision is flagged as <strong>current</strong>, and the version list is shown newest&#8209;first.
+          The list is newest first. Each entry shows its version number, the reason (for example &ldquo;Marked
+          accepted&rdquo; or &ldquo;Sent via email&rdquo;), when, and who did it. The person is always the one signed
+          in. The latest is marked <strong>current</strong>.
         </p>
-        <ScreenshotPlaceholder caption="Revision history panel showing version numbers, editor, and change reason" />
       </section>
 
-      {/* Comparing revisions */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Comparing Two Revisions</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Comparing</h2>
         <p className="text-gray-600 mb-3">
-          Pick any two versions to see a clean, field&#8209;level diff. The comparison highlights only the fields that actually changed and reports the total number of changes &mdash; so a partner&#8209;facing price revision is easy to explain. Compared fields include:
+          The compare button on an older version lists the fields that differ from the current one, with both values.
+          Only changed fields are shown.
         </p>
-        <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>Status</strong> and <strong>valid&#8209;until</strong> date</li>
-          <li><strong>Trip name</strong>, <strong>client name</strong>, and <strong>travel date</strong></li>
-          <li><strong>Adults</strong> and <strong>children</strong></li>
-          <li><strong>Total cost</strong>, <strong>margin %</strong>, <strong>margin amount</strong>, <strong>selling price</strong>, and <strong>price per person</strong></li>
-          <li><strong>Currency</strong>, <strong>season</strong>, <strong>EUR passport</strong>, <strong>single supplement</strong>, and <strong>tour leader</strong></li>
-          <li><strong>Services</strong> and <strong>notes</strong></li>
+        <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li>
+            <strong>B2B</strong>: status, trip name, client name, travel date, adults, children, total cost, margin % and
+            amount, selling price, price per person, currency, tour leader (included and cost), single supplement, EUR
+            passport, season, season name, season premium % and amount, valid until, services and notes.
+          </li>
+          <li>
+            <strong>B2C</strong>: status, travellers, tier, total cost, margin % and amount, selling price, price per
+            person, currency, valid until, internal notes and client notes.
+          </li>
         </ul>
-        <ScreenshotPlaceholder caption="Side-by-side revision comparison with changed fields highlighted" />
       </section>
 
-      {/* Reverting */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Reverting to an Earlier Version</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Reverting</h2>
         <p className="text-gray-600 mb-3">
-          If a change was a mistake &mdash; or a partner prefers the previous offer &mdash; you can restore any earlier version in one step. Reverting:
+          The revert button on an older version puts the quote back as it was in that version, after you confirm:
+          prices, season premium, status, client details, services and notes. The revert is itself saved as a new
+          version, so nothing is lost.
         </p>
-        <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li>Restores the live quote to the chosen version&apos;s data</li>
-          <li>Records the revert itself as a <strong>new revision</strong>, so nothing is overwritten or lost</li>
-          <li>Captures an optional revert reason for the audit trail</li>
-        </ul>
         <Tip>
-          <strong>Permissions:</strong> Reverting overwrites the live quote, so it is restricted to <strong>Manager</strong> role and above. Anyone can view the history and compare versions.
+          Reverting is for managers and above. It is refused for a B2B quote that has been converted to an itinerary or
+          booked, and for a B2C offer that has been booked: those quotes are the record of the price that was sold.
+          Anyone who can open the quote can see its history and compare versions.
         </Tip>
       </section>
 
-      {/* Bulk operations */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Bulk Quote Operations</h2>
-        <p className="text-gray-600 mb-3">
-          When you are managing many quotes at once, select multiple quotes from the list and act on them together:
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Bulk changes on the B2B list</h2>
+        <p className="text-gray-600">
+          Tick quotes on the B2B Quotes list to set their status or delete them together (managers and above). Each
+          quote whose status changes gets its own revision. Converted and booked quotes are skipped by both actions, and
+          an offer past its valid-until date is not set to Accepted; the page says how many were skipped.
         </p>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>Bulk Status Update</strong> &mdash; Move a batch of quotes to a new status (for example, Sent or Expired) in one action. Each affected quote still gets its own revision snapshot recording the bulk change.</li>
-          <li><strong>Bulk Delete</strong> &mdash; Remove several quotes at once to keep your list clean.</li>
+          <li>Two older versions cannot be compared with each other; each is compared with the current one.</li>
+          <li>A revision cannot be edited or deleted.</li>
+          <li>Changes to a B2B quote&apos;s language versions (titles, translated notes) are not in its revisions.</li>
+          <li>Converting a quote to an itinerary does not add a revision; the quote&apos;s Converted status and link show it.</li>
         </ul>
-        <p className="text-gray-600 mt-3">
-          Bulk actions also require <strong>Manager</strong> role or higher.
-        </p>
       </section>
     </div>
   )

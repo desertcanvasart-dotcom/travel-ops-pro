@@ -1,8 +1,15 @@
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, getCurrentUserRole, noOrgResponse } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { clientMessage } from '@/lib/api-errors'
 import { quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
+import { enginePricingRequest, quoteColumnsFromEngine, priceMoved } from '@/lib/b2b/quote-pricing'
+import { updateB2bQuote } from '@/lib/b2b/update-quote'
+import { deleteQuote } from '@/lib/quotes/delete-quote'
+import { statusFilter, todayIso, withEffectiveStatus } from '@/lib/quotes/validity'
+import { normaliseMargin } from '@/lib/org-default-margin'
+import { formatMoney } from '@/lib/currency-totals'
+import { POST as priceWithEngine } from '@/app/api/b2b/calculate-price/route'
 import { NextRequest, NextResponse } from 'next/server'
 
 // ============================================
@@ -79,7 +86,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: true,
         data: {
-          ...data,
+          ...withEffectiveStatus(data),
           available_languages: Object.keys(versionsMap),
           versions: versionsMap
         }
@@ -99,8 +106,18 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .limit(limit)
 
+    // The dropdown filters on the status as shown: an open offer past its
+    // valid-until date is "Expired" (lib/quotes/validity.ts).
+    const today = todayIso()
+    const byStatus = <Q extends { eq: (c: string, v: string) => Q; or: (e: string) => Q }>(q: Q): Q => {
+      if (!status || status === 'all') return q
+      const f = statusFilter(status, today)
+      let out = f.eq ? q.eq('status', f.eq) : q
+      for (const expr of f.or) out = out.or(expr)
+      return out
+    }
     if (partner_id) query = query.eq('partner_id', partner_id)
-    if (status) query = query.eq('status', status)
+    query = byStatus(query)
 
     const { data: firstTry, error } = await query
     let data = firstTry
@@ -119,7 +136,7 @@ export async function GET(request: NextRequest) {
         .limit(limit)
 
       if (partner_id) fallbackQuery = fallbackQuery.eq('partner_id', partner_id)
-      if (status) fallbackQuery = fallbackQuery.eq('status', status)
+      fallbackQuery = byStatus(fallbackQuery)
 
       const fallback = await fallbackQuery
       if (fallback.error) throw fallback.error
@@ -149,11 +166,28 @@ export async function GET(request: NextRequest) {
 
     // Attach available_languages to each quote
     const quotesWithLanguages = (data || []).map(quote => ({
-      ...quote,
+      ...withEffectiveStatus(quote, today),
       available_languages: versionsMap[quote.id] || []
     }))
 
-    return NextResponse.json({ success: true, data: quotesWithLanguages })
+    // The stat tiles: the company's whole book, whatever page or filter is
+    // showing. They were counted over the 100 rows loaded, after the status
+    // filter — so with "Sent" chosen the Draft tile read 0.
+    const count = async (s?: string) => {
+      let q = supabaseAdmin.from('tour_quotes').select('id', { count: 'exact', head: true }).eq('org_id', orgId)
+      if (s) {
+        const f = statusFilter(s, today)
+        if (f.eq) q = q.eq('status', f.eq)
+        for (const expr of f.or) q = q.or(expr)
+      }
+      const { count: n } = await q
+      return n ?? 0
+    }
+    const [total, draft, sent, accepted, expired, converted] = await Promise.all([
+      count(), count('draft'), count('sent'), count('accepted'), count('expired'), count('converted'),
+    ])
+
+    return NextResponse.json({ success: true, data: quotesWithLanguages, counts: { total, draft, sent, accepted, expired, converted } })
 
   } catch (error: any) {
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -166,7 +200,6 @@ export async function POST(request: NextRequest) {
     const {
       variation_id,
       itinerary_id,
-      trip_name,
       partner_id,
       client_name,
       client_email,
@@ -175,88 +208,88 @@ export async function POST(request: NextRequest) {
       travel_date,
       num_adults = 2,
       num_children = 0,
-      // Pre-calculated pricing from UI
-      services_snapshot,
-      total_cost,
-      margin_percent,
-      margin_amount,
-      selling_price,
-      price_per_person,
-      // New fields
       tour_leader_included = false,
-      tour_leader_cost,
       // Which guide model priced this quote (migration 20260904_guide_mode_on
       // _quotes). Stored only when non-default, so NULL always reads as the
       // defaults and an unmigrated database still saves.
       guide_grade,
       guide_mode,
-      single_supplement,
       is_eur_passport = true,
-      season,
-      // Other
-      // No default here: a quote priced from USD rate tables was being saved
-      // as 'EUR' whenever the client did not say, and its page then showed
-      // the same numbers under the org's dollar sign. Resolved below.
-      currency: bodyCurrency,
       valid_days = 30,
       notes,
-      created_by
     } = body
 
-    if (!variation_id && !itinerary_id) {
-      return NextResponse.json({ success: false, error: 'variation_id or itinerary_id is required' }, { status: 400 })
+    // A quote from a trip is priced from that trip by
+    // /api/b2b/quote-from-itinerary. This route prices from a tour variation
+    // and its rates; nothing in the app posts a trip here.
+    if (!variation_id) {
+      return NextResponse.json({ success: false, error: 'variation_id is required (a quote from an itinerary is made with /api/b2b/quote-from-itinerary)' }, { status: 400 })
+    }
+    if (body.margin_percent !== undefined && body.margin_percent !== null && normaliseMargin(body.margin_percent) === null) {
+      return NextResponse.json({ success: false, error: 'margin_percent must be between 0 and 100' }, { status: 400 })
     }
 
-    if (!total_cost || !selling_price) {
-      return NextResponse.json({ success: false, error: 'Pricing data is required' }, { status: 400 })
-    }
-
-    // Calculate valid_until date
-    const validUntil = new Date()
-    validUntil.setDate(validUntil.getDate() + valid_days)
-
-    // Insert quote - quote_number is auto-generated by trigger
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
     if (!(await quoteRefsInOrg(supabaseAdmin, orgId, { itinerary_id, partner_id, variation_id }))) return quoteRefNotFound()
-    // The currency the engine priced in — the org's rate currency — unless
-    // the caller names one. Never a hardcoded 'EUR'.
-    const currency = bodyCurrency || await getOrgRateCurrency(supabaseAdmin, orgId)
 
+    // The price is the server's: the same engine the calculator ran, on the
+    // inputs it ran with (lib/b2b/quote-pricing.ts). Prices in the body are
+    // never stored; the one the operator was shown is only compared.
+    const engine = await priceWithEngine(new NextRequest(new URL('/api/b2b/calculate-price', request.url), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(enginePricingRequest(body)),
+    }))
+    const priced = await engine.json().catch(() => null)
+    if (!engine.ok || !priced?.success || !priced.data) {
+      return NextResponse.json({ success: false, error: priced?.error || 'The quote could not be priced' }, { status: engine.ok ? 422 : engine.status })
+    }
+    const price = quoteColumnsFromEngine(priced.data)
+    const currency = price.currency || await getOrgRateCurrency(supabaseAdmin, orgId)
+    if (!(price.selling_price > 0)) {
+      return NextResponse.json({ success: false, error: 'The quote priced at nothing; check the programme\'s rates in the calculator.' }, { status: 422 })
+    }
+    if (priceMoved(body.selling_price, price.selling_price, currency)) {
+      return NextResponse.json({
+        success: false,
+        error: `The price has changed since it was calculated (now ${formatMoney(price.selling_price, currency)}). Calculate again, then save.`,
+        selling_price: price.selling_price,
+      }, { status: 409 })
+    }
+
+    const validUntil = new Date()
+    validUntil.setDate(validUntil.getDate() + (Math.max(1, Math.floor(Number(valid_days) || 30))))
+    // Authorship is the signed-in user, never a body field.
+    const actor = await getCurrentUserId()
+
+    // quote_number is minted by the database, per company
+    // (migrations/20261211_quote_numbers_per_company.sql).
     const { data: quote, error } = await supabaseAdmin
       .from('tour_quotes')
       .insert({
         org_id: orgId,
-        variation_id: variation_id || null,
-        itinerary_id: itinerary_id || null,
-        trip_name: trip_name || null,
-        source: itinerary_id ? 'whatsapp_b2b' : 'b2b_template',
+        variation_id,
+        trip_name: body.trip_name || null,
+        source: 'b2b_template',
         partner_id: partner_id || null,
-        client_name,
-        client_email,
-        client_phone,
-        client_nationality,
-        travel_date,
+        client_name: client_name || null,
+        client_email: client_email || null,
+        client_phone: client_phone || null,
+        client_nationality: client_nationality || null,
+        travel_date: travel_date || null,
         num_adults,
         num_children,
-        services_snapshot,
-        total_cost,
-        margin_percent,
-        margin_amount,
-        selling_price,
-        price_per_person,
+        ...price,
         currency,
-        tour_leader_included,
-        tour_leader_cost,
+        tour_leader_included: tour_leader_included === true,
         ...(guide_grade === 'senior' ? { guide_grade } : {}),
         ...(guide_mode === 'throughout' ? { guide_mode } : {}),
-        single_supplement,
-        is_eur_passport,
-        season,
+        is_eur_passport: is_eur_passport !== false,
         status: 'draft',
         valid_until: validUntil.toISOString().split('T')[0],
-        notes,
-        created_by
+        notes: notes || null,
+        created_by: actor,
       })
       .select()
       .single()
@@ -285,7 +318,7 @@ export async function POST(request: NextRequest) {
       try {
         await supabaseAdmin.rpc('create_quote_revision', {
           p_quote_id: quote.id,
-          p_changed_by: created_by ?? null,
+          p_changed_by: actor,
           p_change_reason: 'Quote created',
         })
       } catch (revErr) {
@@ -293,7 +326,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log('✅ Quote created:', quote.quote_number)
     return NextResponse.json({
       success: true,
       data: {
@@ -308,32 +340,19 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// PUT { id, …fields } — the same edit as PUT /api/b2b/quotes/[id], with the
+// same rules (lib/b2b/update-quote.ts). It used to write any column given.
 export async function PUT(request: NextRequest) {
   try {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
     const body = await request.json()
-    const { id, org_id: _ignored, ...updates } = body
-
-    if (!id) {
+    if (!body?.id || typeof body.id !== 'string') {
       return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     }
-
-    if (!(await quoteRefsInOrg(supabaseAdmin, orgId, updates))) return quoteRefNotFound()
-    updates.updated_at = new Date().toISOString()
-
-    const { data, error } = await supabaseAdmin
-      .from('tour_quotes')
-      .update(updates)
-      .eq('id', id)
-      .eq('org_id', orgId)
-      .select()
-      .maybeSingle()
-
-    if (error) throw error
-    if (!data) return NextResponse.json({ success: false, error: 'Quote not found' }, { status: 404 })
-    return NextResponse.json({ success: true, data })
+    const result = await updateB2bQuote(supabaseAdmin, { orgId, id: body.id, body, actor: await getCurrentUserId() })
+    return NextResponse.json(result.body, { status: result.status })
 
   } catch (error: any) {
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -351,17 +370,8 @@ export async function DELETE(request: NextRequest) {
   try {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
-
-    const { data, error } = await supabaseAdmin
-      .from('tour_quotes')
-      .delete()
-      .eq('id', id)
-      .eq('org_id', orgId)
-      .select('id')
-
-    if (error) throw error
-    if (!data?.length) return NextResponse.json({ success: false, error: 'Quote not found' }, { status: 404 })
-    return NextResponse.json({ success: true })
+    // Manager and above, and never a converted or booked quote (lib/quotes/delete-quote.ts).
+    return await deleteQuote(supabaseAdmin, { kind: 'b2b', orgId, id, role: await getCurrentUserRole() })
 
   } catch (error: any) {
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })

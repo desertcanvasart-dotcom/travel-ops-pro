@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip, DocScreenshot } from '../layout'
+import { Tip } from '../layout'
 
 export default function B2BQuotesPage() {
   return (
@@ -13,80 +13,137 @@ export default function B2BQuotesPage() {
       </nav>
 
       <h1 className="text-3xl font-bold text-gray-900 mb-4">B2B Quotes</h1>
+      <p className="text-gray-600 mb-4">
+        A B2B quote is a priced tour programme for a partner or a group: the services, the price for the party and the
+        date, and the client&apos;s details, with a PDF you can send. It lives under <strong>Sell &rsaquo; B2B Quotes</strong>.
+      </p>
       <p className="text-gray-600 mb-8">
-        B2B Quotes are saved pricing snapshots that you can share with tour operator partners. Each quote captures a specific pricing calculation with all service details, ready for PDF export and partner distribution.
+        Admins, managers and agents see it in the menu (the owner always does). Agents can create, edit and convert
+        quotes; deleting a quote is for managers and above.
       </p>
 
-      {/* Creating a Quote */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Creating a Quote</h2>
-        <ol className="list-decimal list-inside space-y-2 text-gray-700">
-          <li>Go to the <strong>B2B Price Calculator</strong> and calculate a price</li>
-          <li>Click <strong>Save as Quote</strong></li>
-          <li>Optionally fill in:
-            <ul className="list-disc list-inside ml-6 mt-2 space-y-1 text-gray-600">
-              <li><strong>Partner</strong> &mdash; Select the B2B partner (tour operator) from your contacts</li>
-              <li><strong>Client Name</strong> &mdash; End client name if known</li>
-              <li><strong>Email &amp; Phone</strong> &mdash; Client contact details</li>
-              <li><strong>Nationality</strong> &mdash; For passport-type reference</li>
-              <li><strong>Notes</strong> &mdash; Special requests or conditions</li>
-            </ul>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Where quotes come from</h2>
+        <p className="text-gray-600 mb-3">
+          Not from this page. <strong>New Quote from Tour</strong> opens the tour manager, because a quote starts from a
+          tour variation. A quote is made in one of three places:
+        </p>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>
+            The <Link href="/docs/b2b-pricing" className="text-primary-600 hover:underline">B2B price calculator</Link>:
+            price the tour, then <strong>Save as Quote</strong> with an optional partner, client details and notes.
           </li>
-          <li>Click <strong>Save Quote</strong></li>
-        </ol>
+          <li>The <Link href="/docs/pricing-grid" className="text-primary-600 hover:underline">Pricing Grid</Link>, from an itinerary. Its quote links back to that itinerary.</li>
+          <li><Link href="/docs/order-intake" className="text-primary-600 hover:underline">Order Intake</Link>, from a website order.</li>
+        </ul>
         <p className="text-gray-600 mt-3">
-          The quote is assigned a unique reference code and captures the full pricing snapshot: services, rates, margin, and the rate sheet.
+          The price is always worked out by the server. When you save from the calculator, the server prices the quote
+          again with the same inputs (the party, date, passport, margin, tier, guide, tour leader, and the chosen options
+          and extras) and stores its own figures, services and season premium. If its price differs from the one on
+          your screen (a rate or a season was changed in between), the save is refused and you are asked to calculate
+          again. A new quote is a <strong>Draft</strong> and is valid for 30 days.
         </p>
-        <ScreenshotPlaceholder caption="Save as Quote dialog with partner selection and client details" />
+        <p className="text-gray-600 mt-3">
+          Quote numbers run per company and per year: QT-2026-00001, QT-2026-00002 and so on. Your numbers do not skip
+          when another company on the same installation makes a quote, and two quotes saved at the same moment get two
+          numbers. A quote number cannot be changed.
+        </p>
       </section>
 
-      {/* Viewing Quotes */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Viewing Quotes</h2>
-        <p className="text-gray-600 mb-3">
-          Navigate to <strong>B2B Quotes</strong> from the sidebar. The quotes page shows:
-        </p>
-        <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>Quote List</strong> &mdash; All saved quotes with reference, tour name, partner, date, pax, and price</li>
-          <li><strong>Status Badges</strong> &mdash; Draft, Sent, Confirmed, Expired</li>
-          <li><strong>Search</strong> &mdash; Filter by reference code, tour name, or partner name</li>
-          <li><strong>Quick Actions</strong> &mdash; View, download PDF, or open in calculator</li>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">The list</h2>
+        <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li>
+            <strong>Total, Draft, Sent, Accepted</strong>: counts over all of your company&apos;s quotes, whatever the
+            filter or search shows. Draft and Sent leave out offers whose valid-until date has passed.
+          </li>
+          <li>
+            <strong>Status filter</strong>: All, Draft, Sent, Accepted, Rejected, Expired, Converted. Expired includes
+            draft and sent offers whose date has passed.
+          </li>
+          <li><strong>Search</strong>: quote number, client, template, trip name or partner, within the newest 100 quotes loaded.</li>
+          <li>
+            <strong>Each row</strong>: quote number and date created, the tour, client and partner, pax (+1 for a tour
+            leader), travel date, the selling price and the price per person in the quote&apos;s own currency, the
+            languages it has versions in, and its status. Actions: View, PDF, Delete.
+          </li>
         </ul>
-        <DocScreenshot src="/docs/b2b-quotes/quotes-list.jpg" alt="B2B Quotes list page with quote cards and action buttons" />
+        <p className="text-gray-600 mt-3">
+          Tick quotes to act on several at once (managers and above). <strong>Set status&hellip;</strong> then{' '}
+          <strong>Apply</strong> changes their status; <strong>Delete</strong> removes them. Converted and booked quotes
+          are skipped by both, and an offer past its valid-until date is not set to Accepted; you are told how many were
+          skipped.
+        </p>
       </section>
 
-      {/* Quote Details */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Quote Details</h2>
-        <p className="text-gray-600 mb-3">
-          Click on a quote to see its full details:
-        </p>
-        <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>Tour Information</strong> &mdash; Tour name, variation, duration, cities</li>
-          <li><strong>Pricing Summary</strong> &mdash; Number of pax, total cost, margin, selling price, per person</li>
-          <li><strong>Service Snapshot</strong> &mdash; Complete service breakdown as calculated at quote time</li>
-          <li><strong>Rate Sheet</strong> &mdash; If generated, the full pax pricing table</li>
-          <li><strong>Client &amp; Partner Info</strong> &mdash; Contact details and notes</li>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">A quote</h2>
+        <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li><strong>Header</strong>: number and status, <strong>View Itinerary</strong> for a quote made from one, and <strong>Download PDF</strong>.</li>
+          <li><strong>Tour</strong>: name, variation, tier, days and nights, travellers (with tour leader and guide options), travel date, season.</li>
+          <li>
+            <strong>Services included</strong>: day by day, each line with quantity, unit price and total. A line with
+            no rate is shown in red, and a banner at the top lists them.
+          </li>
+          <li><strong>Notes</strong>: per language (English and Japanese). A missing language can be created blank, or copied and machine-translated.</li>
         </ul>
-      </section>
-
-      {/* PDF Export */}
-      <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">PDF Export</h2>
-        <p className="text-gray-600 mb-3">
-          Click <strong>Download PDF</strong> to generate a professional B2B quote document. The PDF includes:
-        </p>
+        <p className="text-gray-600 mt-3 mb-2"><strong>Pricing</strong>, all in the quote&apos;s own currency (yen without decimals):</p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li>Company branding and logo</li>
-          <li>Quote reference number and date</li>
-          <li>Tour details and itinerary summary</li>
-          <li>Pricing table with rate sheet</li>
-          <li>Single supplement information</li>
-          <li>Terms and conditions</li>
+          <li><strong>Subtotal</strong>: the cost of the services.</li>
+          <li><strong>Margin (x%)</strong>: the margin on that cost.</li>
+          <li><strong>Tour leader cost</strong>, when a tour leader is included.</li>
+          <li><strong>Season premium</strong>: the season&apos;s percentage on top, when the travel date falls in one of your seasons.</li>
+          <li><strong>Selling price</strong>: what the partner pays, with the figures above inside it; and the price per person.</li>
+          <li><strong>Single supplement</strong>, when there is one.</li>
+        </ul>
+        <p className="text-gray-600 mt-3 mb-2">In the side panel:</p>
+        <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li><strong>Client details</strong> and <strong>Partner</strong>.</li>
+          <li>
+            <strong>Update status</strong>: Draft, Sent, Accepted, Rejected. An offer whose valid-until date has passed
+            shows as <strong>Expired</strong> and cannot be accepted until you move the date on.
+          </li>
+          <li>
+            <strong>Convert to itinerary</strong>, once accepted. A template quote becomes a new itinerary dated from the
+            travel date (you are asked for a first day if it has none); its service lines add up, with its season
+            premium, to the quote&apos;s selling price. A quote made from an itinerary updates that itinerary&apos;s
+            price instead. Services with no rate are refused unless you confirm.
+          </li>
+          <li>
+            <strong>Convert to booking</strong>, once accepted (and still after converting). The booking total is the
+            quote&apos;s selling price in its currency; the deposit percentage starts from Settings &rsaquo; Payment terms.
+          </li>
+          <li><strong>Valid until</strong>, which you can change until the quote is converted or booked.</li>
+          <li>
+            <Link href="/docs/quote-revisions" className="text-primary-600 hover:underline">Revision history</Link>: every
+            change, compare with the current version, and revert (managers and above).
+          </li>
         </ul>
         <Tip>
-          <strong>Japanese Support:</strong> The PDF generator supports Japanese text, so quotes for Japanese partners will render correctly with proper fonts.
+          Once a quote is converted or a booking is made from it, it is the record of what was sold. Its price, status,
+          client details and validity no longer change, and it cannot be deleted. Its notes can still be edited.
         </Tip>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">The PDF</h2>
+        <p className="text-gray-600">
+          In the language you are using the app in, on your company letterhead. It shows the services and their
+          quantities, the total and the price per person (never cost or margin), the tour leader, the single supplement,
+          the notes and terms, and your payment rule (deposit percentage and when the balance is due, from Settings). A
+          quote with unpriced services asks before it makes the PDF.
+        </p>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>You cannot change a quote&apos;s price, party or travel date here. Price it again in the calculator and save a new quote.</li>
+          <li>No quote is set to Expired by a schedule. An open offer simply reads as Expired once its date has passed.</li>
+          <li>Search covers only the newest 100 quotes loaded; the counts cover all of them.</li>
+          <li>There is no tax or VAT line. The selling price is shown as the total.</li>
+          <li>A quote cannot be sent by email from this page; download the PDF and send it yourself.</li>
+        </ul>
       </section>
     </div>
   )
