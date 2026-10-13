@@ -11,6 +11,7 @@ import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
 import { getOrgDefaultMargin } from '@/lib/org-default-margin'
 import { quoteMarginPercent } from '@/lib/b2b/partner-margin'
+import { belowMinPaxMessage } from '@/lib/tours/min-pax'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
 import { parseOptionalSelection, isOptionalSelected } from '@/lib/b2b/optional-selection'
@@ -533,6 +534,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Variation not found' }, { status: 404 })
       }
       variation = varRow
+      // A variation sold from 4 travellers was priced for 1 without a word —
+      // its per-person costs spread over fewer people than it is ever run for.
+      const belowMin = belowMinPaxMessage(varRow.min_pax, effectiveTotalPax)
+      if (belowMin) return NextResponse.json({ error: belowMin }, { status: 400 })
     } else {
       // Template-direct: synthesize the variation shape the rest of this route
       // expects. No services row exists, so the auto-pricing fallback below is

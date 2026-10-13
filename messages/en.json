@@ -6925,7 +6925,13 @@
       "guideLanguage": "Guide language",
       "noRate": "No rate",
       "included": "Included",
-      "priceIncomplete": "{count, plural, one {# service has} other {# services have}} no rate — this price is incomplete. See the breakdown."
+      "priceIncomplete": "{count, plural, one {# service has} other {# services have}} no rate — this price is incomplete. See the breakdown.",
+      "priceIncompleteAskManager": "{count, plural, one {# service has} other {# services have}} no rate — this price is incomplete. Ask a manager to add the missing rates.",
+      "netCost": "Net cost",
+      "marginLine": "Margin ({percent}%)",
+      "sellingPriceNote": "Selling price, at the company's default margin",
+      "withdrawn": "This tour is no longer offered. It has been withdrawn from the catalogue.",
+      "quoteThisTour": "Quote this tour"
     }
   },
   "b2bQuotes": {

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
+import { guardAiRate } from '@/lib/rate-limit/ai-limit'
+import { findDefaultVariation, isWithdrawn } from '@/lib/tours/default-variation'
 import {
   translateFields,
   TOUR_TEMPLATE_TRANSLATION_FIELDS,
-  TOUR_VARIATION_TRANSLATION_FIELDS,
-  VARIATION_DAILY_ITINERARY_TRANSLATION_FIELDS
+  TOUR_VARIATION_TRANSLATION_FIELDS
 } from '@/lib/translation-utils'
 import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
 import type { Language } from '@/types/multilingual'
@@ -18,64 +19,47 @@ const supabase = createClient(
 // Resolve code to its target. A programme without variations is still a valid
 // translation target — the imported A.T.S catalogue is variation-less and its
 // content lives at the template level (see ../route.ts resolveTarget).
-// Within the caller's company only.
+// Within the caller's company only, and the same variation the tour page
+// opens on (lib/tours/default-variation): active only, the company's default
+// tier first. A withdrawn variation or tour is not translated.
+const VARIATION_COLS = 'id, variation_code, variation_name, template_id, inclusions, exclusions, optional_extras, tier'
 async function resolveTarget(code: string, orgId: string) {
   const { data: varByCode } = await supabase
     .from('tour_variations')
-    .select('id, variation_code, variation_name, template_id, inclusions, exclusions, optional_extras')
+    .select(`${VARIATION_COLS}, is_active, tour_templates (is_active)`)
     .eq('org_id', orgId)
     .eq('variation_code', code)
-    .single()
+    .maybeSingle()
 
-  if (varByCode) return { template_id: varByCode.template_id as string, variation: varByCode }
+  if (varByCode) {
+    if (isWithdrawn(varByCode) || isWithdrawn((varByCode as any).tour_templates)) return 'withdrawn' as const
+    return { template_id: varByCode.template_id as string, variation: varByCode }
+  }
 
   const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)
   const { data: template } = await supabase
     .from('tour_templates')
-    .select('id')
+    .select('id, is_active')
     .eq('org_id', orgId)
     .eq(isUUID ? 'id' : 'template_code', code)
-    .single()
+    .maybeSingle()
 
   if (!template) return null
+  if (isWithdrawn(template)) return 'withdrawn' as const
 
-  const { data: variation } = await supabase
-    .from('tour_variations')
-    .select('id, variation_code, variation_name, template_id, inclusions, exclusions, optional_extras')
-    .eq('org_id', orgId)
-    .eq('template_id', template.id)
-    .order('tier', { ascending: true })
-    .limit(1)
-    .single()
-
+  const variation = await findDefaultVariation<any>(supabase, orgId, template.id, VARIATION_COLS)
   return { template_id: template.id as string, variation: variation ?? null }
 }
 
-// Helper to translate daily itinerary items
-async function translateDailyItinerary(
-  itinerary: Array<{ day_number: number; day_title: string; day_description: string; city?: string; overnight_city?: string }>,
-  sourceLanguage: Language,
-  targetLanguage: Language
-) {
-  if (!itinerary || itinerary.length === 0) return []
-
-  const translatedDays = []
-  for (const day of itinerary) {
-    const translated = await translateFields(
-      day,
-      VARIATION_DAILY_ITINERARY_TRANSLATION_FIELDS,
-      sourceLanguage,
-      targetLanguage
-    )
-    translatedDays.push({
-      ...day,
-      day_title: translated.day_title || day.day_title,
-      day_description: translated.day_description || day.day_description,
-      city: translated.city || day.city,
-      overnight_city: translated.overnight_city || day.overnight_city
-    })
-  }
-  return translatedDays
+/** A failed version insert is the whole job failing — it used to be logged
+ *  and the route answered success, so the page said "Translation completed"
+ *  with no version saved. */
+export function versionInsertFailed(error: { message?: string } | null | undefined): NextResponse | null {
+  if (!error) return null
+  return NextResponse.json(
+    { success: false, error: `Could not save the translated version: ${error.message || 'unknown error'}` },
+    { status: 500 }
+  )
 }
 
 // POST - Copy and translate tour content to target language
@@ -86,6 +70,13 @@ export async function POST(
   try {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
+    // Writes catalogue content (admin/manager, as RLS has it for the version
+    // tables — this service-role client bypasses RLS) and spends AI calls, so
+    // it shares the per-user AI budget.
+    const denied = await requireRole(['admin', 'manager'])
+    if (denied) return denied
+    const limited = await guardAiRate()
+    if (limited) return limited
     const { code } = await params
     const body = await request.json()
     const { targetLanguage } = body
@@ -99,6 +90,12 @@ export async function POST(
     }
 
     const target = await resolveTarget(code, orgId)
+    if (target === 'withdrawn') {
+      return NextResponse.json(
+        { success: false, withdrawn: true, error: 'This tour is no longer offered' },
+        { status: 410 }
+      )
+    }
     if (!target) {
       return NextResponse.json(
         { success: false, error: 'Tour not found' },
@@ -111,7 +108,6 @@ export async function POST(
     const results: {
       variationVersion?: unknown
       templateVersion?: unknown
-      translatedDailyItinerary?: unknown[]
     } = {}
 
     // ===== VARIATION VERSION ===== (only when the programme has one)
@@ -163,11 +159,10 @@ export async function POST(
         .select()
         .single()
 
-      if (varError) {
-        console.error('Error creating variation version:', varError)
-      } else {
-        results.variationVersion = newVarVersion
-      }
+      if (varError) console.error('Error creating variation version:', varError)
+      const failed = versionInsertFailed(varError)
+      if (failed) return failed
+      results.variationVersion = newVarVersion
     }
 
     }
@@ -228,53 +223,16 @@ export async function POST(
           .select()
           .single()
 
-        if (tmpError) {
-          console.error('Error creating template version:', tmpError)
-        } else {
-          results.templateVersion = newTmpVersion
-        }
+        if (tmpError) console.error('Error creating template version:', tmpError)
+        const failed = versionInsertFailed(tmpError)
+        if (failed) return failed
+        results.templateVersion = newTmpVersion
       }
     }
 
-    // ===== DAILY ITINERARY =====
-    // Variation itinerary when one exists; otherwise the template's own days
-    // (imported programmes keep their day-by-day in tour_templates.itinerary).
-    let dailyItinerary: any[] | null = null
-    if (variation) {
-      const { data } = await supabase
-        .from('variation_daily_itinerary')
-        .select('*')
-        .eq('variation_id', variation.id)
-        .order('day_number', { ascending: true })
-      dailyItinerary = data
-    } else {
-      const { data: tpl } = await supabase
-        .from('tour_templates')
-        .select('itinerary')
-        .eq('org_id', orgId)
-        .eq('id', target.template_id)
-        .single()
-      const days = Array.isArray(tpl?.itinerary) ? tpl!.itinerary : []
-      dailyItinerary = days.map((day: any) => ({
-        day_number: day.day,
-        day_title: day.title,
-        day_description: day.description,
-        city: day.city,
-        overnight_city: day.overnight_city
-      }))
-    }
-
-    if (dailyItinerary && dailyItinerary.length > 0) {
-      // Note: Daily itinerary doesn't have a separate versions table in the current schema
-      // The translations are stored in the template's itinerary JSONB field
-      // For now, we'll translate and return the content for the frontend to display
-      const translatedDays = await translateDailyItinerary(
-        dailyItinerary,
-        sourceLanguage,
-        targetLanguage as Language
-      )
-      results.translatedDailyItinerary = translatedDays
-    }
+    // The Daily Itinerary is not translated: there is no versions table for
+    // it, and nothing stored or showed the translated days — one paid AI call
+    // per day, thrown away (the page shows the days in the base language).
 
     return NextResponse.json({
       success: true,
