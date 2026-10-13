@@ -41,9 +41,12 @@ const FIELD_GROUPS: Record<RateSeasonEntity, Array<{ suffix: 'eur' | 'non_eur'; 
   // reads (single/double/triple/suite per person per night). The two virtual
   // fields below convert on the way in and out (operator decision,
   // 2026-09-02: "align it with hotels, keep it per night").
+  // No Suite box: no pricing path ever read a period's suite price — a suite
+  // is priced as its own row with Cabin Type = Suite — so the box took a
+  // number that went nowhere (audit 2026-12).
   cruise: [
-    { suffix: 'eur', fields: ['double_eur', 'single_supp_eur', 'triple_red_eur', 'suite_eur'] },
-    { suffix: 'non_eur', fields: ['double_non_eur', 'single_supp_non_eur', 'triple_red_non_eur', 'suite_non_eur'] },
+    { suffix: 'eur', fields: ['double_eur', 'single_supp_eur', 'triple_red_eur'] },
+    { suffix: 'non_eur', fields: ['double_non_eur', 'single_supp_non_eur', 'triple_red_non_eur'] },
   ],
   // ONE fare and one tax — no passport split. "A seat costs what a seat
   // costs; the EU/non-EU split is real only for hotels and cruises"

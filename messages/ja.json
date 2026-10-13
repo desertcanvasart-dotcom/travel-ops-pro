@@ -4563,6 +4563,7 @@
       "duplicate": "複製",
       "guideFare": "ガイド運賃（スルーガイド）",
       "guideFareHint": "空欄＝お客様と同運賃、0＝無料。",
+      "bulkDeletePartial": "{ok}件を削除しました。{failed}件は削除できませんでした：{reason}",
       "pricingFlat": "グループ単位",
       "pricingPerPerson": "1名あたり",
       "pricingPerUnit": "ユニット単位",
@@ -5051,7 +5052,8 @@
         "budget": "バジェット",
         "standard": "スタンダード",
         "deluxe": "デラックス",
-        "luxury": "ラグジュアリー"
+        "luxury": "ラグジュアリー",
+        "none": "ティア未設定"
       },
       "boardTypes": {
         "roomOnly": "素泊まり",
@@ -5699,7 +5701,7 @@
         "arrivalTime": "到着時刻",
         "pricing": "料金設定",
         "onewayRate": "片道料金",
-        "roundtripRate": "往復料金",
+        "roundtripRate": "往復料金（参考のみ・価格計算には使用しません）",
         "validityPeriod": "有効期間",
         "validFrom": "有効開始日",
         "validTo": "有効終了日",

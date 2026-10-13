@@ -3,6 +3,10 @@ import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
+import { ownJoinedSupplier } from '@/lib/rates/joined-supplier'
+import { rateUsage, rateInUseMessage } from '@/lib/rates/rate-in-use'
+import { isForeignKeyViolation } from '@/lib/rates/accommodation-duplicates'
 
 // Actor-attributed service-role client (lib/supabase-actor): rate-table
 // writes from here reach fn_rate_audit_trigger, and without the actor
@@ -25,7 +29,7 @@ export async function GET(
       .from('accommodation_rates')
       .select(`
         *,
-        supplier:supplier_id (id, name, city, contact_phone, contact_email, star_rating, tier, is_preferred)
+        supplier:supplier_id (id, name, city, contact_phone, contact_email, star_rating, tier, is_preferred, org_id)
       `)
       .eq('org_id', orgId)
       .eq('id', id)
@@ -33,7 +37,8 @@ export async function GET(
 
     if (error) throw error
 
-    return NextResponse.json({ success: true, data })
+    // Another company's supplier on the row reads as none (lib/rates/joined-supplier).
+    return NextResponse.json({ success: true, data: ownJoinedSupplier([data], orgId)[0] })
   } catch (error: any) {
     console.error('Error fetching accommodation rate:', error)
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -106,7 +111,15 @@ export async function PUT(
     if (body.rate_valid_from !== undefined) updateData.rate_valid_from = body.rate_valid_from || null
     if (body.rate_valid_to !== undefined) updateData.rate_valid_to = body.rate_valid_to || null
     if (body.tier !== undefined) updateData.tier = body.tier
-    if (body.supplier_id !== undefined) updateData.supplier_id = body.supplier_id || null
+    // Only one of the caller's company's suppliers — another company's id is
+    // refused (400), never stored.
+    if (body.supplier_id !== undefined) {
+      const supplierCheck = await validateAndResolveSupplierFields({ supplier_id: body.supplier_id }, supabaseAdmin)
+      if (!supplierCheck.ok) {
+        return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+      }
+      updateData.supplier_id = supplierCheck.supplier_id
+    }
     if (body.supplier_name !== undefined) updateData.supplier_name = body.supplier_name || null
     if (body.notes !== undefined) updateData.notes = body.notes || null
     if (body.is_active !== undefined) updateData.is_active = body.is_active
@@ -116,12 +129,12 @@ export async function PUT(
       .update(updateData)
       .eq('org_id', orgId)
       .eq('id', id)
-      .select(`*, supplier:supplier_id (id, name, city)`)
+      .select(`*, supplier:supplier_id (id, name, city, org_id)`)
       .single()
 
     if (error) throw error
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data: ownJoinedSupplier([data], orgId)[0] })
   } catch (error: any) {
     console.error('Error updating accommodation rate:', error)
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -138,12 +151,19 @@ export async function DELETE(
     const { id } = await params
     if (!(await rowInOrg(supabaseAdmin, 'accommodation_rates', id, orgId))) return notFoundInOrg('Rate')
 
+    // The same guard as Rates → Hotels (lib/rates/rate-in-use).
+    const inUse = rateInUseMessage(await rateUsage(supabaseAdmin, 'accommodation_rates', id, orgId))
+    if (inUse) return NextResponse.json({ success: false, error: inUse }, { status: 409 })
+
     const { error } = await supabaseAdmin
       .from('accommodation_rates')
       .delete()
       .eq('org_id', orgId)
       .eq('id', id)
 
+    if (isForeignKeyViolation(error)) {
+      return NextResponse.json({ success: false, error: 'This rate is still used elsewhere. Switch it off (untick Active) instead of deleting it.' }, { status: 409 })
+    }
     if (error) throw error
 
     return NextResponse.json({ success: true })

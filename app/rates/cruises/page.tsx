@@ -774,9 +774,12 @@ export default function CruisesPage() {
   }
 
   const handleBulkDelete = async () => {
-    await bulkDeleteByIds([...bulk.selected], id => `/api/rates/cruises/${id}`)
+    const [ok, failed, reasons] = await bulkDeleteByIds([...bulk.selected], id => `/api/rates/cruises/${id}`)
     bulk.clear()
     fetchCruises()
+    // A rate still in use is refused with its reason (lib/rates/rate-in-use);
+    // the operator has to see it, not a selection that quietly stays put.
+    if (failed) showToast('error', tCommon('bulkDeletePartial', { ok, failed, reason: reasons.join(' · ') }))
   }
 
   return (

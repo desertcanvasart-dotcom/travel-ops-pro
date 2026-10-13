@@ -3884,6 +3884,7 @@
       "duplicate": "Duplicate",
       "guideFare": "Guide fare (throughout guide)",
       "guideFareHint": "Blank = the guide pays the customer rate; 0 = rides free.",
+      "bulkDeletePartial": "{ok} deleted, {failed} could not be deleted: {reason}",
       "pricingFlat": "Per group",
       "pricingPerPerson": "Per person",
       "pricingPerUnit": "Per unit",
@@ -4042,7 +4043,8 @@
         "budget": "Budget",
         "standard": "Standard",
         "deluxe": "Deluxe",
-        "luxury": "Luxury"
+        "luxury": "Luxury",
+        "none": "No tier"
       },
       "boardTypes": {
         "roomOnly": "Room Only",
@@ -4586,7 +4588,7 @@
         "arrivalTime": "Arrival Time",
         "pricing": "Pricing",
         "onewayRate": "One-way Rate",
-        "roundtripRate": "Roundtrip Rate",
+        "roundtripRate": "Roundtrip Rate (reference only, not used in pricing)",
         "validityPeriod": "Validity Period",
         "validFrom": "Valid From",
         "validTo": "Valid To",

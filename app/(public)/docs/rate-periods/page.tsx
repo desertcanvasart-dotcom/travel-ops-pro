@@ -19,22 +19,40 @@ export default function RatePeriodsPage() {
         five periods and five sets of rates.
       </p>
       <p className="text-gray-600 mb-8">
-        A rate can carry at most <strong>6 periods</strong>. Saving or importing more is refused
-        with a message; nothing is cut off silently. Rate pages are open to admins and managers
-        (owners always): <strong>Home › Suppliers &amp; Rates</strong>.
+        Hotels, Nile cruises and flights take the dated price periods the contract has, up to{' '}
+        <strong>six</strong> per rate. Saving or importing more is refused with a message; nothing
+        is cut off silently. Rate pages are open to admins and managers (owners always):{' '}
+        <strong>Suppliers &amp; Rates</strong>.
       </p>
 
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Adding periods</h2>
         <p className="text-gray-600 mb-3">
-          Open <strong>Rates &rarr; Hotels</strong>, <strong>Rates &rarr; Nile Cruises</strong>{' '}
-          or <strong>Rates &rarr; Flights</strong>, edit a rate, and find <strong>Rate periods</strong>. Press <strong>Add period</strong>
-          for each dated block on the contract, then give it a name, a From and To date, and its
-          rates.
+          Open <strong>Suppliers &amp; Rates › Accommodation › Hotels</strong>,{' '}
+          <strong>Nile Cruises</strong> or <strong>Suppliers &amp; Rates › Transport &amp; Tickets › Flights</strong>,
+          edit a rate, and find <strong>Rate periods</strong>. Press <strong>Add period</strong>
+          for each dated block on the contract, then give it a season word and a name (both
+          optional), a From and a To date, and its rates. From and To are both included.
         </p>
-        <p className="text-gray-600">
+        <p className="text-gray-600 mb-3">
+          Each period has a block for travellers holding an EU passport and one for everyone else
+          (Japanese and all others): per person in a double, the single supplement and the triple
+          reduction, plus a price for each supplement the rate carries. All are per person per
+          night.
+        </p>
+        <p className="text-gray-600 mb-3">
+          <strong>Guide bed / night</strong> is the property&apos;s rate for a throughout guide
+          travelling with the group. Blank means not given: the bed is flagged as unpriced on the
+          quote. 0 means the supplier gives it free: it is priced as a 0 line.
+        </p>
+        <p className="text-gray-600 mb-3">
           Dates carry the year. A contract for 2026 does not silently price 2027 travel, because
           contracts are re-issued each year with the dates moved.
+        </p>
+        <p className="text-gray-600">
+          A seventh period, a period that ends before it starts, or a negative price is refused
+          when you save, with the reason. Removing every period and saving leaves the rate with no
+          periods and no price; the old Low, High and Peak season columns do not come back.
         </p>
         <ScreenshotPlaceholder caption="The rate periods editor with several dated periods on one hotel" />
       </section>
@@ -54,6 +72,19 @@ export default function RatePeriodsPage() {
           A night that no period covers has <strong>no price</strong>: it is reported as unpriced,
           never priced from another period. The first period&rsquo;s prices are also copied to the
           rate&rsquo;s base columns, for the few screens that show a single price with no date.
+        </p>
+        <p className="text-gray-600 mb-3">
+          A night that no period covers has <strong>no rate</strong>: it is an unpriced hole on the
+          quote, never priced at another period. A template priced with no travel date uses the
+          first period.
+        </p>
+        <p className="text-gray-600 mb-3">
+          <strong>Rate Card Validity</strong> (Valid From and Valid To, below the periods) says
+          when the rate sheet as a whole applies. When the engine picks a hotel or ship by itself,
+          it prefers a rate whose validity covers the travel date and which has a period covering
+          it, then one whose validity covers it, then the newest of the rest. So next
+          year&apos;s contract can be filed as a new rate while this year&apos;s still prices this
+          year&apos;s dates. A blank Valid From or Valid To is open on that side.
         </p>
         <Tip>
           The editor warns you about overlaps and about gaps no period covers. Neither stops you
@@ -150,10 +181,32 @@ export default function RatePeriodsPage() {
           so a rate arrives in two steps: create it with <strong>Import CSV</strong>, then price
           it with <strong>Import Periods</strong>.
         </p>
+        <p className="text-gray-600 mt-3">
+          The hotel sheet has a <strong>Tier</strong> column, because the engine picks a hotel by
+          city and tier. Write a tier from your vocabulary, by its key or its word; an unknown
+          tier is reported in the preview and the row is not imported. A blank Tier keeps the
+          tier a hotel already has, and gives a new hotel your default tier. A blank Property Type
+          keeps the current one, or is <em>hotel</em> for a new row. The hotel sheet also carries
+          the Rate Card Validity (Rate Valid From, Rate Valid To).
+        </p>
+        <p className="text-gray-600 mt-3">
+          The periods sheet refuses a property with more than six periods, a row that ends before
+          it starts, and a price that is not a number.
+        </p>
         <Tip>
           Sheets exported before this change still import. Their old season-price columns are
           simply ignored &mdash; the periods are what price your quotes.
         </Tip>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>It does not block overlapping periods or gaps between them; the editor only warns.</li>
+          <li>It does not price a night outside every period at the nearest period.</li>
+          <li>It does not drop an expired rate card from the automatic pick when it is the only rate there; it ranks it last.</li>
+          <li>A cruise period has no Suite price: a suite is priced as its own rate with Cabin Type Suite.</li>
+        </ul>
       </section>
 
       <section className="mb-10">

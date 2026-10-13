@@ -110,6 +110,83 @@ export default function ToursRatesPage() {
           <li>Save</li>
         </ol>
 
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">EU vs Non-EU Pricing</h3>
+        <p className="text-gray-600 mb-6">
+          Many rates have different prices for European passport holders and everyone else. Hotels
+          and Nile cruises carry both prices in every dated period. Sleeping trains and hotel
+          services carry one price for everybody.
+        </p>
+
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Accommodation: hotels, ships, sleeper trains and hotel assistants</h3>
+        <p className="text-gray-600 mb-3">
+          Menu: <strong>Suppliers &amp; Rates › Accommodation</strong>, then <strong>Hotels</strong>,{' '}
+          <strong>Nile Cruises</strong>, <strong>Sleeping Trains</strong> or <strong>Hotel Services</strong>.
+          Admins and managers see these screens (the owner always does). The Hotels, Nile Cruises and
+          Hotel Services data, including their spreadsheets, is for managers and above, reads included.
+          Agents can read sleeping-train rates, because the trip day editor&apos;s travel-leg picker lists
+          them; only managers can change them. Each company sees and prices only its own rates,
+          suppliers, hotels and ships: a supplier, hotel or ship of another company is refused on save.
+        </p>
+
+        <h4 className="font-medium text-gray-900 mt-4 mb-2">Hotels (&ldquo;Hotel Rates&rdquo;)</h4>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>Header: <strong>Hotel Companies</strong> (opens the hotel suppliers), the property spreadsheet, the periods spreadsheet, and <strong>Add Rate</strong>.</li>
+          <li>Cards: Total Rates, Active, Linked (rows with a supplier), Avg. PP double (all periods; one figure per currency, priced rows only) and Cities.</li>
+          <li>The form: hotel company (or &ldquo;No supplier / Direct booking&rdquo;), Service Code (made as <code>ACC-&lt;CITY&gt;-…</code> when blank), Hotel Name (one of that company&apos;s hotels, or a new one created under it on save; a hotel of another hotel company is never linked), City, Property type, Board basis, Rate currency, contacts, Tier, Rate periods, Rate Card Validity, Notes and Active.</li>
+          <li>All amounts are per person per night: the price in a double, the single supplement, and the triple reduction off the double.</li>
+          <li><strong>Duplicate</strong> (copy icon) opens a new rate pre-filled. It saves when the hotel name, city, tier, board basis, hotel company or Rate Card Validity differs from every existing rate; otherwise the save is refused and names that key.</li>
+          <li>A rate with no tier (from an old spreadsheet import) shows <strong>No tier</strong> and is never picked automatically until it is given one.</li>
+        </ul>
+
+        <h4 className="font-medium text-gray-900 mt-4 mb-2">How a hotel night is priced</h4>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>The night is priced at the period that contains its date. A date in no period is an unpriced hole. With no travel date the first period is used.</li>
+          <li>Automatic pick: active hotels in the city at the quoted tier. With a travel date, a rate whose <strong>Rate Card Validity</strong> covers the date and which has a period covering it comes first; then one whose validity covers it; then the rest. Within each group the newest wins. An expired rate card is used only when nothing else is there. A blank Valid From or Valid To is open on that side.</li>
+          <li>A hotel chosen on the programme day always wins, even at another tier or city, and the price line says so.</li>
+          <li>Throughout guide: the period&apos;s <strong>Guide bed / night</strong>. Blank means not given, and the bed is flagged as unpriced. 0 means the hotel gives it free, and it is priced as a 0 line.</li>
+        </ul>
+
+        <h4 className="font-medium text-gray-900 mt-4 mb-2">Nile Cruises (&ldquo;Cruise Rates&rdquo;)</h4>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>One row per ship, sailing and cabin type: Supplier, Ship (one of the supplier&apos;s ships, or a new one), Ship Category, Embarkation and Disembarkation City (the route name is made from them), Sailing days (empty = any day), Duration (Nights), Cabin Type, Tier, Preferred Cruise, Rate currency, Rate periods, Rate Card Validity, Cruise Code (made as <code>CRUISE-&lt;SHIP&gt;-&lt;N&gt;N-&lt;CAB&gt;</code> when blank), Sightseeing Included, Active and Notes.</li>
+          <li>Each period takes PP Dbl, Sgl Supp and Tpl Red per person per night, EU and non-EU, and the guide&apos;s bed (blank = unpriced, 0 = free). They are stored as cabin rates: single = double + supplement, triple = double − reduction (0 = no triple cabin). A suite is priced as its own row with Cabin Type Suite.</li>
+          <li>A second rate for the same ship, cabin type, route, nights, supplier and Rate Card Validity is refused and names that key. A Cruise Code already in use is refused with that reason.</li>
+          <li>Automatic pick: active ships at the tier, narrowed to the embarkation port when one matches. Sailings as long as the programme&apos;s cruise come first; within them, a rate card valid on the sailing date first, then Preferred, then newest. Cost: the double rate × nights per person; a single pays the single − double gap per night.</li>
+        </ul>
+
+        <h4 className="font-medium text-gray-900 mt-4 mb-2">Sleeping Trains (&ldquo;Sleeping Train Rates&rdquo;)</h4>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>Fields: Supplier (the operator name is taken from it), Train (one of the supplier&apos;s trains), Origin, Destination, Cabin Type (Half Twin or Single), One-Way Rate, Guide fare (blank = the guide pays the customer fare; 0 = free), Roundtrip Rate (reference only, not used in pricing), departure and arrival times, Season (a label only), Valid From and Valid To, Notes and Active.</li>
+          <li>Valid To may not be before Valid From. A rate prices only dates inside its window, both ends included.</li>
+          <li>One train is a Half Twin row and a Single row for the same route, supplier, train and validity. Sharing travellers pay the Half Twin fare as that night&apos;s bed; a solo traveller pays the Single gap; the throughout guide takes the Single (or its guide fare).</li>
+          <li>When more than one train serves the route on the date, the leg is a hole until the exact train is picked on the day.</li>
+          <li><strong>Show All</strong> lists switched-off rates too; the cards (Total Rates, Active, Avg. One-way per currency, Routes) count every rate.</li>
+        </ul>
+
+        <h4 className="font-medium text-gray-900 mt-4 mb-2">Hotel Services (&ldquo;Hotel Assistants&rdquo;)</h4>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>Fields: Supplier, Service Type (Porter, Check-in Assist, Check-out Assist, Full Service, Concierge), Hotel Category (Budget, Standard, Deluxe, Luxury, All), Rate Destination (blank = all destinations), Rate (one price for every passport; blank = not priced), Pricing basis (per group, per person, or per unit with people per unit), Rate currency, Description, Notes and Active.</li>
+          <li>A hotel check-in is charged as Check-in Assist, else Full Service. A check-out is charged as Check-out Assist, else Porter, else Full Service. Boarding and leaving a ship use the same check-in and check-out rates.</li>
+          <li>Which row: one for the hotel&apos;s city first, then one for all destinations (a row for another city never prices it). Then the quote&apos;s category: Budget, Standard or Luxury; a Deluxe quote reads Deluxe, then Standard. Then an All row. The oldest matching row wins a tie.</li>
+          <li>Concierge rows are never added automatically; pick them in the Pricing Grid, which lists every row with its destination.</li>
+        </ul>
+
+        <h4 className="font-medium text-gray-900 mt-4 mb-2">Deleting</h4>
+        <p className="text-gray-600 mb-3">
+          A hotel, ship, sleeper or hotel-service rate that a tour day, a programme day or a Pricing
+          Grid line still uses cannot be deleted: the delete is refused and says what uses it. Untick
+          <strong> Active</strong> instead. A bulk delete deletes the others and shows the reasons for
+          the ones it could not delete.
+        </p>
+
+        <h4 className="font-medium text-gray-900 mt-4 mb-2">What it does not do</h4>
+        <ul className="list-disc list-inside space-y-1 text-gray-700 mb-6">
+          <li>It does not stop you saving overlapping periods or gaps between periods; the editor only warns.</li>
+          <li>It does not price a sleeping train&apos;s round-trip fare or use its Season label.</li>
+          <li>It does not drop an expired hotel or ship rate card from the automatic pick when it is the only one; it only ranks it last.</li>
+          <li>The day editor&apos;s property list has no travel date, so it is not ranked by Rate Card Validity; the quote&apos;s automatic pick is.</li>
+        </ul>
+
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Importing rates from a spreadsheet</h3>
         <p className="text-gray-600 mb-3">
           Each rate page has <strong>Sample CSV</strong>, <strong>Export</strong> and{' '}

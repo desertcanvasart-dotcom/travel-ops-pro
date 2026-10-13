@@ -175,10 +175,11 @@ export default function SleepingTrainRatesContent() {
   // Fetch rates
   const fetchRates = async () => {
     try {
-      const params = new URLSearchParams()
-      if (!showInactive) params.append('active_only', 'true')
-
-      const response = await fetch(`/api/rates/sleeping-trains?${params}`)
+      // Every row, active or not: Show All / Active Only filters on the
+      // client (below). Asking the server for active rows only — on mount,
+      // with the toggle never refetching — hid every switched-off sleeper
+      // from this screen for good, and Total Rates always equalled Active.
+      const response = await fetch('/api/rates/sleeping-trains')
       const data = await response.json()
 
       if (data.success) {
@@ -426,9 +427,11 @@ export default function SleepingTrainRatesContent() {
   }
 
   const handleBulkDelete = async () => {
-    await bulkDeleteByIds([...bulk.selected], id => `/api/rates/sleeping-trains/${id}`)
+    const [ok, failed, reasons] = await bulkDeleteByIds([...bulk.selected], id => `/api/rates/sleeping-trains/${id}`)
     bulk.clear()
     fetchRates()
+    // A rate still in use is refused with its reason (lib/rates/rate-in-use).
+    if (failed) showNotification('error', tCommon('error'), tCommon('bulkDeletePartial', { ok, failed, reason: reasons.join(' · ') }))
   }
 
   return (

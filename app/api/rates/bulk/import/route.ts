@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
-import { RATE_TABLE_CONFIGS, validateImportData, isExampleRow, transportationConfigFor, vehicleColumnSpecsFor } from '@/lib/bulk-rate-service'
+import { RATE_TABLE_CONFIGS, validateImportData, isExampleRow, transportationConfigFor, vehicleColumnSpecsFor, resolveImportTier, accommodationImportFill } from '@/lib/bulk-rate-service'
 import { stripVehicleFields, vehiclesFromFlatRow } from '@/lib/rates/vehicle-bands'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
 import type { ImportResult, ValidationError } from '@/lib/bulk-rate-service'
@@ -204,6 +204,18 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Hotels: the Tier cell must be one of the agency's tiers (by key or
+    // word) — an unknown one is reported in the preview, not guessed.
+    const tierItems = table === 'accommodation_rates' ? await vocabularyItemsForCurrentOrg('tier') : []
+    if (table === 'accommodation_rates') {
+      parsedRows.forEach((row, idx) => {
+        const r = resolveImportTier(row.tier, tierItems)
+        if (r.ok) { if (r.tier) row.tier = r.tier; return }
+        supplierErrors.push({ row: sheetRowOf.get(row) ?? idx + 2, column: 'tier', message: r.error })
+        indicesToDemote.add(idx)
+      })
+    }
+
     if (supplierErrors.length > 0) {
       const demotedCount = indicesToDemote.size
       preview.errors = [...preview.errors, ...supplierErrors].slice(0, 100)
@@ -375,6 +387,7 @@ export async function POST(request: NextRequest) {
     }
 
     const hasValidity = VALIDITY_REQUIRED_TABLES.has(config.tableName)
+    const isHotels = config.tableName === 'accommodation_rates'
     for (let i = 0; i < dedupedRows.length; i += BATCH_SIZE) {
       const batch = dedupedRows.slice(i, i + BATCH_SIZE)
 
@@ -388,7 +401,7 @@ export async function POST(request: NextRequest) {
       if (keyValues.length > 0) {
         const { data: existing } = await supabase
           .from(config.tableName)
-          .select(hasValidity ? `${uniqueKeyColumn}, rate_valid_from, rate_valid_to` : uniqueKeyColumn)
+          .select(hasValidity ? `${uniqueKeyColumn}, rate_valid_from, rate_valid_to` : isHotels ? `${uniqueKeyColumn}, tier, property_type` : uniqueKeyColumn)
           .eq('org_id', orgId)
           .in(uniqueKeyColumn, keyValues)
 
@@ -410,6 +423,13 @@ export async function POST(request: NextRequest) {
           if (!row.rate_valid_from) row.rate_valid_from = kept?.rate_valid_from || todayIso()
           if (!row.rate_valid_to) row.rate_valid_to = kept?.rate_valid_to || OPEN_ENDED_VALID_TO
         }
+      }
+
+      // Hotels: a blank Tier / Property Type keeps the stored value; a new
+      // row gets the company's default tier and 'hotel' (bulk-rate-service).
+      if (isHotels) {
+        const ladder = tierItems.map(i => i.key)
+        for (const row of batch) accommodationImportFill(row, existingValidity.get(row[uniqueKeyColumn]) as { tier?: string | null; property_type?: string | null } | undefined, ladder)
       }
 
       // Split into inserts and updates — purely for counting; the upsert

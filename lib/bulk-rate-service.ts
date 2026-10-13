@@ -1,6 +1,6 @@
 import { SLEEPING_TRAIN_CABIN_VALUES } from '@/lib/rates/sleeping-train-cabins'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
-import { slugifyKey } from '@/lib/vocabulary'
+import { slugifyKey, defaultTierKey, resolveVocabularyKey } from '@/lib/vocabulary'
 import { PRESET_VEHICLE_KEYS, PRESET_VEHICLE_BANDS, vehicleKeyLabel } from '@/lib/rates/vehicle-bands'
 /**
  * Bulk Rate Import/Export Service
@@ -258,6 +258,11 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('property_name', 'Property Name', 'text', true),
       col('property_type', 'Property Type', 'text', false),
       col('city', 'City', 'text', false),
+      // The tier the engine picks the hotel at (hotelCandidates matches
+      // tier exactly). The sheet had none, so every hotel it created had
+      // tier NULL and was never picked. Blank = the row's current tier, or
+      // the company's default tier for a new row (accommodationImportFill).
+      col('tier', 'Tier', 'text', false),
       col('board_basis', 'Board Basis', 'text', false),
       // No season rate columns: a hotel prices from its dated period list
       // (the `seasons` JSONB), imported from the rate-periods sheet. This
@@ -962,4 +967,43 @@ export function getTableDisplayName(tableName: string): string {
  */
 export function getSupportedTables(): string[] {
   return Object.keys(RATE_TABLE_CONFIGS)
+}
+
+// ============================================
+// Hotels sheet: tier and property type
+// ============================================
+// A new hotel row needs both: `tier` decides whether the engine ever picks it,
+// and `property_type` is NOT NULL (a row without it failed its whole batch of
+// fifty). A blank cell must not blank an existing row either — a batch upsert
+// sends a missing cell as NULL — so the import fills blanks from the row as
+// stored, and only a NEW row gets the defaults.
+
+/** The tier cell as a vocabulary key, or an error naming the agency's tiers.
+ *  Blank is fine (filled later); an unknown word is refused, not guessed. */
+export function resolveImportTier(
+  value: unknown,
+  tierItems: ReadonlyArray<{ key: string; label: string }>
+): { ok: true; tier: string | null } | { ok: false; error: string } {
+  const raw = value == null ? '' : String(value).trim()
+  if (!raw) return { ok: true, tier: null }
+  if (tierItems.length === 0) return { ok: true, tier: slugifyKey(raw) }
+  const key = resolveVocabularyKey(tierItems, raw)
+  return key
+    ? { ok: true, tier: key }
+    : { ok: false, error: `"${raw}" is not one of your tiers (${tierItems.map(i => i.key).join(', ')})` }
+}
+
+/** Fill a hotel row's blank tier / property type before the upsert: the
+ *  stored row's own value, else the defaults a new rate gets on the form. */
+export function accommodationImportFill(
+  row: Record<string, unknown>,
+  kept: { tier?: string | null; property_type?: string | null } | undefined,
+  tierLadder: readonly string[]
+): void {
+  if (row.tier == null || row.tier === '') {
+    row.tier = kept?.tier || (tierLadder.length ? defaultTierKey(tierLadder) : 'standard')
+  }
+  if (row.property_type == null || row.property_type === '') {
+    row.property_type = kept?.property_type || 'hotel'
+  }
 }

@@ -7,6 +7,8 @@ import { createActorAdminClient } from '@/lib/supabase-actor'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { operatorNameForSupplier } from '@/lib/suppliers/operator-name'
 import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
+import { validityError } from '@/lib/rates/accommodation-payload'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
@@ -67,12 +69,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: SLEEPING_TRAIN_CABIN_ERROR }, { status: 400 })
     }
 
+    // The engine treats a window ending before it starts as expired on every
+    // date — an out-of-season hole that never goes away. Refused instead.
+    const badDates = validityError(body.rate_valid_from, body.rate_valid_to)
+    if (badDates) return NextResponse.json({ success: false, error: badDates }, { status: 400 })
+
+    // Only one of the caller's company's suppliers (lib/suppliers/
+    // validate-supplier-fields): another company's id is refused, not saved.
+    const supplierCheck = await validateAndResolveSupplierFields({ supplier_id: body.supplier_id }, supabaseAdmin)
+    if (!supplierCheck.ok) {
+      return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+    }
+    const supplierId = supplierCheck.supplier_id
+
     // Optional explicit link to one of the supplier's trains (Phase 3);
     // a stale id resolves to null, and null is omitted so an unmigrated
     // database still saves.
     const trainProp = await resolveRateProperty(supabaseAdmin, {
       propertyType: 'train',
-      supplierId: body.supplier_id || null,
+      supplierId,
       name: null,
       propertyId: body.property_id,
     })
@@ -90,8 +105,8 @@ export async function POST(request: NextRequest) {
       rate_valid_to: body.rate_valid_to || null,
       season: body.season || null,
       // The supplier IS the operator (lib/suppliers/operator-name.ts).
-      operator_name: await operatorNameForSupplier(supabaseAdmin, body.supplier_id, body.operator_name),
-      supplier_id: body.supplier_id || null,
+      operator_name: await operatorNameForSupplier(supabaseAdmin, supplierId, body.operator_name),
+      supplier_id: supplierId,
       ...(trainProp.property_id ? { property_id: trainProp.property_id } : {}),
       description: body.description || null,
       notes: body.notes || null,

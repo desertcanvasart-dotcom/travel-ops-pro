@@ -43,12 +43,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     // Write-through: rate rows that reference this ship display its name from
     // their own denormalized column (the engine, PDFs and CSV read it), so a
-    // rename must follow into them or the two drift apart.
+    // rename must follow into them or the two drift apart. This company's rows
+    // only: a rate row elsewhere carrying this id is not ours to rename.
     if ('name' in record && data.property_type === 'ship') {
-      await supabaseAdmin.from('nile_cruises').update({ ship_name: data.name }).eq('property_id', propertyId)
+      await supabaseAdmin.from('nile_cruises').update({ ship_name: data.name }).eq('property_id', propertyId).eq('org_id', orgId)
     }
     if ('name' in record && data.property_type === 'hotel') {
-      await supabaseAdmin.from('accommodation_rates').update({ property_name: data.name }).eq('property_id', propertyId)
+      await supabaseAdmin.from('accommodation_rates').update({ property_name: data.name }).eq('property_id', propertyId).eq('org_id', orgId)
     }
 
     return NextResponse.json({ success: true, data })
@@ -75,12 +76,13 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     // Refuse while rates still reference it: deleting the ship under priced
     // rows would strand them (property_id would null out and the link is lost
-    // silently). Deactivate instead, or delete the rates first.
+    // silently). Deactivate instead, or delete the rates first. Only this
+    // company's rates count — another company's row must not block our delete.
     const counts = await Promise.all([
-      supabaseAdmin.from('nile_cruises').select('id', { count: 'exact', head: true }).eq('property_id', propertyId),
-      supabaseAdmin.from('accommodation_rates').select('id', { count: 'exact', head: true }).eq('property_id', propertyId),
-      supabaseAdmin.from('train_rates').select('id', { count: 'exact', head: true }).eq('property_id', propertyId),
-      supabaseAdmin.from('sleeping_train_rates').select('id', { count: 'exact', head: true }).eq('property_id', propertyId),
+      supabaseAdmin.from('nile_cruises').select('id', { count: 'exact', head: true }).eq('property_id', propertyId).eq('org_id', orgId),
+      supabaseAdmin.from('accommodation_rates').select('id', { count: 'exact', head: true }).eq('property_id', propertyId).eq('org_id', orgId),
+      supabaseAdmin.from('train_rates').select('id', { count: 'exact', head: true }).eq('property_id', propertyId).eq('org_id', orgId),
+      supabaseAdmin.from('sleeping_train_rates').select('id', { count: 'exact', head: true }).eq('property_id', propertyId).eq('org_id', orgId),
     ])
     const inUse = counts.reduce((n, c) => n + (c.count ?? 0), 0)
     if (inUse > 0) {
