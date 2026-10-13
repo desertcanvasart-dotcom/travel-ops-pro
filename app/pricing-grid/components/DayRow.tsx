@@ -6,7 +6,7 @@ import type { GridDay, GridConfig, AllRates, SlotValue, DayCalc, SelectedItem, D
 import { GROUP_SLOTS, PP_SLOTS, DAY_TYPES, DAY_TYPE_LABELS, DEFAULT_DAY_TYPE, DAY_TYPE_DEFAULTS } from '../types'
 import { calculateDay, convertAmount } from '../lib/calculator'
 import SlotRow from './SlotRow'
-import { currencySymbol } from '@/lib/currency-totals'
+import { shownSymbol } from '../lib/display-fx'
 
 interface DayRowProps {
   day: GridDay
@@ -27,7 +27,7 @@ const APPLY_TO_ALL_SLOTS = new Set(['water'])
 export default function DayRow({ day, allDays, config, rates, onToggleExpand, onUpdateSlot, onUpdateDay, onRemoveDay, onApplyToAllDays }: DayRowProps) {
   const calc: DayCalc = calculateDay(day, config)
   const cv = (n: number) => convertAmount(n, config.exchangeRate)
-  const sym = currencySymbol(config.currency)
+  const sym = shownSymbol(config)
 
   // Day-type + component override panel — collapsed by default to keep the
   // day editor tight; operators who care about the rich completeness gate

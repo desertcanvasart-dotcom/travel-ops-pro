@@ -642,6 +642,12 @@ export async function POST(request: NextRequest) {
     const tieredIdFor = (row: any, paxNum: number): string =>
       `${row.id}__${vehicleRateForPax(row, paxNum)?.key ?? 'vehicle'}`
 
+    // The group the vehicles are sized for: the travellers the text names
+    // (the page takes the same figure as the grid's pax), else the grid's own.
+    // Sizing for the pax SENT put "we are 8" in a sedan for 2.
+    const metaPax = Math.floor(Number(parsed.metadata?.pax))
+    const groupSize = metaPax > 0 ? metaPax : (Number(pax) || 2)
+
     // 6. Post-process: fill obvious gaps the AI missed (deterministic rules)
     const totalDays = parsed.days?.length || 0
 
@@ -747,7 +753,7 @@ export async function POST(request: NextRequest) {
         const routes = allTransportRoutes
         const dayTourVehicles = rawRates.transportRates?.filter((t: any) => t.service_type === 'day_tour') || []
         const routeIds: string[] = [...(Array.isArray(slots.route) ? slots.route : [])]
-        const paxNum = pax || 2
+        const paxNum = groupSize
         const cityLower = day.city?.toLowerCase()?.trim()
         const prevDay = idx > 0 ? parsed.days[idx - 1] : null
         const prevCity = prevDay?.city?.toLowerCase()?.trim() || ''
@@ -1143,7 +1149,7 @@ export async function POST(request: NextRequest) {
                 return rc === depCity || rc.includes(depCity) || depCity.includes(rc)
               })
               if (depTransfer) {
-                const tieredId = tieredIdFor(depTransfer, pax || 2)
+                const tieredId = tieredIdFor(depTransfer, groupSize)
                 const currentRoutes = Array.isArray(slots.route) ? slots.route : []
                 if (!currentRoutes.includes(tieredId)) {
                   slots.route = [...currentRoutes, tieredId]
@@ -1155,7 +1161,7 @@ export async function POST(request: NextRequest) {
 
           if (pkg) {
             const existingRoutes = Array.isArray(slots.route) ? slots.route : []
-            const pkgId = tieredIdFor(pkg, pax || 2)
+            const pkgId = tieredIdFor(pkg, groupSize)
             if (!existingRoutes.includes(pkgId)) {
               slots.route = [...existingRoutes, pkgId]
             }
@@ -1230,6 +1236,10 @@ export async function POST(request: NextRequest) {
 // ENRICHMENT — resolve IDs to full rate objects
 // ============================================
 
+// The prices here are only what the parse reports back; the page rebuilds
+// every picked item from the rates list by its id (hydrate-items.ts), and the
+// save from the stored rates. They follow the rates list's non-EU rules all
+// the same, so the two never disagree about a row.
 function buildFlatRateMap(rawRates: any): Map<string, any> {
   const map = new Map<string, any>()
 
@@ -1257,7 +1267,7 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
   }
   addAll(rawRates.guideRates, (r: any) => ({
     rateId: r.id, name: `${r.guide_language} ${r.guide_type || 'Guide'}`,
-    rateEur: toNum(r.base_rate_eur || r.rate_eur), rateNonEur: toNum(r.base_rate_eur || r.rate_eur),
+    rateEur: toNum(r.base_rate_eur || r.rate_eur), rateNonEur: toNum(r.base_rate_non_eur || r.rate_non_eur || r.base_rate_eur || r.rate_eur),
   }))
   addAll(rawRates.airportRates, (r: any) => ({
     rateId: r.id, name: `${r.airport_code} — ${r.direction}`,
@@ -1273,7 +1283,7 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
   }))
   addAll(rawRates.activityRates, (r: any) => ({
     rateId: r.id, name: r.activity_name,
-    rateEur: toNum(r.rate_eur || r.base_rate_eur), rateNonEur: toNum(r.rate_eur || r.base_rate_eur),
+    rateEur: toNum(r.rate_eur || r.base_rate_eur), rateNonEur: toNum(r.rate_non_eur || r.base_rate_non_eur || r.rate_eur || r.base_rate_eur),
   }))
   addAll(rawRates.accommodationRates, (r: any) => ({
     rateId: r.id, name: `${r.property_name} (${r.city})`,
@@ -1291,7 +1301,7 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
   }))
   addAll(rawRates.cruiseRates, (r: any) => ({
     rateId: r.id, name: `${r.ship_name} (${r.duration_nights}N, ${r.cabin_type})`,
-    rateEur: toNum(r.rate_double_eur || r.rate_low_double_eur), rateNonEur: toNum(r.rate_double_eur || r.rate_low_double_eur),
+    rateEur: toNum(r.rate_double_eur || r.rate_low_double_eur), rateNonEur: toNum(r.rate_double_non_eur || r.rate_low_double_non_eur || r.rate_double_eur || r.rate_low_double_eur),
   }))
 
   // Cruise transport packages
@@ -1301,7 +1311,7 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
   // Flights
   addAll(rawRates.flightRates, (r: any) => ({
     rateId: r.id, name: `${r.airline} ${r.route_from}→${r.route_to} (${r.cabin_class})`,
-    rateEur: toNum(r.base_rate_eur) + toNum(r.tax_eur), rateNonEur: toNum(r.base_rate_non_eur) + toNum(r.tax_non_eur),
+    rateEur: toNum(r.base_rate_eur) + toNum(r.tax_eur), rateNonEur: toNum(r.base_rate_non_eur || r.base_rate_eur) + toNum(r.tax_non_eur || r.tax_eur),
   }))
 
   // Water (hardcoded — not from DB)

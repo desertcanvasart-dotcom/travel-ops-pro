@@ -9,7 +9,8 @@ import { describe, it, expect } from 'vitest'
 // add-on (`<id>_supp`, the solo traveller's extra) keeps its own meaning.
 
 import { calculateDay, calculatePaxRange, buildTransportTierIndex } from '@/app/pricing-grid/lib/calculator'
-import { mapSlotsToServices, mapServicesToSlots } from '@/app/pricing-grid/lib/slot-mapping'
+import { mapServicesToSlots } from '@/app/pricing-grid/lib/slot-mapping'
+import { hydrateDays } from '@/app/pricing-grid/lib/hydrate-items'
 import { supplementItemId, isSupplementItem, isSingleSupplementItem } from '@/app/pricing-grid/types'
 import type { GridConfig, GridDay, SelectedItem, SlotValue } from '@/app/pricing-grid/types'
 
@@ -81,16 +82,19 @@ describe('pax-range sheet (calculatePaxRange)', () => {
 })
 
 describe('save and reload', () => {
-  it('maps a supplement to its own per-pax service line, and a reload brings it back under the hotel', () => {
-    const d = day([slot('accommodation', [HOTEL, VIEW])])
-    const services = mapSlotsToServices(d, cfg({ pax: 2 }))
-    const line = services.find(s => s.service_name === 'Nile View (supplement)')
-    expect(line).toMatchObject({ service_type: 'accommodation', quantity: 2, rate_eur: 20, total_cost: 40 })
-    expect(line!.notes).toContain('rate_id:h1#supp:view_nile')
-
+  it('a supplement saved as its own line comes back under the hotel with its key, priced from the rate', () => {
+    // The lines as the save writes them (app/api/pricing-grid/save).
+    const services = [
+      { service_type: 'accommodation', service_name: 'Hotel A', quantity: 2, rate_eur: 80, rate_non_eur: 90, total_cost: 160, notes: '__grid:slot:accommodation|rate_id:h1' },
+      { service_type: 'accommodation', service_name: 'Nile View (supplement)', quantity: 2, rate_eur: 20, rate_non_eur: 25, total_cost: 40, notes: '__grid:slot:accommodation|rate_id:h1#supp:view_nile' },
+    ]
     const slots = mapServicesToSlots(services.map((s, i) => ({ id: `svc${i}`, ...s })), 2)
     const acc = slots.find(s => s.slotId === 'accommodation')!
     expect(acc.selectedItems.map(i => i.rateId)).toEqual(['h1', 'h1#supp:view_nile'])
-    expect(calculateDay(day([acc]), cfg({ pax: 2 })).perPersonTotal).toBe(100)
+    // The reload carries no key; the rate list gives it back (hydrate-items).
+    const rates = { accommodation: [{ id: 'h1', name: 'Hotel A', rateEur: 80, rateNonEur: 90, supplements: [{ key: 'view_nile', name: 'Nile View', rateEur: 20, rateNonEur: 25 }] }] }
+    const [d] = hydrateDays([day([acc])], rates as never, 2).days
+    expect(d.slots[0].selectedItems[1]).toMatchObject({ supplementKey: 'view_nile', rateEur: 20 })
+    expect(calculateDay(d, cfg({ pax: 2 })).perPersonTotal).toBe(100)
   })
 })
