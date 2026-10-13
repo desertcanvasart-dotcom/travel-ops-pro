@@ -74,6 +74,19 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/b2b/calculator': ['admin', 'manager', 'agent'],
   '/intake/order': ['admin', 'manager', 'agent'],
   '/b2c/quotes': ['admin', 'manager'],
+  // Operate. Departures, Capacity, Documents and Guest Surveys are the
+  // managers' screens in the menu; with no entry here any member opened them
+  // by URL. Agents still open a single voucher, contract, invoice or receipt
+  // from a trip, booking or payment — those pages come BEFORE '/documents'
+  // (the first matching key wins).
+  '/departures': ['admin', 'manager'],
+  '/capacity': ['admin', 'manager'],
+  '/surveys': ['admin', 'manager'],
+  '/documents/supplier': ['admin', 'manager', 'agent'],
+  '/documents/contract': ['admin', 'manager', 'agent'],
+  '/documents/invoice': ['admin', 'manager', 'agent'],
+  '/documents/receipt': ['admin', 'manager', 'agent'],
+  '/documents': ['admin', 'manager'],
 
   // All authenticated users (including viewer)
   '/dashboard': ['admin', 'manager', 'agent', 'viewer'],
@@ -194,8 +207,12 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   // with a clear 403. Reads stay open: generation reads them for every role.
   { prefix: '/api/content-library', roles: ['admin', 'manager'] },
   { prefix: '/api/itinerary-resources', roles: ['admin', 'manager', 'agent'] },
-  { prefix: '/api/capacity', roles: ['admin', 'manager', 'agent'] },
-  { prefix: '/api/departures', roles: ['admin', 'manager', 'agent'] },
+  // Operate's Capacity and Departures are the managers' screens; agents used
+  // neither but could write both (and delete a whole range of capacity).
+  { prefix: '/api/capacity', roles: ['admin', 'manager'] },
+  { prefix: '/api/departures', roles: ['admin', 'manager'] },
+  { prefix: '/api/surveys', roles: ['admin', 'manager'] },
+  { prefix: '/api/followups', roles: ['admin', 'manager', 'agent'] },
 
   // ---- Outbound messaging (agent and above) ----
   // Anything that puts a message in front of a real customer, supplier or
@@ -257,6 +274,12 @@ const FINANCIAL_API_PREFIXES = [
   // B2C offers: cost, margin and the client's details. The B2C Quotes screen
   // is the only reader, and the menu shows it to managers and above.
   '/api/b2c',
+  // Operate's manager screens: departure prices, margins and internal notes,
+  // the capacity calendar, and every guest's survey answers (with the token
+  // that lets the answers be overwritten). No agent screen reads them.
+  '/api/departures',
+  '/api/capacity',
+  '/api/surveys',
 ]
 
 // Staff-only, READS INCLUDED (agent and above). Customer conversations are
@@ -306,6 +329,15 @@ const STAFF_ONLY_API_PREFIXES = [
   '/api/b2b',
   '/api/intake',
   '/api/extras-catalogue',
+  // Operate: tasks (assignee emails, booking checklists), follow-ups (client
+  // phone and email), supplier vouchers (costs, supplier contacts), the
+  // 日程表 / ops sheet, and payments (the invoice and receipt pages). Only
+  // writes were gated; a viewer could read them all.
+  '/api/tasks',
+  '/api/followups',
+  '/api/supplier-documents',
+  '/api/documents',
+  '/api/payments',
 ]
 
 export async function middleware(request: NextRequest, event: NextFetchEvent) {

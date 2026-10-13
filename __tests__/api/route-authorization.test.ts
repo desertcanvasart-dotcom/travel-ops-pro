@@ -406,6 +406,17 @@ describe('rate reads', () => {
     expect(staffOnly(path)).toBe(true)
   })
 
+  it.each(['/api/tasks', '/api/followups', '/api/supplier-documents/abc', '/api/documents/nittei', '/api/payments/abc'])(
+    '%s (Operate) is staff-readable, never viewer', path => {
+      expect(staffOnly(path)).toBe(true)
+    })
+
+  it.each(['/api/departures', '/api/departures/abc/holds', '/api/capacity', '/api/surveys'])(
+    '%s (Operate, managers’ screens) is manager-and-above, reads included', path => {
+      expect(managerOnly(path)).toBe(true)
+      expect(rolesFor(path)).toEqual(['admin', 'manager'])
+    })
+
   it('B2C offers are manager-and-above, reads included', () => {
     expect(managerOnly('/api/b2c/quotes')).toBe(true)
     expect(managerOnly('/api/b2c/quotes/abc')).toBe(true)
