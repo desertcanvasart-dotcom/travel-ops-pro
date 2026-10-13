@@ -187,7 +187,10 @@ describe('every document renders the marker, in both states', () => {
   })
 
   it('itinerary PDF, share page, portal, WhatsApp invoice and receipt state it (source)', () => {
-    expect(src('lib/pdf-generator.ts')).toContain('vatTextLines(vatOnLiveNet(itinerary, totalPrice, currency), totalPrice, currency, locale)')
+    // The trip's extras lines are left out of its VAT since the owner's
+    // 2026-10-13 rule, so the PDF now passes the trip with them added up.
+    expect(src('lib/pdf-generator.ts')).toContain('const tripVat = { ...itinerary, vat_excluded: tripVatExcluded(days) }')
+    expect(src('lib/pdf-generator.ts')).toContain('vatTextLines(vatOnLiveNet(tripVat, totalPrice, currency), totalPrice, currency, locale)')
     expect(src('app/share/[token]/page.tsx')).toContain('{vatMarker(vat, it.currency)}')
     expect(src('app/portal/[token]/page.tsx')).toMatch(/vatMarker\(vatOnLiveNet\(tripVat, payment\.total, payment\.currency\), payment\.currency, 'ja'\)/)
     expect(src('app/api/whatsapp/send-invoice/route.ts')).toContain('vatMarker(readInvoiceVat(invoice), invoice.currency)')

@@ -11,7 +11,7 @@ import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-number
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { currencyDecimals, roundToCurrency } from '@/lib/currency-totals'
 import { invoiceNet, invoiceTotals, resolveInvoiceVat } from '@/lib/invoices/totals'
-import { getOrgVatRate, parseVatApplied } from '@/lib/vat'
+import { getOrgVatRate, invoiceVatExcluded, loadTripVatExtras, parseVatApplied, tripVatExcludedShare } from '@/lib/vat'
 import { recordsInOrg } from '@/lib/org-refs'
 
 const supabaseAdmin = createClient(
@@ -134,7 +134,16 @@ export async function POST(request: NextRequest) {
 
     // Calculate amounts based on invoice type
     let totalAmount = body.total_amount || 0
-    let lineItems = body.line_items || []
+    // A line's `source` says the SERVER added it as insurance or an extra, and
+    // VAT leaves those out (lib/vat.ts) — so a caller's line never carries one.
+    let lineItems = Array.isArray(body.line_items)
+      ? body.line_items.map((l: Record<string, unknown>) => {
+          if (!l || typeof l !== 'object' || !('source' in l)) return l
+          const { source: _source, ...rest } = l
+          void _source
+          return rest
+        })
+      : []
     const depositPercent = body.deposit_percent || 10
     let fullTripCost = body.full_trip_cost || totalAmount // Store original trip cost
     // Every derived amount below is rounded to THIS currency's minor unit.
@@ -160,6 +169,11 @@ export async function POST(request: NextRequest) {
       vatApplied = resolveInvoiceVat(undefined, { parent: parentRow, itinerary: tripRow })
     }
     const vatRate = vatApplied ? await getOrgVatRate(supabaseAdmin, orgId) : 0
+    // No VAT on extras (owner, 2026-10-13): a trip whose lines include extras
+    // has that share of what this invoice bills for it left out of the base.
+    const tripShare = vatApplied && body.itinerary_id
+      ? tripVatExcludedShare(await loadTripVatExtras(supabaseAdmin, body.itinerary_id))
+      : 0
 
     // ---------- what the SERVER adds to this invoice ----------
     // Two kinds of money reach a trip's invoice without the caller sending
@@ -374,12 +388,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Subtotal + tax − discount must equal the total (see lib/invoices/totals).
-    // totalAmount is the NET here; the tax is VAT on it, added on top.
+    // totalAmount is the NET here; the tax is VAT on it, added on top — on all
+    // of it except the insurance premiums and extras added above and the
+    // trip's own extras share (owner, 2026-10-13: "No taxes over extras or
+    // insurance"). They are still billed; they are just not taxed.
     const { vat_applied: vatOnInvoice, ...totals } = invoiceTotals({
       invoiceType,
       netAmount: totalAmount,
       vatApplied,
       vatRate,
+      vatExcluded: invoiceVatExcluded({
+        net: roundToCurrency(totalAmount, currency),
+        additions: includeAdditions(invoiceType) ? additionsTotal : 0,
+        tripShare,
+        currency,
+      }),
       discountAmount: body.discount_amount,
       currency,
     })

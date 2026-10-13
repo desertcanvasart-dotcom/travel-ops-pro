@@ -1,6 +1,6 @@
 'use client'
 
-import { vatMarker, vatOnLiveNet } from '@/lib/vat'
+import { tripVatExcluded, vatMarker, vatOnLiveNet } from '@/lib/vat'
 import { VatToken } from '@/app/components/Vat'
 import { clientTotalOfDays, seasonSupplementOf, tripClientTotal } from '@/lib/itinerary-client-price'
 import { addDays } from '@/lib/payment-schedule'
@@ -253,6 +253,11 @@ export default function ViewItineraryPage() {
   const effectiveTotalCost = computedClientTotal > 0
     ? tripClientTotal(itinerary as never, days as never)
     : (Number(itinerary?.total_cost) || 0)
+  // The trip's VAT at its recorded rate, not on its extras lines (lib/vat.ts).
+  const tripVat = useMemo(
+    () => vatOnLiveNet(itinerary ? { ...itinerary, vat_excluded: tripVatExcluded(days as never) } : null, effectiveTotalCost, itinerary?.currency),
+    [itinerary, days, effectiveTotalCost]
+  )
   const [error, setError] = useState<string | null>(null)
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set([1]))
 
@@ -1538,7 +1543,7 @@ export default function ViewItineraryPage() {
         trip: splitTourCode(content.trip_name).title,
         dates,
         // The price and whether VAT is on it — never silent (lib/vat.ts).
-        price: `${formatMoney(effectiveTotalCost, itinerary.currency)} (${vatMarker(vatOnLiveNet(itinerary, effectiveTotalCost, itinerary.currency), itinerary.currency, lang === 'ja' ? 'ja' : 'en')})`,
+        price: `${formatMoney(effectiveTotalCost, itinerary.currency)} (${vatMarker(tripVat, itinerary.currency, lang === 'ja' ? 'ja' : 'en')})`,
         link: data.url,
         company: company?.name ?? '',
       })
@@ -2067,7 +2072,7 @@ export default function ViewItineraryPage() {
               </div>
               <p className="text-xl font-bold text-gray-900">{formatMoney(effectiveTotalCost, itinerary.currency)}</p>
               {/* VAT at the rate the trip recorded from its quote (lib/vat.ts). */}
-              <VatToken vat={vatOnLiveNet(itinerary, effectiveTotalCost, itinerary.currency)} currency={itinerary.currency} />
+              <VatToken vat={tripVat} currency={itinerary.currency} />
               <p className="text-xs text-gray-500">{tStage('daysTravellers', { days: itinerary.total_days, travellers: itinerary.num_adults + (itinerary.num_children || 0) + (itinerary.num_infants || 0) })}</p>
               {actualPnl && (
                 <dl className="pt-2 mt-2 border-t border-gray-100 text-xs grid grid-cols-2 gap-y-1">

@@ -8,7 +8,7 @@ import { loadSeasonWindows } from '@/lib/auto-pricing-service'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { currencySymbol } from '@/lib/currency-totals'
-import { getOrgVatRate, parseVatApplied, vatColumns, vatInsertColumns } from '@/lib/vat'
+import { getOrgVatRate, parseVatApplied, quoteVatExcluded, vatColumns, vatInsertColumns } from '@/lib/vat'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { quoteMarginPercent } from '@/lib/b2b/partner-margin'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
@@ -546,12 +546,14 @@ export async function POST(request: NextRequest) {
     validUntil.setDate(validUntil.getDate() + 30)
 
     // VAT on top of the net (lib/vat.ts): as asked, else as the trip carries
-    // it; the company's rate today, recorded on the quote.
+    // it; the company's rate today, recorded on the quote. Not on the trip's
+    // extras lines' share of the price (owner, 2026-10-13).
     const vat = vatColumns({
       applied: parseVatApplied(body.vat_applied) ?? itinerary.vat_applied === true,
       net: sellingPrice,
       rate: await getOrgVatRate(supabaseAdmin, orgId),
       currency: rateCurrency,
+      excluded: quoteVatExcluded({ services_snapshot: servicesSnapshot, margin_percent: effectiveMargin, season_uplift_percent: season?.upliftPercent ?? 0 }),
     })
 
     const { data: quote, error: quoteError } = await supabaseAdmin

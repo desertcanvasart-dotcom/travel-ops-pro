@@ -92,8 +92,8 @@ export default function TeamSettingsPage() {
           administrator (or the owner) can change it; anyone else can see it, but their save is refused.
         </p>
         <ul className="list-disc list-inside space-y-1 text-gray-700 mb-4">
-          <li>It is used when someone ticks <strong>Apply VAT</strong> on a B2B quote, a B2C offer or an invoice: VAT is added on top of the net price at this rate.</li>
-          <li>Each document records the rate and amount it was issued with. Changing the rate here affects only documents priced or issued afterwards.</li>
+          <li>It is used when someone ticks <strong>Apply VAT</strong> on a B2B quote, a B2C offer or an invoice: VAT is added on top of the net price at this rate, on everything except extras and insurance, which are billed without VAT.</li>
+          <li>Each document records the rate and amount it was issued with. Changing the rate here affects only documents priced or issued afterwards. Documents issued before extras and insurance were left out (13 October 2026) keep the VAT they recorded.</li>
           <li>Blank sets it back to 14. A value outside 0&ndash;100 is refused.</li>
         </ul>
 

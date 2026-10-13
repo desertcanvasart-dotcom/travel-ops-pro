@@ -97,8 +97,10 @@ export default function B2CQuotesPage() {
         </p>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
           <li>Tick <strong>Apply VAT (14%)</strong> in New offer, or on the offer page. It is off unless you tick it.</li>
-          <li>VAT is added on top of the selling price at your company&apos;s rate (Settings &rsaquo; Company Profile), rounded to the currency. The page and the message then also show the total including VAT.</li>
-          <li>The rate and amount are recorded on the offer. A re-price while VAT is on works it out again on the new price at the rate the offer recorded; a later change of the company rate does not touch it.</li>
+          <li>VAT is added on top of the selling price at your company&apos;s rate (Settings &rsaquo; Company Profile), rounded to the currency, but not on extras or insurance. An offer is priced from its trip&apos;s supplier cost, so the part left out is the trip&apos;s Extra lines&apos; share of that cost, applied to the price: VAT = (price &minus; price &times; extras cost &divide; trip cost) &times; rate. The page and the message then also show the total including VAT.</li>
+          <li>When something was left out, the VAT line says <strong>VAT 14% included: &lt;amount&gt; (extras and insurance not taxed)</strong> (in Japanese 「…（オプション・保険はVAT対象外）」).</li>
+          <li>The rate, the amount and the amount it was charged on are recorded on the offer. A re-price while VAT is on works it out again on the new price at the rate the offer recorded; a later change of the company rate does not touch it.</li>
+          <li>Offers made before extras were left out (13 October 2026) keep the VAT they recorded, on the whole price, until they are re-priced or VAT is switched again.</li>
           <li>A booked offer keeps its VAT, and booking it passes its VAT choice and rate to the trip.</li>
         </ul>
       </section>

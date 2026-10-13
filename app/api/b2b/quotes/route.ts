@@ -9,7 +9,7 @@ import { deleteQuote } from '@/lib/quotes/delete-quote'
 import { statusFilter, todayIso, withEffectiveStatus } from '@/lib/quotes/validity'
 import { normaliseMargin } from '@/lib/org-default-margin'
 import { formatMoney } from '@/lib/currency-totals'
-import { getOrgVatRate, parseVatApplied, vatColumns, vatInsertColumns } from '@/lib/vat'
+import { getOrgVatRate, parseVatApplied, quoteVatExcluded, vatColumns, vatInsertColumns } from '@/lib/vat'
 import { POST as priceWithEngine } from '@/app/api/b2b/calculate-price/route'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -262,11 +262,13 @@ export async function POST(request: NextRequest) {
     // VAT on top of the engine's net (lib/vat.ts): whether to charge it is the
     // operator's choice, the rate is the company's today, the amount is ours.
     // Recorded on the quote, so a later change of rate never re-prices it.
+    // Not on the catalogue extras' share of the price (owner, 2026-10-13).
     const vat = vatColumns({
       applied: parseVatApplied(body.vat_applied) === true,
       net: price.selling_price,
       rate: await getOrgVatRate(supabaseAdmin, orgId),
       currency,
+      excluded: quoteVatExcluded(price),
     })
 
     const validUntil = new Date()

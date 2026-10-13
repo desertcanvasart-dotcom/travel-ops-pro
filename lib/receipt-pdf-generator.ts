@@ -25,6 +25,8 @@ interface Invoice {
   vat_applied?: boolean
   tax_rate?: number | null
   tax_amount?: number | null
+  /** Set when the invoice left extras and insurance out of its VAT. */
+  vat_base?: number | null
 }
 
 /**

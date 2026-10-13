@@ -66,6 +66,13 @@ export default function ReceiptsPage() {
           half its VAT). For a payment recorded on a trip it is the VAT inside the amount at the trip&apos;s recorded
           rate. The receipt page, the PDF and the WhatsApp receipt all show it.
         </p>
+        <p className="text-gray-600 mt-3">
+          Extras and insurance carry no VAT. An invoice that left them out recorded less VAT, so its receipts carry
+          their share of that, and say <strong>VAT 14% included: &lt;amount&gt; (extras and insurance not taxed)</strong>.
+          For a trip payment, when the trip has Extra lines, only the taxed share of the payment bears VAT: the VAT is
+          the same proportion of the payment as the trip&apos;s VAT is of its total including VAT. Receipts for invoices
+          issued before 13 October 2026 take their share of the VAT those invoices recorded.
+        </p>
       </section>
 
       <section className="mb-10">

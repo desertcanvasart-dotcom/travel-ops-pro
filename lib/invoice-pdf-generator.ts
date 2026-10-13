@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf'
 import { formatMoney } from '@/lib/currency-totals'
-import { formatVatRate, readInvoiceVat } from '@/lib/vat'
+import { formatVatRate, readInvoiceVat, vatExcludesExtras, vatExclusionNote } from '@/lib/vat'
 
 interface LineItem {
   description: string
@@ -27,6 +27,8 @@ interface Invoice {
   tax_amount: number
   /** Whether tax_rate / tax_amount are VAT this invoice charges (lib/vat.ts). */
   vat_applied?: boolean
+  /** What the VAT was charged on, when extras and insurance were left out. */
+  vat_base?: number | null
   discount_amount: number
   total_amount: number
   currency: string
@@ -560,6 +562,14 @@ export function generateInvoicePDF(
     doc.text(`VAT ${formatVatRate(vat.vat_rate)}% included:`, totalsX, y)
     doc.setTextColor(...darkGray)
     doc.text(formatCurrency(vat.vat_amount, invoice.currency), totalsValueX, y, { align: 'right' })
+    // The premiums and extras on it are billed but not taxed: say so.
+    if (vatExcludesExtras(vat)) {
+      y += 4
+      doc.setFontSize(8)
+      doc.setTextColor(...mediumGray)
+      doc.text(vatExclusionNote('en').trim(), totalsX, y)
+      doc.setFontSize(10)
+    }
   } else {
     doc.text('VAT not applied', totalsX, y)
   }

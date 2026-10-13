@@ -36,6 +36,9 @@ interface Payment {
   /** The trip's VAT (lib/vat.ts): the amount paid includes it. */
   vat_applied?: boolean
   vat_rate?: number | null
+  /** The trip's extras (not taxed) and the client total they are part of. */
+  vat_excluded?: number
+  vat_net?: number
 }
 
 export default function InvoicePage() {
@@ -122,6 +125,8 @@ export default function InvoicePage() {
       vat_applied: vat.vat_applied,
       tax_rate: vat.vat_rate ?? 0,
       tax_amount: vat.vat_amount,
+      // Set when the trip's extras were left out, so the PDF says so.
+      vat_base: vat.vat_base ?? null,
       discount_amount: 0,
       total_amount: p.amount,
       currency: p.currency,

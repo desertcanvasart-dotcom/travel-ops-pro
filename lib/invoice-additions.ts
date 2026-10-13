@@ -30,6 +30,10 @@ export interface AdditionLine {
   quantity: number
   unit_price: number
   amount: number
+  /** What it is. Kept on the stored line because VAT is not charged on
+   *  insurance or extras (lib/vat.ts invoiceLinesVatExcluded), and switching
+   *  VAT on later must leave the same lines out. */
+  source: Addition['source']
 }
 
 /**
@@ -83,6 +87,7 @@ export function toLineItems(additions: Addition[], invoiceCurrency: string): Add
     quantity: quantityOf(a),
     unit_price: roundToCurrency(a.unit_price, invoiceCurrency),
     amount: amountOf(a, invoiceCurrency),
+    source: a.source,
   }))
 }
 

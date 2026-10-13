@@ -81,7 +81,8 @@ export default function TravellerPortalPage() {
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>Their trip, dates and party size</li>
           <li>What they have paid and what is still due, with the trip&apos;s VAT line under the trip price
-            (「VAT（14%）適用：…」 or 「VAT 不適用」, from the quote the trip was booked from)</li>
+            (「VAT（14%）適用：…」 or 「VAT 不適用」, from the quote the trip was booked from). Extras and insurance
+            carry no VAT; when the price includes extras the line adds 「（オプション・保険はVAT対象外）」</li>
           <li>The participation form &mdash; names in kanji, kana and roman letters, passport
             details, address, emergency contact</li>
           <li>Passport and document attachments &mdash; see{' '}
