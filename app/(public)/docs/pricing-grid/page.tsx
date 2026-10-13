@@ -77,7 +77,8 @@ export default function PricingGridPage() {
         </p>
         <ul className="list-disc list-inside space-y-1 text-gray-700 mb-3">
           <li><strong>Paid once for the group</strong> &mdash; Transport, Guide, Airport Services, Hotel Services, Tipping, Boat Rides, Other (Group).</li>
-          <li><strong>Paid per person</strong> &mdash; Accommodation, Entrance Fees, Flights, Experiences, Meals, Water, Nile Cruise, Other (PP).</li>
+          <li><strong>Paid per person</strong> &mdash; Accommodation, Entrance Fees, Flights, Experiences, Meals, Nile Cruise, Other (PP).</li>
+          <li><strong>Fixed costs</strong> &mdash; not a service you pick. The grid adds them itself on every sightseeing day (see below).</li>
         </ul>
         <p className="text-gray-600 mb-3">
           Airport services, hotel services, boat rides and experiences follow their own rate&rsquo;s basis instead:
@@ -90,8 +91,48 @@ export default function PricingGridPage() {
         </p>
         <p className="text-gray-600">
           Picking a hotel fills the day&rsquo;s meals from its board basis (lunch and dinner for BB, lunch for HB, none
-          for FB or AI), from the meal rates of the day&rsquo;s city. <strong>Water</strong> can be copied to every day.
+          for FB or AI), from the meal rates of the day&rsquo;s city.
         </p>
+      </section>
+
+      {/* Fixed costs */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Fixed costs</h2>
+        <p className="text-gray-600 mb-3">
+          The grid charges every <strong>active</strong> cost in Rates &rsaquo; Fixed Costs by itself, the same way automatic
+          pricing and the AI builders do. There is nothing to pick and no per-day choice (the old Water service is gone).
+          Each cost is its own named line, per person, on each <strong>sightseeing day</strong>, converted from the
+          cost&rsquo;s own currency into your rate currency. Water Bottle (capital letters ignored) is the water cost.
+        </p>
+        <ul className="list-disc list-inside space-y-2 text-gray-700 mb-3">
+          <li>
+            <strong>A sightseeing day</strong> is a day with a guide or an attraction picked: a guide (picked or typed, with the
+            Guide switch on), or anything in Entrance Fees, Experiences or Boat Rides. A day with only a hotel, meals,
+            transport, flights or tips is not charged, and the day type you set does not decide it. With the Guide switch
+            off, a day counts only if it has an attraction.
+          </li>
+          <li>
+            On a sightseeing day the day card shows a read-only <strong>Fixed costs</strong> row under its per-person services,
+            with each cost&rsquo;s name and amount per person. It is part of the day&rsquo;s per-person figure, the totals, the tour leader and
+            the pax table, like any per-person service.
+          </li>
+          <li>
+            With no active Water Bottle row, water is charged at a built-in 2.00 per person per day and an amber note says so.
+            Any other cost has no fallback. Daily Tips is never charged here (tips come from Tipping). A cost whose currency has no
+            exchange rate is <strong>not charged</strong> and the same note names it.
+          </li>
+          <li>
+            The amounts come from Rates &rsaquo; Fixed Costs when you open the grid and again when you save; a change there may take up to five
+            minutes to reach every server. Saving writes each cost as its own <em>supplies</em> line on each sightseeing day, so the saved
+            trip total includes them. Saving again replaces those lines, it does not add to them.
+          </li>
+          <li>
+            <strong>Prices on grid trips change compared with before.</strong> Water used to be a fixed EUR 0.50 you picked day by day; it is
+            now your Water Bottle rate (or 2.00 with no row), on every sightseeing day, and every other active fixed cost is added too. A trip loaded
+            from an earlier save or draft loses its old Water pick and any earlier fixed-cost lines; the automatic lines replace them, so
+            nothing is charged twice. Save it again to store the new price.
+          </li>
+        </ul>
       </section>
 
       {/* How totals are computed */}
@@ -107,7 +148,7 @@ export default function PricingGridPage() {
           <li>A typed amount in a service replaces its picks. Group amounts are paid once, per-person amounts &times; pax.</li>
           <li><strong>Total cost</strong> is the sum of all days. <strong>Selling total</strong> is total cost &times; (1 + markup), rounded once at the end (to whole yen for a yen company), plus the season premium.</li>
           <li><strong>Season premium</strong>: when the departure date falls in one of your seasons (Settings &rsaquo; Seasonal Premiums), its percentage is added on top of the selling total. A band shows &ldquo;Season +N% &middot; +amount &middot; on an ordinary date amount&rdquo;.</li>
-          <li><strong>Water</strong> is EUR 0.50 per person per day, converted into your rate currency. If there is no exchange rate for that, water has no price and its line says so.</li>
+          <li><strong>Fixed costs</strong> are added per person on every sightseeing day (see Fixed costs above), to the nearest cent of your rate currency (whole yen for a yen company).</li>
         </ul>
         <p className="text-gray-600">
           The header strip (<strong>Cost/PP</strong>, <strong>Total Cost</strong>, <strong>Margin (N%)</strong>, <strong>Sell/PP</strong>,{' '}
@@ -175,9 +216,9 @@ export default function PricingGridPage() {
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>It does not add VAT or any tax line. A flight&rsquo;s price is its fare plus its tax, and the markup is applied to both.</li>
           <li>It does not store the quote in the currency you were viewing; the itinerary is in the rate currency.</li>
-          <li>It does not guess a price: a new pick with no current rate, a date outside every rate period, or water without an exchange rate has no price until you fix it.</li>
+          <li>It does not guess a price: a new pick with no current rate, or a date outside every rate period has no price until you fix it.</li>
           <li>It does not re-price a line kept at its saved price when your rates change; it keeps that price until you pick a rate for it. A saved line whose price cannot be converted into your rate currency has no price.</li>
-          <li>It does not read Rates &rsaquo; Fixed Costs. Automatic pricing and the AI builders charge every active fixed cost per person for each sightseeing day; the grid&rsquo;s Water is its own fixed EUR 0.50, and any other fixed cost has to be added as an Other (PP) line by hand.</li>
+          <li>It does not let you skip a fixed cost on one day, or add one on a day without a guide or attraction. Change the day&rsquo;s picks, or the cost in Rates &rsaquo; Fixed Costs.</li>
           <li>It does not block a save when a day is missing a service; it saves a draft.</li>
           <li>A typed amount is taken as it is, in the rate currency.</li>
         </ul>

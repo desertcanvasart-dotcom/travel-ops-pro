@@ -232,7 +232,8 @@ export default function ToursRatesPage() {
             fallback: no row, no line; a cost whose currency has no exchange rate is not charged and
             the quote warns, naming it. Tips are set under Tipping, and a cost named Daily Tips is
             refused here. A second cost with the same name is refused. A change may take up to five
-            minutes to reach every server. The Pricing Grid does not read these costs.
+            minutes to reach every server. The Pricing Grid charges the same costs by itself on every
+            sightseeing day (a day with a guide or an attraction picked).
           </li>
           <li>
             <strong>Commission Rates</strong> (<code>/rates/commissions</code>): a rate from 0 to

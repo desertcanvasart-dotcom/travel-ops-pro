@@ -18,43 +18,47 @@ import { cruiseSailingLabel, sanitizeSailingDays } from '@/lib/rates/cruise-sail
 import { airportsFrom, flightRouteLabel, cityOfAirportKey } from '@/lib/rates/airports'
 import { flightGuideFare } from '@/lib/rates/ticket-guide-fare'
 import { supplementsForRow, supplementField } from '@/lib/rates/supplements'
-import { createRateNormalizer } from '@/lib/rates/rate-currency'
-import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
-import { getExchangeRate } from '@/lib/currency-service'
+import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
 import { roundToCurrency } from '@/lib/currency-totals'
 import { getOrgRateCurrency, type RateCurrency } from '@/lib/org-rate-currency'
 import { pricingBasisLabel, toPricingBasis } from '@/lib/pricing/pricing-basis'
 import { vehicleBands, vehicleKeyLabel } from '@/lib/rates/vehicle-bands'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
 import { tipGridOption } from '@/lib/tipping-utils'
-import type { AllRates, RateOption } from '@/app/pricing-grid/types'
+import type { AllRates, GridFixedCosts, RateOption } from '@/app/pricing-grid/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (table: string) => any }
 
-/** Bottled water is no rate table: a fixed EUR 0.50 per person per day. */
-export const WATER_EUR_PER_PERSON_DAY = 0.5
-
 /**
- * The water option in the org's rate currency. It was 0.50 in WHATEVER the
- * rate currency was — ¥0.50 a day for a JPY company. Converted from EUR now;
- * with no EUR rate to convert it by, it has no price (0) and says so, never a
- * guess.
+ * The fixed costs the grid charges (Rates › Fixed Costs): the same list the
+ * automatic engine and both AI builders charge — getFixedDailyCosts, water
+ * first with its 2.00 fallback, every other active cost by name, Daily Tips
+ * never — shaped for the grid. Per person per sightseeing day, in the rate
+ * currency, to its smallest unit (so the screen's sum and the save's rounded
+ * lines agree). A zero adds no line; `warnings` says why the water default was
+ * used or a cost was left out (its currency has no exchange rate).
  */
-export async function waterOption(
+export function gridFixedCostsFrom(
+  daily: { items: Array<{ name: string; perPersonPerDay: number }>; warnings: string[] },
   rateCurrency: string,
-  getRates: typeof fetchRunExchangeRates = fetchRunExchangeRates,
-): Promise<RateOption> {
-  const base = { id: 'water-standard', name: 'Water Bottles' }
-  if (rateCurrency === 'EUR') {
-    return { ...base, rateEur: WATER_EUR_PER_PERSON_DAY, rateNonEur: WATER_EUR_PER_PERSON_DAY, details: 'Per person per day' }
+): GridFixedCosts {
+  return {
+    items: daily.items
+      .map(i => ({ name: i.name, perPersonPerDay: roundToCurrency(i.perPersonPerDay, rateCurrency) }))
+      .filter(i => i.perPersonPerDay > 0),
+    warnings: [...daily.warnings],
   }
-  const fx = getExchangeRate('EUR', rateCurrency, await getRates())
-  if (!fx || !(fx > 0)) {
-    return { ...base, rateEur: 0, rateNonEur: 0, details: `Per person per day — no EUR→${rateCurrency} exchange rate, so no price` }
-  }
-  const price = roundToCurrency(WATER_EUR_PER_PERSON_DAY * fx, rateCurrency)
-  return { ...base, rateEur: price, rateNonEur: price, details: 'Per person per day' }
+}
+
+export async function loadGridFixedCosts(
+  orgId: string,
+  normalizer: RateNormalizer,
+  rateCurrency: string,
+): Promise<GridFixedCosts> {
+  // Imported on use: lib/fixed-costs opens a service-role client when loaded.
+  const { getFixedDailyCosts } = await import('@/lib/fixed-costs')
+  return gridFixedCostsFrom(await getFixedDailyCosts(orgId, normalizer), rateCurrency)
 }
 
 /**
@@ -66,7 +70,7 @@ export async function loadGridRateOptions(
   supabase: Db,
   orgId: string,
   tier: string | null,
-): Promise<{ rates: AllRates; rateCurrency: RateCurrency }> {
+): Promise<{ rates: AllRates; rateCurrency: RateCurrency; fixedCosts: GridFixedCosts }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ofTier = (q: any) => (tier ? q.eq('tier', tier) : q)
   // Fetch all rate tables in parallel
@@ -359,8 +363,6 @@ export async function loadGridRateOptions(
       ...(r.per_person_rate === false ? { pricing_basis: 'flat' as const, unit_capacity: null } : {}),
     })),
 
-    water: [await waterOption(rateCurrency)],
-
     cruise: (nCruises || []).map((r: any) => ({
       id: r.id,
       name: `${r.ship_name} (${r.duration_nights}N, ${r.cabin_type})`,
@@ -391,7 +393,10 @@ export async function loadGridRateOptions(
     })),
   }
 
-  return { rates: rates as unknown as AllRates, rateCurrency }
+  // The fixed costs, from the same helper as automatic pricing and in the same
+  // rate currency as every other amount here.
+  const fixedCosts = await loadGridFixedCosts(orgId, normalizer, rateCurrency)
+  return { rates: rates as unknown as AllRates, rateCurrency, fixedCosts }
 }
 
 /** The guide durations as the rate form names them. */

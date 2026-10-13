@@ -252,7 +252,6 @@ Use the ID format as shown (e.g., "a1b2c3d4-..." UUID format).
         "flights": [],
         "experiences": [],
         "meals": [],
-        "water": [],
         "cruise": [],
         "other_pp": 0
       }
@@ -286,7 +285,6 @@ Use the ID format as shown (e.g., "a1b2c3d4-..." UUID format).
 - guide: ALWAYS add a guide for touring days — pick the guide matching the requested language; ONE language for the whole trip — the language the text asks for, else the same language on every day
 - entrance_fees: match EVERY attraction/site mentioned by name
 - meals: ALWAYS add lunch AND dinner for the day's city. Pick restaurant meals matching city.
-- water: ALWAYS add water
 - hotel_services: check-in/check-out service
 - tipping: driver tip + guide tip
 - accommodation: hotel in overnight city (if not last day)
@@ -345,7 +343,6 @@ Transportation AFTER the last cruise sightseeing day (e.g., Luxor → Hurghada) 
 
 ### Free/Leisure Day (beach, resort, no sightseeing)
 - accommodation: hotel
-- water: add water
 - vehicle: NONE
 - guide: NONE
 - meals: ONLY if hotel is NOT all-inclusive (board_basis != AI)
@@ -487,7 +484,6 @@ Return a JSON object with "metadata" and "days" — same format as a parsed itin
         "flights": [],
         "experiences": [],
         "meals": [],
-        "water": [],
         "cruise": [],
         "other_pp": 0
       }
@@ -503,7 +499,7 @@ Return a JSON object with "metadata" and "days" — same format as a parsed itin
 - NO guide, NO entrance fees, NO meals
 
 ### Touring Day (sightseeing)
-- vehicle: day-tour vehicle, guide: ALWAYS, entrance_fees: match sites, meals: lunch + dinner, water: ALWAYS
+- vehicle: day-tour vehicle, guide: ALWAYS, entrance_fees: match sites, meals: lunch + dinner
 - tipping: driver + guide tip, accommodation: hotel, hotel_services: porterage
 
 ### Cruise Embarkation Day
@@ -521,7 +517,7 @@ Return a JSON object with "metadata" and "days" — same format as a parsed itin
 - NO cruise rate (not sleeping on ship)
 
 ### Free/Leisure Day (beach, resort)
-- accommodation: hotel, water: yes
+- accommodation: hotel
 - NO vehicle, NO guide
 
 ### Departure Day (last day)
@@ -1055,10 +1051,8 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Auto-fill water on EVERY day (people drink water every day)
-      if (isEmpty('water')) {
-        slots.water = ['water-standard']
-      }
+      // No water pick: Rates › Fixed Costs (water included) are charged by the
+      // grid itself on every sightseeing day (pricing-grid/lib/fixed-cost-lines.ts).
 
       // Touring day: auto-fill tipping if missing (driver + guide tip)
       // This includes arrival/departure days that have sightseeing
@@ -1319,12 +1313,6 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
     rateId: r.id, name: `${r.airline} ${r.route_from}→${r.route_to} (${r.cabin_class})`,
     rateEur: toNum(r.base_rate_eur) + toNum(r.tax_eur), rateNonEur: toNum(r.base_rate_non_eur || r.base_rate_eur) + toNum(r.tax_non_eur || r.tax_eur),
   }))
-
-  // Water (hardcoded — not from DB)
-  map.set('water-standard', {
-    rateId: 'water-standard', name: 'Water Bottles',
-    rateEur: 0.50, rateNonEur: 0.50,
-  })
 
   return map
 }

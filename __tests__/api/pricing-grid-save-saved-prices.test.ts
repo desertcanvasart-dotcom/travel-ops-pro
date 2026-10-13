@@ -21,6 +21,12 @@ vi.mock('@/lib/auth/current-org', async () => {
   return { getCurrentOrgId: async () => 'org-1', noOrgResponse: () => NextResponse.json({ success: false }, { status: 403 }) }
 })
 vi.mock('@/lib/vocabulary-server', () => ({ vocabularyItemsForCurrentOrg: vi.fn(async () => []) }))
+// Rates › Fixed Costs are charged by the grid on every sightseeing day since
+// 2026-10-14 (pricing-grid-save-fixed-costs.test.ts owns that). Not under test
+// here: with none, a day's first line is still the pick this file is about.
+vi.mock('@/lib/fixed-costs', () => ({
+  getFixedDailyCosts: async () => ({ waterPerPersonPerDay: 0, items: [], extraItems: [], warnings: [] }),
+}))
 // EUR 1 = USD 1.08 = JPY 162. No network.
 vi.mock('@/lib/rates/fx-source', () => ({
   fetchRunExchangeRates: async () => ({ base: 'EUR', date: '2026-10-01', rates: { EUR: 1, USD: 1.08, JPY: 162 } }),

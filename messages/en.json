@@ -8404,7 +8404,10 @@
   },
   "pricingGrid": {
     "savedPrice": "saved price — not linked to a current rate",
-    "savedPriceHint": "This line has no current rate, so it keeps the price it was saved with. Pick a rate to price it from your rates."
+    "savedPriceHint": "This line has no current rate, so it keeps the price it was saved with. Pick a rate to price it from your rates.",
+    "fixedCosts": "Fixed costs",
+    "fixedCostsHint": "Charged automatically on every sightseeing day (a day with a guide or an attraction) from Rates › Fixed Costs. Nothing to pick.",
+    "perPerson": "per person"
   },
   "blogAdmin": {
     "title": "Blog",

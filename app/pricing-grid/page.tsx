@@ -5,13 +5,14 @@ import { readHandoffText, decodeTextParam } from '@/lib/text-handoff'
 import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import type { GridConfig, GridDay, AllRates, SlotValue, GridTotals } from './types'
+import type { GridConfig, GridDay, AllRates, SlotValue, GridTotals, GridFixedCosts } from './types'
 import { SLOT_DEFINITIONS } from './types'
 import { calculateGrandTotals, calculateDay, countMissingGuideBeds, convertAmount } from './lib/calculator'
 import { gridCompleteness } from './lib/grid-completeness'
 import type { SeasonWindow } from '@/lib/pricing/season-uplift'
 import { mapServicesToSlots } from './lib/slot-mapping'
 import { hydrateDays } from './lib/hydrate-items'
+import { dropLegacyFixedCostPicks } from './lib/fixed-cost-lines'
 import { displayFx, shownSymbol } from './lib/display-fx'
 import type { ExchangeRates } from '@/lib/currency-service'
 import { alignGuideLanguage, guideLanguages, majorityGuideLanguage } from './lib/guide-language'
@@ -111,10 +112,15 @@ function PricingGridContent() {
   const [config, setConfig] = useState<GridConfig>(() =>
     loadFromStorage(STORAGE_KEY_CONFIG, DEFAULT_CONFIG)
   )
+  // A draft from before the grid charged Rates › Fixed Costs itself may hold
+  // the old Water pick: dropped, the automatic lines replace it.
   const [days, setDays] = useState<GridDay[]>(() =>
-    loadFromStorage(STORAGE_KEY_DAYS, [])
+    dropLegacyFixedCostPicks(loadFromStorage<GridDay[]>(STORAGE_KEY_DAYS, []))
   )
   const [rates, setRates] = useState<AllRates | null>(null)
+  // The Rates › Fixed Costs the grid charges on every sightseeing day, from
+  // the same request as the rates, with the warnings to show.
+  const [fixedCosts, setFixedCosts] = useState<GridFixedCosts>({ items: [], warnings: [] })
   const guideLanguageList = useMemo(() => guideLanguages(rates?.guide ?? []), [rates])
   // The operator's own high dates, loaded once. The grid is the other screen
   // that quotes a departure, so it reads the same calendar the B2B engine does.
@@ -237,6 +243,10 @@ function PricingGridContent() {
       if (requestId !== ratesRequestRef.current) return
       if (data.success) {
         setRates(data.data)
+        setFixedCosts({
+          items: Array.isArray(data.fixedCosts?.items) ? data.fixedCosts.items : [],
+          warnings: Array.isArray(data.fixedCosts?.warnings) ? data.fixedCosts.warnings : [],
+        })
         setRatesTier(tier)
         // A draft restored from this browser is re-priced from these rates
         // by the effect below (hydrate-items.ts).
@@ -453,17 +463,6 @@ function PricingGridContent() {
     setDays(prev => prev.map(d => d.id === dayId ? { ...d, isExpanded: true } : d))
     requestAnimationFrame(() =>
       document.getElementById(`grid-day-${dayId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
-  }
-
-  // Copy one service to every day (offered on Water, a daily item).
-  const applySlotToAllDays = (slotId: string, value: SlotValue) => {
-    const copy = (): SlotValue => ({ ...value, slotId, selectedItems: value.selectedItems.map(i => ({ ...i })) })
-    setDays(prev => prev.map(d => ({
-      ...d,
-      slots: d.slots.some(s => s.slotId === slotId)
-        ? d.slots.map(s => (s.slotId === slotId ? copy() : s))
-        : [...d.slots, copy()],
-    })))
   }
 
   const updateDay = (dayId: string, partial: Partial<GridDay>) => {
@@ -831,6 +830,9 @@ function PricingGridContent() {
     exchangeRate: fxView.factor,
     rateCurrency: fx?.rateCurrency ?? null,
     shownCurrency: fxView.shown,
+    // Derived like the rest: the server's list, never saved (the save reads
+    // the table itself).
+    fixedCosts: fixedCosts.items,
   }
   // The picks with no rate behind them — priced as nothing, and named.
   const unpricedItems = rates && ratesTier === config.tier ? hydrateDays(days, rates, config.pax).unpriced : []
@@ -987,7 +989,6 @@ function PricingGridContent() {
                 onUpdateSlot={(slotId, value) => updateSlot(day.id, slotId, value)}
                 onUpdateDay={(partial) => updateDay(day.id, partial)}
                 onRemoveDay={() => removeDay(day.id)}
-                onApplyToAllDays={applySlotToAllDays}
               />
             ))}
           </div>
@@ -1013,6 +1014,15 @@ function PricingGridContent() {
           {unpricedItems.length > 0 && (
             <div className="mb-3 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-800">
               No current rate, so no price: {unpricedItems.map(u => `day ${u.dayNumber} ${u.name || u.rateId}`).join('; ')}. Pick a rate or type an amount.
+            </div>
+          )}
+
+          {/* Rates › Fixed Costs the grid could not charge as entered: the
+              built-in water default in use, or a cost whose currency has no
+              exchange rate (left out of the price). Same text the save returns. */}
+          {fixedCosts.warnings.length > 0 && (
+            <div className="mb-3 px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-xs text-amber-800 space-y-1" data-testid="fixed-cost-warnings">
+              {fixedCosts.warnings.map(w => <div key={w}>{w}</div>)}
             </div>
           )}
 

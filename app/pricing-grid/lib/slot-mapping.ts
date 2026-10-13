@@ -23,7 +23,6 @@ export const SLOT_TO_SERVICE_TYPE: Record<string, string> = {
   flights: 'flight',
   experiences: 'activity',
   meals: 'meal',
-  water: 'supplies',
   cruise: 'cruise',
   other_group: 'extra',
   other_pp: 'extra',
@@ -44,7 +43,14 @@ export function serviceTypeToSlotId(serviceType: string, serviceName: string, qu
     case 'entrance': return 'entrance_fees'
     case 'flight': return 'flights'
     case 'meal': return 'meals'
-    case 'supplies': return 'water'
+    // Fixed costs (water, wifi …) are no slot any more: the grid charges them
+    // itself on every sightseeing day, so a saved line of them — the old Water
+    // pick, a later grid save's cost lines, the engine's or the AI builder's —
+    // is not loaded as a pick (it would be charged twice). Not a slot id, so
+    // mapServicesToSlots leaves it out.
+    case 'supplies':
+    case 'water':
+      return 'fixed_cost'
     case 'cruise': return 'cruise'
     case 'activity':
       // Disambiguate: boat rides vs experiences

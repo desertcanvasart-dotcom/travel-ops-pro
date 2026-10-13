@@ -48,6 +48,10 @@ export interface GridConfig {
   exchangeRate: number | null
   /** The org's rate currency — what every rate, line and total is in. */
   rateCurrency?: string | null
+  /** The active Rates › Fixed Costs the grid charges on every sightseeing day,
+   *  per person, in the rate currency. Derived each render from the rates
+   *  route, never trusted: the save reads the table itself. */
+  fixedCosts?: GridFixedCost[]
   /** The currency the figures are actually shown in: `currency`, or the rate
    *  currency when there is no rate to convert by. Derived, display only. */
   shownCurrency?: string | null
@@ -141,7 +145,8 @@ export interface SlotDefinition {
   rateTable: string | null  // null = manual entry
 }
 
-// All 16 fixed slots
+// All 14 fixed slots (Water is gone: Rates › Fixed Costs are charged by the
+// grid itself on every sightseeing day — lib/fixed-cost-lines.ts)
 export const SLOT_DEFINITIONS: SlotDefinition[] = [
   // GROUP SERVICES (charged once, divided by pax)
   { slotId: 'route',            label: 'Transport',        bucket: 'group',      selectionMode: 'multi',  icon: '🚗', rateTable: 'transportation_rates' },
@@ -157,7 +162,6 @@ export const SLOT_DEFINITIONS: SlotDefinition[] = [
   { slotId: 'flights',          label: 'Flights',          bucket: 'per_person', selectionMode: 'multi',  icon: '🛩️', rateTable: null },
   { slotId: 'experiences',      label: 'Experiences',      bucket: 'per_person', selectionMode: 'multi',  icon: '🎈', rateTable: 'activity_rates' },
   { slotId: 'meals',            label: 'Meals',            bucket: 'per_person', selectionMode: 'multi',  icon: '🍽️', rateTable: 'meal_rates' },
-  { slotId: 'water',            label: 'Water',            bucket: 'per_person', selectionMode: 'single', icon: '💧', rateTable: null },
   { slotId: 'cruise',           label: 'Nile Cruise',      bucket: 'per_person', selectionMode: 'single', icon: '🚢', rateTable: 'cruise_rates' },
   { slotId: 'other_pp',         label: 'Other (PP)',       bucket: 'per_person', selectionMode: 'custom', icon: '📋', rateTable: null },
 ]
@@ -298,6 +302,20 @@ export interface RateOption {
   unit_capacity?: number | null
 }
 
+/** One Rates › Fixed Costs row the grid charges (lib/fixed-costs getFixedDailyCosts):
+ *  per person per sightseeing day, in the rate currency. */
+export interface GridFixedCost {
+  name: string
+  perPersonPerDay: number
+}
+
+/** What GET /api/pricing-grid/rates hands the screen: the costs to charge and
+ *  why any was not (or fell back to the built-in water default). */
+export interface GridFixedCosts {
+  items: GridFixedCost[]
+  warnings: string[]
+}
+
 export interface GridSupplement {
   /** Dated periods for this supplement — it is priced per night like the room
    *  it rides on, so it follows the same calendar. */
@@ -327,7 +345,6 @@ export interface AllRates {
   flights: RateOption[]
   experiences: RateOption[]
   meals: RateOption[]
-  water: RateOption[]
   cruise: RateOption[]
 }
 

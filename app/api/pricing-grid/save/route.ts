@@ -20,6 +20,7 @@ import { roundToCurrency } from '@/lib/currency-totals'
 import { seasonForDate, type SeasonWindow } from '@/lib/pricing/season-uplift'
 import { sellingFromCost } from '@/app/pricing-grid/lib/calculator'
 import { hydrateDays } from '@/app/pricing-grid/lib/hydrate-items'
+import { fixedCostsForDay, dropLegacyFixedCostPicks } from '@/app/pricing-grid/lib/fixed-cost-lines'
 import { applyStoredPrices, storedUnitPrice, type StoredPrice, type StoredServiceRow } from '@/app/pricing-grid/lib/saved-price'
 import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
 import type { ExchangeRates } from '@/lib/currency-service'
@@ -96,7 +97,6 @@ const SLOT_TO_SERVICE: Record<string, string> = {
   flights: 'flight',
   experiences: 'activity',
   meals: 'meal',
-  water: 'supplies',
   cruise: 'cruise',
   other_group: 'extra',
   other_pp: 'extra',
@@ -265,7 +265,7 @@ export async function POST(request: NextRequest) {
       itineraryCurrency = owned.currency ?? null
     }
 
-    const { rates: gridRates, rateCurrency } = await loadGridRateOptions(supabase, callerOrgId, null)
+    const { rates: gridRates, rateCurrency, fixedCosts } = await loadGridRateOptions(supabase, callerOrgId, null)
     // A line of the trip being re-saved that has no current rate (none
     // stored, or since deleted or switched off) keeps the price it was saved
     // with — read here from ITS row of THIS trip, never from the request
@@ -273,7 +273,10 @@ export async function POST(request: NextRequest) {
     const { prices: storedPrices, supplierIds: storedSupplierIds } = isUpdate
       ? await storedLinePrices(supabase, config.itineraryId, postedDays, { itineraryCurrency, rateCurrency })
       : { prices: new Map<string, StoredPrice>(), supplierIds: new Map<string, string>() }
-    const { days, unpriced } = hydrateDays(applyStoredPrices(postedDays as any[], storedPrices), gridRates, paxN)
+    // The old Water pick of a trip drafted or saved before the grid charged
+    // Rates › Fixed Costs itself is dropped: the automatic lines below replace
+    // it (fixed-cost-lines.ts), never in addition.
+    const { days, unpriced } = hydrateDays(applyStoredPrices(dropLegacyFixedCostPicks(postedDays as any[]), storedPrices), gridRates, paxN)
 
     // Completeness signal (harness consolidation Phase B). The grid saves a
     // DRAFT, so this does NOT block the save (you build incrementally) — it is
@@ -291,6 +294,9 @@ export async function POST(request: NextRequest) {
     // filled from the From of a message the office sent, it became the
     // client's email. Dropped with a warning; a failed lookup blocks nothing.
     const warnings: string[] = []
+    // The built-in water default, or a fixed cost left out because its
+    // currency has no exchange rate: never silent (lib/fixed-costs.ts).
+    warnings.push(...(fixedCosts?.warnings ?? []))
     if (config.clientEmail) {
       try {
         const own = await loadOwnAddresses(supabase, await getCurrentOrgId())
@@ -485,6 +491,27 @@ export async function POST(request: NextRequest) {
             notes: `__grid:slot:${slot.slotId}|rate_id:${item.rateId}`,
           })
         }
+      }
+
+      // Rates › Fixed Costs: every active cost as its own line, per person, on
+      // a sightseeing day — read from the table here (never from the request),
+      // at the same amounts the screen showed. The save RPC matches a line by
+      // day + type + name and updates it in place, so a re-save replaces these
+      // lines rather than adding to them.
+      for (const cost of fixedCostsForDay(day, { withGuide, fixedCosts: fixedCosts?.items })) {
+        const supplierCost = cost.perPersonPerDay * paxN
+        pushService(dayNumber, {
+          service_type: 'supplies',
+          service_name: cost.name,
+          quantity: paxN,
+          rate_eur: cost.perPersonPerDay,
+          rate_non_eur: cost.perPersonPerDay,
+          total_cost: supplierCost,
+          client_price: grossUp(supplierCost),
+          supplier_id: null,
+          // Names no real slot: a reload leaves it out of the day's picks (slot-mapping).
+          notes: '__grid:slot:fixed_cost',
+        })
       }
 
       // The throughout guide's own costs — his bed, his seats, his meals at

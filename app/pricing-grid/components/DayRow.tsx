@@ -7,6 +7,8 @@ import { GROUP_SLOTS, PP_SLOTS, DAY_TYPES, DAY_TYPE_LABELS, DEFAULT_DAY_TYPE, DA
 import { calculateDay, convertAmount } from '../lib/calculator'
 import SlotRow from './SlotRow'
 import { shownSymbol } from '../lib/display-fx'
+import { fixedCostsForDay } from '../lib/fixed-cost-lines'
+import { useTranslations } from 'next-intl'
 
 interface DayRowProps {
   day: GridDay
@@ -17,15 +19,13 @@ interface DayRowProps {
   onUpdateSlot: (slotId: string, value: SlotValue) => void
   onUpdateDay: (partial: Partial<GridDay>) => void
   onRemoveDay: () => void
-  /** Copy one service to every day of the trip (offered on Water). */
-  onApplyToAllDays?: (slotId: string, value: SlotValue) => void
 }
 
-/** Services offered "Apply to all days" — a daily item, not a one-off. */
-const APPLY_TO_ALL_SLOTS = new Set(['water'])
-
-export default function DayRow({ day, allDays, config, rates, onToggleExpand, onUpdateSlot, onUpdateDay, onRemoveDay, onApplyToAllDays }: DayRowProps) {
+export default function DayRow({ day, allDays, config, rates, onToggleExpand, onUpdateSlot, onUpdateDay, onRemoveDay }: DayRowProps) {
+  const t = useTranslations('pricingGrid')
   const calc: DayCalc = calculateDay(day, config)
+  // Rates › Fixed Costs charged on this day (a sightseeing day), read-only.
+  const fixedToday = fixedCostsForDay(day, config)
   const cv = (n: number) => convertAmount(n, config.exchangeRate)
   const sym = shownSymbol(config)
 
@@ -270,9 +270,6 @@ export default function DayRow({ day, allDays, config, rates, onToggleExpand, on
       passport={config.passport}
       pax={config.pax}
       onChange={(val) => onUpdateSlot(def.slotId, val)}
-      onApplyToAllDays={onApplyToAllDays && APPLY_TO_ALL_SLOTS.has(def.slotId) && allDays.length > 1
-        ? () => onApplyToAllDays(def.slotId, getSlotValue(def.slotId))
-        : undefined}
     />
   )
 
@@ -490,8 +487,21 @@ export default function DayRow({ day, allDays, config, rates, onToggleExpand, on
               </span>
             </div>
             {PP_SLOTS.filter(shown).map(def => renderSlot(def))}
-            {!PP_SLOTS.some(shown) && (
+            {!PP_SLOTS.some(shown) && fixedToday.length === 0 && (
               <div className="px-4 py-2 text-[11px] text-gray-400 italic">No per-person services</div>
+            )}
+            {/* Fixed costs: charged on every sightseeing day by the grid itself,
+                not picked — so the agent sees what is added and cannot double it. */}
+            {fixedToday.length > 0 && (
+              <div className="px-4 py-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-600 border-t border-gray-100" data-testid="day-fixed-costs">
+                <span className="font-medium text-gray-500" title={t('fixedCostsHint')}>{t('fixedCosts')}</span>
+                {fixedToday.map(c => (
+                  <span key={c.name} className="px-1.5 py-0.5 rounded bg-gray-100 tabular-nums">
+                    {c.name} {sym}{cv(c.perPersonPerDay).toFixed(2)}
+                  </span>
+                ))}
+                <span className="text-gray-400">{t('perPerson')}</span>
+              </div>
             )}
           </div>
 

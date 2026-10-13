@@ -16,6 +16,7 @@ import { roundToCurrency } from '@/lib/currency-totals'
 import { dayDate, rateOnDate } from '@/lib/rates/date-window'
 import { soldItems, customAmountSold } from './guide-rule'
 import { soldAccommodationItems } from './sold-lines'
+import { fixedCostPerPerson } from './fixed-cost-lines'
 
 // --- Helpers ---
 
@@ -54,7 +55,7 @@ const GROUP_SLOT_IDS = new Set([
 
 const PP_SLOT_IDS = new Set([
   'accommodation', 'entrance_fees', 'flights', 'experiences',
-  'meals', 'water', 'cruise', 'other_pp'
+  'meals', 'cruise', 'other_pp'
 ])
 
 export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
@@ -133,6 +134,10 @@ export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
       }
     }
   }
+
+  // Rates › Fixed Costs, on a sightseeing day: per person, with no pick to make
+  // (fixed-cost-lines.ts). The save writes the same lines.
+  perPersonTotal += fixedCostPerPerson(day, config)
 
   const groupPerPerson = pax > 0 ? groupTotal / pax : 0
   const dailyPerPerson = groupPerPerson + perPersonTotal
@@ -221,8 +226,8 @@ export function calculateGrandTotals(
 //
 //     totalCost(pax) = GroupFixed + Transport(pax) + PerPerson × pax
 //
-// where PerPerson (accommodation double-occupancy PPD, entrance, meals, water,
-// cruise, flights) and GroupFixed (guide, tipping, airport/hotel services, boat
+// where PerPerson (accommodation double-occupancy PPD, entrance, meals, fixed
+// costs, cruise, flights) and GroupFixed (guide, tipping, airport/hotel services, boat
 // rides) are pax-invariant, and Transport(pax) is the ONE non-linear term — the
 // vehicle tier (Sedan→Minivan→Van→Minibus→Bus) is re-selected by group size.
 // This mirrors auto-pricing-service's per-pax loop exactly; here the inputs are
@@ -305,6 +310,9 @@ function aggregateNonTransport(days: GridDay[], config: GridConfig) {
     // Each day at its own date, the same rule calculateDay applies — the pax
     // sheet and the day cards must agree about what a night costs.
     const on = dayDate(config.startDate, day.dayNumber)
+    // The day's fixed costs are per person like water was, so the tour
+    // leader pays them too (tourLeaderCost = perPerson + single supplement).
+    perPerson += fixedCostPerPerson(day, config)
     for (const slot of day.slots) {
       if (slot.slotId === 'route') continue // transport is pax-dependent — handled separately
 
