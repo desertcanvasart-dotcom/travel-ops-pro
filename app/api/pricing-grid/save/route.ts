@@ -1,4 +1,5 @@
 import { BASIS_SLOTS, itemCost } from '@/app/pricing-grid/lib/item-basis'
+import { insertItineraryWithCode } from '@/lib/itineraries/itinerary-code'
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { randomBytes } from 'crypto'
@@ -52,9 +53,7 @@ const UUID_PREFIX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 
 // L8: the prior implementation used Math.random() in the 1000-9999 range,
 // giving only 9000 codes per year. Birthday-paradox collision probability
-// becomes meaningful at very modest volume — and itinerary_code currently
-// has no DB UNIQUE constraint, so a collision silently produces two
-// itineraries sharing the same code. randomBytes(4).toString('hex') gives
+// becomes meaningful at very modest volume. randomBytes(4).toString('hex') gives
 // ~4.3B values (8 hex chars), reducing collision probability to negligible
 // across any realistic per-year throughput.
 function generateItineraryCode(): string {
@@ -553,16 +552,15 @@ export async function POST(request: NextRequest) {
         )
       }
       itineraryData.org_id = orgId
-      itineraryData.itinerary_code = generateItineraryCode()
       itineraryData.created_at = now
 
-      const { data, error } = await supabase
-        .from('itineraries')
-        .insert([itineraryData])
-        .select('id, itinerary_code')
-        .single()
+      // A taken code draws another (lib/itineraries/itinerary-code), as every
+      // other way a trip is created does.
+      const { data, error } = await insertItineraryWithCode<{ id: string; itinerary_code: string }>(
+        supabase, itineraryData, generateItineraryCode, { select: 'id, itinerary_code' }
+      )
 
-      if (error) throw new Error(`Failed to create itinerary: ${error.message}`)
+      if (error || !data) throw new Error(`Failed to create itinerary: ${error?.message ?? 'no row returned'}`)
       itineraryId = data.id
       itineraryCode = data.itinerary_code
 

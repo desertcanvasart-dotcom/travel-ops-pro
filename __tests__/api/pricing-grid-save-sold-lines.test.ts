@@ -36,7 +36,9 @@ function fakeDb() {
     from(table: string) {
       if (table in OFFICE) return { select: () => readChain(OFFICE[table]) }
       return {
-        insert(rows: any[]) {
+        insert(input: any) {
+          // A row or a list of rows (the trip goes through insertItineraryWithCode).
+          const rows = Array.isArray(input) ? input : [input]
           if (table === 'itineraries') { state.inserted = rows[0]; state.totalUpdate = rows[0].total_cost }
           return { select: () => ({ single: async () => ({ data: { id: 'itn-1', itinerary_code: 'ITN-S-1' }, error: null }) }), then: (r: any) => r({ error: null }) }
         },
