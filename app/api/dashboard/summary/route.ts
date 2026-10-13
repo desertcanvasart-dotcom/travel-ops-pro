@@ -1,8 +1,11 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserRole, noOrgResponse } from '@/lib/auth/current-org'
 import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
+import { shiftDateISO, todayFromRequest } from '@/lib/today'
+import { quotePipeline, STAFF_ROLES } from '@/lib/dashboard/figures'
+import { roleAllows } from '@/lib/auth/roles'
 
 // ============================================
 // DASHBOARD SUMMARY — one round trip for the operator's morning view
@@ -13,10 +16,7 @@ import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
 // "System Status" was decorative. Every figure returned here is computed from
 // the database; trends are real period-over-period counts or absent.
 
-const iso = (d: Date) => d.toISOString()
-const dayStart = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
-
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     // createServerClient() is SERVICE-ROLE: it bypasses RLS, so nothing filters
     // these queries except what is written here. Until this line existed, every
@@ -28,18 +28,26 @@ export async function GET() {
 
     const supabase = createServerClient()
 
-    const now = new Date()
-    const todayStart = dayStart(now)
-    const in7 = new Date(todayStart); in7.setDate(in7.getDate() + 7)
-    const in30 = new Date(todayStart); in30.setDate(in30.getDate() + 30)
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-    const todayDate = todayStart.toISOString().slice(0, 10) // date-typed columns
+    // The caller's calendar date, not the UTC server's — the same "today" the
+    // attention and money routes use (see todayFromRequest).
+    const todayDate = todayFromRequest(request.url)
+    const in7 = shiftDateISO(todayDate, 7)
+    const in30 = shiftDateISO(todayDate, 30)
+    const monthStart = `${todayDate.slice(0, 7)}-01`
+    const prevMonthStart = shiftDateISO(monthStart, -1).slice(0, 7) + '-01'
+    // Timestamp columns are compared from the start of that date (UTC).
+    const todayStart = `${todayDate}T00:00:00Z`
+
+    // Recent quotes name customers; the itineraries API they used to come
+    // from is staff-only, so they still are.
+    const role = await getCurrentUserRole()
+    const isStaff = roleAllows(role, STAFF_ROLES)
 
     const OPEN_TASK = ['done', 'completed', 'cancelled'] // anything else is open
 
     const [
       departingSoon,
+      departingSoonCount,
       inProgress,
       openTasks,
       waUnread,
@@ -52,16 +60,24 @@ export async function GET() {
       quotesCreatedToday,
       bookingsCreatedToday,
       paymentsToday,
+      recentQuotes,
     ] = await Promise.all([
-      // Confirmed trips leaving in the next 7 days — the "get ready" list
+      // Bookings (any status but cancelled) leaving in the next 7 days — the
+      // "get ready" list. The list is capped; the count below is not.
       supabase.from('bookings')
         .select('id, booking_code, trip_name, client_name, start_date, status')
         .eq('org_id', orgId)
         .neq('status', 'cancelled')
         .gte('start_date', todayDate)
-        .lt('start_date', in7.toISOString().slice(0, 10))
+        .lt('start_date', in7)
         .order('start_date', { ascending: true })
         .limit(6),
+      supabase.from('bookings')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .neq('status', 'cancelled')
+        .gte('start_date', todayDate)
+        .lt('start_date', in7),
       // Trips on the ground right now
       supabase.from('bookings')
         .select('id', { count: 'exact', head: true })
@@ -100,10 +116,10 @@ export async function GET() {
       supabase.from('clients').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
       supabase.from('clients').select('id', { count: 'exact', head: true })
         .eq('org_id', orgId)
-        .gte('created_at', iso(monthStart)),
+        .gte('created_at', monthStart),
       supabase.from('clients').select('id', { count: 'exact', head: true })
         .eq('org_id', orgId)
-        .gte('created_at', iso(prevMonthStart)).lt('created_at', iso(monthStart)),
+        .gte('created_at', prevMonthStart).lt('created_at', monthStart),
       // Quote pipeline (B2C itineraries). `source != 'b2b_custom'` is what the
       // Itineraries list applies too — without it this counted B2B trips the
       // list deliberately hides, and the two screens disagreed by design.
@@ -113,13 +129,25 @@ export async function GET() {
       supabase.from('itineraries').select('id', { count: 'exact', head: true })
         .eq('org_id', orgId)
         .not('source', 'eq', 'b2b_custom')
-        .gte('created_at', iso(todayStart)),
+        .gte('created_at', todayStart),
       supabase.from('bookings').select('id', { count: 'exact', head: true })
         .eq('org_id', orgId)
-        .gte('created_at', iso(todayStart)),
+        .gte('created_at', todayStart),
+      // Money in only: a refund is a payments row too (payment_type 'refund')
       supabase.from('payments').select('id', { count: 'exact', head: true })
         .eq('org_id', orgId)
+        .neq('payment_type', 'refund')
         .gte('payment_date', todayDate),
+      // Recent Activity: the five newest quotes, only what the list shows —
+      // the dashboard used to pull a 100-row page of /api/itineraries for it.
+      isStaff
+        ? supabase.from('itineraries')
+            .select('id, itinerary_code, client_name, status, created_at')
+            .eq('org_id', orgId)
+            .not('source', 'eq', 'b2b_custom')
+            .order('created_at', { ascending: false })
+            .limit(5)
+        : Promise.resolve({ data: [], error: null }),
     ])
 
     const openTaskRows = openTasks.data || []
@@ -128,15 +156,14 @@ export async function GET() {
     const sumUnread = (rows: { unread_count: number | null }[] | null) =>
       (rows || []).reduce((s, r) => s + (r.unread_count || 0), 0)
 
-    const quotesSent = quoteRows.filter(q => q.status === 'sent' || q.status === 'confirmed').length
-    const quotesConfirmed = quoteRows.filter(q => q.status === 'confirmed').length
+    const pipeline = quotePipeline(quoteRows)
 
     return NextResponse.json({
       success: true,
       data: {
         ops: {
           departingSoon: {
-            count: departingSoon.data?.length || 0,
+            count: departingSoonCount.count || 0,
             items: departingSoon.data || [],
           },
           inProgress: inProgress.count || 0,
@@ -147,7 +174,8 @@ export async function GET() {
         },
         followups: {
           pending: followupRows.length,
-          overdue: followupRows.filter(f => f.due_date && new Date(f.due_date) < now).length,
+          // due_date is a date: overdue once the day has passed, not on it
+          overdue: followupRows.filter(f => f.due_date && f.due_date.slice(0, 10) < todayDate).length,
         },
         clients: {
           total: clientsTotal.count || 0,
@@ -156,12 +184,13 @@ export async function GET() {
         },
         quotes: {
           total: quoteRows.length,
-          sent: quotesSent,
-          confirmed: quotesConfirmed,
+          sent: pipeline.sent,
+          confirmed: pipeline.confirmed,
           upcoming30d: quoteRows.filter(q =>
             q.status === 'confirmed' && q.start_date &&
-            q.start_date >= todayDate && q.start_date < in30.toISOString().slice(0, 10)
+            q.start_date >= todayDate && q.start_date < in30
           ).length,
+          recent: recentQuotes.data || [],
         },
         today: {
           quotesCreated: quotesCreatedToday.count || 0,

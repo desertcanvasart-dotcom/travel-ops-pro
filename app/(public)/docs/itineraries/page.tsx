@@ -193,24 +193,6 @@ export default function ItinerariesPage() {
           <li><strong>日程表 (Itinerary Doc)</strong> &mdash; the customer-facing Japanese day-schedule: check-in/check-out pairing per stay, the 作成日 date, rendered with the customer&apos;s own template where one is set.</li>
         </ul>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link
-          href="/docs/clients"
-          className="inline-flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
-        >
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          Clients
-        </Link>
-        <Link
-          href="/docs/bookings"
-          className="inline-flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
-        >
-          Next: Bookings
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }

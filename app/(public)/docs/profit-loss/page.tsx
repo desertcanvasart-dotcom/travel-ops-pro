@@ -79,18 +79,6 @@ export default function ProfitLossPage() {
           <li>Outstanding receivables and payables</li>
         </ul>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link href="/docs/expenses-commissions" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          Expenses &amp; Commissions
-        </Link>
-        <Link href="/docs/followups-reminders" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          Next: Follow-ups &amp; Reminders
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }

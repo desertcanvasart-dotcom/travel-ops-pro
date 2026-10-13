@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { SkeletonPageHeader, SkeletonStatCards, SkeletonTable } from '@/components/Skeleton'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
@@ -19,7 +19,8 @@ import {
   Users,
   FileText,
   Building,
-  Percent
+  Percent,
+  AlertCircle
 } from 'lucide-react'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
@@ -117,6 +118,15 @@ interface YearOverYear {
   expense_change_percent: number
 }
 
+interface FxHole {
+  reference: string
+  message: string
+}
+
+interface DemoExcluded {
+  excluded: number
+}
+
 const CATEGORY_LABELS: Record<string, { label: string; icon: string }> = {
   guide: { label: 'Tour Guide', icon: '👨‍🏫' },
   driver: { label: 'Driver', icon: '🚗' },
@@ -139,8 +149,12 @@ const CATEGORY_LABELS: Record<string, { label: string; icon: string }> = {
 }
 
 export default function FinancialReportsPage() {
-  // Every figure on this page is stated in ONE currency: what the company bills in.
-  const { currency: reportCurrency } = useCurrency()
+  // Every figure on this page is stated in ONE currency. The user's preferred
+  // currency is what we ASK for; the response's reporting_currency is what the
+  // numbers are actually in (the server falls back to EUR for a currency it
+  // cannot report in), so that is the one every figure is formatted with.
+  const { currency: requestedCurrency } = useCurrency()
+  const [reportCurrency, setReportCurrency] = useState<string>(requestedCurrency)
   const fmt = (v: unknown) => formatMoney(Number(v) || 0, reportCurrency)
   const t = useTranslations('financialReports')
   const [summary, setSummary] = useState<Summary | null>(null)
@@ -152,36 +166,71 @@ export default function FinancialReportsPage() {
   const [yearOverYear, setYearOverYear] = useState<YearOverYear | null>(null)
   const [availableYears, setAvailableYears] = useState<number[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [fxHoles, setFxHoles] = useState<FxHole[]>([])
+  const [complete, setComplete] = useState(true)
+  const [demoExcluded, setDemoExcluded] = useState<DemoExcluded | null>(null)
+  // Only the newest request may write to the page: switching year (or
+  // currency) while a slower earlier request is in flight must not let the
+  // earlier year's figures land on top of the later one.
+  const requestSeq = useRef(0)
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [activeTab, setActiveTab] = useState<'overview' | 'revenue' | 'cashflow' | 'tax' | 'commission'>('overview')
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal?: AbortSignal) => {
+    const seq = ++requestSeq.current
     setLoading(true)
     try {
-      const response = await fetch(`/api/financial-reports?year=${selectedYear}&currency=${encodeURIComponent(reportCurrency)}`)
-      if (response.ok) {
-        const result = await response.json()
-        if (result.success) {
-          setSummary(result.summary)
-          setMonthly(result.monthly)
-          setQuarterly(result.quarterly)
-          setCashFlow(result.cashFlow)
-          setTaxSummary(result.taxSummary)
-          setCommissionSummary(result.commissionSummary)
-          setYearOverYear(result.yearOverYear)
-          setAvailableYears(result.availableYears)
-        }
-      }
+      const response = await fetch(
+        `/api/financial-reports?year=${selectedYear}&currency=${encodeURIComponent(requestedCurrency)}`,
+        { signal }
+      )
+      const result = response.ok ? await response.json() : null
+      if (seq !== requestSeq.current) return
+      if (!result?.success) throw new Error(result?.error || `HTTP ${response.status}`)
+      setSummary(result.summary)
+      setMonthly(result.monthly)
+      setQuarterly(result.quarterly)
+      setCashFlow(result.cashFlow)
+      setTaxSummary(result.taxSummary)
+      setCommissionSummary(result.commissionSummary)
+      setYearOverYear(result.yearOverYear)
+      setAvailableYears(result.availableYears || [])
+      setReportCurrency(result.reporting_currency || requestedCurrency)
+      setFxHoles(result.fx_holes || [])
+      setComplete(result.complete !== false)
+      setDemoExcluded(result.demo_excluded || null)
+      setLoadError(false)
     } catch (error) {
+      if (seq !== requestSeq.current || signal?.aborted) return
       console.error('Error fetching financial data:', error)
+      // A failed load used to leave the previous year's figures on screen
+      // under the newly selected year. Show nothing rather than the wrong year.
+      setSummary(null)
+      setMonthly([])
+      setQuarterly([])
+      setCashFlow(null)
+      setTaxSummary(null)
+      setCommissionSummary(null)
+      setYearOverYear(null)
+      setFxHoles([])
+      setComplete(true)
+      setDemoExcluded(null)
+      setLoadError(true)
     } finally {
-      setLoading(false)
+      if (seq === requestSeq.current) setLoading(false)
     }
-  }, [selectedYear, reportCurrency])
+  }, [selectedYear, requestedCurrency])
 
   useEffect(() => {
-    fetchData()
+    const controller = new AbortController()
+    fetchData(controller.signal)
+    return () => controller.abort()
   }, [fetchData])
+
+  // The year on screen is always one the picker offers, even before it has any
+  // invoices or expenses.
+  const yearOptions = Array.from(new Set([selectedYear, ...availableYears])).sort((a, b) => b - a)
 
   const exportToCSV = (data: any[], filename: string) => {
     // Quote-wrap every cell (so commas/quotes in values don't break columns)
@@ -258,13 +307,9 @@ export default function FinancialReportsPage() {
             onChange={(e) => setSelectedYear(parseInt(e.target.value))}
             className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
           >
-            {availableYears.length > 0 ? (
-              availableYears.map(year => (
-                <option key={year} value={year}>{year}</option>
-              ))
-            ) : (
-              <option value={new Date().getFullYear()}>{new Date().getFullYear()}</option>
-            )}
+            {yearOptions.map(year => (
+              <option key={year} value={year}>{year}</option>
+            ))}
           </select>
           <div className="flex items-center gap-2">
             <button
@@ -323,6 +368,62 @@ export default function FinancialReportsPage() {
           </div>
         </div>
       </div>
+
+      {loadError && (
+        <div role="alert" className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm text-red-800">{t('loadFailed', { year: selectedYear })}</p>
+          </div>
+          <button
+            onClick={() => fetchData()}
+            className="px-3 py-1.5 text-xs font-medium text-red-700 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+          >
+            {t('retry')}
+          </button>
+        </div>
+      )}
+
+      {!loadError && reportCurrency !== requestedCurrency.toUpperCase() && (
+        <p className="text-xs text-gray-500">
+          {t('currencyFallback', { currency: reportCurrency, requested: requestedCurrency })}
+        </p>
+      )}
+
+      {/* FX shortfall — lines left OUT of the money figures, same treatment
+          as the Analytics page: an excluded line that says nothing is just a
+          wrong total with better manners. */}
+      {!complete && fxHoles.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-semibold text-amber-800">
+              {t('fxHolesTitle', { count: fxHoles.length })}
+            </h3>
+            <p className="text-sm text-amber-700 mt-1">
+              {t('fxHolesBody', { currency: reportCurrency })}
+            </p>
+            <ul className="mt-2 space-y-0.5">
+              {fxHoles.slice(0, 5).map((hole, i) => (
+                <li key={i} className="text-xs text-amber-700">
+                  <span className="font-medium">{hole.reference}</span> — {hole.message}
+                </li>
+              ))}
+              {fxHoles.length > 5 && (
+                <li className="text-xs text-amber-700">
+                  {t('fxHolesMore', { count: fxHoles.length - 5 })}
+                </li>
+              )}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {(demoExcluded?.excluded ?? 0) > 0 && (
+        <p className="text-xs text-gray-500">
+          {t('demoExcluded', { count: demoExcluded!.excluded })}
+        </p>
+      )}
 
       {/* Tabs */}
       <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-lg w-fit">

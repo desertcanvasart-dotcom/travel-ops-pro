@@ -40,6 +40,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // Admin, Manager, Agent
   '/clients': ['admin', 'manager', 'agent'],
   '/itineraries': ['admin', 'manager', 'agent'],
+  '/bookings': ['admin', 'manager', 'agent'],
   '/invoices': ['admin', 'manager', 'agent'],
   '/payments': ['admin', 'manager', 'agent'],
   '/tasks': ['admin', 'manager', 'agent'],
@@ -61,6 +62,9 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // All authenticated users (including viewer)
   '/dashboard': ['admin', 'manager', 'agent', 'viewer'],
   '/analytics': ['admin', 'manager'],
+  // The menu shows it to agents and above; with no entry here a viewer could
+  // open it by URL (its data is behind the staff-only /api/copilot gate).
+  '/copilot-analytics': ['admin', 'manager', 'agent'],
   '/calendar': ['admin', 'manager', 'agent', 'viewer'],
   '/notifications': ['admin', 'manager', 'agent', 'viewer'],
 }
