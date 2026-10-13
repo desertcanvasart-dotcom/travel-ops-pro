@@ -7,7 +7,9 @@
     "applyHint": "Adds VAT on top of the net price at the company's rate (Settings › Company Profile), on everything except extras and insurance. The rate and amount are recorded on this document.",
     "net": "Net price",
     "totalInclVat": "Total incl. VAT",
-    "lockedHint": "VAT is recorded with the price and no longer changes on this document."
+    "lockedHint": "VAT is recorded with the price and no longer changes on this document.",
+    "appliedOnSave": "VAT {rate}% is added when you save, on everything except the trip's extras and insurance. The amount then shows on the invoice.",
+    "vatShort": "VAT"
   },
   "common": {
     "save": "Save",

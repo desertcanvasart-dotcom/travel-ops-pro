@@ -146,6 +146,7 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; ic
 
 export default function InvoicesContent() {
   const t = useTranslations('invoices')
+  const tVat = useTranslations('vat')
   const orgVatRate = useOrgVatRate()
   const dialog = useConfirmDialog()
   const [invoices, setInvoices] = useState<Invoice[]>([])
@@ -158,7 +159,11 @@ export default function InvoicesContent() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [formData, setFormData] = useState<FormData>(initialFormData)
   // The VAT the form previews (lib/vat.ts); the server records the real one.
-  const formVat = formData.vat_applied ? vatFor(formData.total_amount, orgVatRate, formData.currency || 'EUR') : 0
+  // An invoice for a trip leaves out the trip's extras and the confirmed
+  // insurance and extras the server adds on save, which the form cannot see:
+  // no number is shown for it rather than one larger than the saved VAT.
+  const vatSetOnSave = formData.vat_applied && !!formData.itinerary_id
+  const formVat = formData.vat_applied && !vatSetOnSave ? vatFor(formData.total_amount, orgVatRate, formData.currency || 'EUR') : 0
 
   // An invoice is denominated in what the operator bills in. initialFormData is
   // a module constant and cannot read a hook, so the currency is filled in when
@@ -1129,13 +1134,19 @@ export default function InvoicesContent() {
                     checked={formData.vat_applied}
                     onChange={(on) => setFormData(prev => ({ ...prev, vat_applied: on }))}
                   />
-                  <VatToken
-                    vat={{ vat_applied: formData.vat_applied, vat_rate: orgVatRate, vat_amount: formVat }}
-                    currency={formData.currency}
-                  />
+                  {vatSetOnSave ? (
+                    <p className="text-xs text-gray-600">{tVat('appliedOnSave', { rate: orgVatRate })}</p>
+                  ) : (
+                    <VatToken
+                      vat={{ vat_applied: formData.vat_applied, vat_rate: orgVatRate, vat_amount: formVat }}
+                      currency={formData.currency}
+                    />
+                  )}
                   <div className="flex justify-between pt-3 border-t border-gray-200">
                     <span className="font-semibold text-gray-900">{t('total')}</span>
-                    <span className="font-bold text-xl text-gray-900">{formatMoney(formData.total_amount + formVat, formData.currency)}</span>
+                    <span className="font-bold text-xl text-gray-900">
+                      {formatMoney(formData.total_amount + formVat, formData.currency)}{vatSetOnSave ? ` + ${tVat('vatShort')}` : ''}
+                    </span>
                   </div>
                 </div>
               </div>
