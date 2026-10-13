@@ -266,10 +266,10 @@ export default function ActivityRatesContent() {
   // Fetch rates
   const fetchRates = async () => {
     try {
-      const params = new URLSearchParams()
-      if (!showInactive) params.append('active_only', 'true')
-
-      const response = await fetch(`/api/rates/activities?${params}`)
+      // Every rate, inactive ones too: "Show inactive" filters on this page.
+      // The fetch ran once, active only, so an inactive rate could never be
+      // found again to reactivate — and Total always equalled Active.
+      const response = await fetch('/api/rates/activities')
       const data = await response.json()
 
       if (data.success) {
@@ -541,7 +541,9 @@ export default function ActivityRatesContent() {
 
   // Stats
   const activeRates = rates.filter(r => r.is_active).length
-  const perPersonRates = rates.filter(r => r.pricing_type === 'per_person' || !r.pricing_type).length
+  // A tiered rate is a per-person rate by group-size band, so it counts here
+  // — the tiles left it out and did not add up to Total.
+  const perPersonRates = rates.filter(r => r.pricing_type === 'per_person' || r.pricing_type === 'tiered' || !r.pricing_type).length
   const perUnitRates = rates.filter(r => r.pricing_type === 'per_unit').length
   const flatRates = rates.filter(r => r.pricing_type === 'flat').length
   const uniqueCities = [...new Set(rates.map(r => r.city).filter(Boolean))].length

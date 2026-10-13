@@ -4,7 +4,9 @@ import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getTieredActivityRate, applyActivityTiers } from '@/lib/rates/activity-tiers'
 import { makeDayTourVehicleFinder } from '@/lib/rates/day-tour-vehicle'
-import { calculateAutoPricing, calculatePricingWithPassengerBreakdown, ServiceTier, CHILD_DISCOUNT_PERCENT, loadSeasonWindows } from '@/lib/auto-pricing-service'
+import { calculateAutoPricing, calculatePricingWithPassengerBreakdown, ServiceTier, CHILD_DISCOUNT_PERCENT, loadSeasonWindows, buildEntranceFeeCache, getGuideRate } from '@/lib/auto-pricing-service'
+import { priceEntranceLine, priceMealLine } from '@/lib/b2b/variation-service-rates'
+import { guideLanguageWord } from '@/lib/guides/guide-language'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
@@ -309,75 +311,27 @@ function selectVehicleFromPackage(pkg: any, numPax: number): { rate: number; veh
   return band ? { rate: band.rate_eur, vehicle: vehicleKeyLabel(band.key) } : null
 }
 
-// Select guide from guides table based on language and tier
-// The quoting company's guides only (suppliers.org_id, 20261205).
-async function selectGuideFromB2CTable(orgId: string | null, language: string = 'English', tier: string = 'standard'): Promise<{ rate: number; name: string; id: string } | null> {
-  if (!orgId) return null
-  const { data: guides, error } = await supabaseAdmin
-    .from('guides')
-    .select('id, name, daily_rate, languages, tier, is_preferred')
-    .eq('org_id', orgId)
+// The guide_rates row a service line picked, this company's, in the run
+// currency — the operator chose it, so it prices whatever the defaults say.
+async function pickedGuideRate(
+  orgId: string | null,
+  id: string,
+  normalizer: ReturnType<typeof createRateNormalizer>
+): Promise<{ id: string; name: string; dailyRate: number } | null> {
+  const { data } = await supabaseAdmin
+    .from('guide_rates')
+    .select('*')
+    .eq('org_id', orgId ?? NO_ORG)
+    .eq('id', id)
     .eq('is_active', true)
-    .contains('languages', [language])
-    .order('is_preferred', { ascending: false })
-
-  if (error || !guides || guides.length === 0) {
-    // Fallback: any guide
-    const { data: anyGuide } = await supabaseAdmin
-      .from('guides')
-      .select('id, name, daily_rate, tier')
-      .eq('org_id', orgId)
-      .eq('is_active', true)
-      .order('is_preferred', { ascending: false })
-      .limit(1)
-
-    if (!anyGuide || anyGuide.length === 0) return null
-    
-    return {
-      rate: anyGuide[0].daily_rate || 0,
-      name: anyGuide[0].name || 'Guide',
-      id: anyGuide[0].id
-    }
-  }
-
-  // Find guide matching tier
-  const selectedGuide = guides.find((g: any) => g.tier === tier) || guides[0]
-
-  return {
-    rate: selectedGuide.daily_rate || 0,
-    name: selectedGuide.name || 'Guide',
-    id: selectedGuide.id
-  }
+  const row = ((await normalizer.normalize('guide_rates', (data ?? []) as Record<string, any>[])) ?? [])[0]
+  const dailyRate = Number(row?.base_rate_eur) || 0
+  return row && dailyRate > 0 ? { id: row.id, name: `${guideLanguageWord(row.guide_language)} Speaking Guide`, dailyRate } : null
 }
-
 
 // Matches no organisation: a rate read without one finds nothing (a missing
 // rate), never another company's rate.
 const NO_ORG = '00000000-0000-0000-0000-000000000000'
-
-// Get entrance fee from entrance_fees table — this company's.
-async function getEntranceFee(orgId: string | null, attractionName: string, isEurPassport: boolean): Promise<{ rate: number; name: string; id: string } | null> {
-  const { data: fees, error } = await supabaseAdmin
-    .from('entrance_fees')
-    .select('id, attraction_name, eur_rate, non_eur_rate')
-    .eq('org_id', orgId ?? NO_ORG)
-    .eq('is_active', true)
-    .ilike('attraction_name', `%${attractionName}%`)
-    .limit(1)
-
-  if (error || !fees || fees.length === 0) return null
-
-  const fee = fees[0]
-  const rate = isEurPassport 
-    ? (fee.eur_rate || 0) 
-    : (fee.non_eur_rate || fee.eur_rate || 0)
-
-  return {
-    rate,
-    name: fee.attraction_name,
-    id: fee.id
-  }
-}
 
 // Get hotel rate from accommodation_rates table (authoritative per-person rates) — this company's.
 async function getHotelRate(
@@ -835,6 +789,22 @@ export async function POST(request: NextRequest) {
     // catalog with their own capacity bands) — NOT the `vehicles` fleet list,
     // which has no rates and priced these lines at 0. Cache built once per request.
     const findDayTourVehicle = makeDayTourVehicleFinder(orgId)
+    // The Guides & Services tables, read once per request and converted into
+    // the run currency — each row from ITS OWN rate_currency (a fee entered as
+    // 600 EGP was priced as 600 in a USD quote). Same normaliser, same policy
+    // as the engine: a row that cannot be converted prices as missing.
+    const serviceNormalizer = createRateNormalizer(rateCurrency)
+    let feeRows: Promise<Record<string, any>[]> | null = null
+    const entranceFees = () => (feeRows ??= buildEntranceFeeCache(orgId, serviceNormalizer) as Promise<Record<string, any>[]>)
+    let mealRowsP: Promise<Record<string, any>[]> | null = null
+    const mealRows = () => (mealRowsP ??= (async () => {
+      const { data } = await supabaseAdmin
+        .from('meal_rates')
+        .select('*')
+        .eq('org_id', orgId ?? NO_ORG)
+        .eq('is_active', true)
+      return ((await serviceNormalizer.normalize('meal_rates', (data ?? []) as Record<string, any>[])) ?? []) as Record<string, any>[]
+    })())
     // Read once, and only when a line asks for a transport package.
     let sailing: Promise<{ durationDays: number; route: string[] }> | null = null
     const legacyCruise = () => (sailing ??= legacySailing(orgId, templateId, template?.duration_days || 1))
@@ -853,7 +823,7 @@ export async function POST(request: NextRequest) {
       // production since launch, so tiered pricing never actually fired.
       // ============================================
       if (service.rate_type === 'activity' && service.service_name) {
-        const tiered = await getTieredActivityRate(supabaseAdmin, orgId, service.service_name)
+        const tiered = await getTieredActivityRate(supabaseAdmin, orgId, service.service_name, { normalizer: serviceNormalizer, date: travel_date })
 
         if (tiered) {
           const priceResult = applyActivityTiers(tiered.tiers, num_pax, is_eur_passport, rateSym)
@@ -924,29 +894,33 @@ export async function POST(request: NextRequest) {
           }
 
           case 'guide': {
-            const guide = await selectGuideFromB2CTable(orgId, language, effectiveTier)
+            // From guide_rates, the table Rates → Guides maintains, exactly as
+            // the day-by-day engine prices a guide (language by key, grade,
+            // mode, valid on the travel date); the line's picked rate wins. It
+            // read the legacy guides view's daily_rate and fell back to "any
+            // guide" of any language.
+            const picked = service.rate_id ? await pickedGuideRate(orgId, service.rate_id, serviceNormalizer) : null
+            const guide = picked ?? await getGuideRate(orgId, language, effectiveTier, serviceNormalizer, { grade: guideGrade, mode: guideMode, date: travel_date })
             if (guide) {
-              unitCost = guide.rate
-              lineTotal = guide.rate
+              unitCost = guide.dailyRate
+              lineTotal = guide.dailyRate
               effectiveQuantityMode = 'fixed'
-              pricingNote = `${guide.name}: ${rateSym}${guide.rate}/day`
-              rateSource = 'guides'
-              console.log(`✅ Guide from B2C: ${guide.name} -> ${rateSym}${guide.rate}`)
+              pricingNote = `${guide.name}: ${rateSym}${guide.dailyRate}/day`
+              rateSource = 'guide_rates'
             }
             break
           }
 
           case 'activity':
           case 'entrance': {
-            if (service.service_name) {
-              const fee = await getEntranceFee(orgId, service.service_name, is_eur_passport)
-              if (fee) {
-                unitCost = fee.rate
-                lineTotal = fee.rate * num_pax
-                effectiveQuantityMode = 'per_pax'
-                pricingNote = `${fee.name}: ${rateSym}${fee.rate}/pax (${is_eur_passport ? 'EUR' : 'non-EUR'})`
-                rateSource = 'entrance_fees'
-                console.log(`✅ Entrance from B2C: ${fee.name} -> ${rateSym}${fee.rate}/pax`)
+            if (service.service_name || service.rate_id) {
+              const priced = priceEntranceLine(await entranceFees(), {
+                serviceName: service.service_name, rateId: service.rate_id, date: travel_date,
+                numPax: num_pax, isEurPassport: is_eur_passport, rateSym,
+              })
+              if (priced) {
+                ({ unitCost, lineTotal, pricingNote, rateSource } = priced)
+                effectiveQuantityMode = priced.quantityMode
               }
             }
             break
@@ -997,25 +971,18 @@ export async function POST(request: NextRequest) {
           }
 
           case 'meal': {
-            const { data: mealRate } = await supabaseAdmin
-              .from('meal_rates')
-              .select('*')
-              .eq('org_id', orgId ?? NO_ORG)
-              .eq('is_active', true)
-              .limit(1)
-              .single()
-
-            if (mealRate) {
-              if (service.service_name?.toLowerCase().includes('dinner')) {
-                unitCost = mealRate.dinner_rate_eur || 0
-              } else {
-                unitCost = mealRate.lunch_rate_eur || 0
-              }
-              lineTotal = unitCost * num_pax
-              effectiveQuantityMode = 'per_pax'
-              pricingNote = `${rateSym}${unitCost}/pax`
-              rateSource = 'meal_rates'
-              console.log(`✅ Meal from B2C: ${service.service_name} -> ${rateSym}${unitCost}/pax`)
+            // meal_rates has no lunch_rate_eur / dinner_rate_eur: every meal
+            // line priced 0 and was marked found, so the stored cost below was
+            // never used. One restaurant's rate now (the line's pick, else the
+            // tier's for that meal on the travel date), per group or per
+            // person with its minimum; no rate = the stored cost.
+            const priced = priceMealLine(await mealRows(), {
+              serviceName: service.service_name, rateId: service.rate_id, tier: effectiveTier,
+              date: travel_date, numPax: num_pax, rateSym,
+            })
+            if (priced) {
+              ({ unitCost, lineTotal, pricingNote, rateSource } = priced)
+              effectiveQuantityMode = priced.quantityMode
             }
             break
           }

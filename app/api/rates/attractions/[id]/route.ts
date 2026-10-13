@@ -11,6 +11,9 @@ import { clientMessage } from '@/lib/api-errors'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
+import { validateRatePayload } from '@/lib/rate-validation'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
+import { rateInUse, rateInUseMessage } from '@/lib/rates/rate-in-use'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabase = createActorAdminClient()
@@ -133,6 +136,25 @@ export async function PUT(
       language // optional: if non-English, save translatable fields to version table
     } = body
 
+    // The same money checks as a create: an edit could save a negative fee.
+    const _rateCheck = validateRatePayload(body)
+    if (!_rateCheck.ok) {
+      return NextResponse.json({ success: false, error: 'Invalid rate values', violations: _rateCheck.errors }, { status: 400 })
+    }
+
+    // The supplier must be this company's (it was stored as sent).
+    let resolvedSupplierId: string | null | undefined
+    if (supplier_id !== undefined) {
+      resolvedSupplierId = null
+      if (supplier_id) {
+        const supplierCheck = await validateAndResolveSupplierFields({ supplier_id }, supabase)
+        if (!supplierCheck.ok) {
+          return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+        }
+        resolvedSupplierId = supplierCheck.supplier_id
+      }
+    }
+
     // If non-English language specified, save translatable fields to version table
     if (language && language !== 'en') {
       // Update non-translatable fields only in base record
@@ -156,10 +178,9 @@ export async function PUT(
       // Do NOT update attraction_name or notes in base record for non-English
       if (is_active !== undefined) updateData.is_active = is_active
       if (is_addon !== undefined) updateData.is_addon = is_addon
-    if (is_sellable_extra !== undefined) updateData.is_sellable_extra = is_sellable_extra
       if (is_sellable_extra !== undefined) updateData.is_sellable_extra = is_sellable_extra
       if (addon_note !== undefined) updateData.addon_note = addon_note
-      if (supplier_id !== undefined) updateData.supplier_id = supplier_id || null
+      if (resolvedSupplierId !== undefined) updateData.supplier_id = resolvedSupplierId
 
       const { data, error } = await supabase
         .from('entrance_fees')
@@ -232,7 +253,7 @@ export async function PUT(
     if (is_addon !== undefined) updateData.is_addon = is_addon
     if (is_sellable_extra !== undefined) updateData.is_sellable_extra = is_sellable_extra
     if (addon_note !== undefined) updateData.addon_note = addon_note
-    if (supplier_id !== undefined) updateData.supplier_id = supplier_id || null
+    if (resolvedSupplierId !== undefined) updateData.supplier_id = resolvedSupplierId
 
     const { data, error } = await supabase
       .from('entrance_fees')
@@ -282,23 +303,28 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: 'Attraction not found' }, { status: 404 })
     }
     
-    // Check if attraction is used in any of THIS company's itinerary services
-    // (through the day's itinerary) — another company's trip naming a place
-    // of the same name used to block the delete.
+    // Refused, with the reason, while a trip line, a variation or a
+    // programme's picked ticket still uses it (lib/rates/rate-in-use).
+    const use = await rateInUse(supabase, 'entrance_fees', id, orgId)
+    if (use) return NextResponse.json({ success: false, error: rateInUseMessage(use) }, { status: 409 })
+
+    // A trip line written with the attraction's own name, on THIS company's
+    // trips. The whole name, case aside: a CONTAINS match let "Karnak Sound &
+    // Light" block deleting "Karnak".
     const { data: usedIn } = await supabase
       .from('itinerary_services')
       .select('id, itinerary_days!inner(itineraries!inner(org_id))')
       .eq('itinerary_days.itineraries.org_id', orgId)
-      .ilike('service_name', `%${existing.attraction_name}%`)
+      .ilike('service_name', existing.attraction_name.replace(/[%_\\]/g, (ch: string) => `\\${ch}`))
       .limit(1)
-    
+
     if (usedIn && usedIn.length > 0) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Cannot delete: This attraction is used in existing itineraries. Consider deactivating it instead.' 
-      }, { status: 400 })
+      return NextResponse.json({
+        success: false,
+        error: rateInUseMessage({ where: 'trip_line' })
+      }, { status: 409 })
     }
-    
+
     const { error } = await supabase
       .from('entrance_fees')
       .delete()

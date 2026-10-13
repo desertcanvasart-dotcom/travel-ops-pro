@@ -247,10 +247,10 @@ export default function MealRatesContent() {
   // Fetch rates
   const fetchRates = async () => {
     try {
-      const params = new URLSearchParams()
-      if (!showInactive) params.append('active_only', 'true')
-
-      const response = await fetch(`/api/rates/meals?${params}`)
+      // Every rate, inactive ones too: "Show inactive" filters on this page.
+      // The fetch ran once, active only, so an inactive rate could never be
+      // found again to reactivate — and Total always equalled Active.
+      const response = await fetch('/api/rates/meals')
       const data = await response.json()
 
       if (data.success) {
