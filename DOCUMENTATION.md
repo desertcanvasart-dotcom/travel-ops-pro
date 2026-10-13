@@ -803,7 +803,6 @@ Additional rate endpoints:
 ### AI Utilities (`lib/ai/`)
 | File | Description |
 |------|-------------|
-| `content-library-utils.ts` | Content library helper functions |
 | `content-library.ts` | Content library AI integration |
 | `cruise-detection.ts` | Detect cruise-related services in itineraries |
 | `cruise-pricing.ts` | Cruise pricing calculation logic |

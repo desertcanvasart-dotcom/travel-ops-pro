@@ -6,6 +6,12 @@
 import { type CruiseDetectionResult } from './cruise-detection'
 import { type ServiceTier } from './parsing-utils'
 
+// Every read here runs on the service role (RLS does not apply), so each one
+// filters by the generating company: content items, cruise programmes,
+// writing rules and the usage log are each company's own since 20261208.
+// Matches no organisation: an org-less read finds nothing.
+const NO_ORG = '00000000-0000-0000-0000-000000000000'
+
 // ============================================
 // CRUISE CONTENT LOOKUP
 // ============================================
@@ -20,6 +26,7 @@ export interface CruiseContentMatch {
 
 export async function findCruiseContent(
   supabaseAdmin: any,
+  orgId: string | null | undefined,
   cruiseDetection: CruiseDetectionResult,
   tier: ServiceTier,
   requestedDuration: number | null
@@ -54,6 +61,7 @@ export async function findCruiseContent(
           is_active
         )
       `)
+      .eq('org_id', orgId ?? NO_ORG)
       .eq('is_cruise', true)
       .eq('is_active', true)
       .eq('content_variations.is_active', true)
@@ -91,6 +99,7 @@ export async function findCruiseContent(
             is_active
           )
         `)
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('is_cruise', true)
         .eq('is_active', true)
         .eq('content_variations.is_active', true)
@@ -159,15 +168,21 @@ export interface ContentItem {
   inclusions: string[]
 }
 
+// writing_rules' real columns (there is no rule_text: the prompt used to
+// print "- undefined" for every rule).
 export interface WritingRule {
+  name: string
+  description: string
   rule_type: string
-  rule_text: string
   category: string
   priority: number
+  applies_to?: string[] | null
+  examples?: unknown
 }
 
 export async function fetchContentLibrary(
   supabaseAdmin: any,
+  orgId: string | null | undefined,
   tier: string,
   cities: string[],
   interests: string[]
@@ -190,6 +205,7 @@ export async function fetchContentLibrary(
         inclusions,
         content_library!inner (
           id,
+          org_id,
           name,
           slug,
           short_description,
@@ -202,6 +218,7 @@ export async function fetchContentLibrary(
           )
         )
       `)
+      .eq('content_library.org_id', orgId ?? NO_ORG)
       .eq('tier', tier)
       .eq('is_active', true)
 
@@ -250,11 +267,12 @@ export async function fetchContentLibrary(
   }
 }
 
-export async function fetchWritingRules(supabaseAdmin: any): Promise<WritingRule[]> {
+export async function fetchWritingRules(supabaseAdmin: any, orgId: string | null | undefined): Promise<WritingRule[]> {
   try {
     const { data: rules, error } = await supabaseAdmin
       .from('writing_rules')
       .select('*')
+      .eq('org_id', orgId ?? NO_ORG)
       .eq('is_active', true)
       .order('priority', { ascending: false })
 
@@ -292,6 +310,15 @@ export function buildContentContext(content: ContentItem[]): string {
   return context
 }
 
+/** One rule as the prompt reads it: "name: description" (either alone when
+ *  the other is empty; nothing when both are). */
+function ruleLine(r: WritingRule): string | null {
+  const name = (r.name ?? '').trim()
+  const description = (r.description ?? '').trim()
+  if (name && description) return `${name}: ${description}`
+  return name || description || null
+}
+
 export function buildWritingRulesContext(rules: WritingRule[]): string {
   if (rules.length === 0) return ''
 
@@ -302,12 +329,12 @@ export function buildWritingRulesContext(rules: WritingRule[]): string {
 
   if (enforceRules.length > 0) {
     context += 'MUST follow:\n'
-    enforceRules.forEach(r => context += `- ${r.rule_text}\n`)
+    enforceRules.forEach(r => { const line = ruleLine(r); if (line) context += `- ${line}\n` })
   }
 
   if (avoidRules.length > 0) {
     context += 'AVOID:\n'
-    avoidRules.forEach(r => context += `- ${r.rule_text}\n`)
+    avoidRules.forEach(r => { const line = ruleLine(r); if (line) context += `- ${line}\n` })
   }
 
   return context
@@ -323,9 +350,6 @@ export function buildWritingRulesContext(rules: WritingRule[]): string {
  * the AI from outputting attraction names in wrong languages.
  * Only pass English/Latin-script names to the AI prompt.
  */
-// Matches no organisation: an org-less read finds no attractions.
-const NO_ORG = '00000000-0000-0000-0000-000000000000'
-
 export async function fetchAttractionsList(supabase: any, orgId: string | null | undefined): Promise<string[]> {
   try {
     // Fetch BOTH entrance fees AND activity rates — activities (Sea Trip, etc.)
@@ -624,22 +648,27 @@ export function buildRichContentContext(
  */
 export async function logContentUsage(
   supabase: any,
+  orgId: string | null | undefined,
   contentIds: string[],
   tier: string,
   itineraryId: string,
   context: string = 'itinerary_generation'
 ): Promise<void> {
-  if (contentIds.length === 0) return
+  if (contentIds.length === 0 || !orgId) return
   try {
+    // Only this company's items (an id from elsewhere logs nothing), and the
+    // log row is the company's.
     const { data: variations } = await supabase
       .from('content_variations')
-      .select('id, content_id')
+      .select('id, content_id, content_library!inner(org_id)')
+      .eq('content_library.org_id', orgId)
       .in('content_id', contentIds)
       .eq('tier', tier)
 
     if (!variations || variations.length === 0) return
 
     const logs = variations.map((v: any) => ({
+      org_id: orgId,
       content_id: v.content_id,
       variation_id: v.id,
       itinerary_id: itineraryId,

@@ -11,8 +11,8 @@ import { timingSafeEqual } from 'node:crypto'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { loadCachedPriceSettings, refreshTemplateCachedPrice, type NoPriceReason } from '@/lib/tours/cached-price'
-import { getCurrentOrgId, requireRole } from '@/lib/auth/current-org'
-import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
+import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
+import { tierLadderForOrg } from '@/lib/vocabulary-server'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -58,22 +58,35 @@ function secretMatches(presented: string | null): boolean {
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
-/** The only organization on this installation, or null when there are several. */
-async function soleOrgId(): Promise<string | null> {
-  const { data } = await supabaseAdmin.from('organizations').select('id').limit(2)
-  return data && data.length === 1 ? data[0].id : null
-}
+// ============================================
+// WHOSE TEMPLATES, PRICED WITH WHOSE RATES
+// ============================================
+// A template belongs to one company (tour_templates.org_id, 20261207), and so
+// do the rates and settings that price it (20261206). Each company's
+// templates are priced with THAT company's rates, currency, margin, guide
+// language and tier ladder — one company at a time, never mixed. The
+// scheduler (CRON_SECRET, no person) runs every company in turn; a signed-in
+// manager runs only their own company.
 
-/** null = allowed; a NextResponse = the refusal to return. */
-async function authorize(request: NextRequest): Promise<NextResponse | null> {
-  if (secretMatches(presentedSecret(request))) return null
-  return requireRole(['admin', 'manager'])
+type Caller = { denied: NextResponse } | { orgIds: string[] }
+
+/** Who is asking, and which companies' templates that lets them run. */
+async function authorize(request: NextRequest): Promise<Caller> {
+  if (secretMatches(presentedSecret(request))) {
+    const { data } = await supabaseAdmin.from('organizations').select('id').order('created_at', { ascending: true })
+    return { orgIds: ((data ?? []) as Array<{ id: string }>).map(o => o.id) }
+  }
+  const denied = await requireRole(['admin', 'manager'])
+  if (denied) return { denied }
+  const orgId = await getCurrentOrgId()
+  if (!orgId) return { denied: noOrgResponse() }
+  return { orgIds: [orgId] }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const denied = await authorize(request)
-    if (denied) return denied
+    const caller = await authorize(request)
+    if ('denied' in caller) return caller.denied
 
     // Parse request body for optional template ID
     let templateId: string | null = null
@@ -87,66 +100,66 @@ export async function POST(request: NextRequest) {
     console.log('🔄 Starting price recalculation...')
     const startTime = Date.now()
 
-    // Fetch templates to recalculate
-    let query = supabaseAdmin
-      .from('tour_templates')
-      .select('id, template_name, duration_days, uses_day_builder, pricing_mode')
-      .eq('is_active', true)
+    const results: { id: string; name: string; org_id: string; price: number | null; tier: string | null; error?: string; no_price?: NoPriceReason }[] = []
 
-    if (templateId) {
-      query = query.eq('id', templateId)
+    for (const orgId of caller.orgIds) {
+      // This company's active templates (one of them, when a templateId is
+      // given — another company's id finds nothing).
+      let query = supabaseAdmin
+        .from('tour_templates')
+        .select('id, template_name, duration_days, uses_day_builder, pricing_mode')
+        .eq('org_id', orgId)
+        .eq('is_active', true)
+      if (templateId) {
+        query = query.eq('id', templateId)
+      }
+
+      const { data: templates, error } = await query
+      if (error) {
+        console.error('Error fetching templates:', error)
+        return NextResponse.json(
+          { success: false, error: clientMessage(error, 'Internal server error') },
+          { status: 500 }
+        )
+      }
+      if (!templates || templates.length === 0) continue
+
+      console.log(`📋 Org ${orgId}: ${templates.length} templates to process`)
+
+      // The "from" price ranges over this company's own tiers, at its own
+      // settings: rates, rate currency, default margin, guide language
+      // (lib/tours/cached-price).
+      const tierLadder = await tierLadderForOrg(supabaseAdmin, orgId)
+      const pricingOptions = await loadCachedPriceSettings(supabaseAdmin, orgId)
+
+      // Process templates sequentially to avoid overwhelming the database
+      for (const template of templates) {
+        try {
+          const { price, tier, noPrice } = await refreshTemplateCachedPrice(supabaseAdmin, template, { tierLadder, pricingOptions })
+          console.log(`✅ Updated ${template.template_name}: ${price} (${tier})`)
+          // Why a tour has no price — the rates its closest tier lacks — so the
+          // catalogue can say what to add instead of a bare N/A.
+          results.push({ id: template.id, name: template.template_name, org_id: orgId, price, tier, ...(noPrice ? { no_price: noPrice } : {}) })
+        } catch (err: any) {
+          console.error(`❌ Error processing ${template.template_name}:`, err)
+          results.push({
+            id: template.id,
+            name: template.template_name,
+            org_id: orgId,
+            price: null,
+            tier: null,
+            error: clientMessage(err, 'Internal server error')
+          })
+        }
+      }
     }
 
-    const { data: templates, error } = await query
-
-    if (error) {
-      console.error('Error fetching templates:', error)
-      return NextResponse.json(
-        { success: false, error: clientMessage(error, 'Internal server error') },
-        { status: 500 }
-      )
-    }
-
-    if (!templates || templates.length === 0) {
+    if (results.length === 0) {
       return NextResponse.json({
         success: true,
         message: 'No templates to recalculate',
         updated: 0
       })
-    }
-
-    console.log(`📋 Found ${templates.length} templates to process`)
-
-    const results: { id: string; name: string; price: number | null; tier: string | null; error?: string; no_price?: NoPriceReason }[] = []
-
-    // The "from" price ranges over the agency's own tiers, not the four presets.
-    const tierLadder = await tierLadderForCurrentOrg()
-
-    // Whose rates: tour_templates carry no org_id, so a signed-in run prices for
-    // the caller's org and the scheduler (no session) for the installation's
-    // sole org. Without rateCurrency the engine read every rate as EUR.
-    const orgId = (await getCurrentOrgId()) ?? (await soleOrgId())
-    // ...and at its own settings: guide language, default margin (lib/tours/cached-price).
-    const pricingOptions = await loadCachedPriceSettings(supabaseAdmin, orgId)
-
-    // Process templates sequentially to avoid overwhelming the database
-    for (const template of templates) {
-      try {
-        const { price, tier, noPrice } = await refreshTemplateCachedPrice(supabaseAdmin, template, { tierLadder, pricingOptions })
-        console.log(`✅ Updated ${template.template_name}: ${price} (${tier})`)
-        // Why a tour has no price — the rates its closest tier lacks — so the
-        // catalogue can say what to add instead of a bare N/A.
-        results.push({ id: template.id, name: template.template_name, price, tier, ...(noPrice ? { no_price: noPrice } : {}) })
-      } catch (err: any) {
-        console.error(`❌ Error processing ${template.template_name}:`, err)
-        results.push({
-          id: template.id,
-          name: template.template_name,
-          price: null,
-          tier: null,
-          error: clientMessage(err, 'Internal server error')
-        })
-      }
     }
 
     const duration = Date.now() - startTime
@@ -180,13 +193,15 @@ export async function POST(request: NextRequest) {
 // active tour template, which is the operator's product catalogue.
 export async function GET(request: NextRequest) {
   try {
-    const denied = await authorize(request)
-    if (denied) return denied
+    const caller = await authorize(request)
+    if ('denied' in caller) return caller.denied
 
-    // Check how many templates need price updates
+    // Check how many templates need price updates — the caller's company's
+    // (the scheduler: every company's).
     const { data: templates, error } = await supabaseAdmin
       .from('tour_templates')
-      .select('id, template_name, cached_starting_price, cached_price_updated_at')
+      .select('id, org_id, template_name, cached_starting_price, cached_price_updated_at')
+      .in('org_id', caller.orgIds)
       .eq('is_active', true)
 
     if (error) {
@@ -211,6 +226,7 @@ export async function GET(request: NextRequest) {
         stale_prices: stalePrice.length,
         templates_needing_update: withoutPrice.map(t => ({
           id: t.id,
+          org_id: t.org_id,
           name: t.template_name
         }))
       }

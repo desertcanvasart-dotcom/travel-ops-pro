@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET - List all tour templates with variations
+// GET - List the company's tour templates with variations
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { searchParams } = new URL(request.url)
-    const category = searchParams.get('category_id')
     const themeKey = searchParams.get('theme_key')
     const tourType = searchParams.get('tour_type')
     const isActive = searchParams.get('is_active')
@@ -24,6 +26,7 @@ export async function GET(request: NextRequest) {
       const { data, error } = await supabaseAdmin
         .from('tour_templates')
         .select('id, template_code, template_name, duration_days, is_active')
+        .eq('org_id', orgId)
         .order('template_code', { ascending: true })
 
       if (error) {
@@ -36,20 +39,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, data: data ?? [], count: data?.length ?? 0 })
     }
 
-    // First get templates
+    // First get templates. (The theme is theme_key; the retired
+    // tour_categories table and its category_id link are gone — 20261207.)
     let query = supabaseAdmin
       .from('tour_templates')
-      .select(`
-        *,
-        category:tour_categories(id, category_name, category_code)
-      `)
+      .select('*')
+      .eq('org_id', orgId)
       .order('created_at', { ascending: false })
 
     if (themeKey) {
       query = query.eq('theme_key', themeKey)
-    }
-    if (category) {
-      query = query.eq('category_id', category)
     }
 
     if (tourType) {
@@ -78,6 +77,7 @@ export async function GET(request: NextRequest) {
       const { data: variations, error: variationsError } = await supabaseAdmin
         .from('tour_variations')
         .select('*')
+        .eq('org_id', orgId)
         .in('template_id', templateIds)
         .order('tier', { ascending: true })
 
@@ -132,6 +132,8 @@ export async function GET(request: NextRequest) {
 // POST - Create new tour template
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     if (!body.template_name || !body.tour_type) {
@@ -145,13 +147,12 @@ export async function POST(request: NextRequest) {
     const templateCode = body.template_code || generateTemplateCode(body)
 
     const templateData = {
+      org_id: orgId,
       template_code: templateCode,
       template_name: body.template_name,
-      // The portable theme key (org_vocabularies tour_theme). category_id is
-      // the install-local UUID it replaces — still written when a stale client
-      // sends one, never read. See migration 20261011.
+      // The portable theme key (org_vocabularies tour_theme). The
+      // install-local category_id it replaced is gone (20261207).
       theme_key: body.theme_key || null,
-      category_id: body.category_id || null,
       tour_type: body.tour_type,
       duration_days: body.duration_days || 1,
       duration_nights: body.duration_nights || null,
@@ -197,6 +198,7 @@ export async function POST(request: NextRequest) {
       .from('tour_templates')
       // Empty select() returns all columns, like the insert below.
       .select()
+      .eq('org_id', orgId)
       .eq('template_name', body.template_name)
       .eq('tour_type', body.tour_type)
       .gte('created_at', dupWindowStart)

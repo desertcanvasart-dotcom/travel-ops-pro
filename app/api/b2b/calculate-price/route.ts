@@ -486,6 +486,9 @@ export async function POST(request: NextRequest) {
           tour_templates (id, template_name, template_code, duration_days, uses_day_builder, pricing_mode)
         `)
         .eq('id', variation_id)
+        // The caller's company's variation (tour_variations.org_id, 20261207);
+        // another company's is "not found".
+        .eq('org_id', orgId ?? NO_ORG)
         .single()
 
       if (varError || !varRow) {
@@ -501,6 +504,7 @@ export async function POST(request: NextRequest) {
         .from('tour_templates')
         .select('id, template_name, template_code, duration_days, uses_day_builder, pricing_mode')
         .eq('id', template_id)
+        .eq('org_id', orgId ?? NO_ORG)
         .single()
 
       if (tplError || !templateRow) {

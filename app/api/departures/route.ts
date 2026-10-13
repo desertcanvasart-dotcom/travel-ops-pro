@@ -204,6 +204,9 @@ export async function POST(request: NextRequest) {
         .from('tour_templates')
         .select('template_name, template_code, duration_days')
         .eq('id', template_id)
+        // The company's own programme only (tour_templates.org_id, 20261207):
+        // another company's template is "not found".
+        .eq('org_id', org_id)
         .single()
 
       if (templateError || !template) {
@@ -216,6 +219,21 @@ export async function POST(request: NextRequest) {
       finalTourName = finalTourName || template.template_name
       finalTourCode = finalTourCode || template.template_code
       finalDurationDays = finalDurationDays || template.duration_days
+    }
+
+    if (variation_id) {
+      const { data: variation } = await supabase
+        .from('tour_variations')
+        .select('id')
+        .eq('id', variation_id)
+        .eq('org_id', org_id)
+        .maybeSingle()
+      if (!variation) {
+        return NextResponse.json(
+          { success: false, error: 'Tour variation not found' },
+          { status: 404 }
+        )
+      }
     }
 
     if (!finalTourName) {

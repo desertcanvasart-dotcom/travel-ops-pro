@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse, after } from 'next/server'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
 import { loadCachedPriceSettings, refreshTemplateCachedPrice } from '@/lib/tours/cached-price'
 
@@ -19,6 +19,9 @@ const supabaseAdmin = createClient(
 
 export async function PATCH(request: NextRequest) {
   try {
+    // The caller's company's template only (tour_templates.org_id, 20261207).
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
     const { template_id, itinerary } = body
 
@@ -56,6 +59,7 @@ export async function PATCH(request: NextRequest) {
         updated_at: new Date().toISOString()
       })
       .eq('id', template_id)
+      .eq('org_id', orgId)
       .select('id, uses_day_builder, pricing_mode')
       .maybeSingle()
 
@@ -65,6 +69,9 @@ export async function PATCH(request: NextRequest) {
         { success: false, error: 'Failed to update template' },
         { status: 500 }
       )
+    }
+    if (!savedTemplate) {
+      return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 })
     }
 
     // 2. Update tour_template_versions (English version)
@@ -83,8 +90,7 @@ export async function PATCH(request: NextRequest) {
     // itinerary. Refresh it now the itinerary changed, after the response so
     // the save does not wait on a full multi-tier pricing run. The org context
     // is read here, while the request is still in scope.
-    if (savedTemplate) {
-      const orgId = await getCurrentOrgId()
+    {
       const ctx = {
         tierLadder: await tierLadderForCurrentOrg(),
         pricingOptions: await loadCachedPriceSettings(supabaseAdmin, orgId),

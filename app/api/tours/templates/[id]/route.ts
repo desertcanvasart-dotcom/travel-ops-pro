@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
 
 // Admin client for all operations (bypasses RLS)
@@ -15,23 +15,24 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
 
-    // Get template with category
+    // The caller's company's template only: another company's id is "not
+    // found", like one that does not exist.
     const { data: template, error: templateError } = await supabaseAdmin
       .from('tour_templates')
-      .select(`
-        *,
-        category:tour_categories(id, category_name, category_code)
-      `)
+      .select('*')
       .eq('id', id)
-      .single()
+      .eq('org_id', orgId)
+      .maybeSingle()
 
     if (templateError) {
       console.error('Error fetching template:', templateError)
       return NextResponse.json(
         { success: false, error: clientMessage(templateError, 'Internal server error') },
-        { status: 404 }
+        { status: 500 }
       )
     }
 
@@ -47,40 +48,24 @@ export async function GET(
       .from('tour_variations')
       .select('*')
       .eq('template_id', id)
+      .eq('org_id', orgId)
       .order('tier', { ascending: true })
 
-    // Get days with activities
-    const { data: days } = await supabaseAdmin
-      .from('tour_days')
-      .select(`
-        *,
-        activities:tour_day_activities(
-          *,
-          entrance:attractions(id, name, city),
-          transportation:transportation_rates(id, vehicle_type, city)
-        ),
-        accommodation:hotel_contacts(id, name, city),
-        lunch_meal:restaurant_contacts!lunch_meal_id(id, name, city),
-        dinner_meal:restaurant_contacts!dinner_meal_id(id, name, city),
-        guide:guides(id, name, languages)
-      `)
-      .eq('tour_id', id)
-      .order('day_number', { ascending: true })
-
-    // Get pricing
-    const { data: pricing } = await supabaseAdmin
-      .from('tour_pricing')
-      .select('*')
-      .eq('tour_id', id)
-      .order('pax', { ascending: true })
+    // `days` and `pricing` were read from tour_days / tour_pricing by
+    // tour_id = this template's id — but those rows belong to the legacy
+    // builder's tours (tour_days.tour_id → tours), never to a template, so
+    // they always came back empty. The template's day plan is
+    // /api/tours/templates/[id]/days. The keys stay for old clients.
+    const days: unknown[] = []
+    const pricing: unknown[] = []
 
     return NextResponse.json({
       success: true,
       data: {
         ...template,
         variations: variations || [],
-        days: days || [],
-        pricing: pricing || []
+        days,
+        pricing
       }
     })
 
@@ -99,6 +84,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
     const body = await request.json()
 
@@ -108,7 +95,6 @@ export async function PUT(
     if (body.template_code !== undefined) updateData.template_code = body.template_code
     if (body.template_name !== undefined) updateData.template_name = body.template_name
     if (body.theme_key !== undefined) updateData.theme_key = body.theme_key || null
-    if (body.category_id !== undefined) updateData.category_id = body.category_id || null
     if (body.tour_type !== undefined) updateData.tour_type = body.tour_type
     if (body.duration_days !== undefined) updateData.duration_days = body.duration_days
     if (body.duration_nights !== undefined) updateData.duration_nights = body.duration_nights
@@ -149,6 +135,7 @@ export async function PUT(
       .from('tour_templates')
       .update(updateData)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
 
     if (error) {
@@ -181,121 +168,106 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete template (and cascade to variations, days, activities, pricing, quotes)
+// DELETE - Delete template (and its variations, their children, its day
+// activities, and the company's quotes built only on it)
+//
+// Manager-and-above (the tour manager's role; RLS on tour_templates says the
+// same). Only the caller's company's template: another company's id is "not
+// found". The steps are not one transaction, so the first one that fails
+// stops the delete and is REPORTED (500, naming the step) — it used to be
+// logged and the route answered 200 with half a programme left behind.
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params
-
-    // Needed for the quote cascade below: templates are shared across
-    // organisations, the quotes built from them are not.
+    const denied = await requireRole(['admin', 'manager'])
+    if (denied) return denied
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
+    const { id } = await params
 
-    // 1. Get all days first
-    const { data: days, error: daysErr } = await supabaseAdmin
-      .from('tour_days')
+    const { data: template } = await supabaseAdmin
+      .from('tour_templates')
       .select('id')
-      .eq('tour_id', id)
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!template) {
+      return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 })
+    }
 
-    // tour_day_activities links by template_id (+ day_number), NOT by a
-    // tour_day_id — that column does not exist, so this delete 400'd. The
-    // error was only logged, so the template vanished and its activities were
-    // orphaned behind it.
+    const failed = (step: string, err: { message?: string }) => {
+      console.error(`Error deleting template ${id} — ${step}:`, err)
+      return NextResponse.json(
+        { success: false, error: `Failed to delete ${step}: ${err.message ?? 'unknown error'}`, step },
+        { status: 500 }
+      )
+    }
+
+    // tour_day_activities links by template_id (+ day_number).
     const { error: actErr } = await supabaseAdmin
       .from('tour_day_activities')
       .delete()
       .eq('template_id', id)
-    if (actErr) console.error('Error deleting day activities:', actErr)
+    if (actErr) return failed('day activities', actErr)
 
-    // Delete days
-    const { error: delDaysErr } = await supabaseAdmin
-      .from('tour_days')
-      .delete()
-      .eq('tour_id', id)
-    if (delDaysErr) console.error('Error deleting days:', delDaysErr)
-
-    // 2. Get all variations
-    const { data: variations } = await supabaseAdmin
+    const { data: variations, error: varReadErr } = await supabaseAdmin
       .from('tour_variations')
       .select('id')
       .eq('template_id', id)
+      .eq('org_id', orgId)
+    if (varReadErr) return failed('variations', varReadErr)
 
     if (variations && variations.length > 0) {
       const variationIds = variations.map(v => v.id)
 
-      // Detach quotes that also have an itinerary_id (set variation_id to null).
-      //
-      // SCOPED. tour_templates and tour_variations carry no org_id, so a
-      // template is shared across organisations — but the QUOTES built from it
-      // are not. Unscoped, deleting a template reached into every other
-      // organisation's quotes and deleted them. Only our own are touched.
+      // Quotes that also have an itinerary keep it and lose the variation;
+      // quotes with nothing else are deleted. The company's own quotes only
+      // (a variation is one company's now, and so are the quotes built on it).
       const { error: detachErr } = await supabaseAdmin
         .from('tour_quotes')
         .update({ variation_id: null })
         .in('variation_id', variationIds)
         .eq('org_id', orgId)
         .not('itinerary_id', 'is', null)
-      if (detachErr) console.error('Error detaching quotes:', detachErr)
+      if (detachErr) return failed('quote links', detachErr)
 
-      // Delete quotes that only reference these variations (no itinerary fallback)
       const { error: delQuotesErr } = await supabaseAdmin
         .from('tour_quotes')
         .delete()
         .in('variation_id', variationIds)
         .eq('org_id', orgId)
-      if (delQuotesErr) console.error('Error deleting quotes:', delQuotesErr)
+      if (delQuotesErr) return failed('quotes', delQuotesErr)
 
-      // Delete variation daily itinerary
       const { error: delDailyErr } = await supabaseAdmin
         .from('variation_daily_itinerary')
         .delete()
         .in('variation_id', variationIds)
-      if (delDailyErr) console.error('Error deleting variation daily itinerary:', delDailyErr)
+      if (delDailyErr) return failed('variation daily itinerary', delDailyErr)
 
-      // Delete variation services
       const { error: delSvcErr } = await supabaseAdmin
         .from('tour_variation_services')
         .delete()
         .in('variation_id', variationIds)
-      if (delSvcErr) console.error('Error deleting variation services:', delSvcErr)
+      if (delSvcErr) return failed('variation services', delSvcErr)
     }
 
-    // Delete variations (version tables cascade automatically via ON DELETE CASCADE)
+    // Variations (their version tables, pricing and costed services cascade).
     const { error: delVarErr } = await supabaseAdmin
       .from('tour_variations')
       .delete()
       .eq('template_id', id)
-    if (delVarErr) {
-      console.error('Error deleting variations:', delVarErr)
-      return NextResponse.json(
-        { success: false, error: `Failed to delete variations: ${delVarErr.message}` },
-        { status: 500 }
-      )
-    }
+      .eq('org_id', orgId)
+    if (delVarErr) return failed('variations', delVarErr)
 
-    // Delete pricing
-    const { error: delPriceErr } = await supabaseAdmin
-      .from('tour_pricing')
-      .delete()
-      .eq('tour_id', id)
-    if (delPriceErr) console.error('Error deleting pricing:', delPriceErr)
-
-    // Delete template (version tables cascade automatically via ON DELETE CASCADE)
+    // The template (its version tables cascade).
     const { error } = await supabaseAdmin
       .from('tour_templates')
       .delete()
       .eq('id', id)
-
-    if (error) {
-      console.error('Error deleting template:', error)
-      return NextResponse.json(
-        { success: false, error: `Failed to delete template: ${error.message}` },
-        { status: 500 }
-      )
-    }
+      .eq('org_id', orgId)
+    if (error) return failed('template', error)
 
     return NextResponse.json({
       success: true,

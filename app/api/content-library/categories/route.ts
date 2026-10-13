@@ -6,34 +6,18 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { contentSession, withoutOwnedColumns } from '@/lib/content-library/session'
 
-// Helper to create Supabase client
-async function createClient() {
-  const cookieStore = await cookies()
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options)
-          })
-        },
-      },
-    }
-  )
-}
+// Categories are each company's own taxonomy (20261208 gave every company the
+// full set): read, created, changed and deleted in the caller's ACTIVE
+// company only (lib/content-library/session.ts).
 
 // GET - List all categories (with content counts)
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId } = session
     const { searchParams } = new URL(request.url)
     const includeCount = searchParams.get('include_count') === 'true'
     const activeOnly = searchParams.get('active_only') !== 'false'
@@ -41,6 +25,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('content_categories')
       .select('*')
+      .eq('org_id', orgId)
       .order('sort_order', { ascending: true })
 
     if (activeOnly) {
@@ -59,6 +44,7 @@ export async function GET(request: NextRequest) {
       const { data: counts, error: countError } = await supabase
         .from('content_library')
         .select('category_id')
+        .eq('org_id', orgId)
         .eq('is_active', true)
 
       if (!countError && counts) {
@@ -89,13 +75,9 @@ export async function GET(request: NextRequest) {
 // POST - Create new category
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId } = session
 
     const body = await request.json()
     const { name, slug, description, icon, sort_order } = body
@@ -113,6 +95,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('content_categories')
       .insert({
+        org_id: orgId,
         name,
         slug: finalSlug,
         description: description || null,
@@ -146,16 +129,13 @@ export async function POST(request: NextRequest) {
 // PATCH - Update category
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId } = session
 
     const body = await request.json()
-    const { id, ...updates } = body
+    const id = body.id
+    const updates = withoutOwnedColumns(body)
 
     if (!id) {
       return NextResponse.json(
@@ -168,10 +148,17 @@ export async function PATCH(request: NextRequest) {
       .from('content_categories')
       .update(updates)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
-      .single()
+      .maybeSingle()
 
+    if (!error && !data) {
+      return NextResponse.json({ error: 'Category not found' }, { status: 404 })
+    }
     if (error) {
+      if (error.code === '23505') {
+        return NextResponse.json({ error: 'A category with this slug already exists' }, { status: 409 })
+      }
       console.error('Error updating category:', error)
       return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
@@ -189,13 +176,9 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Delete category
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId } = session
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
@@ -207,13 +190,23 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // Check if category has content
-    const { count } = await supabase
+    // Check if category has content. Deleting a category CASCADES to its
+    // content items, so a count that could not be read must stop the delete
+    // — it used to read as "none" (count null) and delete anyway.
+    const { count, error: countError } = await supabase
       .from('content_library')
-      .select('*', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
       .eq('category_id', id)
 
-    if (count && count > 0) {
+    if (countError || count == null) {
+      console.error('Error counting category content:', countError)
+      return NextResponse.json(
+        { error: 'Could not check whether the category is empty — nothing was deleted.' },
+        { status: 500 }
+      )
+    }
+    if (count > 0) {
       return NextResponse.json(
         { error: `Cannot delete category with ${count} content items. Move or delete content first.` },
         { status: 400 }
@@ -224,6 +217,7 @@ export async function DELETE(request: NextRequest) {
       .from('content_categories')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
 
     if (error) {
       console.error('Error deleting category:', error)

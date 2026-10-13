@@ -14,9 +14,10 @@ export type MockTables = Record<string, Row[]>
 
 let currentTables: MockTables = {}
 
-// Every rate table carries org_id since 20261206, and every reader filters by
-// the caller's company. A hermetic fixture is ONE company's catalogue: a rate
-// row that names no company is MOCK_ORG's. A test about two companies sets
+// Every rate table carries org_id since 20261206 (tour templates, variations
+// and legacy tours since 20261207), and every reader filters by the caller's
+// company. A hermetic fixture is ONE company's catalogue: a row of these
+// tables that names no company is MOCK_ORG's. A test about two companies sets
 // org_id on its rows explicitly (and those are left alone).
 export const MOCK_ORG = 'org-1'
 const RATE_TABLES = new Set([
@@ -25,6 +26,7 @@ const RATE_TABLES = new Set([
   'transportation_rates', 'tipping_rates', 'entrance_fees', 'service_fees', 'assistant_rates',
   'seasonal_rates', 'vehicle_rates', 'fixed_daily_costs', 'attraction_aliases', 'destinations',
   'vehicles', 'hotel_contacts', 'cruise_contacts', 'restaurant_contacts',
+  'tour_templates', 'tour_variations', 'tours',
 ])
 
 /** Install the dataset the next engine call will read from. */

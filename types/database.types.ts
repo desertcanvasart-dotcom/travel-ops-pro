@@ -3710,6 +3710,7 @@ export interface Database {
       content_categories: {
         Row: {
           id: string
+          org_id: string
           name: string
           slug: string
           description: string | null
@@ -3721,6 +3722,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          org_id: string
           name: string
           slug: string
           description?: string | null
@@ -3732,6 +3734,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          org_id?: string
           name?: string
           slug?: string
           description?: string | null
@@ -3746,6 +3749,7 @@ export interface Database {
       content_library: {
         Row: {
           id: string
+          org_id: string
           category_id: string | null
           name: string
           slug: string
@@ -3769,6 +3773,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          org_id: string
           category_id?: string | null
           name: string
           slug: string
@@ -3792,6 +3797,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          org_id?: string
           category_id?: string | null
           name?: string
           slug?: string
@@ -3847,6 +3853,7 @@ export interface Database {
       content_usage_log: {
         Row: {
           id: string
+          org_id: string
           content_id: string | null
           variation_id: string | null
           itinerary_id: string | null
@@ -3855,6 +3862,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          org_id: string
           content_id?: string | null
           variation_id?: string | null
           itinerary_id?: string | null
@@ -3863,6 +3871,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          org_id?: string
           content_id?: string | null
           variation_id?: string | null
           itinerary_id?: string | null
@@ -3889,7 +3898,7 @@ export interface Database {
       content_variations: {
         Row: {
           id: string
-          content_id: string | null
+          content_id: string
           tier: string
           title: string | null
           description: string
@@ -3906,7 +3915,7 @@ export interface Database {
         }
         Insert: {
           id?: string
-          content_id?: string | null
+          content_id: string
           tier: string
           title?: string | null
           description: string
@@ -3923,7 +3932,7 @@ export interface Database {
         }
         Update: {
           id?: string
-          content_id?: string | null
+          content_id?: string
           tier?: string
           title?: string | null
           description?: string
@@ -8152,6 +8161,38 @@ export interface Database {
           },
         ]
       }
+      org_backfill_content_copies: {
+        Row: {
+          copy_id: string
+          created_at: string
+          org_id: string
+          original_id: string
+          table_name: string
+        }
+        Insert: {
+          copy_id: string
+          created_at?: string
+          org_id: string
+          original_id: string
+          table_name: string
+        }
+        Update: {
+          copy_id?: string
+          created_at?: string
+          org_id?: string
+          original_id?: string
+          table_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_backfill_content_copies_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_backfill_rate_copies: {
         Row: {
           copy_id: string
@@ -8218,6 +8259,59 @@ export interface Database {
             referencedColumns: ["id"]
           },
         ]
+      }
+      org_backfill_tour_copies: {
+        Row: {
+          copy_id: string
+          created_at: string
+          org_id: string
+          original_id: string
+          table_name: string
+        }
+        Insert: {
+          copy_id: string
+          created_at?: string
+          org_id: string
+          original_id: string
+          table_name: string
+        }
+        Update: {
+          copy_id?: string
+          created_at?: string
+          org_id?: string
+          original_id?: string
+          table_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_backfill_tour_copies_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_backfill_tour_orphans: {
+        Row: {
+          deleted_at: string
+          row_data: Json
+          row_id: string
+          table_name: string
+        }
+        Insert: {
+          deleted_at?: string
+          row_data: Json
+          row_id: string
+          table_name: string
+        }
+        Update: {
+          deleted_at?: string
+          row_data?: Json
+          row_id?: string
+          table_name?: string
+        }
+        Relationships: []
       }
       org_backfill_property_copies: {
         Row: {
@@ -8853,6 +8947,7 @@ export interface Database {
       prompt_templates: {
         Row: {
           id: string
+          org_id: string
           name: string
           purpose: string
           description: string | null
@@ -8871,6 +8966,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          org_id: string
           name: string
           purpose: string
           description?: string | null
@@ -8889,6 +8985,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          org_id?: string
           name?: string
           purpose?: string
           description?: string | null
@@ -10711,80 +10808,6 @@ export interface Database {
         }
         Relationships: []
       }
-      tour_availability: {
-        Row: {
-          id: string
-          variation_id: string | null
-          date: string
-          is_available: boolean | null
-          available_spots: number | null
-          reason: string | null
-          created_at: string | null
-        }
-        Insert: {
-          id?: string
-          variation_id?: string | null
-          date: string
-          is_available?: boolean | null
-          available_spots?: number | null
-          reason?: string | null
-          created_at?: string | null
-        }
-        Update: {
-          id?: string
-          variation_id?: string | null
-          date?: string
-          is_available?: boolean | null
-          available_spots?: number | null
-          reason?: string | null
-          created_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tour_availability_variation_id_fkey"
-            columns: ["variation_id"]
-            isOneToOne: false
-            referencedRelation: "tour_variations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tour_categories: {
-        Row: {
-          id: string
-          category_code: string
-          category_name: string
-          description: string | null
-          icon: string | null
-          sort_order: number | null
-          is_active: boolean | null
-          created_at: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          id?: string
-          category_code: string
-          category_name: string
-          description?: string | null
-          icon?: string | null
-          sort_order?: number | null
-          is_active?: boolean | null
-          created_at?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          id?: string
-          category_code?: string
-          category_name?: string
-          description?: string | null
-          icon?: string | null
-          sort_order?: number | null
-          is_active?: boolean | null
-          created_at?: string | null
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
       tour_day_activities: {
         Row: {
           id: string
@@ -11322,140 +11345,6 @@ export interface Database {
           },
         ]
       }
-      tour_reviews: {
-        Row: {
-          id: string
-          template_id: string | null
-          variation_id: string | null
-          customer_name: string | null
-          customer_country: string | null
-          rating: number | null
-          review_title: string | null
-          review_text: string | null
-          pros: string[] | null
-          cons: string[] | null
-          would_recommend: boolean | null
-          travel_date: string | null
-          review_date: string | null
-          is_verified: boolean | null
-          is_featured: boolean | null
-          is_published: boolean | null
-        }
-        Insert: {
-          id?: string
-          template_id?: string | null
-          variation_id?: string | null
-          customer_name?: string | null
-          customer_country?: string | null
-          rating?: number | null
-          review_title?: string | null
-          review_text?: string | null
-          pros?: string[] | null
-          cons?: string[] | null
-          would_recommend?: boolean | null
-          travel_date?: string | null
-          review_date?: string | null
-          is_verified?: boolean | null
-          is_featured?: boolean | null
-          is_published?: boolean | null
-        }
-        Update: {
-          id?: string
-          template_id?: string | null
-          variation_id?: string | null
-          customer_name?: string | null
-          customer_country?: string | null
-          rating?: number | null
-          review_title?: string | null
-          review_text?: string | null
-          pros?: string[] | null
-          cons?: string[] | null
-          would_recommend?: boolean | null
-          travel_date?: string | null
-          review_date?: string | null
-          is_verified?: boolean | null
-          is_featured?: boolean | null
-          is_published?: boolean | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tour_reviews_template_id_fkey"
-            columns: ["template_id"]
-            isOneToOne: false
-            referencedRelation: "tour_templates"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tour_reviews_variation_id_fkey"
-            columns: ["variation_id"]
-            isOneToOne: false
-            referencedRelation: "tour_variations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tour_template_defaults: {
-        Row: {
-          id: string
-          template_id: string
-          default_vehicle_id: string | null
-          default_guide_language: string | null
-          default_meal_plan: string | null
-          include_transport: boolean | null
-          include_guide: boolean | null
-          include_entrances: boolean | null
-          include_meals: boolean | null
-          include_accommodation: boolean | null
-          include_tips: boolean | null
-          include_water: boolean | null
-          default_margin_percent: number | null
-          created_at: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          id?: string
-          template_id: string
-          default_vehicle_id?: string | null
-          default_guide_language?: string | null
-          default_meal_plan?: string | null
-          include_transport?: boolean | null
-          include_guide?: boolean | null
-          include_entrances?: boolean | null
-          include_meals?: boolean | null
-          include_accommodation?: boolean | null
-          include_tips?: boolean | null
-          include_water?: boolean | null
-          default_margin_percent?: number | null
-          created_at?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          id?: string
-          template_id?: string
-          default_vehicle_id?: string | null
-          default_guide_language?: string | null
-          default_meal_plan?: string | null
-          include_transport?: boolean | null
-          include_guide?: boolean | null
-          include_entrances?: boolean | null
-          include_meals?: boolean | null
-          include_accommodation?: boolean | null
-          include_tips?: boolean | null
-          include_water?: boolean | null
-          default_margin_percent?: number | null
-          created_at?: string | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tour_template_defaults_template_id_fkey"
-            columns: ["template_id"]
-            isOneToOne: false
-            referencedRelation: "tour_templates"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       tour_template_versions: {
         Row: {
           id: string
@@ -11520,10 +11409,10 @@ export interface Database {
       }
       tour_templates: {
         Row: {
+          org_id: string
           id: string
           template_code: string
           template_name: string
-          category_id: string | null
           tour_type: string
           duration_days: number
           duration_nights: number | null
@@ -11564,10 +11453,10 @@ export interface Database {
           website_url: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           template_code: string
           template_name: string
-          category_id?: string | null
           tour_type: string
           duration_days: number
           duration_nights?: number | null
@@ -11608,10 +11497,10 @@ export interface Database {
           website_url?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           template_code?: string
           template_name?: string
-          category_id?: string | null
           tour_type?: string
           duration_days?: number
           duration_nights?: number | null
@@ -11653,135 +11542,10 @@ export interface Database {
         }
         Relationships: [
           {
-            foreignKeyName: "tour_templates_category_id_fkey"
-            columns: ["category_id"]
+            foreignKeyName: "tour_templates_org_id_fkey"
+            columns: ["org_id"]
             isOneToOne: false
-            referencedRelation: "tour_categories"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tour_templates_with_languages: {
-        Row: {
-          id: string | null
-          template_code: string | null
-          template_name: string | null
-          category_id: string | null
-          tour_type: string | null
-          duration_days: number | null
-          duration_nights: number | null
-          primary_destination_id: string | null
-          destinations_covered: string[] | null
-          cities_covered: string[] | null
-          short_description: string | null
-          long_description: string | null
-          highlights: string[] | null
-          main_attractions: string[] | null
-          best_for: string[] | null
-          physical_level: string | null
-          age_suitability: string | null
-          pickup_required: boolean | null
-          accommodation_nights: number | null
-          meals_included: string[] | null
-          image_url: string | null
-          gallery_urls: string[] | null
-          is_featured: boolean | null
-          is_active: boolean | null
-          popularity_score: number | null
-          created_at: string | null
-          updated_at: string | null
-          default_transportation_service: string | null
-          transportation_city: string | null
-          pricing_mode: string | null
-          uses_day_builder: boolean | null
-          inclusions: string[] | null
-          exclusions: string[] | null
-          itinerary: Json | null
-          available_languages: string[] | null
-          version_count: number | null
-        }
-        Insert: {
-          id?: string | null
-          template_code?: string | null
-          template_name?: string | null
-          category_id?: string | null
-          tour_type?: string | null
-          duration_days?: number | null
-          duration_nights?: number | null
-          primary_destination_id?: string | null
-          destinations_covered?: string[] | null
-          cities_covered?: string[] | null
-          short_description?: string | null
-          long_description?: string | null
-          highlights?: string[] | null
-          main_attractions?: string[] | null
-          best_for?: string[] | null
-          physical_level?: string | null
-          age_suitability?: string | null
-          pickup_required?: boolean | null
-          accommodation_nights?: number | null
-          meals_included?: string[] | null
-          image_url?: string | null
-          gallery_urls?: string[] | null
-          is_featured?: boolean | null
-          is_active?: boolean | null
-          popularity_score?: number | null
-          created_at?: string | null
-          updated_at?: string | null
-          default_transportation_service?: string | null
-          transportation_city?: string | null
-          pricing_mode?: string | null
-          uses_day_builder?: boolean | null
-          inclusions?: string[] | null
-          exclusions?: string[] | null
-          itinerary?: Json | null
-          available_languages?: string[] | null
-          version_count?: number | null
-        }
-        Update: {
-          id?: string | null
-          template_code?: string | null
-          template_name?: string | null
-          category_id?: string | null
-          tour_type?: string | null
-          duration_days?: number | null
-          duration_nights?: number | null
-          primary_destination_id?: string | null
-          destinations_covered?: string[] | null
-          cities_covered?: string[] | null
-          short_description?: string | null
-          long_description?: string | null
-          highlights?: string[] | null
-          main_attractions?: string[] | null
-          best_for?: string[] | null
-          physical_level?: string | null
-          age_suitability?: string | null
-          pickup_required?: boolean | null
-          accommodation_nights?: number | null
-          meals_included?: string[] | null
-          image_url?: string | null
-          gallery_urls?: string[] | null
-          is_featured?: boolean | null
-          is_active?: boolean | null
-          popularity_score?: number | null
-          created_at?: string | null
-          updated_at?: string | null
-          default_transportation_service?: string | null
-          transportation_city?: string | null
-          pricing_mode?: string | null
-          uses_day_builder?: boolean | null
-          inclusions?: string[] | null
-          exclusions?: string[] | null
-          itinerary?: Json | null
-          available_languages?: string[] | null
-          version_count?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tour_templates_with_languages_category_id_fkey"
-            columns: ["category_id"]
-            isOneToOne: false
-            referencedRelation: "tour_categories"
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -11900,6 +11664,7 @@ export interface Database {
       }
       tour_variations: {
         Row: {
+          org_id: string
           id: string
           template_id: string | null
           variation_code: string
@@ -11930,6 +11695,7 @@ export interface Database {
           updated_at: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           template_id?: string | null
           variation_code: string
@@ -11960,6 +11726,7 @@ export interface Database {
           updated_at?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           template_id?: string | null
           variation_code?: string
@@ -11991,6 +11758,13 @@ export interface Database {
         }
         Relationships: [
           {
+            foreignKeyName: "tour_variations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "tour_variations_template_id_fkey"
             columns: ["template_id"]
             isOneToOne: false
@@ -12001,6 +11775,7 @@ export interface Database {
       }
       tours: {
         Row: {
+          org_id: string
           id: string
           tour_code: string
           tour_name: string
@@ -12014,6 +11789,7 @@ export interface Database {
           updated_at: string | null
         }
         Insert: {
+          org_id: string
           id?: string
           tour_code: string
           tour_name: string
@@ -12027,6 +11803,7 @@ export interface Database {
           updated_at?: string | null
         }
         Update: {
+          org_id?: string
           id?: string
           tour_code?: string
           tour_name?: string
@@ -12039,7 +11816,15 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tours_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       train_rates: {
         Row: {
@@ -13279,6 +13064,7 @@ export interface Database {
       writing_rules: {
         Row: {
           id: string
+          org_id: string
           name: string
           category: string
           rule_type: string
@@ -13294,6 +13080,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          org_id: string
           name: string
           category: string
           rule_type: string
@@ -13309,6 +13096,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          org_id?: string
           name?: string
           category?: string
           rule_type?: string

@@ -90,6 +90,9 @@ export async function buildProgramItineraryHtml(input: {
     .from('tour_templates')
     .select('id, template_code, itinerary, hotels')
     .eq('id', templateId)
+    // The organisation's own programme (tour_templates.org_id, 20261207): a
+    // ?template_id= naming another company's programme is "not found".
+    .eq('org_id', orgId)
     .single()
 
   if (programError || !program) throw new ProgramItineraryError('Programme not found', 404)

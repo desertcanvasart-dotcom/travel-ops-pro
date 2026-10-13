@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { matchTourTemplate, getTemplateWithPricing } from '@/lib/tour-matcher-service'
 import { isEuroPassport as isEuroPassportFromNationality } from '@/lib/passport'
 import type { PricingHole } from '@/lib/pricing-types'
@@ -28,6 +29,10 @@ import type { PricingHole } from '@/lib/pricing-types'
 
 export async function POST(request: NextRequest) {
   try {
+    // Templates and destination cities are the caller's company's (20261206 /
+    // 20261207): the matcher reads only those.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
     const {
       // From WhatsApp parser
@@ -81,9 +86,10 @@ export async function POST(request: NextRequest) {
         // Use specific template
         templateData = await getTemplateWithPricing(
           supabase, 
-          template_id, 
-          totalPax, 
-          isEuroPassport
+          template_id,
+          totalPax,
+          isEuroPassport,
+          orgId
         )
         
         if (templateData) {
@@ -107,14 +113,15 @@ export async function POST(request: NextRequest) {
           duration_days,
           interests,
           budget_level
-        })
+        }, orgId)
 
         if (matchResult.best_match && matchResult.best_match.match_score >= 50) {
           templateData = await getTemplateWithPricing(
             supabase,
             matchResult.best_match.template_id,
             totalPax,
-            isEuroPassport
+            isEuroPassport,
+            orgId
           )
         }
       }

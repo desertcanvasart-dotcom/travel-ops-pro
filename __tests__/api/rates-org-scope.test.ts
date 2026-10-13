@@ -137,7 +137,8 @@ describe('bulk import: per-company codes', () => {
 
 describe('the pricing engine reads one company\'s rates', () => {
   // Org A is the fixture catalogue; org B has the same rows (same codes) at
-  // ten times the price. A's price must not move, B's must.
+  // ten times the price, and its own copy of the template (a template is one
+  // company's since 20261207). A's price must not move, B's must.
   function twoCompanies() {
     const a = fullRateTables() as Record<string, any[]>
     const b = fullRateTables() as Record<string, any[]>
@@ -146,8 +147,10 @@ describe('the pricing engine reads one company\'s rates', () => {
       const priced = (row: Record<string, any>) => Object.fromEntries(Object.entries(row).map(([k, v]) =>
         [k, typeof v === 'number' && /(rate|eur|price|cost|fee)/i.test(k) ? v * 10 : v]))
       tables[t] = [
-        ...list.map(r => (t === 'tour_templates' ? r : { ...r, org_id: 'org-a' })),
-        ...(t === 'tour_templates' ? [] : (b[t] ?? []).map(r => ({ ...priced(r), id: `b-${r.id}`, org_id: 'org-b' }))),
+        ...list.map(r => ({ ...r, org_id: 'org-a' })),
+        ...(b[t] ?? []).map(r => (t === 'tour_templates'
+          ? { ...r, id: `b-${r.id}`, org_id: 'org-b' }
+          : { ...priced(r), id: `b-${r.id}`, org_id: 'org-b' })),
       ]
     }
     return tables
@@ -155,13 +158,13 @@ describe('the pricing engine reads one company\'s rates', () => {
   const params = { templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: true, language: 'English', marginPercent: 25 }
 
   it('the same trip prices from its own company\'s catalogue', async () => {
-    setMockTables(Object.fromEntries(Object.entries(fullRateTables()).map(([t, l]) => [t, (l as any[]).map(r => (t === 'tour_templates' ? r : { ...r, org_id: 'org-a' }))])))
+    setMockTables(Object.fromEntries(Object.entries(fullRateTables()).map(([t, l]) => [t, (l as any[]).map(r => ({ ...r, org_id: 'org-a' }))])))
     const alone = await calculateDayBasedPricing({ ...params, orgId: 'org-a' })
     expect(alone.complete).toBe(true)
 
     setMockTables(twoCompanies())
     const a = await calculateDayBasedPricing({ ...params, orgId: 'org-a' })
-    const b = await calculateDayBasedPricing({ ...params, orgId: 'org-b' })
+    const b = await calculateDayBasedPricing({ ...params, templateId: `b-${TEMPLATE_ID}`, orgId: 'org-b' })
     const pp = (r: typeof a, n: number) => r.paxPricing.find(p => p.numPax === n)!.withoutLeader.totalCost
     expect(pp(a, 2)).toBe(pp(alone, 2))
     expect(pp(b, 2)).toBeGreaterThan(pp(a, 2) * 5)
@@ -169,11 +172,15 @@ describe('the pricing engine reads one company\'s rates', () => {
     expect(a.services.some(s => String(s.id ?? '').includes('b-'))).toBe(false)
   })
 
-  it('no company, no rates — holes, never someone else\'s numbers', async () => {
+  it('no company, no template and no rates — never someone else\'s numbers', async () => {
     setMockTables(twoCompanies())
     const r = await calculateDayBasedPricing({ ...params, orgId: undefined })
     expect(r.complete).toBe(false)
-    expect(r.holes.length).toBeGreaterThan(0)
+    expect(r.success).toBe(false)
+    expect(r.warnings).toContain('Template not found')
+    // Another company's template is not priced with this company's rates either.
+    const cross = await calculateDayBasedPricing({ ...params, templateId: `b-${TEMPLATE_ID}`, orgId: 'org-a' })
+    expect(cross.success).toBe(false)
   })
 
   it('each reader filters by the company', async () => {

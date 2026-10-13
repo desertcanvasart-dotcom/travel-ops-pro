@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { templateInOrg } from '@/lib/tours/org-scope'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,6 +15,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await templateInOrg(supabaseAdmin, orgId, id))) {
+      return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 })
+    }
 
     const { data, error } = await supabaseAdmin
       .from('tour_template_versions')
@@ -46,6 +53,11 @@ export async function POST(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await templateInOrg(supabaseAdmin, orgId, id))) {
+      return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 })
+    }
     const body = await request.json()
 
     const { language, ...content } = body
@@ -89,6 +101,7 @@ export async function POST(
         const { data: template } = await supabaseAdmin
           .from('tour_templates')
           .select('template_name')
+          .eq('org_id', orgId)
           .eq('id', id)
           .single()
         templateName = template?.template_name || 'Untitled Tour'

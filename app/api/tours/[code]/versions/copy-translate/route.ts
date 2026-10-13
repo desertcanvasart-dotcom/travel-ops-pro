@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import {
   translateFields,
   TOUR_TEMPLATE_TRANSLATION_FIELDS,
@@ -17,10 +18,12 @@ const supabase = createClient(
 // Resolve code to its target. A programme without variations is still a valid
 // translation target — the imported A.T.S catalogue is variation-less and its
 // content lives at the template level (see ../route.ts resolveTarget).
-async function resolveTarget(code: string) {
+// Within the caller's company only.
+async function resolveTarget(code: string, orgId: string) {
   const { data: varByCode } = await supabase
     .from('tour_variations')
     .select('id, variation_code, variation_name, template_id, inclusions, exclusions, optional_extras')
+    .eq('org_id', orgId)
     .eq('variation_code', code)
     .single()
 
@@ -30,6 +33,7 @@ async function resolveTarget(code: string) {
   const { data: template } = await supabase
     .from('tour_templates')
     .select('id')
+    .eq('org_id', orgId)
     .eq(isUUID ? 'id' : 'template_code', code)
     .single()
 
@@ -38,6 +42,7 @@ async function resolveTarget(code: string) {
   const { data: variation } = await supabase
     .from('tour_variations')
     .select('id, variation_code, variation_name, template_id, inclusions, exclusions, optional_extras')
+    .eq('org_id', orgId)
     .eq('template_id', template.id)
     .order('tier', { ascending: true })
     .limit(1)
@@ -79,6 +84,8 @@ export async function POST(
   { params }: { params: Promise<{ code: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { code } = await params
     const body = await request.json()
     const { targetLanguage } = body
@@ -91,7 +98,7 @@ export async function POST(
       )
     }
 
-    const target = await resolveTarget(code)
+    const target = await resolveTarget(code, orgId)
     if (!target) {
       return NextResponse.json(
         { success: false, error: 'Tour not found' },
@@ -179,6 +186,7 @@ export async function POST(
       const { data: template } = await supabase
         .from('tour_templates')
         .select('template_name, short_description, long_description, highlights, main_attractions, best_for, inclusions, exclusions')
+        .eq('org_id', orgId)
         .eq('id', target.template_id)
         .single()
 
@@ -243,6 +251,7 @@ export async function POST(
       const { data: tpl } = await supabase
         .from('tour_templates')
         .select('itinerary')
+        .eq('org_id', orgId)
         .eq('id', target.template_id)
         .single()
       const days = Array.isArray(tpl?.itinerary) ? tpl!.itinerary : []

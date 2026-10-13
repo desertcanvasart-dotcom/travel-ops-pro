@@ -191,6 +191,7 @@ export async function POST(request: NextRequest) {
     const { data: template, error: templateError } = await supabaseAdmin
       .from('tour_templates')
       .insert({
+        org_id: orgId,
         template_code: templateCode,
         template_name: tripName,
         tour_type: tourType,
@@ -212,6 +213,7 @@ export async function POST(request: NextRequest) {
         const { data: template2, error: templateError2 } = await supabaseAdmin
           .from('tour_templates')
           .insert({
+            org_id: orgId,
             template_code: templateCode,
             template_name: tripName,
             tour_type: tourType,
@@ -278,6 +280,8 @@ async function createVariationAndRespond(
   const { data: variation, error: varError } = await supabaseAdmin
     .from('tour_variations')
     .insert({
+      // A variation lives in its template's company.
+      org_id: template.org_id,
       template_id: template.id,
       variation_code: variationCode,
       variation_name: variationName,

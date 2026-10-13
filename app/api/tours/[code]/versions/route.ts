@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,13 +12,18 @@ const supabase = createClient(
 // catalogue is variation-less, and language versions attach at the TEMPLATE
 // level — requiring a variation here made "create version" fail with "Tour
 // not found" on every imported programme.
+//
+// Within the caller's company only: another company's code or id is "not
+// found" (codes are unique per company, so both may hold the same one).
 async function resolveTarget(
-  code: string
+  code: string,
+  orgId: string
 ): Promise<{ template_id: string; variation: { id: string; variation_code: string; template_id: string } | null } | null> {
   // First, try to find by variation_code
   const { data: varByCode } = await supabase
     .from('tour_variations')
     .select('id, variation_code, template_id')
+    .eq('org_id', orgId)
     .eq('variation_code', code)
     .single()
 
@@ -28,6 +34,7 @@ async function resolveTarget(
   const { data: template } = await supabase
     .from('tour_templates')
     .select('id')
+    .eq('org_id', orgId)
     .eq(isUUID ? 'id' : 'template_code', code)
     .single()
 
@@ -36,6 +43,7 @@ async function resolveTarget(
   const { data: variation } = await supabase
     .from('tour_variations')
     .select('id, variation_code, template_id')
+    .eq('org_id', orgId)
     .eq('template_id', template.id)
     .order('tier', { ascending: true })
     .limit(1)
@@ -50,9 +58,11 @@ export async function GET(
   { params }: { params: Promise<{ code: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { code } = await params
 
-    const target = await resolveTarget(code)
+    const target = await resolveTarget(code, orgId)
     if (!target) {
       return NextResponse.json(
         { success: false, error: 'Tour not found' },
@@ -116,6 +126,8 @@ export async function POST(
   { params }: { params: Promise<{ code: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { code } = await params
     const body = await request.json()
 
@@ -128,7 +140,7 @@ export async function POST(
       )
     }
 
-    const target = await resolveTarget(code)
+    const target = await resolveTarget(code, orgId)
     if (!target) {
       return NextResponse.json(
         { success: false, error: 'Tour not found' },

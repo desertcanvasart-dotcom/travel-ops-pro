@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { variationInOrg } from '@/lib/tours/org-scope'
 
 // GET - Get single variation
 export async function GET(
@@ -9,10 +11,16 @@ export async function GET(
   try {
     const supabase = createServerClient()
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await variationInOrg(supabase, orgId, id))) {
+      return NextResponse.json({ success: false, error: 'Variation not found' }, { status: 404 })
+    }
 
     const { data, error } = await supabase
       .from('tour_variations')
       .select('*')
+      .eq('org_id', orgId)
       .eq('id', id)
       .single()
 
@@ -45,6 +53,11 @@ export async function PUT(
   try {
     const supabase = createServerClient()
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await variationInOrg(supabase, orgId, id))) {
+      return NextResponse.json({ success: false, error: 'Variation not found' }, { status: 404 })
+    }
     const body = await request.json()
 
     const updateData: any = {}
@@ -79,6 +92,7 @@ export async function PUT(
     const { data, error } = await supabase
       .from('tour_variations')
       .update(updateData)
+      .eq('org_id', orgId)
       .eq('id', id)
       .select()
       .single()
@@ -114,10 +128,16 @@ export async function DELETE(
   try {
     const supabase = createServerClient()
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await variationInOrg(supabase, orgId, id))) {
+      return NextResponse.json({ success: false, error: 'Variation not found' }, { status: 404 })
+    }
 
     const { error } = await supabase
       .from('tour_variations')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
 
     if (error) {

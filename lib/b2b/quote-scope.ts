@@ -48,7 +48,7 @@ export function quoteNotFound() {
 }
 
 /**
- * Are the trip and partner a quote points at this organisation's? A quote
+ * Are the trip, partner and tour variation a quote points at this organisation's? A quote
  * stored another org's itinerary_id or partner_id as given: the quote and its
  * PDF then carried that org's client, supplier costs or partner contact, and
  * converting it re-priced THEIR trip. An absent reference passes. Fails closed.
@@ -56,10 +56,13 @@ export function quoteNotFound() {
 export async function quoteRefsInOrg(
   supabase: DbClient,
   orgId: string,
-  refs: { itinerary_id?: unknown; partner_id?: unknown }
+  refs: { itinerary_id?: unknown; partner_id?: unknown; variation_id?: unknown }
 ): Promise<boolean> {
   if (!orgId) return false
-  const checks: Array<[string, unknown]> = [['itineraries', refs.itinerary_id], ['b2b_partners', refs.partner_id]]
+  // The variation too: a tour variation is one company's (20261207).
+  const checks: Array<[string, unknown]> = [
+    ['itineraries', refs.itinerary_id], ['b2b_partners', refs.partner_id], ['tour_variations', refs.variation_id],
+  ]
   for (const [table, id] of checks) {
     if (id === undefined || id === null || id === '') continue
     if (typeof id !== 'string') return false

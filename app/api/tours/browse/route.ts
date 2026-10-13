@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,6 +19,8 @@ const supabaseAdmin = createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { searchParams } = new URL(request.url)
 
     // Filters
@@ -55,11 +58,6 @@ export async function GET(request: NextRequest) {
         cached_starting_tier,
         cached_price_updated_at,
         theme_key,
-        tour_categories (
-          id,
-          category_name,
-          category_code
-        ),
         tour_variations (
           id,
           variation_name,
@@ -69,6 +67,7 @@ export async function GET(request: NextRequest) {
           is_active
         )
       `, { count: 'exact' })
+      .eq('org_id', orgId)
       .eq('is_active', true)
       .order('is_featured', { ascending: false })
       .order('created_at', { ascending: false })
@@ -78,8 +77,10 @@ export async function GET(request: NextRequest) {
       query = query.eq('tour_type', tourType)
     }
 
+    // ?category= is the theme (org_vocabularies tour_theme key); the retired
+    // tour_categories UUID link is gone (20261207).
     if (category) {
-      query = query.eq('category_id', category)
+      query = query.eq('theme_key', category)
     }
 
     if (city) {
@@ -158,10 +159,9 @@ export async function GET(request: NextRequest) {
         short_description: template.short_description,
         is_featured: template.is_featured,
         cover_image_url: template.image_url,
-        category: template.tour_categories,
-        // The portable theme key. The tour_categories embed above is the
-        // install-local UUID link it replaces — kept so tours saved before
-        // migration 20261011 still show a theme.
+        // The portable theme key (20261011); the tour_categories link it
+        // replaced is gone (20261207), so `category` is always null now.
+        category: null,
         theme_key: template.theme_key ?? null,
 
         // Variations summary

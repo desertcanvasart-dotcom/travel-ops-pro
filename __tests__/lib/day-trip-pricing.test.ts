@@ -8,7 +8,7 @@
 // template with no explicit services defaulted airport arrival AND departure
 // AND hotel check-in AND check-out onto its one day.
 import { vi, describe, it, expect, beforeEach } from 'vitest'
-import { setMockTables } from '../_mock-supabase'
+import { setMockTables, MOCK_ORG } from '../_mock-supabase'
 import { TEMPLATE_ID, fullRateTables } from '../fixtures/sample-templates'
 
 vi.mock('@supabase/supabase-js', async () => {
@@ -43,6 +43,7 @@ describe('day-tour template pricing', () => {
 
   it("tour_type 'day_tour' prices as a day trip: no airport, no hotel services", async () => {
     const r: any = await calculateDayBasedPricing({
+      orgId: MOCK_ORG,
       templateId: TEMPLATE_ID,
       tier: 'standard',
       isEurPassport: false,
@@ -57,6 +58,7 @@ describe('day-tour template pricing', () => {
 
   it('an explicit packageType from the caller still wins over tour_type', async () => {
     const r: any = await calculateDayBasedPricing({
+      orgId: MOCK_ORG,
       templateId: TEMPLATE_ID,
       packageType: 'full-package',
       tier: 'standard',

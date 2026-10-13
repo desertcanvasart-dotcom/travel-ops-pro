@@ -7,9 +7,16 @@
 // JSONB column the pricing engine already reads.
 //
 // Usage:
-//   node scripts/import-programs.mjs <dir>              # dry run + problem report
-//   node scripts/import-programs.mjs <dir> --apply      # write to the database
+//   node scripts/import-programs.mjs <dir>                        # dry run + problem report
+//   node scripts/import-programs.mjs <dir> --apply --org ats      # write to the database
 //   node scripts/import-programs.mjs <dir> --json out.json
+//
+// --org (an organisation id, or its slug: 'ats', 'travel2egypt') is REQUIRED
+// with --apply. A programme belongs to one company (tour_templates.org_id,
+// migration 20261207) and codes are unique per company: the import writes
+// into that company only, matched on (org_id, template_code) — it never
+// touches, renames or overwrites another company's programme with the same
+// code.
 //
 // DRY RUN IS THE DEFAULT, deliberately. The source documents are inconsistent
 // in ways that matter (see scripts/lib/parse-program.mjs), and the report is
@@ -33,13 +40,21 @@ import {
 } from './lib/program-code.mjs'
 
 const args = process.argv.slice(2)
-const dir = args.find(a => !a.startsWith('--'))
 const APPLY = args.includes('--apply')
 const jsonFlag = args.indexOf('--json')
 const JSON_OUT = jsonFlag >= 0 ? args[jsonFlag + 1] : null
+const orgFlag = args.indexOf('--org')
+const ORG = orgFlag >= 0 ? args[orgFlag + 1] : null
+// The directory: the first argument that is neither a flag nor a flag's value.
+const flagValues = new Set([jsonFlag, orgFlag].filter(i => i >= 0).map(i => i + 1))
+const dir = args.find((a, i) => !a.startsWith('--') && !flagValues.has(i))
 
 if (!dir) {
-  console.error('Usage: node scripts/import-programs.mjs <dir> [--apply] [--json out.json]')
+  console.error('Usage: node scripts/import-programs.mjs <dir> [--apply --org <org id or slug>] [--json out.json]')
+  process.exit(1)
+}
+if (APPLY && (!ORG || ORG.startsWith('--'))) {
+  console.error('--apply needs --org <org id or slug>: the company these programmes belong to.')
   process.exit(1)
 }
 
@@ -278,6 +293,20 @@ const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE
   auth: { persistSession: false },
 })
 
+// The company being imported into: an id, or a slug (organizations.slug).
+const ORG_IS_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ORG)
+const { data: orgRow, error: orgError } = await supabase
+  .from('organizations')
+  .select('id, name')
+  .eq(ORG_IS_UUID ? 'id' : 'slug', ORG)
+  .maybeSingle()
+if (orgError || !orgRow) {
+  console.error(C.red(`No organisation "${ORG}"${orgError ? `: ${orgError.message}` : ''}`))
+  process.exit(1)
+}
+const orgId = orgRow.id
+console.log(C.dim(`Importing into ${orgRow.name} (${orgId}).\n`))
+
 const blocked = programs.filter(p => p.problems.some(x => x.severity === 'error'))
 if (blocked.length) {
   console.log(
@@ -300,6 +329,7 @@ for (const p of programs) {
   const finalCode = p.canonical_code ?? p.code
 
   const row = {
+    org_id: orgId,
     template_code: finalCode,
     // Composed from facts the document states — duration and the places it
     // actually visits — because the source has no English names and inventing
@@ -342,11 +372,13 @@ for (const p of programs) {
     const { data: oldRows } = await supabase
       .from('tour_templates')
       .select('id')
+      .eq('org_id', orgId)
       .eq('template_code', p.code)
     if (oldRows?.length) {
       const { data: canonRows } = await supabase
         .from('tour_templates')
         .select('id')
+        .eq('org_id', orgId)
         .eq('template_code', finalCode)
       if (canonRows?.length) {
         // Both spellings exist as separate rows — renaming would collide, and
@@ -362,6 +394,7 @@ for (const p of programs) {
       const { error: renameError } = await supabase
         .from('tour_templates')
         .update({ template_code: finalCode })
+        .eq('org_id', orgId)
         .eq('template_code', p.code)
       if (renameError) {
         console.log(C.red(`  ${p.code} → ${finalCode}: rename failed: ${renameError.message}`))
@@ -373,7 +406,7 @@ for (const p of programs) {
 
   const { error } = await supabase
     .from('tour_templates')
-    .upsert(row, { onConflict: 'template_code' })
+    .upsert(row, { onConflict: 'org_id,template_code' })
 
   if (error) {
     console.log(C.red(`  ${p.code}: ${error.message}`))

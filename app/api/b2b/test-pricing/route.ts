@@ -17,7 +17,7 @@ import {
   ServiceTier 
 } from '@/lib/auto-pricing-service'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,6 +25,9 @@ const supabaseAdmin = createClient(
 )
 
 export async function GET(request: NextRequest) {
+  // The caller's company's template, priced with its rates (20261207).
+  const callerOrg = await getCurrentOrgId()
+  if (!callerOrg) return noOrgResponse()
   const { searchParams } = new URL(request.url)
   
   // Default to Nile Cruise tour
@@ -46,14 +49,10 @@ export async function GET(request: NextRequest) {
         template_name,
         duration_days,
         tour_type,
-        category_id,
-        itinerary,
-        tour_categories (
-          id,
-          category_name
-        )
+        itinerary
       `)
       .eq('id', templateId)
+      .eq('org_id', callerOrg)
       .single()
 
     if (templateError || !template) {
@@ -96,7 +95,7 @@ export async function GET(request: NextRequest) {
     // STEP 3: Run the NEW day-based pricing
     // ============================================
     // The org's own cruise packages and airports (the engine reads none without it).
-    const orgId = (await getCurrentOrgId()) ?? undefined
+    const orgId = callerOrg
     const dayPricingResult = await calculateDayBasedPricing({
       orgId,
       templateId,
@@ -138,7 +137,7 @@ export async function GET(request: NextRequest) {
         id: template.id,
         name: template.template_name,
         duration: template.duration_days,
-        theme: (template.tour_categories as any)?.category_name || 'Unknown'
+        theme: (template as { theme_key?: string | null }).theme_key || 'Unknown'
       },
       
       // Itinerary analysis

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // ============================================
 // TOUR DETAIL API - WITH VARIATION_ID
@@ -34,9 +35,23 @@ const VARIATION_SELECT = `
     duration_nights,
     cities_covered,
     itinerary,
-    tour_categories (category_name)
+    theme_key
   )
 `
+
+/** The template's theme as the company labels it (org_vocabularies
+ *  tour_theme). The retired tour_categories table is gone (20261207). */
+async function themeLabel(orgId: string, key: unknown): Promise<string> {
+  if (typeof key !== 'string' || !key) return 'Uncategorized'
+  const { data } = await supabase
+    .from('org_vocabularies')
+    .select('label')
+    .eq('org_id', orgId)
+    .eq('kind', 'tour_theme')
+    .eq('key', key)
+    .maybeSingle()
+  return (data as { label?: string } | null)?.label || key
+}
 
 /** The destination line shown on the tour: its cities, or 'Various'. */
 function destinationFromCities(cities: unknown): string {
@@ -69,14 +84,19 @@ export async function GET(
   { params }: { params: Promise<{ code: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { code } = await params
 
+    // Every lookup below is within the caller's company: a code (or id) of
+    // another company's programme is "not found".
     let variation = null
 
     // First, try to find by variation_code
     const { data: varByCode, error: varCodeError } = await supabase
       .from('tour_variations')
       .select(VARIATION_SELECT)
+      .eq('org_id', orgId)
       .eq('variation_code', code)
       .single()
 
@@ -91,6 +111,7 @@ export async function GET(
         const { data: varByTemplateId } = await supabase
           .from('tour_variations')
           .select(VARIATION_SELECT)
+          .eq('org_id', orgId)
           .eq('template_id', code)
           .order('tier', { ascending: true })
           .limit(1)
@@ -104,6 +125,7 @@ export async function GET(
         const { data: template } = await supabase
           .from('tour_templates')
           .select('id')
+          .eq('org_id', orgId)
           .eq('template_code', code)
           .single()
 
@@ -111,6 +133,7 @@ export async function GET(
           const { data: varByTemplate } = await supabase
             .from('tour_variations')
             .select(VARIATION_SELECT)
+            .eq('org_id', orgId)
             .eq('template_id', template.id)
             .order('tier', { ascending: true })
             .limit(1)
@@ -138,9 +161,9 @@ export async function GET(
         .select(`
           id, template_code, template_name, short_description, long_description,
           highlights, main_attractions, duration_days, duration_nights,
-          itinerary, cities_covered,
-          tour_categories (category_name)
+          itinerary, cities_covered, theme_key
         `)
+        .eq('org_id', orgId)
         .eq(isTemplateUUID ? 'id' : 'template_code', code)
         .single()
 
@@ -161,7 +184,7 @@ export async function GET(
           template_id: tpl.id,
           template_name: tpl.template_name,
           template_code: tpl.template_code,
-          category_name: tpl.tour_categories?.category_name || 'Uncategorized',
+          category_name: await themeLabel(orgId, tpl.theme_key),
           destination_name: destinationFromCities(tpl.cities_covered),
           duration_days: tpl.duration_days,
           duration_nights: tpl.duration_nights || 0,
@@ -245,7 +268,7 @@ export async function GET(
       template_id: variation.tour_templates?.id,
       template_name: variation.tour_templates?.template_name,
       template_code: variation.tour_templates?.template_code,
-      category_name: variation.tour_templates?.tour_categories?.category_name || 'Uncategorized',
+      category_name: await themeLabel(orgId, variation.tour_templates?.theme_key),
       destination_name: destinationFromCities(variation.tour_templates?.cities_covered),
       duration_days: variation.tour_templates?.duration_days,
       duration_nights: variation.tour_templates?.duration_nights || 0,
