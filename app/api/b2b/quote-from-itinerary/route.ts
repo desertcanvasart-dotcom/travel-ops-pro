@@ -9,7 +9,8 @@ import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { currencySymbol } from '@/lib/currency-totals'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { createInitialQuoteRevision } from '@/lib/quotes/initial-revision'
 import { quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
 import { getExchangeRate, type ExchangeRates } from '@/lib/currency-service'
 import { parseFrozenFx, frozenToExchangeRates } from '@/lib/itinerary-fx'
@@ -603,6 +604,10 @@ export async function POST(request: NextRequest) {
     if (versionError) {
       console.warn('Warning: Could not create English version:', versionError)
     }
+
+    // Its history starts here, like a calculator quote's: the price it was
+    // created at is version 1, to compare with and revert to.
+    await createInitialQuoteRevision(supabaseAdmin, quote.id, await getCurrentUserId())
 
     console.log('✅ B2B Quote created from itinerary:', {
       quoteNumber: quote.quote_number,

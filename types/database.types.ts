@@ -13257,6 +13257,18 @@ export interface Database {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any
       }
+      hold_departure_seats: {
+        Args: {
+          p_client_id?: string
+          p_client_name?: string
+          p_departure_id?: string
+          p_notes?: string
+          p_org_id?: string
+          p_pax?: number
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Returns: any
+      }
       is_active_user: {
         Args: Record<PropertyKey, never>
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

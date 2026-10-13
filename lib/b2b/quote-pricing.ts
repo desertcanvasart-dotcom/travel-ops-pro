@@ -29,7 +29,11 @@ export function enginePricingRequest(body: Record<string, unknown>): Record<stri
     ...(children > 0 ? { num_adults: adults, num_children: children } : { num_pax: adults }),
     travel_date: typeof body.travel_date === 'string' && body.travel_date ? body.travel_date : undefined,
     is_eur_passport: body.is_eur_passport !== false,
+    // Null when the operator did not set one: the engine then takes the
+    // partner's margin, else the company's (lib/b2b/partner-margin.ts) — the
+    // same answer the calculator showed, because it priced with the partner too.
     margin_percent: body.margin_percent ?? null,
+    partner_id: typeof body.partner_id === 'string' && body.partner_id ? body.partner_id : null,
     tier: typeof body.tier === 'string' && body.tier ? body.tier : 'standard',
     language: typeof body.language === 'string' && body.language ? body.language : 'English',
     tour_leader_included: body.tour_leader_included === true,

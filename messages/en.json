@@ -5530,7 +5530,10 @@
       "cancel": "Cancel",
       "loadFailed": "Could not load extras. Please refresh.",
       "saveFailed": "Could not save the extra.",
-      "deleteFailed": "Could not delete the extra."
+      "deleteFailed": "Could not delete the extra.",
+      "inUse": "“{name}” cannot be deleted: {count, plural, one {# saved quote uses it} other {# saved quotes use it}} ({numbers}). Deactivate it instead — it is no longer offered, and those quotes keep it.",
+      "deactivate": "Deactivate",
+      "deactivateFailed": "Could not deactivate the extra."
     }
   },
   "profitLoss": {
@@ -7195,6 +7198,9 @@
     "tablePerPerson": "Per Person",
     "saveQuote": "Save Quote",
     "partnerOptional": "Partner (Optional)",
+    "partnerMarginApplied": "Priced at this partner's margin: {percent}%.",
+    "partnerMarginYours": "Priced at the margin you set: {percent}%. It takes the place of the partner's.",
+    "repricingForPartner": "Re-pricing for this partner…",
     "noPartnerDirect": "No partner / Direct client",
     "clientDetailsOptional": "Client Details (Optional)",
     "clientName": "Client Name",

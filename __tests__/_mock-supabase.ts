@@ -29,8 +29,12 @@ const RATE_TABLES = new Set([
   'tour_templates', 'tour_variations', 'tours',
 ])
 
+/** Every rpc() call since the last setMockTables, in order. */
+export const rpcCalls: Array<{ fn: string; args?: Record<string, unknown> }> = []
+
 /** Install the dataset the next engine call will read from. */
 export function setMockTables(tables: MockTables): void {
+  rpcCalls.length = 0
   for (const [table, rows] of Object.entries(tables)) {
     if (!RATE_TABLES.has(table) || !Array.isArray(rows)) continue
     for (const row of rows) if (row && !('org_id' in row)) row.org_id = MOCK_ORG
@@ -262,7 +266,35 @@ export function createMockClient() {
   return {
     from: (table: string) => makeQuery(currentTables[table] ?? [], table),
     // Routes call database functions (generate_booking_code, …); tests that
-    // exercise them need "no answer" rather than "no such method".
-    rpc: async (_fn: string, _args?: Record<string, unknown>) => ({ data: null, error: null }),
+    // exercise them need "no answer" rather than "no such method". Each call
+    // is recorded in rpcCalls. hold_departure_seats is answered as the SQL
+    // function does (migration 20261213, pinned on Postgres by
+    // __tests__/migrations/departure-seat-holds-atomic.test.ts), because the
+    // order intake's seat holds go only through it.
+    rpc: async (fn: string, args?: Record<string, unknown>) => {
+      rpcCalls.push({ fn, args })
+      if (fn === 'hold_departure_seats' && args) return { data: holdDepartureSeats(args), error: null }
+      return { data: null, error: null }
+    },
   }
+}
+
+/** In-memory hold_departure_seats: lock (single-threaded here), count the
+ *  seats free by the seatsFree rule, insert the pending hold only if it fits. */
+function holdDepartureSeats(a: Record<string, unknown>) {
+  const dep = (currentTables.tour_departures ?? []).find((d) =>
+    d.id === a.p_departure_id && d.org_id === a.p_org_id && d.status !== 'cancelled')
+  if (!dep) return { held: false, free: 0, id: null }
+  const holds = (currentTables.departure_bookings ?? []).filter((h) =>
+    h.org_id === a.p_org_id && h.departure_id === a.p_departure_id)
+  const sum = (status: string) => holds.filter((h) => h.status === status).reduce((n, h) => n + (Number(h.pax) || 0), 0)
+  const free = Math.max(0, (Number(dep.max_pax) || 0) - (Math.max(Number(dep.booked_pax) || 0, sum('confirmed')) + sum('pending')))
+  const pax = Number(a.p_pax)
+  if (pax > free) return { held: false, free, id: null }
+  const row = {
+    id: `mock-departure_bookings-${++idCounter}`, org_id: a.p_org_id, departure_id: a.p_departure_id,
+    client_id: a.p_client_id ?? null, client_name: a.p_client_name ?? null, pax, status: 'pending', notes: a.p_notes ?? null,
+  }
+  ;(currentTables.departure_bookings ??= []).push(row)
+  return { held: true, free, id: row.id }
 }

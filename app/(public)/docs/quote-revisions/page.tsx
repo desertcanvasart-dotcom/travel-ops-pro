@@ -23,7 +23,7 @@ export default function QuoteRevisionsPage() {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">When a revision is taken</h2>
         <p className="text-gray-600 mb-3">A copy of the whole quote is saved as the next version when:</p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li>a B2B quote is saved from the calculator, or a B2C offer is made (quotes from the Pricing Grid and Order Intake start their history at their first change);</li>
+          <li>a B2B quote is made (saved from the calculator, made from a trip on the Pricing Grid, or made by Order Intake), or a B2C offer is made;</li>
           <li>it is edited on its page (status, notes, valid-until date, and for a B2C offer a re-price);</li>
           <li>its status is changed in bulk from the B2B list;</li>
           <li>a B2C offer is sent by email or WhatsApp;</li>

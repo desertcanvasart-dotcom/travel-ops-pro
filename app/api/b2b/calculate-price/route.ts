@@ -9,7 +9,8 @@ import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
-import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
+import { getOrgDefaultMargin } from '@/lib/org-default-margin'
+import { quoteMarginPercent } from '@/lib/b2b/partner-margin'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
 import { parseOptionalSelection, isOptionalSelected } from '@/lib/b2b/optional-selection'
@@ -137,6 +138,31 @@ interface PriceCalculationResult {
   holes?: { kind: string; message: string }[]
   /** Engine warnings (unmatched attractions, skipped guides, …). */
   warnings?: string[]
+}
+
+// The partner's own margins: its default, and its override for this
+// variation (an active b2b_partner_pricing row). The caller has checked the
+// partner is this org's.
+async function loadPartnerMargins(orgId: string, partnerId: string, variationId: string | null | undefined) {
+  const { data: partner } = await supabaseAdmin
+    .from('b2b_partners')
+    .select('default_margin_percent')
+    .eq('id', partnerId)
+    .eq('org_id', orgId)
+    .maybeSingle()
+  let override: unknown = null
+  if (variationId) {
+    const { data } = await supabaseAdmin
+      .from('b2b_partner_pricing')
+      .select('margin_percent_override')
+      .eq('partner_id', partnerId)
+      .eq('variation_id', variationId)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle()
+    override = data?.margin_percent_override ?? null
+  }
+  return { default: partner?.default_margin_percent ?? null, override }
 }
 
 // Catalogue extras chosen for this quote. Only ACTIVE rows of this org come
@@ -438,7 +464,18 @@ export async function POST(request: NextRequest) {
       return quoteRefNotFound()
     }
     const guideMode = guide_mode === 'throughout' ? 'throughout' as const : 'spot' as const
-    const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(supabaseAdmin, await getCurrentOrgId()) })
+    // The operator's own margin wins; else the partner's (per variation, then
+    // its default); else the company's. One rule for the calculator's screen
+    // and for the save's re-price (lib/b2b/partner-margin.ts) — the partner
+    // used to override a margin the operator had typed, and the calculator
+    // never sent the partner at all.
+    const partnerMargins = partner_id && orgId ? await loadPartnerMargins(orgId, partner_id, variation_id) : null
+    const margin_percent = quoteMarginPercent({
+      requested: requestedMargin,
+      partnerOverride: partnerMargins?.override,
+      partnerDefault: partnerMargins?.default,
+      orgDefault: await getOrgDefaultMargin(supabaseAdmin, orgId),
+    })
 
     // WHICH optional services the customer is buying, not merely whether. The
     // old boolean priced every option or none — see lib/b2b/optional-selection.
@@ -557,20 +594,8 @@ export async function POST(request: NextRequest) {
       console.log(`   tourLeaderIncluded: ${tour_leader_included}`)
       console.log(`   usePassengerBreakdown: ${usePassengerBreakdown}`)
 
-      // Determine effective margin (partner override)
-      let effectiveMargin = margin_percent
-      if (partner_id) {
-        const { data: partner } = await supabaseAdmin
-          .from('b2b_partners')
-          .select('default_margin_percent')
-          .eq('id', partner_id)
-          .eq('org_id', orgId)
-          .single()
-
-        if (partner?.default_margin_percent) {
-          effectiveMargin = partner.default_margin_percent
-        }
-      }
+      // The margin, partner's included, was resolved above.
+      const effectiveMargin = margin_percent
 
       // Use passenger breakdown pricing if breakdown is provided
       let autoPriceResult
@@ -768,32 +793,8 @@ export async function POST(request: NextRequest) {
     // ORIGINAL LOGIC: Process tour_variation_services
     // ============================================
 
-    // Determine effective margin (partner override)
-    let effectiveMargin = margin_percent
-    if (partner_id) {
-      const { data: partner } = await supabaseAdmin
-        .from('b2b_partners')
-        .select('default_margin_percent')
-        .eq('id', partner_id)
-        .eq('org_id', orgId)
-        .single()
-      
-      if (partner?.default_margin_percent) {
-        effectiveMargin = partner.default_margin_percent
-      }
-
-      const { data: override } = await supabaseAdmin
-        .from('b2b_partner_pricing')
-        .select('margin_percent_override')
-        .eq('partner_id', partner_id)
-        .eq('variation_id', variation_id)
-        .eq('is_active', true)
-        .single()
-      
-      if (override?.margin_percent_override) {
-        effectiveMargin = override.margin_percent_override
-      }
-    }
+    // The margin, partner's included, was resolved above.
+    const effectiveMargin = margin_percent
 
     const calculatedServices: CalculatedService[] = []
     const optionalServices: CalculatedService[] = []

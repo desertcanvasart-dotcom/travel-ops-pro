@@ -150,7 +150,7 @@ describe('B2B price from the engine (#1, #5)', () => {
     expect(req).toEqual({
       variation_id: 'v1', num_pax: 4, travel_date: '2027-05-01', is_eur_passport: false, margin_percent: 0,
       tier: 'deluxe', language: 'Japanese', tour_leader_included: true, guide_grade: 'senior', guide_mode: 'throughout',
-      selected_optional_ids: ['o1'], extras: ['e1'],
+      selected_optional_ids: ['o1'], extras: ['e1'], partner_id: null,
     })
     expect(enginePricingRequest({ variation_id: 'v', num_adults: 2, num_children: 1 })).toMatchObject({ num_adults: 2, num_children: 1 })
   })

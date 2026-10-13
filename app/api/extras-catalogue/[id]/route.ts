@@ -78,6 +78,32 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
+/** The services_snapshot line a calculator quote stores for a catalogue
+ *  extra — matched with jsonb containment (@>), so any line of the array. */
+export function extraLineFilter(id: string): string {
+  return JSON.stringify([{ rate_source: 'extras_catalogue', service_id: id }])
+}
+
+export interface ExtraInUse { count: number; quote_numbers: string[] }
+
+/** This company's quotes that sell the extra: how many, and the newest few. */
+async function quotesUsingExtra(supabase: ReturnType<typeof createServerClient>, orgId: string, id: string): Promise<ExtraInUse> {
+  const { data, count, error } = await supabase
+    .from('tour_quotes')
+    .select('quote_number', { count: 'exact' })
+    .eq('org_id', orgId)
+    .contains('services_snapshot', extraLineFilter(id))
+    .order('created_at', { ascending: false })
+    .limit(5)
+  if (error) throw error
+  return { count: count ?? (data ?? []).length, quote_numbers: (data ?? []).map((q: { quote_number: string }) => q.quote_number) }
+}
+
+export function extraInUseMessage(u: ExtraInUse): string {
+  const more = u.count > u.quote_numbers.length ? ` and ${u.count - u.quote_numbers.length} more` : ''
+  return `This extra is used by ${u.count} saved quote${u.count === 1 ? '' : 's'} (${u.quote_numbers.join(', ')}${more}). Deactivate it instead, so those quotes keep it.`
+}
+
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const orgId = await getCurrentOrgId()
@@ -88,6 +114,21 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     // Extras already added to a booking keep their own copy of title and
     // price (booking_extras stores them), so deleting a catalogue row cannot
     // rewrite history — it only stops the extra being offered again.
+    //
+    // A saved B2B quote is different: it names the extra only by id, in a
+    // services_snapshot line (lib/pricing/extras-pricing), and every re-price
+    // of it looks the id up again — so the line came back "not found". Such
+    // an extra is refused, with the quotes that use it; the page offers to
+    // stop offering it instead (is_active = false keeps the row).
+    const inUse = await quotesUsingExtra(supabase, orgId, id)
+    if (inUse.count > 0) {
+      return NextResponse.json({
+        success: false,
+        error: extraInUseMessage(inUse),
+        in_use: inUse,
+      }, { status: 409 })
+    }
+
     const { data, error } = await supabase
       .from('extras_catalogue')
       .delete()
