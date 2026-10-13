@@ -35,8 +35,10 @@ interface SalesAgent {
   avatar_url: string | null
   is_active: boolean
   is_available: boolean
+  /** Open WhatsApp chats, counted from the conversations (/api/whatsapp/agents). */
   current_conversations: number
-  max_conversations: number
+  /** Linked to a login of this company. */
+  has_login?: boolean
 }
 
 interface Conversation {
@@ -201,7 +203,7 @@ function AgentSelector({
                   <div className="flex-1 text-left">
                     <p className="font-medium">{agent.name}</p>
                     <p className="text-xs text-gray-500">
-                      {agent.current_conversations}/{agent.max_conversations} chats
+                      {agent.current_conversations} open chats
                       {!agent.is_available && ' • Away'}
                     </p>
                   </div>
@@ -376,10 +378,20 @@ function AgentsManagementModal({
   const [newAgentName, setNewAgentName] = useState('')
   const [newAgentEmail, setNewAgentEmail] = useState('')
   const [isAdding, setIsAdding] = useState(false)
+  // What the last add / change / deactivate said — each used to fail silently.
+  const [notice, setNotice] = useState<{ tone: 'error' | 'info'; text: string } | null>(null)
+
+  const failure = async (res: Response, fallback: string) => {
+    const data = await res.json().catch(() => ({}))
+    return res.status === 403 && !data.error?.startsWith('You can only')
+      ? 'Only admins and managers can add or deactivate agents.'
+      : data.error || fallback
+  }
 
   const addAgent = async () => {
     if (!newAgentName.trim()) return
     setIsAdding(true)
+    setNotice(null)
     try {
       const res = await fetch('/api/whatsapp/agents', {
         method: 'POST',
@@ -387,37 +399,53 @@ function AgentsManagementModal({
         body: JSON.stringify({ name: newAgentName.trim(), email: newAgentEmail.trim() || null })
       })
       if (res.ok) {
+        const data = await res.json().catch(() => ({}))
         setNewAgentName('')
         setNewAgentEmail('')
+        setNotice({
+          tone: 'info',
+          text: data.linked_login
+            ? 'Agent added and linked to their login.'
+            : 'Agent added without a login: they can be assigned chats, but will not see them under “Mine”.',
+        })
         onRefresh()
+      } else {
+        setNotice({ tone: 'error', text: await failure(res, 'The agent could not be added.') })
       }
     } catch (error) {
       console.error('Error adding agent:', error)
+      setNotice({ tone: 'error', text: 'The agent could not be added.' })
     } finally {
       setIsAdding(false)
     }
   }
 
   const toggleAgentAvailability = async (agent: SalesAgent) => {
+    setNotice(null)
     try {
-      await fetch('/api/whatsapp/agents', {
+      const res = await fetch('/api/whatsapp/agents', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: agent.id, is_available: !agent.is_available })
       })
+      if (!res.ok) setNotice({ tone: 'error', text: await failure(res, 'The agent could not be updated.') })
       onRefresh()
     } catch (error) {
       console.error('Error updating agent:', error)
+      setNotice({ tone: 'error', text: 'The agent could not be updated.' })
     }
   }
 
   const deleteAgent = async (agentId: string) => {
     if (!(await confirmDialog('Are you sure you want to deactivate this agent?'))) return
+    setNotice(null)
     try {
-      await fetch(`/api/whatsapp/agents?id=${agentId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/whatsapp/agents?id=${agentId}`, { method: 'DELETE' })
+      if (!res.ok) setNotice({ tone: 'error', text: await failure(res, 'The agent could not be deactivated.') })
       onRefresh()
     } catch (error) {
       console.error('Error deleting agent:', error)
+      setNotice({ tone: 'error', text: 'The agent could not be deactivated.' })
     }
   }
 
@@ -459,7 +487,19 @@ function AgentsManagementModal({
                 {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               </button>
             </div>
+            <p className="mt-2 text-xs text-gray-500">
+              Use the email of a login in this company to link the agent to it. Without a login the agent can still be assigned chats.
+            </p>
           </div>
+
+          {notice && (
+            <div
+              className={`mb-4 px-3 py-2 rounded-lg text-sm ${notice.tone === 'error' ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'}`}
+              role={notice.tone === 'error' ? 'alert' : 'status'}
+            >
+              {notice.text}
+            </div>
+          )}
 
           {/* Agent List */}
           <div className="space-y-2 max-h-80 overflow-y-auto">
@@ -472,7 +512,8 @@ function AgentsManagementModal({
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">{agent.name}</p>
                     <p className="text-xs text-gray-500">
-                      {agent.email || 'No email'} • {agent.current_conversations} active chats
+                      {agent.email || 'No email'} • {agent.current_conversations} open chats
+                      {agent.has_login === false && ' • No login'}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -558,6 +599,10 @@ export default function WhatsAppInboxPage() {
       if (res.ok) {
         const data = await res.json()
         setAgents(data.agents || [])
+        // The signed-in user's own team member in this company. Never set
+        // before, so "Mine" listed everything, Claim always asked to be set
+        // up as an agent, and replies were never logged in the activity.
+        setCurrentAgentId(data.current_team_member_id ?? null)
       }
     } catch (error) {
       console.error('Error fetching agents:', error)

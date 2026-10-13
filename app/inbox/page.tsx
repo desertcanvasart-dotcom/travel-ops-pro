@@ -192,7 +192,7 @@ function folderListParams(folder: FolderType, query: string | undefined, params:
 }
 
 export default function InboxPage() {
-  const { user } = useAuth()
+  const { user, isAgent } = useAuth()
   const [loading, setLoading] = useState(true)
   const [emails, setEmails] = useState<Email[]>([])
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null)
@@ -877,13 +877,21 @@ ${bodyText}`
           <p className="text-gray-500 mb-6">
             Connect your Gmail account to send and receive emails directly from Autoura.
           </p>
-          <Link
-            href="/settings/email"
-            className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
-          >
-            <Mail className="w-4 h-4" />
-            Connect Gmail
-          </Link>
+          {/* Settings is admin / manager only: the button sent an agent to a
+              page that bounced them to the dashboard. */}
+          {isAgent ? (
+            <p className="text-sm text-gray-600" data-testid="inbox-connect-ask">
+              Ask an admin or manager to connect Gmail in Settings › Email.
+            </p>
+          ) : (
+            <Link
+              href="/settings/email"
+              className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              <Mail className="w-4 h-4" />
+              Connect Gmail
+            </Link>
+          )}
         </div>
       </div>
     )

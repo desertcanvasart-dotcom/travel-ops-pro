@@ -115,11 +115,11 @@ export const CATEGORIES: DocCategory[] = [
     label: 'Communicate',
     menuSection: 'communication',
     items: [
-      { href: '/docs/communication', icon: MessageCircle, title: 'Unified Inbox', description: 'WhatsApp, email and portal messages in one inbox, with the AI parser.', covers: ['/communications'] },
+      { href: '/docs/communication', icon: MessageCircle, title: 'Unified Inbox', description: 'WhatsApp, email, portal messages and trip chats in one inbox: answer, assign, archive and restore.', covers: ['/communications'] },
       { href: '/docs/portal-messages', icon: MessagesSquare, title: 'Portal Messages', description: 'Travellers ask questions from their booking page; your team answers from the unified inbox, beside WhatsApp and email.' },
       { href: '/docs/email-inbox', icon: MailPlus, title: 'Email Inbox', description: 'Connect Gmail, read and send email, and understand what lands here versus the Unified Inbox.', covers: ['/inbox'] },
       { href: '/docs/message-templates', icon: FileInput, title: 'Message Templates', description: 'Create and send pre-designed messages via WhatsApp and email with placeholder auto-fill.', covers: ['/templates'] },
-      { href: '/docs/whatsapp-agent', icon: Bot, title: 'WhatsApp AI Agent', description: 'Draft-gated AI agent that reads the thread, checks live availability, and suggests a reply for you to approve — it never auto-sends.' },
+      { href: '/docs/whatsapp-agent', icon: Bot, title: 'WhatsApp AI Agent', description: 'What exists today: a reply-suggestion engine that is built but not yet shown in the inbox, and where WhatsApp drafts come from now.' },
       { href: '/docs/copilot', icon: Sparkles, title: 'AI Copilot', description: 'Ask questions and draft replies grounded in your own knowledge base (RAG). Agent memory learns your style over time.', covers: ['/copilot'] },
       { href: '/docs/copilot-knowledge', icon: BookOpen, title: 'Copilot Knowledge', description: 'Manage the knowledge sources that ground every Copilot answer.', covers: ['/copilot-knowledge'] },
       { href: '/docs/content-library', icon: BookOpen, title: 'Content Library', description: 'Reusable attraction and activity descriptions with per-tier variations, AI prompts, and writing rules.', covers: ['/content-library'] },

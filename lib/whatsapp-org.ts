@@ -100,3 +100,71 @@ export async function teamMemberInOrg(
   if (error) throw error
   return !!data
 }
+
+/**
+ * What an inbound message changes on its existing conversation: a deleted
+ * (hidden) or archived one comes back to the inbox; a blocked one stays
+ * blocked; anything else is left alone (null — no write).
+ */
+export function whatsappRevival(
+  conv: { is_hidden?: boolean | null; status?: string | null },
+): { is_hidden?: false; hidden_at?: null; hidden_by?: null; status?: 'active' } | null {
+  if (conv.status === 'blocked') return null
+  const out: { is_hidden?: false; hidden_at?: null; hidden_by?: null; status?: 'active' } = {}
+  if (conv.is_hidden) Object.assign(out, { is_hidden: false, hidden_at: null, hidden_by: null })
+  if (conv.status === 'archived') out.status = 'active'
+  return Object.keys(out).length ? out : null
+}
+
+/**
+ * Open WhatsApp chats per team member — the figure the agent lists show.
+ * Counted from the conversations themselves (active, not hidden, assigned to
+ * them) rather than team_members.current_conversations: that counter was only
+ * ever added to on a new chat, never taken from on a reassign, unassign,
+ * archive or delete, so it drifted upward for good.
+ */
+export function openChatsByMember(
+  rows: Array<{ assigned_team_member_id: string | null; status?: string | null; is_hidden?: boolean | null }>,
+): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const r of rows) {
+    if (!r.assigned_team_member_id) continue
+    if ((r.status ?? 'active') !== 'active' || r.is_hidden) continue
+    counts.set(r.assigned_team_member_id, (counts.get(r.assigned_team_member_id) ?? 0) + 1)
+  }
+  return counts
+}
+
+/**
+ * The org member whose login has this email address, or null. Adding an agent
+ * with a colleague's address links the agent to that login, so the chats
+ * assigned to the agent are theirs ("Mine", claiming, the assignment
+ * notification). Only this org's members are considered: another company's
+ * login with the same address is never linked.
+ */
+export async function orgLoginForEmail(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: { from: (table: string) => any },
+  orgId: string,
+  email: string | null | undefined,
+): Promise<string | null> {
+  const wanted = (email ?? '').trim().toLowerCase()
+  if (!wanted) return null
+  const { data: members, error } = await db
+    .from('organization_members')
+    .select('user_id')
+    .eq('org_id', orgId)
+  if (error) return null
+  const ids = ((members ?? []) as { user_id: string | null }[])
+    .map(m => m.user_id)
+    .filter((id): id is string => !!id)
+  if (ids.length === 0) return null
+  const { data: profiles, error: profileError } = await db
+    .from('user_profiles')
+    .select('id, email')
+    .in('id', ids)
+  if (profileError) return null
+  const match = ((profiles ?? []) as { id: string; email: string | null }[])
+    .find(p => (p.email ?? '').trim().toLowerCase() === wanted)
+  return match?.id ?? null
+}

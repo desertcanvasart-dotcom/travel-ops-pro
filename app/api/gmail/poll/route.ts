@@ -322,6 +322,14 @@ export async function GET(request: NextRequest) {
                       .eq('org_id', orgId)
                       .eq('is_hidden', true)
                       .eq('status', 'trashed')
+                    // And out of Communicate's Archive, as Gmail brings an
+                    // archived thread back to the inbox.
+                    await supabase
+                      .from('email_conversations')
+                      .update({ status: 'active' })
+                      .eq('id', existingConv.id)
+                      .eq('org_id', orgId)
+                      .eq('status', 'archived')
                   }
                 }
               }

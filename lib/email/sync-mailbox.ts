@@ -351,6 +351,9 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
         if (!existingByThread.has(r.thread_id)) existingByThread.set(r.thread_id, r.id)
         // Deleted in Communicate — not hidden as personal mail, which stays hidden.
         if (r.is_hidden && r.status === 'trashed') deletedConversations.add(r.id)
+        // Archived in Communicate: new mail brings it back to the inbox the
+        // same way, as Gmail does with an archived thread.
+        if (!r.is_hidden && r.status === 'archived') deletedConversations.add(r.id)
       }
     }
 

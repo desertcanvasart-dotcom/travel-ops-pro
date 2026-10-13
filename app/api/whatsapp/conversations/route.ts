@@ -202,21 +202,13 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error
 
-    // Update team member's count if assigned
+    // When they were last given a chat. No current_conversations bump: the
+    // open-chat figure is counted from the conversations (/api/whatsapp/agents)
+    // — a counter only ever added to here drifted upward for good.
     if (assignedTeamMemberId) {
-      const { data: memberData } = await supabase
-        .from('team_members')
-        .select('current_conversations')
-        .eq('id', assignedTeamMemberId)
-        .eq('org_id', orgId)
-        .single()
-
       await supabase
         .from('team_members')
-        .update({ 
-          current_conversations: (memberData?.current_conversations || 0) + 1,
-          last_assigned_at: new Date().toISOString()
-        })
+        .update({ last_assigned_at: new Date().toISOString() })
         .eq('id', assignedTeamMemberId)
         .eq('org_id', orgId)
 

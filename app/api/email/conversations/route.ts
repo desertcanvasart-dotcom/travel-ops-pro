@@ -6,7 +6,7 @@ import { getCurrentOrgId, getCurrentUserId, noOrgResponse, requireRole } from '@
 import { recordsInOrg } from '@/lib/org-refs'
 import { teamMemberInOrg } from '@/lib/whatsapp-org'
 import { pickConversationUpdates } from '@/lib/email/conversation-updates'
-import { moveThreadInGmail } from '@/lib/email/conversation-trash'
+import { moveThreadInGmail, labelThreadInGmail, type ThreadLabelAction } from '@/lib/email/conversation-trash'
 import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
 import { emailConversationInOrg } from '@/lib/email/conversation-access'
 import type { EmailConversation } from '@/types/unified'
@@ -132,6 +132,14 @@ export async function GET(request: NextRequest) {
 // (lib/email/sync-mailbox.ts, /api/gmail/poll) — and it let any signed-in
 // account file a thread into any company's mailbox.
 
+// The PATCH actions that are also a label change on the Gmail thread.
+const GMAIL_LABEL_ACTIONS: Record<string, ThreadLabelAction | undefined> = {
+  archive: 'archive',
+  unarchive: 'unarchive',
+  mark_read: 'markRead',
+  mark_unread: 'markUnread',
+}
+
 // PATCH /api/email/conversations - Update conversation status, assignment, etc.
 export async function PATCH(request: NextRequest) {
   try {
@@ -177,6 +185,8 @@ export async function PATCH(request: NextRequest) {
 
     if (action === 'mark_read') {
       updateData.unread_count = 0
+    } else if (action === 'mark_unread') {
+      updateData.unread_count = 1
     } else if (action === 'archive') {
       updateData.status = 'archived'
     } else if (action === 'unarchive') {
@@ -235,6 +245,14 @@ export async function PATCH(request: NextRequest) {
     if (action === 'unhide' && data) {
       const gmail = await moveThreadInGmail(data.user_id, data.thread_id, 'untrash', orgId)
       if (!gmail.ok) warning = 'Restored here, but the email could not be taken out of Trash in Gmail. Reconnect Gmail in Settings and try again.'
+    }
+    // Archive and read state follow into the conversation's own mailbox
+    // (lib/email/conversation-trash labelThreadInGmail). Changed here
+    // regardless: a mailbox that needs reconnecting must not stop it.
+    const labelAction = typeof action === 'string' && Object.hasOwn(GMAIL_LABEL_ACTIONS, action) ? GMAIL_LABEL_ACTIONS[action] : undefined
+    if (labelAction && data) {
+      const gmail = await labelThreadInGmail(data.user_id, data.thread_id, labelAction, orgId)
+      if (!gmail.ok) warning = 'Done here, but Gmail could not be updated. An admin or manager can reconnect Gmail in Settings › Email.'
     }
 
     // No conversation_activity row: that log belongs to WhatsApp
