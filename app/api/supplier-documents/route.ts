@@ -3,7 +3,9 @@ import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/cur
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { NextRequest, NextResponse } from 'next/server'
-import { createDocumentNumberer, supplierDocumentPrefix } from '@/lib/documents/numberer'
+import { createDocumentNumberer, isDuplicateKey, supplierDocumentPrefix } from '@/lib/documents/numberer'
+import { SUPPLIER_DOCUMENT_CREATE_FIELDS, pickFields } from '@/lib/documents/supplier-document-fields'
+import { supplierDocumentStats } from '@/lib/documents/supplier-document-stats'
 import { rowInOrg } from '@/lib/api/org-scope'
 
 export async function GET(request: NextRequest) {
@@ -68,23 +70,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
   
-  // Calculate summary stats
-  const stats = {
-    total: data?.length || 0,
-    draft: data?.filter(d => d.status === 'draft').length || 0,
-    sent: data?.filter(d => d.status === 'sent').length || 0,
-    confirmed: data?.filter(d => d.status === 'confirmed').length || 0,
-    completed: data?.filter(d => d.status === 'completed').length || 0,
-    by_type: {
-      hotel_voucher: data?.filter(d => d.document_type === 'hotel_voucher').length || 0,
-      service_order: data?.filter(d => d.document_type === 'service_order').length || 0,
-      transport_voucher: data?.filter(d => d.document_type === 'transport_voucher').length || 0,
-      activity_voucher: data?.filter(d => d.document_type === 'activity_voucher').length || 0,
-      guide_assignment: data?.filter(d => d.document_type === 'guide_assignment').length || 0,
-      cruise_voucher: data?.filter(d => d.document_type === 'cruise_voucher').length || 0
-    }
+  // The tiles: the company's (or this trip's) documents by status, counted by
+  // the database — not the filtered rows above (lib/documents/supplier-document-stats).
+  let stats
+  try {
+    stats = await supplierDocumentStats(supabase, orgId, itineraryId)
+  } catch (statsError) {
+    console.error('Error counting supplier documents:', statsError)
+    stats = null
   }
-  
+
   return NextResponse.json({
     success: true,
     data,
@@ -99,13 +94,12 @@ export async function POST(request: NextRequest) {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
-    const body = await request.json()
-    
-    // Generate document number if not provided
-    if (!body.document_number) {
-      body.document_number = await createDocumentNumberer(supabase, supplierDocumentPrefix)(body.document_type)
-    }
-    
+    // Only the document's own columns, as a draft (lib/documents/
+    // supplier-document-fields): the raw body used to be inserted, so a
+    // caller could create a voucher already 'confirmed', or choose its id.
+    const body: Record<string, any> = pickFields(await request.json(), SUPPLIER_DOCUMENT_CREATE_FIELDS)
+    body.status = 'draft'
+
     // The supplier must be this company's (suppliers.org_id, 20261205).
     if (body.supplier_id && !(await rowInOrg(supabase, 'suppliers', String(body.supplier_id), orgId))) {
       return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
@@ -151,11 +145,28 @@ export async function POST(request: NextRequest) {
     body.org_id = orgId
     body.created_by = await getCurrentUserId()
 
-    const { data, error } = await supabase
+    // A number typed by hand is the caller's: a clash is theirs to resolve
+    // (409). One we draw (this company's sequence) is retried with the next.
+    const typedNumber = !!body.document_number
+    const nextNumber = createDocumentNumberer(supabase, supplierDocumentPrefix, orgId)
+    if (!typedNumber) body.document_number = await nextNumber(String(body.document_type ?? ''))
+
+    let { data, error } = await supabase
       .from('supplier_documents')
       .insert([body])
       .select()
       .single()
+    for (let attempt = 0; !typedNumber && isDuplicateKey(error) && attempt < 3; attempt++) {
+      body.document_number = await nextNumber(String(body.document_type ?? ''))
+      ;({ data, error } = await supabase
+        .from('supplier_documents')
+        .insert([body])
+        .select()
+        .single())
+    }
+    if (typedNumber && isDuplicateKey(error)) {
+      return NextResponse.json({ error: 'Another of your documents already has this number' }, { status: 409 })
+    }
     
     if (error) {
       console.error('Error creating supplier document:', error)

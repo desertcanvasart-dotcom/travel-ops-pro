@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { randomUUID } from 'node:crypto'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
@@ -9,6 +10,7 @@ import { orgIdentity } from '@/lib/org-identity'
 import { markSupplierDocumentSent } from '@/lib/documents/mark-sent'
 import { headerSafe, safeEmailAddress } from '@/lib/http/safe-header'
 import { encodeEmailHeader } from '@/lib/email-send'
+import { decodePdfAttachment, mimeBase64Lines } from '@/lib/documents/pdf-attachment'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,13 +23,13 @@ export async function POST(request: Request) {
     // The recipient, number and names come from the voucher row, not the
     // request: the browser chooses only which voucher, its display title and
     // the PDF it rendered from that row.
-    const { documentId, documentType: documentTitle, pdfBase64 } = body
+    const { documentId, documentType: documentTitle } = body
 
-    if (!pdfBase64) {
-      return NextResponse.json(
-        { success: false, error: 'PDF attachment is required' },
-        { status: 400 }
-      )
+    // A real PDF, base64 only, bounded — never the string as given
+    // (lib/documents/pdf-attachment).
+    const pdf = decodePdfAttachment(body.pdfBase64)
+    if (!pdf.ok) {
+      return NextResponse.json({ success: false, error: pdf.error }, { status: 400 })
     }
 
     // Only this organization's vouchers, from this organization's mailbox.
@@ -132,7 +134,7 @@ export async function POST(request: Request) {
       emailSubject,
       emailBody,
       filename,
-      pdfBase64
+      pdf.base64
     )
 
     // Send via Gmail API
@@ -178,7 +180,9 @@ function buildEmailWithAttachment(
   filename: string,
   attachmentBase64: string
 ): string {
-  const boundary = `boundary_${Date.now()}`
+  // Unguessable, and the parts are base64 (no line can start with "--"), so
+  // nothing inside a part can close it.
+  const boundary = `boundary_${randomUUID()}`
   const safeFilename = headerSafe(filename).replace(/"/g, '')
   // Headers are 7-bit: a Japanese org's subject (書類名, guest, company) and a
   // Japanese supplier's file name arrived as mojibake. The subject is an
@@ -207,7 +211,7 @@ function buildEmailWithAttachment(
     'Content-Transfer-Encoding: base64',
     `Content-Disposition: attachment; filename="${asciiFilename}"; filename*=UTF-8''${utf8Filename}`,
     '',
-    attachmentBase64,
+    mimeBase64Lines(attachmentBase64),
     `--${boundary}--`,
   ]
 

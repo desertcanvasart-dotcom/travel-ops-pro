@@ -146,8 +146,9 @@ describe('the pages', () => {
 
   it('the payment API returns the client’s phone and email', () => {
     const route = read('app/api/payments/[id]/route.ts')
-    expect(route).toContain('client_phone: payment.itineraries?.client_phone')
-    expect(route).toContain('client_email: payment.itineraries?.client_email')
+    // From the payment's trip, only when the trip is this org's (#8).
+    expect(route).toContain('client_phone: trip?.client_phone')
+    expect(route).toContain('client_email: trip?.client_email')
   })
 
   it('the contract shows the trip’s currency and survives no price', () => {

@@ -144,7 +144,8 @@ export async function POST(
 
     const body = await request.json().catch(() => ({}))
     const document_types = requestedDocTypes(body)
-    const nextNumber = createDocumentNumberer(supabase, supplierDocumentPrefix)
+    // This company's own sequence (numbers are per company, 20261216).
+    const nextNumber = createDocumentNumberer(supabase, supplierDocumentPrefix, orgId)
 
     const createdBy = await getCurrentUserId()
 
@@ -260,10 +261,10 @@ export async function POST(
         .from('supplier_documents')
         .insert(documentsToCreate)
         .select()
-      // Another request took one of these numbers between our read and our
-      // insert (the column is UNIQUE): renumber from the new highest and retry.
+      // A number already taken in this company (typed by hand, or drawn by a
+      // request before the counter existed): renumber and retry.
       for (let attempt = 0; createError?.code === '23505' && attempt < 3; attempt++) {
-        const renumber = createDocumentNumberer(supabase, supplierDocumentPrefix)
+        const renumber = createDocumentNumberer(supabase, supplierDocumentPrefix, orgId)
         for (const doc of documentsToCreate) doc.document_number = await renumber(doc.document_type)
         ;({ data: createdDocs, error: createError } = await supabase
           .from('supplier_documents')
