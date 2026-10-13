@@ -11,9 +11,8 @@ import { citiesOf, facetsOf, filterOptions, humanize, onePerRoute, optionCities,
 
 /** Single-choice services picked from the filtered list rather than a plain
  *  select (ported from autoura-saas #644–#646): every hotel of the tier,
- *  every guide, every cruise and cabin — and water, so every service reads
- *  the same way. */
-const PICKER_SLOTS = new Set(['accommodation', 'guide', 'cruise', 'water'])
+ *  every guide, every cruise and cabin, so every service reads the same way. */
+const PICKER_SLOTS = new Set(['accommodation', 'guide', 'cruise'])
 
 interface SlotRowProps {
   definition: SlotDefinition
@@ -23,8 +22,6 @@ interface SlotRowProps {
   passport: PassportType
   onChange: (value: SlotValue) => void
   hidden?: boolean
-  /** Offered on daily items (water): copy this selection to every day. */
-  onApplyToAllDays?: () => void
   /** Group size: the transport list shows each route at the vehicle that seats it. */
   pax?: number
 }
@@ -41,7 +38,7 @@ function SavedPriceMark({ item }: { item: SelectedItem }) {
   )
 }
 
-export default function SlotRow({ definition, value, options, allOptions, passport, onChange, hidden, onApplyToAllDays, pax = 2 }: SlotRowProps) {
+export default function SlotRow({ definition, value, options, allOptions, passport, onChange, hidden, pax = 2 }: SlotRowProps) {
   const { rateSymbol } = useCurrency()
   const [search, setSearch] = useState('')
   const [cityFilter, setCityFilter] = useState('')
@@ -272,7 +269,7 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
             className="w-full px-2 py-0.5 text-xs border border-gray-200 rounded-md bg-gray-50 focus:bg-white focus:ring-1 focus:ring-blue-200 transition-all"
           />
         ) : PICKER_SLOTS.has(definition.slotId) ? (
-          /* Single choice from the filtered list (hotel, guide, cruise, water) */
+          /* Single choice from the filtered list (hotel, guide, cruise) */
           (() => {
             const selected = value.selectedItems[0]
             return (
@@ -301,16 +298,6 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
                 )}
                 {allPool.length === 0 && !selected && (
                   <span className="text-[11px] text-gray-300 px-1 italic">No options</span>
-                )}
-                {onApplyToAllDays && selected && (
-                  <button
-                    type="button"
-                    onClick={onApplyToAllDays}
-                    className="ml-1 text-[11px] text-blue-600 hover:text-blue-800 hover:underline whitespace-nowrap"
-                    title="Put this on every day of the trip"
-                  >
-                    Apply to all days
-                  </button>
                 )}
                 {isDropdownOpen && renderPanel(opt => { selectSingle(opt); setIsDropdownOpen(false) }, false)}
               {/* The property's supplements — the agency's own list, each a
@@ -378,16 +365,6 @@ export default function SlotRow({ definition, value, options, allOptions, passpo
                 ))}
               </select>
               {selected && <SavedPriceMark item={selected} />}
-              {onApplyToAllDays && selected && (
-                <button
-                  type="button"
-                  onClick={onApplyToAllDays}
-                  className="shrink-0 text-[11px] text-blue-600 hover:text-blue-800 hover:underline whitespace-nowrap"
-                  title="Put this on every day of the trip"
-                >
-                  Apply to all days
-                </button>
-              )}
               </div>
               {/* The property's supplements — the agency's own list, each a
                   per-person-per-night extra on top of the room. */}

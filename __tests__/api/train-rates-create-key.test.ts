@@ -92,6 +92,9 @@ beforeEach(() => {
   setMockTables({
     train_rates: [structuredClone(TALGO_QENA)],
     sleeping_train_rates: [structuredClone(WATANIA_SINGLE)],
+    // The suppliers the rates name are the caller's company's: train and
+    // sleeper writes check it (another company's is refused).
+    suppliers: [{ id: WATANIA, org_id: 'org-1', name: 'Watania Sleeping Trains' }, { id: ENR, org_id: 'org-1', name: 'Egyptian National Railways (ENR)' }],
   })
 })
 

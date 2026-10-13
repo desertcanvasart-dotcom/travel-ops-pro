@@ -19,6 +19,7 @@
 
 import { buildTransportCache, findTransportRate } from '@/lib/auto-pricing-service'
 import { usableRate } from '@/lib/pricing/usable-rate'
+import { createRateNormalizer } from '@/lib/rates/rate-currency'
 
 export interface DayTourVehicle {
   rate: number
@@ -39,12 +40,17 @@ export type DayTourVehicleFinder = (
  */
 export function makeDayTourVehicleFinder(
   /** Whose transport rates: this company's only. */
-  orgId: string | null | undefined
+  orgId: string | null | undefined,
+  /** The currency the quote is priced in (the org rate currency). Every row is
+   *  converted into it from its own rate_currency — without this an EGP 2,500
+   *  vehicle was billed as 2,500 of the run currency, while the same routes
+   *  converted extras and packages (lib/rates/rate-currency). */
+  runCurrency: string
 ): DayTourVehicleFinder {
   let cachePromise: ReturnType<typeof buildTransportCache> | null = null
 
   return async (city, pax, isEurPassport) => {
-    cachePromise ??= buildTransportCache(orgId)
+    cachePromise ??= buildTransportCache(orgId, createRateNormalizer(runCurrency))
     const cache = await cachePromise
 
     const record = findTransportRate(cache, {

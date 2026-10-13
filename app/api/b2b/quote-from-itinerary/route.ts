@@ -2,6 +2,7 @@ import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getTieredActivityRate, applyActivityTiers } from '@/lib/rates/activity-tiers'
+import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { makeDayTourVehicleFinder } from '@/lib/rates/day-tour-vehicle'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { loadSeasonWindows } from '@/lib/auto-pricing-service'
@@ -204,11 +205,6 @@ export async function POST(request: NextRequest) {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
-    // Day-tour vehicle rates come from transportation_rates (operator catalog,
-    // operator-set capacity bands) — NOT the rate-less `vehicles` fleet list.
-    // This company's.
-    const findDayTourVehicle = makeDayTourVehicleFinder(orgId)
-
     // The partner is saved on the quote (and printed on its PDF, and copied to
     // the trip on convert), not only used for its margin.
     if (!(await quoteRefsInOrg(supabaseAdmin, orgId, { partner_id }))) return quoteRefNotFound()
@@ -282,6 +278,11 @@ export async function POST(request: NextRequest) {
     // What the rate tables (and services' supplier_cost_original) are in.
     const rateCurrency = await getOrgRateCurrency(supabaseAdmin, orgId)
     const rateSym = currencySymbol(rateCurrency)
+    // Day-tour vehicle rates come from transportation_rates (operator catalog,
+    // operator-set capacity bands) — NOT the rate-less `vehicles` fleet list.
+    // This company's, converted into the rate currency the quote is built in.
+    const findDayTourVehicle = makeDayTourVehicleFinder(orgId, rateCurrency)
+    const activityNormalizer = createRateNormalizer(rateCurrency)
     const departureDate: string | null = itinerary.start_date
       ? String(itinerary.start_date).slice(0, 10)
       : null
@@ -380,7 +381,9 @@ export async function POST(request: NextRequest) {
           // Tiered activity pricing from the catalog first (volume discounts
           // like felucca) — lives on activity_rates.tiers, not the old (always
           // empty) b2b_pricing_rules table.
-          const tiered = await getTieredActivityRate(supabaseAdmin, orgId, serviceName)
+          // Bands converted from the activity's own currency, valid on the
+          // trip's start date (lib/rates/activity-tiers).
+          const tiered = await getTieredActivityRate(supabaseAdmin, orgId, serviceName, { normalizer: activityNormalizer, date: departureDate })
           const ruleResult = tiered ? applyActivityTiers(tiered.tiers, numPax, is_eur_passport, rateSym) : null
           if (ruleResult && usableRate(ruleResult.lineTotal) !== null) {
             const priceResult = ruleResult

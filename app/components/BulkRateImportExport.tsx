@@ -28,6 +28,9 @@ interface ImportState {
     updated: number
     errors: any[]
     warnings?: { kind: 'example_row_skipped'; key: string; message: string }[]
+    /** Rows the preview reported as invalid, left out of the write. */
+    skipped?: number
+    skippedErrors?: ValidationError[]
   }
   error?: string
 }
@@ -175,6 +178,8 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
             updated: data.updated || 0,
             errors: data.errors || [],
             warnings: data.warnings || [],
+            skipped: data.skipped || 0,
+            skippedErrors: data.skippedErrors || [],
           },
         }))
         onImportComplete?.()
@@ -317,7 +322,7 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
                         <AlertCircle className="w-4 h-4 text-amber-600" />
-                        <span className="text-sm font-medium text-amber-700">Validation Warnings</span>
+                        <span className="text-sm font-medium text-amber-700">Rows with errors (these will be skipped)</span>
                       </div>
                       <div className="max-h-32 overflow-y-auto space-y-1">
                         {importState.preview.errors.slice(0, 10).map((err, i) => (
@@ -339,7 +344,13 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
                       Ready to import <strong>{importState.preview.validRows}</strong> valid row(s).
                       Rows with matching service codes will be <strong>updated</strong>;
                       new rows will be <strong>inserted</strong>.
+                      {importState.preview.invalidRows > 0 && (
+                        <> The <strong>{importState.preview.invalidRows}</strong> row(s) with errors will be <strong>skipped</strong> — fix them and import the file again to add them.</>
+                      )}
                     </p>
+                  )}
+                  {importState.preview.validRows === 0 && importState.preview.invalidRows > 0 && (
+                    <p className="text-sm text-red-600">No row can be imported. Fix the errors above and try again.</p>
                   )}
                 </>
               )}
@@ -357,7 +368,7 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
                 <div className="space-y-3">
                   <div className="flex items-center gap-3 p-4 bg-green-50 rounded-lg">
                     <CheckCircle className="w-5 h-5 text-green-500" />
-                    <span className="text-sm text-green-700">Import completed successfully!</span>
+                    <span className="text-sm text-green-700">{(importState.result.skipped ?? 0) > 0 ? 'Import completed — the valid rows were imported.' : 'Import completed successfully!'}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="p-3 bg-green-50 rounded-lg text-center">
@@ -369,6 +380,16 @@ export default function BulkRateImportExport({ tableName, onImportComplete }: Bu
                       <div className="text-xs text-blue-600">Rows Updated</div>
                     </div>
                   </div>
+                  {(importState.result.skipped ?? 0) > 0 && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <div className="text-sm font-medium text-amber-700 mb-1">{importState.result.skipped} row(s) skipped (not imported):</div>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {(importState.result.skippedErrors ?? []).slice(0, 20).map((err, i) => (
+                          <div key={i} className="text-xs text-amber-600">Row {err.row}{err.column ? `, ${err.column}` : ''}: {err.message}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {(importState.result.warnings ?? []).some(w => w.kind === 'example_row_skipped') && (
                     <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                       {importState.result.warnings!

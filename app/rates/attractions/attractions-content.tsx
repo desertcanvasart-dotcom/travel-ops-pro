@@ -1138,43 +1138,10 @@ export default function AttractionsContent() {
                 </div>
               </div>
 
-              {/* Discounts */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3">{t('form.discounts')}</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('form.childDiscount')}
-                    </label>
-                    <input
-                      type="number"
-                      name="child_discount_percent"
-                      value={formData.child_discount_percent}
-                      onChange={handleChange}
-                      min="0"
-                      max="100"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                      placeholder="e.g., 50"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('form.studentDiscount')}
-                    </label>
-                    <input
-                      type="number"
-                      name="student_discount_percentage"
-                      value={formData.student_discount_percentage}
-                      onChange={handleChange}
-                      min="0"
-                      max="100"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                      placeholder="e.g., 25"
-                    />
-                  </div>
-                </div>
-              </div>
+              {/* No child or student discount here: no price ever read them.
+                  Children are priced at the engine's fixed child rate
+                  (lib/auto-pricing-service CHILD_DISCOUNT_PERCENT) and there
+                  is no student price. A stored value is kept as it was. */}
 
               {/* Validity Period */}
               <div className="mb-4">

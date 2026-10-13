@@ -49,7 +49,10 @@ vi.mock('@/lib/auth/current-org', () => ({
   getCurrentUserId: async () => 'user-1',
   noOrgResponse: () => new Response(JSON.stringify({ error: 'no org' }), { status: 403 }),
 }))
-vi.mock('@/lib/org-rate-currency', () => ({ getOrgRateCurrency: async () => 'USD' }))
+vi.mock('@/lib/org-rate-currency', async (orig) => ({
+  ...(await orig<typeof import('@/lib/org-rate-currency')>()),
+  getOrgRateCurrency: async () => 'USD',
+}))
 vi.mock('@/lib/org-default-margin', async (orig) => ({
   ...(await orig<typeof import('@/lib/org-default-margin')>()),
   getOrgDefaultMargin: async () => 30,

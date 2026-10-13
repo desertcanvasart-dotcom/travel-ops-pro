@@ -1,9 +1,9 @@
 'use client'
 // Import CSV / Sample CSV for the supplier roster — the pair every rates
 // page has. Sample gives the sheet; Import checks the file first (what would
-// be added, what is already on file, what is wrong and on which line) and
-// writes only when the operator confirms. An existing supplier is never
-// rewritten by an import.
+// be added, which existing suppliers it would update — matched by
+// supplier_code, else by name — and what is wrong or clashes, on which line)
+// and writes only when the operator confirms.
 import { useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Upload, FileText, Loader2, X } from 'lucide-react'
@@ -12,10 +12,11 @@ interface Preview {
   totalRows: number
   ready: number
   readyNames: string[]
-  alreadyOnFile: { line: number; name: string }[]
+  updates: { line: number; name: string; matchedBy: 'code' | 'name' }[]
   errors: { line: number; name: string; message: string }[]
   exampleRowsSkipped: number
   inserted?: number
+  updated?: number
   insertErrors?: { name: string; message: string }[]
 }
 
@@ -84,7 +85,7 @@ export default function SupplierImportExport({ onImported }: { onImported: () =>
               {error && <p className="text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
               {done && (
                 <p className="text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                  {t('inserted', { count: done.inserted ?? 0 })}
+                  {t('inserted', { count: done.inserted ?? 0 })} {t('updated', { count: done.updated ?? 0 })}
                 </p>
               )}
               {(preview || done) && (() => {
@@ -95,10 +96,10 @@ export default function SupplierImportExport({ onImported }: { onImported: () =>
                     {!done && p.readyNames.length > 0 && (
                       <p className="text-xs text-gray-500">{p.readyNames.slice(0, 12).join(', ')}{p.readyNames.length > 12 ? '…' : ''}</p>
                     )}
-                    {p.alreadyOnFile.length > 0 && (
-                      <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                        <p className="font-medium">{t('alreadyOnFile', { count: p.alreadyOnFile.length })}</p>
-                        <p className="text-xs mt-1">{p.alreadyOnFile.map(a => a.name).join(', ')}</p>
+                    {!done && p.updates.length > 0 && (
+                      <div className="text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                        <p className="font-medium">{t('willUpdate', { count: p.updates.length })}</p>
+                        <p className="text-xs mt-1">{p.updates.slice(0, 12).map(a => a.name).join(', ')}{p.updates.length > 12 ? '…' : ''}</p>
                       </div>
                     )}
                     {p.errors.length > 0 && (
@@ -122,9 +123,9 @@ export default function SupplierImportExport({ onImported }: { onImported: () =>
             </div>
             <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-200">
               <button type="button" onClick={close} className="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">{done ? t('close') : t('cancel')}</button>
-              {preview && preview.ready > 0 && (
+              {preview && preview.ready + preview.updates.length > 0 && (
                 <button type="button" onClick={confirm} disabled={busy} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50">
-                  {busy ? t('importing') : t('confirm', { count: preview.ready })}
+                  {busy ? t('importing') : t('confirm', { count: preview.ready + preview.updates.length })}
                 </button>
               )}
             </div>

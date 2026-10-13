@@ -16,43 +16,49 @@ import { seasonsForRow, plainPeriodName, type RateSeasonEntity } from '@/lib/rat
 import { periodLabel, type OptionPeriod } from '@/lib/rates/date-window'
 import { cruiseSailingLabel, sanitizeSailingDays } from '@/lib/rates/cruise-sailing'
 import { airportsFrom, flightRouteLabel, cityOfAirportKey } from '@/lib/rates/airports'
+import { flightGuideFare } from '@/lib/rates/ticket-guide-fare'
 import { supplementsForRow, supplementField } from '@/lib/rates/supplements'
-import { createRateNormalizer } from '@/lib/rates/rate-currency'
-import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
-import { getExchangeRate } from '@/lib/currency-service'
+import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
 import { roundToCurrency } from '@/lib/currency-totals'
 import { getOrgRateCurrency, type RateCurrency } from '@/lib/org-rate-currency'
 import { pricingBasisLabel, toPricingBasis } from '@/lib/pricing/pricing-basis'
 import { vehicleBands, vehicleKeyLabel } from '@/lib/rates/vehicle-bands'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
-import type { AllRates, RateOption } from '@/app/pricing-grid/types'
+import { tipGridOption } from '@/lib/tipping-utils'
+import type { AllRates, GridFixedCosts, RateOption } from '@/app/pricing-grid/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (table: string) => any }
 
-/** Bottled water is no rate table: a fixed EUR 0.50 per person per day. */
-export const WATER_EUR_PER_PERSON_DAY = 0.5
-
 /**
- * The water option in the org's rate currency. It was 0.50 in WHATEVER the
- * rate currency was — ¥0.50 a day for a JPY company. Converted from EUR now;
- * with no EUR rate to convert it by, it has no price (0) and says so, never a
- * guess.
+ * The fixed costs the grid charges (Rates › Fixed Costs): the same list the
+ * automatic engine and both AI builders charge — getFixedDailyCosts, water
+ * first with its 2.00 fallback, every other active cost by name, Daily Tips
+ * never — shaped for the grid. Per person per sightseeing day, in the rate
+ * currency, to its smallest unit (so the screen's sum and the save's rounded
+ * lines agree). A zero adds no line; `warnings` says why the water default was
+ * used or a cost was left out (its currency has no exchange rate).
  */
-export async function waterOption(
+export function gridFixedCostsFrom(
+  daily: { items: Array<{ name: string; perPersonPerDay: number }>; warnings: string[] },
   rateCurrency: string,
-  getRates: typeof fetchRunExchangeRates = fetchRunExchangeRates,
-): Promise<RateOption> {
-  const base = { id: 'water-standard', name: 'Water Bottles' }
-  if (rateCurrency === 'EUR') {
-    return { ...base, rateEur: WATER_EUR_PER_PERSON_DAY, rateNonEur: WATER_EUR_PER_PERSON_DAY, details: 'Per person per day' }
+): GridFixedCosts {
+  return {
+    items: daily.items
+      .map(i => ({ name: i.name, perPersonPerDay: roundToCurrency(i.perPersonPerDay, rateCurrency) }))
+      .filter(i => i.perPersonPerDay > 0),
+    warnings: [...daily.warnings],
   }
-  const fx = getExchangeRate('EUR', rateCurrency, await getRates())
-  if (!fx || !(fx > 0)) {
-    return { ...base, rateEur: 0, rateNonEur: 0, details: `Per person per day — no EUR→${rateCurrency} exchange rate, so no price` }
-  }
-  const price = roundToCurrency(WATER_EUR_PER_PERSON_DAY * fx, rateCurrency)
-  return { ...base, rateEur: price, rateNonEur: price, details: 'Per person per day' }
+}
+
+export async function loadGridFixedCosts(
+  orgId: string,
+  normalizer: RateNormalizer,
+  rateCurrency: string,
+): Promise<GridFixedCosts> {
+  // Imported on use: lib/fixed-costs opens a service-role client when loaded.
+  const { getFixedDailyCosts } = await import('@/lib/fixed-costs')
+  return gridFixedCostsFrom(await getFixedDailyCosts(orgId, normalizer), rateCurrency)
 }
 
 /**
@@ -64,7 +70,7 @@ export async function loadGridRateOptions(
   supabase: Db,
   orgId: string,
   tier: string | null,
-): Promise<{ rates: AllRates; rateCurrency: RateCurrency }> {
+): Promise<{ rates: AllRates; rateCurrency: RateCurrency; fixedCosts: GridFixedCosts }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ofTier = (q: any) => (tier ? q.eq('tier', tier) : q)
   // Fetch all rate tables in parallel
@@ -209,12 +215,18 @@ export async function loadGridRateOptions(
 
     guide: (nGuides || []).map((r: any) => ({
       id: r.id,
-      // Spot and throughout rates are different prices — the name says which.
-      name: `${r.guide_language ? guideLanguageWord(r.guide_language) : 'Guide'} (${r.guide_type || 'Egyptologist'}${rateGuideMode(r) !== 'spot' ? `, ${rateGuideMode(r)}` : ''})`,
+      // Spot and throughout rates are different prices — the name says which,
+      // and so do the duration and the city: a half-day and a full-day rate
+      // (or a Cairo and a Luxor one) read identically at different prices.
+      name: `${r.guide_language ? guideLanguageWord(r.guide_language) : 'Guide'} (${[
+        r.guide_type || 'Egyptologist',
+        GUIDE_DURATION_LABEL[r.tour_duration] ?? r.tour_duration,
+        rateGuideMode(r) !== 'spot' ? rateGuideMode(r) : '',
+      ].filter(Boolean).join(', ')})${r.city ? ` — ${r.city}` : ''}`,
       rateEur: toNum(r.base_rate_eur || r.rate_eur),
       rateNonEur: toNum(r.base_rate_non_eur || r.rate_non_eur || r.base_rate_eur || r.rate_eur),
       city: r.city,
-      details: r.guide_language ? guideLanguageWord(r.guide_language) : r.guide_language,
+      details: withValidity(r.guide_language ? guideLanguageWord(r.guide_language) : r.guide_language, r),
       // The dropdown filters by language and by kind of guide.
       language: r.guide_language ? guideLanguageWord(r.guide_language) : undefined,
       category: r.guide_type || 'Egyptologist',
@@ -247,17 +259,23 @@ export async function loadGridRateOptions(
       }
     }),
 
-    tipping: (nTipping || []).map((r: any) => ({
-      id: r.id,
-      // `r.role` is not a column: every tip without a service code was
-      // listed as just "Tip". The description says whose it is.
-      name: r.description || r.service_code || [r.role_type, r.context].filter(Boolean).join(' – ') || 'Tip',
-      // Whose tip — the guide's are dropped when the guide is off (guide-rule.ts).
-      tip_role: r.role_type ?? null,
-      rateEur: toNum(r.rate_eur || r.amount_eur),
-      rateNonEur: toNum(r.rate_eur || r.amount_eur),
-      details: r.description,
-    })),
+    tipping: (nTipping || []).map((r: any) => {
+      // The tip's own Rate Unit: a per-person tip is charged per traveller,
+      // not split across the group (lib/tipping-utils tipGridOption).
+      const { unitLabel, ...basis } = tipGridOption(r.rate_unit)
+      return {
+        id: r.id,
+        // `r.role` is not a column: every tip without a service code was
+        // listed as just "Tip". The description says whose it is.
+        name: r.description || r.service_code || [r.role_type, r.context].filter(Boolean).join(' – ') || 'Tip',
+        // Whose tip — the guide's are dropped when the guide is off (guide-rule.ts).
+        tip_role: r.role_type ?? null,
+        rateEur: toNum(r.rate_eur || r.amount_eur),
+        rateNonEur: toNum(r.rate_eur || r.amount_eur),
+        details: [unitLabel, r.description].filter(Boolean).join(' | ') || undefined,
+        ...basis,
+      }
+    }),
 
     boat_rides: (nActivities || [])
       .filter((r: any) => /boat|felucca|motor/i.test(r.activity_name || r.category || ''))
@@ -314,8 +332,10 @@ export async function loadGridRateOptions(
       periods: flightPeriods(r),
       route_from: r.route_from,
       route_to: r.route_to,
-      // Guide fare for the "+1" seat; null = he pays the customer fare.
-      guide_rate: r.guide_rate == null ? null : toNum(r.guide_rate),
+      // Guide fare for the "+1" seat; null = he pays the customer fare. Read
+      // from the first period as STORED (lib/rates/ticket-guide-fare): the
+      // mirrored column holds 0 for a blank, which flew the guide free.
+      guide_rate: flightGuideFare(r),
     })),
 
     experiences: (nActivities || [])
@@ -337,10 +357,11 @@ export async function loadGridRateOptions(
       rateNonEur: toNum(r.base_rate_non_eur || r.rate_non_eur || r.base_rate_eur || r.rate_eur),
       city: r.city,
       category: r.meal_type,
-      details: r.restaurant_name,
+      details: withValidity(mealDetails(r), r),
+      // "Per Person Rate" unticked = one price for the whole group; it was
+      // charged per traveller.
+      ...(r.per_person_rate === false ? { pricing_basis: 'flat' as const, unit_capacity: null } : {}),
     })),
-
-    water: [await waterOption(rateCurrency)],
 
     cruise: (nCruises || []).map((r: any) => ({
       id: r.id,
@@ -372,7 +393,30 @@ export async function loadGridRateOptions(
     })),
   }
 
-  return { rates: rates as unknown as AllRates, rateCurrency }
+  // The fixed costs, from the same helper as automatic pricing and in the same
+  // rate currency as every other amount here.
+  const fixedCosts = await loadGridFixedCosts(orgId, normalizer, rateCurrency)
+  return { rates: rates as unknown as AllRates, rateCurrency, fixedCosts }
+}
+
+/** The guide durations as the rate form names them. */
+const GUIDE_DURATION_LABEL: Record<string, string> = {
+  half_day: 'half day', full_day: 'full day', extended: 'extended', hourly: 'hourly', meet_greet: 'meet & assist day',
+}
+
+/** A meal's restaurant and how its price applies (per person or per group). */
+function mealDetails(r: { restaurant_name?: string | null; per_person_rate?: boolean | null }): string {
+  const basis = r.per_person_rate === false ? 'per group' : 'per person'
+  return [r.restaurant_name, basis].filter(Boolean).join(' | ')
+}
+
+/** " | valid 2026-01-01 to 2026-12-31" on a dated rate: one service may hold
+ *  two periods, and the options must not read alike. */
+function withValidity(details: string | null | undefined, r: { rate_valid_from?: string | null; rate_valid_to?: string | null }): string {
+  const from = r.rate_valid_from ? String(r.rate_valid_from).slice(0, 10) : ''
+  const to = r.rate_valid_to ? String(r.rate_valid_to).slice(0, 10) : ''
+  const period = from && to ? `valid ${from} to ${to}` : from ? `valid from ${from}` : to ? `valid until ${to}` : ''
+  return [details, period].filter(Boolean).join(' | ')
 }
 
 /** A rate row's pricing basis for the grid (lib/pricing/pricing-basis.ts). */

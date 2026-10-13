@@ -246,7 +246,8 @@ export async function createCruiseItineraryServices(
 
   // 3. Tipping rates (itemized, tier-adjusted)
   // Tip rows may be entered in another currency (per-rate currency work).
-  const cruiseTippingRates = await getItemizedTippingRates(supabase, orgId, tier, cruiseNormalizer)
+  // The party size, so a per-person tip is charged per traveller.
+  const cruiseTippingRates = await getItemizedTippingRates(supabase, orgId, tier, cruiseNormalizer, { pax: totalPax })
   if (cruiseTippingRates.allRates.length === 0) {
     warnings.push('No tipping rates found — tips will be €0')
   }
@@ -265,8 +266,12 @@ export async function createCruiseItineraryServices(
   const { data: activityRates } = await supabase.from('activity_rates').select('*').eq('org_id', orgId ?? NO_ORG).eq('is_active', true)
 
   // 5. Water rate
-  const fixedCosts = await getFixedDailyCosts(orgId)
+  const fixedCosts = await getFixedDailyCosts(orgId, cruiseNormalizer)
   const waterRatePerPerson = fixedCosts.waterPerPersonPerDay
+  // Every other active fixed cost is charged like water: its own line, per person, on the same days.
+  const extraFixedItems = fixedCosts.extraItems ?? []
+  // The built-in water default and any cost left uncharged are never silent.
+  warnings.push(...(fixedCosts.warnings ?? []))
 
   // ============================================
   // CREATE DAYS AND SERVICES
@@ -546,6 +551,28 @@ export async function createCruiseItineraryServices(
       })) {
         totalSupplierCost += waterCost
         totalClientPrice += withMargin(waterCost)
+      }
+
+      for (const item of extraFixedItems) {
+        const itemCost = item.perPersonPerDay * totalPax
+        if (await insertService(dayData.day_number, {
+          itinerary_day_id: day.id,
+          service_type: 'supplies',
+          service_code: 'FIXED_COST',
+          service_name: item.name,
+          quantity: totalPax,
+          rate_eur: item.perPersonPerDay,
+          rate_non_eur: item.perPersonPerDay,
+          total_cost: toTarget(itemCost),
+          client_price: toTarget(withMargin(itemCost)),
+          notes: item.name,
+          supplier_currency: rateCurrency,
+          supplier_cost_original: itemCost,
+          exchange_rate_used: rateToTarget || 1,
+        })) {
+          totalSupplierCost += itemCost
+          totalClientPrice += withMargin(itemCost)
+        }
       }
     }
   }

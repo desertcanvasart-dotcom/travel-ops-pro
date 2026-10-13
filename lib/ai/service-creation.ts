@@ -318,7 +318,8 @@ export async function fetchAllPricingRates(
     // Hotel services (hotel_staff_rates table — managed via Rates > Hotel Services UI)
     supabase.from('hotel_staff_rates').select('*').eq('org_id', orgScope).eq('is_active', true),
     // Tipping rates (from tipping_rates table, tier-adjusted, per-role)
-    getItemizedTippingRates(supabase, params.orgId, tier, rateNormalizer),
+    // The party size, so a per-person tip is charged per traveller.
+    getItemizedTippingRates(supabase, params.orgId, tier, rateNormalizer, { pax: totalPax }),
     import('@/lib/transport-rate-utils'),
   ])
 
@@ -828,8 +829,10 @@ export async function createLandItineraryServices(
   }
 
   // Fetch configurable fixed daily costs (water, tips)
-  const fixedCosts = await getFixedDailyCosts(orgId)
+  const fixedCosts = await getFixedDailyCosts(orgId, rates.rateNormalizer)
   const waterRatePerPerson = fixedCosts.waterPerPersonPerDay
+  // Every other active fixed cost is charged like water: its own line, per person, on the same days.
+  const extraFixedItems = fixedCosts.extraItems ?? []
 
   const marginMultiplier = 1 + (marginPercent / 100)
   const withMargin = (cost: number) => Math.round(cost * marginMultiplier * 100) / 100
@@ -893,6 +896,8 @@ export async function createLandItineraryServices(
   const createdDays: CreateDayServicesResult[] = []
   const mealSelections: MealSelection[] = []
   const warnings: string[] = []
+  // The built-in water default and any cost left uncharged are never silent.
+  warnings.push(...(fixedCosts.warnings ?? []))
   let previousDayData: any = null // Track previous day for intercity detection
 
   // ============================================
@@ -2059,6 +2064,23 @@ export async function createLandItineraryServices(
       })
       totalSupplierCost += waterCost
       totalClientPrice += withMargin(waterCost)
+
+      for (const item of extraFixedItems) {
+        const itemCost = item.perPersonPerDay * totalPax
+        services.push({
+          service_type: 'supplies',
+          service_code: 'FIXED_COST',
+          service_name: item.name,
+          quantity: totalPax,
+          rate_eur: item.perPersonPerDay,
+          rate_non_eur: item.perPersonPerDay,
+          total_cost: itemCost,
+          client_price: withMargin(itemCost),
+          notes: item.name
+        })
+        totalSupplierCost += itemCost
+        totalClientPrice += withMargin(itemCost)
+      }
     }
 
     // Hotel (only if included and not last day and not cruise day) — per-person pricing

@@ -5,7 +5,8 @@
 //     (hydrate-items): parsed, reloaded and tier-swapped items get their
 //     periods, guide bed and non-EU price back; a vehicle follows the group;
 //     a pick with no rate has no price;
-//   - water is EUR 0.50 converted into the rate currency, or no price;
+//   - the fixed costs the grid charges (water included) come from the company's
+//     Rates › Fixed Costs in the rate currency — no hardcoded EUR 0.50 pick any more;
 //   - the parse sizes vehicles for the group the text names.
 import { describe, it, expect, vi } from 'vitest'
 import { readFileSync } from 'fs'
@@ -17,7 +18,7 @@ vi.mock('@/lib/supabase-server', () => ({ createServerClient: () => ({}) }))
 import { displayFx, shownSymbol } from '@/app/pricing-grid/lib/display-fx'
 import { hydrateDays } from '@/app/pricing-grid/lib/hydrate-items'
 import { calculateDay, convertAmount } from '@/app/pricing-grid/lib/calculator'
-import { waterOption } from '@/app/api/pricing-grid/rate-options'
+import { gridFixedCostsFrom } from '@/app/api/pricing-grid/rate-options'
 import type { ExchangeRates } from '@/lib/currency-service'
 import type { GridConfig, GridDay, SlotValue } from '@/app/pricing-grid/types'
 
@@ -123,15 +124,17 @@ describe('every pick rebuilt from its rate (hydrateDays)', () => {
   })
 })
 
-describe('water (waterOption)', () => {
-  it('is EUR 0.50 converted into the rate currency', async () => {
-    expect((await waterOption('EUR')).rateNonEur).toBe(0.5)
-    expect((await waterOption('JPY', async () => RATES)).rateNonEur).toBe(81)
+// Was `water (waterOption)`: a hardcoded EUR 0.50 option converted by EUR→rate
+// currency. The grid now charges the company's Fixed Costs (lib/fixed-costs),
+// already in the rate currency; this pins the shaping the grid applies to them.
+describe('fixed costs for the grid (gridFixedCostsFrom)', () => {
+  const daily = (amount: number) => ({ items: [{ name: 'Water Bottle', perPersonPerDay: amount }], warnings: ['w'] })
+  it('are in the rate currency to its smallest unit, warnings kept', () => {
+    expect(gridFixedCostsFrom(daily(2.346), 'USD')).toEqual({ items: [{ name: 'Water Bottle', perPersonPerDay: 2.35 }], warnings: ['w'] })
+    expect(gridFixedCostsFrom(daily(81.4), 'JPY').items[0].perPersonPerDay).toBe(81)
   })
-  it('with no rate to convert it, it has no price and says so', async () => {
-    const w = await waterOption('EGP', async () => RATES)
-    expect(w.rateNonEur).toBe(0)
-    expect(w.details).toMatch(/no EUR→EGP exchange rate/)
+  it('a cost that rounds to nothing adds no line', () => {
+    expect(gridFixedCostsFrom(daily(0.2), 'JPY').items).toEqual([])
   })
 })
 

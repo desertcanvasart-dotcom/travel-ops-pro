@@ -18,10 +18,13 @@ export async function GET(request: NextRequest) {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
-    const { rates, rateCurrency } = await loadGridRateOptions(supabase, orgId, tier)
+    const { rates, rateCurrency, fixedCosts } = await loadGridRateOptions(supabase, orgId, tier)
     // rateCurrency: every amount in `data` is in it — the grid converts from it
     // to the currency it shows.
-    return NextResponse.json({ success: true, data: rates, rateCurrency })
+    // fixedCosts: the Rates › Fixed Costs the grid charges on every sightseeing
+    // day (items, per person, in rateCurrency) and the warnings to show — the
+    // save reads the same list itself.
+    return NextResponse.json({ success: true, data: rates, rateCurrency, fixedCosts })
   } catch (error: any) {
     console.error('Failed to fetch grid rates:', error)
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })

@@ -211,7 +211,12 @@ function ToastNotification({ toast, onClose }: { toast: Toast; onClose: () => vo
 
 function TierBadge({ tier, t }: { tier: string | undefined; t: (key: string) => string }) {
   const tierLabel = useTierLabel()
-  const key = tier || 'standard'
+  // A row with no tier (an old CSV import) is never picked automatically —
+  // it used to show as "Standard" here, which hid exactly that.
+  if (!tier) {
+    return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${CUSTOM_TIER_COLOR}`}>{t('tiers.none')}</span>
+  }
+  const key = tier
   const tierConfig = TIER_OPTIONS_CONFIG.find(tc => tc.value === key)
   // A preset keeps its i18n word; an agency-added tier is labelled by the
   // vocabulary, and reads as its key once the agency has removed it.
@@ -703,7 +708,7 @@ export default function HotelsContent() {
       // Validity
       rate_valid_from: rate.rate_valid_from || today,
       rate_valid_to: rate.rate_valid_to || nextYear,
-      tier: rate.tier || 'standard',
+      tier: rate.tier || defaultTier,
       supplier_id: supplierId,
       supplier_name: rate.supplier_name || rate.supplier?.name || '',
       notes: rate.notes || '',
@@ -856,9 +861,12 @@ export default function HotelsContent() {
   }
 
   const handleBulkDelete = async () => {
-    await bulkDeleteByIds([...bulk.selected], id => `/api/rates/hotels/${id}`)
+    const [ok, failed, reasons] = await bulkDeleteByIds([...bulk.selected], id => `/api/rates/hotels/${id}`)
     bulk.clear()
     fetchRates()
+    // A rate still in use is refused with its reason (lib/rates/rate-in-use);
+    // the operator has to see it, not a selection that quietly stays put.
+    if (failed) showToast('error', tCommon('bulkDeletePartial', { ok, failed, reason: reasons.join(' · ') }))
   }
 
   return (

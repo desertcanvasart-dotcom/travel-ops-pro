@@ -4,6 +4,7 @@ import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useRef } from 'react'
 import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
 import { useTranslations } from 'next-intl'
+import { useRole } from '@/hooks/useRole'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { 
@@ -51,6 +52,9 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function ContactsContent() {
   const t = useTranslations('contacts')
+  // Suppliers is the managers' screen (Suppliers & Rates); agents use
+  // Contacts without the link that would only bounce them.
+  const canOpenSuppliers = useRole().canAccess(['admin', 'manager'])
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -428,7 +432,9 @@ export default function ContactsContent() {
             <Globe className="w-5 h-5 text-blue-600" />
             <p className="text-sm text-blue-800">
               {t('suppliersInfo')}
-              <a href="/suppliers" className="font-medium underline ml-1">{t('goToSuppliers')}</a>
+              {canOpenSuppliers && (
+                <a href="/suppliers" className="font-medium underline ml-1">{t('goToSuppliers')}</a>
+              )}
             </p>
           </div>
         </div>

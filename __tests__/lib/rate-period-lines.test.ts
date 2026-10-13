@@ -67,7 +67,10 @@ describe('the lists use it', () => {
       const src = readFileSync(file, 'utf8')
       const check = src.indexOf('tooManyPeriodsMessage(datedPeriodCount(body.seasons))')
       expect(check, file).toBeGreaterThan(-1)
-      expect(check, file).toBeLessThan(src.indexOf('sanitizeSeasons(body.seasons'))
+      // The periods are written through seasonsWrite (an empty list clears
+      // the legacy windows), after the limit and payload checks.
+      expect(src.indexOf('seasonsWrite(body.seasons'), file).toBeGreaterThan(-1)
+      expect(check, file).toBeLessThan(src.indexOf('seasonsWrite(body.seasons'))
     }
   })
 })

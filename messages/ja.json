@@ -3485,6 +3485,25 @@
     "services": "サービス",
     "rates": "料金",
     "noRatesFound": "このサプライヤーの料金が見つかりません",
+    "rateKind": "料金の種類",
+    "code": "コード",
+    "rateKinds": {
+      "transportation_rates": "交通",
+      "vehicle_rates": "車両",
+      "accommodation_rates": "ホテル",
+      "seasonal_rates": "シーズン",
+      "guide_rates": "ガイド",
+      "assistant_rates": "アシスタント",
+      "nile_cruises": "ナイルクルーズ",
+      "activity_rates": "アクティビティ",
+      "meal_rates": "食事",
+      "train_rates": "列車",
+      "sleeping_train_rates": "寝台列車",
+      "flight_rates": "航空券",
+      "airport_staff_rates": "空港アシスタンス",
+      "hotel_staff_rates": "ホテルアシスタンス"
+    },
+    "deactivateInstead": "代わりに無効にする",
     "propertyType": "種別",
     "vehicleTypes": "車両タイプ",
     "languages": "言語",
@@ -3568,12 +3587,13 @@
       "previewTitle": "インポート前の確認",
       "doneTitle": "インポート完了",
       "willAdd": "{total}行のうち{count}行を新規サプライヤーとして追加します。",
-      "alreadyOnFile": "{count}件は登録済みのため変更しません（各ページで編集してください）",
+      "willUpdate": "{count}行は登録済みのサプライヤー（サプライヤーコード、なければ名前で照合）に一致するため、その内容を更新します：",
       "rowsWithErrors": "{count}行はインポートできません",
       "line": "{line}行目",
       "notInserted": "{count}件を登録できませんでした",
       "exampleSkipped": "サンプルシートの例示行はスキップしました。",
       "inserted": "{count}件のサプライヤーを追加しました。",
+      "updated": "{count}件のサプライヤーを更新しました。",
       "confirm": "{count}件をインポート",
       "importing": "インポート中…",
       "cancel": "キャンセル",
@@ -4442,6 +4462,12 @@
     "tourSaved": "ツアーを保存しました"
   },
   "rates": {
+    "fixedCosts": {
+      "usedInPricing": "料金計算に使用",
+      "infoTitle": "ここで有効な費用はすべて、観光日ごとに1人あたりで見積に加算されます",
+      "infoBody": "有効な費用はそれぞれ独立した明細として、その費用自身の通貨から換算されます。無効な費用は加算されません。見積の利益率は、他の費用と同じようにこれらの費用にも上乗せされます。変更は以降の新しい料金計算に反映されます（稼働中のサーバーは最長5分間、古い金額のままの場合があります）。チップは「料金 > チップ」で別に管理します。",
+      "emptyBody": "費用を追加すると、観光日ごとに1人あたりで加算されます。"
+    },
     "common": {
       "noSupplierDirect": "サプライヤーなし / 直接予約",
       "edit": "編集",
@@ -4543,6 +4569,7 @@
       "duplicate": "複製",
       "guideFare": "ガイド運賃（スルーガイド）",
       "guideFareHint": "空欄＝お客様と同運賃、0＝無料。",
+      "bulkDeletePartial": "{ok}件を削除しました。{failed}件は削除できませんでした：{reason}",
       "pricingFlat": "グループ単位",
       "pricingPerPerson": "1名あたり",
       "pricingPerUnit": "ユニット単位",
@@ -5031,7 +5058,8 @@
         "budget": "バジェット",
         "standard": "スタンダード",
         "deluxe": "デラックス",
-        "luxury": "ラグジュアリー"
+        "luxury": "ラグジュアリー",
+        "none": "ティア未設定"
       },
       "boardTypes": {
         "roomOnly": "素泊まり",
@@ -5147,7 +5175,8 @@
         "cancel": "キャンセル",
         "update": "料金を更新",
         "create": "料金を作成",
-        "guideMode": "ガイド形態"
+        "guideMode": "ガイド形態",
+        "durationHint": "自動見積もりで使われるのは、終日、半日（旅程で半日と指定された日）、ミート＆アシストの日（スルーガイドの到着日・出発日）です。延長と時間制の料金は、バウチャーと料金グリッドでのみ使われます。"
       },
       "table": {
         "language": "言語",
@@ -5579,7 +5608,8 @@
         "trainPickSupplier": "上でサプライヤーを選択すると、その列車を選べます",
         "trainNone": "このオペレーターの列車はまだ登録されていません。サプライヤーの「プロパティ」タブで追加してください",
         "operatorFromSupplier": "上のサプライヤーから設定されます",
-        "operatorNotRecorded": "サプライヤーとして未登録です。上で選択すると、この料金が車両に紐付きます"
+        "operatorNotRecorded": "サプライヤーとして未登録です。上で選択すると、この料金が車両に紐付きます",
+        "rateRequired": "1名あたりの料金を0より大きい値で入力してください。0のままでは乗車券が無料で計算されます。"
       },
       "deleteModal": {
         "title": "電車料金を削除しますか？",
@@ -5679,7 +5709,7 @@
         "arrivalTime": "到着時刻",
         "pricing": "料金設定",
         "onewayRate": "片道料金",
-        "roundtripRate": "往復料金",
+        "roundtripRate": "往復料金（参考のみ・価格計算には使用しません）",
         "validityPeriod": "有効期間",
         "validFrom": "有効開始日",
         "validTo": "有効終了日",
@@ -6121,8 +6151,9 @@
       "loading": "料金を読み込み中...",
       "errorTitle": "エラー",
       "errorLoadingRates": "料金データの読み込みに失敗しました",
+      "loadFailed": "読み込めませんでした：{tabs}。これらのタブが空なのは料金がないからではなく、読み込みに失敗したためです。ページを再読み込みしてください。",
       "backToHome": "ホームに戻る",
-      "export": "エクスポート",
+      "export": "表示中をエクスポート",
       "print": "印刷",
       "resources": "リソース",
       "home": "ホーム",
@@ -8958,7 +8989,10 @@
   },
   "pricingGrid": {
     "savedPrice": "保存時の価格 — 現在の料金に未連携",
-    "savedPriceHint": "この行には現在の料金がないため、保存時の価格のままです。料金を選ぶと料金表から計算されます。"
+    "savedPriceHint": "この行には現在の料金がないため、保存時の価格のままです。料金を選ぶと料金表から計算されます。",
+    "fixedCosts": "固定費",
+    "fixedCostsHint": "観光日（ガイドまたは観光先のある日）ごとに、料金 › 固定費から自動で加算されます。選択は不要です。",
+    "perPerson": "お一人様あたり"
   },
   "blogAdmin": {
     "title": "ブログ",

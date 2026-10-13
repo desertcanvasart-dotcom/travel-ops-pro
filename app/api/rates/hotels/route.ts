@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { sanitizeSeasons, legacyColumnMirror, datedPeriodCount, tooManyPeriodsMessage } from '@/lib/rates/rate-seasons'
+import { seasonsWrite, seasonsPayloadError, datedPeriodCount, tooManyPeriodsMessage } from '@/lib/rates/rate-seasons'
+import { findDuplicateHotel, isUniqueViolation, HOTEL_KEY_DESCRIPTION } from '@/lib/rates/accommodation-duplicates'
+import { ownJoinedSupplier } from '@/lib/rates/joined-supplier'
 import { sanitizeSupplements } from '@/lib/rates/supplements'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
@@ -26,7 +28,7 @@ export async function GET(request: NextRequest) {
       .from('accommodation_rates')
       .select(`
         *,
-        supplier:suppliers(id, name, city, contact_phone, contact_email)
+        supplier:suppliers(id, name, city, contact_phone, contact_email, org_id)
       `)
       .eq('org_id', orgId)
       .order('property_name')
@@ -44,7 +46,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data: data || [] })
+    // Another company's supplier on a row reads as no supplier (lib/rates/joined-supplier).
+    return NextResponse.json({ success: true, data: ownJoinedSupplier(data, orgId) })
   } catch (error: any) {
     console.error('GET accommodation_rates catch error:', error)
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -56,11 +59,11 @@ export async function POST(request: NextRequest) {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
     const body = await request.json()
-    // A malformed periods payload reads as "no periods" and the row keeps
-    // pricing off its base columns — never a 500 on a rate save.
+    // Too many periods, a period that ends before it starts, or a negative
+    // rate is refused (400) — never saved as "no periods".
     const periodLimit = tooManyPeriodsMessage(datedPeriodCount(body.seasons))
+      ?? seasonsPayloadError(body.seasons, 'accommodation')
     if (periodLimit) return NextResponse.json({ success: false, error: periodLimit }, { status: 400 })
-    const hotelSeasons = sanitizeSeasons(body.seasons, 'accommodation')
 
     const _rateCheck = validateRatePayload(body)
     if (!_rateCheck.ok) {
@@ -149,11 +152,11 @@ export async function POST(request: NextRequest) {
       peak_single_supp_non_eur: parseFloat(body.peak_single_supp_non_eur) || 0,
       peak_triple_red_non_eur: parseFloat(body.peak_triple_red_non_eur) || 0,
       
-      // Dated rate periods (unlimited). When present these are what pricing
+      // Dated rate periods (up to six). When sent these are what pricing
       // reads; the first one is mirrored onto the base columns above for
-      // readers that have no travel date.
-      seasons: hotelSeasons,
-      ...legacyColumnMirror(hotelSeasons, 'accommodation'),
+      // readers that have no travel date, and an EMPTY list clears the old
+      // windows above so none of them prices (rate-seasons seasonsWrite).
+      ...('seasons' in body ? seasonsWrite(body.seasons, 'accommodation') : { seasons: null }),
       // The supplements the rate carries; their prices ride in the periods above.
       supplements: sanitizeSupplements(body.supplements),
 
@@ -167,25 +170,23 @@ export async function POST(request: NextRequest) {
       is_active: body.is_active !== false
     }
 
-    // Check for existing rate with same natural key (property_name + city + tier)
-    const { data: existing } = await supabaseAdmin
-      .from('accommodation_rates')
-      .select('*')
-      .eq('org_id', orgId)
-      .ilike('property_name', newHotel.property_name)
-      .eq('city', newHotel.city)
-      .eq('tier', newHotel.tier)
-      .limit(1)
+    // The full natural key (lib/rates/accommodation-duplicates): another
+    // board basis, supplier or rate-card validity is another contract.
+    const dup = await findDuplicateHotel(supabaseAdmin, orgId, newHotel)
+    if (!dup.ok) {
+      console.error('POST accommodation_rates duplicate check error:', dup.error)
+      return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
+    }
 
     // A create never updates. The natural-key match used to be UPDATED in
     // place — so "Duplicate this rate, change the season, save" rewrote the
     // original and nothing new appeared (the train-rates overwrite, same class,
     // #325). An exact duplicate is answered with the existing row instead.
-    if (existing?.length) {
+    if (dup.existing) {
       return NextResponse.json({
         success: false,
-        error: 'A rate with these details already exists. Edit that rate, or change what makes this one different (supplier, period, class, city) before saving.',
-        existing: existing[0],
+        error: `A rate with the same ${HOTEL_KEY_DESCRIPTION} already exists. Edit that rate, or change one of those before saving.`,
+        existing: dup.existing,
       }, { status: 409 })
     }
     let data, error
@@ -199,6 +200,9 @@ export async function POST(request: NextRequest) {
       error = result.error
     }
 
+    if (isUniqueViolation(error)) {
+      return NextResponse.json({ success: false, error: `Service code ${newHotel.service_code} is already used by another rate. Clear it to generate a new one, or type another.` }, { status: 409 })
+    }
     if (error) {
       console.error('POST accommodation_rates error:', error)
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })

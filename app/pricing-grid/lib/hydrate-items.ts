@@ -126,11 +126,30 @@ function resolveItem(slotId: string, item: SelectedItem, options: RateOption[], 
     const key = routeKey({ id: rateId } as RateOption)
     const vehicles = options.filter(o => routeKey(o) === key && o.id.includes('__'))
     if (vehicles.length === 0) return null
-    return fromOption(item, vehicleForPax(vehicles, pax))
+    const vehicle = vehicleForPax(vehicles, pax)
+    return withFleet(fromOption(item, vehicle), vehicle, pax)
   }
 
   const opt = byId(rateId)
   return opt ? fromOption(item, opt) : null
+}
+
+/**
+ * A group bigger than the route's largest vehicle rides in several of it, as
+ * trip pricing and quotes charge (lib/vocabulary vehicleFleetForPax): the line
+ * reads "2 × Bus" at twice the rate. Rebuilt from the option every time, so
+ * the count never compounds.
+ */
+export function withFleet(item: SelectedItem, vehicle: RateOption, pax: number): SelectedItem {
+  const cap = Number(vehicle.capacity_max) || 0
+  if (cap <= 0 || pax <= cap) return item
+  const count = Math.ceil(pax / cap)
+  return {
+    ...item,
+    name: `${count} × ${item.name}`,
+    rateEur: (Number(item.rateEur) || 0) * count,
+    rateNonEur: (Number(item.rateNonEur) || 0) * count,
+  }
 }
 
 const same = (a: SelectedItem, b: SelectedItem) => JSON.stringify(a) === JSON.stringify(b)

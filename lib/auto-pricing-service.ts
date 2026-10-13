@@ -44,14 +44,16 @@ import type { PricingHole } from '@/lib/pricing-types'
 import { priceAcrossPax } from '@/lib/pricing/pax-range'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { sortByItineraryFlow } from '@/lib/pricing/breakdown-order'
-import { periodRatesFor, plainPeriodName as seasonNameOf } from '@/lib/rates/rate-seasons'
-import { ticketsValidOn, outOfSeasonMessage, namedOutOfSeasonMessage } from '@/lib/pricing/ticket-validity'
+import { periodRatesFor, guideRateOf, plainPeriodName as seasonNameOf } from '@/lib/rates/rate-seasons'
+import { ticketsValidOn, ticketValidOn, outOfSeasonMessage, namedOutOfSeasonMessage } from '@/lib/pricing/ticket-validity'
 import { airportsFrom, airportsForCity, cityAirportCode, type Airport } from '@/lib/rates/airports'
 import { sailsOn, sailingDaysLabel } from '@/lib/rates/cruise-sailing'
 import { seasonsForRow as flightSeasonsForRow } from '@/lib/rates/rate-seasons'
+import { enteredFare, flightGuideFare } from '@/lib/rates/ticket-guide-fare'
+import { pickAirportServiceRow } from '@/lib/pricing/airport-service-pick'
 import { cruiseCandidates, hotelCandidates, propertyById } from '@/lib/pricing/property-candidates'
 import { choicesForTier, sanitizePropertyChoice } from '@/lib/pricing/property-choice'
-import { guideLanguageWord, sameGuideLanguage } from '@/lib/guides/guide-language'
+import { guideLanguageWord } from '@/lib/guides/guide-language'
 import { isRoadTransferType, planRoadTrips, rateDeparture, rateTripShape, roadRouteKey, sanitizeTripShape, type RoadPlanEntry, type TripShape } from '@/lib/pricing/road-trips'
 import { durationFor, isRoadTransfer, isSightseeing, sanitizeTransportLines, type TransportLine } from '@/lib/pricing/transport-lines'
 import { getAirportCode, legAssistance, routeAirportCode, sanitizeLegAssist, sanitizeLegPlace, type LegAssist } from '@/lib/pricing/flight-leg'
@@ -60,9 +62,10 @@ import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-curr
 import { tripAccommodationCost, type NightRates } from '@/lib/pricing/rooming'
 import { resolveAttractions, buildAliasMap } from '@/lib/pricing/attractions'
 import { PRESET_TIERS, presetTierFor } from '@/lib/vocabulary'
+import { hotelServiceCategories, pickHotelServiceRow } from '@/lib/pricing/hotel-service-pick'
 import { cruiseSailings, packageForDuration, sailingRoute, type Sailing } from '@/lib/pricing/cruise-package'
 import { vehicleKeyLabel, vehicleRateForPax } from '@/lib/rates/vehicle-bands'
-import { rateGuideMode } from '@/lib/guides/guide-mode'
+import { isHalfDayGuiding, mealCostForGroup, pickGuideRate, pickMealRate, rateValidOn, todayIso, type GuideAskDuration, type PickedMeal } from '@/lib/pricing/service-rates'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -1479,15 +1482,17 @@ export function resolveHotelRatesForDate(
 /** The property's special per-night bed rate for a throughout guide ("+1")
  *  on this night's period. Hotels and cruises grant these as concessions, so
  *  the number lives ONLY on the dated periods (rate-seasons `guide_rate`) —
- *  there is no base column to fall back to, and a night no period covers
- *  reads 0, which the caller prices as a HOLE, never a free bed. */
+ *  there is no base column to fall back to. NULL when the period left it
+ *  blank, or no period covers the night: the caller prices that as a HOLE.
+ *  0 is the supplier giving the bed free, priced as a 0 line — what the
+ *  form's hint has always promised ("0 = the supplier gives it free"). */
 export function resolveGuideBedRateForDate(
   row: HotelOrCruiseRow,
   entity: 'accommodation' | 'cruise',
   travelDate?: string | null
-): number {
+): number | null {
   const hit = periodRatesFor(row, entity, travelDate)
-  return Number(hit?.rates.guide_rate) || 0
+  return guideRateOf(hit?.rates)
 }
 
 /** Per-person-per-night double rate and single supplement for one cruise night.
@@ -1736,7 +1741,8 @@ export async function resolveCruiseStay(
       // The starred ship first, then newest; a port that matches nothing
       // falls back to every ship at the tier — lib/pricing/property-candidates,
       // the same list the day editor offers.
-      raw = (await cruiseCandidates(supabaseAdmin, orgId, tier, embarkCity, nights))[0] ?? null
+      // A rate sheet valid on the sailing date first (property-candidates).
+      raw = (await cruiseCandidates(supabaseAdmin, orgId, tier, embarkCity, nights, travelDate))[0] ?? null
     }
     const cruise = (raw && normalizer
       ? (await normalizer.normalize('nile_cruises', [raw]))?.[0]
@@ -1898,7 +1904,8 @@ export async function resolveHotelStay(
       // editor offers (lib/pricing/property-candidates). Per the harness
       // policy no adjacent tier and no hardcoded default: a missing exact
       // city+tier rate is a hole the caller flags.
-      raw = (await hotelCandidates(supabaseAdmin, orgId, city, tier))[0] ?? null
+      // A rate sheet valid on the night's date first (property-candidates).
+      raw = (await hotelCandidates(supabaseAdmin, orgId, city, tier, travelDate))[0] ?? null
     }
     const hotel = (raw && normalizer
       ? (await normalizer.normalize('accommodation_rates', [raw]))?.[0]
@@ -2006,7 +2013,7 @@ export async function getEntranceFee(
   }
 }
 
-type EntranceFeeRow = { id: string; attraction_name: string; eur_rate: number | null; non_eur_rate: number | null }
+type EntranceFeeRow = { id: string; attraction_name: string; eur_rate: number | null; non_eur_rate: number | null; is_addon?: boolean | null; rate_valid_from?: string | null; rate_valid_to?: string | null }
 
 /**
  * Fetch ALL active entrance fees once, for in-memory matching across a whole
@@ -2055,6 +2062,17 @@ export function findEntranceFeeInList(
   return { id: match.id, name: match.attraction_name, rate }
 }
 
+/** This company's active guide rates, unconverted (getGuideRate normalises
+ *  the one it picks). */
+export async function fetchGuideRows(orgId: string | null | undefined): Promise<Record<string, any>[]> {
+  const { data } = await supabaseAdmin
+    .from('guide_rates')
+    .select('*')
+    .eq('org_id', orgId ?? NO_ORG)
+    .eq('is_active', true)
+  return (data ?? []) as Record<string, any>[]
+}
+
 /** The two guide grades the operator sells (2026-09-04): a licensed
  *  Egyptologist, and a senior one at a higher daily rate. Rows are told apart
  *  by guide_rates.guide_type. */
@@ -2083,8 +2101,16 @@ export async function getGuideRate(
   normalizer?: RateNormalizer,
   opts?: {
     grade?: GuideGrade
-    duration?: 'full_day' | 'meet_greet'
+    duration?: GuideAskDuration
     mode?: 'spot' | 'throughout'
+    /** The day's city: its rate before a city-less one before another city's. */
+    city?: string | null
+    /** The day's date: a rate outside its validity period is not used. */
+    date?: string | null
+    /** A guide the operator chose: that guide's rate first. */
+    supplierId?: string | null
+    /** Rows already fetched (fetchGuideRows) — one query for a whole trip. */
+    rows?: Record<string, any>[]
   }
 ): Promise<{ id: string; name: string; dailyRate: number } | null> {
   const grade = opts?.grade ?? 'egyptologist'
@@ -2098,23 +2124,16 @@ export async function getGuideRate(
     // hold the word ("Japanese") or the key ("japanese") and callers ask by
     // either (lib/guides/guide-language). It was an ilike substring, so any
     // language whose name contained the one asked for could price the guide.
-    const { data: activeRows } = await supabaseAdmin
-      .from('guide_rates')
-      .select('*')
-      .eq('org_id', orgId ?? NO_ORG)
-      .eq('is_active', true)
-    const ofLanguage = ((activeRows ?? []) as Record<string, any>[])
-      .filter(r => sameGuideLanguage(r.guide_language, language) && rateGuideMode(r) === mode)
-
-    // 1. Exact grade + duration in guide_rates.
-    let rawGuideRate: Record<string, any> | null =
-      ofLanguage.find(r => r.guide_type === grade && r.tour_duration === duration) ?? null
-
-    // 2. Default ask only: the pre-grades behaviour (first active row of the
-    //    language, any type/duration) so nothing priced yesterday holes today.
-    if (!rawGuideRate && grade === 'egyptologist' && duration === 'full_day' && mode === 'spot') {
-      rawGuideRate = ofLanguage[0] ?? null
-    }
+    // 1. Exact grade + duration; 2. for the default ask only, any rate of the
+    //    language (the pre-grades behaviour, so nothing priced yesterday
+    //    holes today). Within either: valid on the date, the day's city and
+    //    the chosen guide first, then a fixed order — lib/pricing/service-rates.
+    //    It took the first row in database order, any city, any period.
+    const activeRows = opts?.rows ?? await fetchGuideRows(orgId)
+    const rawGuideRate = pickGuideRate(activeRows, {
+      language, grade, duration, mode,
+      city: opts?.city, date: opts?.date, supplierId: opts?.supplierId,
+    })
     const guideRate = normalizer && rawGuideRate
       ? (await normalizer.normalize('guide_rates', [rawGuideRate]))?.[0]
       : rawGuideRate
@@ -2190,52 +2209,44 @@ export async function getMealRates(
   tier: ServiceTier,
   /** Converts rows entered in another currency into the run currency —
    *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
-  normalizer?: RateNormalizer
-): Promise<{ lunch: number; dinner: number } | null> {
+  normalizer?: RateNormalizer,
+  /** The city and date to price for (lib/pricing/service-rates pickMealRate). */
+  opts?: { city?: string | null; date?: string | null }
+): Promise<{ lunch: number; dinner: number; lunchMeal: PickedMeal | null; dinnerMeal: PickedMeal | null } | null> {
   try {
-    // The meals rates UI (app/rates/meals) writes rows shaped
-    // { meal_type, base_rate_eur, tier } — it never populates the legacy
-    // lunch_rate_eur/dinner_rate_eur columns, so reading only those priced
-    // UI-managed rows at €0 without flagging a hole. Resolve via
-    // meal_type/base_rate_eur (same as the land path in lib/ai/service-creation),
-    // falling back to the legacy columns for pre-UI rows.
-    let { data: mealRows } = await supabaseAdmin
-      .from('meal_rates')
-      .select('*')
-      .eq('org_id', orgId ?? NO_ORG)
-      .eq('is_active', true)
-      .eq('tier', tier)
-    if (normalizer && mealRows) mealRows = await normalizer.normalize('meal_rates', mealRows) as typeof mealRows
+    const mealRows = await fetchMealRows(orgId, tier, normalizer)
+    if (mealRows.length === 0) return null
 
-    if (!mealRows || mealRows.length === 0) {
-      return null
-    }
-
-    const rateFor = (mealType: string): number => {
-      const typed = mealRows.filter(
-        (r: any) => r.meal_type?.toLowerCase() === mealType && (r.base_rate_eur || 0) > 0
-      )
-      if (typed.length > 0) {
-        return typed.reduce((sum: number, r: any) => sum + (r.base_rate_eur || 0), 0) / typed.length
-      }
-      // Legacy rows: per-meal columns on a single row
-      const legacyCol = mealType === 'lunch' ? 'lunch_rate_eur' : 'dinner_rate_eur'
-      const legacy = mealRows.find((r: any) => (r[legacyCol] || 0) > 0)
-      return legacy ? legacy[legacyCol] : 0
-    }
-
-    const lunch = rateFor('lunch')
-    const dinner = rateFor('dinner')
+    // ONE restaurant's rate per meal, never an average across restaurants
+    // and cities (it averaged every lunch row of the tier). The meals page
+    // writes { meal_type, base_rate_eur }; rows from before it carry
+    // lunch_rate_eur / dinner_rate_eur and still price.
+    const lunchMeal = pickMealRate(mealRows, { mealType: 'lunch', city: opts?.city, date: opts?.date })
+    const dinnerMeal = pickMealRate(mealRows, { mealType: 'dinner', city: opts?.city, date: opts?.date })
 
     // No usable rate on any row → hole (caller flags it) instead of silent €0
-    if (!lunch && !dinner) {
-      return null
-    }
+    if (!lunchMeal && !dinnerMeal) return null
 
-    return { lunch, dinner }
+    return { lunch: lunchMeal?.rate ?? 0, dinner: dinnerMeal?.rate ?? 0, lunchMeal, dinnerMeal }
   } catch (err) {
     return null
   }
+}
+
+/** This company's active meal rates of one tier, in the run currency. */
+export async function fetchMealRows(
+  orgId: string | null | undefined,
+  tier: ServiceTier,
+  normalizer?: RateNormalizer
+): Promise<Record<string, any>[]> {
+  let { data: mealRows } = await supabaseAdmin
+    .from('meal_rates')
+    .select('*')
+    .eq('org_id', orgId ?? NO_ORG)
+    .eq('is_active', true)
+    .eq('tier', tier)
+  if (normalizer && mealRows) mealRows = await normalizer.normalize('meal_rates', mealRows) as typeof mealRows
+  return (mealRows ?? []) as Record<string, any>[]
 }
 
 /**
@@ -2258,16 +2269,13 @@ export async function getAirportServiceRate(
       .select('*')
       .eq('org_id', orgId ?? NO_ORG)
       .eq('is_active', true)
-      .eq('airport_code', airportCode)
-      .or(`direction.eq.${direction},direction.eq.both`)
-      .limit(1)
+      .ilike('airport_code', airportCode)
     if (normalizer && rates) rates = await normalizer.normalize('airport_staff_rates', rates) as typeof rates
 
-    if (!rates || rates.length === 0) {
-      return null
-    }
-
-    return usableRate(rates[0].rate_eur)
+    // The same pick the day loop makes (lib/pricing/airport-service-pick) —
+    // `.limit(1)` on an unordered fetch was any row for the airport.
+    const row = pickAirportServiceRow((rates ?? []) as Record<string, unknown>[], airportCode, direction, getTierCategory(tier))
+    return row ? usableRate(row.rate_eur) : null
   } catch (err) {
     return null
   }
@@ -2284,10 +2292,13 @@ export async function getHotelServiceRate(
   tier: ServiceTier,
   /** Converts rows entered in another currency into the run currency —
    *  see lib/rates/rate-currency.ts. Omitted = rows are taken as-is. */
-  normalizer?: RateNormalizer
+  normalizer?: RateNormalizer,
+  /** The hotel's city: a row for that destination beats an all-destinations row. */
+  city?: string | null
 ): Promise<number | null> {
   try {
-    const category = getTierCategory(tier)
+    // Same pick as the engine's in-memory resolver (lib/pricing/hotel-service-pick).
+    const categories = hotelServiceCategories(presetTierFor(PRESET_TIERS, tier))
 
     const lookup = async (type: string) => {
       let { data } = await supabaseAdmin
@@ -2296,10 +2307,9 @@ export async function getHotelServiceRate(
         .eq('org_id', orgId ?? NO_ORG)
         .eq('is_active', true)
         .eq('service_type', type)
-        .or(`hotel_category.eq.${category},hotel_category.eq.all`)
-        .limit(1)
       if (normalizer && data) data = await normalizer.normalize('hotel_staff_rates', data) as typeof data
-      return data && data.length > 0 ? usableRate(data[0].rate_eur) : null
+      const row = pickHotelServiceRow(data ?? [], type, categories, city)
+      return row ? usableRate(row.rate_eur) : null
     }
 
     const dedicated = await lookup(serviceType)
@@ -2337,17 +2347,67 @@ async function getItemizedTips(orgId: string | null | undefined, tier: ServiceTi
  * Build transport cache from database
  * Key format: "service_type|city|duration|area" (one entry per service, all vehicle rates in one row)
  */
-export async function buildTransportCache(orgId: string | null | undefined, normalizer?: RateNormalizer): Promise<Map<string, TransportRate>> {
+export async function buildTransportCache(
+  orgId: string | null | undefined,
+  normalizer?: RateNormalizer,
+  /** The day being priced: rows whose validity excludes it are left out. */
+  onDate?: string | null
+): Promise<Map<string, TransportRate>> {
+  return transportCacheFromRows(await fetchTransportRows(orgId, normalizer), onDate)
+}
+
+/** The company's active transportation rates, currency-normalized. */
+export async function fetchTransportRows(orgId: string | null | undefined, normalizer?: RateNormalizer): Promise<TransportRate[]> {
   let { data: allRates } = await supabaseAdmin
     .from('transportation_rates')
     .select('*')
     .eq('org_id', orgId ?? NO_ORG)
     .eq('is_active', true)
   if (normalizer && allRates) allRates = await normalizer.normalize('transportation_rates', allRates) as typeof allRates
+  return (allRates ?? []) as TransportRate[]
+}
 
+/**
+ * The order rows compete in for one lookup key — FIXED, so the same trip
+ * prices the same way on every run.
+ *
+ * Two rows can answer one key: a route quoted by two suppliers, or next
+ * year's price entered beside this year's. The cache used to keep whichever
+ * row the unordered fetch returned last, so the price changed between runs,
+ * and an expired rate priced like a current one.
+ *
+ *   1. A row whose validity window (rate_valid_from/to) excludes the day is
+ *      not a candidate at all (an absent edge does not exclude — see
+ *      lib/pricing/ticket-validity). With no day in hand, a row valid today
+ *      goes before one that is not.
+ *   2. The most recently started window first: next year's contract, once
+ *      it applies, wins over the open-ended row it replaces.
+ *   3. Then service_code, then id — arbitrary but stable.
+ */
+export function orderTransportRows<T extends Record<string, any>>(rows: readonly T[], onDate?: string | null): T[] {
+  const day = onDate ? String(onDate).slice(0, 10) : null
+  const today = new Date().toISOString().slice(0, 10)
+  const candidates = day ? rows.filter(r => ticketValidOn(r, day)) : [...rows]
+  const from = (r: T) => String(r.rate_valid_from ?? '').slice(0, 10)
+  return candidates.sort((a, b) => {
+    if (!day) {
+      const av = ticketValidOn(a, today) ? 0 : 1
+      const bv = ticketValidOn(b, today) ? 0 : 1
+      if (av !== bv) return av - bv
+    }
+    if (from(a) !== from(b)) return from(a) < from(b) ? 1 : -1
+    const ac = String(a.service_code ?? '').toLowerCase()
+    const bc = String(b.service_code ?? '').toLowerCase()
+    if (ac !== bc) return ac < bc ? -1 : 1
+    return String(a.id ?? '') < String(b.id ?? '') ? -1 : String(a.id ?? '') > String(b.id ?? '') ? 1 : 0
+  })
+}
+
+/** The lookup cache over rows already fetched — see buildTransportCache.
+ *  Every key keeps the FIRST row in orderTransportRows' order. */
+export function transportCacheFromRows(rows: readonly TransportRate[], onDate?: string | null): Map<string, TransportRate> {
   const cache = new Map<string, TransportRate>()
-
-  if (!allRates) return cache
+  const allRates = orderTransportRows(rows as Array<TransportRate & Record<string, any>>, onDate)
 
   for (const rate of allRates) {
     // Use origin_city as fallback for city (some records use origin_city instead)
@@ -2361,7 +2421,7 @@ export async function buildTransportCache(orgId: string | null | undefined, norm
       rate.area || ''
     ].join('|')
 
-    cache.set(baseKey, rate)
+    if (!cache.has(baseKey)) cache.set(baseKey, rate)
 
     // Also cache without area for fallback
     const keyNoArea = [
@@ -2397,7 +2457,7 @@ export async function buildTransportCache(orgId: string | null | undefined, norm
         (rate.origin_city || '').toLowerCase(),
         (rate.destination_city || '').toLowerCase()
       ].join('|')
-      cache.set(intercityKey, rate)
+      if (!cache.has(intercityKey)) cache.set(intercityKey, rate)
     }
 
     // Road transfers by ROUTE and SHAPE — the only way they are found
@@ -2409,12 +2469,12 @@ export async function buildTransportCache(orgId: string | null | undefined, norm
     }
 
     // Also cache by service_code for direct lookups
-    if (rate.service_code) {
+    if (rate.service_code && !cache.has(`code:${rate.service_code.toLowerCase()}`)) {
       cache.set(`code:${rate.service_code.toLowerCase()}`, rate)
     }
   }
 
-  debugLog(`📦 Built transport cache with ${cache.size} entries from ${allRates.length} DB records`)
+  debugLog(`📦 Built transport cache with ${cache.size} entries from ${allRates.length} rows valid${onDate ? ` on ${onDate}` : ''}`)
   // Log cache keys for debugging
   const keys = Array.from(cache.keys()).filter(k => !k.startsWith('code:')).slice(0, 20)
   debugLog('📦 Sample cache keys:', keys)
@@ -2592,7 +2652,8 @@ export function findCruiseTransportRule(
  * Select the vehicle + rate from a cruise transport package by group size —
  * the SAME rule as a transportation rate (lib/rates/vehicle-bands
  * vehicleRateForPax: the vehicle whose vocabulary size the group falls in,
- * else the smallest that covers it, else the largest offered). A package that
+ * else the smallest that covers it, else as many of the largest as seat the
+ * group). A package that
  * offers no vehicle answers rate 0, which pricing treats as No rate.
  */
 export function getCruiseTransportRate(
@@ -2600,7 +2661,9 @@ export function getCruiseTransportRate(
   numPax: number
 ): { vehicleType: string; rate: number } {
   const band = vehicleRateForPax(pkg as unknown as Record<string, unknown>, numPax)
-  return band ? { vehicleType: vehicleKeyLabel(band.key), rate: band.rate_eur } : { vehicleType: 'Vehicle', rate: 0 }
+  // A group bigger than every vehicle rides in several of the largest; the
+  // rate is already the whole fleet's.
+  return band ? { vehicleType: band.count > 1 ? `${band.count} × ${vehicleKeyLabel(band.key)}` : vehicleKeyLabel(band.key), rate: band.rate_eur } : { vehicleType: 'Vehicle', rate: 0 }
 }
 
 /**
@@ -2832,14 +2895,14 @@ export async function calculateDayBasedPricing(
   const ticketLegs = collectTicketLegs(itinerary)
 
   const [
-    transportCache,
+    transportRows,
     cruiseTransportPricingRules,
     cruiseStay,
     hotelStays,
     ticketRates,
     airports,
-    guideRate,
-    mealRates,
+    guideRows,
+    mealRows,
     tippingRates,
     fixedDailyCosts,
     entranceFeeCache,
@@ -2847,7 +2910,7 @@ export async function calculateDayBasedPricing(
     hotelStaffRows,
     attractionAliases,
   ] = await Promise.all([
-    buildTransportCache(orgId, rateNormalizer),
+    fetchTransportRows(orgId, rateNormalizer),
     // Fetch cruise transport packages from b2b_transport_packages
     fetchCruiseTransportPricingRules(params.orgId, rateNormalizer),
     // Cruise rates only apply when the itinerary has cruise nights
@@ -2857,8 +2920,8 @@ export async function calculateDayBasedPricing(
     Promise.all(hotelCities.map(city => resolveHotelStay(orgId, city, tier, isEurPassport, params.travelDate, rateNormalizer, propertyChoices.hotelByCity.get(city.toLowerCase())))),
     fetchTicketRates(orgId, ticketLegs, rateNormalizer),
     fetchAirports(params.orgId),
-    getGuideRate(orgId, language, tier, rateNormalizer, { grade: guideGrade, mode: guideMode }),
-    getMealRates(orgId, tier, rateNormalizer),
+    fetchGuideRows(orgId),
+    fetchMealRows(orgId, tier, rateNormalizer),
     getItemizedTips(orgId, tier, rateNormalizer),
     // Water cost from DB (fixed_daily_costs table) instead of hardcoding
     import('@/lib/fixed-costs').then(m => m.getFixedDailyCosts(orgId, rateNormalizer)),
@@ -2941,7 +3004,8 @@ export async function calculateDayBasedPricing(
 
   // In-memory resolvers that replicate getAirportServiceRate/getHotelServiceRate
   // EXACTLY (same filters incl. direction/category "both"/"all" fallbacks, same
-  // first-matching-row-in-fetch-order semantics, same rate>0-else-null result).
+  // rate>0-else-null result). Airport rows are picked by service type and a
+  // fixed order (lib/pricing/airport-service-pick); hotel rows by fetch order.
   // The exported helpers remain for other callers.
   // `rowExists` separates "nobody has entered this service" from "the row is
   // there with a blank or zero price". Both block a definite price, but only
@@ -2956,11 +3020,9 @@ export async function calculateDayBasedPricing(
     airportCode: string,
     direction: 'arrival' | 'departure'
   ): { rate: number | null; rowExists: boolean; basis: PricingBasis; capacity: number | null } => {
-    const row = airportStaffRows.find(
-      (r: any) =>
-        r.airport_code === airportCode &&
-        (r.direction === direction || r.direction === 'both')
-    )
+    // By service type for the tier, then a fixed order (lib/pricing/airport-service-pick):
+    // the first row in fetch order could be the VIP row on a standard trip.
+    const row: any = pickAirportServiceRow(airportStaffRows as any[], airportCode, direction, getTierCategory(tier))
     if (!row) return { rate: null, rowExists: false, basis: 'flat', capacity: null }
     return { rate: usableRate(row.rate_eur), rowExists: true, ...basisOf(row) }
   }
@@ -2976,16 +3038,15 @@ export async function calculateDayBasedPricing(
   // Check-out has its own type since 2026-09-03 (checkout_assist, entered
   // beside check-in on the Hotel Assistants page); a porter row still
   // covers a check-out day for offices that filed it that way.
+  // The row: the day's destination first, then all destinations; the
+  // quote's category (a deluxe quote reads Deluxe, then Standard), then All
+  // — deterministic (lib/pricing/hotel-service-pick).
+  const hotelServiceCats = hotelServiceCategories(presetTierFor(PRESET_TIERS, tier))
   const resolveHotelServiceRate = (
-    serviceType: 'checkin_assist' | 'checkout_assist' | 'porter' | 'full_service'
+    serviceType: 'checkin_assist' | 'checkout_assist' | 'porter' | 'full_service',
+    city?: string | null
   ): { rate: number | null; rowExists: boolean; via: 'dedicated' | 'porter' | 'full_service'; basis: PricingBasis; capacity: number | null } => {
-    const category = getTierCategory(tier)
-    const matches = (type: string) =>
-      hotelStaffRows.find(
-        (r: any) =>
-          r.service_type === type &&
-          (r.hotel_category === category || r.hotel_category === 'all')
-      )
+    const matches = (type: string): any => pickHotelServiceRow(hotelStaffRows as any[], type, hotelServiceCats, city)
     const dedicated = matches(serviceType)
     if (dedicated) return { rate: usableRate(dedicated.rate_eur), rowExists: true, via: 'dedicated', ...basisOf(dedicated) }
     if (serviceType === 'checkout_assist') {
@@ -2999,13 +3060,44 @@ export async function calculateDayBasedPricing(
     return { rate: null, rowExists: false, via: 'dedicated', basis: 'flat', capacity: null }
   }
 
+  // The date a day is priced on: rates outside their validity period are not
+  // used (lib/pricing/service-rates). Without a travel date, today.
+  const priceDateFor = (dayNumber?: number | null): string => dateForDay(dayNumber) ?? todayIso()
+  const tourType = (template as { tour_type?: string }).tour_type ?? null
+
+  // The trip's guide rate — the hole check and the fallback for a day whose
+  // own city has none. Each day then prices from the rate of ITS city and
+  // date (dayGuideRate below); this took the first row of the language, any
+  // city, any period, for the whole trip.
+  const guideRate = await getGuideRate(orgId, language, tier, rateNormalizer, { grade: guideGrade, mode: guideMode, date: priceDateFor(1), rows: guideRows })
+
   // Throughout mode ("+1"): the guide is with the group every day, so the
   // meet/assist-day rate is fetched too — arrival and departure days with no
   // sightseeing bill at it, not at the full guiding day (operator, 2026-09-04).
   const hasSightseeingDay = (d: (typeof itinerary)[number]) => d.services.guide_required || d.attractions.length > 0
   const meetGreetGuideRate = guideMode === 'throughout'
-    ? await getGuideRate(orgId, language, tier, rateNormalizer, { grade: guideGrade, duration: 'meet_greet', mode: 'throughout' })
+    ? await getGuideRate(orgId, language, tier, rateNormalizer, { grade: guideGrade, duration: 'meet_greet', mode: 'throughout', date: priceDateFor(1), rows: guideRows })
     : null
+
+  /** One day's guide rate: that day's city and date, the duration it asks. */
+  const dayGuideRate = async (day: ItineraryDay, duration: GuideAskDuration): Promise<{ id: string; name: string; dailyRate: number } | null> => {
+    const raw = pickGuideRate(guideRows, { language, grade: guideGrade, duration, mode: guideMode, city: day.city, date: priceDateFor(day.day) })
+    if (!raw) return null
+    const row = (await rateNormalizer.normalize('guide_rates', [raw]))?.[0] as Record<string, any> | undefined
+    const dailyRate = Number(row?.base_rate_eur || row?.rate_eur) || 0
+    return row && dailyRate > 0 ? { id: row.id, name: `${guideLanguageWord(language)} Speaking Guide`, dailyRate } : null
+  }
+  /** A guiding day's rate: the half-day rate when the trip marks the day half
+   *  (isHalfDayGuiding) and one exists, else the full day — and say so. */
+  const sightseeingGuideRate = async (day: ItineraryDay): Promise<{ rate: { id: string; name: string; dailyRate: number } | null; note?: string }> => {
+    if (isHalfDayGuiding(day, tourType)) {
+      const half = await dayGuideRate(day, 'half_day')
+      if (half) return { rate: half, note: 'Half day' }
+      const full = (await dayGuideRate(day, 'full_day')) ?? guideRate
+      return { rate: full, note: full ? 'Half day — no half-day rate, priced at the full-day rate' : undefined }
+    }
+    return { rate: (await dayGuideRate(day, 'full_day')) ?? guideRate }
+  }
 
   // Flag missing rates that the itinerary actually needs (no fabrication).
   const needsGuide = guideMode === 'throughout' || itinerary.some(hasSightseeingDay)
@@ -3029,18 +3121,22 @@ export async function calculateDayBasedPricing(
       message: noMeetGreetRateMessage,
     })
   }
+  // One restaurant rate per day and meal: the day's city and date, the
+  // starred restaurant first (lib/pricing/service-rates pickMealRate). It
+  // averaged every row of the tier across restaurants and cities, and
+  // charged a per-group price per person.
+  const mealFor = (day: ItineraryDay, meal: 'lunch' | 'dinner'): PickedMeal | null =>
+    pickMealRate(mealRows, { mealType: meal, city: day.city, date: priceDateFor(day.day) })
   // One hole per meal TYPE the trip needs and cannot price — a tier with
   // lunch rates but no dinner rate used to price every dinner at 0 with no
   // hole at all (rateFor returns 0, and only a both-zero result was null).
-  const needsMeal = (meal: 'lunch' | 'dinner') => itinerary.some(d => d.meals[meal] === 'external')
-  const mealRateFor = (meal: 'lunch' | 'dinner'): number => usableRate(mealRates?.[meal]) ?? 0
   const noMealRateMessage = (meal: 'lunch' | 'dinner') =>
     `No ${tier} ${meal} rate. Add one in Rates → Meals.`
   for (const meal of ['lunch', 'dinner'] as const) {
-    if (needsMeal(meal) && mealRateFor(meal) <= 0) {
+    if (itinerary.some(d => d.meals[meal] === 'external' && !mealFor(d, meal))) {
       addHole({
         kind: 'meal',
-        reason: mealRates ? 'unpriced' : 'missing',
+        reason: mealRows.length ? 'unpriced' : 'missing',
         lookupAttempted: `meal_rates meal_type=${meal} tier=${tier}`,
         message: noMealRateMessage(meal),
       })
@@ -3049,6 +3145,8 @@ export async function calculateDayBasedPricing(
 
   // Water cost comes from fixedDailyCosts (fetched in the Step 4 batch above)
   const waterCostPerPax = fixedDailyCosts.waterPerPersonPerDay
+  // The built-in water default is never silent (lib/fixed-costs).
+  warnings.push(...(fixedDailyCosts.warnings ?? []))
 
   // ============================================
   // STEP 5: Calculate Single Supplement (whole tour)
@@ -3116,12 +3214,17 @@ export async function calculateDayBasedPricing(
     const hasSightseeing = day.services.guide_required || day.attractions.length > 0
 
     // ----- GUIDE (fixed per day) -----
+    // Each day's rate is its own city's and date's, half a day when the trip
+    // marks the day half (sightseeingGuideRate above).
+    const sightseeingGuide = hasSightseeing ? await sightseeingGuideRate(day) : { rate: null }
+    const todaysGuide = sightseeingGuide.rate
     if (guideMode === 'throughout') {
       // The "+1" travels day one to the end: a full guiding fee on
       // sightseeing days, the meet/assist rate on every other day (arrival,
       // departure, transit — he escorts either way).
-      if (hasSightseeing && guideRate) {
-        fixedCosts += guideRate.dailyRate
+      const meetGreetToday = !hasSightseeing ? ((await dayGuideRate(day, 'meet_greet')) ?? meetGreetGuideRate) : null
+      if (hasSightseeing && todaysGuide) {
+        fixedCosts += todaysGuide.dailyRate
         services.push({
           id: `day${day.day}-guide`,
           dayNumber: day.day,
@@ -3129,14 +3232,15 @@ export async function calculateDayBasedPricing(
           serviceName: `Throughout Guide — ${language}`,
           quantity: 1,
           quantityMode: 'fixed',
-          unitCost: guideRate.dailyRate,
-          lineTotal: guideRate.dailyRate,
+          unitCost: todaysGuide.dailyRate,
+          lineTotal: todaysGuide.dailyRate,
           rateSource: 'guides',
           isPerPax: false,
-          isOptional: false
+          isOptional: false,
+          ...(sightseeingGuide.note ? { notes: sightseeingGuide.note } : {}),
         })
-      } else if (!hasSightseeing && meetGreetGuideRate) {
-        fixedCosts += meetGreetGuideRate.dailyRate
+      } else if (!hasSightseeing && meetGreetToday) {
+        fixedCosts += meetGreetToday.dailyRate
         services.push({
           id: `day${day.day}-guide`,
           dayNumber: day.day,
@@ -3144,8 +3248,8 @@ export async function calculateDayBasedPricing(
           serviceName: `Throughout Guide — ${language} (meet/assist day)`,
           quantity: 1,
           quantityMode: 'fixed',
-          unitCost: meetGreetGuideRate.dailyRate,
-          lineTotal: meetGreetGuideRate.dailyRate,
+          unitCost: meetGreetToday.dailyRate,
+          lineTotal: meetGreetToday.dailyRate,
           rateSource: 'guides',
           isPerPax: false,
           isOptional: false
@@ -3155,10 +3259,10 @@ export async function calculateDayBasedPricing(
       } else {
         listUnpricedLine({ id: `day${day.day}-guide`, dayNumber: day.day, serviceType: 'guide', serviceName: `Throughout Guide — ${language} (meet/assist day)`, isPerPax: false }, noMeetGreetRateMessage)
       }
-    } else if (hasSightseeing && !guideRate) {
+    } else if (hasSightseeing && !todaysGuide) {
       listUnpricedLine({ id: `day${day.day}-guide`, dayNumber: day.day, serviceType: 'guide', serviceName: `${language} Speaking Guide`, isPerPax: false }, noGuideRateMessage)
-    } else if (hasSightseeing && guideRate) {
-      fixedCosts += guideRate.dailyRate
+    } else if (hasSightseeing && todaysGuide) {
+      fixedCosts += todaysGuide.dailyRate
       services.push({
         id: `day${day.day}-guide`,
         dayNumber: day.day,
@@ -3166,16 +3270,17 @@ export async function calculateDayBasedPricing(
         serviceName: `${language} Speaking Guide`,
         quantity: 1,
         quantityMode: 'fixed',
-        unitCost: guideRate.dailyRate,
-        lineTotal: guideRate.dailyRate,
+        unitCost: todaysGuide.dailyRate,
+        lineTotal: todaysGuide.dailyRate,
         rateSource: 'guides',
         isPerPax: false,
-        isOptional: false
+        isOptional: false,
+        ...(sightseeingGuide.note ? { notes: sightseeingGuide.note } : {}),
       })
     }
 
     // ----- TIPPING (context-aware per-role) -----
-    const { determineTipRolesForDay, formatTipServiceName } = await import('@/lib/tipping-utils')
+    const { determineTipRolesForDay, formatTipServiceName, priceTip } = await import('@/lib/tipping-utils')
     const hasAirportToday = day.services.airport_arrival || day.services.airport_departure
     const airportCount = (day.services.airport_arrival ? 1 : 0) + (day.services.airport_departure ? 1 : 0)
     const hasHotelNight = day.accommodation_type === 'hotel'
@@ -3194,21 +3299,29 @@ export async function calculateDayBasedPricing(
     for (const tipRole of dayTipRoles) {
       // Tips vary by place: the city picks the rate, falling back to the
       // country-wide row when this city has none of its own.
-      const tipRate = tippingRates.getRate(tipRole.role, tipRole.context, day.city)
-      if (tipRate > 0) {
-        const totalTipCost = tipRate * tipRole.quantity
-        fixedCosts += totalTipCost
+      // Each tip by its own Rate Unit (lib/tipping-utils priceTip): per day,
+      // per service, per night, once per cruise (its first day), per person.
+      const tip = tippingRates.getTip(tipRole.role, tipRole.context, day.city)
+      const line = tip && priceTip(tip, {
+        quantity: tipRole.quantity,
+        cruiseStart: day.is_cruise_day ? !previousDay?.is_cruise_day : undefined,
+      })
+      if (line) {
+        // A per-person tip scales with the group like the staff per-person
+        // rates above; every other unit is a group cost.
+        if (line.perPax) staffPerPax += line.total
+        else fixedCosts += line.total
         services.push({
           id: `day${day.day}-tips-${tipRole.role}`,
           dayNumber: day.day,
           serviceType: 'tips',
           serviceName: formatTipServiceName(tipRole.role, tipRole.context),
-          quantity: tipRole.quantity,
-          quantityMode: 'fixed',
-          unitCost: tipRate,
-          lineTotal: totalTipCost,
+          quantity: line.quantity,
+          quantityMode: line.perPax ? 'per_pax' : 'fixed',
+          unitCost: line.unitCost,
+          lineTotal: line.total,
           rateSource: 'tipping_rates',
-          isPerPax: false,
+          isPerPax: line.perPax,
           isOptional: false
         })
       }
@@ -3349,7 +3462,8 @@ export async function calculateDayBasedPricing(
     const checkinIsEmbarkation = Boolean(day.services.cruise_embark) && day.accommodation_type === 'cruise'
     const checkoutIsDisembarkation = Boolean(day.services.cruise_disembark) && previousDay?.accommodation_type === 'cruise'
     if (day.services.hotel_checkin && !checkinIsEmbarkation) {
-      const found = resolveHotelServiceRate('checkin_assist')
+      // The hotel checked into is where the traveller sleeps tonight.
+      const found = resolveHotelServiceRate('checkin_assist', day.overnight_city || day.city)
       const rate = found.rate
       if (rate != null) {
         const priced = priceStaff(found)
@@ -3377,7 +3491,8 @@ export async function calculateDayBasedPricing(
     }
 
     if (day.services.hotel_checkout && !checkoutIsDisembarkation) {
-      const found = resolveHotelServiceRate('checkout_assist')
+      // The hotel checked out of is last night's.
+      const found = resolveHotelServiceRate('checkout_assist', previousDay?.overnight_city || previousDay?.city || day.city)
       const rate = found.rate
       if (rate != null) {
         const priced = priceStaff(found)
@@ -3414,7 +3529,7 @@ export async function calculateDayBasedPricing(
     // (lib/ai/service-creation). No separate rate type exists yet.
     for (const event of ['embark', 'disembark'] as const) {
       if (!(event === 'embark' ? day.services.cruise_embark : day.services.cruise_disembark)) continue
-      const found = resolveHotelServiceRate(event === 'embark' ? 'checkin_assist' : 'checkout_assist')
+      const found = resolveHotelServiceRate(event === 'embark' ? 'checkin_assist' : 'checkout_assist', day.city)
       const serviceName = event === 'embark' ? 'Cruise Embarkation Assistance' : 'Cruise Disembarkation Assistance'
       const line = { id: `day${day.day}-cruise-${event}`, dayNumber: day.day, serviceType: 'hotel_service', serviceName, isPerPax: false }
       if (found.rate != null) {
@@ -3556,10 +3671,10 @@ export async function calculateDayBasedPricing(
       }
 
       // The "+1" guide sleeps where the group sleeps, at the hotel's special
-      // guide rate for this night's period. Blank = hole, never a free bed.
+      // guide rate for this night's period. Blank = hole; 0 = free, a 0 line.
       if (guideMode === 'throughout') {
         const guideBed = resolveGuideBedRateForDate(hotelRate.row, 'accommodation', dateForDay(day.day))
-        if (guideBed > 0) {
+        if (guideBed !== null) {
           fixedCosts += guideBed
           services.push({
             id: `day${day.day}-guide-bed`,
@@ -3720,12 +3835,12 @@ export async function calculateDayBasedPricing(
     }
 
     // The "+1" guide's cabin, each night at that night's period guide_rate.
-    // Any night without one is a hole for the whole sailing — never free.
+    // Any night without one (blank) is a hole for the whole sailing; 0 is free.
     if (guideMode === 'throughout') {
       const guideNights = cruiseDays.map(day =>
         resolveGuideBedRateForDate(cruiseRates.row, 'cruise', dateForDay(day.day)))
-      if (guideNights.every(n => n > 0)) {
-        const guideCabinTotal = guideNights.reduce((s, n) => s + n, 0)
+      if (guideNights.every((n): n is number => n !== null)) {
+        const guideCabinTotal = guideNights.reduce((s: number, n) => s + (n ?? 0), 0)
         fixedCosts += guideCabinTotal
         services.push({
           id: `cruise-guide-cabin`,
@@ -3788,17 +3903,23 @@ export async function calculateDayBasedPricing(
    * NO default — a date outside every period has no fare, it does not quietly
    * take the first one.
    */
-  const flightRatesOn = (r: Record<string, any>, on: string | null): { rates: Record<string, number> | null; outside: boolean } => {
+  const flightRatesOn = (r: Record<string, any>, on: string | null): { rates: Record<string, number> | null; outside: boolean; season: { from: string; to: string } | null } => {
     const period = periodRatesFor(r, 'flight', on)
     // No periods at all: a row from before they existed. Its own columns are
     // the fare, which is what the engine has always read.
-    if (!period) return { rates: r as Record<string, number>, outside: false }
-    return period.outside ? { rates: null, outside: true } : { rates: period.rates, outside: false }
+    if (!period) return { rates: r as Record<string, number>, outside: false, season: null }
+    return period.outside ? { rates: null, outside: true, season: null } : { rates: period.rates, outside: false, season: period.season }
   }
 
-  const fareFrom = (rates: Record<string, number>): number =>
-    (isEurPassport ? money(rates.base_rate_eur) : money(rates.base_rate_non_eur) || money(rates.base_rate_eur)) +
-    (isEurPassport ? money(rates.tax_eur) : money(rates.tax_non_eur) || money(rates.tax_eur))
+  /** The fare + tax per person, or null when the period has no fare. A blank
+   *  fare is stored as 0 (lib/rates/rate-seasons) and is an unpriced HOLE —
+   *  it used to go through money(), so a leg dated in a period nobody priced
+   *  cost the tax alone, or nothing. */
+  const fareFrom = (rates: Record<string, number>): number | null => {
+    const base = isEurPassport ? usableRate(rates.base_rate_eur) : usableRate(rates.base_rate_non_eur) ?? usableRate(rates.base_rate_eur)
+    if (base == null) return null
+    return base + (isEurPassport ? money(rates.tax_eur) : money(rates.tax_non_eur) || money(rates.tax_eur))
+  }
 
   for (const leg of ticketLegs) {
     const routeLabel = `${leg.from} → ${leg.to}`
@@ -3841,8 +3962,19 @@ export async function calculateDayBasedPricing(
           : [p.row]
       })
       const pick = resolveTicketRow(candidates, leg.rateId)
-      if (pick.row) {
-        const fare = fareFrom(flightRatesOn(pick.row, legDate).rates!)
+      const picked = pick.row ? flightRatesOn(pick.row, legDate) : null
+      const pickedFare = picked?.rates ? fareFrom(picked.rates) : null
+      if (pick.row && pickedFare == null) {
+        // The fare is on file but its period carries no price — a hole the
+        // operator fixes in that fare's period, not by adding a new fare.
+        listUnpriced({ id: `day${leg.day}-ticket-flight`, dayNumber: leg.day, serviceType: 'flight', serviceName: `${flightLabel(fromAirports[0], toAirports[0])} ${routeLabel}`, isPerPax: true }, {
+          kind: 'transport', reason: 'unpriced',
+          dayNumber: leg.day, city: leg.to,
+          lookupAttempted: `flight_rates ${routeLabel} economy${legDate ? ` on ${legDate}` : ''} id=${pick.row.id}`,
+          message: `The ${pick.row.airline ? `${pick.row.airline} ` : ''}fare for ${routeLabel} has no price in the period covering ${legDate ?? 'this trip'}. Enter it in Rates → Flights.`,
+        })
+      } else if (pick.row && picked?.rates && pickedFare != null) {
+        const fare = pickedFare
         ticketsPerPax += fare
         services.push({
           id: `day${leg.day}-ticket-flight`, dayNumber: leg.day, serviceType: 'flight',
@@ -3854,15 +3986,18 @@ export async function calculateDayBasedPricing(
           notes: money(pick.row.tax_eur) > 0 ? 'Fare incl. tax, per person' : 'Per person',
         })
         if (guideMode === 'throughout') {
-          const periodRates = flightRatesOn(pick.row, legDate).rates!
-          const gFare = periodRates.guide_rate != null ? money(periodRates.guide_rate) : fareFrom(periodRates)
+          // The guide's fare as STORED for this period (lib/rates/ticket-guide-fare):
+          // blank = he pays the customer fare, 0 = he rides free. The period
+          // reader turns a blank into 0, which flew him free on every fare.
+          const guideFare = flightGuideFare(pick.row, picked.season)
+          const gFare = guideFare ?? fare
           fixedCosts += gFare
           services.push({
             id: `day${leg.day}-guide-ticket`, dayNumber: leg.day, serviceType: 'flight',
             serviceName: `Throughout Guide — flight ${routeLabel}`,
             quantity: 1, quantityMode: 'fixed', unitCost: gFare, lineTotal: gFare,
             rateSource: 'flight_rates', isPerPax: false, isOptional: false,
-            notes: periodRates.guide_rate != null ? 'Guide fare' : 'Customer fare (no guide fare entered)',
+            notes: guideFare != null ? 'Guide fare' : 'Customer fare (no guide fare entered)',
           })
         }
       } else {
@@ -3898,8 +4033,17 @@ export async function calculateDayBasedPricing(
         cityKey(r.origin_city) === cityKey(leg.from) && cityKey(r.destination_city) === cityKey(leg.to))
       const { valid: candidates, expired } = ticketsValidOn(onRoute, legDate)
       const pick = resolveTicketRow(candidates, leg.rateId)
-      if (pick.row) {
-        const fare = money(pick.row.rate_eur)
+      // A blank or zero fare is an unpriced hole, never a free ticket.
+      const trainFare = pick.row ? usableRate(pick.row.rate_eur) : null
+      if (pick.row && trainFare == null) {
+        listUnpriced({ id: `day${leg.day}-ticket-train`, dayNumber: leg.day, serviceType: 'transportation', serviceName: `Train ${routeLabel}`, isPerPax: true }, {
+          kind: 'transport', reason: 'unpriced',
+          dayNumber: leg.day, city: leg.to,
+          lookupAttempted: `train_rates ${routeLabel}${legDate ? ` on ${legDate}` : ''} id=${pick.row.id}`,
+          message: `The train rate for ${routeLabel}${pick.row.class_type ? ` (${pick.row.class_type})` : ''} has no price. Open it in Rates → Trains and set one.`,
+        })
+      } else if (pick.row && trainFare != null) {
+        const fare = trainFare
         ticketsPerPax += fare
         services.push({
           id: `day${leg.day}-ticket-train`, dayNumber: leg.day, serviceType: 'transportation',
@@ -3909,14 +4053,16 @@ export async function calculateDayBasedPricing(
           notes: pick.row.operator_name ? `Per person — ${pick.row.operator_name}` : 'Per person',
         })
         if (guideMode === 'throughout') {
-          const gFare = pick.row.guide_rate != null ? money(pick.row.guide_rate) : fare
+          // Blank ('' or null) = the customer fare; only a stored number is a guide fare.
+          const guideFare = enteredFare(pick.row.guide_rate)
+          const gFare = guideFare ?? fare
           fixedCosts += gFare
           services.push({
             id: `day${leg.day}-guide-ticket`, dayNumber: leg.day, serviceType: 'transportation',
             serviceName: `Throughout Guide — train ${routeLabel}`,
             quantity: 1, quantityMode: 'fixed', unitCost: gFare, lineTotal: gFare,
             rateSource: 'train_rates', isPerPax: false, isOptional: false,
-            notes: pick.row.guide_rate != null ? 'Guide fare' : 'Customer fare (no guide fare entered)',
+            notes: guideFare != null ? 'Guide fare' : 'Customer fare (no guide fare entered)',
           })
         }
       } else {
@@ -3953,8 +4099,12 @@ export async function calculateDayBasedPricing(
       cityKey(r.origin_city) === cityKey(leg.from) && cityKey(r.destination_city) === cityKey(leg.to))
     const { valid: routeRows, expired } = ticketsValidOn(onRoute, legDate)
     // validity stays in the key: two SUPPLIERS can sell the same window, and
-    // the same supplier can re-issue a contract mid-season.
-    const trainKey = (r: Record<string, any>) => `${r.supplier_id ?? r.operator_name ?? ''}|${r.rate_valid_from ?? ''}`
+    // the same supplier can re-issue a contract mid-season. So does the TRAIN
+    // (property_id): one supplier running two trains on a route with the same
+    // validity read as ONE train, so naming train B could price train A's
+    // Half Twin, and an unnamed leg was auto-priced instead of asking which.
+    const trainKey = (r: Record<string, any>) =>
+      `${r.supplier_id ?? r.operator_name ?? ''}|${r.property_id ?? ''}|${r.rate_valid_from ?? ''}|${r.rate_valid_to ?? ''}`
     let chosenKey: string | null = null
     let namedMissing = false
     let namedExpired: Record<string, any> | undefined
@@ -4050,7 +4200,11 @@ export async function calculateDayBasedPricing(
   // attractions are matched in memory here — was a per-attraction query
   // (+ full-table scan on each miss) inside the loop below.
 
-  const resolved = resolveAttractions(itinerary, entranceFeeCache, attractionAliases, isEurPassport)
+  // Only fees valid on the trip's first day price (a fee's Valid From / Valid
+  // To): next year's price takes over on its date, an expired one stops.
+  const feeDate = priceDateFor(1)
+  const feesOnDate = entranceFeeCache.filter(f => rateValidOn(f, feeDate))
+  const resolved = resolveAttractions(itinerary, feesOnDate, attractionAliases, isEurPassport)
   for (const fee of resolved.tickets) {
     processedAttractions.add(fee.name.toLowerCase())
     // A free site (rate 0, e.g. Colossi of Memnon) is a resolved visit with
@@ -4090,10 +4244,16 @@ export async function calculateDayBasedPricing(
     ))
   })
   resolved.missingIds.forEach((miss, i) => {
-    warnings.push(`Day ${miss.day}: picked attraction ${miss.id} is no longer in the entrance fees table`)
+    // Still in the table, but its validity period does not cover the trip.
+    const outOfDate = entranceFeeCache.find(f => f.id === miss.id)
+    warnings.push(outOfDate
+      ? `Day ${miss.day}: picked attraction "${outOfDate.attraction_name}" has no fee valid on ${feeDate}`
+      : `Day ${miss.day}: picked attraction ${miss.id} is no longer in the entrance fees table`)
     services.push(zeroLine(
-      { id: `day${miss.day}-entrance-missing-${i}`, dayNumber: miss.day, serviceType: 'entrance', serviceName: 'Picked ticket', isPerPax: true },
-      { issue: 'The ticket picked for this day is no longer in Rates → Entrance Fees. Pick it again on the day.' },
+      { id: `day${miss.day}-entrance-missing-${i}`, dayNumber: miss.day, serviceType: 'entrance', serviceName: outOfDate?.attraction_name ?? 'Picked ticket', isPerPax: true },
+      { issue: outOfDate
+        ? `This ticket's fee is not valid on ${feeDate}. Add the fee for that period in Rates → Attractions.`
+        : 'The ticket picked for this day is no longer in Rates → Entrance Fees. Pick it again on the day.' },
     ))
   })
 
@@ -4119,17 +4279,33 @@ export async function calculateDayBasedPricing(
       // There is no breakfast rate to buy: an "external" breakfast has never
       // priced, and still does not.
       if (status !== 'external' || meal === 'breakfast') continue
-      const rate = mealRateFor(meal)
-      if (rate > 0) {
-        externalMealsPerPax += rate
+      const picked = mealFor(day, meal)
+      if (picked && !picked.perPerson) {
+        // One price for the whole group (Per Person Rate unticked): a fixed
+        // cost like a guide — it was multiplied by every traveller.
+        fixedCosts += picked.rate
+        services.push({
+          ...line,
+          isPerPax: false,
+          quantity: 1,
+          quantityMode: 'fixed',
+          unitCost: picked.rate,
+          lineTotal: picked.rate,
+          rateSource: 'meal_rates',
+          isOptional: false,
+          notes: `${picked.row.restaurant_name ?? 'Restaurant'} — per group`,
+        })
+      } else if (picked) {
+        externalMealsPerPax += picked.rate
         services.push({
           ...line,
           quantity: 1,
           quantityMode: 'per_pax',
-          unitCost: rate,
-          lineTotal: rate,
+          unitCost: picked.rate,
+          lineTotal: picked.rate,
           rateSource: 'meal_rates',
           isOptional: false,
+          ...(picked.row.restaurant_name ? { notes: String(picked.row.restaurant_name) } : {}),
         })
       } else {
         // The hole was recorded once per meal type above.
@@ -4144,13 +4320,15 @@ export async function calculateDayBasedPricing(
   // the REQUESTED group size — the multi-pax sheet below keeps this fixed
   // line at every pax count, a known approximation the quote's own pax never
   // suffers from.
-  if (guideMode === 'throughout' && (params.numPax ?? 2) <= 3 && mealRates) {
+  if (guideMode === 'throughout' && (params.numPax ?? 2) <= 3 && mealRows.length) {
     for (const day of itinerary) {
       for (const meal of ['lunch', 'dinner'] as const) {
         if (day.meals[meal] !== 'external') continue
-        const rate = mealRateFor(meal)
+        const picked = mealFor(day, meal)
         // No rate for this meal: the customer's own line already shows it.
-        if (rate <= 0) continue
+        // A per-group price already feeds the guide.
+        if (!picked || !picked.perPerson) continue
+        const rate = picked.rate
         fixedCosts += rate
         services.push({
           id: `day${day.day}-guide-${meal}`,
@@ -4174,6 +4352,10 @@ export async function calculateDayBasedPricing(
   const sightseeingDaysList = itinerary.filter(d => d.services.guide_required || d.attractions.length > 0)
   const sightseeingDays = sightseeingDaysList.length
   const waterPerPax = waterCostPerPax * sightseeingDays
+  // Every other active fixed cost (Rates › Fixed Costs) is charged like water:
+  // its own line, per person, on each of the same sightseeing days.
+  const extraFixedItems = fixedDailyCosts.extraItems ?? []
+  const extraFixedPerPax = extraFixedItems.reduce((sum, item) => sum + item.perPersonPerDay * sightseeingDays, 0)
 
   for (const sDay of sightseeingDaysList) {
     services.push({
@@ -4192,10 +4374,29 @@ export async function calculateDayBasedPricing(
     })
   }
 
+  extraFixedItems.forEach((item, i) => {
+    for (const sDay of sightseeingDaysList) {
+      services.push({
+        id: `fixed-cost-${i}-day-${sDay.day}`,
+        dayNumber: sDay.day,
+        serviceType: 'supplies',
+        serviceName: item.name,
+        quantity: 1,
+        quantityMode: 'per_pax',
+        unitCost: item.perPersonPerDay,
+        lineTotal: item.perPersonPerDay,
+        rateSource: 'fixed',
+        isPerPax: true,
+        isOptional: false,
+        notes: `${item.name} for sightseeing`
+      })
+    }
+  })
+
   // Accommodation is NOT in the per-person line any more: it goes through
   // the rooming rule per party size (accommodationAt below). Everything
   // else still scales linearly with pax.
-  const perPaxCosts = entranceFeesPerPax + externalMealsPerPax + waterPerPax + ticketsPerPax + supplementsPerPax + staffPerPax
+  const perPaxCosts = entranceFeesPerPax + externalMealsPerPax + waterPerPax + extraFixedPerPax + ticketsPerPax + supplementsPerPax + staffPerPax
   const accommodationAt = (pax: number) => tripAccommodationCost(pax, accommodationNights)
 
   debugLog(`📊 Fixed costs: €${fixedCosts.toFixed(2)} | Per-pax costs: €${perPaxCosts.toFixed(2)}`)
@@ -4267,6 +4468,21 @@ export async function calculateDayBasedPricing(
   const baseVehicleType = getVehicleTypeByPax(2)
   let baseTransportCost = 0
 
+  // Transport is looked up per DAY, among the rows valid on that day
+  // (orderTransportRows): a rate whose validity window has ended does not
+  // price, and next year's rate takes over on the day it starts.
+  const transportCaches = new Map<string, Map<string, TransportRate>>()
+  const transportCacheFor = (dayNumber: number): Map<string, TransportRate> => {
+    const on = dateForDay(dayNumber)
+    const key = on ?? ''
+    let cache = transportCaches.get(key)
+    if (!cache) {
+      cache = transportCacheFromRows(transportRows, on)
+      transportCaches.set(key, cache)
+    }
+    return cache
+  }
+
   for (const info of transportInfoByDay) {
     if (!info.requiresTransport) continue
 
@@ -4286,7 +4502,7 @@ export async function calculateDayBasedPricing(
     }
 
     // Find transport rate (resolves vehicle tier for 2 pax base)
-    const rate = findTransportRate(transportCache, {
+    const rate = findTransportRate(transportCacheFor(info.day), {
       serviceType: needs.serviceType,
       city: info.city,
       duration: needs.duration,
@@ -4426,7 +4642,7 @@ export async function calculateDayBasedPricing(
     for (const info of transportInfoByDay) {
       if (!info.requiresTransport) continue
       const { needs } = info
-      const rate = findTransportRate(transportCache, {
+      const rate = findTransportRate(transportCacheFor(info.day), {
         serviceType: needs.serviceType,
         city: info.city,
         duration: needs.duration,
@@ -4467,7 +4683,7 @@ export async function calculateDayBasedPricing(
       ? (pax: number) => transportAtPax(pax + 1) + staffUnitsAt(pax)
       : (pax: number) => transportAtPax(pax) + staffUnitsAt(pax),
     // The leader rides the ticket legs at customer fare, like everything else he consumes.
-    tourLeaderCost: accommodationPPD + singleSupplement + entranceFeesPerPax + externalMealsPerPax + waterPerPax + ticketsPerPax + staffPerPax,
+    tourLeaderCost: accommodationPPD + singleSupplement + entranceFeesPerPax + externalMealsPerPax + waterPerPax + extraFixedPerPax + ticketsPerPax + staffPerPax,
     accommodationAt,
     paxFrom: PAX_COUNTS[0],
     paxTo: PAX_COUNTS[PAX_COUNTS.length - 1],

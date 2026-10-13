@@ -3,6 +3,12 @@ import { clientMessage } from '@/lib/api-errors'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
+import { validateRatePayload } from '@/lib/rate-validation'
+import { knownAirlineCode } from '@/lib/airline-codes'
+import { flightPeriodsPatch } from '@/lib/rates/flight-write'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
+import { OWN_SUPPLIER_EMBED, ownSupplierOnRow } from '@/lib/rates/own-supplier-embed'
+import { rateDeleteBlocked } from '@/lib/rates/rate-delete-guard'
 
 // ============================================
 // FLIGHT RATES API - Single Record
@@ -25,10 +31,7 @@ export async function GET(
 
     const { data, error } = await supabaseAdmin
       .from('flight_rates')
-      .select(`
-        *,
-        supplier:suppliers(id, name, city, contact_phone, contact_email)
-      `)
+      .select(`*, ${OWN_SUPPLIER_EMBED}`)
       .eq('org_id', orgId)
       .eq('id', id)
       .single()
@@ -38,7 +41,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Flight rate not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data: ownSupplierOnRow(data, orgId) })
   } catch (error: any) {
     console.error('GET flight_rates/[id] catch error:', error)
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -61,6 +64,41 @@ export async function PUT(
     // ...and org_id: a rate stays in its company.
     const { id: _, ...updates } = body
     delete updates.org_id
+
+    // The edit is held to what the create is held to — the form saves edits
+    // HERE, and this route stored whatever it was sent.
+    const rateCheck = validateRatePayload(updates)
+    if (!rateCheck.ok) {
+      return NextResponse.json({ error: 'Invalid rate values', violations: rateCheck.errors }, { status: 400 })
+    }
+
+    // A supplier in the patch must be this company's ('__none__' = none):
+    // the raw spread stored any id, another company's included.
+    if ('supplier_id' in updates || 'supplier_name' in updates) {
+      const supplierCheck = await validateAndResolveSupplierFields(updates, supabaseAdmin, orgId)
+      if (!supplierCheck.ok) {
+        return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+      }
+      updates.supplier_id = supplierCheck.supplier_id
+      updates.supplier_name = supplierCheck.supplier_name
+    }
+
+    // The periods: sanitized, held to the period limit, and the FIRST one
+    // mirrored onto the base columns every date-less reader takes (the grid's
+    // option price, the CSV export). Stored raw here, an edited first fare
+    // left base_rate_eur, tax_eur and guide_rate on the old values
+    // (lib/rates/flight-write). Applied after the numeric parsing below.
+    let periodPatch: Record<string, unknown> = {}
+    if ('seasons' in updates) {
+      const periods = flightPeriodsPatch(updates.seasons)
+      if (!periods.ok) return NextResponse.json({ success: false, error: periods.error }, { status: 400 })
+      periodPatch = periods.patch
+      delete updates.seasons
+    }
+
+    // The carrier code follows the airline, as on create: the one the form
+    // sends (an air carrier's IATA code), else the one known for the name.
+    if (updates.airline && !updates.airline_code) updates.airline_code = knownAirlineCode(updates.airline)
 
     // Regenerate route_name if route fields changed
     if (updates.route_from || updates.route_to) {
@@ -103,6 +141,7 @@ export async function PUT(
     if (updates.carry_on_kg !== undefined) {
       updates.carry_on_kg = updates.carry_on_kg ? parseInt(updates.carry_on_kg) : null
     }
+    Object.assign(updates, periodPatch)
 
     updates.updated_at = new Date().toISOString()
 
@@ -136,6 +175,10 @@ export async function DELETE(
     if (!orgId) return noOrgResponse()
     const { id } = await params
     if (!(await rowInOrg(supabaseAdmin, 'flight_rates', id, orgId))) return notFoundInOrg('Rate')
+
+    // In use → refused with what uses it (lib/rates/rate-delete-guard).
+    const blocked = await rateDeleteBlocked(supabaseAdmin, orgId, id)
+    if (blocked) return NextResponse.json({ success: false, error: blocked }, { status: 409 })
 
     const { error } = await supabaseAdmin
       .from('flight_rates')

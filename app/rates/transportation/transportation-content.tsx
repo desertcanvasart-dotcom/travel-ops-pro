@@ -13,6 +13,8 @@ import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
+import { useSupplierTypes } from '@/hooks/useSupplierTypes'
+import { isTransportSupplier } from '@/lib/rates/transport-suppliers'
 import { Copy, Search,
   Plus,
   Edit2,
@@ -78,6 +80,8 @@ interface Supplier {
   id: string
   name: string
   type: string
+  /** Every role the supplier fills; `type` is only the first. */
+  types?: string[] | null
   city?: string
   status?: string
 }
@@ -200,7 +204,15 @@ export default function TransportationContent() {
   const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
 
   const [rates, setRates] = useState<TransportationRate[]>([])
-  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  // The tiles count every rate of the company, not the rows this filter loaded.
+  const [summary, setSummary] = useState<{ total: number; active: number; inactive: number; cities: number; linked: number } | null>(null)
+  const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([])
+  const { hasBehaviour } = useSupplierTypes()
+  // Who can be picked as the transport company: any supplier with a ground
+  // transport role among ALL its roles, an agency-added type that behaves
+  // like one included (lib/rates/transport-suppliers). The filter read the
+  // primary type only.
+  const suppliers = allSuppliers.filter(s => isTransportSupplier(s, hasBehaviour))
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [cityFilter, setCityFilter] = useState('')
@@ -232,10 +244,7 @@ export default function TransportationContent() {
       const response = await fetch('/api/suppliers?status=active')
       if (response.ok) {
         const result = await response.json()
-        const transportSuppliers = (result.data || []).filter((s: Supplier) =>
-          ['transport', 'local_operator', 'driver'].includes(s.type)
-        )
-        setSuppliers(transportSuppliers)
+        setAllSuppliers(result.data || [])
       }
     } catch (error) {
       console.error('Error fetching suppliers:', error)
@@ -257,11 +266,19 @@ export default function TransportationContent() {
       if (supplierFilter) params.append('supplier_id', supplierFilter)
       if (!showInactive) params.append('activeOnly', 'true')
 
-      const response = await fetch(`/api/resources/transportation?${params}`, { signal: controller.signal })
+      const [response, summaryRes] = await Promise.all([
+        fetch(`/api/resources/transportation?${params}`, { signal: controller.signal }),
+        fetch('/api/resources/transportation?summary=1', { signal: controller.signal }),
+      ])
       if (response.ok) {
         const data = await response.json()
         if (controller.signal.aborted) return
         setRates(data)
+      }
+      if (summaryRes.ok) {
+        const counts = await summaryRes.json()
+        if (controller.signal.aborted) return
+        setSummary(counts)
       }
     } catch (error: any) {
       if (error?.name === 'AbortError') return // superseded by a newer fetch / unmount
@@ -536,7 +553,9 @@ export default function TransportationContent() {
         fetchRates()
         await dialog.alert('Deleted', 'Transportation rate has been deleted.', 'success')
       } else {
-        await dialog.alert('Error', 'Failed to delete transportation rate. Please try again.', 'warning')
+        // A rate a trip, programme or rule uses is refused with what uses it.
+        const result = await response.json().catch(() => ({}))
+        await dialog.alert('Error', result.error || 'Failed to delete transportation rate. Please try again.', 'warning')
       }
     } catch (error) {
       console.error('Error deleting transportation rate:', error)
@@ -631,12 +650,13 @@ export default function TransportationContent() {
   const goToPrevPage = () => goToPage(currentPage - 1)
   const goToNextPage = () => goToPage(currentPage + 1)
 
-  // Stats
-  const totalRates = rates.length
-  const activeRates = rates.filter(r => r.is_active).length
-  const inactiveRates = totalRates - activeRates
-  const uniqueCities = [...new Set(rates.map(r => r.city))].length
-  const linkedToSuppliers = rates.filter(r => r.supplier_id).length
+  // Stats — the company's counts from the server (every rate, whatever the
+  // filters and Show Inactive); the loaded rows only until they arrive.
+  const totalRates = summary?.total ?? rates.length
+  const activeRates = summary?.active ?? rates.filter(r => r.is_active).length
+  const inactiveRates = summary?.inactive ?? totalRates - activeRates
+  const uniqueCities = summary?.cities ?? [...new Set(rates.map(r => r.city))].length
+  const linkedToSuppliers = summary?.linked ?? rates.filter(r => r.supplier_id).length
 
   if (loading) {
     return (

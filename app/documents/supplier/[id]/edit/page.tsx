@@ -16,6 +16,7 @@ import { pickerOwnsLines } from '@/lib/documents/voucher-lines'
 import { TripBreadcrumb } from '@/components/nav/TripNav'
 import { withReturnTo, safeReturnPath, FROM_PARAM } from '@/lib/nav/return-to'
 import { toVoucherAmount, voucherPickFx } from '@/lib/documents/voucher-pick-price'
+import { mealVoucherQuantity } from '@/lib/pricing/service-rates'
 import { voucherHasMoney } from '@/lib/documents/voucher-currency'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 
@@ -58,6 +59,8 @@ interface MealRate {
   tier: string | null
   supplier_name: string | null
   notes: string | null
+  /** false = one price for the whole group (meal_rates.per_person_rate). */
+  per_person_rate?: boolean | null
 }
 
 interface SelectedMeal {
@@ -299,10 +302,14 @@ export default function EditSupplierDocumentPage() {
   const fetchMealRates = async () => {
     setLoadingMeals(true)
     try {
-      const response = await fetch('/api/rates/meals?active_only=true')
+      // In the company's rate currency, each row from its OWN currency
+      // (lib/rates/rows-in-rate-currency) — inVoucher then converts from the
+      // company's. The raw rows were taken as company-currency amounts, so an
+      // EGP rate went onto the voucher ~50× too high.
+      const response = await fetch('/api/rates/meals?active_only=true&in_rate_currency=true')
       const result = await response.json()
       if (result.success && Array.isArray(result.data)) {
-        setMealRates(result.data.map((r: any) => ({
+        setMealRates(result.data.filter((r: any) => !r.rate_unconvertible).map((r: any) => ({
           id: r.id,
           service_code: r.service_code || '',
           restaurant_name: r.restaurant_name,
@@ -313,7 +320,8 @@ export default function EditSupplierDocumentPage() {
           base_rate_non_eur: r.base_rate_non_eur || 0,
           tier: r.tier,
           supplier_name: r.supplier_name,
-          notes: r.notes
+          notes: r.notes,
+          per_person_rate: r.per_person_rate,
         })))
       }
     } catch (err) {
@@ -326,10 +334,11 @@ export default function EditSupplierDocumentPage() {
   const fetchGuideRates = async () => {
     setLoadingGuides(true)
     try {
-      const response = await fetch('/api/rates/guides?active_only=true')
+      // In the company's rate currency, each row from its own (see meals).
+      const response = await fetch('/api/rates/guides?active_only=true&in_rate_currency=true')
       const result = await response.json()
       if (result.success && Array.isArray(result.data)) {
-        setGuideRates(result.data.map((r: any) => ({
+        setGuideRates(result.data.filter((r: any) => !r.rate_unconvertible).map((r: any) => ({
           id: r.id,
           service_code: r.service_code || '',
           guide_language: r.guide_language,
@@ -353,10 +362,11 @@ export default function EditSupplierDocumentPage() {
   const fetchEntranceFees = async () => {
     setLoadingFees(true)
     try {
-      const response = await fetch('/api/rates/attractions?active_only=true')
+      // In the company's rate currency, each row from its own (see meals).
+      const response = await fetch('/api/rates/attractions?active_only=true&in_rate_currency=true')
       const result = await response.json()
       if (result.success) {
-        setEntranceFees(result.data || [])
+        setEntranceFees((result.data || []).filter((r: any) => !r.rate_unconvertible))
       }
     } catch (err) {
       console.error('Error fetching entrance fees:', err)
@@ -704,15 +714,18 @@ export default function EditSupplierDocumentPage() {
     const totalPax = (document?.num_adults || 1) + (document?.num_children || 0)
     const unitRate = inVoucher(rate.base_rate_eur)
     if (unitRate == null) return
+    // A per-group rate is one price; a per-person one is charged for the
+    // party, never fewer than the restaurant's minimum (mealVoucherQuantity).
+    const quantity = mealVoucherQuantity(rate, totalPax)
     setSelectedMeals(prev => [...prev, {
       rate_id: rate.id,
       service_code: rate.service_code,
       restaurant_name: rate.restaurant_name,
       meal_type: rate.meal_type || '',
       city: rate.city || '',
-      quantity: totalPax,
+      quantity,
       unit_rate: unitRate,
-      total_cost: unitRate * totalPax
+      total_cost: unitRate * quantity
     }])
   }
 

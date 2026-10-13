@@ -22,6 +22,8 @@ export interface FeeRow {
   attraction_name: string
   eur_rate: number | null
   non_eur_rate: number | null
+  /** "Not included in the automatic price": charged only when picked by id. */
+  is_addon?: boolean | null
 }
 
 export interface DayAttractions {
@@ -135,6 +137,10 @@ export function resolveAttractions(
   // Free text: a day whose ids priced something has been curated — its
   // wording is for the documents and is not guessed at. Any other day is
   // priced from its wording as before (including one whose only id is gone).
+  // An add-on fee ("Not included in the automatic price") is never matched
+  // from wording — "Great Pyramid" charged "Great Pyramid Interior" — only a
+  // ticket picked by id charges it.
+  const wordingFees = fees.filter(f => f.is_addon !== true)
   const seenText = new Set<string>()
   for (const d of days) {
     if (curated.has(d.day)) continue
@@ -152,13 +158,13 @@ export function resolveAttractions(
       const names = canonical ? canonical.split(CANONICAL_JOINER).map(n => n.trim()).filter(Boolean) : []
       let hit = false
       for (const name of names) {
-        const row = matchExact(fees, name) ?? matchByName(fees, name)
+        const row = matchExact(wordingFees, name) ?? matchByName(wordingFees, name)
         if (row) { hit = true; take(row, d.day, text) }
         else out.unresolved.push({ day: d.day, text: `${text} → ${name}` })
       }
       if (hit || names.length > 0) continue
 
-      const row = matchExact(fees, text) ?? matchByName(fees, text)
+      const row = matchExact(wordingFees, text) ?? matchByName(wordingFees, text)
       if (row) take(row, d.day, text)
       else out.unresolved.push({ day: d.day, text })
     }

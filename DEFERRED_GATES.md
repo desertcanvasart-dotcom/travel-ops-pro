@@ -150,38 +150,31 @@ destructure-and-omit and the mapper comment.
       operator of org A — or one in both orgs with B active — succeeds and the
       itinerary lands in org A
 
-### Bundled into this gate: suppliers.org_id (Phase 3 step 2 finding)
+### Bundled into this gate: suppliers.org_id (Phase 3 step 2 finding) — ✅ DONE
 
-The `suppliers` table has NO `org_id` column today. For solo operation this
-is the same kind of latent issue as `communication_threads.org_id` was —
-trivially correct under one org, structurally broken under two. But it is
-WORSE than the thread case: a shared unscoped suppliers table is a
-**CROSS-TENANT DATA LEAK** the instant a second org exists, not just a
-misattribution risk. Any second org's operator would see every other org's
-supplier roster, rate cards, contact info, payment terms, and commission
-agreements.
+**Done by migrations `20261205_suppliers_org_id.sql` (suppliers, supplier
+properties, the guides / airport_staff / hotel_staff views) and
+`20261206_rates_org_id.sql` (every rate table).** Kept for the record: the
+`suppliers` table used to have no `org_id`, which would have been a
+cross-tenant leak of every company's roster, rate cards, contacts and
+commission agreements the moment a second company existed.
 
-Phase 3 step 2 added FK constraints from itinerary_services, expenses,
-booking_supplier_status, supplier_invoices to suppliers — making the
-referential link real but NOT solving the multi-tenancy of the suppliers
-table itself. That work belongs here:
-
-- [ ] `ALTER TABLE suppliers ADD COLUMN org_id UUID REFERENCES organizations(id)`,
-      backfill from a per-org resolver (same mechanism as threads/briefs)
-- [ ] RLS on suppliers with `user_is_in_org(org_id)` predicate
-- [ ] All write-paths in `app/api/suppliers/*` and `app/api/rates/*` stamp
-      org_id from session
-- [ ] All read-paths (suppliers UI, rate dropdowns, sync-suppliers) scope by
-      `org_id`. Note that several rate routes already use service-role; those
-      need an explicit `.eq('org_id', orgId)` added since RLS won't filter for
-      them
-- [ ] `accommodation_rates`, `transportation_rates`, `nile_cruises`,
-      `guide_rates`, `activity_rates`, `meal_rates` all carry supplier_id but
-      no org_id — they inherit org-scoping transitively via the FK to
-      suppliers. Decide whether to denormalize org_id onto rate rows for
-      faster filtering vs always joining through suppliers
-- [ ] End-to-end test: two orgs each have their own suppliers + rates;
-      neither sees the other's
+- [x] `suppliers.org_id` added and backfilled per company; a supplier both
+      companies used was copied, one per company (`org_backfill_supplier_copies`), and
+      every reference re-pointed at its own company's copy
+- [x] RLS on suppliers: `user_is_in_org(org_id)` to read, plus
+      `is_manager_or_above()` to write (`suppliers_org_*` policies)
+- [x] Write paths in `app/api/suppliers/*` and `app/api/rates/*` stamp
+      `org_id` from the session; supplier codes are unique per company
+      (`UNIQUE(org_id, supplier_code)`), rate keys per company
+      (`UNIQUE(org_id, service_code / cruise_code / cost_type)`)
+- [x] Read paths (suppliers screen, rate pickers, CSV import/export, bulk rate
+      import) scope by `org_id` explicitly — they run on the service role, so
+      RLS does not filter for them
+- [x] Rate tables carry their own `org_id` (denormalised, stamped on write)
+      rather than inheriting it through the supplier
+- [x] Two-company tests: `__tests__/api/suppliers-org-scope.test.ts`,
+      `__tests__/api/rates-org-scope.test.ts`
 
 ---
 

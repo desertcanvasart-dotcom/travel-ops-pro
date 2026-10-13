@@ -69,6 +69,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const taken = await costTypeTaken(orgId, newCost.cost_type)
+    if (taken) return clashResponse(taken)
+
     const { data, error } = await supabaseAdmin
       .from('fixed_daily_costs')
       .insert({ ...newCost, org_id: orgId })
@@ -76,6 +79,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
+      if (error.code === '23505') return clashResponse(`A fixed cost called "${newCost.cost_type}" already exists — edit that one instead.`)
       console.error('POST fixed_daily_costs error:', error)
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
@@ -87,6 +91,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
+
+/** Cost types are one per company (UNIQUE(org_id, cost_type)) — and,
+ *  for pricing, regardless of case: "water bottle" is the Water Bottle
+ *  (lib/fixed-costs). A clash used to reach the database and come back as
+ *  "Internal server error"; it is a 409 that names the cost. */
+async function costTypeTaken(orgId: string, costType: unknown, exceptId?: string): Promise<string | null> {
+  const wanted = String(costType ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
+  if (!wanted) return null
+  const { data } = await supabaseAdmin.from('fixed_daily_costs').select('id, cost_type').eq('org_id', orgId)
+  const hit = (data ?? []).find((r: { id: string; cost_type: string }) =>
+    r.id !== exceptId && String(r.cost_type ?? '').trim().replace(/\s+/g, ' ').toLowerCase() === wanted)
+  return hit ? `A fixed cost called "${hit.cost_type}" already exists — edit that one instead.` : null
+}
+
+const clashResponse = (message: string) => NextResponse.json({ success: false, error: message }, { status: 409 })
 
 export async function PUT(request: NextRequest) {
   try {
@@ -120,6 +139,11 @@ export async function PUT(request: NextRequest) {
     if (updateFields.rate_currency !== undefined && tableColumns.has('rate_currency')) updateData.rate_currency = updateFields.rate_currency || null
     if (updateFields.is_active !== undefined && tableColumns.has('is_active')) updateData.is_active = updateFields.is_active
 
+    if (updateData.cost_type !== undefined) {
+      const taken = await costTypeTaken(orgId, updateData.cost_type, id)
+      if (taken) return clashResponse(taken)
+    }
+
     const { data, error } = await supabaseAdmin
       .from('fixed_daily_costs')
       .update(updateData)
@@ -129,6 +153,7 @@ export async function PUT(request: NextRequest) {
       .single()
 
     if (error) {
+      if (error.code === '23505') return clashResponse(`A fixed cost called "${updateData.cost_type}" already exists — edit that one instead.`)
       console.error('PUT fixed_daily_costs error:', error)
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
