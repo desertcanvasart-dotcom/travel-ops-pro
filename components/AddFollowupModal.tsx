@@ -2,11 +2,22 @@
 
 import { todayLocal } from '@/lib/today'
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase'
 import { X, Clock, AlertCircle, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
-const supabase = createClient()
+// Writes go through /api/followups, which checks the client is the active
+// company's and the role is the active company's (see lib/followups).
+const writeFollowup = async (url: string, method: 'POST' | 'PATCH' | 'DELETE', body?: Record<string, unknown>) => {
+  const response = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  })
+  if (!response.ok) {
+    const data = await response.json().catch(() => null)
+    throw new Error(data?.error || `HTTP ${response.status}`)
+  }
+}
 
 interface AddFollowupModalProps {
   isOpen: boolean
@@ -79,33 +90,23 @@ export default function AddFollowupModal({
 
       if (isEditMode) {
         // Update existing followup
-        const { error: updateError } = await supabase
-          .from('client_followups')
-          .update({
-            title: title,
-            followup_type: formData.followup_type,
-            due_date: formData.due_date,
-            priority: formData.priority,
-            description: formData.notes || null
-          })
-          .eq('id', editFollowup.id)
-
-        if (updateError) throw updateError
+        await writeFollowup(`/api/followups/${editFollowup.id}`, 'PATCH', {
+          title: title,
+          followup_type: formData.followup_type,
+          due_date: formData.due_date,
+          priority: formData.priority,
+          description: formData.notes || null
+        })
       } else {
         // Create new followup
-        const { error: insertError } = await supabase
-          .from('client_followups')
-          .insert({
-            client_id: clientId,
-            title: title,
-            followup_type: formData.followup_type,
-            due_date: formData.due_date,
-            priority: formData.priority,
-            status: 'pending',
-            description: formData.notes || null
-          })
-
-        if (insertError) throw insertError
+        await writeFollowup('/api/followups', 'POST', {
+          client_id: clientId,
+          title: title,
+          followup_type: formData.followup_type,
+          due_date: formData.due_date,
+          priority: formData.priority,
+          description: formData.notes || null
+        })
       }
 
       // Reset form
@@ -133,12 +134,7 @@ export default function AddFollowupModal({
     setError(null)
 
     try {
-      const { error: deleteError } = await supabase
-        .from('client_followups')
-        .delete()
-        .eq('id', editFollowup.id)
-
-      if (deleteError) throw deleteError
+      await writeFollowup(`/api/followups/${editFollowup.id}`, 'DELETE')
 
       // Success
       onSuccess()

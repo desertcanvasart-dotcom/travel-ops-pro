@@ -912,7 +912,9 @@
     "followup": "フォローアップ",
     "snoozed": "スヌーズしました",
     "success": "完了しました",
-    "urgent": "緊急"
+    "urgent": "緊急",
+    "failedToLoad": "フォローアップを読み込めませんでした。ページを再読み込みしてください。",
+    "listTruncated": "保留中のフォローアップ{matched}件のうち、期限の近い{shown}件を表示しています。カードの件数はすべてを数えています。"
   },
   "financialReports": {
     "financialReports": "財務レポート",
@@ -8492,7 +8494,7 @@
     "saving": "保存中...",
     "update": "更新",
     "confirmDelete": "タスク「{title}」を削除しますか？",
-    "confirmBulkArchive": "{count}件の完了タスクをアーカイブしますか？",
+    "confirmBulkArchive": "この会社の完了タスク{count}件をすべてアーカイブしますか？フィルターは適用されません。",
     "priorityLow": "低",
     "priorityMedium": "中",
     "priorityHigh": "高",
@@ -8537,7 +8539,9 @@
     "checklistUnpriced": "未見積",
     "checklistUnpricedCount": "未見積{count}件",
     "checklistUnpricedHint": "旅程の日程上は必要ですが、見積済みのサービスがまだありません。ここで手配するか、旅程の見積に追加してください。",
-    "statusChangeFailed": "ステータスを変更できませんでした"
+    "statusChangeFailed": "ステータスを変更できませんでした",
+    "saveFailed": "タスクを保存できませんでした",
+    "listTruncated": "条件に一致する{matched}件のうち、新しい{shown}件を表示しています。古いタスクを表示するにはフィルターを絞り込んでください。"
   },
   "resourceSummary": {
     "noResourcesAssigned": "リソース未割り当て",

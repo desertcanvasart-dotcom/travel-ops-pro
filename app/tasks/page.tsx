@@ -146,6 +146,8 @@ export default function TasksPage() {
   const [clients, setClients] = useState<Client[]>([])
   const [itineraries, setItineraries] = useState<Itinerary[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
+  // How many tasks matched the filters; the API lists at most its limit.
+  const [matched, setMatched] = useState(0)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -206,6 +208,7 @@ export default function TasksPage() {
         if (result.success) {
           setTasks(result.data)
           setSummary(result.summary)
+          setMatched(Number(result.matched) || result.data.length)
         }
       }
     } catch (error: any) {
@@ -354,6 +357,11 @@ export default function TasksPage() {
         setEditingTask(null)
         resetForm()
         fetchTasks()
+      } else {
+        // e.g. an invoice ID that is not this company's, or a removed assignee:
+        // the modal stayed open with no word of why.
+        const data = await response.json().catch(() => null)
+        await dialog.alert(t('saveFailed'), data?.error || t('saveFailed'), 'warning')
       }
     } catch (error) {
       console.error('Error saving task:', error)
@@ -402,30 +410,24 @@ export default function TasksPage() {
     }
   }
 
+  // Every done task of the company, whatever the filters: the server archives
+  // them in one statement (was one PUT per done task in the filtered list).
   const handleBulkArchiveDone = async () => {
-    const doneTasks = tasks.filter(t => t.status === 'done' && !t.archived)
-    if (doneTasks.length === 0) return
-    
-    if (!(await confirmDialog(t('confirmBulkArchive', { count: doneTasks.length }), { variant: 'warning' }))) return
+    const count = summary?.done ?? 0
+    if (count === 0) return
+
+    if (!(await confirmDialog(t('confirmBulkArchive', { count }), { variant: 'warning' }))) return
 
     setArchiving('bulk')
     try {
-      // allSettled so one failed PUT doesn't abort the whole batch (was
-      // Promise.all → first rejection left the rest unprocessed and the UI stale).
-      await Promise.allSettled(doneTasks.map(task =>
-        fetch(`/api/tasks/${task.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            archived: true,
-            archived_at: new Date().toISOString()
-          })
-        })
-      ))
+      const response = await fetch('/api/tasks/archive-done', { method: 'POST' })
+      if (!response.ok) {
+        const data = await response.json().catch(() => null)
+        await dialog.alert(t('saveFailed'), data?.error || t('saveFailed'), 'warning')
+      }
     } catch (error) {
       console.error('Error bulk archiving:', error)
     } finally {
-      // Always refetch so the table reflects DB truth, even on a partial failure.
       fetchTasks()
       setArchiving(null)
     }
@@ -574,7 +576,8 @@ export default function TasksPage() {
   }), [filteredTasks])
 
   const archivedTasks = filteredTasks.filter(t => t.archived)
-  const archivableDoneCount = tasks.filter(t => t.status === 'done' && !t.archived).length
+  // The company's non-archived done tasks (the Done card), not the loaded list's.
+  const archivableDoneCount = summary?.done ?? 0
 
   const getLinkedItemName = (type: string, id: string) => {
     if (type === 'client') {
@@ -889,6 +892,14 @@ export default function TasksPage() {
               </select>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* The API lists the newest tasks up to its limit; say so rather than
+          silently leave the oldest out. */}
+      {matched > tasks.length && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-2">
+          {t('listTruncated', { shown: tasks.length, matched })}
         </div>
       )}
 

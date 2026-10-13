@@ -141,16 +141,15 @@ export default function ClientProfilePage() {
   // Mark followup as complete
   const markFollowupComplete = async (followupId: string) => {
     try {
-      const { error } = await supabase
-        .from('client_followups')
-        .update({ 
-          status: 'completed',
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', followupId)
+      // Through the API: the active company's follow-up only, stamped with
+      // who completed it (see lib/followups).
+      const response = await fetch(`/api/followups/${followupId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'complete' })
+      })
+      if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `HTTP ${response.status}`)
 
-      if (error) throw error
-      
       fetchClientData() // Reload data
     } catch (error) {
       console.error('Error marking followup complete:', error)
