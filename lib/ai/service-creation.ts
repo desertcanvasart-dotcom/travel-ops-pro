@@ -828,7 +828,7 @@ export async function createLandItineraryServices(
   }
 
   // Fetch configurable fixed daily costs (water, tips)
-  const fixedCosts = await getFixedDailyCosts(orgId)
+  const fixedCosts = await getFixedDailyCosts(orgId, rates.rateNormalizer)
   const waterRatePerPerson = fixedCosts.waterPerPersonPerDay
 
   const marginMultiplier = 1 + (marginPercent / 100)

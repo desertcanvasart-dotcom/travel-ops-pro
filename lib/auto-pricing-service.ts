@@ -3049,6 +3049,8 @@ export async function calculateDayBasedPricing(
 
   // Water cost comes from fixedDailyCosts (fetched in the Step 4 batch above)
   const waterCostPerPax = fixedDailyCosts.waterPerPersonPerDay
+  // The built-in water default is never silent (lib/fixed-costs).
+  warnings.push(...(fixedDailyCosts.warnings ?? []))
 
   // ============================================
   // STEP 5: Calculate Single Supplement (whole tour)
@@ -3175,7 +3177,7 @@ export async function calculateDayBasedPricing(
     }
 
     // ----- TIPPING (context-aware per-role) -----
-    const { determineTipRolesForDay, formatTipServiceName } = await import('@/lib/tipping-utils')
+    const { determineTipRolesForDay, formatTipServiceName, priceTip } = await import('@/lib/tipping-utils')
     const hasAirportToday = day.services.airport_arrival || day.services.airport_departure
     const airportCount = (day.services.airport_arrival ? 1 : 0) + (day.services.airport_departure ? 1 : 0)
     const hasHotelNight = day.accommodation_type === 'hotel'
@@ -3194,21 +3196,29 @@ export async function calculateDayBasedPricing(
     for (const tipRole of dayTipRoles) {
       // Tips vary by place: the city picks the rate, falling back to the
       // country-wide row when this city has none of its own.
-      const tipRate = tippingRates.getRate(tipRole.role, tipRole.context, day.city)
-      if (tipRate > 0) {
-        const totalTipCost = tipRate * tipRole.quantity
-        fixedCosts += totalTipCost
+      // Each tip by its own Rate Unit (lib/tipping-utils priceTip): per day,
+      // per service, per night, once per cruise (its first day), per person.
+      const tip = tippingRates.getTip(tipRole.role, tipRole.context, day.city)
+      const line = tip && priceTip(tip, {
+        quantity: tipRole.quantity,
+        cruiseStart: day.is_cruise_day ? !previousDay?.is_cruise_day : undefined,
+      })
+      if (line) {
+        // A per-person tip scales with the group like the staff per-person
+        // rates above; every other unit is a group cost.
+        if (line.perPax) staffPerPax += line.total
+        else fixedCosts += line.total
         services.push({
           id: `day${day.day}-tips-${tipRole.role}`,
           dayNumber: day.day,
           serviceType: 'tips',
           serviceName: formatTipServiceName(tipRole.role, tipRole.context),
-          quantity: tipRole.quantity,
-          quantityMode: 'fixed',
-          unitCost: tipRate,
-          lineTotal: totalTipCost,
+          quantity: line.quantity,
+          quantityMode: line.perPax ? 'per_pax' : 'fixed',
+          unitCost: line.unitCost,
+          lineTotal: line.total,
           rateSource: 'tipping_rates',
-          isPerPax: false,
+          isPerPax: line.perPax,
           isOptional: false
         })
       }

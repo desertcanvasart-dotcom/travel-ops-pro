@@ -63,63 +63,110 @@ export default function ToursRatesPage() {
 
       {/* Rates Management */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Rates Management</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">The Rates hub</h2>
         <p className="text-gray-600 mb-4">
-          Manage all your pricing in one place. Go to <strong>Rates</strong> in the sidebar.
+          Open it from <strong>Home › Suppliers &amp; Rates › Rates Hub</strong>. The Suppliers
+          &amp; Rates menu is shown to <strong>admins</strong> and <strong>managers</strong>{' '}
+          (owners always); the rate pages are theirs too. The menu&rsquo;s four groups
+          (Accommodation, Transport &amp; Tickets, Guides &amp; Services, Costs) open the hub on
+          the matching tab, and list the rate pages underneath.
         </p>
 
-        <h3 className="text-lg font-medium text-gray-900 mb-3">Rate Categories</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left px-4 py-3 font-semibold text-gray-900 border-b border-gray-200">Category</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-900 border-b border-gray-200">What It Covers</th>
-              </tr>
-            </thead>
-            <tbody className="text-gray-700">
-              <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">Hotels</td><td className="px-4 py-2.5">Room rates by city, tier, and per person</td></tr>
-              <tr className="border-b border-gray-100 bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Transportation</td><td className="px-4 py-2.5">Vehicle rates by type, service type, and group size</td></tr>
-              <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">Guides</td><td className="px-4 py-2.5">Daily and hourly rates by language and grade (e.g. Egyptologist, senior), plus a &ldquo;throughout&rdquo; guide who accompanies the whole trip</td></tr>
-              <tr className="border-b border-gray-100 bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Entrance Fees</td><td className="px-4 py-2.5">Attraction tickets with EU and non-EU prices</td></tr>
-              <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">Meals</td><td className="px-4 py-2.5">Lunch and dinner rates by quality tier</td></tr>
-              <tr className="border-b border-gray-100 bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Activities</td><td className="px-4 py-2.5">Optional activities and excursions</td></tr>
-              <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">Cruises</td><td className="px-4 py-2.5">Nile cruise rates by ship and cabin type</td></tr>
-              <tr className="border-b border-gray-100 bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Airport Services</td><td className="px-4 py-2.5">Meet &amp; greet, VIP lounge, etc.</td></tr>
-              <tr className="border-b border-gray-100"><td className="px-4 py-2.5 font-medium">Sleeping Trains</td><td className="px-4 py-2.5">Overnight train rates by cabin type</td></tr>
-              <tr className="border-b border-gray-100 bg-gray-50/50"><td className="px-4 py-2.5 font-medium">Flights</td><td className="px-4 py-2.5">Domestic flight rates</td></tr>
-              <tr><td className="px-4 py-2.5 font-medium">Tipping</td><td className="px-4 py-2.5">Recommended tipping rates by service type</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <DocScreenshot src="/docs/tours-rates/rates-hub.jpg" alt="Rates hub showing rate category cards with counts and quick access links" />
+        <h3 className="text-lg font-medium text-gray-900 mb-3">Tabs</h3>
+        <p className="text-gray-600 mb-3">
+          Each tab lists your company&rsquo;s active rates of one kind, with the count in brackets:
+          Transport, Guides, Entrances (entrance fees, inactive ones included), Hotels, Meals,
+          Cruises, Sleep Train, Trains, Airport Asst., Hotel Asst. and Tips. Two links sit beside
+          them: <strong>Fixed Costs</strong> and <strong>Seasons</strong> (your seasonal premiums).
+          Flights, activities and attractions have their own pages and no hub tab. Every rate is
+          loaded, however many there are. If a tab&rsquo;s rates could not be loaded, a red notice
+          names it &mdash; an empty tab then means &ldquo;not loaded&rdquo;, not &ldquo;no
+          rates&rdquo;.
+        </p>
 
-        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Adding or Editing a Rate</h3>
-        <ol className="list-decimal list-inside space-y-2 text-gray-700">
-          <li>Go to the relevant rate category</li>
-          <li>Click <strong>Add New</strong> or click an existing rate to edit</li>
-          <li>Fill in the details (prices, descriptions, supplier info)</li>
-          <li>Click <strong>Save</strong></li>
-        </ol>
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">The four figures at the top</h3>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li><strong>Total Services</strong> &mdash; the eleven tab counts added up.</li>
+          <li><strong>Categories</strong> &mdash; always 11, the number of tabs.</li>
+          <li><strong>Cities</strong> &mdash; the different cities across transport, guides, entrances, hotels, meals, cruise embark and disembark cities, and train origins and destinations.</li>
+          <li><strong>Current View</strong> &mdash; the rows on the page you are looking at (at most the per-page size), not the filtered total.</li>
+        </ul>
+
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Filters and money</h3>
+        <ul className="list-disc list-inside space-y-1 text-gray-700 mb-3">
+          <li>Search looks in every field. City filters transport, guides, entrances, hotels and meals; Category filters entrances; Tier and Property Type filter hotels, and the Seasonal / Base button switches the hotel columns. 10, 20, 50 or 100 per page.</li>
+          <li>A rate entered in its own currency (its Currency field) is shown in that currency, unconverted. A rate without one is in your company&rsquo;s rate currency, shown in your display currency. Hotels show the per-person double price of their first period.</li>
+          <li><strong>Export view</strong> saves the current tab&rsquo;s rows as filtered on screen, every field, zeros as 0 and lists written out. It is a file to read, not to re-import. <strong>Print</strong> prints the page.</li>
+        </ul>
         <Tip>
           Rates are used by the auto-pricing engine when you build itineraries in <strong>Auto</strong> cost mode. Keep them up to date for accurate quotes.
         </Tip>
 
-        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">EU vs Non-EU Pricing</h3>
-        <p className="text-gray-600 mb-6">
-          Many rates (especially entrance fees and transportation) have different prices for European passport holders and non-European passport holders. Make sure to set both when adding rates.
-        </p>
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Adding or editing a rate</h3>
+        <ol className="list-decimal list-inside space-y-2 text-gray-700">
+          <li>Open the rate page from the menu (the hub lists; the rate pages edit)</li>
+          <li>Click <strong>Add</strong>, or edit an existing rate</li>
+          <li>Fill in the prices (EU and non-EU passport where the rate has both), the supplier and the Currency if it is not your rate currency</li>
+          <li>Save</li>
+        </ol>
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Importing rates from a spreadsheet</h3>
         <p className="text-gray-600 mb-3">
-          Each rate category has its own CSV import, so you can load a whole contract at once
-          instead of typing rows. Every rate sheet carries a <strong>supplier code</strong> column,
-          so each rate attaches to the right supplier &mdash; and a rate whose code is not yet in
-          this install is reported and skipped rather than guessed. See{' '}
+          Each rate page has <strong>Sample CSV</strong>, <strong>Export</strong> and{' '}
+          <strong>Import CSV</strong>; Hotels and Nile Cruises also have{' '}
+          <strong>Sample Periods</strong>, <strong>Export Periods</strong> and{' '}
+          <strong>Import Periods</strong> for their dated prices. An import shows a preview first;
+          then it imports the valid rows and lists the rows it skipped, with the reason. A rate
+          naming a supplier code your company does not have is skipped rather than guessed. See{' '}
           <Link href="/docs/bulk-csv" className="text-primary-600 hover:underline">Bulk Import (CSV)</Link>{' '}
-          for the shared rules and <Link href="/docs/suppliers" className="text-primary-600 hover:underline">Suppliers</Link>{' '}
-          for why the code matters.
+          and <Link href="/docs/rate-periods" className="text-primary-600 hover:underline">Rate Periods</Link>.
         </p>
+
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Costs: tips, fixed costs, commissions</h3>
+        <ul className="list-disc list-inside space-y-2 text-gray-700 mb-3">
+          <li>
+            <strong>Tipping</strong> (<code>/rates/tipping</code>): each tip has a role, a context,
+            a city (blank = anywhere), a rate and a <strong>Rate Unit</strong>. Pricing charges one
+            tip per role per day &mdash; the most specific match: role + context + city, then role +
+            context anywhere, then role + city, then role anywhere &mdash; converted from the
+            tip&rsquo;s currency and rounded to cents. By unit: <em>per day</em> once a day the role
+            works; <em>per service</em> once per service that day (two airports, two porter tips);{' '}
+            <em>per night</em> once per night covered; <em>per cruise</em> once, on the first day of
+            the cruise; <em>per person</em> per traveller. A unit your company added in the
+            vocabulary has no rule and is not priced. Leaving Service Code blank makes one from
+            role, context and city. The same role + context + city twice, or a code already used,
+            is refused with a message.
+          </li>
+          <li>
+            In the <strong>Pricing Grid</strong>, a per-person tip is charged per traveller; every
+            other tip once per pick per day for the group (pick a per-cruise tip on one day of the
+            cruise). A guide&rsquo;s tips drop when the guide is off.
+          </li>
+          <li>
+            <strong>Fixed Costs</strong> (<code>/rates/fixed-costs</code>): pricing uses one cost,{' '}
+            <strong>Water Bottle</strong> (capital letters ignored), per person per touring day,
+            converted from its currency. Other cost types are kept for reference and marked{' '}
+            &ldquo;Not priced&rdquo;. With no active Water Bottle row &mdash; or one whose currency
+            has no exchange rate &mdash; pricing uses a built-in 2.00 per person per day and the
+            quote shows a warning saying so. A second cost with the same name is refused. A change
+            may take up to five minutes to reach every server.
+          </li>
+          <li>
+            <strong>Commission Rates</strong> (<code>/rates/commissions</code>): a rate from 0 to
+            100 on the supplier, with a direction. <em>We receive</em> = rate × the
+            supplier&rsquo;s price on the service; <em>We pay</em> = rate × (client price −
+            supplier cost), nothing when there is no profit. A service&rsquo;s own commission rate
+            overrides the supplier&rsquo;s. 0% is shown and saved as no commission.
+          </li>
+        </ul>
+
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">What the hub does not do</h3>
+        <ul className="list-disc list-inside space-y-1 text-gray-700 mb-6">
+          <li>It does not edit rates; the rate pages do.</li>
+          <li>It does not convert a rate&rsquo;s own currency into yours.</li>
+          <li>Its Export view is not an import sheet.</li>
+          <li>It has no tabs for flights, activities or attractions.</li>
+        </ul>
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Labels in your own words</h3>
         <p className="text-gray-600">

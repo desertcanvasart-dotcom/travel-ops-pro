@@ -138,13 +138,17 @@ describe('the suppliers screen', () => {
     expect(csv).not.toContain('Other Palace')
   })
 
-  it("the CSV import stamps the company; another company's supplier of the same name is not 'already on file'", async () => {
+  it("the CSV import stamps the company; another company's supplier of the same name is not on file here", async () => {
+    // A row matching this company's supplier UPDATES it (lib/suppliers/
+    // import-csv); one matching only the other company's is added here.
     const csvData = 'name,type\nOther Palace,hotel\nNile Palace,hotel\n'
     const out = await (await importRoute.POST(json({ csvData }))).json()
-    expect(out.alreadyOnFile.map((r: any) => r.name)).toEqual(['Nile Palace'])
+    expect(out.updates.map((r: any) => r.name)).toEqual(['Nile Palace'])
     expect(out.inserted).toBe(1)
     const mine = (await rows('suppliers')).filter(s => s.name === 'Other Palace')
     expect(mine.map(s => s.org_id).sort()).toEqual(['org-a', 'org-b'])
+    // Company B's supplier was not touched by A's update.
+    expect((await rows('suppliers')).find(s => s.id === 'sb-hotel')).toMatchObject({ name: 'Other Palace', org_id: 'org-b' })
   })
 })
 

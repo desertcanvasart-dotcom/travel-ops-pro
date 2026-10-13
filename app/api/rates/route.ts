@@ -7,6 +7,7 @@ import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { getOrgRateCurrency, normaliseRateCurrency } from '@/lib/org-rate-currency'
 import { createRateNormalizer, type RateCurrencyTable } from '@/lib/rates/rate-currency'
+import { selectAllRows } from '@/lib/db/select-all-rows'
 
 // Which rate table each ?type= reads, for the in_org_currency conversion below.
 // Types missing here (guide = a VIEW over suppliers, service_fee) carry no
@@ -22,6 +23,31 @@ const TYPE_TABLE: Record<string, RateCurrencyTable> = {
   sleeping_trains: 'sleeping_train_rates',
   trains: 'train_rates',
   tipping: 'tipping_rates',
+}
+
+type Order = { column: string; ascending?: boolean }[]
+
+/** The transportation hub row. Keeps `id`: the in_org_currency path below
+ *  matches the normaliser's misses by it, and without it an unconvertible
+ *  row came back labelled as converted ('undefined' never equals a miss). */
+export function transportHubRow(rate: any) {
+  return {
+    id: rate.id,
+    service_code: rate.service_code || rate.id,
+    // The row's own entry currency — a transform must not strip it
+    // (the attractions round-trip bug, one route over).
+    rate_currency: rate.rate_currency ?? null,
+    service_type: rate.service_type,
+    city: rate.city,
+    origin_city: rate.origin_city,
+    destination_city: rate.destination_city,
+    supplier_name: rate.supplier_name,
+    notes: rate.notes,
+    includes: rate.includes,
+    // The vehicles list (lib/rates/vehicle-bands) — every vehicle the
+    // row prices, the agency's own included, is here and nowhere else.
+    vehicles: rate.vehicles ?? null,
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -40,8 +66,12 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    let data: any[] = []
-    let error = null
+    // Each type names a fresh query and its order; every row is then read
+    // past PostgREST's 1000-row cap (lib/db/select-all-rows) — the hub's tab
+    // counts, "Total Services" and "Cities" stopped silently at a thousand.
+    let build: () => any
+    let order: Order = []
+    let transform: ((row: any) => any) | null = null
 
     switch (type) {
       case 'accommodation':
@@ -51,87 +81,38 @@ export async function GET(request: NextRequest) {
         // really contact cards, while the hotels rate page (which reads this
         // table) correctly showed none. Two screens, two answers, and the
         // fabricated zeros looked like real prices.
-        const accommodationQuery = supabase
-          .from('accommodation_rates')
-          .select('*')
-          .eq('org_id', orgId)
-          .eq('is_active', true)
-
-        if (city) {
-          accommodationQuery.ilike('city', city)
+        build = () => {
+          const q = supabase.from('accommodation_rates').select('*').eq('org_id', orgId).eq('is_active', true)
+          return city ? q.ilike('city', city) : q
         }
-
-        const accommodationResult = await accommodationQuery
-        data = accommodationResult.data || []
-        error = accommodationResult.error
         break
 
       case 'meal':
         // The RATE table, not restaurant_contacts — see the note above. The
         // 26 "meals" the hub listed were the restaurant contact directory,
         // every one of them priced at zero.
-        const mealQuery = supabase
-          .from('meal_rates')
-          .select('*')
-          .eq('org_id', orgId)
-          .eq('is_active', true)
-
-        if (city) {
-          mealQuery.ilike('city', city)
+        build = () => {
+          const q = supabase.from('meal_rates').select('*').eq('org_id', orgId).eq('is_active', true)
+          return city ? q.ilike('city', city) : q
         }
-
-        const mealResult = await mealQuery
-        data = mealResult.data || []
-        error = mealResult.error
         break
 
       case 'entrance':
-        // ✅ Keep entrance_fees table (already correct)
-        const entranceQuery = supabase
-          .from('entrance_fees')
-          .select('*')
-          .eq('org_id', orgId)
-        
-        if (city) {
-          entranceQuery.eq('city', city)
+        // Every entrance fee, inactive included (the hub lists both).
+        build = () => {
+          const q = supabase.from('entrance_fees').select('*').eq('org_id', orgId)
+          return city ? q.eq('city', city) : q
         }
-        
-        const entranceResult = await entranceQuery
-        data = entranceResult.data || []
-        error = entranceResult.error
         break
 
       case 'transportation':
-        // ✅ Pull from transportation_rates table (one row per service with tiered vehicle rates)
-        const transportQuery = supabase
-          .from('transportation_rates')
-          .select('*')
-          .eq('org_id', orgId)
-          .eq('is_active', true)
-
-        if (city) {
-          transportQuery.eq('city', city)
+        // One row per service with tiered vehicle rates.
+        build = () => {
+          const q = supabase.from('transportation_rates').select('*').eq('org_id', orgId).eq('is_active', true)
+          return city ? q.eq('city', city) : q
         }
-
-        const transportResult = await transportQuery.order('city').order('service_type')
-
-        data = (transportResult.data || []).map((rate: any) => ({
-          service_code: rate.service_code || rate.id,
-          // The row's own entry currency — a transform must not strip it
-          // (the attractions round-trip bug, one route over).
-          rate_currency: rate.rate_currency ?? null,
-          service_type: rate.service_type,
-          city: rate.city,
-          origin_city: rate.origin_city,
-          destination_city: rate.destination_city,
-          supplier_name: rate.supplier_name,
-          notes: rate.notes,
-          includes: rate.includes,
-          // The vehicles list (lib/rates/vehicle-bands) — every vehicle the
-          // row prices, the agency's own included, is here and nowhere else.
-          vehicles: rate.vehicles ?? null,
-        }))
-        error = transportResult.error
+        order = [{ column: 'city' }, { column: 'service_type' }]
+        transform = transportHubRow
         break
 
       case 'guide':
@@ -141,33 +122,15 @@ export async function GET(request: NextRequest) {
         // guide rates page — and the pricing engine — read guide_rates with
         // the real language and rate. Same class as the accommodation fix
         // above: two screens, two answers.
-        const guideQuery = supabase
-          .from('guide_rates')
-          .select('*')
-          .eq('org_id', orgId)
-          .eq('is_active', true)
-
-        if (city) {
-          guideQuery.ilike('city', city)
+        build = () => {
+          const q = supabase.from('guide_rates').select('*').eq('org_id', orgId).eq('is_active', true)
+          return city ? q.ilike('city', city) : q
         }
-
-        const guideResult = await guideQuery
-        data = guideResult.data || []
-        error = guideResult.error
         break
 
       case 'service':
       case 'service_fee':
-        // Keep service_fees table if it exists
-        const serviceQuery = supabase
-          .from('service_fees')
-          .select('*')
-          .eq('org_id', orgId)
-          .eq('is_active', true)
-        
-        const serviceResult = await serviceQuery
-        data = serviceResult.data || []
-        error = serviceResult.error
+        build = () => supabase.from('service_fees').select('*').eq('org_id', orgId).eq('is_active', true)
         break
 
       // ============================================
@@ -175,95 +138,35 @@ export async function GET(request: NextRequest) {
       // ============================================
 
       case 'airport_staff':
-        // ✅ Pull from airport_staff_rates table
-        const airportStaffQuery = supabase
-          .from('airport_staff_rates')
-          .select('*')
-          .eq('org_id', orgId)
-          .eq('is_active', true)
-          .order('airport_code')
-          .order('service_type')
-        
-        const airportStaffResult = await airportStaffQuery
-        data = airportStaffResult.data || []
-        error = airportStaffResult.error
+        build = () => supabase.from('airport_staff_rates').select('*').eq('org_id', orgId).eq('is_active', true)
+        order = [{ column: 'airport_code' }, { column: 'service_type' }]
         break
 
       case 'hotel_staff':
-        // ✅ Pull from hotel_staff_rates table
-        const hotelStaffQuery = supabase
-          .from('hotel_staff_rates')
-          .select('*')
-          .eq('org_id', orgId)
-          .eq('is_active', true)
-          .order('service_type')
-          .order('hotel_category')
-        
-        const hotelStaffResult = await hotelStaffQuery
-        data = hotelStaffResult.data || []
-        error = hotelStaffResult.error
+        build = () => supabase.from('hotel_staff_rates').select('*').eq('org_id', orgId).eq('is_active', true)
+        order = [{ column: 'service_type' }, { column: 'hotel_category' }]
         break
 
       case 'cruises':
-        // ✅ Pull from nile_cruises table
-        const cruisesQuery = supabase
-          .from('nile_cruises')
-          .select('*')
-          .eq('org_id', orgId)
-          .eq('is_active', true)
-          .order('ship_name')
-          .order('cabin_type')
-        
-        const cruisesResult = await cruisesQuery
-        data = cruisesResult.data || []
-        error = cruisesResult.error
+        build = () => supabase.from('nile_cruises').select('*').eq('org_id', orgId).eq('is_active', true)
+        order = [{ column: 'ship_name' }, { column: 'cabin_type' }]
         break
 
       case 'sleeping_trains':
-        // ✅ Pull from sleeping_train_rates table
-        const sleepingTrainsQuery = supabase
-          .from('sleeping_train_rates')
-          // The rate names WHICH train it prices; the hub could not show it.
-          .select('*, supplier_properties(name)')
-          .eq('org_id', orgId)
-          .eq('is_active', true)
-          .order('origin_city')
-          .order('destination_city')
-        
-        const sleepingTrainsResult = await sleepingTrainsQuery
-        data = sleepingTrainsResult.data || []
-        error = sleepingTrainsResult.error
+        // The rate names WHICH train it prices; the hub could not show it.
+        build = () => supabase.from('sleeping_train_rates').select('*, supplier_properties(name)').eq('org_id', orgId).eq('is_active', true)
+        order = [{ column: 'origin_city' }, { column: 'destination_city' }]
         break
 
       case 'trains':
-        // ✅ Pull from train_rates table
-        const trainsQuery = supabase
-          .from('train_rates')
-          // The rate names WHICH train it prices; the hub could not show it.
-          .select('*, supplier_properties(name)')
-          .eq('org_id', orgId)
-          .eq('is_active', true)
-          .order('origin_city')
-          .order('destination_city')
-        
-        const trainsResult = await trainsQuery
-        data = trainsResult.data || []
-        error = trainsResult.error
+        // The rate names WHICH train it prices; the hub could not show it.
+        build = () => supabase.from('train_rates').select('*, supplier_properties(name)').eq('org_id', orgId).eq('is_active', true)
+        order = [{ column: 'origin_city' }, { column: 'destination_city' }]
         break
 
       case 'tipping':
-        // ✅ Pull from tipping_rates table
-        const tippingQuery = supabase
-          .from('tipping_rates')
-          .select('*')
-          .eq('org_id', orgId)
-          .eq('is_active', true)
-          .order('role_type')
-          .order('context')
-        
-        const tippingResult = await tippingQuery
-        data = tippingResult.data || []
-        error = tippingResult.error
+        build = () => supabase.from('tipping_rates').select('*').eq('org_id', orgId).eq('is_active', true)
+        order = [{ column: 'role_type' }, { column: 'context' }]
         break
 
       default:
@@ -273,15 +176,18 @@ export async function GET(request: NextRequest) {
         )
     }
 
-    if (error) {
-      console.error('Supabase error:', error)
-      // Return empty array instead of error for missing tables
-      return NextResponse.json({
-        success: true,
-        data: [],
-        count: 0
-      })
+    const result = await selectAllRows<any>(build, { order: [...order, { column: 'id' }] })
+
+    if (result.error) {
+      // A failed read is an error, not "no rates": answering success with []
+      // made the hub show 0 for the category, indistinguishable from empty.
+      console.error('Supabase error:', result.error)
+      return NextResponse.json(
+        { success: false, error: `Could not load ${type} rates` },
+        { status: 500 }
+      )
     }
+    let data: any[] = (result.data ?? []).map(row => (transform ? transform(row) : row))
 
     // A PRICING screen may ask for the rows in the org's rate currency
     // (in_org_currency=true). The tour-builder's selectors sum what they get
@@ -315,9 +221,9 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('API error:', error)
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Failed to fetch rates' 
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch rates'
       },
       { status: 500 }
     )

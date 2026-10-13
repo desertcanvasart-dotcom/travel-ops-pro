@@ -265,7 +265,7 @@ export async function createCruiseItineraryServices(
   const { data: activityRates } = await supabase.from('activity_rates').select('*').eq('org_id', orgId ?? NO_ORG).eq('is_active', true)
 
   // 5. Water rate
-  const fixedCosts = await getFixedDailyCosts(orgId)
+  const fixedCosts = await getFixedDailyCosts(orgId, cruiseNormalizer)
   const waterRatePerPerson = fixedCosts.waterPerPersonPerDay
 
   // ============================================

@@ -12,17 +12,23 @@ export default function RatePeriodsPage() {
       </nav>
 
       <h1 className="text-3xl font-bold text-gray-900 mb-4">Rate Periods</h1>
+      <p className="text-gray-600 mb-4">
+        Hotels, Nile cruises and flights carry dated price periods: each period has a name, a
+        From and To date, and its own prices. A property that prices April,
+        May&ndash;September, October&ndash;19 December, Christmas and January&ndash;March has
+        five periods and five sets of rates.
+      </p>
       <p className="text-gray-600 mb-8">
-        Hotels and Nile cruises take as many dated price periods as the contract has. A property
-        that prices April, May&ndash;September, October&ndash;19 December, Christmas and
-        January&ndash;March has five periods and five sets of rates &mdash; not three.
+        A rate can carry at most <strong>6 periods</strong>. Saving or importing more is refused
+        with a message; nothing is cut off silently. Rate pages are open to admins and managers
+        (owners always): <strong>Home › Suppliers &amp; Rates</strong>.
       </p>
 
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Adding periods</h2>
         <p className="text-gray-600 mb-3">
-          Open <strong>Rates &rarr; Hotels</strong> or <strong>Rates &rarr; Nile Cruises</strong>,
-          edit a rate, and find <strong>Rate periods</strong>. Press <strong>Add period</strong>
+          Open <strong>Rates &rarr; Hotels</strong>, <strong>Rates &rarr; Nile Cruises</strong>{' '}
+          or <strong>Rates &rarr; Flights</strong>, edit a rate, and find <strong>Rate periods</strong>. Press <strong>Add period</strong>
           for each dated block on the contract, then give it a name, a From and To date, and its
           rates.
         </p>
@@ -40,14 +46,21 @@ export default function RatePeriodsPage() {
           season boundary is charged correctly rather than at the rate of the night it started.
         </p>
         <p className="text-gray-600 mb-3">
-          Where two periods overlap &mdash; a Christmas window sitting inside a broad high season,
-          which is how contracts are usually written &mdash; the <strong>shorter</strong> period
-          wins on the days they share. That matches how you would read the contract yourself.
+          Periods may overlap. Where they do &mdash; a Christmas window sitting inside a broad high
+          season, which is how contracts are usually written &mdash; the <strong>shortest</strong>{' '}
+          period containing the date wins. That matches how you would read the contract yourself.
+        </p>
+        <p className="text-gray-600 mb-3">
+          A night that no period covers has <strong>no price</strong>: it is reported as unpriced,
+          never priced from another period. The first period&rsquo;s prices are also copied to the
+          rate&rsquo;s base columns, for the few screens that show a single price with no date.
         </p>
         <Tip>
           The editor warns you about overlaps and about gaps no period covers. Neither stops you
           saving: an overlap is often deliberate, and a gap may be a period you have not typed
-          yet. They are shown because they are also what a mistyped year looks like.
+          yet. They are shown because they are also what a mistyped year looks like. The periods
+          spreadsheet import does <em>not</em> show these warnings &mdash; open the rate in the
+          editor to check.
         </Tip>
       </section>
 
@@ -85,18 +98,31 @@ export default function RatePeriodsPage() {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Loading a contract from a spreadsheet</h2>
         <p className="text-gray-600 mb-3">
           A contract usually arrives as a table of periods, so there is a sheet shaped the same
-          way: one row per dated block, as many rows per property as you need.
+          way: one row per dated block, up to six rows per rate. The Hotels and Nile Cruises pages
+          have it (<strong>Sample Periods</strong>, <strong>Export Periods</strong>,{' '}
+          <strong>Import Periods</strong>); flights do not.
         </p>
         <ol className="list-decimal list-inside space-y-2 text-gray-700">
-          <li>Press <strong>Sample Periods</strong> to get a file with the right columns and two
-            example rows</li>
-          <li>Replace the example rows with the contract &mdash; the Service Code column must
-            match a rate that already exists</li>
+          <li>Press <strong>Sample Periods</strong> to get a file with the right columns and example rows</li>
+          <li>Fill it in: <strong>Service Code</strong> (cruises: <strong>Cruise Code</strong>),
+            Property Name or Ship Name, <strong>Period Name</strong>, <strong>Season</strong> (a
+            word or key from your Rate seasons vocabulary), <strong>From</strong> and{' '}
+            <strong>To</strong> (YYYY-MM-DD or DD/MM/YYYY), then the price columns, such as
+            &ldquo;PP Double (EU passport)&rdquo; or, for ships, Single/Double/Triple/Suite per
+            passport group</li>
           <li>Press <strong>Import Periods</strong> and check the preview</li>
         </ol>
         <p className="text-gray-600 mt-3">
-          The preview says exactly which properties change and from how many periods to how many.
-          Nothing is written until you confirm.
+          Prices are in the rate&rsquo;s own currency (the Currency set on the rate, or your
+          company&rsquo;s rate currency if it has none) &mdash; the sheet has no currency column.
+          Write plain numbers, with a decimal point, not a decimal comma.
+        </p>
+        <p className="text-gray-600 mt-3">
+          The preview lists each rate as &ldquo;N periods &rarr; M&rdquo;. Nothing is written until
+          you confirm. A row is refused when its code is not an existing rate (&ldquo;Create it
+          first&rdquo;), its season word is unknown or its dates are not dates; a rate with any
+          refused row is left untouched as a whole, and a rate with more than six rows is refused.
+          The example rows from the sample sheet are skipped.
         </p>
         <p className="text-gray-600 mt-3">
           The sheet also carries your supplements: two columns per entry in your vocabulary, one
@@ -106,8 +132,8 @@ export default function RatePeriodsPage() {
           everywhere is taken off it. A sheet with no supplement columns leaves the lists alone.
         </p>
         <Tip>
-          Importing <strong>replaces</strong> the periods of every property named in the file. A
-          new contract supersedes the old one. Properties not named in the file are untouched.
+          Importing <strong>replaces</strong> the periods of every rate named in the file. A
+          new contract supersedes the old one. Rates not named in the file are untouched.
         </Tip>
       </section>
 
@@ -137,6 +163,16 @@ export default function RatePeriodsPage() {
           Your own high dates &mdash; Golden Week, Obon, New Year &mdash; are a separate premium
           added to the selling price, under <strong>Settings &rarr; Seasonal Premiums</strong>.
         </p>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>It does not hold more than six periods on one rate.</li>
+          <li>It does not price a night outside every period from the nearest one.</li>
+          <li>The periods spreadsheet does not warn about overlaps or gaps, and does not create rates.</li>
+          <li>There is no periods spreadsheet for flights; their periods are entered in the editor.</li>
+        </ul>
       </section>
     </div>
   )
