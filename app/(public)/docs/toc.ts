@@ -146,7 +146,7 @@ export const CATEGORIES: DocCategory[] = [
       { href: '/docs/traveller-portal', icon: Globe, title: 'Traveller Portal', description: 'The page your customers see: a private link per traveller, the form that replaces the posted 申込書, and who is allowed to see what.' },
       { href: '/docs/passport-documents', icon: IdCard, title: 'Passport & Documents', description: 'Travellers attach their passport from their own link. Stored privately, opened by a short-lived link, deleted automatically after the trip.' },
       { href: '/docs/calendar', icon: Calendar, title: 'Calendar', description: 'Month, week, and timeline views of all tours. Drag-to-reschedule, resource conflict detection, and team-wide visibility.', covers: ['/calendar'] },
-      { href: '/docs/extras', icon: Sparkles, title: 'Extras & Upgrades', description: 'Add-ons, upgrades and options offered on top of a trip — priced off-margin, per-row currency, and attached from the itinerary.', covers: ['/rates/extras'] },
+      { href: '/docs/extras', icon: Sparkles, title: 'Extras', description: 'Add-ons, upgrades and options offered on top of a trip — priced off-margin, per-row currency, and attached from the itinerary.', covers: ['/rates/extras'] },
     ],
   },
   {
