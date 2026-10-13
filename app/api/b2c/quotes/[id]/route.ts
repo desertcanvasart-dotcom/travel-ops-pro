@@ -16,7 +16,7 @@ import { itineraryPax, offerCostBase, OFFER_ITINERARY_COLUMNS, pickB2cQuoteUpdat
 import { bookingsFromQuote, MANAGER_ROLES, quoteLockReason } from '@/lib/quotes/lock'
 import { deleteQuote } from '@/lib/quotes/delete-quote'
 import { withEffectiveStatus } from '@/lib/quotes/validity'
-import { getOrgVatRate, vatColumns } from '@/lib/vat'
+import { getOrgVatRate, loadTripVatExtras, offerVatExcluded, vatColumns, vatUpdateColumns } from '@/lib/vat'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabaseAdmin = createClient(
@@ -109,16 +109,22 @@ export async function PUT(
 
     // VAT (lib/vat.ts). Switched on or off: recorded on the offer's net at the
     // company's rate today. Re-priced while on: the new net at the rate the
-    // offer recorded. Sent unchanged with nothing else: left as it is.
+    // offer recorded. Sent unchanged with nothing else: left as it is. Either
+    // way the trip's extras' share of the price is not taxed (owner, 2026-10-13).
     const vatWas = current.vat_applied === true
     const vatOn = vatWanted ?? vatWas
     if (vatOn !== vatWas || (vatOn && updates.selling_price !== undefined)) {
-      Object.assign(updates, vatColumns({
+      const net = updates.selling_price ?? current.selling_price
+      const currency = (updates.currency as string | undefined) ?? current.currency
+      Object.assign(updates, vatUpdateColumns(vatColumns({
         applied: vatOn,
-        net: updates.selling_price ?? current.selling_price,
+        net,
         rate: vatOn !== vatWas ? await getOrgVatRate(supabaseAdmin, orgId) : current.vat_rate,
-        currency: (updates.currency as string | undefined) ?? current.currency,
-      }))
+        currency,
+        excluded: vatOn
+          ? offerVatExcluded({ sellingPrice: net, cost: updates.total_cost ?? current.total_cost, extrasCost: (await loadTripVatExtras(supabaseAdmin, current.itinerary_id)).excluded_cost, currency })
+          : 0,
+      }), current))
     }
 
     if (Object.keys(updates).length === 0) {

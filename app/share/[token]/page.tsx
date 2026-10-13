@@ -17,7 +17,7 @@
 // chrome. A client should not see the operator's tooling.
 
 import { cache } from 'react'
-import { totalInclVatLabel, totalWithVat, vatMarker, vatOnLiveNet, type VatRecord } from '@/lib/vat'
+import { loadTripVatExtras, totalInclVatLabel, totalWithVat, vatMarker, vatOnLiveNet, type VatRecord } from '@/lib/vat'
 import type { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
@@ -130,17 +130,23 @@ const loadShare = cache(async function loadShare(
     : DEFAULT_BRAND
 
   const clientItinerary = toClientItinerary(itinerary, days ?? [])
+  const tripPrice = clientItinerary.totalPrice
   clientItinerary.totalPrice = shareTotalWithExtras(
     clientItinerary.totalPrice,
     clientItinerary.currency,
     (bookings ?? []) as Array<Record<string, unknown>>
   )
+  // Not taxed (owner, 2026-10-13): the booking's confirmed extras added just
+  // above, and the trip's own extras lines.
+  const vatExcluded = itinerary.vat_applied === true
+    ? (Number(clientItinerary.totalPrice) || 0) - (Number(tripPrice) || 0) + (await loadTripVatExtras(supabase, share.itinerary_id)).vat_excluded
+    : 0
 
   return {
     itinerary: clientItinerary,
     // VAT on the total shown, at the rate the trip recorded from its quote
     // (lib/vat.ts) — always stated beside the price.
-    vat: vatOnLiveNet(itinerary, clientItinerary.totalPrice, clientItinerary.currency),
+    vat: vatOnLiveNet({ ...itinerary, vat_excluded: vatExcluded }, clientItinerary.totalPrice, clientItinerary.currency),
     priceWithheld: !price.show,
     messages: toClientTripMessages((messageRows ?? []) as Array<Record<string, unknown>>),
     operator: {

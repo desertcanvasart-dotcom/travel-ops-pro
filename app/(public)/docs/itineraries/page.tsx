@@ -117,7 +117,7 @@ export default function ItinerariesPage() {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">VAT</h2>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
           <li>A trip carries VAT when the quote it was converted from, or the quote it was booked from, carried VAT. It takes that quote&apos;s rate.</li>
-          <li>The price card shows <strong>VAT 14% included: &lt;amount&gt;</strong> or <strong>VAT not applied</strong>. The amount is the trip&apos;s current client total at the recorded rate, so it follows the total when the trip is edited.</li>
+          <li>The price card shows <strong>VAT 14% included: &lt;amount&gt;</strong> or <strong>VAT not applied</strong>. The amount is the trip&apos;s current client total, less the client price of its lines of type Extra, at the recorded rate, so it follows the total when the trip is edited. Extras and insurance carry no VAT; when the trip has Extra lines the line ends <strong>(extras and insurance not taxed)</strong>.</li>
           <li>The itinerary PDF, the email and WhatsApp message, the share page, the contract and the traveller portal state the same line; the PDF, email and share page also give the total including VAT.</li>
           <li>The invoice created from the trip starts with VAT on when the trip carries it.</li>
         </ul>

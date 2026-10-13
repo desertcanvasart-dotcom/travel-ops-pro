@@ -1529,6 +1529,7 @@ export interface Database {
           vat_applied: boolean
           vat_rate: number | null
           vat_amount: number
+          vat_base: number | null
         }
         Insert: {
           id?: string
@@ -1564,6 +1565,7 @@ export interface Database {
           vat_applied?: boolean
           vat_rate?: number | null
           vat_amount?: number
+          vat_base?: number | null
         }
         Update: {
           id?: string
@@ -1599,6 +1601,7 @@ export interface Database {
           vat_applied?: boolean
           vat_rate?: number | null
           vat_amount?: number
+          vat_base?: number | null
         }
         Relationships: [
           {
@@ -6599,6 +6602,7 @@ export interface Database {
           org_id: string
           full_trip_cost: number | null
           vat_applied: boolean
+          vat_base: number | null
         }
         Insert: {
           id?: string
@@ -6636,6 +6640,7 @@ export interface Database {
           org_id: string
           full_trip_cost?: number | null
           vat_applied?: boolean
+          vat_base?: number | null
         }
         Update: {
           id?: string
@@ -6673,6 +6678,7 @@ export interface Database {
           org_id?: string
           full_trip_cost?: number | null
           vat_applied?: boolean
+          vat_base?: number | null
         }
         Relationships: [
           {
@@ -11345,6 +11351,7 @@ export interface Database {
           vat_applied: boolean
           vat_rate: number | null
           vat_amount: number
+          vat_base: number | null
         }
         Insert: {
           id?: string
@@ -11393,6 +11400,7 @@ export interface Database {
           vat_applied?: boolean
           vat_rate?: number | null
           vat_amount?: number
+          vat_base?: number | null
         }
         Update: {
           id?: string
@@ -11441,6 +11449,7 @@ export interface Database {
           vat_applied?: boolean
           vat_rate?: number | null
           vat_amount?: number
+          vat_base?: number | null
         }
         Relationships: [
           {

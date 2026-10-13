@@ -19,7 +19,7 @@ import { getCurrentOrgId, getCurrentUserId, getCurrentUserRole, noOrgResponse } 
 import { MANAGER_ROLES } from '@/lib/quotes/lock'
 import { itineraryPax, offerCostBase, OFFER_ITINERARY_COLUMNS, resolveOfferCurrency, resolveTravellers } from '@/lib/b2c/quote-updates'
 import { statusFilter, todayIso, withEffectiveStatus } from '@/lib/quotes/validity'
-import { getOrgVatRate, parseVatApplied, vatColumns, vatInsertColumns } from '@/lib/vat'
+import { getOrgVatRate, loadTripVatExtras, offerVatExcluded, parseVatApplied, vatColumns, vatInsertColumns } from '@/lib/vat'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -147,12 +147,17 @@ export async function POST(request: NextRequest) {
     })
 
     // VAT on top of the offer's price, when asked (lib/vat.ts): the company's
-    // rate today, the amount ours, both recorded on the offer.
+    // rate today, the amount ours, both recorded on the offer. Not on the
+    // trip's extras' share of the price (owner, 2026-10-13).
+    const vatApplied = parseVatApplied(body.vat_applied) === true
     const vat = vatColumns({
-      applied: parseVatApplied(body.vat_applied) === true,
+      applied: vatApplied,
       net: priced.selling_price,
       rate: await getOrgVatRate(supabaseAdmin, orgId),
       currency: quoteCurrency,
+      excluded: vatApplied
+        ? offerVatExcluded({ sellingPrice: priced.selling_price, cost: totalCost, extrasCost: (await loadTripVatExtras(supabaseAdmin, itinerary_id)).excluded_cost, currency: quoteCurrency })
+        : 0,
     })
 
     const validUntil = new Date()
