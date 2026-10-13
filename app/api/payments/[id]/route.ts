@@ -19,13 +19,7 @@ export async function GET(
       .from('payments')
       .select(`
         *,
-        itineraries (
-          itinerary_code,
-          client_name,
-          client_phone,
-          client_email,
-          total_cost
-        )
+        itineraries ( * )
       `)
       .eq('id', id)
       .eq('org_id', orgId)
@@ -41,7 +35,12 @@ export async function GET(
       // receipt need these; the list route already returned them.
       client_phone: payment.itineraries?.client_phone,
       client_email: payment.itineraries?.client_email,
-      total_cost: payment.itineraries?.total_cost
+      total_cost: payment.itineraries?.total_cost,
+      // The trip's VAT (lib/vat.ts) — the payment's invoice and receipt state
+      // the VAT inside the amount paid. '*' above so a database without the
+      // columns (migration 20261214) still answers.
+      vat_applied: payment.itineraries?.vat_applied === true,
+      vat_rate: payment.itineraries?.vat_rate ?? null,
     }
 
     return NextResponse.json({

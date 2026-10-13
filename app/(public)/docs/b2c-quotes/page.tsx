@@ -90,12 +90,26 @@ export default function B2CQuotesPage() {
       </section>
 
       <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">VAT</h2>
+        <p className="text-gray-600 mb-3">
+          Every offer says whether it carries VAT: <strong>VAT 14% included: &lt;amount&gt;</strong> or{' '}
+          <strong>VAT not applied</strong>, on the list, on the offer page and in the email and WhatsApp message.
+        </p>
+        <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li>Tick <strong>Apply VAT (14%)</strong> in New offer, or on the offer page. It is off unless you tick it.</li>
+          <li>VAT is added on top of the selling price at your company&apos;s rate (Settings &rsaquo; Company Profile), rounded to the currency. The page and the message then also show the total including VAT.</li>
+          <li>The rate and amount are recorded on the offer. A re-price while VAT is on works it out again on the new price at the rate the offer recorded; a later change of the company rate does not touch it.</li>
+          <li>A booked offer keeps its VAT, and booking it passes its VAT choice and rate to the trip.</li>
+        </ul>
+      </section>
+
+      <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>It does not cost a different party size. The traveller count is the itinerary&apos;s.</li>
           <li>It does not convert currencies. The offer is in the itinerary&apos;s currency.</li>
           <li>No offer is set to Expired by a schedule; an open offer reads as Expired once its date has passed.</li>
-          <li>There is no PDF of a B2C offer and no tax or VAT line; the email and WhatsApp message give the total and the price per person.</li>
+          <li>There is no PDF of a B2C offer; the email and WhatsApp message give the total, the price per person (before VAT) and the VAT line.</li>
         </ul>
       </section>
     </div>

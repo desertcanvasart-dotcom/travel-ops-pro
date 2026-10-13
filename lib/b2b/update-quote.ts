@@ -11,6 +11,7 @@ import { pickB2bQuoteUpdates } from '@/lib/b2b/quote-updates'
 import { bookingsFromQuote, quoteLockReason } from '@/lib/quotes/lock'
 import { withEffectiveStatus } from '@/lib/quotes/validity'
 import { clientMessage } from '@/lib/api-errors'
+import { getOrgVatRate, vatColumns } from '@/lib/vat'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (table: string) => any; rpc: (fn: string, args?: Record<string, unknown>) => any }
@@ -22,7 +23,8 @@ export async function updateB2bQuote(
   const { orgId, id, body, actor } = opts
   const { data: current } = await db
     .from('tour_quotes')
-    .select('id, status, valid_until, converted_to_itinerary_id')
+    // '*' so a database without the VAT columns (migration 20261214) still edits.
+    .select('*')
     .eq('id', id)
     .eq('org_id', orgId)
     .maybeSingle()
@@ -35,9 +37,23 @@ export async function updateB2bQuote(
     return { status: 400, body: { success: false, error: 'Nothing to change: a quote\'s status, client details, notes and valid-until date can be edited; its price comes from the calculator.' } }
   }
 
+  // VAT switched on or off: recorded from the quote's own net at the
+  // company's rate today (lib/vat.ts). Sent unchanged, it is left as it is —
+  // re-saving a form must not re-rate a quote at a rate changed since.
+  const { vat_applied: vatWanted, ...rest } = picked.updates
+  const updates: Record<string, unknown> = { ...rest }
+  if (vatWanted !== undefined && vatWanted !== (current.vat_applied === true)) {
+    Object.assign(updates, vatColumns({
+      applied: vatWanted,
+      net: current.selling_price,
+      rate: vatWanted ? await getOrgVatRate(db, orgId) : null,
+      currency: current.currency,
+    }))
+  }
+
   const { data, error } = await db
     .from('tour_quotes')
-    .update({ ...picked.updates, updated_at: new Date().toISOString(), last_modified_by: actor })
+    .update({ ...updates, updated_at: new Date().toISOString(), last_modified_by: actor })
     .eq('id', id)
     .eq('org_id', orgId)
     .select()

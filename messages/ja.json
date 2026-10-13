@@ -1,4 +1,13 @@
 {
+  "vat": {
+    "applied": "VAT（{rate}%）適用：{amount}",
+    "notApplied": "VAT 不適用",
+    "apply": "VAT（{rate}%）を適用",
+    "applyHint": "会社の税率（設定 › 会社情報）で、税抜価格に VAT を上乗せします。税率と税額はこの書類に記録されます。",
+    "net": "税抜価格",
+    "totalInclVat": "VAT込み合計",
+    "lockedHint": "VAT は価格とともに記録済みのため、この書類では変更できません。"
+  },
   "common": {
     "save": "保存",
     "cancel": "キャンセル",
@@ -947,7 +956,7 @@
     "grossRevenue": "総収益",
     "deductibleExpenses": "控除可能経費",
     "taxableIncome": "課税所得",
-    "vatSummary": "VAT概要（推定14%）",
+    "vatSummary": "VAT概要（発行済み請求書の記録額）",
     "vatCollected": "VAT徴収額",
     "vatPaid": "VAT支払額",
     "netVat": "純VAT",
@@ -4003,6 +4012,8 @@
       "defaultMargin": "標準マージン（%）",
       "defaultMarginUnset": "未設定 — 25%が適用されます",
       "defaultMarginHint": "貴社の標準の販売マージンです。個人設定のないメンバーはこの値を引き継ぎます。見積りごとに変更できます。",
+      "vatRate": "VAT 税率（%）",
+      "vatRateHint": "「VAT を適用」にチェックした見積り・請求書で、税抜価格に上乗せされます。税率は各書類の発行時点の値で記録されるため、ここを変更しても発行済みの書類は変わりません。",
       "rateChangeAlerts": "料金変更の通知",
       "rateChangeAlertsInApp": "アプリ内",
       "rateChangeAlertsInAppEmail": "アプリ内＋メール",

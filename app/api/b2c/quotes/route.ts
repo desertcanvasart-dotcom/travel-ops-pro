@@ -3,7 +3,7 @@
 // GET  /api/b2c/quotes              list offers (newest first)
 // POST /api/b2c/quotes              create an offer FROM an itinerary
 //   body: { itinerary_id, margin_percent?, valid_days?, tier?, client_id?,
-//           internal_notes?, client_notes? } — the party (num_travelers) and
+//           internal_notes?, client_notes?, vat_applied? } — the party (num_travelers) and
 //           the currency are the itinerary's; naming others is refused.
 // ============================================
 
@@ -19,6 +19,7 @@ import { getCurrentOrgId, getCurrentUserId, getCurrentUserRole, noOrgResponse } 
 import { MANAGER_ROLES } from '@/lib/quotes/lock'
 import { itineraryPax, offerCostBase, OFFER_ITINERARY_COLUMNS, resolveOfferCurrency, resolveTravellers } from '@/lib/b2c/quote-updates'
 import { statusFilter, todayIso, withEffectiveStatus } from '@/lib/quotes/validity'
+import { getOrgVatRate, parseVatApplied, vatColumns, vatInsertColumns } from '@/lib/vat'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -145,6 +146,15 @@ export async function POST(request: NextRequest) {
       seasonUpliftPercent: season?.upliftPercent ?? 0, currency: quoteCurrency,
     })
 
+    // VAT on top of the offer's price, when asked (lib/vat.ts): the company's
+    // rate today, the amount ours, both recorded on the offer.
+    const vat = vatColumns({
+      applied: parseVatApplied(body.vat_applied) === true,
+      net: priced.selling_price,
+      rate: await getOrgVatRate(supabaseAdmin, orgId),
+      currency: quoteCurrency,
+    })
+
     const validUntil = new Date()
     validUntil.setDate(validUntil.getDate() + (Math.max(1, Math.floor(Number(valid_days) || 30))))
     // Authorship is the signed-in user, never a body field.
@@ -169,6 +179,7 @@ export async function POST(request: NextRequest) {
         season_uplift_percent: season?.upliftPercent ?? 0,
         season_uplift_amount: priced.season_uplift_amount,
         currency: quoteCurrency,
+        ...vatInsertColumns(vat),
         status: 'draft',
         valid_until: validUntil.toISOString().split('T')[0],
         internal_notes,

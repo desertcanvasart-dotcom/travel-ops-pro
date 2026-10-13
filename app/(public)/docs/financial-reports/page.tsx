@@ -74,17 +74,17 @@ export default function FinancialReportsPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Tax Summary tab</h2>
         <p className="text-gray-600 mb-3">
-          This tab is a rough estimate, not a tax calculation. It uses a fixed VAT rate of 14% and a fixed list of deductible categories that you cannot change.
+          This tab is a summary, not a tax calculation. The VAT figures are the amounts recorded on your documents; the deductible categories are a fixed list that you cannot change.
         </p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li><strong>Gross Revenue</strong> and <strong>Total Expenses</strong> &mdash; the same figures as the Overview.</li>
           <li><strong>Deductible Expenses</strong> &mdash; expenses in these categories only: office, software, marketing, fuel, permits, toll and parking. Every other category (hotels, guides, drivers, entrance fees and so on) is treated as not deductible.</li>
           <li><strong>Taxable Income</strong> &mdash; gross revenue minus deductible expenses.</li>
-          <li><strong>VAT Summary (Est. 14%)</strong> &mdash; VAT Collected is 14% of revenue. VAT Paid is 14% of all expenses. Net VAT is the difference. The report does not know which invoices or expenses actually carried VAT, at what rate, or which are exempt; it applies 14% to everything.</li>
+          <li><strong>VAT Summary (as recorded on issued invoices)</strong> &mdash; VAT Collected is the VAT recorded on the year&rsquo;s invoices that count as revenue (not drafts or cancelled ones), converted like their totals. When the invoices are in more than one currency, the amounts in each currency are listed under it. VAT Paid is the tax recorded on the year&rsquo;s expenses; nothing in the app records expense tax yet, so it is normally zero. Net VAT is Collected minus Paid. Nothing is worked out from a rate.</li>
           <li><strong>Expense Breakdown by Category</strong> &mdash; each category&rsquo;s total and share of all expenses.</li>
         </ul>
         <Tip>
-          Use these figures for planning only. Your real VAT and taxable income depend on rates, exemptions and deductible items this report does not track. Confirm amounts with your accountant before filing.
+          Use these figures for planning only. Your taxable income depends on deductible items this report does not track, and VAT you paid suppliers is not recorded. Confirm amounts with your accountant before filing.
         </Tip>
       </section>
 
@@ -111,7 +111,7 @@ export default function FinancialReportsPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li>It does not calculate real tax. The VAT rate (14%) and the deductible categories are fixed.</li>
+          <li>It does not calculate real tax. The deductible categories are fixed, and it does not know the VAT you paid suppliers.</li>
           <li>It does not wait for expense approval. Pending expenses count as costs as soon as they are entered.</li>
           <li>It does not date paid expenses by when they were paid. Cash outflows use the expense date.</li>
           <li>It does not include lines it cannot convert. They are listed in the amber banner instead.</li>

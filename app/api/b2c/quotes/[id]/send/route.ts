@@ -13,6 +13,7 @@ import { sendEmailInternal } from '@/lib/email-send'
 import { effectiveQuoteStatus } from '@/lib/quotes/validity'
 import { orgIdentity } from '@/lib/org-identity'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
+import { readVat, vatTextLines } from '@/lib/vat'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -79,6 +80,9 @@ export async function POST(
       `Reference: ${quote.quote_number}`,
       `Travellers: ${quote.num_travelers}`,
       `Total: ${money(quote.selling_price, currency)}  (${money(quote.price_per_person, currency)} per person)`,
+      // Never silent about VAT: "VAT 14% included: …" and the total with it,
+      // or "VAT not applied" (lib/vat.ts).
+      ...vatTextLines(readVat(quote), quote.selling_price, currency),
       // "8 November 2026", never the raw "2026-11-08".
       quote.valid_until ? `Valid until: ${new Date(`${String(quote.valid_until).slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}` : '',
       quote.client_notes ? `\n${quote.client_notes}` : '',

@@ -1452,6 +1452,9 @@ export interface Database {
           season_name: string | null
           season_uplift_percent: number
           season_uplift_amount: number
+          vat_applied: boolean
+          vat_rate: number | null
+          vat_amount: number
         }
         Insert: {
           id?: string
@@ -1484,6 +1487,9 @@ export interface Database {
           season_name?: string | null
           season_uplift_percent?: number
           season_uplift_amount?: number
+          vat_applied?: boolean
+          vat_rate?: number | null
+          vat_amount?: number
         }
         Update: {
           id?: string
@@ -1516,6 +1522,9 @@ export interface Database {
           season_name?: string | null
           season_uplift_percent?: number
           season_uplift_amount?: number
+          vat_applied?: boolean
+          vat_rate?: number | null
+          vat_amount?: number
         }
         Relationships: [
           {
@@ -6512,6 +6521,7 @@ export interface Database {
           parent_invoice_id: string | null
           org_id: string
           full_trip_cost: number | null
+          vat_applied: boolean
         }
         Insert: {
           id?: string
@@ -6548,6 +6558,7 @@ export interface Database {
           parent_invoice_id?: string | null
           org_id: string
           full_trip_cost?: number | null
+          vat_applied?: boolean
         }
         Update: {
           id?: string
@@ -6584,6 +6595,7 @@ export interface Database {
           parent_invoice_id?: string | null
           org_id?: string
           full_trip_cost?: number | null
+          vat_applied?: boolean
         }
         Relationships: [
           {
@@ -6684,6 +6696,8 @@ export interface Database {
           template_id: string | null
           fx_frozen: Json | null
           destination_id: string | null
+          vat_applied: boolean
+          vat_rate: number | null
         }
         Insert: {
           id?: string
@@ -6752,6 +6766,8 @@ export interface Database {
           template_id?: string | null
           fx_frozen?: Json | null
           destination_id?: string | null
+          vat_applied?: boolean
+          vat_rate?: number | null
         }
         Update: {
           id?: string
@@ -6820,6 +6836,8 @@ export interface Database {
           template_id?: string | null
           fx_frozen?: Json | null
           destination_id?: string | null
+          vat_applied?: boolean
+          vat_rate?: number | null
         }
         Relationships: [
           {
@@ -8562,6 +8580,7 @@ export interface Database {
           support_hours: Json | null
           office_email_addresses: string[]
           whatsapp_number: string | null
+          vat_rate: number
         }
         Insert: {
           id?: string
@@ -8593,6 +8612,7 @@ export interface Database {
           support_hours?: Json | null
           office_email_addresses: string[]
           whatsapp_number?: string | null
+          vat_rate?: number
         }
         Update: {
           id?: string
@@ -8624,6 +8644,7 @@ export interface Database {
           support_hours?: Json | null
           office_email_addresses?: string[]
           whatsapp_number?: string | null
+          vat_rate?: number
         }
         Relationships: []
       }
@@ -11244,6 +11265,9 @@ export interface Database {
           org_id: string
           guide_grade: string | null
           guide_mode: string | null
+          vat_applied: boolean
+          vat_rate: number | null
+          vat_amount: number
         }
         Insert: {
           id?: string
@@ -11289,6 +11313,9 @@ export interface Database {
           org_id: string
           guide_grade?: string | null
           guide_mode?: string | null
+          vat_applied?: boolean
+          vat_rate?: number | null
+          vat_amount?: number
         }
         Update: {
           id?: string
@@ -11334,6 +11361,9 @@ export interface Database {
           org_id?: string
           guide_grade?: string | null
           guide_mode?: string | null
+          vat_applied?: boolean
+          vat_rate?: number | null
+          vat_amount?: number
         }
         Relationships: [
           {

@@ -80,7 +80,8 @@ export default function TravellerPortalPage() {
         <p className="text-gray-600 mb-3">The page is in Japanese, and covers:</p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>Their trip, dates and party size</li>
-          <li>What they have paid and what is still due</li>
+          <li>What they have paid and what is still due, with the trip&apos;s VAT line under the trip price
+            (「VAT（14%）適用：…」 or 「VAT 不適用」, from the quote the trip was booked from)</li>
           <li>The participation form &mdash; names in kanji, kana and roman letters, passport
             details, address, emergency contact</li>
           <li>Passport and document attachments &mdash; see{' '}

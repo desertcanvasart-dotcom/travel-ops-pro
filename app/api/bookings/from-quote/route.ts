@@ -33,6 +33,7 @@ import {
 } from '@/lib/booking-creation'
 import { paymentRuleFrom } from '@/lib/payment-schedule'
 import { insertBookingWithCode } from '@/lib/bookings/booking-code'
+import { tripVatFromQuote } from '@/lib/vat'
 
 export const dynamic = 'force-dynamic'
 
@@ -347,10 +348,20 @@ export async function POST(request: NextRequest) {
       console.error('Booking created but supplier manifest failed:', suppliers.error)
     }
 
-    // The trip is now committed operationally.
+    // The trip is now committed operationally — at the VAT the booked quote
+    // recorded: the trip's pages, its portal and the invoice raised from it
+    // read the trip's flag (lib/vat.ts). The booking keeps the NET total.
+    // Read on its own with '*', so a database without the VAT columns
+    // (migration 20261214) books exactly as before.
+    const { data: quoteVat } = await supabaseAdmin
+      .from(table)
+      .select('*')
+      .eq('id', quote_id)
+      .eq('org_id', orgId)
+      .maybeSingle()
     const { error: statusError } = await supabaseAdmin
       .from('itineraries')
-      .update({ status: 'confirmed' })
+      .update({ status: 'confirmed', ...tripVatFromQuote(quoteVat) })
       .eq('id', itineraryId)
       .eq('org_id', orgId)
 

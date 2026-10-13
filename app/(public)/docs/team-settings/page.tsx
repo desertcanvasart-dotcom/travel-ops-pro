@@ -85,6 +85,18 @@ export default function TeamSettingsPage() {
         </ul>
         <DocScreenshot src="/docs/team-settings/settings-preferences.jpg" alt="Settings page showing preferences section with cost mode, currency, tier, and language options" />
 
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">VAT rate</h3>
+        <p className="text-gray-600 mb-3">
+          <strong>Settings &rsaquo; Organization &rsaquo; Company Profile &rsaquo; VAT rate (%)</strong> is your
+          company&apos;s VAT rate, 14 unless you change it. Each company on the install has its own. Only an
+          administrator (or the owner) can change it; anyone else can see it, but their save is refused.
+        </p>
+        <ul className="list-disc list-inside space-y-1 text-gray-700 mb-4">
+          <li>It is used when someone ticks <strong>Apply VAT</strong> on a B2B quote, a B2C offer or an invoice: VAT is added on top of the net price at this rate.</li>
+          <li>Each document records the rate and amount it was issued with. Changing the rate here affects only documents priced or issued afterwards.</li>
+          <li>Blank sets it back to 14. A value outside 0&ndash;100 is refused.</li>
+        </ul>
+
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Settings that reach across the app</h3>
         <p className="text-gray-600 mb-3">
           A few settings are less about your account and more about how the whole product behaves.

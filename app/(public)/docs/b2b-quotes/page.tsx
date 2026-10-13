@@ -143,12 +143,28 @@ export default function B2BQuotesPage() {
       </section>
 
       <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">VAT</h2>
+        <p className="text-gray-600 mb-3">
+          Every quote says whether it carries VAT: <strong>VAT 14% included: &lt;amount&gt;</strong> or{' '}
+          <strong>VAT not applied</strong>, on the list, on the quote page and on the PDF.
+        </p>
+        <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li>Tick <strong>Apply VAT (14%)</strong> when you save a quote from the calculator, or on the quote page. It is off unless you tick it.</li>
+          <li>VAT is added on top of the selling price: VAT = selling price &times; your company&apos;s rate (Settings &rsaquo; Company Profile, 14% unless an administrator changes it), rounded to the currency (whole yen for JPY). The page and the PDF then show the net price, the VAT and the total including VAT.</li>
+          <li>The rate and amount are recorded on the quote when VAT is switched on. Changing the company rate later does not change a quote already made.</li>
+          <li>A converted or booked quote keeps its VAT. Converting a quote passes its VAT choice and rate to the trip, and the trip&apos;s invoice starts with VAT on when the trip has it.</li>
+          <li>Reverting to an earlier revision brings back that revision&apos;s VAT with its price.</li>
+        </ul>
+      </section>
+
+      <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>You cannot change a quote&apos;s price, party or travel date here. Price it again in the calculator and save a new quote.</li>
           <li>No quote is set to Expired by a schedule. An open offer simply reads as Expired once its date has passed.</li>
           <li>Search covers only the newest 100 quotes loaded; the counts cover all of them.</li>
-          <li>There is no tax or VAT line. The selling price is shown as the total.</li>
+          <li>Quotes made by the order intake are saved without VAT; switch it on from the quote page.</li>
+          <li>The price per person and the single supplement are shown before VAT.</li>
           <li>A quote cannot be sent by email from this page; download the PDF and send it yourself.</li>
         </ul>
       </section>

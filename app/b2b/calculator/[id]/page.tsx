@@ -8,6 +8,7 @@ import { todayLocal } from '@/lib/today'
 import React, { useState, useEffect, useRef, Fragment, Suspense } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { VatToggle } from '@/app/components/Vat'
 import { useTranslations } from 'next-intl'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { useTierLabel } from '@/hooks/useTierLabel'
@@ -329,6 +330,9 @@ function TourPriceCalculatorInner() {
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedQuote, setSavedQuote] = useState<SavedQuote | null>(null)
+  // "Apply VAT" on the quote being saved: off unless chosen. The server adds
+  // VAT at the company's rate on its own price and records both (lib/vat.ts).
+  const [vatApplied, setVatApplied] = useState(false)
   const [partners, setPartners] = useState<Partner[]>([])
   const [quoteForm, setQuoteForm] = useState({
     partner_id: '',
@@ -850,6 +854,7 @@ function TourPriceCalculatorInner() {
           tier: variationTier,
           language: guideLanguage || 'English',
           selling_price: result.selling_price,
+          vat_applied: vatApplied,
           notes: quoteForm.notes || null
         })
       })
@@ -2144,6 +2149,8 @@ function TourPriceCalculatorInner() {
                   className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-[#647C47] outline-none resize-none"
                 />
               </div>
+
+              <VatToggle checked={vatApplied} onChange={setVatApplied} />
 
               {/* Quote Summary */}
               <div className="bg-gray-50 rounded-lg p-3 text-sm">

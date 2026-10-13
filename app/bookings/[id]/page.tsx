@@ -58,6 +58,8 @@ import { isSupplierBacked } from '@/lib/bookings/supplier-backing'
 import { BackLink, TripBreadcrumb } from '@/components/nav/TripNav'
 import { withReturnTo } from '@/lib/nav/return-to'
 import { useRole } from '@/hooks/useRole'
+import { vatOnLiveNet } from '@/lib/vat'
+import { VatToken } from '@/app/components/Vat'
 
 type TabType = 'overview' | 'suppliers' | 'payments' | 'passengers' | 'notes'
 
@@ -623,6 +625,10 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">{t('fields.totalCost')}</span>
                     <span className="font-bold">{formatCurrency(booking.total_cost, booking.currency)}</span>
+                  </div>
+                  {/* The trip's VAT (lib/vat.ts): the booking total is the net. */}
+                  <div className="flex justify-end">
+                    <VatToken vat={vatOnLiveNet(booking.itinerary, booking.total_cost, booking.currency)} currency={booking.currency} />
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">{t('fields.depositAmount')}</span>
