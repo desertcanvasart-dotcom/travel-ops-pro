@@ -20,6 +20,7 @@ import { createClient } from '@supabase/supabase-js'
 import { bearerToken, hashApiKey } from '@/lib/integrations/credentials'
 import type { AvailabilityDay } from '@/lib/integrations/types'
 import { businessToday } from '@/lib/today'
+import { loadDayLoads } from '@/lib/capacity-load'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -95,8 +96,8 @@ export async function GET(request: NextRequest) {
 
   const { data: rows, error: capacityError } = await supabaseAdmin
     .from('operator_capacity')
-    // Note the omissions: no internal_notes, no booked_guides/vehicles.
-    .select('date, status, max_groups, booked_groups, reason')
+    // Note the omissions: no internal_notes, no booked counts.
+    .select('date, status, max_groups, reason')
     .eq('org_id', integration.org_id)
     .gte('date', from)
     .lte('date', to)
@@ -107,9 +108,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 
+  // The groups already out on each day, counted from sold trips and running
+  // departures (lib/capacity-load), as the Capacity page and the availability
+  // check count them — booked_groups was never written. Only the slots LEFT
+  // reach the partner.
+  let loads: Awaited<ReturnType<typeof loadDayLoads>> = new Map()
+  try {
+    loads = await loadDayLoads(supabaseAdmin, integration.org_id, from, to)
+  } catch (e) {
+    console.error('Availability load read failed:', e)
+    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
+  }
+
   const days: AvailabilityDay[] = (rows || []).map(row => {
     const max = numberOrNull(row.max_groups)
-    const booked = numberOrNull(row.booked_groups) ?? 0
+    const booked = loads.get(row.date)?.groups ?? 0
     return {
       date: row.date,
       status: row.status,

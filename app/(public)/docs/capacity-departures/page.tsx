@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder } from '../layout'
+import { Tip } from '../layout'
 
 export default function CapacityDeparturesPage() {
   return (
@@ -9,73 +9,86 @@ export default function CapacityDeparturesPage() {
       <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6">
         <Link href="/docs" className="hover:text-primary-600 transition-colors">Docs</Link>
         <ChevronRight className="w-4 h-4" />
-        <span className="text-gray-900 font-medium">Capacity &amp; Departures</span>
+        <span className="text-gray-900 font-medium">Capacity</span>
       </nav>
 
-      <h1 className="text-3xl font-bold text-gray-900 mb-4">Capacity &amp; Departures</h1>
+      <h1 className="text-3xl font-bold text-gray-900 mb-4">Capacity</h1>
+      <p className="text-gray-600 mb-4">
+        <strong>Operate &rsaquo; Capacity</strong> is a month calendar of how many groups you can take each day. The availability
+        check, the partner availability API and the WhatsApp assistant read it. A day with no entry counts as available with 3
+        groups.
+      </p>
       <p className="text-gray-600 mb-8">
-        Define how much your operation can handle and which tours run on which dates. The system turns that into live availability &mdash; used by your team, by resource assignment, and by the WhatsApp AI agent &mdash; so you never promise dates you can&apos;t deliver or overbook a departure.
+        The menu shows it to the owner, Administrators and Managers. Agents and Viewers do not see it.
       </p>
 
-      {/* Operator Capacity */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Operator Capacity</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">The calendar</h2>
         <p className="text-gray-600 mb-3">
-          Capacity is set per calendar date and measured in <strong>groups</strong> &mdash; how many tours your operation can run at once on that day. Each day records:
+          It opens on your current month (your own date, not UTC) and starts each week on Monday. The legend shows the four
+          statuses: Available, Limited, Busy and Blackout. Each day shows:
         </p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>Max groups</strong> &mdash; The ceiling for that date</li>
-          <li><strong>Booked groups</strong> &mdash; How many are already committed</li>
-          <li><strong>Status</strong> &mdash; Available, Limited, Busy, or Blackout</li>
-          <li><strong>Reason / notes</strong> &mdash; Context, for example a blackout reason</li>
+          <li><strong>N/M groups</strong> &mdash; groups out that day against the day&apos;s Max groups, and <strong>N free</strong>.</li>
+          <li><strong>guides N/M</strong> and <strong>vehicles N/M</strong> when the day has those limits.</li>
+          <li>The reason, if one is set.</li>
+          <li><strong>not set</strong> for a day with no entry, with its groups out if there are any (against the default 3).</li>
         </ul>
-        <p className="text-gray-600 mt-3">
-          Dates with no entry default to available, so you only need to mark the days that differ &mdash; peak periods, holidays, or days you are not operating.
-        </p>
-        <ScreenshotPlaceholder caption="Capacity calendar showing per-day status and group counts" />
+        <p className="text-gray-600 mt-3">A day over any of its limits is outlined in red and marked <strong>over</strong>; hover it to see which.</p>
       </section>
 
-      {/* Scheduled Departures */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Scheduled Departures</h2>
-        <p className="text-gray-600 mb-3">
-          A departure is a specific run of a tour on a specific date, ideal for group or fixed&#8209;date selling. You can create one from a tour template or from scratch, and each carries:
-        </p>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">How groups out are counted</h2>
+        <p className="text-gray-600 mb-3">You do not type booked groups. The app counts, for each day:</p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>Tour &amp; dates</strong> &mdash; Linked template, start date, and an end date derived from the tour duration</li>
-          <li><strong>Seats</strong> &mdash; Max pax, booked pax, and a minimum pax to run</li>
-          <li><strong>Status</strong> &mdash; Draft, Open, Limited, Full, Guaranteed, or Cancelled</li>
-          <li><strong>Booking cutoff</strong> &mdash; Days before departure when bookings close</li>
-          <li><strong>Pricing</strong> &mdash; Price per person and currency, plus public and internal notes</li>
+          <li>each sold trip (an itinerary that is Confirmed or Completed) on the road that day, from its start date to its end date;</li>
+          <li>each running departure (Open, Limited, Full or Guaranteed) on the road that day with at least one seat taken &mdash; see <Link href="/docs/departures" className="text-primary-600 hover:underline">Departures</Link>.</li>
         </ul>
         <p className="text-gray-600 mt-3">
-          Departures can be flagged <strong>guaranteed</strong> once they pass the minimum, giving travellers confidence the date will run.
+          Each counts as one group. <strong>Guides</strong> and <strong>vehicles</strong> are the different guides and vehicles
+          assigned to those trips and departures. A trip with no guide or vehicle assigned adds none.
         </p>
       </section>
 
-      {/* Live Availability */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Live Availability</h2>
-        <p className="text-gray-600 mb-3">
-          The system computes availability on the fly rather than relying on a stale flag. For a requested date range and group size it inspects each day and returns a single verdict with a clear, customer&#8209;ready message:
-        </p>
-        <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>Blackout</strong> &mdash; Not operating on one or more dates; offers to check alternatives</li>
-          <li><strong>Busy</strong> &mdash; Fully booked for the requested group size</li>
-          <li><strong>Limited</strong> &mdash; Bookable, but tight &mdash; encourages booking soon</li>
-          <li><strong>Available</strong> &mdash; Dates work on your end</li>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Editing days</h2>
+        <ol className="list-decimal list-inside space-y-2 text-gray-700">
+          <li>Click a day. Shift-click another day in the same month to select the range between them.</li>
+          <li>Set <strong>Status</strong> (or Leave unchanged), <strong>Max groups</strong>, <strong>Max guides</strong>, <strong>Max vehicles</strong> and the <strong>Reason</strong>.</li>
+          <li>Click <strong>Save N days</strong>.</li>
+        </ol>
+        <ul className="list-disc list-inside space-y-1 text-gray-700 mt-3">
+          <li>Fields showing &ldquo;unchanged&rdquo; keep what each day already had.</li>
+          <li>Empty Max guides or Max vehicles to remove that limit (&ldquo;no limit&rdquo;).</li>
+          <li><strong>Reset to not set</strong> removes the selected days&apos; entries, so they count as available with 3 groups again.</li>
+          <li>Counts must be whole numbers of 0 or more; anything else is refused with a message.</li>
+          <li>The Reason is shown to clients and partners when the day is Busy or Blackout.</li>
         </ul>
-        <p className="text-gray-600 mt-3">
-          For departures, available spots are computed as max pax minus booked pax, and a departure is only marked bookable when it has enough spots for the party <strong>and</strong> the request is before the booking cutoff.
-        </p>
       </section>
 
-      {/* WhatsApp AI Agent & Resource Assignment */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Where else these numbers are used</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">How the availability check decides</h2>
+        <p className="text-gray-600 mb-3">
+          For a date range, each day gets its status and the group slots left: Max groups (3 for a day with no entry) minus the
+          groups out, never below 0. One enquiry is one group, whatever the party size. Then:
+        </p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>Resource assignment</strong> &mdash; Booked counts feed back into capacity, so the system reflects real load and helps avoid double&#8209;booking guides and vehicles.</li>
-          <li><strong>WhatsApp AI agent</strong> &mdash; The reply engine built for WhatsApp can read live capacity and departures, but its suggestions are not shown anywhere in the app yet, so customers are not answered from these numbers automatically. See <Link href="/docs/whatsapp-agent" className="text-primary-600 hover:underline">WhatsApp AI Agent</Link>.</li>
+          <li><strong>Blackout</strong> on any day &mdash; not available, with the reason.</li>
+          <li><strong>Busy</strong> with no slot left on any day &mdash; fully booked.</li>
+          <li><strong>Limited</strong> on any day &mdash; available, with a &ldquo;book soon&rdquo; message.</li>
+          <li>Otherwise &mdash; available.</li>
+        </ul>
+        <Tip>The status is what you set. An Available or Limited day stays bookable even when its groups out reach Max groups &mdash; only a Busy day uses the slot count. Mark a day Busy if a full day should turn enquiries away.</Tip>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>It does not change a day&apos;s status for you; groups out never make a day Busy.</li>
+          <li>Max guides and Max vehicles only flag a day as over; they do not stop a trip being confirmed or a guide being assigned.</li>
+          <li>Range selection does not cross months.</li>
+          <li>Internal notes and notes have no fields on this page.</li>
+          <li>The WhatsApp assistant&apos;s replies are drafts not yet shown in the app, so customers are not answered from these numbers automatically. See <Link href="/docs/whatsapp-agent" className="text-primary-600 hover:underline">WhatsApp AI Agent</Link>.</li>
         </ul>
       </section>
     </div>

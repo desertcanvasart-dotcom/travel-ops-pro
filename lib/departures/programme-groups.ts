@@ -14,6 +14,10 @@ export interface GroupableDeparture {
   start_date: string
   max_pax: number
   booked_pax: number
+  /** Booked outside the app + confirmed + pending holds (lib/departures/seats),
+   *  as GET /api/departures returns it. */
+  seats_taken?: number
+  held_pending?: number
   status: string
   tour_template?: { template_name: string; template_code: string; duration_days: number } | null
 }
@@ -74,14 +78,18 @@ export function buildProgrammeGroups<D extends GroupableDeparture>(templates: Gr
   })
 }
 
-/** What a programme row says about its dates. Cancelled dates hold no seats. */
+/** What a programme row says about its dates. Cancelled dates hold no seats.
+ *  `booked` is the seats TAKEN — booked outside the app plus web-order holds
+ *  (booked_pax alone left every hold out); `pending` the held seats still
+ *  waiting for the office. */
 export function summarise(departures: GroupableDeparture[]) {
   const live = departures.filter(d => d.status !== 'cancelled')
   return {
     count: departures.length,
     next: live[0]?.start_date ?? departures[0]?.start_date ?? null,
     last: live[live.length - 1]?.start_date ?? null,
-    booked: live.reduce((n, d) => n + (d.booked_pax || 0), 0),
+    booked: live.reduce((n, d) => n + (d.seats_taken ?? (d.booked_pax || 0)), 0),
+    pending: live.reduce((n, d) => n + (d.held_pending || 0), 0),
     seats: live.reduce((n, d) => n + (d.max_pax || 0), 0),
     guaranteed: departures.filter(d => d.status === 'guaranteed').length,
     full: departures.filter(d => d.status === 'full').length,

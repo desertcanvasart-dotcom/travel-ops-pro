@@ -122,3 +122,108 @@ export function mergeCapacityEntry(
   }
   return out
 }
+
+// ============================================
+// What is booked on a day: counted, not typed
+// ============================================
+// operator_capacity.booked_groups (and booked_guides / booked_vehicles) were
+// never written by anything — no input, no trigger — so every day read
+// "0/3 groups · 3 free" and a Busy day's slot test compared against
+// max_groups alone. The groups out on a day are now COUNTED from what the
+// app already knows (lib/capacity-load.ts reads them):
+//   * each sold trip (itinerary confirmed or completed) on the road that day
+//     — start_date ≤ day ≤ end_date — is one group;
+//   * each running departure (Open, Limited, Full or Guaranteed, with at
+//     least one seat taken — lib/departures/seats) on the road is one group.
+// Guides and vehicles are the distinct assigned_guide_id / assigned_vehicle_id
+// among those, so a day over its Max guides / Max vehicles can be flagged.
+// The stored booked_* columns are no longer read.
+
+/** A day with no capacity row: available, this many groups. */
+export const DEFAULT_MAX_GROUPS = 3
+
+export interface DayLoad {
+  groups: number
+  guides: number
+  vehicles: number
+}
+
+export interface LoadSource {
+  start_date: string
+  end_date: string | null
+  assigned_guide_id?: string | null
+  assigned_vehicle_id?: string | null
+}
+
+/** Groups, guides and vehicles out on each of `dates`. Pure. */
+export function dayLoads(dates: string[], sources: LoadSource[]): Map<string, DayLoad> {
+  const out = new Map<string, DayLoad>()
+  for (const date of dates) {
+    const on = sources.filter(s => s.start_date <= date && (s.end_date ?? s.start_date) >= date)
+    out.set(date, {
+      groups: on.length,
+      guides: new Set(on.map(s => s.assigned_guide_id).filter(Boolean)).size,
+      vehicles: new Set(on.map(s => s.assigned_vehicle_id).filter(Boolean)).size,
+    })
+  }
+  return out
+}
+
+/** One day's verdict input: its status, and the group slots left once the
+ *  groups already out are counted. Never negative. The availability check
+ *  and the WhatsApp assistant both build their days with this. */
+export function capacityDayDetail(
+  date: string,
+  row: { status: string; max_groups: number | null; reason?: string | null } | null | undefined,
+  load: DayLoad | null | undefined,
+): CapacityDayDetail {
+  const groups = load?.groups ?? 0
+  if (!row) return { date, status: 'available', available_slots: Math.max(0, DEFAULT_MAX_GROUPS - groups) }
+  return {
+    date,
+    status: row.status as CapacityStatus,
+    available_slots: Math.max(0, (Number(row.max_groups) || 0) - groups),
+    reason: row.reason ?? null,
+  }
+}
+
+/** What a day is over: "guides 4/3", "vehicles 2/1". Empty when within its
+ *  limits, or when no limit is set. */
+export function overLimits(
+  row: { max_groups?: number | null; max_guides?: number | null; max_vehicles?: number | null } | null | undefined,
+  load: DayLoad | null | undefined,
+): string[] {
+  if (!load) return []
+  const out: string[] = []
+  const maxGroups = row ? row.max_groups : DEFAULT_MAX_GROUPS
+  if (maxGroups != null && load.groups > maxGroups) out.push(`groups ${load.groups}/${maxGroups}`)
+  if (row?.max_guides != null && load.guides > row.max_guides) out.push(`guides ${load.guides}/${row.max_guides}`)
+  if (row?.max_vehicles != null && load.vehicles > row.max_vehicles) out.push(`vehicles ${load.vehicles}/${row.max_vehicles}`)
+  return out
+}
+
+const COUNT_FIELDS = ['max_groups', 'max_guides', 'max_vehicles', 'booked_groups', 'booked_guides', 'booked_vehicles'] as const
+const CLEARABLE = new Set(['max_guides', 'max_vehicles'])
+
+/** A day's input as the save routes take it: counts are whole numbers ≥ 0
+ *  (max_guides / max_vehicles may be null — no limit); status one of four.
+ *  Returns the problem, or null. Nothing checked them: max_groups could be
+ *  -2 or 1.5, and the check route then reported negative slots. */
+export function capacityInputError(entry: Record<string, unknown>): string | null {
+  if (entry.status !== undefined && entry.status !== null &&
+      !['available', 'limited', 'busy', 'blackout'].includes(String(entry.status))) {
+    return `Invalid status: ${entry.status}`
+  }
+  for (const f of COUNT_FIELDS) {
+    const v = entry[f]
+    if (v === undefined) continue
+    if (v === null) {
+      if (CLEARABLE.has(f)) continue
+      return `${f} must be a whole number of 0 or more`
+    }
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > 1000) {
+      return `${f} must be a whole number of 0 or more`
+    }
+  }
+  return null
+}

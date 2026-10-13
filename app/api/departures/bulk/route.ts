@@ -13,9 +13,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { orgAuth } from '@/lib/auth/org-auth'
-import { normaliseDates, MAX_GENERATED_DATES } from '@/lib/departures/generate-dates'
+import { uniqueValidDates, MAX_GENERATED_DATES } from '@/lib/departures/generate-dates'
+import { DEPARTURE_STATUSES } from '@/lib/departures/seats'
+import { paxRangeError } from '@/lib/departures/validate'
+import { getOrgDefaultCurrency } from '@/lib/org-default-currency'
 
-const VALID_STATUSES = ['draft', 'open', 'limited', 'full', 'guaranteed', 'cancelled']
+const VALID_STATUSES: readonly string[] = DEPARTURE_STATUSES
 
 /**
  * POST /api/departures/bulk
@@ -35,7 +38,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const templateId: string | undefined = body.template_id
-    const dates = normaliseDates(Array.isArray(body.dates) ? body.dates : [])
+    // Uncapped: normaliseDates() cut the list at the cap before the "too
+    // many" check below could see it, so extra dates were dropped silently.
+    const dates = uniqueValidDates(Array.isArray(body.dates) ? body.dates : [])
     const maxPax = Number.isFinite(body.max_pax) ? Math.max(1, Math.floor(body.max_pax)) : 20
     const minPax = Number.isFinite(body.min_pax) ? Math.max(1, Math.floor(body.min_pax)) : 2
     const status = typeof body.status === 'string' && VALID_STATUSES.includes(body.status) ? body.status : 'open'
@@ -48,9 +53,13 @@ export async function POST(request: NextRequest) {
     }
     if (dates.length > MAX_GENERATED_DATES) {
       return NextResponse.json(
-        { success: false, error: `Too many dates (max ${MAX_GENERATED_DATES})` },
+        { success: false, error: `Too many dates: ${dates.length} (max ${MAX_GENERATED_DATES} at a time)` },
         { status: 400 },
       )
+    }
+    const rangeError = paxRangeError(maxPax, minPax)
+    if (rangeError) {
+      return NextResponse.json({ success: false, error: rangeError }, { status: 400 })
     }
 
     // The template supplies the name, code and length; end_date is derived so
@@ -70,6 +79,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Tour template not found' }, { status: 404 })
     }
     const durationDays = template.duration_days || 1
+    // Priced in the company's own currency — left out, the column's default
+    // made every generated date EUR whatever the company bills in.
+    const currency = await getOrgDefaultCurrency(supabase, org_id)
 
     const rows = dates.map(start_date => {
       const start = new Date(`${start_date}T00:00:00Z`)
@@ -86,6 +98,7 @@ export async function POST(request: NextRequest) {
         max_pax: maxPax,
         min_pax: minPax,
         status,
+        currency,
       }
     })
 
