@@ -2,10 +2,13 @@
   "vat": {
     "applied": "VAT（{rate}%）適用：{amount}",
     "notApplied": "VAT 不適用",
+    "appliedExcludes": "VAT（{rate}%）適用：{amount}（オプション・保険はVAT対象外）",
     "apply": "VAT（{rate}%）を適用",
-    "applyHint": "会社の税率（設定 › 会社情報）で、税抜価格に VAT を上乗せします。税率と税額はこの書類に記録されます。",
+    "applyHint": "会社の税率（設定 › 会社情報）で、税抜価格に VAT を上乗せします（オプションと保険には課税しません）。税率と税額はこの書類に記録されます。",
     "net": "税抜価格",
     "totalInclVat": "VAT込み合計",
+    "appliedOnSave": "VAT（{rate}%）は保存時に、旅行のオプションと保険を除いた金額に加算されます。金額は請求書に表示されます。",
+    "vatShort": "VAT",
     "lockedHint": "VAT は価格とともに記録済みのため、この書類では変更できません。"
   },
   "common": {

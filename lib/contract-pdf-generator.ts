@@ -40,8 +40,9 @@ interface ContractData {
   /** null = no price yet: prints "To be confirmed". */
   totalCost: number | null
   currency: string
-  /** The trip's VAT choice and recorded rate (lib/vat.ts). Absent = no VAT. */
-  vat?: { vat_applied?: boolean | null; vat_rate?: number | null } | null
+  /** The trip's VAT choice and recorded rate (lib/vat.ts), and the client
+   *  price of its extras, which VAT leaves out. Absent = no VAT. */
+  vat?: { vat_applied?: boolean | null; vat_rate?: number | null; vat_excluded?: number | null } | null
   /** The contract as the page shows it; each part left out is left out. */
   document?: ContractDocument
 }

@@ -4,7 +4,7 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { recordsInOrg } from '@/lib/org-refs'
 import { roundToCurrency } from '@/lib/currency-totals'
 import { switchInvoiceVat } from '@/lib/invoices/totals'
-import { getOrgVatRate, parseVatApplied } from '@/lib/vat'
+import { getOrgVatRate, loadTripVatExtras, parseVatApplied, tripVatExcludedShare } from '@/lib/vat'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -112,7 +112,12 @@ export async function PUT(
         .maybeSingle()
       if (!currentInvoice) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
       if (vatWanted !== (currentInvoice.vat_applied === true)) {
-        const switched = switchInvoiceVat(currentInvoice, vatWanted, vatWanted ? await getOrgVatRate(supabaseAdmin, orgId) : 0)
+        // On: the base leaves out its insurance and extras lines and the
+        // trip's own extras share, as at issue (lib/vat.ts).
+        const tripShare = vatWanted && currentInvoice.itinerary_id
+          ? tripVatExcludedShare(await loadTripVatExtras(supabaseAdmin, currentInvoice.itinerary_id))
+          : 0
+        const switched = switchInvoiceVat(currentInvoice, vatWanted, vatWanted ? await getOrgVatRate(supabaseAdmin, orgId) : 0, tripShare)
         if (!switched.ok) return NextResponse.json({ error: switched.error }, { status: 409 })
         Object.assign(updateData, switched.updates)
       }

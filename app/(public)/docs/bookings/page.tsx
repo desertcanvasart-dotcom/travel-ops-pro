@@ -124,7 +124,8 @@ export default function BookingsPage() {
             <strong>VAT</strong>: the booking&apos;s total, deposit and balance are the net figures from the quote. The
             payment summary shows the trip&apos;s VAT line (<strong>VAT 14% included: &lt;amount&gt;</strong> or{' '}
             <strong>VAT not applied</strong>), and VAT is billed on the trip&apos;s invoices. Booking a quote passes its VAT
-            choice and rate to the trip.
+            choice and rate to the trip. The VAT is on the total less the booking&apos;s confirmed extras and the
+            trip&apos;s Extra lines, which carry no VAT; the line then ends &ldquo;(extras and insurance not taxed)&rdquo;.
           </li>
         </ul>
       </section>

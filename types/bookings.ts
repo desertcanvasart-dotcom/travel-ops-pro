@@ -123,6 +123,8 @@ export interface BookingWithDetails extends Booking {
     /** VAT carried from the trip's quote (lib/vat.ts); the booking total is net. */
     vat_applied?: boolean
     vat_rate?: number | null
+    /** What of the booking total is extras, not taxed (GET /api/bookings/[id]). */
+    vat_excluded?: number
   }
   assigned_guide?: {
     id: string

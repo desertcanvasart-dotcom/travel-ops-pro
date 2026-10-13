@@ -3,6 +3,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { paymentCurrencyFor } from '@/lib/payment-currency'
+import { loadTripVatExtras } from '@/lib/vat'
 
 export async function GET(
   request: NextRequest,
@@ -31,6 +32,9 @@ export async function GET(
     // given on older payments, and another company's trip would print that
     // company's client, phone, email and total on our invoice and receipt.
     const trip = payment.itineraries?.org_id === orgId ? payment.itineraries : null
+    // No VAT on the trip's extras (owner, 2026-10-13): the payment's VAT is
+    // worked out on the taxed share of the trip (lib/vat.ts vatInsideGross).
+    const extras = trip?.vat_applied === true ? await loadTripVatExtras(supabase, trip.id) : null
 
     const formattedPayment = {
       ...payment,
@@ -47,6 +51,7 @@ export async function GET(
       // columns (migration 20261214) still answers.
       vat_applied: trip?.vat_applied === true,
       vat_rate: trip?.vat_rate ?? null,
+      ...(extras && extras.vat_excluded > 0 ? { vat_excluded: extras.vat_excluded, vat_net: extras.vat_net } : {}),
     }
 
     return NextResponse.json({

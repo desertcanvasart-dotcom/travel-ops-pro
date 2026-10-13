@@ -5,7 +5,7 @@ import { createServerClient } from '@/lib/supabase-server'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { orgIdentity } from '@/lib/org-identity'
-import { vatInPayment, vatInsideGross, vatMarker, type VatRecord } from '@/lib/vat'
+import { loadTripVatExtras, vatInPayment, vatInsideGross, vatMarker, type VatRecord } from '@/lib/vat'
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,7 +44,9 @@ export async function POST(request: NextRequest) {
       // invoice_payments has no org_id: the organisation is its invoice's.
       const { data: ip, error: ipError } = await supabase
         .from('invoice_payments')
-        .select('id, amount, currency, payment_method, payment_date, transaction_reference, created_at, invoices!inner (invoice_number, client_name, client_id, itinerary_id, org_id, total_amount, tax_rate, tax_amount)')
+        // The invoice's '*': its VAT columns when the database has them —
+        // vat_base (20261218) says it left extras and insurance out.
+        .select('id, amount, currency, payment_method, payment_date, transaction_reference, created_at, invoices!inner (*)')
         .eq('id', invoicePaymentId)
         .eq('invoices.org_id', orgId)
         .single()
@@ -52,7 +54,7 @@ export async function POST(request: NextRequest) {
       if (ipError || !ip) {
         return NextResponse.json({ success: false, error: 'Payment not found' }, { status: 404 })
       }
-      const inv = (ip as unknown as { invoices: { invoice_number: string; client_name: string | null; client_id: string | null; itinerary_id: string | null; total_amount: number | null; tax_rate: number | null; tax_amount: number | null } }).invoices
+      const inv = (ip as unknown as { invoices: { invoice_number: string; client_name: string | null; client_id: string | null; itinerary_id: string | null; total_amount: number | null; tax_rate: number | null; tax_amount: number | null; vat_applied?: boolean; vat_base?: number | null } }).invoices
 
       // The same phone the invoice send uses: the client's, else the trip's.
       let phone: string | null = null
@@ -116,8 +118,13 @@ export async function POST(request: NextRequest) {
         paymentMethod: payment.payment_method,
         referenceLabel: 'Itinerary',
         reference: trip?.itinerary_code || 'N/A',
-        // The VAT inside the amount at the trip's recorded rate.
-        vat: vatInsideGross(payment.amount, trip, payment.currency),
+        // The VAT inside the amount at the trip's recorded rate, on the
+        // trip's taxed share — its extras are not taxed (lib/vat.ts).
+        vat: vatInsideGross(
+          payment.amount,
+          trip?.vat_applied === true ? { ...trip, ...(await loadTripVatExtras(supabase, trip.id)) } : trip,
+          payment.currency
+        ),
       }
     }
 

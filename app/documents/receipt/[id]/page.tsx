@@ -46,6 +46,9 @@ interface Payment {
   /** The trip's VAT (GET /api/payments/[id]); the amount paid includes it. */
   vat_applied?: boolean
   vat_rate?: number | null
+  /** The trip's extras (not taxed) and the client total they are part of. */
+  vat_excluded?: number
+  vat_net?: number
 }
 
 export default function ReceiptPage() {
@@ -107,6 +110,7 @@ export default function ReceiptPage() {
       vat_applied: vat.vat_applied,
       tax_rate: vat.vat_rate,
       tax_amount: vat.vat_amount,
+      vat_base: vat.vat_base ?? null,
     }
   }
 

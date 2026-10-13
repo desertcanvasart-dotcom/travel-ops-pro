@@ -8,6 +8,7 @@ import { paymentRuleFrom } from '@/lib/payment-schedule'
 import { buildBookingRow, populateSuppliersFromItinerary } from '@/lib/booking-creation'
 import { templateInOrg } from '@/lib/tours/org-scope'
 import { rowInOrg } from '@/lib/api/org-scope'
+import { loadTripVatExtras } from '@/lib/vat'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { insertBookingWithCode } from '@/lib/bookings/booking-code'
 import { isItineraryStatus, ITINERARY_STATUSES } from '@/lib/itineraries/statuses'
@@ -94,13 +95,18 @@ export async function GET(
       clientPreferredLanguage = client?.preferred_language ?? null
     }
 
+    // The client price of the trip's extras lines, which its VAT leaves out
+    // (lib/vat.ts) — for the contract, which states VAT without the lines.
+    const vatExcluded = data.vat_applied === true ? (await loadTripVatExtras(supabase, id)).vat_excluded : 0
+
     return NextResponse.json({
       success: true,
       data: {
         ...data,
         available_languages: availableLanguages,
         versions: versionsMap,
-        client_preferred_language: clientPreferredLanguage
+        client_preferred_language: clientPreferredLanguage,
+        ...(vatExcluded > 0 ? { vat_excluded: vatExcluded } : {}),
       }
     })
   } catch (error) {

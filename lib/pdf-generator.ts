@@ -3,7 +3,7 @@
 // File: lib/pdf-generator.ts
 // ============================================
 
-import { vatOnLiveNet, vatTextLines } from '@/lib/vat'
+import { tripVatExcluded, vatOnLiveNet, vatTextLines } from '@/lib/vat'
 import { seasonSupplementOf, serviceClientPrice } from '@/lib/itinerary-client-price'
 import { overnightLabel, overnightProperty } from '@/lib/itineraries/overnight-property'
 import { jsPDF } from 'jspdf'
@@ -652,12 +652,13 @@ export async function generateItineraryPDF(
 
     // VAT, always stated beside the total, in the document's language: on top
     // at the trip's recorded rate, with the total including it, or "VAT not
-    // applied" (lib/vat.ts).
+    // applied" (lib/vat.ts). Not on the trip's extras lines.
     if (totalPrice > 0) {
       doc.setFontSize(9)
       doc.setFont(fontFamily, 'normal')
       doc.setTextColor(80, 80, 80)
-      for (const line of vatTextLines(vatOnLiveNet(itinerary, totalPrice, currency), totalPrice, currency, locale)) {
+      const tripVat = { ...itinerary, vat_excluded: tripVatExcluded(days) }
+      for (const line of vatTextLines(vatOnLiveNet(tripVat, totalPrice, currency), totalPrice, currency, locale)) {
         doc.text(line, pageWidth - margin, yPos, { align: 'right' })
         yPos += 5
       }

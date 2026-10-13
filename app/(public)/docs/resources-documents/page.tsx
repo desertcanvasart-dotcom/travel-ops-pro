@@ -177,7 +177,8 @@ export default function ResourcesDocumentsPage() {
           Every document that shows a client price states whether VAT is on it: <strong>VAT 14% included:
           &lt;amount&gt;</strong> or <strong>VAT not applied</strong>. The itinerary PDF and the contract use the
           trip&apos;s VAT (carried from its quote); the invoice uses the VAT the invoice recorded; a receipt states the
-          VAT inside the amount received. See{' '}
+          VAT inside the amount received. Extras and insurance carry no VAT; a document that left them out says
+          &ldquo;(extras and insurance not taxed)&rdquo; after the amount. See{' '}
           <Link href="/docs/invoices-payments" className="text-primary-600 hover:underline">Invoices</Link> and{' '}
           <Link href="/docs/team-settings" className="text-primary-600 hover:underline">Settings</Link> for how the
           rate is set and recorded.
