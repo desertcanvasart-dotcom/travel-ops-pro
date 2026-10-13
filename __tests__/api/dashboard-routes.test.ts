@@ -42,7 +42,8 @@ vi.mock('@/lib/auth/current-org', () => ({
   noOrgResponse: () => new Response(null, { status: 400 }),
 }))
 vi.mock('@/lib/email/connected-mailboxes', () => ({
-  scopedToConnectedMailboxes: async (_db: unknown, build: (f: string | null) => PromiseLike<unknown>) => build(null),
+  // (db, orgId, build) since the per-company mailbox scoping (hotfix + 20261204).
+  scopedToConnectedMailboxes: async (_db: unknown, _orgId: unknown, build: (f: string | null) => PromiseLike<unknown>) => build(null),
 }))
 vi.mock('@/lib/demo-data', () => ({
   loadDemoItineraryIds: async () => new Set<string>(),
