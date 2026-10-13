@@ -133,7 +133,11 @@ describe('capacity saves keep what the request left out', () => {
   it('the availability check counts default slots as slots left, and steps dates as strings', () => {
     const s = src('app/api/capacity/check/route.ts')
     expect(s).not.toContain('3 - group_size')
-    expect(s).toContain('shiftDateISO(d, 1)')
+    // Operate audit: the days are built by the shared datesInRange /
+    // capacityDayDetail (lib/capacity-load, lib/capacity-availability), which
+    // step dates as strings — the route no longer has its own loop.
+    expect(s).toContain('datesInRange(start_date, effectiveEndDate)')
+    expect(src('lib/capacity-load.ts')).toContain('shiftDateISO(d, 1)')
   })
 })
 
@@ -158,9 +162,12 @@ describe('departures', () => {
     expect(s).not.toContain('booking_name')
   })
 
-  it('seats cannot be cut below the booked pax on the server', () => {
+  // Operate audit (Departures #4): the floor is now booked_pax + the live
+  // holds, checked under the row lock in set_departure_seats (migration
+  // 20261215, exercised on Postgres in departure-holds-lifecycle.test.ts).
+  it('seats cannot be cut below what is taken on the server', () => {
     const s = src('app/api/departures/[id]/route.ts')
-    expect(s).toContain('if (bookedPax > maxPax)')
+    expect(s).toContain("supabase.rpc('set_departure_seats'")
   })
 
   it('the active-bookings count before a delete is org-scoped', () => {
@@ -170,8 +177,10 @@ describe('departures', () => {
 
   it('a clone keeps its price currency', () => {
     const s = src('app/departures/page.tsx')
-    expect(s).toContain("currency: departure.currency || 'EUR'")
-    expect(s).toContain('Price per Person ({newDeparture.currency})')
+    // Operate audit (Departures #6): a new departure starts in the company's
+    // own currency, not EUR.
+    expect(s).toContain('currency: departure.currency || orgCurrency')
+    expect(s).toContain('Price per Person{newDeparture.currency ? ` (${newDeparture.currency})` : \'\'}')
   })
 })
 

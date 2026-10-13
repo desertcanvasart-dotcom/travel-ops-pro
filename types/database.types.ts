@@ -13450,6 +13450,16 @@ export interface Database {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any
       }
+      set_departure_seats: {
+        Args: {
+          p_booked_pax?: number
+          p_departure_id?: string
+          p_max_pax?: number
+          p_org_id?: string
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Returns: any
+      }
       tour_theme_base: {
         Args: {
           p_code?: string

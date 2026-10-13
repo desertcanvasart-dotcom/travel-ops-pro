@@ -78,10 +78,14 @@ describe('#20 finishing a website order', () => {
 })
 
 describe('#21 the seat hold respects the seats left', () => {
-  it('counts booked_pax or confirmed holds (the larger), plus pending holds', () => {
+  // Operate audit (Departures #2): booked_pax is the office's count of seats
+  // sold OUTSIDE the app, so confirmed holds add to it rather than overlap —
+  // taken = booked_pax + confirmed + pending (was max(booked, confirmed) +
+  // pending, which gave 4 below).
+  it('counts booked_pax plus confirmed holds plus pending holds', () => {
     expect(seatsFree({ max_pax: 10, booked_pax: 6 }, [])).toBe(4)
     expect(seatsFree({ max_pax: 10, booked_pax: 6 }, [{ pax: 2, status: 'pending' }])).toBe(2)
-    expect(seatsFree({ max_pax: 10, booked_pax: 2 }, [{ pax: 5, status: 'confirmed' }, { pax: 1, status: 'pending' }])).toBe(4)
+    expect(seatsFree({ max_pax: 10, booked_pax: 2 }, [{ pax: 5, status: 'confirmed' }, { pax: 1, status: 'pending' }])).toBe(2)
     expect(seatsFree({ max_pax: 4, booked_pax: 6 }, [])).toBe(0)
   })
 

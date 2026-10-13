@@ -9,6 +9,8 @@
 // setMockTables({ table: rows }) before invoking the engine.
 // See PRICING-HARNESS-PLAN.md (Layer 0).
 
+import { seatsFree } from '@/lib/departures/seats'
+
 type Row = Record<string, any>
 export type MockTables = Record<string, Row[]>
 
@@ -236,6 +238,11 @@ function makeQuery(rows: Row[], table?: string) {
       filtered = filtered.slice(0, n)
       return builder
     },
+    // PostgREST's inclusive row window (.range(0, 999) = the first 1000).
+    range(from: number, to: number) {
+      filtered = filtered.slice(from, to + 1)
+      return builder
+    },
     single() {
       applyPendingPatch()
       return Promise.resolve(
@@ -274,21 +281,20 @@ export function createMockClient() {
     rpc: async (fn: string, args?: Record<string, unknown>) => {
       rpcCalls.push({ fn, args })
       if (fn === 'hold_departure_seats' && args) return { data: holdDepartureSeats(args), error: null }
+      if (fn === 'set_departure_seats' && args) return { data: setDepartureSeats(args), error: null }
       return { data: null, error: null }
     },
   }
 }
 
-/** In-memory hold_departure_seats: lock (single-threaded here), count the
- *  seats free by the seatsFree rule, insert the pending hold only if it fits. */
+/** In-memory hold_departure_seats (migration 20261215): lock (single-threaded
+ *  here), open dates only, count the seats free by lib/departures/seats,
+ *  insert the pending hold only if it fits. */
 function holdDepartureSeats(a: Record<string, unknown>) {
   const dep = (currentTables.tour_departures ?? []).find((d) =>
-    d.id === a.p_departure_id && d.org_id === a.p_org_id && d.status !== 'cancelled')
+    d.id === a.p_departure_id && d.org_id === a.p_org_id && ['open', 'limited', 'guaranteed'].includes(d.status))
   if (!dep) return { held: false, free: 0, id: null }
-  const holds = (currentTables.departure_bookings ?? []).filter((h) =>
-    h.org_id === a.p_org_id && h.departure_id === a.p_departure_id)
-  const sum = (status: string) => holds.filter((h) => h.status === status).reduce((n, h) => n + (Number(h.pax) || 0), 0)
-  const free = Math.max(0, (Number(dep.max_pax) || 0) - (Math.max(Number(dep.booked_pax) || 0, sum('confirmed')) + sum('pending')))
+  const free = seatsFree(dep as any, liveHolds(a.p_org_id, a.p_departure_id) as any)
   const pax = Number(a.p_pax)
   if (pax > free) return { held: false, free, id: null }
   const row = {
@@ -297,4 +303,24 @@ function holdDepartureSeats(a: Record<string, unknown>) {
   }
   ;(currentTables.departure_bookings ??= []).push(row)
   return { held: true, free, id: row.id }
+}
+
+function liveHolds(orgId: unknown, departureId: unknown): Row[] {
+  return (currentTables.departure_bookings ?? []).filter((h) =>
+    h.org_id === orgId && h.departure_id === departureId && (h.status === 'pending' || h.status === 'confirmed'))
+}
+
+/** In-memory set_departure_seats (migration 20261215): max_pax / booked_pax
+ *  changed only when booked_pax + the live holds still fit. */
+function setDepartureSeats(a: Record<string, unknown>) {
+  const dep = (currentTables.tour_departures ?? []).find((d) => d.id === a.p_departure_id && d.org_id === a.p_org_id)
+  if (!dep) return { ok: false, reason: 'not_found' }
+  const max = a.p_max_pax != null ? Number(a.p_max_pax) : Number(dep.max_pax) || 0
+  const booked = a.p_booked_pax != null ? Number(a.p_booked_pax) : Number(dep.booked_pax) || 0
+  const held = liveHolds(a.p_org_id, a.p_departure_id).reduce((n, h) => n + (Number(h.pax) || 0), 0)
+  const answer = { max_pax: max, booked_pax: booked, held, taken: booked + held }
+  if (booked + held > max) return { ok: false, reason: 'below_taken', ...answer }
+  dep.max_pax = max
+  dep.booked_pax = booked
+  return { ok: true, reason: null, ...answer }
 }

@@ -26,6 +26,11 @@ import { roomingAdjustment } from '@/lib/pricing/rooming'
 import { matchProgramme, type TourUpOrder } from '@/lib/intake/tour-up-order'
 import { clientMessage } from '@/lib/api-errors'
 import { createInitialQuoteRevision } from '@/lib/quotes/initial-revision'
+import { isBookableStatus, seatsFree } from '@/lib/departures/seats'
+
+// The seat rule lives in lib/departures/seats.ts; re-exported for the callers
+// and tests that have always imported it from here.
+export { seatsFree }
 
 /** The order, written down for the quote's notes — everything the 日程表,
  *  contract and passenger list will need and the quote row has no column for. */
@@ -273,9 +278,10 @@ export async function processTourUpOrder(
   // A party larger than the seats left gets no hold (the departure was held
   // past max_pax before), and the result says so for the office to sort out.
   // The count and the insert are ONE database call under the departure's row
-  // lock (hold_departure_seats, migration 20261213): counted here and
-  // inserted after, two orders for the last seats at the same moment were
-  // both held.
+  // lock (hold_departure_seats, migrations 20261213 and 20261215): counted
+  // here and inserted after, two orders for the last seats at the same
+  // moment were both held. Only an Open, Limited or Guaranteed date takes a
+  // hold; the office confirms or releases it on the departure's page.
   let departureBooking: { id: string; departure_id: string } | null = null
   let departureFull: { free: number; requested: number } | null = null
   if (departure) {
@@ -296,24 +302,14 @@ export async function processTourUpOrder(
   return { status: 200, body: { ...preview, client: { id: clientId, name: clientName }, clientCreated, quote: quote as { id: string; quote_number: string }, departureBooking, departureFull } }
 }
 
-/**
- * Seats left on a departure. booked_pax is the office's own count (kept by
- * hand on the departures grid; nothing updates it from holds), and a pending
- * hold is not in it yet — so the seats taken are the larger of booked_pax and
- * the confirmed holds, plus every pending hold. Never below 0.
- */
-export function seatsFree(
-  departure: { max_pax: number | null; booked_pax: number | null },
-  holds: Array<{ pax: number | null; status: string | null }>
-): number {
-  const sum = (status: string) => holds.filter(h => h.status === status).reduce((n, h) => n + (Number(h.pax) || 0), 0)
-  const taken = Math.max(Number(departure.booked_pax) || 0, sum('confirmed')) + sum('pending')
-  return Math.max(0, (Number(departure.max_pax) || 0) - taken)
-}
-
+/** Seats left on the departure (lib/departures/seats: booked_pax, which the
+ *  office enters on the departure page for bookings made outside the app,
+ *  plus confirmed and pending holds). A date that is not Open, Limited or
+ *  Guaranteed has none: hold_departure_seats refuses it. */
 async function departureSeatsFree(
-  supabase: SupabaseClient, orgId: string, departure: { id: string; max_pax: number; booked_pax: number },
+  supabase: SupabaseClient, orgId: string, departure: { id: string; status: string; max_pax: number; booked_pax: number },
 ): Promise<number> {
+  if (!isBookableStatus(departure.status)) return 0
   const { data } = await supabase
     .from('departure_bookings')
     .select('pax, status')

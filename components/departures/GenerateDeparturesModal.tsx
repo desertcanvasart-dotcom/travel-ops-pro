@@ -11,7 +11,7 @@
 import { useMemo, useState } from 'react'
 import { X, Loader2, CalendarPlus, Check } from 'lucide-react'
 import { todayLocal } from '@/lib/today'
-import { datesByWeekday, datesByInterval, normaliseDates, addMonthsISO } from '@/lib/departures/generate-dates'
+import { datesByWeekday, datesByInterval, uniqueValidDates, addMonthsISO, MAX_GENERATED_DATES } from '@/lib/departures/generate-dates'
 
 type Mode = 'weekly' | 'interval' | 'pick'
 
@@ -58,11 +58,15 @@ export default function GenerateDeparturesModal({
 
   const existing = useMemo(() => new Set(existingDates.map(d => d.slice(0, 10))), [existingDates])
 
-  const candidates = useMemo(() => {
-    if (mode === 'weekly') return datesByWeekday(rangeStart, rangeEnd, weekdays)
-    if (mode === 'interval') return datesByInterval(rangeStart, rangeEnd, stepDays)
-    return normaliseDates(picked)
+  // One past the cap, so a rule that makes too many dates is SAID to — the
+  // preview used to stop at the cap and drop the rest without a word.
+  const generated = useMemo(() => {
+    if (mode === 'weekly') return datesByWeekday(rangeStart, rangeEnd, weekdays, MAX_GENERATED_DATES + 1)
+    if (mode === 'interval') return datesByInterval(rangeStart, rangeEnd, stepDays, MAX_GENERATED_DATES + 1)
+    return uniqueValidDates(picked)
   }, [mode, rangeStart, rangeEnd, weekdays, stepDays, picked])
+  const tooMany = generated.length > MAX_GENERATED_DATES
+  const candidates = tooMany ? [] : generated
 
   const toCreate = candidates.filter(d => !existing.has(d))
   const skipCount = candidates.length - toCreate.length
@@ -209,7 +213,7 @@ export default function GenerateDeparturesModal({
               </div>
               {picked.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
-                  {normaliseDates(picked).map(d => (
+                  {uniqueValidDates(picked).map(d => (
                     <span key={d} className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 rounded">
                       {d}
                       <button
@@ -253,7 +257,7 @@ export default function GenerateDeparturesModal({
               {skipCount > 0 && <span className="text-gray-400"> · {skipCount} already exist (skipped)</span>}
             </div>
             {candidates.length === 0 ? (
-              <p className="text-xs text-gray-400">Choose a range and pattern to preview dates.</p>
+              <p className="text-xs text-gray-400">{tooMany ? 'Too many dates to preview.' : 'Choose a range and pattern to preview dates.'}</p>
             ) : (
               <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
                 {candidates.map(d => (
@@ -270,6 +274,11 @@ export default function GenerateDeparturesModal({
             )}
           </div>
 
+          {tooMany && (
+            <div className="text-sm text-red-600">
+              That makes more than {MAX_GENERATED_DATES} dates — shorten the range or pick fewer days.
+            </div>
+          )}
           {error && <div className="text-sm text-red-600">{error}</div>}
         </div>
 
