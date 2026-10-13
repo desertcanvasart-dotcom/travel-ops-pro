@@ -23,6 +23,12 @@ const ORG = '10000000-0000-4000-8000-000000000001'
 const OTHER = '10000000-0000-4000-8000-000000000002'
 const dep = (n: number) => `40000000-0000-4000-8000-0000000000${String(n).padStart(2, '0')}`
 
+const TRIP = '70000000-0000-4000-8000-000000000001'
+const Q1 = '50000000-0000-4000-8000-000000000001'
+const Q2 = '50000000-0000-4000-8000-000000000002'
+const H1 = '60000000-0000-4000-8000-000000000001'
+const H2 = '60000000-0000-4000-8000-000000000002'
+
 let db: { query(s: string, p?: unknown[]): Promise<{ rows: any[] }>; exec(s: string): Promise<unknown>; close(): Promise<void> }
 const sql = readFileSync(path.join(MIGRATIONS, FILE), 'utf8')
 const hold = async (d: string, pax: number, org = ORG) =>
@@ -50,12 +56,22 @@ beforeAll(async () => {
     INSERT INTO tour_departures (id, org_id, tour_name, start_date, end_date, max_pax, booked_pax, status) VALUES
       ${row(1, 'open', 10, 2)}, ${row(2, 'full', 10, 0)}, ${row(3, 'draft', 10, 0)}, ${row(4, 'limited', 10, 0)},
       ${row(5, 'guaranteed', 10, 0)}, ${row(6, 'open', 10, 0)}, ${row(7, 'open', 10, 0)}, ${row(8, 'cancelled', 10, 0)},
-      ${row(9, 'open', 10, 0)}, ${row(10, 'open', 4, 0, OTHER)};
+      ${row(9, 'open', 10, 0)}, ${row(10, 'open', 4, 0, OTHER)}, ${row(11, 'open', 10, 0)};
     -- Departure 1: 2 booked outside the app, 5 confirmed, 1 pending, 3 cancelled.
     INSERT INTO departure_bookings (org_id, departure_id, pax, status) VALUES
       ('${ORG}', '${dep(1)}', 5, 'confirmed'), ('${ORG}', '${dep(1)}', 1, 'pending'), ('${ORG}', '${dep(1)}', 3, 'cancelled'),
       -- Departure 8 was cancelled before this migration with a hold still pending.
       ('${ORG}', '${dep(8)}', 2, 'pending'), ('${ORG}', '${dep(8)}', 1, 'confirmed');
+    -- A website order's hold from before this migration, tied to its quote
+    -- only by the number in its note; and the other company's hold whose
+    -- note names the same number (never linked across companies).
+    INSERT INTO itineraries (id, org_id, itinerary_code, client_name, trip_name, start_date, end_date, total_days) VALUES
+      ('${TRIP}', '${ORG}', 'ITN-2026-0001', 'Suzuki', 'Nile', '2026-11-09', '2026-11-16', 8);
+    INSERT INTO tour_quotes (id, org_id, quote_number, status, itinerary_id) VALUES
+      ('${Q1}', '${ORG}', 'QT-2026-00012', 'sent', '${TRIP}');
+    INSERT INTO departure_bookings (id, org_id, departure_id, pax, status, notes) VALUES
+      ('${H1}', '${ORG}', '${dep(11)}', 2, 'pending', 'ウェブ注文 QT-2026-00012（幼児 1名 別）'),
+      ('${H2}', '${OTHER}', '${dep(10)}', 1, 'pending', 'ウェブ注文 QT-2026-00012');
   `)
   await db.exec(sql)
   // Applied twice: idempotent.
@@ -165,5 +181,34 @@ describe('grants', () => {
       expect(await can('anon', sig)).toBe(false)
       expect(await can('service_role', sig)).toBe(true)
     }
+  })
+})
+
+describe('a hold follows its quote', () => {
+  const holdRow = async (id: string) =>
+    (await db.query(`SELECT quote_id, status FROM departure_bookings WHERE id = $1`, [id])).rows[0]
+
+  it('existing holds are linked by the quote number in their note, within the company only', async () => {
+    expect(await holdRow(H1)).toEqual({ quote_id: Q1, status: 'pending' })
+    expect(await holdRow(H2)).toEqual({ quote_id: null, status: 'pending' })
+  })
+
+  it('a rejected quote releases its pending holds', async () => {
+    await db.exec(`UPDATE tour_quotes SET status = 'rejected' WHERE id = '${Q1}'`)
+    expect((await holdRow(H1)).status).toBe('cancelled')
+    expect((await holdRow(H2)).status).toBe('pending')
+  })
+
+  it('a deleted quote releases its pending holds; confirmed ones stay', async () => {
+    await db.exec(`
+      INSERT INTO tour_quotes (id, org_id, quote_number, status, itinerary_id) VALUES ('${Q2}', '${ORG}', 'QT-2026-00013', 'sent', '${TRIP}');
+      INSERT INTO departure_bookings (org_id, departure_id, pax, status, quote_id) VALUES
+        ('${ORG}', '${dep(11)}', 1, 'pending', '${Q2}'), ('${ORG}', '${dep(11)}', 1, 'confirmed', '${Q2}');
+    `)
+    await db.exec(`DELETE FROM tour_quotes WHERE id = '${Q2}'`)
+    const rows = (await db.query(
+      `SELECT status FROM departure_bookings WHERE departure_id = $1 AND quote_id IS NULL AND id <> $2 ORDER BY status`,
+      [dep(11), H1])).rows.map((r: any) => r.status)
+    expect(rows).toEqual(['cancelled', 'confirmed'])
   })
 })

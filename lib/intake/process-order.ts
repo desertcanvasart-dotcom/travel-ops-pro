@@ -295,7 +295,17 @@ export async function processTourUpOrder(
     })
     const result = hold as { held?: boolean; free?: number; id?: string | null } | null
     if (holdErr || !result) console.error('[intake] departure hold failed:', holdErr ?? 'no answer')
-    else if (result.held && result.id) departureBooking = { id: result.id, departure_id: departure.id }
+    else if (result.held && result.id) {
+      departureBooking = { id: result.id, departure_id: departure.id }
+      // The hold follows its quote: rejecting or deleting the quote releases
+      // it (migration 20261215). Best-effort — the hold stands either way.
+      const { error: linkErr } = await supabase
+        .from('departure_bookings')
+        .update({ quote_id: quote.id })
+        .eq('id', result.id)
+        .eq('org_id', orgId)
+      if (linkErr) console.error('[intake] could not link the hold to its quote:', linkErr.message)
+    }
     else departureFull = { free: Number(result.free) || 0, requested: numPax }
   }
 

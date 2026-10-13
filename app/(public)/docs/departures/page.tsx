@@ -94,7 +94,7 @@ export default function DeparturesPage() {
         </p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>Change <strong>Seats (max pax)</strong> and <strong>Booked outside the app</strong>, then <strong>Save seats</strong>. Seats cannot go below what is taken; this is checked in the database at the moment of saving, so a web order arriving at the same time cannot slip past it.</li>
-          <li><strong>Seat holds</strong> lists every hold with client, pax, status, the order note (it names the quote) and the date placed.</li>
+          <li><strong>Seat holds</strong> lists every hold with client, pax, status, the order note (it names the quote) and the date placed. When the quote is set to Rejected or Expired, or deleted, its pending holds are released automatically; confirmed holds stay until you release them.</li>
           <li><strong>Confirm</strong> moves a pending hold to confirmed. <strong>Release</strong> cancels a hold and frees its seats.</li>
           <li><strong>Delete</strong> works once no hold is pending or confirmed. Otherwise the message names the holds to release first.</li>
         </ul>
@@ -134,7 +134,7 @@ export default function DeparturesPage() {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>It does not set Full, Limited or Guaranteed for you; seat counts never change the status.</li>
-          <li>It does not release a hold when its quote is declined or deleted &mdash; release it on the departure&apos;s page.</li>
+          <li>A quote that passes its valid-until date without being set to Expired keeps its hold &mdash; release it on the departure&apos;s page.</li>
           <li>It does not rehome confirmed holds of a cancelled departure.</li>
           <li>The price per person is not shown on the list or the grid.</li>
           <li>The website rate always rounds up to end in 999, the yen rule, whatever the currency.</li>

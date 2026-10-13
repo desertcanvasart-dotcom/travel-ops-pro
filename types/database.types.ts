@@ -4442,6 +4442,7 @@ export interface Database {
           client_id: string | null
           client_name: string | null
           pax: number
+          quote_id: string | null
           status: string
           notes: string | null
           created_at: string
@@ -4455,6 +4456,7 @@ export interface Database {
           client_id?: string | null
           client_name?: string | null
           pax?: number
+          quote_id?: string | null
           status?: string
           notes?: string | null
           created_at?: string
@@ -4468,6 +4470,7 @@ export interface Database {
           client_id?: string | null
           client_name?: string | null
           pax?: number
+          quote_id?: string | null
           status?: string
           notes?: string | null
           created_at?: string

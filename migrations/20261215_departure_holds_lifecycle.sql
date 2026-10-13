@@ -208,4 +208,63 @@ BEGIN
 END
 $$;
 
+-- ── A hold follows its quote ──────────────────────────────────────────────
+-- A website order's hold (lib/intake/process-order) was tied to its quote
+-- only by the quote number written into the note, so a quote the customer
+-- turned down, or one the office deleted, kept its seats held until someone
+-- released them by hand on the departure page. departure_bookings.quote_id
+-- now records the quote; a quote set to Rejected or Expired, or deleted,
+-- releases its pending holds (confirmed ones are the office's to release).
+-- Existing holds are linked through the quote number in their note
+-- ("ウェブ注文 QT-2026-00012…"), within the same company only.
+DO $$
+BEGIN
+  IF to_regclass('public.departure_bookings') IS NULL OR to_regclass('public.tour_quotes') IS NULL THEN RETURN; END IF;
+
+  ALTER TABLE public.departure_bookings
+    ADD COLUMN IF NOT EXISTS quote_id uuid REFERENCES public.tour_quotes(id) ON DELETE SET NULL;
+  CREATE INDEX IF NOT EXISTS departure_bookings_quote_id_idx ON public.departure_bookings (quote_id);
+
+  CREATE OR REPLACE FUNCTION public.release_holds_on_quote_end() RETURNS trigger
+    LANGUAGE plpgsql
+    SECURITY DEFINER
+    SET search_path = public, pg_temp
+    AS $fn$
+  DECLARE
+    q public.tour_quotes;
+  BEGIN
+    IF TG_OP = 'DELETE' THEN q := OLD; ELSE q := NEW; END IF;
+    UPDATE departure_bookings
+       SET status = 'cancelled', updated_at = now()
+     WHERE quote_id = q.id AND org_id = q.org_id AND status = 'pending';
+    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+    RETURN NEW;
+  END $fn$;
+  REVOKE EXECUTE ON FUNCTION public.release_holds_on_quote_end() FROM PUBLIC, anon, authenticated;
+
+  DROP TRIGGER IF EXISTS tour_quotes_end_releases_holds ON public.tour_quotes;
+  CREATE TRIGGER tour_quotes_end_releases_holds
+    AFTER UPDATE OF status ON public.tour_quotes
+    FOR EACH ROW
+    WHEN (NEW.status IN ('rejected', 'expired') AND OLD.status IS DISTINCT FROM NEW.status)
+    EXECUTE FUNCTION public.release_holds_on_quote_end();
+
+  -- BEFORE: the foreign key clears quote_id as the row goes.
+  DROP TRIGGER IF EXISTS tour_quotes_delete_releases_holds ON public.tour_quotes;
+  CREATE TRIGGER tour_quotes_delete_releases_holds
+    BEFORE DELETE ON public.tour_quotes
+    FOR EACH ROW
+    EXECUTE FUNCTION public.release_holds_on_quote_end();
+
+  -- DATA: link the holds already placed, by the quote number in their note.
+  UPDATE public.departure_bookings b
+     SET quote_id = q.id
+    FROM public.tour_quotes q
+   WHERE b.quote_id IS NULL
+     AND q.org_id = b.org_id
+     AND b.notes LIKE 'ウェブ注文 %'
+     AND regexp_replace(split_part(b.notes, ' ', 2), '（.*$', '') = q.quote_number;
+END
+$$;
+
 COMMIT;
