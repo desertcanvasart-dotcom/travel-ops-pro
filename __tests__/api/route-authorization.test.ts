@@ -428,6 +428,16 @@ describe('rate reads', () => {
     expect(rolesFor('/api/b2b/transport-packages')).toEqual(['admin', 'manager'])
   })
 
+  it.each(['/api/clients', '/api/clients/abc', '/api/team-members', '/api/team-members/abc', '/api/departments', '/api/departments/routing'])(
+    '%s (People) is staff-readable, never viewer', path => {
+      expect(staffOnly(path)).toBe(true)
+    })
+
+  it('partners: create is agent-and-above (the WhatsApp parser), edit and delete are manager-and-above', () => {
+    expect(rolesFor('/api/b2b/partners')).toEqual(expect.arrayContaining(['admin', 'manager', 'agent']))
+    expect(rolesFor('/api/b2b/partners/abc')).toEqual(['admin', 'manager'])
+  })
+
   it('B2C offers are manager-and-above, reads included', () => {
     expect(managerOnly('/api/b2c/quotes')).toBe(true)
     expect(managerOnly('/api/b2c/quotes/abc')).toBe(true)

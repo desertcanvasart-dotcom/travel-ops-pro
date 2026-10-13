@@ -23,6 +23,9 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // Admin and Manager
   '/team-members': ['admin', 'manager'],
   '/departments': ['admin', 'manager'],
+  // People › Partners: the managers' screen. With no entry here any member —
+  // an agent included — opened it by URL.
+  '/b2b/partners': ['admin', 'manager'],
   '/financial-reports': ['admin', 'manager'],
   '/receipts': ['admin', 'manager'],
   '/supplier-invoices': ['admin', 'manager'],
@@ -188,6 +191,11 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   // the general '/api/b2b' entry below — .find() takes the first match.
   { prefix: '/api/b2b/pricing-rules', roles: ['admin', 'manager'] },
   { prefix: '/api/b2b/transport-packages', roles: ['admin', 'manager'] },
+  // Editing, deactivating and deleting a partner are the managers' (People ›
+  // Partners). Creating one stays agent-and-above — the WhatsApp parser's
+  // quick-create — and is the bare '/api/b2b/partners', which this prefix
+  // (with its trailing slash) does not match. MUST precede '/api/b2b'.
+  { prefix: '/api/b2b/partners/', roles: ['admin', 'manager'] },
   { prefix: '/api/b2b', roles: ['admin', 'manager', 'agent'] },
   // B2C offers are the managers' (the menu's B2C Quotes).
   { prefix: '/api/b2c', roles: ['admin', 'manager'] },
@@ -352,6 +360,12 @@ const STAFF_ONLY_API_PREFIXES = [
   // writes were gated; a viewer could read them all.
   '/api/tasks',
   '/api/followups',
+  // People: client records (date of birth, dietary and accessibility needs,
+  // passport type) and the roster (phone, email, notes). Only writes were
+  // gated; a viewer, whose screens read none of these, could GET them all.
+  '/api/clients',
+  '/api/team-members',
+  '/api/departments',
   // The tour catalogue: templates, the bulk CSV export and variation
   // services carry supplier costs. A viewer's screens read none of it.
   '/api/tours',
