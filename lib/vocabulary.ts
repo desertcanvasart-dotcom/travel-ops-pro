@@ -170,7 +170,7 @@ export const VOCABULARY_KIND_INFO: Record<VocabularyKind, VocabularyKindInfo> = 
     kind: 'tipping_unit',
     group: 'Guides & tipping',
     title: 'Tipping units',
-    description: 'How a tip is counted. The engine sums the per-day ones.',
+    description: 'How a tip is counted: per day, per service, per night, once per cruise or per person. A unit you add here has no pricing rule and is not priced.',
     usedIn: 'Tipping rates, pricing engine',
     minItems: 1,
     example: 'Per Day / Per Service / Per Person',

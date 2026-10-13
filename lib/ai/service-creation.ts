@@ -318,7 +318,8 @@ export async function fetchAllPricingRates(
     // Hotel services (hotel_staff_rates table — managed via Rates > Hotel Services UI)
     supabase.from('hotel_staff_rates').select('*').eq('org_id', orgScope).eq('is_active', true),
     // Tipping rates (from tipping_rates table, tier-adjusted, per-role)
-    getItemizedTippingRates(supabase, params.orgId, tier, rateNormalizer),
+    // The party size, so a per-person tip is charged per traveller.
+    getItemizedTippingRates(supabase, params.orgId, tier, rateNormalizer, { pax: totalPax }),
     import('@/lib/transport-rate-utils'),
   ])
 

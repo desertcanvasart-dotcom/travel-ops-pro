@@ -476,7 +476,6 @@ export default function ToursRatesPage() {
           <li>Transportation has no EU / non-EU price on the form, and a flight has one fare per period.</li>
           <li>A flight is always priced in economy, and margin is applied to airport tax too.</li>
           <li>Several vehicles for a big group are always several of the largest vehicle; the app does not mix sizes to find a cheaper combination.</li>
-          <li>The pricing grid&apos;s vehicle list still offers the largest vehicle for a group bigger than every vehicle; trip pricing and quotes price the extra vehicles.</li>
           <li>The Flights and Trains tiles count the rates loaded for the current filters, not every rate.</li>
           <li>A flight guide fare stored as 0 by a period save was turned back into blank (the customer fare). If a guide really flies free on a fare, enter 0 again.</li>
         </ul>

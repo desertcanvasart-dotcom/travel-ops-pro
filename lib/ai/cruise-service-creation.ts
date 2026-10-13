@@ -246,7 +246,8 @@ export async function createCruiseItineraryServices(
 
   // 3. Tipping rates (itemized, tier-adjusted)
   // Tip rows may be entered in another currency (per-rate currency work).
-  const cruiseTippingRates = await getItemizedTippingRates(supabase, orgId, tier, cruiseNormalizer)
+  // The party size, so a per-person tip is charged per traveller.
+  const cruiseTippingRates = await getItemizedTippingRates(supabase, orgId, tier, cruiseNormalizer, { pax: totalPax })
   if (cruiseTippingRates.allRates.length === 0) {
     warnings.push('No tipping rates found — tips will be €0')
   }
