@@ -7006,7 +7006,7 @@
     "convertedDescription": "This quote has been converted to an itinerary. Review and confirm the itinerary to create a booking.",
     "viewItinerary": "View Itinerary",
     "seasonPremium": "{season} premium ({percent}%)",
-    "newQuoteHint": "A quote starts from a tour: pick a tour variation, then price and save it in the calculator.",
+    "newQuoteHint": "A quote starts from a tour: open Tours, pick a tour and use Quote this tour, then price and save it in the calculator.",
     "incompleteTitle": "Incomplete price",
     "incompleteBody": "{count, plural, one {# service in this quote has no rate} other {# services in this quote have no rate}}, so its total leaves them out. Add the rates and price it again, or go ahead knowingly.",
     "gapOnDay": "Day {day}: {name}",

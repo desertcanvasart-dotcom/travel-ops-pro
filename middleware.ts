@@ -49,6 +49,13 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/whatsapp-parser': ['admin', 'manager', 'agent'],
   '/contacts': ['admin', 'manager', 'agent'],
   '/followups': ['admin', 'manager', 'agent'],
+  // Tours. Tour Manager (templates, variations, their options) and Transport
+  // Packages are the managers' screens; '/tours' (Ready-made Packages) is
+  // every staff role's — agents start a B2B quote there ("Quote this tour").
+  // The specific keys come BEFORE '/tours' (the first matching key wins).
+  '/tours/manage': ['admin', 'manager'],
+  '/tours/variations': ['admin', 'manager'],
+  '/b2b/pricing-rules': ['admin', 'manager'],
   '/tours': ['admin', 'manager', 'agent'],
   '/expenses': ['admin', 'manager'],
   '/reminders': ['admin', 'manager', 'agent'],
@@ -274,6 +281,9 @@ const FINANCIAL_API_PREFIXES = [
   // B2C offers: cost, margin and the client's details. The B2C Quotes screen
   // is the only reader, and the menu shows it to managers and above.
   '/api/b2c',
+  // Transport packages: supplier costs, read only by the managers' Tours ›
+  // Transport Packages screen and server-side by the pricing engine.
+  '/api/b2b/transport-packages',
   // Operate's manager screens: departure prices, margins and internal notes,
   // the capacity calendar, and every guest's survey answers (with the token
   // that lets the answers be overwritten). No agent screen reads them.
@@ -335,6 +345,9 @@ const STAFF_ONLY_API_PREFIXES = [
   // writes were gated; a viewer could read them all.
   '/api/tasks',
   '/api/followups',
+  // The tour catalogue: templates, the bulk CSV export and variation
+  // services carry supplier costs. A viewer's screens read none of it.
+  '/api/tours',
   '/api/supplier-documents',
   '/api/documents',
   '/api/payments',

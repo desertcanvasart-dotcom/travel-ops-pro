@@ -1412,7 +1412,7 @@ function WhatsAppParserContent() {
               template_name: result.data.trip_name || 'Custom Tour',
               variation_id: null,
               variation_code: '',
-              variation_name: 'Template creation failed — use Tour Manager',
+              variation_name: 'Template creation failed — pick the tour under Tours',
               itinerary_id: result.data.id,
               _fallback: true,
             })
@@ -1426,7 +1426,7 @@ function WhatsAppParserContent() {
             template_name: result.data.trip_name || 'Custom Tour',
             variation_id: null,
             variation_code: '',
-            variation_name: 'Template creation failed — use Tour Manager',
+            variation_name: 'Template creation failed — pick the tour under Tours',
             itinerary_id: result.data.id,
             _fallback: true,
           })
@@ -2114,7 +2114,7 @@ function WhatsAppParserContent() {
                     <div className={`flex items-center gap-2 mb-3 bg-white rounded-lg p-3 border ${generatedQuote._fallback ? 'border-amber-200' : 'border-indigo-200'}`}>
                       <p className="text-sm text-gray-600">
                         {generatedQuote._fallback
-                          ? 'Itinerary created. Open Tour Manager to create a template and price via the B2B calculator.'
+                          ? 'Itinerary created. Open Tours, pick the tour and use Quote this tour to price it in the B2B calculator.'
                           : `${generatedQuote.variation_name} • Ready for B2B pricing in calculator`}
                       </p>
                     </div>
@@ -2138,10 +2138,10 @@ function WhatsAppParserContent() {
                       )}
                       <button
                         type="button"
-                        onClick={() => router.push('/tours/manage')}
+                        onClick={() => router.push('/tours')}
                         className={`px-4 py-2.5 border bg-white rounded-lg flex items-center gap-2 text-sm ${generatedQuote._fallback ? 'border-amber-300 hover:bg-amber-50 text-amber-700' : 'border-indigo-300 hover:bg-indigo-50 text-indigo-700'}`}
                       >
-                        <Eye className="w-4 h-4" /> Tour Manager
+                        <Eye className="w-4 h-4" /> Tours
                       </button>
                     </div>
                     {generatedItinerary.warnings?.length > 0 && (
