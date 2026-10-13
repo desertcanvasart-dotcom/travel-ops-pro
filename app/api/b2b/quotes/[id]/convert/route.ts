@@ -9,6 +9,7 @@ import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/cur
 import { paymentRuleFrom } from '@/lib/payment-schedule'
 import { computeDeposit } from '@/lib/booking-creation'
 import { roundToCurrency } from '@/lib/currency-totals'
+import { tripVatFromQuote } from '@/lib/vat'
 import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
 import { parseFrozenFx, frozenToExchangeRates } from '@/lib/itinerary-fx'
 import { quoteAmountsInTripCurrency, allocateClientPrices } from '@/lib/b2b/convert-money'
@@ -178,6 +179,9 @@ export async function POST(
           payment_status: 'not_paid',
           partner_id: quote.partner_id || null,
           partner_commission_percent: partnerInfo?.commission_percent || 0,
+          // The trip shows its client total with the quote's VAT choice and
+          // recorded rate (lib/vat.ts); the invoice raised from it inherits it.
+          ...tripVatFromQuote(quote),
           source: 'b2b_custom',
           notes: `Converted from B2B quote ${quote.quote_number}`,
         })
@@ -332,6 +336,9 @@ export async function POST(
           // B2B Partner fields
           partner_id: quote.partner_id || null,
           partner_commission_percent: partnerInfo?.commission_percent || 0,
+          // The quote's VAT choice and recorded rate (lib/vat.ts). Written
+          // only when on, so a database without the columns still converts.
+          ...(quote.vat_applied === true ? tripVatFromQuote(quote) : {}),
           source: 'b2b_template'
         })
         .select()

@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { ArrowLeft, Loader2, Send, CheckCircle2, XCircle, Eye, Save, MessageCircle, Mail } from 'lucide-react'
 import QuoteRevisions from '@/components/QuoteRevisions'
 import ConvertToBookingCard from '@/app/components/ConvertToBookingCard'
+import { readVat, totalWithVat } from '@/lib/vat'
+import { VatToken, VatToggle } from '@/app/components/Vat'
 
 interface B2CQuote {
   id: string
@@ -28,6 +30,10 @@ interface B2CQuote {
   sent_at: string | null
   internal_notes: string | null
   client_notes: string | null
+  /** Recorded VAT (lib/vat.ts): on top of selling_price when applied. */
+  vat_applied?: boolean
+  vat_rate?: number | null
+  vat_amount?: number
   /** 'booked' once a booking was made from it: only the notes can change. */
   locked?: 'booked' | 'converted' | null
   itineraries?: { id: string; trip_name: string | null; itinerary_code: string | null; client_name: string | null; client_email: string | null; client_phone?: string | null } | null
@@ -110,6 +116,7 @@ export default function B2CQuoteDetail({ params }: { params: Promise<{ id: strin
   if (!quote) return <div className="p-6 text-gray-500">Offer not found.</div>
 
   const money = (v: number) => formatMoney(Number(v) || 0, quote.currency || 'EUR')
+  const vat = readVat(quote)
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -147,6 +154,13 @@ export default function B2CQuoteDetail({ params }: { params: Promise<{ id: strin
               )}
               <div><span className="text-gray-400">Selling price</span><p className="font-bold text-[#647C47]">{money(quote.selling_price)}</p></div>
               <div><span className="text-gray-400">Per person</span><p className="font-medium">{money(quote.price_per_person)} × {quote.num_travelers}</p></div>
+              {/* VAT, always stated (lib/vat.ts): on top of the selling price. */}
+              <div className="col-span-2 flex flex-wrap items-center gap-3">
+                <VatToken vat={vat} currency={quote.currency} />
+                {vat.vat_applied && (
+                  <span className="text-gray-700">Total incl. VAT: <b className="text-[#647C47]">{money(totalWithVat(quote.selling_price, vat, quote.currency))}</b></span>
+                )}
+              </div>
             </div>
 
             {/* Re-price: from the itinerary as it stands now (its supplier cost,
@@ -159,6 +173,13 @@ export default function B2CQuoteDetail({ params }: { params: Promise<{ id: strin
                 <div><label className="block text-xs text-gray-500 mb-1">Margin %</label><input type="number" min={0} max={100} step="0.01" value={margin} onChange={(e) => setMargin(Number(e.target.value))} className="w-24 border rounded-lg px-3 py-2 text-sm" /></div>
                 <button onClick={() => patch({ margin_percent: margin }, 'Re-priced')} disabled={busy} className="inline-flex items-center gap-1 px-4 py-2 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] disabled:opacity-50"><Save className="w-4 h-4" /> Re-price</button>
                 <p className="w-full text-xs text-gray-400">Re-reads the itinerary's cost and party ({quote.num_travelers} traveller(s)).</p>
+                <VatToggle
+                  className="w-full"
+                  checked={vat.vat_applied}
+                  rate={vat.vat_applied ? vat.vat_rate : undefined}
+                  disabled={busy}
+                  onChange={(on) => patch({ vat_applied: on }, on ? 'VAT applied' : 'VAT removed')}
+                />
               </div>
             )}
           </div>

@@ -1,5 +1,7 @@
 'use client'
 
+import { vatMarker, vatOnLiveNet } from '@/lib/vat'
+import { VatToken } from '@/app/components/Vat'
 import { clientTotalOfDays, seasonSupplementOf, tripClientTotal } from '@/lib/itinerary-client-price'
 import { addDays } from '@/lib/payment-schedule'
 import { overnightLabel, overnightProperty } from '@/lib/itineraries/overnight-property'
@@ -101,6 +103,9 @@ interface Itinerary {
   num_infants: number    // Ages 0-3: FREE except flights
   currency: string
   total_cost: number
+  /** VAT carried from the quote (lib/vat.ts): flag and recorded rate. */
+  vat_applied?: boolean
+  vat_rate?: number | null
   /** What the trip costs us, when the pricing engine has stored it. */
   supplier_cost?: number | null
   status: string
@@ -719,10 +724,10 @@ export default function ViewItineraryPage() {
           client_email: itinerary.client_email,
           line_items: lineItems,
           subtotal: effectiveTotalCost,
-          tax_rate: 0,
-          tax_amount: 0,
           discount_amount: 0,
+          // The NET; the server adds VAT when the trip carries it (lib/vat.ts).
           total_amount: effectiveTotalCost,
+          vat_applied: itinerary.vat_applied === true,
           currency: itinerary.currency || 'EUR',
           issue_date: todayLocal(),
           // Fourteen days from the office's today — toISOString is UTC, a day
@@ -1532,7 +1537,8 @@ export default function ViewItineraryPage() {
         name: itinerary.client_name || '',
         trip: splitTourCode(content.trip_name).title,
         dates,
-        price: formatMoney(effectiveTotalCost, itinerary.currency),
+        // The price and whether VAT is on it — never silent (lib/vat.ts).
+        price: `${formatMoney(effectiveTotalCost, itinerary.currency)} (${vatMarker(vatOnLiveNet(itinerary, effectiveTotalCost, itinerary.currency), itinerary.currency, lang === 'ja' ? 'ja' : 'en')})`,
         link: data.url,
         company: company?.name ?? '',
       })
@@ -2060,6 +2066,8 @@ export default function ViewItineraryPage() {
                 </span>
               </div>
               <p className="text-xl font-bold text-gray-900">{formatMoney(effectiveTotalCost, itinerary.currency)}</p>
+              {/* VAT at the rate the trip recorded from its quote (lib/vat.ts). */}
+              <VatToken vat={vatOnLiveNet(itinerary, effectiveTotalCost, itinerary.currency)} currency={itinerary.currency} />
               <p className="text-xs text-gray-500">{tStage('daysTravellers', { days: itinerary.total_days, travellers: itinerary.num_adults + (itinerary.num_children || 0) + (itinerary.num_infants || 0) })}</p>
               {actualPnl && (
                 <dl className="pt-2 mt-2 border-t border-gray-100 text-xs grid grid-cols-2 gap-y-1">

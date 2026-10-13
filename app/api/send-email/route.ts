@@ -101,7 +101,14 @@ export async function POST(request: Request) {
         )
       }
       emailSubject = lookupServerMessage(recipientLocale, 'email.itinerary.subject', { tripName, itineraryCode })
-      emailBody = generateEmailTemplate(clientName, itineraryCode, tripName, totalCost, currency, recipientLocale, await orgIdentity(await getCurrentOrgId()))
+      // The trip's VAT (lib/vat.ts), read from the trip — never from the body.
+      const { data: trip } = await supabase
+        .from('itineraries')
+        .select('*')
+        .eq('id', String(itineraryId))
+        .eq('org_id', await getCurrentOrgId())
+        .maybeSingle()
+      emailBody = generateEmailTemplate(clientName, itineraryCode, tripName, totalCost, currency, recipientLocale, await orgIdentity(await getCurrentOrgId()), trip)
     } else {
       return NextResponse.json(
         { success: false, error: 'Missing email content parameters' },

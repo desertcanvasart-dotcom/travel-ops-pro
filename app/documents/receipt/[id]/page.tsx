@@ -25,6 +25,8 @@ import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import { BackLink } from '@/components/nav/TripNav'
 import { formatMoney } from '@/lib/currency-totals'
+import { vatInsideGross } from '@/lib/vat'
+import { VatToken } from '@/app/components/Vat'
 
 interface Payment {
   id: string
@@ -41,6 +43,9 @@ interface Payment {
   transaction_reference: string
   payment_date: string
   notes: string
+  /** The trip's VAT (GET /api/payments/[id]); the amount paid includes it. */
+  vat_applied?: boolean
+  vat_rate?: number | null
 }
 
 export default function ReceiptPage() {
@@ -91,12 +96,19 @@ export default function ReceiptPage() {
     notes: p.notes
   })
 
-  const buildInvoiceData = (p: Payment) => ({
-    invoice_number: p.itinerary_code,
-    client_name: p.client_name,
-    total_amount: p.amount,
-    currency: p.currency
-  })
+  // The VAT inside the amount paid, at the trip's recorded rate (lib/vat.ts).
+  const buildInvoiceData = (p: Payment) => {
+    const vat = vatInsideGross(p.amount, p, p.currency)
+    return {
+      invoice_number: p.itinerary_code,
+      client_name: p.client_name,
+      total_amount: p.amount,
+      currency: p.currency,
+      vat_applied: vat.vat_applied,
+      tax_rate: vat.vat_rate,
+      tax_amount: vat.vat_amount,
+    }
+  }
 
   const handlePreviewPDF = async () => {
     if (!payment) return
@@ -356,6 +368,7 @@ export default function ReceiptPage() {
               <p className="text-4xl font-bold">
                 {formatCurrency(payment.amount, payment.currency)}
               </p>
+              <VatToken vat={vatInsideGross(payment.amount, payment, payment.currency)} currency={payment.currency} className="mt-2" />
             </div>
 
             {/* Notes */}

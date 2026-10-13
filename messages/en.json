@@ -1,4 +1,13 @@
 {
+  "vat": {
+    "applied": "VAT {rate}% included: {amount}",
+    "notApplied": "VAT not applied",
+    "apply": "Apply VAT ({rate}%)",
+    "applyHint": "Adds VAT on top of the net price at the company's rate (Settings › Company Profile). The rate and amount are recorded on this document.",
+    "net": "Net price",
+    "totalInclVat": "Total incl. VAT",
+    "lockedHint": "VAT is recorded with the price and no longer changes on this document."
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",
@@ -3233,6 +3242,8 @@
       "defaultMargin": "Default margin (%)",
       "defaultMarginUnset": "Not set — 25% applies",
       "defaultMarginHint": "The margin the company sells at. Colleagues who have set no margin of their own inherit it; each quote can still override it.",
+      "vatRate": "VAT rate (%)",
+      "vatRateHint": "Added on top of the net price on every quote or invoice where \"Apply VAT\" is ticked. Each document records the rate it was issued at, so changing this never alters a document already made.",
       "rateChangeAlerts": "Rate-change alerts",
       "rateChangeAlertsInApp": "In the app",
       "rateChangeAlertsInAppEmail": "In the app + e-mail",
@@ -6065,7 +6076,7 @@
     "grossRevenue": "Gross Revenue",
     "deductibleExpenses": "Deductible Expenses",
     "taxableIncome": "Taxable Income",
-    "vatSummary": "VAT Summary (Est. 14%)",
+    "vatSummary": "VAT Summary (as recorded on issued invoices)",
     "vatCollected": "VAT Collected",
     "vatPaid": "VAT Paid",
     "netVat": "Net VAT",

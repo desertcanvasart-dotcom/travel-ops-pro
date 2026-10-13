@@ -8,6 +8,7 @@ import { loadSeasonWindows } from '@/lib/auto-pricing-service'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { currencySymbol } from '@/lib/currency-totals'
+import { getOrgVatRate, parseVatApplied, vatColumns, vatInsertColumns } from '@/lib/vat'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
@@ -542,6 +543,15 @@ export async function POST(request: NextRequest) {
     const validUntil = new Date()
     validUntil.setDate(validUntil.getDate() + 30)
 
+    // VAT on top of the net (lib/vat.ts): as asked, else as the trip carries
+    // it; the company's rate today, recorded on the quote.
+    const vat = vatColumns({
+      applied: parseVatApplied(body.vat_applied) ?? itinerary.vat_applied === true,
+      net: sellingPrice,
+      rate: await getOrgVatRate(supabaseAdmin, orgId),
+      currency: rateCurrency,
+    })
+
     const { data: quote, error: quoteError } = await supabaseAdmin
       .from('tour_quotes')
       .insert({
@@ -571,6 +581,7 @@ export async function POST(request: NextRequest) {
         season_name: season?.name ?? null,
         season_uplift_percent: season?.upliftPercent ?? 0,
         season_uplift_amount: seasonUplift,
+        ...vatInsertColumns(vat),
         // Every line in services_snapshot is in the RATE currency (B2B rate
         // tables + the normalized kept lines above) — saving the itinerary's
         // display currency here mislabeled the amounts whenever it differed.
@@ -632,6 +643,7 @@ export async function POST(request: NextRequest) {
         season_name: season?.name ?? null,
         season_uplift_percent: season?.upliftPercent ?? 0,
         season_uplift_amount: seasonUplift,
+        ...vat,
         services_count: servicesSnapshot.length,
       }
     }, { status: 201 })

@@ -59,6 +59,16 @@ export default function ReceiptsPage() {
 
       {/* PDF detail */}
       <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">VAT</h2>
+        <p className="text-gray-600">
+          Every receipt states the VAT inside the amount received, or <strong>VAT not applied</strong>. For a payment
+          against an invoice it is that payment&apos;s share of the VAT the invoice recorded (half the invoice paid,
+          half its VAT). For a payment recorded on a trip it is the VAT inside the amount at the trip&apos;s recorded
+          rate. The receipt page, the PDF and the WhatsApp receipt all show it.
+        </p>
+      </section>
+
+      <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">The Receipt PDF</h2>
         <p className="text-gray-600 mb-3">
           The generated receipt PDF includes the receipt number, the source invoice or itinerary reference, client details, payment date, payment method, amount, transaction reference, and any notes.

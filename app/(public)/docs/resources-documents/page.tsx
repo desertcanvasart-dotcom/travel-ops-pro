@@ -91,6 +91,16 @@ export default function ResourcesDocumentsPage() {
           <li><strong>Invoice PDF</strong> &mdash; From the invoice page, click <strong>Download PDF</strong></li>
           <li><strong>Contract</strong> &mdash; From the itinerary, click <strong>Generate Documents</strong></li>
         </ul>
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">VAT</h3>
+        <p className="text-gray-600 mb-3">
+          Every document that shows a client price states whether VAT is on it: <strong>VAT 14% included:
+          &lt;amount&gt;</strong> or <strong>VAT not applied</strong>. The itinerary PDF and the contract use the
+          trip&apos;s VAT (carried from its quote); the invoice uses the VAT the invoice recorded; a receipt states the
+          VAT inside the amount received. See{' '}
+          <Link href="/docs/invoices-payments" className="text-primary-600 hover:underline">Invoices</Link> and{' '}
+          <Link href="/docs/team-settings" className="text-primary-600 hover:underline">Settings</Link> for how the
+          rate is set and recorded.
+        </p>
         <Tip>
           PDFs are generated in your browser &mdash; no waiting for server processing. You can also go to <strong>Documents</strong> in the sidebar to see all generated documents in one place.
         </Tip>

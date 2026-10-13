@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { FileText, Loader2, Plus, Eye, Trash2, X, Users, Clock, Send, CheckCircle2, XCircle } from 'lucide-react'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { formatMoney } from '@/lib/currency-totals'
+import { readVat } from '@/lib/vat'
+import { VatToken, VatToggle } from '@/app/components/Vat'
 
 interface B2CQuote {
   id: string
@@ -16,6 +18,9 @@ interface B2CQuote {
   status: string
   valid_until: string | null
   created_at: string
+  vat_applied?: boolean
+  vat_rate?: number | null
+  vat_amount?: number
   itineraries?: { id: string; trip_name: string | null; itinerary_code: string | null; client_name: string | null } | null
 }
 
@@ -134,6 +139,7 @@ export default function B2CQuotesPage() {
                   <td className="px-4 py-3 text-right">
                     <p className="text-sm font-bold text-[#647C47]">{formatMoney(Number(q.selling_price) || 0, q.currency || 'EUR')}</p>
                     <p className="text-xs text-gray-500">{formatMoney(Number(q.price_per_person) || 0, q.currency || 'EUR')} pp</p>
+                    <VatToken vat={readVat(q)} currency={q.currency} className="mt-1" />
                   </td>
                   <td className="px-4 py-3 text-center text-sm">{q.valid_until || '—'}</td>
                   <td className="px-4 py-3 text-center">{badge(q.status)}</td>
@@ -164,6 +170,8 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   // Empty means the company's default margin (Settings); the server applies it.
   const [marginPercent, setMarginPercent] = useState('')
   const [validDays, setValidDays] = useState(30)
+  // Off unless chosen; the server records the company's rate and the amount.
+  const [vatApplied, setVatApplied] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -185,7 +193,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         // Travellers and currency are the itinerary's own; the server reads them.
-        body: JSON.stringify({ itinerary_id: itineraryId, ...(marginPercent.trim() !== '' ? { margin_percent: Number(marginPercent) } : {}), valid_days: validDays }),
+        body: JSON.stringify({ itinerary_id: itineraryId, ...(marginPercent.trim() !== '' ? { margin_percent: Number(marginPercent) } : {}), valid_days: validDays, vat_applied: vatApplied }),
       })
       const json = await res.json()
       if (!json.success) { setError(json.error || 'Failed to create offer'); return }
@@ -230,6 +238,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             <div><label className="block text-xs text-gray-500 mb-1">Margin %</label><input type="number" min={0} max={100} step="0.01" className={input} placeholder="Company default" value={marginPercent} onChange={(e) => setMarginPercent(e.target.value)} /></div>
             <div><label className="block text-xs text-gray-500 mb-1">Valid (days)</label><input type="number" min={1} className={input} value={validDays} onChange={(e) => setValidDays(Number(e.target.value))} /></div>
           </div>
+          <VatToggle checked={vatApplied} onChange={setVatApplied} />
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
         <div className="flex justify-end gap-2 px-5 py-4 border-t">

@@ -10,7 +10,8 @@ import { syncInvoice } from '@/lib/accounting'
 import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-numbering'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { currencyDecimals, roundToCurrency } from '@/lib/currency-totals'
-import { invoiceTotals } from '@/lib/invoices/totals'
+import { invoiceNet, invoiceTotals, resolveInvoiceVat } from '@/lib/invoices/totals'
+import { getOrgVatRate, parseVatApplied } from '@/lib/vat'
 import { recordsInOrg } from '@/lib/org-refs'
 
 const supabaseAdmin = createClient(
@@ -141,6 +142,24 @@ export async function POST(request: NextRequest) {
     // decimal place is not an amount of money that exists.
     const currency = body.currency || 'EUR'
     const moneyDp = currencyDecimals(currency)
+
+    // VAT (lib/vat.ts): as the caller chose, else as the source carries it —
+    // the deposit a final settles, else the trip (which has it from its
+    // quote). The rate is the company's today and is recorded on the invoice;
+    // the amount is worked out below from the net, never taken from the body.
+    let vatApplied = parseVatApplied(body.vat_applied)
+    if (vatApplied === undefined) {
+      const [{ data: parentRow }, { data: tripRow }] = await Promise.all([
+        body.parent_invoice_id
+          ? supabaseAdmin.from('invoices').select('*').eq('id', body.parent_invoice_id).eq('org_id', orgId).maybeSingle()
+          : Promise.resolve({ data: null }),
+        body.itinerary_id
+          ? supabaseAdmin.from('itineraries').select('*').eq('id', body.itinerary_id).eq('org_id', orgId).maybeSingle()
+          : Promise.resolve({ data: null }),
+      ])
+      vatApplied = resolveInvoiceVat(undefined, { parent: parentRow, itinerary: tripRow })
+    }
+    const vatRate = vatApplied ? await getOrgVatRate(supabaseAdmin, orgId) : 0
 
     // ---------- what the SERVER adds to this invoice ----------
     // Two kinds of money reach a trip's invoice without the caller sending
@@ -288,7 +307,7 @@ export async function POST(request: NextRequest) {
       if (body.parent_invoice_id) {
         const { data: parent } = await supabaseAdmin
           .from('invoices')
-          .select('total_amount, currency, full_trip_cost')
+          .select('total_amount, tax_amount, currency, full_trip_cost')
           .eq('id', body.parent_invoice_id)
           .eq('org_id', orgId)
           .single()
@@ -297,16 +316,19 @@ export async function POST(request: NextRequest) {
         // loses what rounding removed — 20% of ¥1,854,367 is ¥370,873, which
         // rebuilds as ¥1,854,365 and under-bills the balance by ¥2. Used when
         // it reproduces the deposit exactly (same additions then and now).
+        // The deposit's NET: a deposit carrying VAT recorded it in tax_amount,
+        // and what it paid towards the trip price is the part before VAT.
+        const parentNet = parent?.total_amount != null ? invoiceNet(parent) : null
         const storedTrip = Number(parent?.full_trip_cost)
-        if (Number.isFinite(storedTrip) && storedTrip > 0 && parent?.total_amount != null) {
+        if (Number.isFinite(storedTrip) && storedTrip > 0 && parentNet != null) {
           const storedBase = storedTrip - additionsTotal
           const depositFromStored = roundToCurrency((storedBase * depositPercent) / 100, currency)
-          if (storedBase > 0 && Math.abs(depositFromStored - Number(parent.total_amount)) < 0.005) {
+          if (storedBase > 0 && Math.abs(depositFromStored - parentNet) < 0.005) {
             fullTripCost = storedTrip
           }
         }
-        if (parent?.total_amount != null) {
-          depositAmount = Number(parent.total_amount)
+        if (parent && parentNet != null) {
+          depositAmount = parentNet
           depositSource = 'parent'
           // Surface a mismatch between the recomputed percent and the
           // actual parent amount; don't fail the request — the caller may
@@ -352,11 +374,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Subtotal + tax − discount must equal the total (see lib/invoices/totals).
-    const totals = invoiceTotals({
+    // totalAmount is the NET here; the tax is VAT on it, added on top.
+    const { vat_applied: vatOnInvoice, ...totals } = invoiceTotals({
       invoiceType,
-      totalAmount,
-      taxRate: body.tax_rate,
-      taxAmount: body.tax_amount,
+      netAmount: totalAmount,
+      vatApplied,
+      vatRate,
       discountAmount: body.discount_amount,
       currency,
     })
@@ -376,10 +399,12 @@ export async function POST(request: NextRequest) {
       // how the PDF came to quote a trip cost 2 yen below the real one.
       full_trip_cost: invoiceType === 'standard' ? null : fullTripCost,
       ...totals,
-      total_amount: totalAmount,
+      // Written only when on: off is the column's default, so an invoice
+      // without VAT still saves on a database before migration 20261214.
+      ...(vatOnInvoice ? { vat_applied: true } : {}),
       currency,
       amount_paid: 0,
-      balance_due: totalAmount,
+      balance_due: totals.total_amount,
       status: 'draft',
       issue_date: body.issue_date || new Date().toISOString().split('T')[0],
       due_date: body.due_date || null,

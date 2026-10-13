@@ -18,6 +18,8 @@ import ConvertToBookingCard from '@/app/components/ConvertToBookingCard'
 import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
 import { formatMoney } from '@/lib/currency-totals'
+import { readVat, totalWithVat } from '@/lib/vat'
+import { VatToken, VatToggle } from '@/app/components/Vat'
 import { useConfirm, useConfirmDialog } from '@/components/ConfirmDialog'
 import { quoteCompleteness, describeGaps } from '@/lib/pricing/quote-completeness'
 
@@ -62,6 +64,10 @@ interface Quote {
   converted_to_itinerary_id: string | null
   /** 'converted' or 'booked': only the notes can change any more. */
   locked?: 'converted' | 'booked' | null
+  /** Recorded VAT (lib/vat.ts): on top of selling_price when applied. */
+  vat_applied?: boolean
+  vat_rate?: number | null
+  vat_amount?: number
   valid_until: string
   notes: string | null
   created_at: string
@@ -108,6 +114,7 @@ export default function QuoteDetailPage() {
   const params = useParams()
   const quoteId = params?.id as string
   const t = useTranslations('b2bQuotes')
+  const tVat = useTranslations('vat')
   const confirmDialog = useConfirm()
   const dialog = useConfirmDialog()
 
@@ -157,6 +164,25 @@ export default function QuoteDetailPage() {
       }
     } catch (err) {
       console.error('Failed to update status:', err)
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  // VAT on or off. The server records the company's rate and the amount on
+  // this quote's net; a converted or booked quote keeps the VAT it had.
+  const updateVat = async (on: boolean) => {
+    if (!quote) return
+    setUpdating(true)
+    try {
+      const res = await fetch(`/api/b2b/quotes/${quoteId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vat_applied: on, change_reason: on ? 'VAT applied' : 'VAT removed' })
+      })
+      const data = await res.json()
+      if (data.success) setQuote({ ...quote, vat_applied: data.data.vat_applied, vat_rate: data.data.vat_rate, vat_amount: data.data.vat_amount })
+      else await dialog.alert(t('pricing'), data.error || t('pricing'), 'warning')
     } finally {
       setUpdating(false)
     }
@@ -600,6 +626,24 @@ export default function QuoteDetailPage() {
                   <span className="text-xl font-bold text-[#647C47]">{money(quote.selling_price)}</span>
                 </div>
                 <p className="text-xs text-gray-500 text-right mt-1">{money(quote.price_per_person)} {t('perPersonLong')}</p>
+              </div>
+              {/* VAT, always stated (lib/vat.ts): on top of the selling price. */}
+              <div className="pt-3 border-t space-y-2">
+                <VatToken vat={readVat(quote)} currency={quote.currency} />
+                {readVat(quote).vat_applied && (
+                  <div className="flex justify-between">
+                    <span className="font-medium">{tVat('totalInclVat')}</span>
+                    <span className="text-lg font-bold text-[#647C47]">{money(totalWithVat(quote.selling_price, readVat(quote), quote.currency))}</span>
+                  </div>
+                )}
+                {!quote.locked && quote.status !== 'converted' && (
+                  <VatToggle
+                    checked={readVat(quote).vat_applied}
+                    rate={readVat(quote).vat_applied ? readVat(quote).vat_rate : undefined}
+                    disabled={updating}
+                    onChange={updateVat}
+                  />
+                )}
               </div>
               {quote.single_supplement && quote.single_supplement > 0 && (
                 <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">

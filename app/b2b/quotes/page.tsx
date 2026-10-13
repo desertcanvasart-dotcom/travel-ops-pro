@@ -12,6 +12,8 @@ import { LanguageIndicator } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { formatMoney } from '@/lib/currency-totals'
+import { readVat } from '@/lib/vat'
+import { VatToken } from '@/app/components/Vat'
 
 // ============================================
 // B2B QUOTES LIST PAGE
@@ -30,6 +32,9 @@ interface Quote {
   currency: string | null
   status: string
   created_at: string
+  vat_applied?: boolean
+  vat_rate?: number | null
+  vat_amount?: number
   trip_name: string | null
   source: string | null
   tour_variations: {
@@ -356,6 +361,7 @@ export default function QuotesListPage() {
                   <td className="px-4 py-3 text-center text-sm">{quote.travel_date ? formatDate(quote.travel_date) : '-'}</td>
                   <td className="px-4 py-3 text-right">
                     <p className="text-sm font-bold text-[#647C47]">{money(quote, quote.selling_price)}</p>
+                    <VatToken vat={readVat(quote)} currency={quote.currency} className="mt-1" />
                     <p className="text-xs text-gray-500">{money(quote, quote.price_per_person)}{t('perPerson')}</p>
                   </td>
                   <td className="px-4 py-3 text-center">

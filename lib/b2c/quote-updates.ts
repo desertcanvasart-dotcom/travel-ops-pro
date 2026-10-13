@@ -16,6 +16,9 @@
 // itinerary), the status, the notes and the valid-until date. Everything else
 // is ignored; a field of the wrong shape refuses the whole update. A booked
 // offer keeps everything but its notes (lib/quotes/lock.ts).
+//
+// vat_applied: VAT on top of the offer's price or not. Only the flag is taken;
+// the route records the rate and amount (lib/vat.ts). A booked offer keeps its.
 
 import { normaliseMargin } from '@/lib/org-default-margin'
 import { isPastValidUntil, todayIso } from '@/lib/quotes/validity'
@@ -80,6 +83,7 @@ export interface B2cQuoteUpdates {
   client_notes?: string | null
   internal_notes?: string | null
   valid_until?: string | null
+  vat_applied?: boolean
 }
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -113,6 +117,10 @@ export function pickB2cQuoteUpdates(
       return { ok: false, status: 400, error: 'valid_until must be a date (YYYY-MM-DD)' }
     }
     out.valid_until = body.valid_until as string | null
+  }
+  if (body.vat_applied !== undefined) {
+    if (typeof body.vat_applied !== 'boolean') return { ok: false, status: 400, error: 'vat_applied must be true or false' }
+    out.vat_applied = body.vat_applied
   }
 
   if (current.lock) {

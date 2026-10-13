@@ -17,6 +17,11 @@
 //
 // Once a quote is converted or booked (lib/quotes/lock.ts) only its notes
 // change.
+//
+// vat_applied is the one price-side choice a person makes here: VAT on top of
+// the engine's price or not. Only the flag is taken; the rate and amount are
+// worked out by lib/b2b/update-quote.ts (lib/vat.ts), and a locked quote keeps
+// the VAT it was converted or booked with.
 
 import { isPastValidUntil, todayIso } from '@/lib/quotes/validity'
 import { editRefusalMessage, type LockReason } from '@/lib/quotes/lock'
@@ -32,6 +37,7 @@ export interface B2bQuoteUpdates {
   client_nationality?: string | null
   notes?: string | null
   valid_until?: string | null
+  vat_applied?: boolean
 }
 
 const TEXT_FIELDS = ['client_name', 'client_email', 'client_phone', 'client_nationality', 'notes'] as const
@@ -65,6 +71,10 @@ export function pickB2bQuoteUpdates(
       return { ok: false, status: 400, error: 'valid_until must be a date (YYYY-MM-DD)' }
     }
     out.valid_until = body.valid_until as string | null
+  }
+  if (body.vat_applied !== undefined) {
+    if (typeof body.vat_applied !== 'boolean') return { ok: false, status: 400, error: 'vat_applied must be true or false' }
+    out.vat_applied = body.vat_applied
   }
 
   if (current.lock) {

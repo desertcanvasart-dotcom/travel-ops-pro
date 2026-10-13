@@ -40,6 +40,8 @@ interface Profile {
   default_currency: string
   rate_currency: string
   default_margin_percent: string
+  /** VAT rate in percent (migration 20261214, default 14). */
+  vat_rate: string
   rate_change_alerts: string
   /** What travel contracts name (migration 20261115). */
   operating_country: string
@@ -69,6 +71,7 @@ export default function CompanyProfileCard() {
     default_currency: '',
     rate_currency: 'EUR',
     default_margin_percent: '',
+    vat_rate: '14',
     rate_change_alerts: 'in_app',
     operating_country: '',
     contract_governing_law: '',
@@ -99,6 +102,7 @@ export default function CompanyProfileCard() {
         default_currency: data.data.default_currency ?? '',
         rate_currency: data.data.rate_currency ?? 'EUR',
         default_margin_percent: data.data.default_margin_percent == null ? '' : String(data.data.default_margin_percent),
+        vat_rate: data.data.vat_rate == null ? '14' : String(data.data.vat_rate),
         rate_change_alerts: data.data.rate_change_alerts ?? 'in_app',
         operating_country: data.data.operating_country ?? '',
         contract_governing_law: data.data.contract_governing_law ?? '',
@@ -307,6 +311,19 @@ export default function CompanyProfileCard() {
             placeholder={t('defaultMarginUnset')}
           />
           <p className="text-xs text-gray-500 mt-1">{t('defaultMarginHint')}</p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">{t('vatRate')}</label>
+          <input
+            className={inputClass}
+            type="number"
+            min={0}
+            max={100}
+            step={0.5}
+            value={form.vat_rate}
+            onChange={e => set('vat_rate', e.target.value)}
+          />
+          <p className="text-xs text-gray-500 mt-1">{t('vatRateHint')}</p>
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">{t('rateChangeAlerts')}</label>

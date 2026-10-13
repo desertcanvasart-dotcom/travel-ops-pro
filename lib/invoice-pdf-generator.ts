@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf'
 import { formatMoney } from '@/lib/currency-totals'
+import { formatVatRate, readInvoiceVat } from '@/lib/vat'
 
 interface LineItem {
   description: string
@@ -24,6 +25,8 @@ interface Invoice {
   subtotal: number
   tax_rate: number
   tax_amount: number
+  /** Whether tax_rate / tax_amount are VAT this invoice charges (lib/vat.ts). */
+  vat_applied?: boolean
   discount_amount: number
   total_amount: number
   currency: string
@@ -549,14 +552,18 @@ export function generateInvoicePDF(
   doc.text(formatCurrency(subtotal, invoice.currency), totalsValueX, y, { align: 'right' })
   y += 6
 
-  // Tax (if applicable)
-  if (Number(invoice.tax_amount) > 0) {
-    doc.setTextColor(...mediumGray)
-    doc.text(`Tax (${invoice.tax_rate}%):`, totalsX, y)
+  // VAT, always stated (lib/vat.ts): "VAT 14% included:" and the recorded
+  // amount, or "VAT not applied" — a customer must never have to guess.
+  const vat = readInvoiceVat(invoice)
+  doc.setTextColor(...mediumGray)
+  if (vat.vat_applied) {
+    doc.text(`VAT ${formatVatRate(vat.vat_rate)}% included:`, totalsX, y)
     doc.setTextColor(...darkGray)
-    doc.text(formatCurrency(invoice.tax_amount, invoice.currency), totalsValueX, y, { align: 'right' })
-    y += 6
+    doc.text(formatCurrency(vat.vat_amount, invoice.currency), totalsValueX, y, { align: 'right' })
+  } else {
+    doc.text('VAT not applied', totalsX, y)
   }
+  y += 6
 
   // Discount (if applicable)
   if (Number(invoice.discount_amount) > 0) {

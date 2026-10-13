@@ -120,6 +120,12 @@ export default function BookingsPage() {
             The trip of a booking cannot be deleted either; cancel the trip (Cancel trip on the itinerary page), which can
             cancel the booking with it.
           </li>
+          <li>
+            <strong>VAT</strong>: the booking&apos;s total, deposit and balance are the net figures from the quote. The
+            payment summary shows the trip&apos;s VAT line (<strong>VAT 14% included: &lt;amount&gt;</strong> or{' '}
+            <strong>VAT not applied</strong>), and VAT is billed on the trip&apos;s invoices. Booking a quote passes its VAT
+            choice and rate to the trip.
+          </li>
         </ul>
       </section>
 

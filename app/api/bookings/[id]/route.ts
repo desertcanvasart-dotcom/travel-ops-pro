@@ -31,11 +31,7 @@ export async function GET(
       .from('bookings')
       .select(`
         *,
-        itinerary:itineraries (
-          id,
-          itinerary_code,
-          status
-        )
+        itinerary:itineraries ( * )
       `)
       .eq('id', id)
       .eq('org_id', orgId)

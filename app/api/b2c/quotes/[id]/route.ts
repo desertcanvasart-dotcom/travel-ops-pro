@@ -16,6 +16,7 @@ import { itineraryPax, offerCostBase, OFFER_ITINERARY_COLUMNS, pickB2cQuoteUpdat
 import { bookingsFromQuote, MANAGER_ROLES, quoteLockReason } from '@/lib/quotes/lock'
 import { deleteQuote } from '@/lib/quotes/delete-quote'
 import { withEffectiveStatus } from '@/lib/quotes/validity'
+import { getOrgVatRate, vatColumns } from '@/lib/vat'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabaseAdmin = createClient(
@@ -60,7 +61,8 @@ export async function PUT(
 
     const { data: current } = await supabaseAdmin
       .from('b2c_quotes')
-      .select('id, itinerary_id, status, valid_until, margin_percent, num_travelers, season_uplift_percent, currency')
+      // '*': the VAT columns too, when the database has them (migration 20261214).
+      .select('*')
       .eq('id', id)
       .eq('org_id', orgId)
       .maybeSingle()
@@ -73,7 +75,8 @@ export async function PUT(
     const lock = quoteLockReason(current, await bookingsFromQuote(supabaseAdmin, 'b2c', id))
     const picked = pickB2cQuoteUpdates(body, { valid_until: current.valid_until, lock })
     if (!picked.ok) return NextResponse.json({ success: false, error: picked.error }, { status: picked.status })
-    const updates: Record<string, unknown> = { ...picked.updates }
+    const { vat_applied: vatWanted, ...editable } = picked.updates
+    const updates: Record<string, unknown> = { ...editable }
     // Changing a margin is manager and above (owner decision, 2026-10-13).
     if (picked.updates.margin_percent !== undefined && !MANAGER_ROLES.includes((await getCurrentUserRole()) ?? '')) {
       return NextResponse.json({ success: false, error: 'Insufficient permissions. Changing the margin requires manager role or higher.' }, { status: 403 })
@@ -104,8 +107,22 @@ export async function PUT(
       }))
     }
 
+    // VAT (lib/vat.ts). Switched on or off: recorded on the offer's net at the
+    // company's rate today. Re-priced while on: the new net at the rate the
+    // offer recorded. Sent unchanged with nothing else: left as it is.
+    const vatWas = current.vat_applied === true
+    const vatOn = vatWanted ?? vatWas
+    if (vatOn !== vatWas || (vatOn && updates.selling_price !== undefined)) {
+      Object.assign(updates, vatColumns({
+        applied: vatOn,
+        net: updates.selling_price ?? current.selling_price,
+        rate: vatOn !== vatWas ? await getOrgVatRate(supabaseAdmin, orgId) : current.vat_rate,
+        currency: (updates.currency as string | undefined) ?? current.currency,
+      }))
+    }
+
     if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ success: false, error: 'Nothing to change: an offer\'s margin, status, notes and valid-until date can be edited.' }, { status: 400 })
+      return NextResponse.json({ success: false, error: 'Nothing to change: an offer\'s margin, status, notes, valid-until date and VAT can be edited.' }, { status: 400 })
     }
     const actor = await getCurrentUserId()
     updates.updated_at = new Date().toISOString()
