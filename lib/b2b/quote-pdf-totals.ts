@@ -12,7 +12,7 @@ import { escapeHtml as esc } from '@/lib/html-escape'
 import { netPriceLabel, readVat, totalInclVatLabel, totalWithVat, vatMarker } from '@/lib/vat'
 
 export function quotePdfTotalsHtml(
-  quote: { selling_price?: unknown; currency?: string | null; vat_applied?: unknown; vat_rate?: unknown; vat_amount?: unknown },
+  quote: { selling_price?: unknown; currency?: string | null; vat_applied?: unknown; vat_rate?: unknown; vat_amount?: unknown; vat_base?: unknown },
   locale: 'en' | 'ja',
   totalLabel: string
 ): string {

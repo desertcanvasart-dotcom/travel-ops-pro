@@ -11,14 +11,17 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { DEFAULT_VAT_RATE, formatVatRate, normaliseVatRate, type VatRecord } from '@/lib/vat'
+import { DEFAULT_VAT_RATE, formatVatRate, normaliseVatRate, vatExcludesExtras, type VatRecord } from '@/lib/vat'
 import { formatMoney } from '@/lib/currency-totals'
 
-/** The token: green when VAT is included, grey when it is not. */
+/**
+ * The token: green when VAT is included, grey when it is not. A document that
+ * left extras or insurance out of its VAT (it recorded a vat_base) says so.
+ */
 export function VatToken({ vat, currency, className = '' }: { vat: VatRecord; currency: string | null | undefined; className?: string }) {
   const t = useTranslations('vat')
   const text = vat.vat_applied
-    ? t('applied', {
+    ? t(vatExcludesExtras(vat) ? 'appliedExcludes' : 'applied', {
         rate: formatVatRate(vat.vat_rate ?? DEFAULT_VAT_RATE),
         amount: formatMoney(Number(vat.vat_amount) || 0, currency || 'EUR'),
       })

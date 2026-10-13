@@ -44,7 +44,7 @@ interface UnifiedPayment {
   notes: string | null
   created_at: string
   /** An invoice payment: the invoice's recorded VAT, for the receipt's VAT line. */
-  invoice_vat?: { vat_applied?: boolean; tax_rate?: number | null; tax_amount?: number | null; total_amount?: number }
+  invoice_vat?: { vat_applied?: boolean; tax_rate?: number | null; tax_amount?: number | null; total_amount?: number; vat_base?: number | null }
 }
 
 export default function ReceiptsPage() {
@@ -131,6 +131,8 @@ export default function ReceiptsPage() {
                   tax_rate: invoice.tax_rate,
                   tax_amount: invoice.tax_amount,
                   total_amount: Number(invoice.total_amount) || 0,
+                  // Set when it left extras and insurance out of its VAT.
+                  vat_base: invoice.vat_base ?? null,
                 },
               })
             })
@@ -172,11 +174,11 @@ export default function ReceiptsPage() {
       // The VAT the receipt states (lib/vat.ts): an invoice payment's share of
       // its invoice's recorded VAT; an itinerary payment's VAT inside the
       // amount at its trip's rate, read from the payment's own record.
-      let vatSource: { vat_applied?: boolean; tax_rate?: number | null; tax_amount?: number | null; total_amount?: number } = payment.invoice_vat ?? {}
+      let vatSource: { vat_applied?: boolean; tax_rate?: number | null; tax_amount?: number | null; total_amount?: number; vat_base?: number | null } = payment.invoice_vat ?? {}
       if (payment.source === 'itinerary') {
         const res = await fetch(`/api/payments/${payment.id}`).then(r => r.json()).catch(() => null)
         const vat = vatInsideGross(payment.amount, res?.data, payment.currency)
-        vatSource = { vat_applied: vat.vat_applied, tax_rate: vat.vat_rate, tax_amount: vat.vat_amount, total_amount: payment.amount }
+        vatSource = { vat_applied: vat.vat_applied, tax_rate: vat.vat_rate, tax_amount: vat.vat_amount, total_amount: payment.amount, vat_base: vat.vat_base ?? null }
       }
 
       const doc = generateReceiptPDF({

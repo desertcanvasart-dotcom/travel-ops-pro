@@ -21,7 +21,9 @@ import type Anthropic from '@anthropic-ai/sdk'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getAnthropicClient } from '@/lib/ai/anthropic-client'
 import { MODEL_DRAFT } from '@/lib/ai/models'
-import { determineCapacityResult, type CapacityDayDetail } from '@/lib/capacity-availability'
+import { capacityDayDetail, determineCapacityResult } from '@/lib/capacity-availability'
+import { datesInRange, loadDayLoads } from '@/lib/capacity-load'
+import { BOOKABLE_DEPARTURE_STATUSES, withSeatCounts } from '@/lib/departures/seats'
 
 // ============================================================
 // TYPES
@@ -215,7 +217,7 @@ class ToolExecutor {
       // Capacity rows for the range — this org's calendar only.
       const { data: rows } = await this.supabase
         .from('operator_capacity')
-        .select('date, status, max_groups, booked_groups, reason')
+        .select('date, status, max_groups, reason')
         .eq('org_id', this.orgId)
         .gte('date', start)
         .lte('date', end)
@@ -224,24 +226,26 @@ class ToolExecutor {
       const byDate = new Map<string, any>()
       for (const r of rows || []) byDate.set(r.date, r)
 
-      // Expand the range; a date with no row defaults to available (3 groups).
-      const details: CapacityDayDetail[] = []
-      const cur = new Date(start)
-      const endD = new Date(end)
-      while (cur <= endD) {
-        const d = cur.toISOString().split('T')[0]
-        const row = byDate.get(d)
-        details.push(
-          row
-            ? { date: d, status: row.status, available_slots: row.max_groups - row.booked_groups, reason: row.reason }
-            : { date: d, status: 'available', available_slots: 3 - groupSize }
-        )
-        cur.setDate(cur.getDate() + 1)
+      // The days exactly as /api/capacity/check builds them: slots LEFT once
+      // the groups already out (sold trips, running departures) are counted,
+      // and 3 for a day with no row. This used 3 − the party size for an
+      // empty day, and walked the range with local setDate/toISOString.
+      let loads: Awaited<ReturnType<typeof loadDayLoads>> = new Map()
+      try {
+        loads = await loadDayLoads(this.supabase, this.orgId, start, end)
+      } catch {
+        // The verdict still stands on the calendar alone.
       }
+      const details = datesInRange(start, end).map(d => capacityDayDetail(d, byDate.get(d), loads.get(d)))
 
-      const availability = determineCapacityResult(details, groupSize)
+      // The slots are GROUPS and one enquiry is one group, whatever its
+      // size — passing the travellers made a party of 2 "fully booked" on a
+      // Busy day with one group slot left.
+      const availability = determineCapacityResult(details, 1)
 
-      // Optionally surface bookable scheduled departures in the range.
+      // Optionally surface bookable scheduled departures in the range, with
+      // the seats free as every screen counts them (booked outside the app +
+      // confirmed + pending holds — lib/departures/seats).
       let departures: any[] = []
       if (input?.check_departures) {
         const { data: deps } = await this.supabase
@@ -250,10 +254,11 @@ class ToolExecutor {
           .eq('org_id', this.orgId)
           .gte('start_date', start)
           .lte('start_date', end)
-          .in('status', ['open', 'limited', 'guaranteed'])
+          .in('status', [...BOOKABLE_DEPARTURE_STATUSES])
           .order('start_date', { ascending: true })
           .limit(5)
-        departures = (deps || []).filter((dp: any) => dp.max_pax - dp.booked_pax >= groupSize)
+        departures = (await withSeatCounts(this.supabase, this.orgId, (deps || []) as any[]))
+          .filter((dp: any) => dp.seats_free >= groupSize)
       }
 
       return { success: true, data: { availability, departures }, message: availability.message }

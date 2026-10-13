@@ -27,13 +27,13 @@ function boundedRange(startISO: string, endISO: string): { start: Date; end: Dat
  * Every date in [startISO, endISO] whose weekday is selected.
  * `weekdays` are JS weekday numbers: 0 = Sunday … 6 = Saturday.
  */
-export function datesByWeekday(startISO: string, endISO: string, weekdays: readonly number[]): string[] {
+export function datesByWeekday(startISO: string, endISO: string, weekdays: readonly number[], cap = MAX_GENERATED_DATES): string[] {
   const range = boundedRange(startISO, endISO)
   if (!range || weekdays.length === 0) return []
   const want = new Set(weekdays)
   return eachDayOfInterval(range)
     .filter(d => want.has(getDay(d)))
-    .slice(0, MAX_GENERATED_DATES)
+    .slice(0, cap)
     .map(iso)
 }
 
@@ -41,27 +41,34 @@ export function datesByWeekday(startISO: string, endISO: string, weekdays: reado
  * Dates from startISO up to and including endISO, one every `stepDays` days.
  * A step of the tour's own length gives back-to-back departures.
  */
-export function datesByInterval(startISO: string, endISO: string, stepDays: number): string[] {
+export function datesByInterval(startISO: string, endISO: string, stepDays: number, cap = MAX_GENERATED_DATES): string[] {
   const range = boundedRange(startISO, endISO)
   if (!range || !Number.isFinite(stepDays) || stepDays < 1) return []
   const step = Math.floor(stepDays)
   const out: string[] = []
-  for (let d = range.start; d <= range.end && out.length < MAX_GENERATED_DATES; d = addDays(d, step)) {
+  for (let d = range.start; d <= range.end && out.length < cap; d = addDays(d, step)) {
     out.push(iso(d))
   }
   return out
 }
 
-/** Normalise, validate and de-duplicate a hand-picked list to yyyy-MM-dd. */
-export function normaliseDates(dates: readonly string[]): string[] {
+/** Every valid date of a hand-picked list as yyyy-MM-dd, de-duplicated and
+ *  sorted — uncapped, so a caller can tell the user a list was too long
+ *  instead of quietly dropping its tail. */
+export function uniqueValidDates(dates: readonly unknown[]): string[] {
   const seen = new Set<string>()
   for (const raw of dates) {
-    if (!raw) continue
+    if (!raw || typeof raw !== 'string') continue
     const d = parseISO(raw.slice(0, 10))
     if (!isValid(d)) continue
     seen.add(iso(d))
   }
-  return [...seen].sort().slice(0, MAX_GENERATED_DATES)
+  return [...seen].sort()
+}
+
+/** Normalise, validate and de-duplicate a hand-picked list to yyyy-MM-dd. */
+export function normaliseDates(dates: readonly string[]): string[] {
+  return uniqueValidDates(dates).slice(0, MAX_GENERATED_DATES)
 }
 
 /**

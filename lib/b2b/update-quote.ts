@@ -11,7 +11,7 @@ import { pickB2bQuoteUpdates } from '@/lib/b2b/quote-updates'
 import { bookingsFromQuote, quoteLockReason } from '@/lib/quotes/lock'
 import { withEffectiveStatus } from '@/lib/quotes/validity'
 import { clientMessage } from '@/lib/api-errors'
-import { getOrgVatRate, vatColumns } from '@/lib/vat'
+import { getOrgVatRate, quoteVatExcluded, vatColumns, vatUpdateColumns } from '@/lib/vat'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (table: string) => any; rpc: (fn: string, args?: Record<string, unknown>) => any }
@@ -38,17 +38,19 @@ export async function updateB2bQuote(
   }
 
   // VAT switched on or off: recorded from the quote's own net at the
-  // company's rate today (lib/vat.ts). Sent unchanged, it is left as it is —
-  // re-saving a form must not re-rate a quote at a rate changed since.
+  // company's rate today (lib/vat.ts), less its catalogue extras' share
+  // (owner, 2026-10-13). Sent unchanged, it is left as it is — re-saving a
+  // form must not re-rate a quote at a rate changed since.
   const { vat_applied: vatWanted, ...rest } = picked.updates
   const updates: Record<string, unknown> = { ...rest }
   if (vatWanted !== undefined && vatWanted !== (current.vat_applied === true)) {
-    Object.assign(updates, vatColumns({
+    Object.assign(updates, vatUpdateColumns(vatColumns({
       applied: vatWanted,
       net: current.selling_price,
       rate: vatWanted ? await getOrgVatRate(db, orgId) : null,
       currency: current.currency,
-    }))
+      excluded: quoteVatExcluded(current),
+    }), current))
   }
 
   const { data, error } = await db

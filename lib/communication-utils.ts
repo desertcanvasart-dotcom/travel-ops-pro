@@ -1,6 +1,6 @@
 // Email and WhatsApp integration utilities
 
-import { vatOnLiveNet, vatTextLines } from '@/lib/vat'
+import { vatOnLiveNet, vatTextLines, type TripVat } from '@/lib/vat'
 import { lookupServerMessage } from '@/lib/i18n/server-messages'
 import { escapeHtml } from '@/lib/html-escape'
 import { formatMoney } from '@/lib/currency-totals'
@@ -45,8 +45,9 @@ export function generateEmailTemplate(
   currency: string,
   locale: RecipientLocale = 'en',
   identity: OrgIdentity = businessIdentity(),
-  /** The trip's VAT choice and recorded rate (lib/vat.ts); absent = none. */
-  vat: { vat_applied?: unknown; vat_rate?: unknown } | null = null
+  /** The trip's VAT choice and recorded rate (lib/vat.ts), and the client
+   *  price of its extras (not taxed); absent = none. */
+  vat: TripVat | null = null
 ): string {
   // Client-facing copy is localized to the recipient's language (email.itinerary.*).
   // Brand constants (COMPANY_INFO), colors and layout stay as-is.

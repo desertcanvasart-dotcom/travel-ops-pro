@@ -37,7 +37,7 @@ import {
 } from '@/lib/booking-portal'
 import { toClientItinerary } from '@/lib/itinerary-share'
 import { formatMoney } from '@/lib/currency-totals'
-import { vatMarker, vatOnLiveNet } from '@/lib/vat'
+import { loadTripVatExtras, vatMarker, vatOnLiveNet } from '@/lib/vat'
 import { tripDays, type PremiumBand } from '@/lib/insurance'
 import TravellerForm from './TravellerForm'
 import ChangeRequestForm from './ChangeRequestForm'
@@ -91,8 +91,9 @@ async function resolve(token: string): Promise<{
   scopedPassengerId: string | null
   isLeadCoordinator: boolean
   requireCode: boolean
-  /** The trip's VAT flag and recorded rate (lib/vat.ts). */
-  tripVat: { vat_applied: boolean; vat_rate: unknown }
+  /** The trip's VAT flag and recorded rate (lib/vat.ts), and what of the
+   *  total is extras (not taxed): the booking's extras and the trip's own. */
+  tripVat: { vat_applied: boolean; vat_rate: unknown; vat_excluded: number }
 } | null> {
   if (!isValidPortalToken(token)) return null
   const supabase = admin()
@@ -284,7 +285,13 @@ async function resolve(token: string): Promise<{
     insuranceBands,
     // The trip's VAT choice and recorded rate (lib/vat.ts), carried from its
     // quote; stated under ご旅行代金.
-    tripVat: { vat_applied: (itin as { vat_applied?: unknown } | null)?.vat_applied === true, vat_rate: (itin as { vat_rate?: unknown } | null)?.vat_rate ?? null },
+    tripVat: {
+      vat_applied: (itin as { vat_applied?: unknown } | null)?.vat_applied === true,
+      vat_rate: (itin as { vat_rate?: unknown } | null)?.vat_rate ?? null,
+      vat_excluded: (itin as { vat_applied?: unknown } | null)?.vat_applied === true
+        ? (Number((booking as { extras_total?: unknown }).extras_total) || 0) + (await loadTripVatExtras(supabase, booking.itinerary_id)).vat_excluded
+        : 0,
+    },
     tripDays: tripDays(booking.start_date, booking.end_date),
     scopedPassengerId,
     isLeadCoordinator,

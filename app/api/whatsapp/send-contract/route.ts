@@ -6,7 +6,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createServerClient } from '@/lib/supabase-server'
 import { generateContractPDF } from '@/lib/contract-pdf-generator'
-import { vatMarker, vatOnLiveNet } from '@/lib/vat'
+import { loadTripVatExtras, vatMarker, vatOnLiveNet } from '@/lib/vat'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { orgIdentity } from '@/lib/org-identity'
 import { contractNumberFor, contractPrice, describeDestinations } from '@/lib/contract-facts'
@@ -88,8 +88,13 @@ export async function POST(request: NextRequest) {
       // The trip's own destinations — it printed "Cairo, Luxor, Aswan" for all.
       destinations: contract.destinations?.trim() || describeDestinations(itinerary.destinations),
       totalCost,
-      // The trip's VAT (lib/vat.ts): stated under the price.
-      vat: { vat_applied: itinerary.vat_applied === true, vat_rate: itinerary.vat_rate ?? null },
+      // The trip's VAT (lib/vat.ts): stated under the price, not on its
+      // extras lines.
+      vat: {
+        vat_applied: itinerary.vat_applied === true,
+        vat_rate: itinerary.vat_rate ?? null,
+        vat_excluded: itinerary.vat_applied === true ? (await loadTripVatExtras(supabase, itinerary.id)).vat_excluded : 0,
+      },
       document: {
         ...contract,
         // Sent without the page (an older client): the trip's own lists.

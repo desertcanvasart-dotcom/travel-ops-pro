@@ -39,6 +39,7 @@ interface Itinerary {
   /** VAT carried from the trip's quote (lib/vat.ts). */
   vat_applied?: boolean
   vat_rate?: number | null
+  vat_excluded?: number
   trip_name?: string | null
   destinations?: string | string[] | null
   deposit_amount?: number | null
@@ -287,7 +288,8 @@ export default function ContractPage() {
   const currency = itinerary?.currency || 'USD'
   const perPerson = contractPricePerPerson(contractData.totalCost, contractData.numTravelers)
   // The trip's VAT choice and recorded rate (lib/vat.ts), stated with the price.
-  const tripVat = { vat_applied: itinerary?.vat_applied === true, vat_rate: itinerary?.vat_rate ?? null }
+  // Its extras lines are not taxed (vat_excluded, from GET /api/itineraries/[id]).
+  const tripVat = { vat_applied: itinerary?.vat_applied === true, vat_rate: itinerary?.vat_rate ?? null, vat_excluded: itinerary?.vat_excluded ?? 0 }
 
   // The terms and conditions in the page's language, naming the operator's
   // own governing law (Company profile) — they named Egyptian law and Cairo

@@ -24,6 +24,15 @@ interface ReminderTask {
   assigned_member: { id: string; name: string; email: string | null; user_id: string | null; is_active: boolean | null; org_id: string } | null
 }
 
+interface ReminderFollowup {
+  id: string
+  title: string
+  assigned_to: string
+  send_reminder: boolean | null
+  reminder_sent: boolean | null
+  clients: { first_name: string | null; last_name: string | null } | null
+}
+
 // This endpoint should be called by a cron job (Railway cron, Vercel cron, or external service)
 // Recommended: Run daily at 8:00 AM local time
 // 
@@ -44,6 +53,7 @@ async function getHandler(request: NextRequest) {
     const results = {
       dueSoon: 0,
       overdue: 0,
+      followups: 0,
       errors: [] as string[]
     }
 
@@ -153,11 +163,52 @@ async function getHandler(request: NextRequest) {
           results.overdue++
         }
       }
+
+      // =========================================
+      // 3. Client follow-ups due today
+      // =========================================
+      // In-app only, to the person who scheduled it (assigned_to: the login id
+      // /api/followups stamps), once per due date: reminder_sent is set here
+      // and cleared when the follow-up is snoozed or re-dated. The follow-up
+      // is this organisation's through its client (no org_id of its own).
+      const { data: dueFollowups, error: followupsError } = await supabase
+        .from('client_followups')
+        .select('id, title, assigned_to, send_reminder, reminder_sent, clients!inner(org_id, first_name, last_name)')
+        .eq('clients.org_id', orgId)
+        .eq('status', 'pending')
+        .eq('due_date', todayStr)
+        .not('assigned_to', 'is', null)
+
+      if (followupsError) {
+        results.errors.push(`Follow-ups query error (${orgId}): ${followupsError.message}`)
+      } else {
+        for (const f of (dueFollowups ?? []) as unknown as ReminderFollowup[]) {
+          if (f.send_reminder === false || f.reminder_sent === true) continue
+          // Only someone still in this organisation is reminded about its client.
+          const { data: member } = await supabase
+            .from('organization_members').select('user_id').eq('org_id', orgId).eq('user_id', f.assigned_to).maybeSingle()
+          if (!member) continue
+
+          const client = [f.clients?.first_name, f.clients?.last_name].filter(Boolean).join(' ')
+          const sent = await createNotification({
+            org_id: orgId,
+            user_id: f.assigned_to,
+            type: 'followup_due',
+            title: `Follow-up due today: ${f.title}`,
+            message: `Your follow-up "${f.title}"${client ? ` with ${client}` : ''} is due today.`,
+            link: '/followups',
+            send_email: false,
+          })
+          if (!sent.success) continue
+          await supabase.from('client_followups').update({ reminder_sent: true }).eq('id', f.id)
+          results.followups++
+        }
+      }
     }
 
     return NextResponse.json({
       success: true,
-      message: `Task reminders sent: ${results.dueSoon} due soon, ${results.overdue} overdue`,
+      message: `Task reminders sent: ${results.dueSoon} due soon, ${results.overdue} overdue; ${results.followups} follow-ups due today`,
       results,
       timestamp: new Date().toISOString()
     })

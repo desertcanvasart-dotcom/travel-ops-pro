@@ -150,8 +150,10 @@ export default function B2BQuotesPage() {
         </p>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
           <li>Tick <strong>Apply VAT (14%)</strong> when you save a quote from the calculator, or on the quote page. It is off unless you tick it.</li>
-          <li>VAT is added on top of the selling price: VAT = selling price &times; your company&apos;s rate (Settings &rsaquo; Company Profile, 14% unless an administrator changes it), rounded to the currency (whole yen for JPY). The page and the PDF then show the net price, the VAT and the total including VAT.</li>
-          <li>The rate and amount are recorded on the quote when VAT is switched on. Changing the company rate later does not change a quote already made.</li>
+          <li>VAT is added on top of the selling price, but not on extras or insurance: VAT = (selling price &minus; the extras&apos; share of it) &times; your company&apos;s rate (Settings &rsaquo; Company Profile, 14% unless an administrator changes it), rounded to the currency (whole yen for JPY). An extra&apos;s share is its set price, or its cost at the quote&apos;s margin, plus any season premium. The extras are catalogue extras chosen in the calculator, and on a quote made from a trip, the trip&apos;s lines of type Extra. The page and the PDF then show the net price (extras included), the VAT and the total including VAT.</li>
+          <li>When a quote has extras, its VAT line says so: <strong>VAT 14% included: &lt;amount&gt; (extras and insurance not taxed)</strong>, in Japanese 「VAT（14%）適用：…（オプション・保険はVAT対象外）」.</li>
+          <li>The rate, the amount and the amount it was charged on are recorded on the quote when VAT is switched on. Changing the company rate later does not change a quote already made.</li>
+          <li>Quotes priced before extras were left out (13 October 2026) keep the VAT they recorded, on the whole selling price. Switching VAT off and on again on such a quote works it out under the current rule.</li>
           <li>A converted or booked quote keeps its VAT. Converting a quote passes its VAT choice and rate to the trip, and the trip&apos;s invoice starts with VAT on when the trip has it.</li>
           <li>Reverting to an earlier revision brings back that revision&apos;s VAT with its price.</li>
         </ul>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useParams, useRouter } from 'next/navigation'
@@ -15,6 +15,9 @@ import { slugifyKey } from '@/lib/vocabulary'
 import { pickerOwnsLines } from '@/lib/documents/voucher-lines'
 import { TripBreadcrumb } from '@/components/nav/TripNav'
 import { withReturnTo, safeReturnPath, FROM_PARAM } from '@/lib/nav/return-to'
+import { toVoucherAmount, voucherPickFx } from '@/lib/documents/voucher-pick-price'
+import { voucherHasMoney } from '@/lib/documents/voucher-currency'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface TransportRate {
   id: string
@@ -134,6 +137,7 @@ export default function EditSupplierDocumentPage() {
   const mealTypeLabel = useVocabLabel('meal_type')
   const { rateCurrency } = useCurrency()
   const t = useTranslations('supplierDocumentEdit')
+  const dialog = useConfirmDialog()
   const params = useParams()
   const router = useRouter()
   const [document, setDocument] = useState<any>(null)
@@ -147,6 +151,9 @@ export default function EditSupplierDocumentPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // What the last currency change did (converted at a rate, or refused).
+  const [currencyNotice, setCurrencyNotice] = useState<{ ok: boolean; text: string } | null>(null)
+  const [convertingCurrency, setConvertingCurrency] = useState(false)
 
   // Suppliers state
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -186,6 +193,36 @@ export default function EditSupplierDocumentPage() {
     fetchEntranceFees()
     fetchSuppliers()
   }, [params.id])
+
+  // Rates are in the company's rate currency; the voucher states its own
+  // (the trip's, or the supplier's). A picked rate is converted at the trip's
+  // frozen rate, else today's (lib/documents/voucher-pick-price); null = not
+  // known, and a pick waits for it rather than writing the wrong currency.
+  const voucherCurrency: string = document?.currency || rateCurrency
+  const [liveRates, setLiveRates] = useState<{ base: string; rates: Record<string, number> } | null>(null)
+  const pickFx = useMemo(
+    () => voucherPickFx(rateCurrency, voucherCurrency, document?.itinerary?.fx_frozen, liveRates),
+    [rateCurrency, voucherCurrency, document?.itinerary?.fx_frozen, liveRates]
+  )
+  const documentLoaded = document != null
+  useEffect(() => {
+    if (!documentLoaded || voucherCurrency === rateCurrency || liveRates) return
+    let live = true
+    fetch(`/api/exchange-rates?base=${encodeURIComponent(rateCurrency)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (live && d?.success && d.data) setLiveRates(d.data) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [documentLoaded, voucherCurrency, rateCurrency, liveRates])
+  /** A rate-currency amount in the voucher's currency; null (and says so)
+   *  when the exchange rate is not known. */
+  const inVoucher = (amount: number): number | null => {
+    if (pickFx == null) {
+      setError(t('fxUnknown', { from: rateCurrency, to: voucherCurrency }))
+      return null
+    }
+    return toVoucherAmount(amount, pickFx)
+  }
 
   const fetchDocument = async () => {
     try {
@@ -398,72 +435,129 @@ export default function EditSupplierDocumentPage() {
     }
   }
 
+  /** The fields a save writes, with the currency its amounts are in. */
+  const buildSaveBody = (): Record<string, any> => {
+    // Only send editable fields — exclude joined relations and read-only fields
+    const {
+      id: _id,
+      itinerary: _itinerary,
+      supplier: _supplier,
+      created_at: _created,
+      ...editableFields
+    } = document
+
+    const dataToSave: Record<string, any> = {
+      ...editableFields,
+      selected_attractions: selectedAttractions,
+      // The amounts on screen are in the currency on screen: the server
+      // converts them if that is not the one being saved, and never
+      // relabels them (lib/documents/voucher-currency).
+      amounts_currency: editableFields.currency || 'EUR',
+    }
+
+    // Rebuild the lines from this document type's picker only when that
+    // picker is in use. Otherwise the lines stay as they are: a generated
+    // voucher's come from the trip, and no picker here can rebuild them.
+    if (document.document_type === 'transport_voucher' && pickerOwnsLines(selectedRoutes, document.selected_routes)) {
+      dataToSave.selected_routes = selectedRoutes
+      dataToSave.services = selectedRoutes.map(r => ({
+        service_type: 'transportation',
+        service_name: r.route_name,
+        service_code: r.service_code,
+        city: r.city,
+        vehicle_type: document.vehicle_type,
+        quantity: r.quantity,
+        total_cost: r.total_cost,
+        unit_rate: r.unit_rate
+      }))
+    } else if (document.document_type === 'service_order' && pickerOwnsLines(selectedMeals, document.selected_meals)) {
+      dataToSave.selected_meals = selectedMeals
+      dataToSave.services = selectedMeals.map(m => ({
+        service_type: 'meal',
+        service_name: `${m.restaurant_name}${m.meal_type ? ` - ${m.meal_type}` : ''}`,
+        service_code: m.service_code,
+        city: m.city,
+        quantity: m.quantity,
+        total_cost: m.total_cost,
+        unit_rate: m.unit_rate
+      }))
+    } else if (document.document_type === 'guide_assignment' && pickerOwnsLines(selectedGuides, document.selected_guides)) {
+      dataToSave.selected_guides = selectedGuides
+      dataToSave.services = selectedGuides.map(g => ({
+        service_type: 'guide',
+        service_name: `${g.guide_language} ${GUIDE_TYPE_LABELS[g.guide_type] || g.guide_type} — ${DURATION_LABELS[g.tour_duration] || g.tour_duration}`,
+        service_code: g.service_code,
+        city: g.city,
+        quantity: g.quantity,
+        total_cost: g.total_cost,
+        unit_rate: g.unit_rate
+      }))
+    } else if (document.document_type === 'activity_voucher' && pickerOwnsLines(selectedAttractions, document.selected_attractions)) {
+      dataToSave.services = selectedAttractions.map(a => ({
+        service_name: a.attraction_name,
+        service_type: 'entrance_fee',
+        city: a.city,
+        quantity: a.quantity,
+        unit_rate: a.eur_rate,
+        total_cost: a.eur_rate * a.quantity
+      }))
+    }
+    return dataToSave
+  }
+
+  // A voucher with amounts converts them when its currency changes: the server
+  // converts at the trip's frozen rate, else today's, and saves the voucher
+  // (or refuses when no rate is known). One with no amounts is just relabelled.
+  const changeCurrency = async (next: string) => {
+    const current = document.currency || 'EUR'
+    if (next === current) return
+    setCurrencyNotice(null)
+    const body = buildSaveBody()
+    if (!voucherHasMoney(body)) {
+      setDocument({ ...document, currency: next })
+      return
+    }
+    const confirmed = await dialog.confirm({
+      title: t('convertCurrencyTitle'),
+      message: t('convertCurrencyMessage', { from: current, to: next }),
+      confirmText: t('convertCurrencyConfirm'),
+    })
+    if (!confirmed) return
+    setConvertingCurrency(true)
+    try {
+      const response = await fetch(`/api/supplier-documents/${params.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, currency: next, amounts_currency: current }),
+      })
+      const result = await response.json().catch(() => null)
+      if (!response.ok || !result?.success) {
+        setCurrencyNotice({ ok: false, text: result?.error || t('failedToSave') })
+        return
+      }
+      const saved = result.data
+      setDocument((prev: any) => ({ ...prev, ...saved, itinerary: prev?.itinerary }))
+      setSelectedAttractions(saved.selected_attractions || [])
+      setSelectedRoutes(saved.selected_routes || [])
+      setSelectedMeals(saved.selected_meals || [])
+      setSelectedGuides(saved.selected_guides || [])
+      const c = result.converted
+      setCurrencyNotice({
+        ok: true,
+        text: c ? t('currencyConverted', { from: c.from, to: c.to, rate: Number(c.fx).toLocaleString('en-US', { maximumFractionDigits: 6 }) }) : t('currencyChanged', { to: next }),
+      })
+    } catch {
+      setCurrencyNotice({ ok: false, text: t('errorSavingDocument') })
+    } finally {
+      setConvertingCurrency(false)
+    }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     setError(null)
     try {
-      // Only send editable fields — exclude joined relations and read-only fields
-      const {
-        id: _id,
-        itinerary: _itinerary,
-        supplier: _supplier,
-        created_at: _created,
-        ...editableFields
-      } = document
-
-      const dataToSave: Record<string, any> = {
-        ...editableFields,
-        selected_attractions: selectedAttractions,
-      }
-
-      // Rebuild the lines from this document type's picker only when that
-      // picker is in use. Otherwise the lines stay as they are: a generated
-      // voucher's come from the trip, and no picker here can rebuild them.
-      if (document.document_type === 'transport_voucher' && pickerOwnsLines(selectedRoutes, document.selected_routes)) {
-        dataToSave.selected_routes = selectedRoutes
-        dataToSave.services = selectedRoutes.map(r => ({
-          service_type: 'transportation',
-          service_name: r.route_name,
-          service_code: r.service_code,
-          city: r.city,
-          vehicle_type: document.vehicle_type,
-          quantity: r.quantity,
-          total_cost: r.total_cost,
-          unit_rate: r.unit_rate
-        }))
-      } else if (document.document_type === 'service_order' && pickerOwnsLines(selectedMeals, document.selected_meals)) {
-        dataToSave.selected_meals = selectedMeals
-        dataToSave.services = selectedMeals.map(m => ({
-          service_type: 'meal',
-          service_name: `${m.restaurant_name}${m.meal_type ? ` - ${m.meal_type}` : ''}`,
-          service_code: m.service_code,
-          city: m.city,
-          quantity: m.quantity,
-          total_cost: m.total_cost,
-          unit_rate: m.unit_rate
-        }))
-      } else if (document.document_type === 'guide_assignment' && pickerOwnsLines(selectedGuides, document.selected_guides)) {
-        dataToSave.selected_guides = selectedGuides
-        dataToSave.services = selectedGuides.map(g => ({
-          service_type: 'guide',
-          service_name: `${g.guide_language} ${GUIDE_TYPE_LABELS[g.guide_type] || g.guide_type} — ${DURATION_LABELS[g.tour_duration] || g.tour_duration}`,
-          service_code: g.service_code,
-          city: g.city,
-          quantity: g.quantity,
-          total_cost: g.total_cost,
-          unit_rate: g.unit_rate
-        }))
-      } else if (document.document_type === 'activity_voucher' && pickerOwnsLines(selectedAttractions, document.selected_attractions)) {
-        dataToSave.services = selectedAttractions.map(a => ({
-          service_name: a.attraction_name,
-          service_type: 'entrance_fee',
-          city: a.city,
-          quantity: a.quantity,
-          unit_rate: a.eur_rate,
-          total_cost: a.eur_rate * a.quantity
-        }))
-      }
-
+      const dataToSave = buildSaveBody()
       const response = await fetch(`/api/supplier-documents/${params.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -491,13 +585,16 @@ export default function EditSupplierDocumentPage() {
     if (selectedAttractions.find(a => a.id === fee.id)) {
       return
     }
-    
+    // In the voucher's currency (the line keeps the rate fields' names).
+    const eurRate = inVoucher(fee.eur_rate)
+    if (eurRate == null) return
+
     const newAttraction: SelectedAttraction = {
       id: fee.id,
       attraction_name: fee.attraction_name,
       city: fee.city,
-      eur_rate: fee.eur_rate,
-      non_eur_rate: fee.non_eur_rate,
+      eur_rate: eurRate,
+      non_eur_rate: toVoucherAmount(fee.non_eur_rate, pickFx ?? 1),
       quantity: document?.num_adults + (document?.num_children || 0) || 1
     }
     
@@ -547,7 +644,8 @@ export default function EditSupplierDocumentPage() {
   // Add a transport route
   const addRoute = (rate: TransportRate) => {
     if (selectedRoutes.find(r => r.rate_id === rate.id)) return
-    const unitRate = getRateForVehicle(rate)
+    const unitRate = inVoucher(getRateForVehicle(rate))
+    if (unitRate == null) return
     setSelectedRoutes(prev => [...prev, {
       rate_id: rate.id,
       service_code: rate.service_code,
@@ -585,8 +683,8 @@ export default function EditSupplierDocumentPage() {
     if (document && document.document_type === 'transport_voucher' && selectedRoutes.length > 0 && transportRates.length > 0) {
       setSelectedRoutes(prev => prev.map(r => {
         const rate = transportRates.find(tr => tr.id === r.rate_id)
-        if (!rate) return r
-        const unitRate = getRateForVehicle(rate)
+        if (!rate || pickFx == null) return r
+        const unitRate = toVoucherAmount(getRateForVehicle(rate), pickFx)
         return { ...r, unit_rate: unitRate, total_cost: unitRate * r.quantity }
       }))
     }
@@ -604,6 +702,8 @@ export default function EditSupplierDocumentPage() {
   const addMeal = (rate: MealRate) => {
     if (selectedMeals.find(m => m.rate_id === rate.id)) return
     const totalPax = (document?.num_adults || 1) + (document?.num_children || 0)
+    const unitRate = inVoucher(rate.base_rate_eur)
+    if (unitRate == null) return
     setSelectedMeals(prev => [...prev, {
       rate_id: rate.id,
       service_code: rate.service_code,
@@ -611,8 +711,8 @@ export default function EditSupplierDocumentPage() {
       meal_type: rate.meal_type || '',
       city: rate.city || '',
       quantity: totalPax,
-      unit_rate: rate.base_rate_eur,
-      total_cost: rate.base_rate_eur * totalPax
+      unit_rate: unitRate,
+      total_cost: unitRate * totalPax
     }])
   }
 
@@ -643,6 +743,8 @@ export default function EditSupplierDocumentPage() {
   // Add a guide (rate is per day, not per person — default quantity to 1 day)
   const addGuide = (rate: GuideRate) => {
     if (selectedGuides.find(g => g.rate_id === rate.id)) return
+    const unitRate = inVoucher(rate.base_rate_eur)
+    if (unitRate == null) return
     setSelectedGuides(prev => [...prev, {
       rate_id: rate.id,
       service_code: rate.service_code,
@@ -651,8 +753,8 @@ export default function EditSupplierDocumentPage() {
       tour_duration: rate.tour_duration,
       city: rate.city || '',
       quantity: 1,
-      unit_rate: rate.base_rate_eur,
-      total_cost: rate.base_rate_eur
+      unit_rate: unitRate,
+      total_cost: unitRate
     }])
   }
 
@@ -1167,11 +1269,15 @@ export default function EditSupplierDocumentPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('currency')}</label>
                 <select
                   value={document.currency || 'EUR'}
-                  onChange={(e) => setDocument({ ...document, currency: e.target.value })}
+                  onChange={(e) => changeCurrency(e.target.value)}
+                  disabled={convertingCurrency || saving}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 >
                   {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c} ({currencySymbol(c)})</option>)}
                 </select>
+                {currencyNotice && (
+                  <p className={`mt-1 text-xs ${currencyNotice.ok ? 'text-green-700' : 'text-red-600'}`}>{currencyNotice.text}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('totalCost')}</label>
@@ -1244,7 +1350,7 @@ export default function EditSupplierDocumentPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="text-sm text-gray-700">{formatMoney(route.unit_rate, document?.currency || rateCurrency)}</span>
+                            <span className="text-sm text-gray-700">{formatMoney(route.unit_rate, voucherCurrency)}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <input
@@ -1257,7 +1363,7 @@ export default function EditSupplierDocumentPage() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <span className="text-sm font-semibold text-primary-600">
-                              {formatMoney(route.total_cost, document?.currency || rateCurrency)}
+                              {formatMoney(route.total_cost, voucherCurrency)}
                             </span>
                           </td>
                           <td className="px-4 py-3">
@@ -1281,7 +1387,7 @@ export default function EditSupplierDocumentPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className="text-lg font-bold text-primary-600">
-                            {formatMoney(calculateRoutesTotal(), document?.currency || rateCurrency)}
+                            {formatMoney(calculateRoutesTotal(), voucherCurrency)}
                           </span>
                         </td>
                         <td></td>
@@ -1370,7 +1476,7 @@ export default function EditSupplierDocumentPage() {
                                 </div>
                                 <div className="text-right shrink-0 ml-3">
                                   <p className="text-sm font-semibold text-primary-600">
-                                    {formatMoney(getRateForVehicle(rate), document?.currency || rateCurrency)}
+                                    {formatMoney(getRateForVehicle(rate), rateCurrency)}
                                   </p>
                                   {rate.supplier_name && (
                                     <p className="text-xs text-gray-400">{rate.supplier_name}</p>
@@ -1425,7 +1531,7 @@ export default function EditSupplierDocumentPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="text-sm text-gray-700">{'\u20AC'}{meal.unit_rate.toFixed(2)}</span>
+                            <span className="text-sm text-gray-700">{formatMoney(meal.unit_rate, voucherCurrency)}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <input
@@ -1438,7 +1544,7 @@ export default function EditSupplierDocumentPage() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <span className="text-sm font-semibold text-primary-600">
-                              {'\u20AC'}{meal.total_cost.toFixed(2)}
+                              {formatMoney(meal.total_cost, voucherCurrency)}
                             </span>
                           </td>
                           <td className="px-4 py-3">
@@ -1462,7 +1568,7 @@ export default function EditSupplierDocumentPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className="text-lg font-bold text-primary-600">
-                            {'\u20AC'}{calculateMealsTotal().toFixed(2)}
+                            {formatMoney(calculateMealsTotal(), voucherCurrency)}
                           </span>
                         </td>
                         <td></td>
@@ -1549,7 +1655,7 @@ export default function EditSupplierDocumentPage() {
                                 </div>
                                 <div className="text-right shrink-0 ml-3">
                                   <p className="text-sm font-semibold text-primary-600">
-                                    {'\u20AC'}{rate.base_rate_eur.toFixed(2)}
+                                    {formatMoney(rate.base_rate_eur, rateCurrency)}
                                   </p>
                                   {rate.supplier_name && (
                                     <p className="text-xs text-gray-400">{rate.supplier_name}</p>
@@ -1610,7 +1716,7 @@ export default function EditSupplierDocumentPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="text-sm text-gray-700">{'\u20AC'}{guide.unit_rate.toFixed(2)}</span>
+                            <span className="text-sm text-gray-700">{formatMoney(guide.unit_rate, voucherCurrency)}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <input
@@ -1623,7 +1729,7 @@ export default function EditSupplierDocumentPage() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <span className="text-sm font-semibold text-primary-600">
-                              {'\u20AC'}{guide.total_cost.toFixed(2)}
+                              {formatMoney(guide.total_cost, voucherCurrency)}
                             </span>
                           </td>
                           <td className="px-4 py-3">
@@ -1647,7 +1753,7 @@ export default function EditSupplierDocumentPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className="text-lg font-bold text-primary-600">
-                            {'\u20AC'}{calculateGuidesTotal().toFixed(2)}
+                            {formatMoney(calculateGuidesTotal(), voucherCurrency)}
                           </span>
                         </td>
                         <td></td>
@@ -1736,7 +1842,7 @@ export default function EditSupplierDocumentPage() {
                                 </div>
                                 <div className="text-right shrink-0 ml-3">
                                   <p className="text-sm font-semibold text-primary-600">
-                                    {'\u20AC'}{rate.base_rate_eur.toFixed(2)}
+                                    {formatMoney(rate.base_rate_eur, rateCurrency)}
                                   </p>
                                   {rate.notes && (
                                     <p className="text-xs text-gray-400 max-w-[120px] truncate">{rate.notes}</p>
@@ -1798,7 +1904,7 @@ export default function EditSupplierDocumentPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="text-sm text-gray-700">{formatMoney(attraction.eur_rate, document?.currency || rateCurrency)}</span>
+                            <span className="text-sm text-gray-700">{formatMoney(attraction.eur_rate, voucherCurrency)}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <input
@@ -1811,7 +1917,7 @@ export default function EditSupplierDocumentPage() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <span className="text-sm font-semibold text-primary-600">
-                              {formatMoney((attraction.eur_rate * attraction.quantity), document?.currency || rateCurrency)}
+                              {formatMoney((attraction.eur_rate * attraction.quantity), voucherCurrency)}
                             </span>
                           </td>
                           <td className="px-4 py-3">
@@ -1835,7 +1941,7 @@ export default function EditSupplierDocumentPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className="text-lg font-bold text-primary-600">
-                            {formatMoney(calculateAttractionsTotal(), document?.currency || rateCurrency)}
+                            {formatMoney(calculateAttractionsTotal(), voucherCurrency)}
                           </span>
                         </td>
                         <td></td>
@@ -1922,9 +2028,9 @@ export default function EditSupplierDocumentPage() {
                                 </p>
                               </div>
                               <div className="text-right">
-                                <p className="text-sm font-semibold text-primary-600">{formatMoney(fee.eur_rate, document?.currency || rateCurrency)}</p>
+                                <p className="text-sm font-semibold text-primary-600">{formatMoney(fee.eur_rate, rateCurrency)}</p>
                                 {fee.non_eur_rate > 0 && fee.non_eur_rate !== fee.eur_rate && (
-                                  <p className="text-xs text-gray-400">{t('nonEU')}: {formatMoney(fee.non_eur_rate, document?.currency || rateCurrency)}</p>
+                                  <p className="text-xs text-gray-400">{t('nonEU')}: {formatMoney(fee.non_eur_rate, rateCurrency)}</p>
                                 )}
                               </div>
                             </button>

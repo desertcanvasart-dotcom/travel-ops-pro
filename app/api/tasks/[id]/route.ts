@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { completeChecklist, type ChecklistItem } from '@/lib/tasks/itinerary-tasks'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
-import { taskRefsInOrg } from '@/lib/org-refs'
+import { taskRefsInOrg, teamMemberInactive, INACTIVE_ASSIGNEE } from '@/lib/org-refs'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -81,6 +81,16 @@ export async function PUT(
       }
       if (!(await taskRefsInOrg(supabaseAdmin, orgId, { assigned_to: body.assigned_to, department_id: body.department_id, ...link }))) {
         return NextResponse.json({ error: 'Assignee, department or linked record not found' }, { status: 404 })
+      }
+    }
+    // A NEW assignee must be an active member. Only on change: the edit form
+    // sends the current assignee back with every save, and a task whose
+    // assignee has since left must still be editable (to reassign it).
+    if (body.assigned_to) {
+      const { data: current } = await supabaseAdmin
+        .from('tasks').select('assigned_to').eq('id', id).eq('org_id', orgId).maybeSingle()
+      if (current?.assigned_to !== body.assigned_to && (await teamMemberInactive(supabaseAdmin, orgId, body.assigned_to))) {
+        return NextResponse.json({ error: INACTIVE_ASSIGNEE }, { status: 400 })
       }
     }
 

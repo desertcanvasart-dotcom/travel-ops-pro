@@ -2,10 +2,13 @@
   "vat": {
     "applied": "VAT（{rate}%）適用：{amount}",
     "notApplied": "VAT 不適用",
+    "appliedExcludes": "VAT（{rate}%）適用：{amount}（オプション・保険はVAT対象外）",
     "apply": "VAT（{rate}%）を適用",
-    "applyHint": "会社の税率（設定 › 会社情報）で、税抜価格に VAT を上乗せします。税率と税額はこの書類に記録されます。",
+    "applyHint": "会社の税率（設定 › 会社情報）で、税抜価格に VAT を上乗せします（オプションと保険には課税しません）。税率と税額はこの書類に記録されます。",
     "net": "税抜価格",
     "totalInclVat": "VAT込み合計",
+    "appliedOnSave": "VAT（{rate}%）は保存時に、旅行のオプションと保険を除いた金額に加算されます。金額は請求書に表示されます。",
+    "vatShort": "VAT",
     "lockedHint": "VAT は価格とともに記録済みのため、この書類では変更できません。"
   },
   "common": {
@@ -912,7 +915,9 @@
     "followup": "フォローアップ",
     "snoozed": "スヌーズしました",
     "success": "完了しました",
-    "urgent": "緊急"
+    "urgent": "緊急",
+    "failedToLoad": "フォローアップを読み込めませんでした。ページを再読み込みしてください。",
+    "listTruncated": "保留中のフォローアップ{matched}件のうち、期限の近い{shown}件を表示しています。カードの件数はすべてを数えています。"
   },
   "financialReports": {
     "financialReports": "財務レポート",
@@ -8098,6 +8103,9 @@
   "supplierDocuments": {
     "supplierDocuments": "サプライヤー書類",
     "supplierDocumentsSubtitle": "バウチャー、サービスオーダー、割り当てを管理",
+    "showingRange": "全{total}件中 {first}〜{last}件を表示",
+    "newer": "新しい書類",
+    "older": "古い書類",
     "forOneTrip": "1件の旅程の書類を表示しています（{code}）",
     "forThisTrip": "この旅程の書類を表示しています",
     "showAllDocuments": "すべての書類を表示",
@@ -8137,7 +8145,13 @@
     "documentsNotGenerated": "書類は作成されませんでした",
     "staleTitle": "旅程と一致しない書類が{count}件あります",
     "staleLines": "旅程にない明細 {count}件",
-    "staleNote": "書類作成後に旅程が変更されました。書類を編集するか、取り消して再作成してください。送付済みの場合はサプライヤーにもお知らせください。"
+    "staleNote": "書類作成後に旅程が変更されました。書類を編集するか、取り消して再作成してください。送付済みの場合はサプライヤーにもお知らせください。",
+    "cancelled": "キャンセル",
+    "statsScopeCompany": "件数はフィルターに関係なく、自社のすべてのサプライヤー書類を数えています。",
+    "statsScopeTrip": "件数はフィルターに関係なく、この旅程のすべてのサプライヤー書類を数えています。",
+    "cannotDeleteTitle": "書類は削除されませんでした",
+    "cannotDeleteSent": "この書類はサプライヤーに送付済みです。ステータスを「キャンセル」に変更（編集）してから削除してください。",
+    "deleteFailed": "書類を削除できませんでした。"
   },
   "supplierDocumentEdit": {
     "documentNotFound": "書類が見つかりません",
@@ -8225,6 +8239,12 @@
     "noAttractionsFound": "観光地が見つかりません",
     "addon": "追加オプション",
     "nonEU": "非EU",
+    "fxUnknown": "{from}から{to}への為替レートがまだ取得できていないため、この料金をバウチャーに追加できません。しばらくしてからもう一度お試しください。",
+    "convertCurrencyTitle": "バウチャーの金額を換算しますか？",
+    "convertCurrencyMessage": "すべての明細と合計を、旅行の為替レート（ない場合は本日のレート）で{from}から{to}に換算し、ほかの変更と一緒にバウチャーを保存します。",
+    "convertCurrencyConfirm": "換算して保存",
+    "currencyConverted": "1 {from} = {rate} {to} で{from}から{to}に換算し、保存しました。",
+    "currencyChanged": "通貨を{to}に変更し、保存しました。",
     "attractionsAvailable": "{count}件の観光地が利用可能",
     "attractionsSelected": "{count}件選択済み",
     "failedToSave": "書類の保存に失敗しました",
@@ -8377,9 +8397,9 @@
     "serviceOrdersDescription": "一般サービスオーダー書類",
     "viewAll": "すべて表示",
     "quickTips": "クイックヒント",
-    "tip1": "顧客契約書は確定済み旅程から生成されます",
+    "tip1": "顧客契約書は旅程または予約の「書類 › 契約書」から開きます",
     "tip2": "サプライヤーバウチャーはメールやWhatsAppで直接送信できます",
-    "tip3": "すべての書類は保存され、いつでも再ダウンロードできます",
+    "tip3": "サプライヤー書類は保存されます。契約書・請求書・領収書は開くたびにその時点の内容で作成されます",
     "tip4": "フィルターを使用して特定の書類タイプをすばやく検索できます"
   },
   "teamMembers": {
@@ -8492,7 +8512,7 @@
     "saving": "保存中...",
     "update": "更新",
     "confirmDelete": "タスク「{title}」を削除しますか？",
-    "confirmBulkArchive": "{count}件の完了タスクをアーカイブしますか？",
+    "confirmBulkArchive": "この会社の完了タスク{count}件をすべてアーカイブしますか？フィルターは適用されません。",
     "priorityLow": "低",
     "priorityMedium": "中",
     "priorityHigh": "高",
@@ -8537,7 +8557,9 @@
     "checklistUnpriced": "未見積",
     "checklistUnpricedCount": "未見積{count}件",
     "checklistUnpricedHint": "旅程の日程上は必要ですが、見積済みのサービスがまだありません。ここで手配するか、旅程の見積に追加してください。",
-    "statusChangeFailed": "ステータスを変更できませんでした"
+    "statusChangeFailed": "ステータスを変更できませんでした",
+    "saveFailed": "タスクを保存できませんでした",
+    "listTruncated": "条件に一致する{matched}件のうち、新しい{shown}件を表示しています。古いタスクを表示するにはフィルターを絞り込んでください。"
   },
   "resourceSummary": {
     "noResourcesAssigned": "リソース未割り当て",

@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
-import { determineCapacityResult } from '@/lib/capacity-availability'
-import { shiftDateISO } from '@/lib/today'
+import { capacityDayDetail, determineCapacityResult } from '@/lib/capacity-availability'
+import { datesInRange, loadDayLoads } from '@/lib/capacity-load'
 
 // ============================================
 // CAPACITY CHECK API (server-to-server, e.g. WhatsApp AI agent)
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     // Get capacity entries for the date range
     const { data: capacityData, error } = await supabase
       .from('operator_capacity')
-      .select('date, status, max_groups, booked_groups, notes, reason')
+      .select('date, status, max_groups, reason')
       .eq('org_id', org_id)
       .gte('date', start_date)
       .lte('date', effectiveEndDate)
@@ -92,61 +92,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create a map of dates to capacity
-    const capacityMap = new Map<string, {
-      status: string
-      max_groups: number
-      booked_groups: number
-      notes?: string
-      reason?: string
-    }>()
+    const capacityMap = new Map<string, { status: string; max_groups: number; reason?: string | null }>()
+    capacityData?.forEach(entry => capacityMap.set(entry.date, entry))
 
-    capacityData?.forEach(entry => {
-      capacityMap.set(entry.date, {
-        status: entry.status,
-        max_groups: entry.max_groups,
-        booked_groups: entry.booked_groups,
-        notes: entry.notes,
-        reason: entry.reason
-      })
-    })
-
-    // Generate all dates in range
-    // Calendar arithmetic on the date strings: a UTC parse stepped with local
-    // setDate() repeated or skipped a day across a DST change on a non-UTC host.
-    const dates: string[] = []
-    for (let d = start_date; d <= effectiveEndDate; d = shiftDateISO(d, 1)) {
-      dates.push(d)
-    }
-
-    // Check availability for each date
-    const details = dates.map(date => {
-      const capacity = capacityMap.get(date)
-
-      if (!capacity) {
-        // No entry = default available
-        return {
-          date,
-          status: 'available' as const,
-          // Default 3 max groups, none booked. Slots LEFT on the day, as for a
-          // stored row — subtracting the group here as well reported 2 for a
-          // 1-group enquiry and -2 for a group of 5.
-          available_slots: 3
-        }
-      }
-
-      const availableSlots = capacity.max_groups - capacity.booked_groups
-
-      return {
-        date,
-        status: capacity.status as 'available' | 'limited' | 'busy' | 'blackout',
-        available_slots: availableSlots,
-        reason: capacity.reason
-      }
-    })
+    // The groups already out on each day, counted from sold trips and
+    // running departures (lib/capacity-load) — booked_groups was never
+    // written, so every day had all its slots free. A day with no entry is
+    // available with 3 groups (capacityDayDetail).
+    const loads = await loadDayLoads(supabase, org_id, start_date, effectiveEndDate)
+    const details = datesInRange(start_date, effectiveEndDate)
+      .map(date => capacityDayDetail(date, capacityMap.get(date), loads.get(date)))
 
     // Determine overall availability (pure — see lib/capacity-availability.ts)
-    const result = determineCapacityResult(details as any, group_size)
+    // group_size is how many GROUPS the enquiry needs (one party = 1), the
+    // unit the slots are counted in.
+    const result = determineCapacityResult(details, Math.max(1, Number(group_size) || 1))
 
     return NextResponse.json({
       success: true,

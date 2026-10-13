@@ -40,6 +40,17 @@ describe('summarise', () => {
       dep('2', 'a', '2026-10-12', { status: 'guaranteed', booked_pax: 12 }),
       dep('3', 'a', '2026-10-19', { status: 'full', booked_pax: 20 }),
     ])
-    expect(s).toEqual({ count: 3, next: '2026-10-12', last: '2026-10-19', booked: 32, seats: 40, guaranteed: 1, full: 1, cancelled: 1 })
+    expect(s).toEqual({ count: 3, next: '2026-10-12', last: '2026-10-19', booked: 32, pending: 0, seats: 40, guaranteed: 1, full: 1, cancelled: 1 })
+  })
+
+  // Operate audit (Departures #2): the list's "taken/seats" counts the
+  // web-order holds the server adds (seats_taken), not booked_pax alone.
+  it('counts the seats taken, holds included, when the list carries them', () => {
+    const s = summarise([
+      dep('1', 'a', '2026-10-05', { booked_pax: 0, seats_taken: 6, held_pending: 4 }),
+      dep('2', 'a', '2026-10-12', { booked_pax: 2, seats_taken: 2, held_pending: 0 }),
+      dep('3', 'a', '2026-10-19', { status: 'cancelled', booked_pax: 0, seats_taken: 3, held_pending: 0 }),
+    ])
+    expect(s).toMatchObject({ booked: 8, pending: 4, seats: 40 })
   })
 })

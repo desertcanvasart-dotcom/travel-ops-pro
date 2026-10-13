@@ -3,6 +3,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { paymentCurrencyFor } from '@/lib/payment-currency'
+import { loadTripVatExtras } from '@/lib/vat'
 
 export async function GET(
   request: NextRequest,
@@ -27,20 +28,30 @@ export async function GET(
 
     if (error) throw error
 
+    // Only this org's trip (as send-receipt does): itinerary_id was stored as
+    // given on older payments, and another company's trip would print that
+    // company's client, phone, email and total on our invoice and receipt.
+    const trip = payment.itineraries?.org_id === orgId ? payment.itineraries : null
+    // No VAT on the trip's extras (owner, 2026-10-13): the payment's VAT is
+    // worked out on the taxed share of the trip (lib/vat.ts vatInsideGross).
+    const extras = trip?.vat_applied === true ? await loadTripVatExtras(supabase, trip.id) : null
+
     const formattedPayment = {
       ...payment,
-      itinerary_code: payment.itineraries?.itinerary_code,
-      client_name: payment.itineraries?.client_name,
+      itineraries: trip,
+      itinerary_code: trip?.itinerary_code,
+      client_name: trip?.client_name,
       // The receipt's WhatsApp button and the email on the invoice and
       // receipt need these; the list route already returned them.
-      client_phone: payment.itineraries?.client_phone,
-      client_email: payment.itineraries?.client_email,
-      total_cost: payment.itineraries?.total_cost,
+      client_phone: trip?.client_phone,
+      client_email: trip?.client_email,
+      total_cost: trip?.total_cost,
       // The trip's VAT (lib/vat.ts) — the payment's invoice and receipt state
       // the VAT inside the amount paid. '*' above so a database without the
       // columns (migration 20261214) still answers.
-      vat_applied: payment.itineraries?.vat_applied === true,
-      vat_rate: payment.itineraries?.vat_rate ?? null,
+      vat_applied: trip?.vat_applied === true,
+      vat_rate: trip?.vat_rate ?? null,
+      ...(extras && extras.vat_excluded > 0 ? { vat_excluded: extras.vat_excluded, vat_net: extras.vat_net } : {}),
     }
 
     return NextResponse.json({

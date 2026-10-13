@@ -9,6 +9,7 @@ import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/cur
 import { supplierBacking } from '@/lib/bookings/supplier-backing'
 import { removeBookingDocumentFiles } from '@/lib/portal/traveller-documents'
 import { rowInOrg } from '@/lib/api/org-scope'
+import { loadTripVatExtras } from '@/lib/vat'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -82,10 +83,21 @@ export async function GET(
       assignedGuide = guide
     }
 
+    // What of the booking total VAT leaves out (owner, 2026-10-13: no VAT on
+    // extras): its confirmed extras (extras_total) and the trip's own extras
+    // lines. The page shows the trip's VAT on the rest (lib/vat.ts).
+    const itinerary = booking.itinerary?.vat_applied === true
+      ? {
+          ...booking.itinerary,
+          vat_excluded: (Number(booking.extras_total) || 0) + (await loadTripVatExtras(supabaseAdmin, booking.itinerary.id)).vat_excluded,
+        }
+      : booking.itinerary
+
     return NextResponse.json({
       success: true,
       data: {
         ...booking,
+        itinerary,
         suppliers: (suppliers || []).map(r => ({ ...r, expense: expenseByRow.get(r.id as string) ?? null })),
         payments: payments || [],
         assigned_guide: assignedGuide,
