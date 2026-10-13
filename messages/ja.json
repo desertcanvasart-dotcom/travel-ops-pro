@@ -7033,7 +7033,13 @@
       "guideLanguage": "ガイド言語",
       "noRate": "料金なし",
       "included": "含む",
-      "priceIncomplete": "料金が未設定のサービスが{count}件あります — この価格は未完成です。内訳をご確認ください。"
+      "priceIncomplete": "料金が未設定のサービスが{count}件あります — この価格は未完成です。内訳をご確認ください。",
+      "priceIncompleteAskManager": "料金が未設定のサービスが{count}件あります — この価格は未完成です。不足している料金の登録をマネージャーに依頼してください。",
+      "netCost": "原価",
+      "marginLine": "マージン（{percent}%）",
+      "sellingPriceNote": "販売価格（会社の標準マージン適用）",
+      "withdrawn": "このツアーは現在販売されていません。カタログから取り下げられています。",
+      "quoteThisTour": "このツアーの見積もりを作成"
     },
     "views": {
       "grid": "グリッド",

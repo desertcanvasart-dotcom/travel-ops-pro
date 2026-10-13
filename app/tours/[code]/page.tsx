@@ -19,6 +19,9 @@ import { useOrgDocumentTemplates } from '@/lib/documents/use-org-templates'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
+import { useRole } from '@/hooks/useRole'
+import { paxChoices } from '@/lib/tours/min-pax'
+import { tourLanguages, needsVersion } from '@/lib/tours/version-languages'
 import {
   ArrowLeft,
   Calendar,
@@ -169,6 +172,12 @@ export default function TourDetailPage() {
   const params = useParams()
   const t = useTranslations('tours')
   const orgDocuments = useOrgDocumentTemplates()
+  // Costs (the breakdown, net cost and margin) and catalogue writes (language
+  // versions) are admin/manager; an agent sees the selling price and can
+  // start a B2B quote.
+  const { canAccess } = useRole()
+  const canSeeCost = canAccess(['admin', 'manager'])
+  const canQuote = canAccess(['admin', 'manager', 'agent'])
   // Engine prices are EUR; render them in the preferred currency.
   const { formatWithConversion, currency, rateCurrency } = useCurrency()
   const currencySymbol = CURRENCY_SYMBOLS[currency] || currency
@@ -236,6 +245,14 @@ export default function TourDetailPage() {
 
       if (data.success) {
         setTour(data.data)
+        // The picker offers min_pax…max_pax; the default 2 moves inside it.
+        setSelectedPax(prev => {
+          const choices = paxChoices(data.data.min_pax, data.data.max_pax)
+          return Math.min(Math.max(prev, choices[0]), choices[choices.length - 1])
+        })
+      } else if (response.status === 410 || data.withdrawn) {
+        // A withdrawn variation or tour opened by its URL.
+        setError(t('detail.withdrawn'))
       } else {
         setError('Tour not found')
       }
@@ -291,7 +308,11 @@ export default function TourDetailPage() {
           travel_date: travelDate,
           is_eur_passport: isEurPassport,
           language: guideLanguage,
-          margin_percent: 0,
+          // No margin_percent: the server's rule picks it (lib/b2b/partner-
+          // margin — the company's default margin, else 25), as for the
+          // catalogue card and the B2B calculator. This page sent 0, so every
+          // figure on it was COST under "Price per person" — €1,000 here
+          // against €1,250 "Starting from" on the card for the same 2 pax.
           include_optionals: false
         })
       })
@@ -381,14 +402,6 @@ export default function TourDetailPage() {
     }
   }, [tour, versions, activeLanguage])
 
-  // Check if current language has a version
-  const hasVersionForLanguage = useCallback((lang: Language) => {
-    if (!versions) return false
-    const hasVarVersion = versions.variation_versions?.some(v => v.language === lang)
-    const hasTmpVersion = versions.template_versions?.some(v => v.language === lang)
-    return hasVarVersion || hasTmpVersion
-  }, [versions])
-
   const getTierStyle = (tier: string) => {
     const styles: Record<string, { bg: string; text: string; icon: string }> = {
       budget: { bg: 'bg-emerald-50 border-emerald-200', text: 'text-emerald-700', icon: '💰' },
@@ -452,7 +465,8 @@ export default function TourDetailPage() {
   const versionedTour = getVersionedContent() || tour
   const tierStyle = getTierStyle(tour.tier)
   const groupStyle = getGroupTypeStyle(tour.group_type)
-  const showCreatePrompt = !hasVersionForLanguage(activeLanguage)
+  // Creating a version writes catalogue content — admin/manager only.
+  const showCreatePrompt = canSeeCost && needsVersion(versions?.available_languages, activeLanguage)
 
   return (
     <div className="p-6">
@@ -471,6 +485,15 @@ export default function TourDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* The way into the B2B calculator for this variation — an agent
+              has no Tour Manager to start a quote from. */}
+          {canQuote && tour.variation_id && <Link
+            href={`/b2b/calculator/${tour.variation_id}`}
+            data-testid="quote-this-tour"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium border border-[#647C47] text-[#647C47] hover:bg-[#e8ede3] transition-colors"
+          >
+            {t('detail.quoteThisTour')}
+          </Link>}
           {/* The office's own 日程表 document — blank template or a filled
               departure, chosen in a small dialog. */}
           {orgDocuments.has('ats-daily-itinerary') && <button
@@ -493,7 +516,7 @@ export default function TourDetailPage() {
         <LanguageTabs
           activeLanguage={activeLanguage}
           onLanguageChange={setActiveLanguage}
-          availableLanguages={versions?.available_languages || ['en']}
+          availableLanguages={tourLanguages(versions?.available_languages)}
           onCreateVersion={(lang) => setActiveLanguage(lang)}
         />
 
@@ -749,7 +772,7 @@ export default function TourDetailPage() {
                 title={t('detail.numberOfTravelers')}
                 className="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] outline-none bg-white"
               >
-                {Array.from({ length: tour.max_pax }, (_, i) => i + 1).map(num => (
+                {paxChoices(tour.min_pax, tour.max_pax).map(num => (
                   <option key={num} value={num}>
                     {num} {num === 1 ? t('detail.person') : t('detail.people')}
                   </option>
@@ -831,6 +854,7 @@ export default function TourDetailPage() {
                   <p className="text-3xl font-bold text-[#647C47]">
                     {formatWithConversion(pricing.price_per_person, rateCurrency)}
                   </p>
+                  <p className="text-xs text-gray-500 mt-1">{t('detail.sellingPriceNote')}</p>
                   <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#647C47]/20">
                     <span className="text-sm text-gray-600">{t('detail.totalFor')} {selectedPax} {selectedPax === 1 ? t('detail.person') : t('detail.people')}</span>
                     <span className="text-lg font-semibold text-gray-900">{formatWithConversion(pricing.selling_price, rateCurrency)}</span>
@@ -838,13 +862,13 @@ export default function TourDetailPage() {
                   {pricing.services.some(s => s.unpriced) && (
                     <p className="mt-3 text-xs text-red-700 flex items-start gap-1.5" data-testid="tour-price-incomplete">
                       <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                      {t('detail.priceIncomplete', { count: pricing.services.filter(s => s.unpriced).length })}
+                      {t(canSeeCost ? 'detail.priceIncomplete' : 'detail.priceIncompleteAskManager', { count: pricing.services.filter(s => s.unpriced).length })}
                     </p>
                   )}
                 </div>
 
-                {/* Toggle Breakdown */}
-                <button
+                {/* Toggle Breakdown — its lines are costs: admin/manager only */}
+                {canSeeCost && <button
                   type="button"
                   onClick={() => setShowBreakdown(!showBreakdown)}
                   className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg mb-4"
@@ -854,10 +878,10 @@ export default function TourDetailPage() {
                     {t('detail.viewPriceBreakdown')}
                   </span>
                   {showBreakdown ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
+                </button>}
 
                 {/* Price Breakdown */}
-                {showBreakdown && pricing.services.length > 0 && (
+                {canSeeCost && showBreakdown && pricing.services.length > 0 && (
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
                     <h4 className="text-xs font-semibold text-gray-700 mb-3 uppercase tracking-wide">{t('detail.servicesIncluded')}</h4>
                     {/* Day by day, with a band where each day starts. */}
@@ -900,15 +924,21 @@ export default function TourDetailPage() {
                         )
                       })}
                     </div>
-                    <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between text-sm font-medium">
-                      <span className="text-gray-700">{t('detail.subtotal')}</span>
-                      <span className="text-gray-900">{formatWithConversion(pricing.subtotal_cost, rateCurrency)}</span>
+                    {/* The lines above are cost; the price is cost + margin
+                        (+ any season premium, shown as the badge). */}
+                    <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between text-sm font-medium" data-testid="tour-net-cost">
+                      <span className="text-gray-700">{t('detail.netCost')}</span>
+                      <span className="text-gray-900">{formatWithConversion(pricing.total_cost, rateCurrency)}</span>
+                    </div>
+                    <div className="mt-1 flex justify-between text-sm">
+                      <span className="text-gray-600">{t('detail.marginLine', { percent: pricing.margin_percent })}</span>
+                      <span className="text-gray-900">{formatWithConversion(pricing.margin_amount, rateCurrency)}</span>
                     </div>
                   </div>
                 )}
 
                 {/* Optional Services */}
-                {showBreakdown && pricing.optional_services && pricing.optional_services.length > 0 && (
+                {canSeeCost && showBreakdown && pricing.optional_services && pricing.optional_services.length > 0 && (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
                     <h4 className="text-xs font-semibold text-amber-700 mb-3 uppercase tracking-wide">{t('detail.availableAddOns')}</h4>
                     <div className="space-y-2">
