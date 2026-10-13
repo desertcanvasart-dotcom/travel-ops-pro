@@ -222,13 +222,17 @@ export default function ToursRatesPage() {
             cruise). A guide&rsquo;s tips drop when the guide is off.
           </li>
           <li>
-            <strong>Fixed Costs</strong> (<code>/rates/fixed-costs</code>): pricing uses one cost,{' '}
-            <strong>Water Bottle</strong> (capital letters ignored), per person per touring day,
-            converted from its currency. Other cost types are kept for reference and marked{' '}
-            &ldquo;Not priced&rdquo;. With no active Water Bottle row &mdash; or one whose currency
-            has no exchange rate &mdash; pricing uses a built-in 2.00 per person per day and the
-            quote shows a warning saying so. A second cost with the same name is refused. A change
-            may take up to five minutes to reach every server.
+            <strong>Fixed Costs</strong> (<code>/rates/fixed-costs</code>): every{' '}
+            <strong>active</strong> cost is charged to the quote as its own line, per person for
+            each sightseeing day (a day with a guide or an attraction), converted from the cost&rsquo;s
+            own currency. A cost marked inactive is not charged. <strong>Water Bottle</strong>{' '}
+            (capital letters ignored) is the one with a fallback: with no active Water Bottle row
+            &mdash; or one whose currency has no exchange rate &mdash; pricing uses a built-in 2.00
+            per person per day and the quote shows a warning saying so. Any other cost has no
+            fallback: no row, no line; a cost whose currency has no exchange rate is not charged and
+            the quote warns, naming it. Tips are set under Tipping, and a cost named Daily Tips is
+            refused here. A second cost with the same name is refused. A change may take up to five
+            minutes to reach every server. The Pricing Grid does not read these costs.
           </li>
           <li>
             <strong>Commission Rates</strong> (<code>/rates/commissions</code>): a rate from 0 to

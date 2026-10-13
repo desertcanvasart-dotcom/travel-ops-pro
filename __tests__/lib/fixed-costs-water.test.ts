@@ -1,5 +1,5 @@
-// Rates › Fixed Costs. Pricing reads ONE cost — Water Bottle, per person per
-// touring day. Three ways it used to go quietly wrong:
+// Rates › Fixed Costs, the Water Bottle cost (every other active cost is charged
+// too — see fixed-costs-all.test.ts). Three ways water used to go quietly wrong:
 //   - the AI itinerary and cruise builders read it with no converter, so a
 //     row entered as 20 EGP was used as 20 EUR/USD of water per person a day;
 //   - the match was case-sensitive: "water bottle" priced the built-in 2.00;
@@ -45,7 +45,7 @@ describe('the water cost', () => {
 
   it('falls back to 2.00 only with a warning — no row, another cost type, no exchange rate', async () => {
     expect(waterCostFromRows([]).warnings[0]).toMatch(/no active "Water Bottle" row/)
-    // A "Snacks" row is stored, not priced: water still falls back, and says so.
+    // A "Snacks" row is not the water cost: water still falls back, and says so.
     const snacks = waterCostFromRows([{ cost_type: 'Snacks', cost_per_person_per_day: 3 }])
     expect(snacks.waterPerPersonPerDay).toBe(2)
     expect(snacks.warnings).toHaveLength(1)

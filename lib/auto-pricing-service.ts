@@ -4352,6 +4352,10 @@ export async function calculateDayBasedPricing(
   const sightseeingDaysList = itinerary.filter(d => d.services.guide_required || d.attractions.length > 0)
   const sightseeingDays = sightseeingDaysList.length
   const waterPerPax = waterCostPerPax * sightseeingDays
+  // Every other active fixed cost (Rates › Fixed Costs) is charged like water:
+  // its own line, per person, on each of the same sightseeing days.
+  const extraFixedItems = fixedDailyCosts.extraItems ?? []
+  const extraFixedPerPax = extraFixedItems.reduce((sum, item) => sum + item.perPersonPerDay * sightseeingDays, 0)
 
   for (const sDay of sightseeingDaysList) {
     services.push({
@@ -4370,10 +4374,29 @@ export async function calculateDayBasedPricing(
     })
   }
 
+  extraFixedItems.forEach((item, i) => {
+    for (const sDay of sightseeingDaysList) {
+      services.push({
+        id: `fixed-cost-${i}-day-${sDay.day}`,
+        dayNumber: sDay.day,
+        serviceType: 'supplies',
+        serviceName: item.name,
+        quantity: 1,
+        quantityMode: 'per_pax',
+        unitCost: item.perPersonPerDay,
+        lineTotal: item.perPersonPerDay,
+        rateSource: 'fixed',
+        isPerPax: true,
+        isOptional: false,
+        notes: `${item.name} for sightseeing`
+      })
+    }
+  })
+
   // Accommodation is NOT in the per-person line any more: it goes through
   // the rooming rule per party size (accommodationAt below). Everything
   // else still scales linearly with pax.
-  const perPaxCosts = entranceFeesPerPax + externalMealsPerPax + waterPerPax + ticketsPerPax + supplementsPerPax + staffPerPax
+  const perPaxCosts = entranceFeesPerPax + externalMealsPerPax + waterPerPax + extraFixedPerPax + ticketsPerPax + supplementsPerPax + staffPerPax
   const accommodationAt = (pax: number) => tripAccommodationCost(pax, accommodationNights)
 
   debugLog(`📊 Fixed costs: €${fixedCosts.toFixed(2)} | Per-pax costs: €${perPaxCosts.toFixed(2)}`)
@@ -4660,7 +4683,7 @@ export async function calculateDayBasedPricing(
       ? (pax: number) => transportAtPax(pax + 1) + staffUnitsAt(pax)
       : (pax: number) => transportAtPax(pax) + staffUnitsAt(pax),
     // The leader rides the ticket legs at customer fare, like everything else he consumes.
-    tourLeaderCost: accommodationPPD + singleSupplement + entranceFeesPerPax + externalMealsPerPax + waterPerPax + ticketsPerPax + staffPerPax,
+    tourLeaderCost: accommodationPPD + singleSupplement + entranceFeesPerPax + externalMealsPerPax + waterPerPax + extraFixedPerPax + ticketsPerPax + staffPerPax,
     accommodationAt,
     paxFrom: PAX_COUNTS[0],
     paxTo: PAX_COUNTS[PAX_COUNTS.length - 1],

@@ -177,6 +177,7 @@ export default function PricingGridPage() {
           <li>It does not store the quote in the currency you were viewing; the itinerary is in the rate currency.</li>
           <li>It does not guess a price: a new pick with no current rate, a date outside every rate period, or water without an exchange rate has no price until you fix it.</li>
           <li>It does not re-price a line kept at its saved price when your rates change; it keeps that price until you pick a rate for it. A saved line whose price cannot be converted into your rate currency has no price.</li>
+          <li>It does not read Rates &rsaquo; Fixed Costs. Automatic pricing and the AI builders charge every active fixed cost per person for each sightseeing day; the grid&rsquo;s Water is its own fixed EUR 0.50, and any other fixed cost has to be added as an Other (PP) line by hand.</li>
           <li>It does not block a save when a day is missing a service; it saves a draft.</li>
           <li>A typed amount is taken as it is, in the rate currency.</li>
         </ul>

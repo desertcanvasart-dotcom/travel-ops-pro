@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { RateNormalizer } from '@/lib/rates/rate-currency'
-import { WATER_COST_TYPE, WATER_DEFAULT_PER_PERSON_PER_DAY, isWaterCostType } from '@/lib/fixed-cost-types'
+import { WATER_COST_TYPE, WATER_DEFAULT_PER_PERSON_PER_DAY, isWaterCostType, isTipsCostType } from '@/lib/fixed-cost-types'
 
 export { WATER_COST_TYPE, isWaterCostType }
 
@@ -12,15 +12,14 @@ const supabaseAdmin = createClient(
 // ============================================
 // Fixed daily costs (Rates › Fixed Costs)
 // ============================================
-// Pricing reads ONE cost from this table: "Water Bottle", per person per
-// touring day. Any other cost type is stored and listed but not priced — the
-// page says so on every such card. The match ignores case and spacing, so
-// "water bottle" is the same cost (the case-sensitive match used to drop it
-// and price the built-in default without a word).
-//
-// The built-in default (2.00 in the run currency) is used only when there is
-// no usable active row — and never silently: `warnings` says why, and the
-// pricing engine shows it on the quote.
+// Pricing charges EVERY active cost in this table, each as its own named line,
+// per person for each sightseeing day (the day count water has always used).
+// Each is converted from its own currency. "Water Bottle" (case and spacing
+// ignored) is the one with a safety net: with no usable row it is priced at the
+// built-in default (2.00 in the run currency) and `warnings` says why. Any other
+// cost has no fallback — no row, no line — and a row whose currency cannot be
+// converted is not charged and raises a warning naming the cost. An inactive row
+// never charges. Tips are priced from tipping_rates, never from here.
 // ============================================
 
 // Default fallback values (used when DB has no data)
@@ -28,9 +27,21 @@ const DEFAULTS = {
   [WATER_COST_TYPE]: WATER_DEFAULT_PER_PERSON_PER_DAY,
 }
 
+export interface FixedCostItem {
+  /** The cost's name — the line's name for every cost but water. */
+  name: string
+  /** Per person, per sightseeing day, in the run currency. */
+  perPersonPerDay: number
+  isWater: boolean
+}
+
 export interface FixedDailyCosts {
   waterPerPersonPerDay: number
-  /** Why the built-in default was used, if it was. Empty = a real row priced. */
+  /** Every cost to charge (water first, then the others by name). */
+  items: FixedCostItem[]
+  /** The items except water — each is its own extra line. */
+  extraItems: FixedCostItem[]
+  /** Why the built-in default was used, or a cost was not charged. Empty = all priced. */
   warnings: string[]
 }
 
@@ -43,12 +54,14 @@ export interface FixedDailyCosts {
 // The cache is per server instance: an edit clears the instance that served
 // it at once (clearFixedCostsCache); another instance may price the old
 // figure for up to CACHE_TTL.
-type FixedCostRow = { id?: string; cost_type: string; cost_per_person_per_day: number | null; rate_currency?: string | null }
+type FixedCostRow = { id?: string; cost_type: string; cost_per_person_per_day: number | null; rate_currency?: string | null; is_active?: boolean | null }
 const cachedRows = new Map<string, { rows: FixedCostRow[]; fetchedAt: number }>()
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 const fallback = (why: string): FixedDailyCosts => ({
   waterPerPersonPerDay: DEFAULTS[WATER_COST_TYPE],
+  items: [{ name: WATER_COST_TYPE, perPersonPerDay: DEFAULTS[WATER_COST_TYPE], isWater: true }],
+  extraItems: [],
   warnings: [`Water priced at the built-in ${DEFAULTS[WATER_COST_TYPE].toFixed(2)} per person per day: ${why}`],
 })
 
@@ -56,7 +69,7 @@ const fallback = (why: string): FixedDailyCosts => ({
  * The water cost from already-fetched (and, when the run converts, already
  * converted) active rows. Pure.
  */
-export function waterCostFromRows(rows: FixedCostRow[], opts: { converted?: boolean } = {}): FixedDailyCosts {
+export function waterCostFromRows(rows: FixedCostRow[], opts: { converted?: boolean } = {}): { waterPerPersonPerDay: number; warnings: string[] } {
   const record = rows.find(r => isWaterCostType(r.cost_type))
   if (!record) return fallback(`no active "${WATER_COST_TYPE}" row in Rates › Fixed Costs`)
   const value = record.cost_per_person_per_day
@@ -70,7 +83,44 @@ export function waterCostFromRows(rows: FixedCostRow[], opts: { converted?: bool
 }
 
 /**
- * Fetch fixed daily costs (water bottles) from the database.
+ * Every cost to charge, from already-fetched (and, when the run converts,
+ * already converted) rows. Pure. Water comes first, from waterCostFromRows (so
+ * its fallback and warning are unchanged); every other active row is its own
+ * item. A zero amount adds no line; an amount that cannot be priced is not
+ * charged and warns, naming the cost.
+ */
+export function fixedCostItemsFromRows(rows: FixedCostRow[], opts: { converted?: boolean } = {}): FixedDailyCosts {
+  const active = rows.filter(r => r.is_active !== false)
+  const water = waterCostFromRows(active, opts)
+  const items: FixedCostItem[] = [{ name: WATER_COST_TYPE, perPersonPerDay: water.waterPerPersonPerDay, isWater: true }]
+  const warnings = [...water.warnings]
+  const others = active
+    .filter(r => !isWaterCostType(r.cost_type) && !isTipsCostType(r.cost_type) && String(r.cost_type ?? '').trim() !== '')
+    .sort((a, b) => a.cost_type.localeCompare(b.cost_type))
+  for (const row of others) {
+    const name = row.cost_type.trim().replace(/\s+/g, ' ')
+    const raw = row.cost_per_person_per_day
+    const missing = raw === null || raw === undefined
+    const value = missing ? NaN : Number(raw)
+    if (!Number.isFinite(value) || value < 0) {
+      warnings.push(missing && opts.converted
+        ? `"${name}" not charged: the row is in ${row.rate_currency ?? 'another currency'} and no exchange rate was available`
+        : `"${name}" not charged: the row has no usable amount`)
+      continue
+    }
+    if (value === 0) continue
+    items.push({ name, perPersonPerDay: value, isWater: false })
+  }
+  return {
+    waterPerPersonPerDay: water.waterPerPersonPerDay,
+    items,
+    extraItems: items.filter(i => !i.isWater),
+    warnings,
+  }
+}
+
+/**
+ * Fetch the fixed daily costs (water and every other active cost) from the database.
  * Uses a 5-minute in-memory cache to avoid repeated DB queries.
  * Falls back to the built-in default, with a warning, if there is no row or
  * the DB is unavailable.
@@ -116,7 +166,7 @@ export async function getFixedDailyCosts(
     ? (await normalizer.normalize('fixed_daily_costs', rows)) ?? rows
     : rows
 
-  const result = waterCostFromRows(converted, { converted: Boolean(normalizer) })
+  const result = fixedCostItemsFromRows(converted, { converted: Boolean(normalizer) })
   for (const w of result.warnings) console.warn(`[FixedCosts] ${w}`)
   return result
 }

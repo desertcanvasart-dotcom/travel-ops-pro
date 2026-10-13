@@ -35,15 +35,15 @@ const COST_TYPE_CONFIG: Record<string, { icon: any; color: string; bgColor: stri
 // Tips are managed via Rates > Tipping (tipping_rates table), not here
 const HIDDEN_COST_TYPES = ['Daily Tips']
 
-// Pricing reads ONE cost from this page — Water Bottle, per person per
-// touring day (lib/fixed-costs). Every other card says it is not priced, so
-// nobody adds "Snacks" here and believes the quotes include it.
+// Pricing charges every active cost here (lib/fixed-costs), per person per
+// sightseeing day; the badge on each active card says so.
 const isHiddenCostType = (t: string) => HIDDEN_COST_TYPES.some(h => h.toLowerCase() === t.trim().toLowerCase())
 
 export default function FixedCostsPage() {
   const { rateSymbol, rateCurrency } = useCurrency()
   const tCommon = useTranslations('common')
   const tRates = useTranslations('rates.common')
+  const tFixed = useTranslations('rates.fixedCosts')
   const [costs, setCosts] = useState<FixedCost[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(true)
@@ -230,7 +230,7 @@ export default function FixedCostsPage() {
           </div>
           <div className="min-w-0">
             <h1 className="text-xl font-bold text-gray-900">Fixed Daily Costs</h1>
-            <p className="text-sm text-gray-600 max-w-xl">The per-person daily water rate used in pricing, and any other daily costs you want on file</p>
+            <p className="text-sm text-gray-600 max-w-xl">Daily costs charged per person for each sightseeing day: water, and any other cost you add</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap shrink-0">
@@ -252,8 +252,8 @@ export default function FixedCostsPage() {
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
         <div>
-          <p className="font-medium">Pricing uses one cost from this page: {WATER_COST_TYPE}, per person per touring day</p>
-          <p className="text-blue-600 mt-1">Water is a pass-through cost with no profit margin applied. Changes affect all new pricing (a running server may keep the old figure for up to 5 minutes). Any other cost type is kept for reference and is not added to quotes. Tips are managed separately under Rates &gt; Tipping.</p>
+          <p className="font-medium">{tFixed('infoTitle')}</p>
+          <p className="text-blue-600 mt-1">{tFixed('infoBody')}</p>
         </div>
       </div>
 
@@ -283,7 +283,7 @@ export default function FixedCostsPage() {
           <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
             <Settings className="w-10 h-10 text-gray-300 mx-auto mb-3" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No fixed costs configured</h3>
-            <p className="text-sm text-gray-600 mb-4">Add a {WATER_COST_TYPE} cost to set the water rate pricing uses.</p>
+            <p className="text-sm text-gray-600 mb-4">{tFixed('emptyBody')}</p>
             <button
               onClick={() => setShowAddForm(true)}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#566b3c]"
@@ -298,8 +298,8 @@ export default function FixedCostsPage() {
           </div>
         ) : (
           filtered.map((cost) => {
-            const priced = isWaterCostType(cost.cost_type)
-            const config = (priced ? COST_TYPE_CONFIG[WATER_COST_TYPE] : null) || {
+            const isWater = isWaterCostType(cost.cost_type)
+            const config = (isWater ? COST_TYPE_CONFIG[WATER_COST_TYPE] : null) || {
               icon: Coins,
               color: 'text-gray-600',
               bgColor: 'bg-gray-100',
@@ -319,9 +319,9 @@ export default function FixedCostsPage() {
                     <div>
                       <h3 className="font-semibold text-gray-900 text-lg flex items-center gap-2">
                         {config.label}
-                        {priced
-                          ? <span className="px-1.5 py-0.5 text-[11px] font-medium rounded bg-green-100 text-green-700">Used in pricing</span>
-                          : <span className="px-1.5 py-0.5 text-[11px] font-medium rounded bg-gray-100 text-gray-600">Not priced</span>}
+                        {cost.is_active && (
+                          <span className="px-1.5 py-0.5 text-[11px] font-medium rounded bg-green-100 text-green-700">{tFixed('usedInPricing')}</span>
+                        )}
                       </h3>
                       <p className="text-sm text-gray-500 mt-0.5">{cost.description || config.hint}</p>
                     </div>
