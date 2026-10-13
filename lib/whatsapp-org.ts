@@ -136,6 +136,37 @@ export function openChatsByMember(
 }
 
 /**
+ * Who a new chat goes to: the member longest without one, among those who can
+ * actually work it — active, available, with a linked login (a member with no
+ * login, a driver or guide say, would be handed chats nobody can see) and not
+ * already at max_conversations open chats. null when nobody qualifies: the
+ * chat stays unassigned for the team to claim.
+ */
+export function pickAutoAssignee(
+  members: Array<{
+    id: string
+    user_id: string | null
+    is_active?: boolean | null
+    is_available?: boolean | null
+    max_conversations?: number | null
+    last_assigned_at?: string | null
+    created_at?: string | null
+  }>,
+  openChats: Map<string, number>,
+): string | null {
+  const stamp = (v: string | null | undefined) => (v ? Date.parse(v) || 0 : 0)
+  const eligible = members.filter(m => {
+    if (!m.user_id || m.is_active === false || m.is_available === false) return false
+    const max = m.max_conversations
+    return !(typeof max === 'number' && max > 0 && (openChats.get(m.id) ?? 0) >= max)
+  })
+  // Never-assigned first (0), then oldest assignment; ties by who joined first.
+  eligible.sort((a, b) =>
+    stamp(a.last_assigned_at) - stamp(b.last_assigned_at) || stamp(a.created_at) - stamp(b.created_at))
+  return eligible[0]?.id ?? null
+}
+
+/**
  * The org member whose login has this email address, or null. Adding an agent
  * with a colleague's address links the agent to that login, so the chats
  * assigned to the agent are theirs ("Mine", claiming, the assignment
@@ -164,7 +195,9 @@ export async function orgLoginForEmail(
     .select('id, email')
     .in('id', ids)
   if (profileError) return null
-  const match = ((profiles ?? []) as { id: string; email: string | null }[])
-    .find(p => (p.email ?? '').trim().toLowerCase() === wanted)
-  return match?.id ?? null
+  // Exactly one login: two members of the org sharing an address is
+  // ambiguous, and guessing would hand one person's notifications to the other.
+  const matches = ((profiles ?? []) as { id: string; email: string | null }[])
+    .filter(p => (p.email ?? '').trim().toLowerCase() === wanted)
+  return matches.length === 1 ? matches[0].id : null
 }

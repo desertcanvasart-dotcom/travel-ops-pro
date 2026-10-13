@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, getCurrentUserId, getCurrentUserRole, noOrgResponse } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { clientMessage } from '@/lib/api-errors'
-import { quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
+import { quoteRefsInOrg, quoteRefNotFound, partnerIsInactive, inactivePartnerResponse } from '@/lib/b2b/quote-scope'
 import { enginePricingRequest, quoteColumnsFromEngine, priceMoved } from '@/lib/b2b/quote-pricing'
 import { updateB2bQuote } from '@/lib/b2b/update-quote'
 import { deleteQuote } from '@/lib/quotes/delete-quote'
@@ -233,6 +233,8 @@ export async function POST(request: NextRequest) {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
     if (!(await quoteRefsInOrg(supabaseAdmin, orgId, { itinerary_id, partner_id, variation_id }))) return quoteRefNotFound()
+    // A new quote for a deactivated partner is refused (existing quotes stay valid).
+    if (await partnerIsInactive(supabaseAdmin, orgId, partner_id)) return inactivePartnerResponse()
 
     // The price is the server's: the same engine the calculator ran, on the
     // inputs it ran with (lib/b2b/quote-pricing.ts). Prices in the body are

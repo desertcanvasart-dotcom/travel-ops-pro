@@ -7725,6 +7725,8 @@
     "country": "国",
     "selectCountry": "選択...",
     "defaultMargin": "デフォルトマージン（%）",
+    "commissionPercent": "コミッション（%）",
+    "tableCommission": "コミッション",
     "partnerIsActive": "パートナーはアクティブです",
     "cancel": "キャンセル",
     "update": "更新",
@@ -8442,7 +8444,12 @@
     "sysRoleViewer": "閲覧者 — 読み取り専用",
     "sendInvitation": "招待を送信",
     "sending": "送信中…",
-    "inviteFailed": "招待を送信できませんでした"
+    "inviteFailed": "招待を送信できませんでした",
+    "inviteAdminOnly": "システムへの招待は管理者のみ行えます。",
+    "failedToLoad": "チームメンバーを読み込めませんでした",
+    "failedToSave": "チームメンバーを保存できませんでした",
+    "failedToDeactivate": "チームメンバーを非アクティブにできませんでした",
+    "failedToReactivate": "チームメンバーを再アクティブにできませんでした"
   },
   "tasks": {
     "title": "タスク",
@@ -8750,8 +8757,10 @@
   "departments": {
     "loading": "部署を読み込み中…",
     "title": "部署",
-    "subtitle": "各サービス種別は1つの部署に割り当てられ、生成されたタスクはその部署のメンバーに届きます。",
-    "memberCount": "{count}名",
+    "subtitle": "各サービス種別は1つの部署に割り当てられます。メンバーは参考情報です。旅程のタスクを生成するときに、部署ごとの担当者を選びます。",
+    "memberCount": "有効メンバー{count}名",
+    "newTypesPlaceholder": "サービス種別（任意、カンマ区切り）",
+    "reactivateConflict": "この部署を有効に戻すと拒否されます。{types} はすでに {names} に割り当てられています。先にこのカードまたは {names} から外してください。",
     "active": "有効",
     "descriptionPlaceholder": "説明（任意）",
     "routedTypes": "担当サービス種別",

@@ -43,8 +43,9 @@ describe('P1b routes are org-scoped', () => {
 
   it('partner deletion fails CLOSED when the reference lookup errors', () => {
     const code = read('app/api/b2b/partners/[id]/route.ts')
-    // The ref check must read its error and refuse on it, not proceed.
-    expect(code).toMatch(/data:\s*quotes,\s*error:\s*refErr/)
-    expect(code).toMatch(/if\s*\(refErr\)/)
+    // Each reference count (quotes, trips, bookings) throws on its error, and
+    // the catch refuses the delete — it never proceeds on a failed lookup.
+    expect(code).toMatch(/if \(error\) throw error/)
+    expect(code).toMatch(/catch \(refErr\)[\s\S]{0,200}delete refused/)
   })
 })

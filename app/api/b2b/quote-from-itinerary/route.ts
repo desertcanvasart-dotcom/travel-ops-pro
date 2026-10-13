@@ -14,7 +14,7 @@ import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-mar
 import { quoteMarginPercent } from '@/lib/b2b/partner-margin'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { createInitialQuoteRevision } from '@/lib/quotes/initial-revision'
-import { quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
+import { quoteRefsInOrg, quoteRefNotFound, partnerIsInactive, inactivePartnerResponse } from '@/lib/b2b/quote-scope'
 import { getExchangeRate, type ExchangeRates } from '@/lib/currency-service'
 import { parseFrozenFx, frozenToExchangeRates } from '@/lib/itinerary-fx'
 import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
@@ -208,6 +208,8 @@ export async function POST(request: NextRequest) {
     // The partner is saved on the quote (and printed on its PDF, and copied to
     // the trip on convert), not only used for its margin.
     if (!(await quoteRefsInOrg(supabaseAdmin, orgId, { partner_id }))) return quoteRefNotFound()
+    // A new quote for a deactivated partner is refused (existing quotes stay valid).
+    if (await partnerIsInactive(supabaseAdmin, orgId, partner_id)) return inactivePartnerResponse()
 
     const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(supabaseAdmin, orgId) })
 

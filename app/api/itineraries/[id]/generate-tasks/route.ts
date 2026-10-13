@@ -11,6 +11,7 @@ import { createNotifications } from '@/lib/notifications'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { todayFromRequest } from '@/lib/today'
 import { teamMemberInOrg } from '@/lib/whatsapp-org'
+import { teamMemberInactive, INACTIVE_ASSIGNEE } from '@/lib/org-refs'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,6 +48,11 @@ export async function POST(
           { success: false, error: 'An assignee is not a team member of this organization. Pick someone from your own team.' },
           { status: 404 }
         )
+      }
+      // A deactivated member is never reminded (task-reminders skips them), so
+      // tasks given to one would remind nobody — the same refusal as POST /api/tasks.
+      if (await teamMemberInactive(supabaseAdmin, orgId, assigneeId)) {
+        return NextResponse.json({ success: false, error: INACTIVE_ASSIGNEE }, { status: 400 })
       }
     }
 
