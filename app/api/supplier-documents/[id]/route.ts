@@ -6,6 +6,9 @@ import { recordsInOrg } from '@/lib/org-refs'
 import {
   SUPPLIER_DOCUMENT_UPDATE_FIELDS, deleteBlockReason, isSupplierDocumentStatus, pickFields,
 } from '@/lib/documents/supplier-document-fields'
+import { convertVoucherMoney, planCurrencyChange } from '@/lib/documents/voucher-currency'
+import { voucherPickFx } from '@/lib/documents/voucher-pick-price'
+import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
 
 export async function GET(
   request: NextRequest,
@@ -69,6 +72,41 @@ export async function PUT(
       return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
     }
 
+    // A new currency converts the amounts; it never just relabels them
+    // (lib/documents/voucher-currency). The body's amounts are in
+    // `amounts_currency` (absent: the stored currency).
+    let converted: { from: string; to: string; fx: number } | null = null
+    if ('currency' in updateData || body?.amounts_currency != null) {
+      const { data: stored, error: storedError } = await supabase
+        .from('supplier_documents')
+        .select('currency, total_cost, services, selected_routes, selected_meals, selected_guides, selected_attractions, itinerary:itineraries(fx_frozen)')
+        .eq('id', id)
+        .eq('org_id', orgId)
+        .maybeSingle()
+      if (storedError) {
+        console.error('Error reading document:', storedError)
+        return NextResponse.json({ success: false, error: clientMessage(storedError, 'Internal server error') }, { status: 500 })
+      }
+      if (!stored) return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 })
+      const { itinerary, ...storedRow } = stored as Record<string, any>
+      const plan = planCurrencyChange(storedRow, updateData, body?.amounts_currency)
+      if (plan.kind === 'refuse') {
+        return NextResponse.json({ success: false, error: plan.error }, { status: plan.status })
+      }
+      if (plan.kind === 'convert') {
+        // The trip's frozen rate, else today's — as a picked rate is converted.
+        const fx = voucherPickFx(plan.from, plan.to, itinerary?.fx_frozen, await fetchRunExchangeRates())
+        if (fx == null) {
+          return NextResponse.json({
+            success: false,
+            error: `No exchange rate from ${plan.from} to ${plan.to} is known, so the amounts cannot be converted. The currency was not changed.`,
+          }, { status: 422 })
+        }
+        Object.assign(updateData, convertVoucherMoney({ ...storedRow, ...updateData }, fx, plan.to))
+        converted = { ...plan, fx }
+      }
+    }
+
     // Auto-set timestamps based on status changes
     if (updateData.status === 'sent' && !updateData.sent_at) {
       updateData.sent_at = new Date().toISOString()
@@ -107,7 +145,7 @@ export async function PUT(
     }
 
     console.log('Document updated successfully:', data)
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data, converted })
   } catch (error) {
     console.error('Error in PUT:', error)
     return NextResponse.json({ success: false, error: 'Server error' }, { status: 500 })

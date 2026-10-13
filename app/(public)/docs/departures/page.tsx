@@ -80,7 +80,7 @@ export default function DeparturesPage() {
           <li><strong>Departure</strong> &mdash; the dates; click one to open its page.</li>
           <li><strong>Taken / Seats</strong> &mdash; taken as above (an amber tag shows pending held seats; hover for the split). Seats are editable but cannot go below what is taken.</li>
           <li><strong>Status</strong>, <strong>燃油 Fuel</strong> (typed), <strong>LND</strong> (the engine&apos;s per-person gross, domestic flights included).</li>
-          <li>Per class: <strong>AIR</strong> (typed), <strong>合計 Total</strong> (AIR + fuel + LND) and <strong>Website</strong> (the total rounded up to end in 999 unless you type your own).</li>
+          <li>Per class: <strong>AIR</strong> (typed), <strong>合計 Total</strong> (AIR + fuel + LND) and <strong>Website</strong> (in yen, the total rounded up to end in 999; in any other currency, the total rounded to the cent &mdash; unless you type your own).</li>
           <li><strong>Generate dates</strong> makes dates from a weekday pattern, a fixed interval or hand-picked days, skips dates that exist, and refuses more than 366 at a time with a message.</li>
           <li><strong>Export CSV</strong> writes every class plus booked outside, held confirmed, held pending, seats taken and seats.</li>
         </ul>
@@ -94,7 +94,7 @@ export default function DeparturesPage() {
         </p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>Change <strong>Seats (max pax)</strong> and <strong>Booked outside the app</strong>, then <strong>Save seats</strong>. Seats cannot go below what is taken; this is checked in the database at the moment of saving, so a web order arriving at the same time cannot slip past it.</li>
-          <li><strong>Seat holds</strong> lists every hold with client, pax, status, the order note (it names the quote) and the date placed. When the quote is set to Rejected or Expired, or deleted, its pending holds are released automatically; confirmed holds stay until you release them.</li>
+          <li><strong>Seat holds</strong> lists every hold with client, pax, status, the order note (it names the quote) and the date placed. When the quote is set to Rejected or Expired, or deleted, its pending holds are released automatically. A draft or sent quote that passes its valid-until date releases them too: a daily job (09:20 Japan time) cancels them, adds a line to the note saying why, and sends the company&apos;s owners, admins and managers one in-app notification. Confirmed holds stay until you release them.</li>
           <li><strong>Confirm</strong> moves a pending hold to confirmed. <strong>Release</strong> cancels a hold and frees its seats.</li>
           <li><strong>Delete</strong> works once no hold is pending or confirmed. Otherwise the message names the holds to release first.</li>
         </ul>
@@ -134,10 +134,8 @@ export default function DeparturesPage() {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>It does not set Full, Limited or Guaranteed for you; seat counts never change the status.</li>
-          <li>A quote that passes its valid-until date without being set to Expired keeps its hold &mdash; release it on the departure&apos;s page.</li>
           <li>It does not rehome confirmed holds of a cancelled departure.</li>
           <li>The price per person is not shown on the list or the grid.</li>
-          <li>The website rate always rounds up to end in 999, the yen rule, whatever the currency.</li>
         </ul>
         <p className="text-gray-600 mt-3">
           Holds come from <Link href="/docs/order-intake" className="text-primary-600 hover:underline">Order Intake</Link>. How many

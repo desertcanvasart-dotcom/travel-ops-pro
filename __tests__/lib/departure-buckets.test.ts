@@ -65,3 +65,33 @@ describe('FX conversion is a parameter, rounded to whole target units', () => {
     expect(convertAtRate(100, 0)).toBe(0)
   })
 })
+
+// The 999 rule is the yen rule. The grid prices in the company's own currency,
+// and a euro total of €1,234.56 was published as €1,999 (Operate audit).
+describe('websiteRate: 999 for yen only', () => {
+  it('yen rounds up to end in 999, as before (the default)', () => {
+    expect(websiteRate(417_651, 'JPY')).toBe(417_999)
+    expect(websiteRate(417_651)).toBe(417_999)
+  })
+
+  it('any other currency is the total rounded to its own unit', () => {
+    expect(websiteRate(1_234.564, 'EUR')).toBe(1_234.56)
+    expect(websiteRate(1_234.565, 'USD')).toBe(1_234.57)
+    expect(websiteRate(980.1, 'GBP')).toBe(980.1)
+    expect(websiteRate(15_000, 'EGP')).toBe(15_000)
+    expect(websiteRate(0, 'EUR')).toBe(0)
+  })
+
+  it('classColumn suggests by the grid currency', () => {
+    expect(classColumn({ landPp: 1_000.5, fuelPp: 34.25, airPp: 200, websiteTyped: null, currency: 'EUR' }))
+      .toMatchObject({ totalPp: 1_234.75, websiteSuggested: 1_234.75, websitePp: 1_234.75 })
+    expect(classColumn({ landPp: 100_500, fuelPp: 0, airPp: 200_000, websiteTyped: null, currency: 'JPY' }).websiteSuggested)
+      .toBe(300_999)
+  })
+
+  it('the grid route and page pass their currency', async () => {
+    const { readFileSync } = await import('node:fs')
+    expect(readFileSync('app/api/departures/grid/route.ts', 'utf8')).toContain('currency: targetCurrency,')
+    expect(readFileSync('app/departures/grid/[templateId]/page.tsx', 'utf8')).toContain('currency: band.currency')
+  })
+})

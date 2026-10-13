@@ -182,6 +182,7 @@ export async function GET(request: NextRequest) {
             fuelPp,
             airPp: num(dep[AIR_COLUMN[c]]),
             websiteTyped: num(dep[WEB_COLUMN[c]]),
+            currency: targetCurrency,
           }),
         ]),
       ) as Record<FlightClass, ClassColumn>

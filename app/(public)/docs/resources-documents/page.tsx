@@ -99,7 +99,8 @@ export default function ResourcesDocumentsPage() {
         </p>
         <h3 className="text-lg font-medium text-gray-900 mb-3">Filters and actions</h3>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
-          <li>Type chips, an <strong>All Status</strong> select, and a search box (document number, supplier, client or city). The search looks through the rows already loaded.</li>
+          <li>Type chips, an <strong>All Status</strong> select, and a search box (document number, supplier, client or city). The search covers every matching document, not only the page on screen.</li>
+          <li>The list shows 50 documents at a time, newest first. Below it, &ldquo;Showing 1&ndash;50 of N&rdquo; with <strong>Newer</strong> and <strong>Older</strong> moves between pages; changing a filter or the search goes back to the newest.</li>
           <li><strong>View</strong> and <strong>Edit</strong> (Edit is hidden for a cancelled document).</li>
           <li><strong>Mark as Sent</strong> (from Draft), <strong>Mark as Confirmed</strong> (from Sent), <strong>Mark as Completed</strong> (from Confirmed), and <strong>Revert to Draft</strong>.</li>
           <li>
@@ -138,6 +139,13 @@ export default function ResourcesDocumentsPage() {
             trip has none. If no rate is known yet, the pick is refused with a message instead of adding the wrong amount.
             Every line and total is shown in the document&apos;s currency; the picker shows the rate itself in your rate
             currency.
+          </li>
+          <li>
+            Changing the <strong>Currency</strong> of a document that has lines or a total converts them: after you confirm,
+            every line&apos;s rate and total and the document total are converted from the old currency to the new one at the
+            trip&apos;s frozen exchange rate (today&apos;s rate when the trip has none), and the document is saved with your
+            other changes. A note under the select shows the rate used. If no rate is known, the change is refused with a
+            message and nothing is saved. A document with no lines and no total simply takes the new currency.
           </li>
         </ul>
       </section>
@@ -185,8 +193,6 @@ export default function ResourcesDocumentsPage() {
         <ul className="list-disc list-inside space-y-2 text-gray-700">
           <li>There is no list of contracts, invoices or receipts here; the Documents page lists supplier documents only.</li>
           <li>A document is a snapshot of the trip when it was generated. Later trip changes are flagged, not applied.</li>
-          <li>Changing a document&apos;s <strong>Currency</strong> on the Edit page relabels it; it does not convert the lines already on it.</li>
-          <li>The list has no paging. It loads every matching document at once; the search only looks through what was loaded.</li>
           <li>Status labels in the list are in English only.</li>
           <li>A document that has gone to the supplier cannot be deleted until it is cancelled.</li>
         </ul>
