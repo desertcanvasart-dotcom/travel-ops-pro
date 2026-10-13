@@ -922,14 +922,10 @@ function WhatsAppParserContent() {
   useEffect(() => {
     const loadUserPreferences = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) { setPreferencesLoaded(true); return }
-
-        const { data } = await supabase
-          .from('user_preferences')
-          .select('*')
-          .eq('user_id', user.id)
-          .single()
+        // Through the API: preferences are per (person, company), and only
+        // the server knows the active company (getCurrentOrgId).
+        const response = await fetch('/api/user-preferences')
+        const data = response.ok ? (await response.json())?.data : null
 
         if (data) {
           const prefs: UserPreferences = {

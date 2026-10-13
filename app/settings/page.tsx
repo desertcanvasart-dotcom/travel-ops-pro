@@ -241,17 +241,12 @@ function SettingsContent() {
 
   const fetchPreferences = async () => {
     try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) return
-  
-      const { data, error } = await supabase
-        .from('user_preferences')
-        .select('*')
-        .eq('user_id', user.id)
-        .single()
-  
+      // Through the API: preferences are per (person, company), and only the
+      // server knows the active company (getCurrentOrgId).
+      const response = await fetch('/api/user-preferences')
+      if (!response.ok) return
+      const { data } = await response.json()
+
       if (data) {
         setUserPreferences({
           id: data.id,

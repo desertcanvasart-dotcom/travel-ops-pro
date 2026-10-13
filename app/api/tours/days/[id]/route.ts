@@ -12,6 +12,22 @@ async function dayInOrg(supabase: ReturnType<typeof createServerClient>, orgId: 
   return day
 }
 
+// tour_days' rate columns reference the RATE tables (accommodation_rates,
+// meal_rates ×2, guide_rates — 20260829's foreign keys), not hotel_contacts /
+// restaurant_contacts / guides, which these embeds used to name: PostgREST
+// found no relationship and every read failed (500). Each embed names its
+// foreign key (meal_rates is referenced twice). There is no
+// tour_day_activities relationship either — that table is the tour
+// manager's, keyed by template_id; a legacy day has no activities, so
+// `activities` is always [] (kept for the builder's shape).
+const DAY_SELECT = `
+  *,
+  accommodation:accommodation_rates!tour_days_accommodation_id_fkey(id, property_name, city, room_type, board_basis),
+  lunch_meal:meal_rates!tour_days_lunch_meal_id_fkey(id, restaurant_name, city, meal_type),
+  dinner_meal:meal_rates!tour_days_dinner_meal_id_fkey(id, restaurant_name, city, meal_type),
+  guide:guide_rates!tour_days_guide_id_fkey(id, guide_language, guide_type, city)
+`
+
 // ============================================
 // TOUR DAYS - SINGLE OPERATIONS
 // File: app/api/tours/days/[id]/route.ts
@@ -33,14 +49,7 @@ export async function GET(
 
     const { data, error } = await supabase
       .from('tour_days')
-      .select(`
-        *,
-        activities:tour_day_activities(*),
-        accommodation:hotel_contacts(id, name, city),
-        lunch_meal:restaurant_contacts!lunch_meal_id(id, name, city),
-        dinner_meal:restaurant_contacts!dinner_meal_id(id, name, city),
-        guide:guides(id, name, languages)
-      `)
+      .select(DAY_SELECT)
       .eq('id', id)
       .single()
 
@@ -51,14 +60,9 @@ export async function GET(
       )
     }
 
-    // Sort activities by activity_order
-    data.activities = data.activities?.sort((a: any, b: any) => 
-      (a.activity_order || 0) - (b.activity_order || 0)
-    ) || []
-
     return NextResponse.json({
       success: true,
-      data: data
+      data: { ...data, activities: [] }
     })
 
   } catch (error) {
@@ -132,7 +136,7 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete day (and its activities)
+// DELETE - Delete day
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -146,22 +150,9 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: 'Day not found' }, { status: 404 })
     }
 
-    // Activities are keyed by (template_id, day_number), not by the day row's
-    // id — `.eq('tour_day_id', id)` filtered on a column that does not exist
-    // and 400'd, leaving activities behind every deleted day.
-    const { data: dayRow } = await supabase
-      .from('tour_days')
-      .select('tour_id, day_number')
-      .eq('id', id)
-      .maybeSingle()
-
-    if (dayRow) {
-      await supabase
-        .from('tour_day_activities')
-        .delete()
-        .eq('template_id', dayRow.tour_id)
-        .eq('day_number', dayRow.day_number)
-    }
+    // A legacy day has no activities to delete: tour_day_activities is the
+    // tour manager's, keyed by template_id — deleting by template_id = this
+    // day's tour_id matched nothing (a tour is no template).
 
     // Delete day
     const { error } = await supabase

@@ -4,6 +4,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { teamMemberInOrg } from '@/lib/whatsapp-org'
 
 // Every query here runs on the service role and filters on org_id itself:
 // each organization has its own WhatsApp number and only its own threads
@@ -219,8 +220,10 @@ export async function POST(request: NextRequest) {
         .eq('id', assignedTeamMemberId)
         .eq('org_id', orgId)
 
-      // Log activity
-      await supabase
+      // Log activity. agent_id references team_members since 20261209 (it
+      // referenced sales_agents, so this insert always failed — unseen, as
+      // the result was never read).
+      const { error: activityError } = await supabase
         .from('conversation_activity')
         .insert({
           conversation_id: newConversation.id,
@@ -229,6 +232,7 @@ export async function POST(request: NextRequest) {
           action_type: 'auto_assigned',
           action_details: { source: 'new_conversation' }
         })
+      if (activityError) console.error('Activity log failed:', activityError.message)
     }
 
     return NextResponse.json({ conversation: newConversation, created: true })
@@ -292,17 +296,21 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
     }
 
-    // Log activity if agent provided
+    // Log activity if agent provided — one of this company's team members
+    // (agent_id references team_members since 20261209).
     if (agent_id && action) {
-      await supabase
-        .from('conversation_activity')
-        .insert({
-          conversation_id,
-          agent_id,
-          team_member_id: agent_id,
-          action_type: 'status_changed',
-          action_details: { action, updates }
-        })
+      if (await teamMemberInOrg(supabase, agent_id, orgId)) {
+        const { error: activityError } = await supabase
+          .from('conversation_activity')
+          .insert({
+            conversation_id,
+            agent_id,
+            team_member_id: agent_id,
+            action_type: 'status_changed',
+            action_details: { action, updates }
+          })
+        if (activityError) console.error('Activity log failed:', activityError.message)
+      }
     }
 
     return NextResponse.json({ conversation: data })

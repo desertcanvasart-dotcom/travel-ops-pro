@@ -13,9 +13,9 @@ PROJECT_HANDOVER.md → Known Issues. Items in this file BLOCK something.
 
 ## G1. org_id authority must move to the thread before any second org onboards
 
-**Status:** Mostly shipped (2026-10-12) — the commit authority flip, NOT NULL,
-membership check and UI label are done; the per-org Concierge webhook secret
-is still open (below).
+**Status:** ✅ Shipped (2026-10-13) — the commit authority flip, NOT NULL,
+membership check and UI label (2026-10-12), and the per-org Concierge webhook
+secret (2026-10-13, below). Nothing in this gate is open.
 **Trigger:** [GATE — REQUIRED BEFORE SECOND ORG ONBOARDS] — a second org (ATS)
 is live.
 **Owner:** Architecture / multi-tenancy.
@@ -112,14 +112,31 @@ destructure-and-omit and the mapper comment.
 
 ### Verification checklist for when the gate trips
 
-- [ ] Per-org webhook secret resolver in `app/api/webhooks/concierge/route.ts`
-      — STILL OPEN. Concierge briefs still resolve their org without the
-      signature (one shared `CONCIERGE_WEBHOOK_SECRET`). Needed before a
-      second company receives Concierge leads: each org its own secret, the
-      matched secret names the org, and `lib/concierge-brief-intake.ts` /
-      `lib/concierge-brief-schema.ts` revisited together (see "Structural
-      protection" above). The per-channel WhatsApp resolver is done
-      (`lib/whatsapp-org.ts`, 20261125).
+- [x] Per-org webhook secret resolver in `app/api/webhooks/concierge/route.ts`
+      (2026-10-13). `CONCIERGE_WEBHOOK_SECRETS` is JSON keyed by
+      `organizations.slug` — `{"ats":"<secret>","travel2egypt":"<secret>"}`,
+      a value may be a list `["<new>","<old>"]` to rotate. The verifier
+      (`lib/concierge-webhook-auth.ts`) checks every secret and returns the
+      matched one's slug; `lib/concierge/brief-org.ts` turns it into the org
+      (an unknown slug → 500, refused, never guessed; the same secret under
+      two companies → 500 `ambiguous_secret`; unparseable JSON → 500
+      `secret_config_invalid`). The legacy single `CONCIERGE_WEBHOOK_SECRET`
+      (+ `_PREVIOUS`) still verifies and files under the default org
+      (`lib/auth/default-org.ts`), as before. `ingestBrief(…, orgId)` stamps
+      that org on the client, the brief (once, at INSERT — the
+      destructure-guard and the mapper comment were revisited together) and,
+      through the brief, its revisions and its Copilot thread
+      (`promoteBriefToThread` reads `concierge_briefs.org_id`).
+      Uniqueness is per company (migration 20261209):
+      `concierge_briefs UNIQUE (org_id, conversation_id)` and
+      `concierge_brief_revisions UNIQUE (brief_id, brief_revision)` —
+      decided because one Concierge deployment can hold both companies'
+      secrets, so the same conversation id can reach both; each keeps its own
+      lead instead of the second being filed as the first's revision. The
+      revisions' "any signed-in user" SELECT policy is now the brief's
+      company. Tests: `__tests__/lib/concierge-org-secret.test.ts`,
+      `__tests__/migrations/tenancy-followups.test.ts`. The per-channel
+      WhatsApp resolver is done (`lib/whatsapp-org.ts`, 20261125).
 - [x] Backfill any `communication_threads.org_id IS NULL` to the per-org resolved
       value, then `ALTER TABLE ... ALTER COLUMN org_id SET NOT NULL` (20261204)
 - [x] `commit-brief-to-itinerary.ts` takes thread.org_id as authority, not the

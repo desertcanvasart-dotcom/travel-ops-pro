@@ -2,11 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { teamMemberInOrg } from '@/lib/whatsapp-org'
 
 // conversation_activity has no org_id; it is the org's through its
 // conversation (whatsapp_conversations.org_id, migration 20261125). Without
 // that filter the history — who handled which customer, and notes — was every
 // org's.
+//
+// agent_id is a TEAM MEMBER (migration 20261209 pointed its foreign key at
+// team_members; it referenced the retired sales_agents, so every write of a
+// team member id here failed). conversation_activity has two foreign keys to
+// team_members (agent_id, team_member_id): the embed names agent_id's.
+const AGENT_EMBED = 'agent:team_members!conversation_activity_agent_id_fkey(id, name, email, avatar_url)'
 
 // GET /api/whatsapp/activity - Get activity history for a conversation
 export async function GET(request: NextRequest) {
@@ -22,11 +29,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('conversation_activity')
-      .select(`
-        *,
-        agent:sales_agents(id, name, email, avatar_url),
-        conversation:whatsapp_conversations!inner(org_id)
-      `)
+      .select(`*, ${AGENT_EMBED}, conversation:whatsapp_conversations!inner(org_id)`)
       .eq('conversation.org_id', orgId)
       .order('created_at', { ascending: false })
       .limit(limit)
@@ -95,18 +98,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
     }
 
+    // The agent is one of THIS company's team members, or none.
+    if (agent_id && !(await teamMemberInOrg(supabase, agent_id, orgId))) {
+      return NextResponse.json({ error: 'Team member not found in this organization' }, { status: 400 })
+    }
+
     const { data, error } = await supabase
       .from('conversation_activity')
       .insert({
         conversation_id,
         agent_id: agent_id || null,
+        team_member_id: agent_id || null,
         action_type,
         action_details: action_details || {}
       })
-      .select(`
-        *,
-        agent:sales_agents(id, name, avatar_url)
-      `)
+      .select(`*, ${AGENT_EMBED}`)
       .single()
 
     if (error) throw error

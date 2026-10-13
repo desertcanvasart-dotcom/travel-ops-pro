@@ -38,14 +38,20 @@ export async function getUserPreferences(supabase: any): Promise<UserGenerationP
 
     // The company's margin sits under the user's own: a colleague who never
     // opened Settings still quotes at what the company decided, not at 25.
-    const orgMargin = await getOrgDefaultMargin(supabase, await getCurrentOrgId())
+    const orgId = await getCurrentOrgId()
+    const orgMargin = await getOrgDefaultMargin(supabase, orgId)
     defaults.default_margin_percent = resolveMarginPercent({ orgDefault: orgMargin })
+    if (!orgId) return defaults
 
+    // The person's preferences IN THIS COMPANY (user_preferences is per
+    // (user_id, org_id), migration 20261209): a tier key of the other
+    // company's vocabulary, or its margin, never prices this one's trip.
     const { data: prefs } = await supabase
       .from('user_preferences')
       .select('*')
       .eq('user_id', user.id)
-      .single()
+      .eq('org_id', orgId)
+      .maybeSingle()
 
     if (!prefs) return defaults
 
