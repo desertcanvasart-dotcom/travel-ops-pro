@@ -16,6 +16,8 @@ import { pickerOwnsLines } from '@/lib/documents/voucher-lines'
 import { TripBreadcrumb } from '@/components/nav/TripNav'
 import { withReturnTo, safeReturnPath, FROM_PARAM } from '@/lib/nav/return-to'
 import { toVoucherAmount, voucherPickFx } from '@/lib/documents/voucher-pick-price'
+import { voucherHasMoney } from '@/lib/documents/voucher-currency'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface TransportRate {
   id: string
@@ -135,6 +137,7 @@ export default function EditSupplierDocumentPage() {
   const mealTypeLabel = useVocabLabel('meal_type')
   const { rateCurrency } = useCurrency()
   const t = useTranslations('supplierDocumentEdit')
+  const dialog = useConfirmDialog()
   const params = useParams()
   const router = useRouter()
   const [document, setDocument] = useState<any>(null)
@@ -148,6 +151,9 @@ export default function EditSupplierDocumentPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // What the last currency change did (converted at a rate, or refused).
+  const [currencyNotice, setCurrencyNotice] = useState<{ ok: boolean; text: string } | null>(null)
+  const [convertingCurrency, setConvertingCurrency] = useState(false)
 
   // Suppliers state
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -429,72 +435,129 @@ export default function EditSupplierDocumentPage() {
     }
   }
 
+  /** The fields a save writes, with the currency its amounts are in. */
+  const buildSaveBody = (): Record<string, any> => {
+    // Only send editable fields — exclude joined relations and read-only fields
+    const {
+      id: _id,
+      itinerary: _itinerary,
+      supplier: _supplier,
+      created_at: _created,
+      ...editableFields
+    } = document
+
+    const dataToSave: Record<string, any> = {
+      ...editableFields,
+      selected_attractions: selectedAttractions,
+      // The amounts on screen are in the currency on screen: the server
+      // converts them if that is not the one being saved, and never
+      // relabels them (lib/documents/voucher-currency).
+      amounts_currency: editableFields.currency || 'EUR',
+    }
+
+    // Rebuild the lines from this document type's picker only when that
+    // picker is in use. Otherwise the lines stay as they are: a generated
+    // voucher's come from the trip, and no picker here can rebuild them.
+    if (document.document_type === 'transport_voucher' && pickerOwnsLines(selectedRoutes, document.selected_routes)) {
+      dataToSave.selected_routes = selectedRoutes
+      dataToSave.services = selectedRoutes.map(r => ({
+        service_type: 'transportation',
+        service_name: r.route_name,
+        service_code: r.service_code,
+        city: r.city,
+        vehicle_type: document.vehicle_type,
+        quantity: r.quantity,
+        total_cost: r.total_cost,
+        unit_rate: r.unit_rate
+      }))
+    } else if (document.document_type === 'service_order' && pickerOwnsLines(selectedMeals, document.selected_meals)) {
+      dataToSave.selected_meals = selectedMeals
+      dataToSave.services = selectedMeals.map(m => ({
+        service_type: 'meal',
+        service_name: `${m.restaurant_name}${m.meal_type ? ` - ${m.meal_type}` : ''}`,
+        service_code: m.service_code,
+        city: m.city,
+        quantity: m.quantity,
+        total_cost: m.total_cost,
+        unit_rate: m.unit_rate
+      }))
+    } else if (document.document_type === 'guide_assignment' && pickerOwnsLines(selectedGuides, document.selected_guides)) {
+      dataToSave.selected_guides = selectedGuides
+      dataToSave.services = selectedGuides.map(g => ({
+        service_type: 'guide',
+        service_name: `${g.guide_language} ${GUIDE_TYPE_LABELS[g.guide_type] || g.guide_type} — ${DURATION_LABELS[g.tour_duration] || g.tour_duration}`,
+        service_code: g.service_code,
+        city: g.city,
+        quantity: g.quantity,
+        total_cost: g.total_cost,
+        unit_rate: g.unit_rate
+      }))
+    } else if (document.document_type === 'activity_voucher' && pickerOwnsLines(selectedAttractions, document.selected_attractions)) {
+      dataToSave.services = selectedAttractions.map(a => ({
+        service_name: a.attraction_name,
+        service_type: 'entrance_fee',
+        city: a.city,
+        quantity: a.quantity,
+        unit_rate: a.eur_rate,
+        total_cost: a.eur_rate * a.quantity
+      }))
+    }
+    return dataToSave
+  }
+
+  // A voucher with amounts converts them when its currency changes: the server
+  // converts at the trip's frozen rate, else today's, and saves the voucher
+  // (or refuses when no rate is known). One with no amounts is just relabelled.
+  const changeCurrency = async (next: string) => {
+    const current = document.currency || 'EUR'
+    if (next === current) return
+    setCurrencyNotice(null)
+    const body = buildSaveBody()
+    if (!voucherHasMoney(body)) {
+      setDocument({ ...document, currency: next })
+      return
+    }
+    const confirmed = await dialog.confirm({
+      title: t('convertCurrencyTitle'),
+      message: t('convertCurrencyMessage', { from: current, to: next }),
+      confirmText: t('convertCurrencyConfirm'),
+    })
+    if (!confirmed) return
+    setConvertingCurrency(true)
+    try {
+      const response = await fetch(`/api/supplier-documents/${params.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, currency: next, amounts_currency: current }),
+      })
+      const result = await response.json().catch(() => null)
+      if (!response.ok || !result?.success) {
+        setCurrencyNotice({ ok: false, text: result?.error || t('failedToSave') })
+        return
+      }
+      const saved = result.data
+      setDocument((prev: any) => ({ ...prev, ...saved, itinerary: prev?.itinerary }))
+      setSelectedAttractions(saved.selected_attractions || [])
+      setSelectedRoutes(saved.selected_routes || [])
+      setSelectedMeals(saved.selected_meals || [])
+      setSelectedGuides(saved.selected_guides || [])
+      const c = result.converted
+      setCurrencyNotice({
+        ok: true,
+        text: c ? t('currencyConverted', { from: c.from, to: c.to, rate: Number(c.fx).toLocaleString('en-US', { maximumFractionDigits: 6 }) }) : t('currencyChanged', { to: next }),
+      })
+    } catch {
+      setCurrencyNotice({ ok: false, text: t('errorSavingDocument') })
+    } finally {
+      setConvertingCurrency(false)
+    }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     setError(null)
     try {
-      // Only send editable fields — exclude joined relations and read-only fields
-      const {
-        id: _id,
-        itinerary: _itinerary,
-        supplier: _supplier,
-        created_at: _created,
-        ...editableFields
-      } = document
-
-      const dataToSave: Record<string, any> = {
-        ...editableFields,
-        selected_attractions: selectedAttractions,
-      }
-
-      // Rebuild the lines from this document type's picker only when that
-      // picker is in use. Otherwise the lines stay as they are: a generated
-      // voucher's come from the trip, and no picker here can rebuild them.
-      if (document.document_type === 'transport_voucher' && pickerOwnsLines(selectedRoutes, document.selected_routes)) {
-        dataToSave.selected_routes = selectedRoutes
-        dataToSave.services = selectedRoutes.map(r => ({
-          service_type: 'transportation',
-          service_name: r.route_name,
-          service_code: r.service_code,
-          city: r.city,
-          vehicle_type: document.vehicle_type,
-          quantity: r.quantity,
-          total_cost: r.total_cost,
-          unit_rate: r.unit_rate
-        }))
-      } else if (document.document_type === 'service_order' && pickerOwnsLines(selectedMeals, document.selected_meals)) {
-        dataToSave.selected_meals = selectedMeals
-        dataToSave.services = selectedMeals.map(m => ({
-          service_type: 'meal',
-          service_name: `${m.restaurant_name}${m.meal_type ? ` - ${m.meal_type}` : ''}`,
-          service_code: m.service_code,
-          city: m.city,
-          quantity: m.quantity,
-          total_cost: m.total_cost,
-          unit_rate: m.unit_rate
-        }))
-      } else if (document.document_type === 'guide_assignment' && pickerOwnsLines(selectedGuides, document.selected_guides)) {
-        dataToSave.selected_guides = selectedGuides
-        dataToSave.services = selectedGuides.map(g => ({
-          service_type: 'guide',
-          service_name: `${g.guide_language} ${GUIDE_TYPE_LABELS[g.guide_type] || g.guide_type} — ${DURATION_LABELS[g.tour_duration] || g.tour_duration}`,
-          service_code: g.service_code,
-          city: g.city,
-          quantity: g.quantity,
-          total_cost: g.total_cost,
-          unit_rate: g.unit_rate
-        }))
-      } else if (document.document_type === 'activity_voucher' && pickerOwnsLines(selectedAttractions, document.selected_attractions)) {
-        dataToSave.services = selectedAttractions.map(a => ({
-          service_name: a.attraction_name,
-          service_type: 'entrance_fee',
-          city: a.city,
-          quantity: a.quantity,
-          unit_rate: a.eur_rate,
-          total_cost: a.eur_rate * a.quantity
-        }))
-      }
-
+      const dataToSave = buildSaveBody()
       const response = await fetch(`/api/supplier-documents/${params.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1206,11 +1269,15 @@ export default function EditSupplierDocumentPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('currency')}</label>
                 <select
                   value={document.currency || 'EUR'}
-                  onChange={(e) => setDocument({ ...document, currency: e.target.value })}
+                  onChange={(e) => changeCurrency(e.target.value)}
+                  disabled={convertingCurrency || saving}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 >
                   {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c} ({currencySymbol(c)})</option>)}
                 </select>
+                {currencyNotice && (
+                  <p className={`mt-1 text-xs ${currencyNotice.ok ? 'text-green-700' : 'text-red-600'}`}>{currencyNotice.text}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('totalCost')}</label>

@@ -8,8 +8,8 @@
 // through the engine. Per date: seats and status (this is where a programme's
 // dates are run), 燃油 and LND, then the three flight classes sold side by side
 // — economy, business, business one way — each with its typed AIR fare, its
-// 合計 and the website rate published for it (rounded up to end in 999 unless
-// typed). See lib/pricing/departure-buckets and
+// 合計 and the website rate published for it (in yen rounded up to end in 999,
+// in any other currency rounded to the cent, unless typed). See lib/pricing/departure-buckets and
 // handover/feature-specs/6-departures-grid-spec.md.
 // ============================================
 
@@ -137,7 +137,7 @@ function withClasses(band: GridBand, patch: Partial<Record<EditableColumn, numbe
       const prev = band.classes[c]
       const airPp = AIR_COLUMN[c] in patch ? (patch[AIR_COLUMN[c]] ?? null) : prev.airPp
       const websiteTyped = WEB_COLUMN[c] in patch ? (patch[WEB_COLUMN[c]] ?? null) : prev.websiteTyped ? prev.websitePp : null
-      return [c, classColumn({ landPp: band.landPp, fuelPp, airPp, websiteTyped })]
+      return [c, classColumn({ landPp: band.landPp, fuelPp, airPp, websiteTyped, currency: band.currency })]
     }),
   ) as Record<FlightClass, ClassColumn>
   const maxPax = 'max_pax' in patch && patch.max_pax != null ? patch.max_pax : band.maxPax
@@ -630,7 +630,7 @@ export default function DeparturesGridPage() {
             <option value="all">All classes</option>
           </select>
         </label>
-        <span className="ml-auto text-xs text-gray-400">Website = total rounded up to end in 999, unless typed · CSV includes every class</span>
+        <span className="ml-auto text-xs text-gray-400">{currency === 'JPY' ? 'Website = total rounded up to end in 999' : 'Website = total rounded to the cent'}, unless typed · CSV includes every class</span>
       </div>
 
       {anyIncomplete && (
@@ -790,8 +790,8 @@ export default function DeparturesGridPage() {
 
       <p className="mt-2 text-xs text-gray-400">
         AIR is the international fare, typed per class — leave it blank where a class is not sold. LND is priced by the
-        engine per date and includes domestic flights. 燃油 is one amount for every class. Website is the total rounded up
-        to end in 999 (grey); type over it to publish your own (black), clear it to go back. Prices are in your company&apos;s
+        engine per date and includes domestic flights. 燃油 is one amount for every class. Website is the total — in yen rounded up
+        to end in 999, in any other currency rounded to the cent (grey); type over it to publish your own (black), clear it to go back. Prices are in your company&apos;s
         currency; LND is converted from your rate currency at the app&apos;s exchange rate unless you type an FX rate. Taken
         counts seats booked outside the app plus confirmed and pending web-order holds — open a date to confirm or release them.
       </p>
@@ -867,7 +867,9 @@ function ClassCells({
             title={
               col.websiteTyped
                 ? `Typed website rate — clear it to go back to ${col.websiteSuggested?.toLocaleString('en-US') ?? 'the suggestion'}`
-                : 'Suggested: the total rounded up to end in 999 — type to publish your own'
+                : currency === 'JPY'
+                  ? 'Suggested: the total rounded up to end in 999 — type to publish your own'
+                  : 'Suggested: the total, rounded to the cent — type to publish your own'
             }
             emphasis={col.websiteTyped}
             saving={savingWeb}

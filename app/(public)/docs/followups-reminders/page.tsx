@@ -75,7 +75,7 @@ export default function FollowupsRemindersPage() {
           On a follow-up&rsquo;s due date, the daily reminder job (06:10 UTC, the same one that sends task reminders) gives its owner one in-app notification: &ldquo;Follow-up due today&rdquo;, linking to this page. It is sent once per due date; snoozing or changing the date sends it again on the new day. It is not emailed.
         </p>
         <Tip>
-          Follow-ups scheduled before this reminder existed have no owner, so they do not remind anyone. Someone who has left the company is not reminded either.
+          Pending follow-ups scheduled before follow-ups had owners were given one: the person the activity log shows scheduling it, else the person who created the client, else whoever is assigned to the client&rsquo;s latest trip &mdash; always someone in the client&rsquo;s company. Any that none of these could name still have no owner and remind nobody; they were set aside for review. Someone who has left the company is not reminded.
         </Tip>
       </section>
 

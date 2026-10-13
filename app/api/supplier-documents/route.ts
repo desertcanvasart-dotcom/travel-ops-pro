@@ -7,6 +7,7 @@ import { createDocumentNumberer, isDuplicateKey, supplierDocumentPrefix } from '
 import { SUPPLIER_DOCUMENT_CREATE_FIELDS, pickFields } from '@/lib/documents/supplier-document-fields'
 import { supplierDocumentStats } from '@/lib/documents/supplier-document-stats'
 import { rowInOrg } from '@/lib/api/org-scope'
+import { SUPPLIER_DOCUMENT_PAGE_SIZE, pageRange, supplierDocumentPage } from '@/lib/documents/supplier-document-page'
 
 export async function GET(request: NextRequest) {
   const supabase = createServerClient()
@@ -20,6 +21,9 @@ export async function GET(request: NextRequest) {
   const search = sanitizeSearchTerm(searchParams.get('search'))
   const startDate = searchParams.get('startDate')
   const endDate = searchParams.get('endDate')
+  // A page at a time, newest first, with an exact count of every match
+  // (lib/documents/supplier-document-page): the whole list was one read.
+  const page = supplierDocumentPage(searchParams.get('page'))
 
   const orgId = await getCurrentOrgId()
   if (!orgId) return noOrgResponse()
@@ -30,9 +34,12 @@ export async function GET(request: NextRequest) {
       *,
       itinerary:itineraries(id, itinerary_code, trip_name, client_name),
       supplier:suppliers(id, name, type)
-    `)
+    `, { count: 'exact' })
     .eq('org_id', orgId)
     .order('created_at', { ascending: false })
+    // Same created_at (one Generate run writes several): a stable order, so a
+    // voucher never shows on two pages or none.
+    .order('id', { ascending: false })
   
   // Apply filters
   if (type) {
@@ -63,7 +70,8 @@ export async function GET(request: NextRequest) {
     query = query.lte('service_date', endDate)
   }
   
-  const { data, error } = await query
+  const [from, to] = pageRange(page)
+  const { data, error, count } = await query.range(from, to)
   
   if (error) {
     console.error('Error fetching supplier documents:', error)
@@ -83,6 +91,9 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     success: true,
     data,
+    total: count ?? (data ?? []).length,
+    page,
+    pageSize: SUPPLIER_DOCUMENT_PAGE_SIZE,
     stats
   })
 }

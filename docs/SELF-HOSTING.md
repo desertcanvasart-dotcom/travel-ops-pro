@@ -236,6 +236,7 @@ nothing tells you:
 | `purge-traveller-documents` | 03:45 | **Passport scans are kept forever, past their retention window** |
 | `gmail-sync` | every 10 min | The shared inbox stops picking up new mail |
 | `survey-invites` | 09:00 | Guests are never sent the post-trip survey |
+| `release-expired-holds` | 00:20 | Seats held for quotes past their valid-until date stay taken |
 | `refresh-exchange-rates` | 01:05 | Conversions quietly fall back to stale stored rates |
 | `send-reminders` | 06:05 | Invoice payment reminders stop |
 | `task-reminders` | 06:10 | Nobody is reminded of tasks falling due |
