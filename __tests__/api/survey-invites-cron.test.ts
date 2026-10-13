@@ -111,3 +111,22 @@ describe('survey-invites cron surveys only the organisations that have the quest
     expect(sendWhatsAppMessage).not.toHaveBeenCalled()
   })
 })
+
+describe('survey-invites cron surveys only trips the client bought', () => {
+  it.each(['quoted', 'sent', 'draft', 'cancelled'])("a '%s' trip that ended today is skipped and nothing is sent", async status => {
+    const { ensureSurvey } = await import('@/lib/surveys/ensure-survey')
+    vi.mocked(ensureSurvey).mockClear()
+    itineraries = [trip({ status, client_email: 'g@x.com', client_phone: '+819012345678' })]
+    const body = await run()
+    expect(body).toMatchObject({ sent: 0, failed: 0, skipped: 1 })
+    expect(ensureSurvey).not.toHaveBeenCalled()
+    expect(sendEmailInternal).not.toHaveBeenCalled()
+    expect(sendWhatsAppMessage).not.toHaveBeenCalled()
+  })
+
+  it('a completed trip is surveyed', async () => {
+    itineraries = [trip({ status: 'completed', client_email: 'g@x.com', client_phone: null })]
+    sendEmailInternal.mockResolvedValue({ success: true })
+    expect(await run()).toMatchObject({ sent: 1, email: 1 })
+  })
+})

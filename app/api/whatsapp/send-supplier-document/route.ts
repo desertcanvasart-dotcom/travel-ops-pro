@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { orgIdentity } from '@/lib/org-identity'
 import { markSupplierDocumentSent } from '@/lib/documents/mark-sent'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { decodePdfAttachment } from '@/lib/documents/pdf-attachment'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,13 +20,13 @@ export async function POST(request: NextRequest) {
     // The recipient, number and names come from the voucher row, not the
     // request: the browser chooses only which voucher, its display title and
     // the PDF it rendered from that row.
-    const { documentId, documentType: documentTitle, pdfBase64 } = body
+    const { documentId, documentType: documentTitle } = body
 
-    if (!pdfBase64) {
-      return NextResponse.json(
-        { success: false, error: 'PDF attachment is required' },
-        { status: 400 }
-      )
+    // A real PDF, base64 only, bounded (lib/documents/pdf-attachment): it is
+    // stored and served to the supplier as application/pdf.
+    const pdf = decodePdfAttachment(body.pdfBase64)
+    if (!pdf.ok) {
+      return NextResponse.json({ success: false, error: pdf.error }, { status: 400 })
     }
 
     // Only this organization's vouchers.
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
     // Upload PDF to Supabase Storage so Twilio can access it. The key is still
     // made safe: document numbers are editable text.
     const fileName = `supplier-documents/${safeKeySegment(documentNumber, 'document')}-${Date.now()}.pdf`
-    const pdfBuffer = Buffer.from(pdfBase64, 'base64')
+    const pdfBuffer = pdf.bytes
 
     // Private bucket + a signed link that expires — see lib/storage/outbound-documents.
 

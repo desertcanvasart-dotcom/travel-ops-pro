@@ -7554,7 +7554,13 @@
     "documentsNotGenerated": "Documents not generated",
     "staleTitle": "{count, plural, one {One document no longer matches} other {# documents no longer match}} the trip",
     "staleLines": "{count, plural, one {# line} other {# lines}} no longer on the trip",
-    "staleNote": "The trip changed after these were generated. Edit them, or cancel them and generate again; tell the supplier if one was already sent."
+    "staleNote": "The trip changed after these were generated. Edit them, or cancel them and generate again; tell the supplier if one was already sent.",
+    "cancelled": "Cancelled",
+    "statsScopeCompany": "Counts cover all of your company's supplier documents, whatever the filters.",
+    "statsScopeTrip": "Counts cover all of this trip's supplier documents, whatever the filters.",
+    "cannotDeleteTitle": "Document not deleted",
+    "cannotDeleteSent": "This document has been sent to the supplier. Set its status to Cancelled (Edit), then delete it.",
+    "deleteFailed": "Could not delete the document."
   },
   "supplierDocumentEdit": {
     "documentNotFound": "Document not found",
@@ -7642,6 +7648,7 @@
     "noAttractionsFound": "No attractions found",
     "addon": "Add-on",
     "nonEU": "Non-EU",
+    "fxUnknown": "The exchange rate from {from} to {to} is not known yet, so this rate cannot be added to the voucher. Try again in a moment.",
     "attractionsAvailable": "{count} attractions available",
     "attractionsSelected": "{count} selected",
     "failedToSave": "Failed to save document",
@@ -7794,9 +7801,9 @@
     "serviceOrdersDescription": "General service order documents",
     "viewAll": "View All",
     "quickTips": "Quick Tips",
-    "tip1": "Customer contracts are generated from confirmed itineraries",
+    "tip1": "Open a customer contract from its itinerary or booking: Documents › Contract",
     "tip2": "Supplier vouchers can be sent directly via email or WhatsApp",
-    "tip3": "All documents are saved and can be re-downloaded anytime",
+    "tip3": "Supplier documents are saved; contracts, invoices and receipts are made fresh each time you open them",
     "tip4": "Use filters to quickly find specific document types"
   },
   "teamMembers": {

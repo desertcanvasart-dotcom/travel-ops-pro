@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useParams, useRouter } from 'next/navigation'
@@ -15,6 +15,7 @@ import { slugifyKey } from '@/lib/vocabulary'
 import { pickerOwnsLines } from '@/lib/documents/voucher-lines'
 import { TripBreadcrumb } from '@/components/nav/TripNav'
 import { withReturnTo, safeReturnPath, FROM_PARAM } from '@/lib/nav/return-to'
+import { toVoucherAmount, voucherPickFx } from '@/lib/documents/voucher-pick-price'
 
 interface TransportRate {
   id: string
@@ -186,6 +187,36 @@ export default function EditSupplierDocumentPage() {
     fetchEntranceFees()
     fetchSuppliers()
   }, [params.id])
+
+  // Rates are in the company's rate currency; the voucher states its own
+  // (the trip's, or the supplier's). A picked rate is converted at the trip's
+  // frozen rate, else today's (lib/documents/voucher-pick-price); null = not
+  // known, and a pick waits for it rather than writing the wrong currency.
+  const voucherCurrency: string = document?.currency || rateCurrency
+  const [liveRates, setLiveRates] = useState<{ base: string; rates: Record<string, number> } | null>(null)
+  const pickFx = useMemo(
+    () => voucherPickFx(rateCurrency, voucherCurrency, document?.itinerary?.fx_frozen, liveRates),
+    [rateCurrency, voucherCurrency, document?.itinerary?.fx_frozen, liveRates]
+  )
+  const documentLoaded = document != null
+  useEffect(() => {
+    if (!documentLoaded || voucherCurrency === rateCurrency || liveRates) return
+    let live = true
+    fetch(`/api/exchange-rates?base=${encodeURIComponent(rateCurrency)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (live && d?.success && d.data) setLiveRates(d.data) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [documentLoaded, voucherCurrency, rateCurrency, liveRates])
+  /** A rate-currency amount in the voucher's currency; null (and says so)
+   *  when the exchange rate is not known. */
+  const inVoucher = (amount: number): number | null => {
+    if (pickFx == null) {
+      setError(t('fxUnknown', { from: rateCurrency, to: voucherCurrency }))
+      return null
+    }
+    return toVoucherAmount(amount, pickFx)
+  }
 
   const fetchDocument = async () => {
     try {
@@ -491,13 +522,16 @@ export default function EditSupplierDocumentPage() {
     if (selectedAttractions.find(a => a.id === fee.id)) {
       return
     }
-    
+    // In the voucher's currency (the line keeps the rate fields' names).
+    const eurRate = inVoucher(fee.eur_rate)
+    if (eurRate == null) return
+
     const newAttraction: SelectedAttraction = {
       id: fee.id,
       attraction_name: fee.attraction_name,
       city: fee.city,
-      eur_rate: fee.eur_rate,
-      non_eur_rate: fee.non_eur_rate,
+      eur_rate: eurRate,
+      non_eur_rate: toVoucherAmount(fee.non_eur_rate, pickFx ?? 1),
       quantity: document?.num_adults + (document?.num_children || 0) || 1
     }
     
@@ -547,7 +581,8 @@ export default function EditSupplierDocumentPage() {
   // Add a transport route
   const addRoute = (rate: TransportRate) => {
     if (selectedRoutes.find(r => r.rate_id === rate.id)) return
-    const unitRate = getRateForVehicle(rate)
+    const unitRate = inVoucher(getRateForVehicle(rate))
+    if (unitRate == null) return
     setSelectedRoutes(prev => [...prev, {
       rate_id: rate.id,
       service_code: rate.service_code,
@@ -585,8 +620,8 @@ export default function EditSupplierDocumentPage() {
     if (document && document.document_type === 'transport_voucher' && selectedRoutes.length > 0 && transportRates.length > 0) {
       setSelectedRoutes(prev => prev.map(r => {
         const rate = transportRates.find(tr => tr.id === r.rate_id)
-        if (!rate) return r
-        const unitRate = getRateForVehicle(rate)
+        if (!rate || pickFx == null) return r
+        const unitRate = toVoucherAmount(getRateForVehicle(rate), pickFx)
         return { ...r, unit_rate: unitRate, total_cost: unitRate * r.quantity }
       }))
     }
@@ -604,6 +639,8 @@ export default function EditSupplierDocumentPage() {
   const addMeal = (rate: MealRate) => {
     if (selectedMeals.find(m => m.rate_id === rate.id)) return
     const totalPax = (document?.num_adults || 1) + (document?.num_children || 0)
+    const unitRate = inVoucher(rate.base_rate_eur)
+    if (unitRate == null) return
     setSelectedMeals(prev => [...prev, {
       rate_id: rate.id,
       service_code: rate.service_code,
@@ -611,8 +648,8 @@ export default function EditSupplierDocumentPage() {
       meal_type: rate.meal_type || '',
       city: rate.city || '',
       quantity: totalPax,
-      unit_rate: rate.base_rate_eur,
-      total_cost: rate.base_rate_eur * totalPax
+      unit_rate: unitRate,
+      total_cost: unitRate * totalPax
     }])
   }
 
@@ -643,6 +680,8 @@ export default function EditSupplierDocumentPage() {
   // Add a guide (rate is per day, not per person — default quantity to 1 day)
   const addGuide = (rate: GuideRate) => {
     if (selectedGuides.find(g => g.rate_id === rate.id)) return
+    const unitRate = inVoucher(rate.base_rate_eur)
+    if (unitRate == null) return
     setSelectedGuides(prev => [...prev, {
       rate_id: rate.id,
       service_code: rate.service_code,
@@ -651,8 +690,8 @@ export default function EditSupplierDocumentPage() {
       tour_duration: rate.tour_duration,
       city: rate.city || '',
       quantity: 1,
-      unit_rate: rate.base_rate_eur,
-      total_cost: rate.base_rate_eur
+      unit_rate: unitRate,
+      total_cost: unitRate
     }])
   }
 
@@ -1244,7 +1283,7 @@ export default function EditSupplierDocumentPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="text-sm text-gray-700">{formatMoney(route.unit_rate, document?.currency || rateCurrency)}</span>
+                            <span className="text-sm text-gray-700">{formatMoney(route.unit_rate, voucherCurrency)}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <input
@@ -1257,7 +1296,7 @@ export default function EditSupplierDocumentPage() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <span className="text-sm font-semibold text-primary-600">
-                              {formatMoney(route.total_cost, document?.currency || rateCurrency)}
+                              {formatMoney(route.total_cost, voucherCurrency)}
                             </span>
                           </td>
                           <td className="px-4 py-3">
@@ -1281,7 +1320,7 @@ export default function EditSupplierDocumentPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className="text-lg font-bold text-primary-600">
-                            {formatMoney(calculateRoutesTotal(), document?.currency || rateCurrency)}
+                            {formatMoney(calculateRoutesTotal(), voucherCurrency)}
                           </span>
                         </td>
                         <td></td>
@@ -1370,7 +1409,7 @@ export default function EditSupplierDocumentPage() {
                                 </div>
                                 <div className="text-right shrink-0 ml-3">
                                   <p className="text-sm font-semibold text-primary-600">
-                                    {formatMoney(getRateForVehicle(rate), document?.currency || rateCurrency)}
+                                    {formatMoney(getRateForVehicle(rate), rateCurrency)}
                                   </p>
                                   {rate.supplier_name && (
                                     <p className="text-xs text-gray-400">{rate.supplier_name}</p>
@@ -1425,7 +1464,7 @@ export default function EditSupplierDocumentPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="text-sm text-gray-700">{'\u20AC'}{meal.unit_rate.toFixed(2)}</span>
+                            <span className="text-sm text-gray-700">{formatMoney(meal.unit_rate, voucherCurrency)}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <input
@@ -1438,7 +1477,7 @@ export default function EditSupplierDocumentPage() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <span className="text-sm font-semibold text-primary-600">
-                              {'\u20AC'}{meal.total_cost.toFixed(2)}
+                              {formatMoney(meal.total_cost, voucherCurrency)}
                             </span>
                           </td>
                           <td className="px-4 py-3">
@@ -1462,7 +1501,7 @@ export default function EditSupplierDocumentPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className="text-lg font-bold text-primary-600">
-                            {'\u20AC'}{calculateMealsTotal().toFixed(2)}
+                            {formatMoney(calculateMealsTotal(), voucherCurrency)}
                           </span>
                         </td>
                         <td></td>
@@ -1549,7 +1588,7 @@ export default function EditSupplierDocumentPage() {
                                 </div>
                                 <div className="text-right shrink-0 ml-3">
                                   <p className="text-sm font-semibold text-primary-600">
-                                    {'\u20AC'}{rate.base_rate_eur.toFixed(2)}
+                                    {formatMoney(rate.base_rate_eur, rateCurrency)}
                                   </p>
                                   {rate.supplier_name && (
                                     <p className="text-xs text-gray-400">{rate.supplier_name}</p>
@@ -1610,7 +1649,7 @@ export default function EditSupplierDocumentPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="text-sm text-gray-700">{'\u20AC'}{guide.unit_rate.toFixed(2)}</span>
+                            <span className="text-sm text-gray-700">{formatMoney(guide.unit_rate, voucherCurrency)}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <input
@@ -1623,7 +1662,7 @@ export default function EditSupplierDocumentPage() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <span className="text-sm font-semibold text-primary-600">
-                              {'\u20AC'}{guide.total_cost.toFixed(2)}
+                              {formatMoney(guide.total_cost, voucherCurrency)}
                             </span>
                           </td>
                           <td className="px-4 py-3">
@@ -1647,7 +1686,7 @@ export default function EditSupplierDocumentPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className="text-lg font-bold text-primary-600">
-                            {'\u20AC'}{calculateGuidesTotal().toFixed(2)}
+                            {formatMoney(calculateGuidesTotal(), voucherCurrency)}
                           </span>
                         </td>
                         <td></td>
@@ -1736,7 +1775,7 @@ export default function EditSupplierDocumentPage() {
                                 </div>
                                 <div className="text-right shrink-0 ml-3">
                                   <p className="text-sm font-semibold text-primary-600">
-                                    {'\u20AC'}{rate.base_rate_eur.toFixed(2)}
+                                    {formatMoney(rate.base_rate_eur, rateCurrency)}
                                   </p>
                                   {rate.notes && (
                                     <p className="text-xs text-gray-400 max-w-[120px] truncate">{rate.notes}</p>
@@ -1798,7 +1837,7 @@ export default function EditSupplierDocumentPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="text-sm text-gray-700">{formatMoney(attraction.eur_rate, document?.currency || rateCurrency)}</span>
+                            <span className="text-sm text-gray-700">{formatMoney(attraction.eur_rate, voucherCurrency)}</span>
                           </td>
                           <td className="px-4 py-3 text-center">
                             <input
@@ -1811,7 +1850,7 @@ export default function EditSupplierDocumentPage() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <span className="text-sm font-semibold text-primary-600">
-                              {formatMoney((attraction.eur_rate * attraction.quantity), document?.currency || rateCurrency)}
+                              {formatMoney((attraction.eur_rate * attraction.quantity), voucherCurrency)}
                             </span>
                           </td>
                           <td className="px-4 py-3">
@@ -1835,7 +1874,7 @@ export default function EditSupplierDocumentPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className="text-lg font-bold text-primary-600">
-                            {formatMoney(calculateAttractionsTotal(), document?.currency || rateCurrency)}
+                            {formatMoney(calculateAttractionsTotal(), voucherCurrency)}
                           </span>
                         </td>
                         <td></td>
@@ -1922,9 +1961,9 @@ export default function EditSupplierDocumentPage() {
                                 </p>
                               </div>
                               <div className="text-right">
-                                <p className="text-sm font-semibold text-primary-600">{formatMoney(fee.eur_rate, document?.currency || rateCurrency)}</p>
+                                <p className="text-sm font-semibold text-primary-600">{formatMoney(fee.eur_rate, rateCurrency)}</p>
                                 {fee.non_eur_rate > 0 && fee.non_eur_rate !== fee.eur_rate && (
-                                  <p className="text-xs text-gray-400">{t('nonEU')}: {formatMoney(fee.non_eur_rate, document?.currency || rateCurrency)}</p>
+                                  <p className="text-xs text-gray-400">{t('nonEU')}: {formatMoney(fee.non_eur_rate, rateCurrency)}</p>
                                 )}
                               </div>
                             </button>

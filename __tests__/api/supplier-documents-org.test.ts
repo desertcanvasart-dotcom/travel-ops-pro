@@ -74,7 +74,10 @@ describe('supplier-documents routes stay inside the org', () => {
   it('lists only the org’s vouchers', async () => {
     db.state.rows.supplier_documents = []
     await list(req(undefined, 'http://x/api/supplier-documents'))
-    expect(orgFilters()).toEqual(['org-A'])
+    // The list, then the tiles' counts (one per status and the total) — every
+    // read filtered by the caller's org.
+    expect(orgFilters().length).toBe(7)
+    expect(orgFilters().every(o => o === 'org-A')).toBe(true)
   })
 
   it('opens, edits and deletes by id only within the org', async () => {

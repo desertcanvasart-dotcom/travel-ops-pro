@@ -3,6 +3,9 @@ import { clientMessage } from '@/lib/api-errors'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { NextRequest, NextResponse } from 'next/server'
 import { recordsInOrg } from '@/lib/org-refs'
+import {
+  SUPPLIER_DOCUMENT_UPDATE_FIELDS, deleteBlockReason, isSupplierDocumentStatus, pickFields,
+} from '@/lib/documents/supplier-document-fields'
 
 export async function GET(
   request: NextRequest,
@@ -19,7 +22,7 @@ export async function GET(
       .from('supplier_documents')
       .select(`
         *,
-        itinerary:itineraries(id, itinerary_code, trip_name, client_name)
+        itinerary:itineraries(id, itinerary_code, trip_name, client_name, currency, fx_frozen)
       `)
       .eq('id', id)
       .eq('org_id', orgId)
@@ -51,32 +54,13 @@ export async function PUT(
     const body = await request.json()
     console.log('Updating document:', id)
 
-    // Whitelist of allowed columns on supplier_documents table
-    // Only these fields will be sent to Supabase — everything else
-    // (joined relations, computed fields, non-column data) is ignored
-    // Not itinerary_id or org_id: a voucher stays on its trip, and its org
-    // comes from that trip (migrations/20261113_supplier_documents_org.sql).
-    const ALLOWED_FIELDS = [
-      'supplier_id', 'document_type', 'document_number',
-      'supplier_name', 'supplier_contact_name', 'supplier_contact_email',
-      'supplier_contact_phone', 'supplier_address', 'supplier_whatsapp',
-      'client_name', 'client_nationality', 'num_adults', 'num_children',
-      'services', 'selected_attractions', 'selected_routes', 'selected_meals', 'selected_guides',
-      'city', 'service_date', 'check_in', 'check_out',
-      'pickup_time', 'pickup_location', 'dropoff_location',
-      'vehicle_type', 'driver_name',
-      'currency', 'total_cost', 'payment_terms',
-      'special_requests', 'internal_notes',
-      'status', 'sent_at', 'confirmed_at', 'completed_at',
-      'sent_via',
-    ]
+    // Only real columns (lib/documents/supplier-document-fields): joined
+    // relations, computed fields and anything else in the body are ignored.
+    const updateData: Record<string, any> = pickFields(body, SUPPLIER_DOCUMENT_UPDATE_FIELDS)
 
-    // Only include fields that are actual table columns
-    const updateData: Record<string, any> = {}
-    for (const field of ALLOWED_FIELDS) {
-      if (field in body) {
-        updateData[field] = body[field]
-      }
+    // A status no screen knows would show as "Draft" everywhere.
+    if ('status' in updateData && !isSupplierDocumentStatus(updateData.status)) {
+      return NextResponse.json({ success: false, error: 'Unknown status' }, { status: 400 })
     }
 
     // A supplier must be this company's (suppliers.org_id, 20261205).
@@ -113,6 +97,10 @@ export async function PUT(
     if (error?.code === 'PGRST116') {
       return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 })
     }
+    // Numbers are unique within the company (20261216).
+    if (error?.code === '23505') {
+      return NextResponse.json({ success: false, error: 'Another of your documents already has this number' }, { status: 409 })
+    }
     if (error) {
       console.error('Error updating document:', error)
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -136,6 +124,25 @@ export async function DELETE(
   try {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
+
+    // A document the supplier holds is cancelled, not deleted.
+    const { data: existing, error: readError } = await supabase
+      .from('supplier_documents')
+      .select('id, status, sent_at')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (readError) {
+      console.error('Error reading document:', readError)
+      return NextResponse.json({ success: false, error: clientMessage(readError, 'Internal server error') }, { status: 500 })
+    }
+    if (!existing) {
+      return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 })
+    }
+    const blocked = deleteBlockReason(existing)
+    if (blocked) {
+      return NextResponse.json({ success: false, error: blocked }, { status: 409 })
+    }
 
     const { data, error } = await supabase
       .from('supplier_documents')

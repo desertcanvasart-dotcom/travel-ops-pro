@@ -111,6 +111,80 @@ export interface Database {
         }
         Relationships: []
       }
+      guest_survey_responses: {
+        Row: {
+          id: string
+          org_id: string
+          survey_id: string
+          respondent_name: string | null
+          answers: Json
+          submitted_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          org_id?: string
+          survey_id: string
+          respondent_name?: string | null
+          answers?: Json
+          submitted_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          survey_id?: string
+          respondent_name?: string | null
+          answers?: Json
+          submitted_at?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guest_survey_responses_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guest_survey_responses_survey_id_fkey"
+            columns: ["survey_id"]
+            isOneToOne: false
+            referencedRelation: "guest_surveys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_document_number_counters: {
+        Row: {
+          org_id: string
+          prefix: string
+          year: number
+          last_value: number
+        }
+        Insert: {
+          org_id: string
+          prefix: string
+          year: number
+          last_value?: number
+        }
+        Update: {
+          org_id?: string
+          prefix?: string
+          year?: number
+          last_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_document_number_counters_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       accommodation_rates: {
         Row: {
           org_id: string
@@ -13263,6 +13337,14 @@ export interface Database {
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any
+      }
+      next_supplier_document_number: {
+        Args: {
+          p_org: string
+          p_prefix: string
+          p_year: number
+        }
+        Returns: string
       }
       generate_document_number: {
         Args: {

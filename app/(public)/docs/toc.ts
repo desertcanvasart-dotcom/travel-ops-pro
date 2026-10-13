@@ -157,7 +157,7 @@ export const CATEGORIES: DocCategory[] = [
       { href: '/docs/departures', icon: CalendarDays, title: 'Departures', description: 'Create and manage scheduled group departures: template or custom, pax limits, and the status lifecycle from Draft to Guaranteed.', covers: ['/departures'] },
       { href: '/docs/capacity-departures', icon: Gauge, title: 'Capacity', description: 'Define operator capacity; live availability prevents overbooking.', covers: ['/capacity'] },
       { href: '/docs/followups-reminders', icon: Bell, title: 'Follow-ups', description: 'Schedule follow-ups, set reminders, and never miss a client touchpoint.', covers: ['/followups'] },
-      { href: '/docs/resources-documents', icon: FolderOpen, title: 'Documents', description: 'Manage guides, vehicles, hotels, restaurants, and airport assistants. Generate invoices, contracts, vouchers, and receipts.', covers: ['/documents'] },
+      { href: '/docs/resources-documents', icon: FolderOpen, title: 'Documents', description: 'Supplier vouchers, guide assignments and service orders, numbered per company: generate, edit, send by email or WhatsApp. Contracts, invoices and receipts open from their trip or payment.', covers: ['/documents'] },
       { href: '/docs/guest-surveys', icon: ClipboardCheck, title: 'Guest Surveys', description: "Read guest satisfaction surveys, sent automatically by email and WhatsApp when a trip ends, and see each guest's ratings and comments.", covers: ['/surveys'] },
     ],
   },

@@ -6,11 +6,12 @@ import Link from 'next/link'
 import {
   FileText, Search, Send, Eye, Trash2, Pencil,
   Hotel, Car, Ship, MapPin, Users, CheckCircle,
-  Clock, RotateCcw, AlertTriangle
+  Clock, RotateCcw, AlertTriangle, XCircle
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { BackLink, TripBreadcrumb } from '@/components/nav/TripNav'
 import { withReturnTo, safeReturnPath, FROM_PARAM } from '@/lib/nav/return-to'
+import { deleteBlockReason } from '@/lib/documents/supplier-document-fields'
 
 interface SupplierDocument {
   id: string
@@ -27,6 +28,7 @@ interface SupplierDocument {
   currency: string
   total_cost: number
   status: string
+  sent_at?: string | null
   created_at: string
   itinerary?: {
     id: string
@@ -34,13 +36,15 @@ interface SupplierDocument {
   }
 }
 
+// Counted by the server over the company's documents (or the trip's), not
+// the filtered rows (lib/documents/supplier-document-stats).
 interface Stats {
   total: number
   draft: number
   sent: number
   confirmed: number
   completed: number
-  by_type: Record<string, number>
+  cancelled: number
 }
 
 const DOCUMENT_TYPES = [
@@ -197,7 +201,13 @@ export default function SupplierDocumentsPage() {
     }
   }
 
-  const handleDelete = async (docId: string) => {
+  const handleDelete = async (doc: SupplierDocument) => {
+    // A document the supplier holds is cancelled first, then deleted (the
+    // server refuses it too).
+    if (deleteBlockReason(doc)) {
+      await dialog.alert(t('cannotDeleteTitle'), t('cannotDeleteSent'), 'warning')
+      return
+    }
     const confirmed = await dialog.confirm({
       title: t('deleteDocument'),
       message: t('confirmDeleteDocument'),
@@ -207,13 +217,16 @@ export default function SupplierDocumentsPage() {
     if (!confirmed) return
 
     try {
-      const response = await fetch(`/api/supplier-documents/${docId}`, {
+      const response = await fetch(`/api/supplier-documents/${doc.id}`, {
         method: 'DELETE'
       })
 
       if (response.ok) {
         fetchDocuments()
         fetchTripCheck(itineraryFilter)
+      } else {
+        const result = await response.json().catch(() => null)
+        await dialog.alert(t('cannotDeleteTitle'), result?.error || t('deleteFailed'), 'warning')
       }
     } catch (error) {
       console.error('Error deleting document:', error)
@@ -331,7 +344,8 @@ export default function SupplierDocumentsPage() {
 
         {/* Stats Cards */}
         {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div>
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <div className="flex items-center gap-1.5 mb-1">
                 <FileText className="w-4 h-4 text-gray-500" />
@@ -367,6 +381,15 @@ export default function SupplierDocumentsPage() {
               <p className="text-xl font-bold text-purple-600">{stats.completed}</p>
               <p className="text-xs text-gray-500">{t('completed')}</p>
             </div>
+            <div className="bg-white rounded-lg border border-gray-200 p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <XCircle className="w-4 h-4 text-red-500" />
+              </div>
+              <p className="text-xl font-bold text-red-600">{stats.cancelled}</p>
+              <p className="text-xs text-gray-500">{t('cancelled')}</p>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">{itineraryFilter ? t('statsScopeTrip') : t('statsScopeCompany')}</p>
           </div>
         )}
 
@@ -553,11 +576,11 @@ export default function SupplierDocumentsPage() {
                               </button>
                             )}
 
-                            {/* Delete */}
+                            {/* Delete: a draft never sent, or a cancelled document */}
                             <button
-                              onClick={() => handleDelete(doc.id)}
+                              onClick={() => handleDelete(doc)}
                               className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                              title={t('delete')}
+                              title={deleteBlockReason(doc) ? t('cannotDeleteSent') : t('delete')}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
