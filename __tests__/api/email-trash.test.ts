@@ -104,7 +104,12 @@ describe('Communicate: Trash', () => {
     const conv = src('app/api/email/conversations/route.ts')
     expect(conv).toContain("status: 'trashed',")
     expect(conv).toContain("updateData.status = 'active' // out of Trash (see DELETE)")
-    for (const ch of ['whatsapp', 'portal', 'trip']) expect(r).toContain(`if (!trash && (channel === 'all' || channel === '${ch}'))`)
+    // The other channels sit Trash out (every channel is read for the tab
+    // counts since the counts fix, so the guard no longer names the channel).
+    const task = (name: string, next: string) => r.slice(r.indexOf(`const ${name}`), r.indexOf(`const ${next}`))
+    expect(task('whatsappTask', 'portalTask')).toContain('if (!trash) {')
+    expect(task('portalTask', 'tripTask')).toContain('if (!trash && bookingThreadsWanted) {')
+    expect(task('tripTask', 'emailTask')).toContain('if (!trash && bookingThreadsWanted) {')
   })
 
   it('new mail from a person brings a deleted conversation back — in the sync and the poll', () => {

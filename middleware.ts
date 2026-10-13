@@ -250,6 +250,12 @@ const STAFF_ONLY_API_PREFIXES = [
   '/api/suppliers',
   '/api/resources',
   '/api/cruises',
+  // Read by the Email Inbox and Communicate (agent and above) only: the
+  // signed-in user's mailbox status and signature, and the partner contacts
+  // the inbox's "insert partner" picker lists. Writes stay manager-and-above
+  // (the '/api/settings' and '/api/partners' entries above).
+  '/api/settings/email',
+  '/api/partners',
 ]
 
 export async function middleware(request: NextRequest, event: NextFetchEvent) {

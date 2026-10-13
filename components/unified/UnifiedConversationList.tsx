@@ -11,6 +11,7 @@ import {
 import { ChannelBadge, ChannelBadgeLight } from './ChannelBadge'
 import { UnifiedConversation, ConversationChannel, ConversationStatus } from '@/types/unified'
 import { useConfirm } from '@/components/ConfirmDialog'
+import type { ChannelCounts } from '@/lib/unified/inbox-filters'
 
 interface UnifiedConversationListProps {
   onSelectConversation: (conversation: UnifiedConversation) => void
@@ -18,6 +19,8 @@ interface UnifiedConversationListProps {
   clientId?: string // Optional: filter by client
   userId?: string // Current user ID for sync
   refreshKey?: number // Bump to force an immediate refetch (e.g. after a delete)
+  /** Open this conversation once it is in the list (?conversation= links). */
+  openConversationId?: string | null
 }
 
 interface FilterState {
@@ -39,8 +42,10 @@ interface SalesAgent {
   avatar_url: string | null
   is_active: boolean
   is_available: boolean
+  /** Open WhatsApp chats, counted from the conversations (/api/whatsapp/agents). */
   current_conversations: number
-  max_conversations: number
+  /** Linked to a login of this company: the chats assigned to them are theirs. */
+  has_login?: boolean
 }
 
 // Contact avatar component with initials
@@ -136,10 +141,21 @@ function AgentsManagementModal({
   const [newAgentName, setNewAgentName] = useState('')
   const [newAgentEmail, setNewAgentEmail] = useState('')
   const [isAdding, setIsAdding] = useState(false)
+  // What the last add / change / deactivate said. Each used to fail silently
+  // — an agent's 403, a duplicate email — and the modal looked unchanged.
+  const [notice, setNotice] = useState<{ tone: 'error' | 'info'; text: string } | null>(null)
+
+  const failure = async (res: Response, fallback: string) => {
+    const data = await res.json().catch(() => ({}))
+    return res.status === 403 && !data.error?.startsWith('You can only')
+      ? t('agentsManagersOnly')
+      : data.error || fallback
+  }
 
   const addAgent = async () => {
     if (!newAgentName.trim()) return
     setIsAdding(true)
+    setNotice(null)
     try {
       const res = await fetch('/api/whatsapp/agents', {
         method: 'POST',
@@ -147,37 +163,48 @@ function AgentsManagementModal({
         body: JSON.stringify({ name: newAgentName.trim(), email: newAgentEmail.trim() || null })
       })
       if (res.ok) {
+        const data = await res.json().catch(() => ({}))
         setNewAgentName('')
         setNewAgentEmail('')
+        setNotice({ tone: 'info', text: data.linked_login ? t('agentAddedLinked') : t('agentAddedNoLogin') })
         onRefresh()
+      } else {
+        setNotice({ tone: 'error', text: await failure(res, t('agentAddFailed')) })
       }
     } catch (error) {
       console.error('Error adding agent:', error)
+      setNotice({ tone: 'error', text: t('agentAddFailed') })
     } finally {
       setIsAdding(false)
     }
   }
 
   const toggleAgentAvailability = async (agent: SalesAgent) => {
+    setNotice(null)
     try {
-      await fetch('/api/whatsapp/agents', {
+      const res = await fetch('/api/whatsapp/agents', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: agent.id, is_available: !agent.is_available })
       })
+      if (!res.ok) setNotice({ tone: 'error', text: await failure(res, t('agentUpdateFailed')) })
       onRefresh()
     } catch (error) {
       console.error('Error updating agent:', error)
+      setNotice({ tone: 'error', text: t('agentUpdateFailed') })
     }
   }
 
   const deleteAgent = async (agentId: string) => {
     if (!(await confirmDialog(t('deactivateAgent')))) return
+    setNotice(null)
     try {
-      await fetch(`/api/whatsapp/agents?id=${agentId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/whatsapp/agents?id=${agentId}`, { method: 'DELETE' })
+      if (!res.ok) setNotice({ tone: 'error', text: await failure(res, t('agentUpdateFailed')) })
       onRefresh()
     } catch (error) {
       console.error('Error deleting agent:', error)
+      setNotice({ tone: 'error', text: t('agentUpdateFailed') })
     }
   }
 
@@ -220,7 +247,17 @@ function AgentsManagementModal({
                 {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               </button>
             </div>
+            <p className="mt-2 text-xs text-gray-500">{t('agentLoginHint')}</p>
           </div>
+
+          {notice && (
+            <div
+              className={`mb-4 px-3 py-2 rounded-lg text-sm ${notice.tone === 'error' ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'}`}
+              role={notice.tone === 'error' ? 'alert' : 'status'}
+            >
+              {notice.text}
+            </div>
+          )}
 
           {/* Agent List */}
           <div className="space-y-2 max-h-80 overflow-y-auto">
@@ -234,6 +271,7 @@ function AgentsManagementModal({
                     <p className="font-medium text-gray-900">{agent.name}</p>
                     <p className="text-xs text-gray-500">
                       {agent.email || t('noEmail')} • {agent.current_conversations} {t('activeChats')}
+                      {agent.has_login === false && ` • ${t('agentNoLogin')}`}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -273,6 +311,7 @@ export function UnifiedConversationList({
   clientId,
   userId,
   refreshKey,
+  openConversationId,
 }: UnifiedConversationListProps) {
   const t = useTranslations('communications')
   const tCommon = useTranslations('common')
@@ -280,9 +319,11 @@ export function UnifiedConversationList({
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [syncMessage, setSyncMessage] = useState<string | null>(null)
+  // Active by default: an archived conversation leaves the list, and is
+  // under the status filter's "Archived".
   const [filters, setFilters] = useState<FilterState>({
     channel: 'all',
-    status: 'all',
+    status: 'active',
     search: '',
     hasUnread: false,
     awaitingReply: false,
@@ -297,6 +338,8 @@ export function UnifiedConversationList({
   }, [])
   const [agents, setAgents] = useState<SalesAgent[]>([])
   const [showAgentsModal, setShowAgentsModal] = useState(false)
+  // Per-tab counts from the server, counted before the tab narrows the list.
+  const [counts, setCounts] = useState<ChannelCounts | null>(null)
 
   // Fetch agents
   const fetchAgents = useCallback(async () => {
@@ -330,6 +373,7 @@ export function UnifiedConversationList({
       if (res.ok) {
         const data = await res.json()
         setConversations(data.conversations || [])
+        setCounts(data.counts ?? null)
       }
     } catch (error) {
       console.error('Error fetching conversations:', error)
@@ -362,7 +406,9 @@ export function UnifiedConversationList({
       } else {
         // Handle Gmail not connected gracefully
         if (res.status === 401 || /auth|credential|token|not connected/i.test(data.error || '')) {
-          setSyncMessage('Gmail not connected. Go to Settings > Email to connect your account.')
+          // Settings is admin / manager only: telling an agent to go there
+          // sent them to a page they cannot open.
+          setSyncMessage(t('syncNotConnected'))
         } else {
           setSyncMessage(data.error || t('syncFailed'))
         }
@@ -426,12 +472,27 @@ export function UnifiedConversationList({
     return Mail
   }
 
-  // Count summaries
+  // A notification's link (?conversation=<id>) opens that conversation once
+  // it is in the list — once, so the user can then move on to another.
+  const openedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!openConversationId || openedRef.current === openConversationId) return
+    const target = conversations.find(c => c.id === openConversationId)
+    if (target) {
+      openedRef.current = openConversationId
+      onSelectConversation(target)
+    }
+  }, [openConversationId, conversations, onSelectConversation])
+
+  // Count summaries. The tab counts are the server's, over every channel —
+  // counting the loaded list showed 0 on every tab but the chosen one.
   const totalUnread = conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0)
-  const whatsappCount = conversations.filter(c => c.channel === 'whatsapp').length
-  const emailCount = conversations.filter(c => c.channel === 'email').length
-  const portalCount = conversations.filter(c => c.channel === 'portal').length
-  const tripCount = conversations.filter(c => c.channel === 'trip').length
+  const countOf = (ch: ConversationChannel) => counts?.[ch] ?? conversations.filter(c => c.channel === ch).length
+  const whatsappCount = countOf('whatsapp')
+  const emailCount = countOf('email')
+  const portalCount = countOf('portal')
+  const tripCount = countOf('trip')
+  const allCount = counts?.all ?? conversations.length
 
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-200">
@@ -539,7 +600,7 @@ export function UnifiedConversationList({
             the four channels pair up. */}
         <div className="grid grid-cols-2 gap-1 mb-3 p-1 bg-gray-100/80 rounded-xl">
           {[
-            { key: 'all', label: t('all'), count: conversations.length, icon: null, color: 'gray', wide: true },
+            { key: 'all', label: t('all'), count: allCount, icon: null, color: 'gray', wide: true },
             { key: 'whatsapp', label: t('whatsapp'), count: whatsappCount, icon: MessageSquare, color: 'emerald' },
             { key: 'email', label: t('email'), count: emailCount, icon: Mail, color: 'blue' },
             { key: 'portal', label: t('portal'), count: portalCount, icon: Plane, color: 'olive' },
@@ -643,18 +704,18 @@ export function UnifiedConversationList({
               </label>
             </div>
             <div>
-              <label htmlFor="status-filter" className="sr-only">{t('filters')}</label>
+              <label htmlFor="status-filter" className="sr-only">{tCommon('status')}</label>
               <select
                 id="status-filter"
                 value={filters.status}
                 onChange={(e) => setFilters(f => ({ ...f, status: e.target.value as any }))}
                 className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                title={t('filters')}
+                title={tCommon('status')}
               >
                 <option value="all">{t('allStatuses')}</option>
-                <option value="active">{tCommon('status')}</option>
-                <option value="archived">{t('archive')}</option>
-                <option value="spam">Spam</option>
+                <option value="active">{t('statusActive')}</option>
+                <option value="archived">{t('statusArchived')}</option>
+                <option value="spam">{t('statusSpam')}</option>
               </select>
             </div>
           </div>
@@ -676,10 +737,10 @@ export function UnifiedConversationList({
                 {t('clickToSyncEmails')}
               </p>
             )}
-            {(filters.search || filters.channel !== 'all' || filters.hasUnread || filters.awaitingReply || filters.unassignedOnly) && (
+            {(filters.search || filters.channel !== 'all' || filters.status !== 'active' || filters.hasUnread || filters.awaitingReply || filters.unassignedOnly) && (
               <button
                 type="button"
-                onClick={() => setFilters({ channel: 'all', status: 'all', search: '', hasUnread: false, awaitingReply: false, unassignedOnly: false })}
+                onClick={() => setFilters({ channel: 'all', status: 'active', search: '', hasUnread: false, awaitingReply: false, unassignedOnly: false })}
                 className="mt-2 text-xs text-primary-600 hover:underline"
               >
                 {t('clearFilters')}

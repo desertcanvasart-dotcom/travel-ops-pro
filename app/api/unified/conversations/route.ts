@@ -7,6 +7,7 @@ import type { UnifiedConversation, UnifiedConversationFilters } from '@/types/un
 import { waitingSince } from '@/lib/email/automated-senders'
 import { tripThreads } from '@/lib/unified/trip-threads'
 import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
+import { bookingThreadsPassFilters, channelCounts } from '@/lib/unified/inbox-filters'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -41,10 +42,16 @@ export async function GET(request: NextRequest) {
 
     // We'll query both tables separately and merge, since views can be tricky with Supabase
     const conversations: UnifiedConversation[] = []
+    // Every channel is read whichever tab is chosen, so each tab's count is
+    // real (lib/unified/inbox-filters channelCounts); the tab narrows the
+    // list after counting, below.
+    // Portal and trip conversations have no status or assignee: they are
+    // left out of Archived / Spam / Unassigned (bookingThreadsPassFilters).
+    const bookingThreadsWanted = bookingThreadsPassFilters({ status, unassignedOnly })
 
     // Query WhatsApp conversations
     const whatsappTask = (async () => {
-    if (!trash && (channel === 'all' || channel === 'whatsapp')) {
+    if (!trash) {
       // The org's own threads — the ones that came to its WhatsApp number
       // (migration 20261125). This listed every org's.
       const orgId = await getCurrentOrgId()
@@ -131,7 +138,7 @@ export async function GET(request: NextRequest) {
     // than a phone number or an address, so the same person's portal thread and
     // WhatsApp chat stay separate. That is deliberate: one is tied to a trip.
     const portalTask = (async () => {
-    if (!trash && (channel === 'all' || channel === 'portal')) {
+    if (!trash && bookingThreadsWanted) {
       // The org's own threads (portal_message_threads.org_id, NOT NULL). This
       // listed every company's travellers' messages.
       const orgId = await getCurrentOrgId()
@@ -238,7 +245,7 @@ export async function GET(request: NextRequest) {
     // has written in among the latest TRIP_WINDOW messages is old enough to
     // drop off the list (it is still on its trip page).
     const tripTask = (async () => {
-    if (!trash && (channel === 'all' || channel === 'trip')) {
+    if (!trash && bookingThreadsWanted) {
       // Like portal threads, a trip thread has no client_id to filter on.
       if (clientId) return
       const orgId = await getCurrentOrgId()
@@ -303,7 +310,7 @@ export async function GET(request: NextRequest) {
 
     // Query Email conversations
     const emailTask = (async () => {
-    if (channel === 'all' || channel === 'email') {
+    {
       const orgId = await getCurrentOrgId()
       if (!orgId) return
       // The org's own conversations (org_id), and only those of its Gmail
@@ -417,12 +424,16 @@ export async function GET(request: NextRequest) {
       return dateB - dateA
     })
 
+    const counts = channelCounts(conversations)
+    const listed = channel === 'all' ? conversations : conversations.filter(c => c.channel === channel)
+
     // Apply limit after merge
-    const limitedConversations = conversations.slice(offset, offset + limit)
+    const limitedConversations = listed.slice(offset, offset + limit)
 
     return NextResponse.json({
       conversations: limitedConversations,
-      total: conversations.length,
+      total: listed.length,
+      counts,
       success: true
     })
   } catch (error: any) {
