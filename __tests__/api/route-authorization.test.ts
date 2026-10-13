@@ -433,10 +433,10 @@ describe('rate reads', () => {
     expect(managerOnly('/api/b2c/quotes/abc')).toBe(true)
   })
 
-  it('the calendar’s guide and vehicle lists stay open to a viewer', () => {
-    for (const path of ['/api/guides', '/api/vehicles']) {
+  it('guide and vehicle lists are staff-only now that the calendar is agent-and-above', () => {
+    for (const path of ['/api/guides', '/api/guides/abc', '/api/vehicles']) {
       expect(managerOnly(path)).toBe(false)
-      expect(staffOnly(path)).toBe(false)
+      expect(staffOnly(path)).toBe(true)
     }
   })
 })

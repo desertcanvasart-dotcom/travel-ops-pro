@@ -31,6 +31,9 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/accounts-receivable': ['admin', 'manager'],
   '/accounts-payable': ['admin', 'manager'],
   '/rates': ['admin', 'manager'],
+  // Suppliers & Rates: the supplier roster is the managers' screen; with no
+  // entry here any member opened it by URL.
+  '/suppliers': ['admin', 'manager'],
   '/hotels': ['admin', 'manager'],
   '/restaurants': ['admin', 'manager'],
   '/guides': ['admin', 'manager'],
@@ -316,13 +319,17 @@ const STAFF_ONLY_API_PREFIXES = [
   '/api/templates',
   // Rates, suppliers and pricing: costs. Agents price trips with them; a
   // viewer's pages (dashboard, calendar, notifications) use none of them.
-  // (/api/guides and /api/vehicles stay open: the calendar lists them.)
+  // /api/guides and /api/vehicles: guide contacts and rates, per-guide trip
+  // revenue and clients. They were left viewer-open for the calendar, which
+  // is agent-and-above now.
   '/api/rates',
   '/api/pricing',
   '/api/pricing-grid',
   '/api/suppliers',
   '/api/resources',
   '/api/cruises',
+  '/api/guides',
+  '/api/vehicles',
   // Read by the Email Inbox and Communicate (agent and above) only: the
   // signed-in user's mailbox status and signature, and the partner contacts
   // the inbox's "insert partner" picker lists. Writes stay manager-and-above
