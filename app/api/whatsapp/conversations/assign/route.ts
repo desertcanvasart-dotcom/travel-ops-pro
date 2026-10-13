@@ -125,9 +125,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Log activity
+    // Log activity. agent_id references team_members since 20261209 (it
+    // referenced sales_agents, so this insert always failed). A failed log
+    // never fails the assignment, but it is reported.
     try {
-      await supabase
+      const { error: activityError } = await supabase
         .from('conversation_activity')
         .insert({
           conversation_id,
@@ -140,8 +142,9 @@ export async function POST(request: NextRequest) {
             action: action || 'assign'
           }
         })
+      if (activityError) console.error('Activity log failed:', activityError.message)
     } catch (activityError) {
-      console.log('Activity log skipped:', activityError)
+      console.error('Activity log failed:', activityError)
     }
 
     // Fetch updated conversation

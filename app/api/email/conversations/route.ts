@@ -238,9 +238,9 @@ export async function PATCH(request: NextRequest) {
     }
 
     // No conversation_activity row: that log belongs to WhatsApp
-    // conversations (its conversation_id references whatsapp_conversations
-    // and agent_id the retired sales_agents), so writing an email
-    // conversation's id there always failed the foreign key.
+    // conversations (its conversation_id references whatsapp_conversations),
+    // so writing an email conversation's id there always failed the foreign
+    // key.
 
     return NextResponse.json({ conversation: data, success: true, ...(warning ? { warning } : {}) })
   } catch (error: any) {

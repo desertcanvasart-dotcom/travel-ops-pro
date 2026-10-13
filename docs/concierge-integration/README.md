@@ -14,6 +14,14 @@ GET   {BASE_URL}/api/webhooks/concierge      ← health + canonicalization recip
 `BASE_URL` is provided out-of-band (staging first, then production). The secret
 is provided out-of-band and set on the concierge as `CONCIERGE_WEBHOOK_SECRET`.
 
+**One secret per company.** Autoura runs more than one company (Travel2Egypt,
+ATS). Each company you send briefs for gets its OWN secret, and the secret you
+sign with decides which company's inbox the brief lands in — the payload does
+not. Sending one conversation to two companies is fine: each keeps its own
+brief and revision history. On the Autoura side the secrets are
+`CONCIERGE_WEBHOOK_SECRETS={"ats":"…","travel2egypt":"…"}`; the single
+`CONCIERGE_WEBHOOK_SECRET` still works and files under the default company.
+
 ## Signing (HMAC-SHA256)
 
 | Header | Value |
@@ -26,7 +34,7 @@ is provided out-of-band and set on the concierge as `CONCIERGE_WEBHOOK_SECRET`.
 - **Signed content:** `` `${timestamp}.${rawBody}` `` — the timestamp, a literal dot, then the **exact raw bytes** you send. Sign the bytes you transmit; don't re-serialize after signing.
 - **Digest:** HMAC-SHA256, lowercase hex.
 - **Replay window:** Autoura rejects timestamps more than **300s** from its clock (`401`).
-- **Rotation:** Autoura may run two valid secrets at once (`CONCIERGE_WEBHOOK_SECRET` + `..._PREVIOUS`). You only ever hold one; rotation is a coordinated swap.
+- **Rotation:** Autoura may run two valid secrets at once per company (`CONCIERGE_WEBHOOK_SECRETS={"ats":["new","old"]}`, or the legacy `CONCIERGE_WEBHOOK_SECRET` + `..._PREVIOUS`). You only ever hold one per company; rotation is a coordinated swap.
 
 Reference signer (Node): [`../../scripts/concierge-webhook-sign.mjs`](../../scripts/concierge-webhook-sign.mjs). The verifier Autoura runs is [`../../lib/concierge-webhook-auth.ts`](../../lib/concierge-webhook-auth.ts) — read `signConciergePayload` if porting to another language.
 

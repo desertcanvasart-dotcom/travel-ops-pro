@@ -51,20 +51,39 @@ export async function GET(
       .eq('org_id', orgId)
       .order('tier', { ascending: true })
 
-    // `days` and `pricing` were read from tour_days / tour_pricing by
-    // tour_id = this template's id — but those rows belong to the legacy
-    // builder's tours (tour_days.tour_id → tours), never to a template, so
-    // they always came back empty. The template's day plan is
-    // /api/tours/templates/[id]/days. The keys stay for old clients.
-    const days: unknown[] = []
-    const pricing: unknown[] = []
+    // `days` and `pricing` used to be read from tour_days / tour_pricing by
+    // tour_id = this template's id — those belong to the legacy builder's
+    // tours (tour_id → tours), never to a template, so both were always
+    // empty. A template's day plan is tour_day_activities (template_id), and
+    // its prices are its variations' variation_pricing rows. Both are this
+    // company's through the template / variations checked above (children
+    // carry no org_id — 20261207).
+    const { data: days, error: daysError } = await supabaseAdmin
+      .from('tour_day_activities')
+      .select('id, day_number, sequence_order, content_id, activity_type, activity_name, city, duration_hours, start_time, is_optional, is_included, requires_guide, notes')
+      .eq('template_id', id)
+      .order('day_number', { ascending: true })
+      .order('sequence_order', { ascending: true })
+    if (daysError) console.error('Error fetching template days:', daysError.message)
+
+    const variationIds = ((variations ?? []) as Array<{ id: string }>).map(v => v.id)
+    let pricing: unknown[] = []
+    if (variationIds.length > 0) {
+      const { data: prices, error: pricingError } = await supabaseAdmin
+        .from('variation_pricing')
+        .select('*')
+        .in('variation_id', variationIds)
+        .order('min_pax', { ascending: true })
+      if (pricingError) console.error('Error fetching template pricing:', pricingError.message)
+      pricing = prices ?? []
+    }
 
     return NextResponse.json({
       success: true,
       data: {
         ...template,
         variations: variations || [],
-        days,
+        days: days || [],
         pricing
       }
     })

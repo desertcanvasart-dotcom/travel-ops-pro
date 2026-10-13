@@ -68,7 +68,9 @@ describe('task reminders', () => {
 describe('invoice reminders cannot be starved by one org\'s failing sends', () => {
   const s = src('app/api/cron/send-reminders/route.ts')
   it('the batch is ordered oldest-due first', () => {
-    expect(s).toMatch(/\.order\('next_reminder_date', \{ ascending: true \}\)[\s\S]*\.limit\(50\)/)
+    // Capped per organisation since the cron runs one company at a time.
+    expect(s).toMatch(/\.order\('next_reminder_date', \{ ascending: true \}\)[\s\S]*\.limit\(REMINDERS_PER_ORG\)/)
+    expect(s).toContain('const REMINDERS_PER_ORG = 50')
   })
   it('a failed send is pushed to tomorrow so it does not hold its slot', () => {
     const failBranch = s.slice(s.indexOf('} else {', s.indexOf('if (result.success)')))

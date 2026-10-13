@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { getOrgDefaultMargin, normaliseMargin, resolveMarginPercent } from '@/lib/org-default-margin'
+
+// Preferences are per (person, company) — user_preferences UNIQUE (user_id,
+// org_id), migration 20261209. default_tier is a key of the company's
+// vocabulary and margin/currency are the company's business settings, so
+// someone in both companies has one row in each, and reads and writes the
+// one of the workspace they have active (getCurrentOrgId).
 
 async function createClient() {
   const cookieStore = await cookies()
@@ -70,13 +76,18 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const { data, error } = await supabase
-      .from('user_preferences')
-      .select('*')
-      .eq('user_id', user.id)
-      .single()
+    // No active company (no membership): the defaults, nothing stored.
+    const orgId = await getCurrentOrgId()
+    const { data, error } = orgId
+      ? await supabase
+          .from('user_preferences')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('org_id', orgId)
+          .maybeSingle()
+      : { data: null, error: null }
 
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
       console.error('Error fetching preferences:', error)
       throw error
     }
@@ -95,7 +106,7 @@ export async function GET(request: NextRequest) {
 
     // Not a user preference — an org fact the client needs to label engine
     // amounts correctly (the rates are in this, the billing is in default_currency).
-    const rate_currency = await getOrgRateCurrency(supabase, await getCurrentOrgId())
+    const rate_currency = await getOrgRateCurrency(supabase, orgId)
 
     return NextResponse.json({
       success: true,
@@ -124,8 +135,12 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
     const prefData = {
       user_id: user.id,
+      org_id: orgId,
       default_cost_mode: body.default_cost_mode || 'auto',
       default_tier: body.default_tier || 'standard',
       default_margin_percent: normaliseMargin(body.default_margin_percent) ?? (await orgDefaultMargin(supabase)),
@@ -136,7 +151,7 @@ export async function PUT(request: NextRequest) {
     const { data, error } = await supabase
       .from('user_preferences')
       .upsert(prefData, { 
-        onConflict: 'user_id',
+        onConflict: 'user_id,org_id',
         ignoreDuplicates: false 
       })
       .select()

@@ -44,10 +44,14 @@ beforeAll(async () => {
   await db.exec(PRELUDE)
   await db.exec(TRACKER_BOOTSTRAP)
   for (const f of readdirSync(MIGRATIONS).filter((f: string) => f.endsWith('.sql')).sort()) {
+    // The schema as it stood just before this migration: later ones change
+    // these tables again (20261209 makes user_preferences per company).
+    if (f >= FILE) continue
     await db.exec(readFileSync(path.join(MIGRATIONS, f), 'utf8'))
     await db.exec("SELECT pg_catalog.set_config('search_path','public',false);")
   }
   // Applied twice: idempotent.
+  await db.exec(sql)
   await db.exec(sql)
   // auth.uid() from a per-transaction setting, so the tests can sign in.
   await db.exec(`CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE

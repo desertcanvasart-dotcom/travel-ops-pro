@@ -4011,7 +4011,7 @@ export interface Database {
             foreignKeyName: "conversation_activity_agent_id_fkey"
             columns: ["agent_id"]
             isOneToOne: false
-            referencedRelation: "sales_agents"
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
           {
@@ -4066,7 +4066,7 @@ export interface Database {
             foreignKeyName: "conversation_notes_agent_id_fkey"
             columns: ["agent_id"]
             isOneToOne: false
-            referencedRelation: "sales_agents"
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
           {
@@ -8292,6 +8292,27 @@ export interface Database {
           },
         ]
       }
+      org_backfill_dropped_rows: {
+        Row: {
+          row_data: Json
+          row_id: string
+          saved_at: string
+          table_name: string
+        }
+        Insert: {
+          row_data: Json
+          row_id: string
+          saved_at?: string
+          table_name: string
+        }
+        Update: {
+          row_data?: Json
+          row_id?: string
+          saved_at?: string
+          table_name?: string
+        }
+        Relationships: []
+      }
       org_backfill_tour_orphans: {
         Row: {
           deleted_at: string
@@ -9605,54 +9626,6 @@ export interface Database {
           tier?: string | null
           is_preferred?: boolean | null
           cuisine_types?: string[] | null
-        }
-        Relationships: []
-      }
-      sales_agents: {
-        Row: {
-          id: string
-          user_id: string | null
-          name: string
-          email: string | null
-          phone: string | null
-          avatar_url: string | null
-          is_active: boolean | null
-          is_available: boolean | null
-          max_conversations: number | null
-          current_conversations: number | null
-          last_assigned_at: string | null
-          created_at: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          id?: string
-          user_id?: string | null
-          name: string
-          email?: string | null
-          phone?: string | null
-          avatar_url?: string | null
-          is_active?: boolean | null
-          is_available?: boolean | null
-          max_conversations?: number | null
-          current_conversations?: number | null
-          last_assigned_at?: string | null
-          created_at?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          id?: string
-          user_id?: string | null
-          name?: string
-          email?: string | null
-          phone?: string | null
-          avatar_url?: string | null
-          is_active?: boolean | null
-          is_available?: boolean | null
-          max_conversations?: number | null
-          current_conversations?: number | null
-          last_assigned_at?: string | null
-          created_at?: string | null
-          updated_at?: string | null
         }
         Relationships: []
       }
@@ -12248,6 +12221,7 @@ export interface Database {
         Row: {
           id: string
           user_id: string
+          org_id: string
           default_cost_mode: string | null
           default_tier: string | null
           default_margin_percent: number | null
@@ -12258,6 +12232,7 @@ export interface Database {
         Insert: {
           id?: string
           user_id: string
+          org_id: string
           default_cost_mode?: string | null
           default_tier?: string | null
           default_margin_percent?: number | null
@@ -12268,6 +12243,7 @@ export interface Database {
         Update: {
           id?: string
           user_id?: string
+          org_id?: string
           default_cost_mode?: string | null
           default_tier?: string | null
           default_margin_percent?: number | null
@@ -12275,7 +12251,15 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_preferences_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_profiles: {
         Row: {
@@ -13134,16 +13118,6 @@ export interface Database {
     // every select('*') result to {}.
     Views: { [_ in never]: never }
     Functions: {
-      assign_conversation: {
-        Args: {
-          p_action_type?: string
-          p_agent_id?: string
-          p_assigned_by?: string
-          p_conversation_id?: string
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        Returns: any
-      }
       bump_whatsapp_conversation: {
         Args: {
           p_conversation_id?: string
@@ -13207,11 +13181,6 @@ export interface Database {
         Args: {
           doc_type?: string
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        Returns: any
-      }
-      get_next_available_agent: {
-        Args: Record<PropertyKey, never>
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any
       }
