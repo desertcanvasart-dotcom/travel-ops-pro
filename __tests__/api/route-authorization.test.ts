@@ -417,6 +417,17 @@ describe('rate reads', () => {
       expect(rolesFor(path)).toEqual(['admin', 'manager'])
     })
 
+  it.each(['/api/tours', '/api/tours/templates/bulk/export', '/api/tours/variations/abc/services', '/api/tours/NEK803'])(
+    '%s (Tours) is staff-readable, never viewer', path => {
+      expect(staffOnly(path)).toBe(true)
+    })
+
+  it('transport packages are manager-and-above, reads included', () => {
+    expect(managerOnly('/api/b2b/transport-packages')).toBe(true)
+    expect(managerOnly('/api/b2b/transport-packages/abc')).toBe(true)
+    expect(rolesFor('/api/b2b/transport-packages')).toEqual(['admin', 'manager'])
+  })
+
   it('B2C offers are manager-and-above, reads included', () => {
     expect(managerOnly('/api/b2c/quotes')).toBe(true)
     expect(managerOnly('/api/b2c/quotes/abc')).toBe(true)

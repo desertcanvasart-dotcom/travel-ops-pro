@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
 import { useTierOptions } from '@/hooks/useTierOptions'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
+import { useRole } from '@/hooks/useRole'
 
 // A preset's emoji in the tier filter; an agency-added tier gets a star.
 const TIER_EMOJI: Record<string, string> = { budget: '💰', standard: '💎', deluxe: '✨', luxury: '👑' }
@@ -90,6 +91,10 @@ export default function ToursBrowsePage() {
       ?? tour.theme_key
       ?? tour.category?.category_name
       ?? ''
+  // Refresh prices, delete and the Tour Manager are admin/manager on the
+  // server; an agent was shown all three and got "Forbidden" for each.
+  const { canAccess } = useRole()
+  const canManage = canAccess(['admin', 'manager'])
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [deleteTarget, setDeleteTarget] = useState<TourTemplate | null>(null)
@@ -274,19 +279,19 @@ export default function ToursBrowsePage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          {canManage && <button
             onClick={refreshPrices}
             disabled={refreshingPrices}
             className="px-4 py-2 text-sm border border-[#647C47] text-[#647C47] rounded-lg hover:bg-[#e8ede3] transition-colors font-medium disabled:opacity-50"
           >
             {refreshingPrices ? t('refreshingPrices') : t('refreshPrices')}
-          </button>
-          <Link
+          </button>}
+          {canManage && <Link
             href="/tours/manage"
             className="px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] transition-colors font-medium"
           >
             {t('manageTours')}
-          </Link>
+          </Link>}
         </div>
       </div>
       {refreshNotice && (
@@ -484,7 +489,7 @@ export default function ToursBrowsePage() {
                     {tour.is_featured && (
                       <span className="text-amber-500 text-xs">⭐</span>
                     )}
-                    <button
+                    {canManage && <button
                       onClick={(e) => { e.preventDefault(); setDeleteTarget(tour); }}
                       className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all rounded"
                       title={t('actions.delete')}
@@ -492,7 +497,7 @@ export default function ToursBrowsePage() {
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
-                    </button>
+                    </button>}
                   </div>
                 </div>
                 <p className="text-xs text-gray-500">
@@ -667,7 +672,7 @@ export default function ToursBrowsePage() {
                     >
                       {t('card.viewDetails')}
                     </Link>
-                  <button
+                  {canManage && <button
                     onClick={() => setDeleteTarget(tour)}
                     className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-red-500 transition-all rounded"
                     title={t('actions.delete')}
@@ -675,7 +680,7 @@ export default function ToursBrowsePage() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
-                  </button>
+                  </button>}
                 </div>
               </div>
             </div>
@@ -761,13 +766,15 @@ export default function ToursBrowsePage() {
                           >
                             {t('actions.view')}
                           </Link>
-                        <span className="text-gray-200">|</span>
-                        <button
-                          onClick={() => setDeleteTarget(tour)}
-                          className="text-gray-400 hover:text-red-500 text-xs font-medium transition-colors"
-                        >
-                          {t('actions.delete')}
-                        </button>
+                        {canManage && <>
+                          <span className="text-gray-200">|</span>
+                          <button
+                            onClick={() => setDeleteTarget(tour)}
+                            className="text-gray-400 hover:text-red-500 text-xs font-medium transition-colors"
+                          >
+                            {t('actions.delete')}
+                          </button>
+                        </>}
                       </div>
                     </td>
                   </tr>
@@ -784,17 +791,17 @@ export default function ToursBrowsePage() {
           <div className="text-4xl mb-3">🔍</div>
           <h3 className="text-sm font-medium text-gray-900 mb-1">{t('empty.noToursFound')}</h3>
           <p className="text-xs text-gray-500 mb-4">{t('empty.adjustFilters')}</p>
-          <Link
+          {canManage && <Link
             href="/tours/manage"
             className="text-sm text-[#647C47] hover:text-[#4a5c35] font-medium"
           >
             {t('empty.createNewTour')}
-          </Link>
+          </Link>}
         </div>
       )}
 
       {/* Delete Confirmation Modal */}
-      {deleteTarget && (
+      {canManage && deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => !deleting && setDeleteTarget(null)} />
           <div className="relative bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">

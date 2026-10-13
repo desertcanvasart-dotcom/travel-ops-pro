@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
+import { syncEnglishVersion } from '@/lib/tours/english-version'
+import { isUniqueViolation } from '@/lib/tours/template-code'
+import { countCatalogueReferences, referenceTotal, refusalMessage } from '@/lib/tours/catalogue-references'
 
 // Admin client for all operations (bypasses RLS)
 const supabaseAdmin = createClient(
@@ -138,6 +141,10 @@ export async function PUT(
     if (body.popularity_score !== undefined) updateData.popularity_score = body.popularity_score
     if (body.default_transportation_service !== undefined) updateData.default_transportation_service = body.default_transportation_service
     if (body.transportation_city !== undefined) updateData.transportation_city = body.transportation_city
+    // The form's Auto-Pricing box. 'manual' keeps the engine off the
+    // template's cached "from" price (lib/tours/cached-price); anything else
+    // is ignored rather than stored as a mode nothing reads.
+    if (body.pricing_mode === 'auto' || body.pricing_mode === 'manual') updateData.pricing_mode = body.pricing_mode
     
     // NEW FIELDS
     if (body.itinerary !== undefined) updateData.itinerary = body.itinerary
@@ -158,6 +165,13 @@ export async function PUT(
       .select()
 
     if (error) {
+      // A code another of the company's templates already has.
+      if (isUniqueViolation(error)) {
+        return NextResponse.json(
+          { success: false, error: `Template code "${updateData.template_code}" is already used by another template` },
+          { status: 409 }
+        )
+      }
       console.error('Error updating template:', error)
       return NextResponse.json(
         { success: false, error: clientMessage(error, 'Failed to update template') },
@@ -172,10 +186,16 @@ export async function PUT(
       )
     }
 
+    // The 'en' version row follows the saved text, so Copy & Translate
+    // translates what the template says now (lib/tours/english-version).
+    const versionError = await syncEnglishVersion(supabaseAdmin, data[0])
+    if (versionError) console.warn('Warning: English version not updated:', versionError)
+
     return NextResponse.json({
       success: true,
       data: data[0],
-      message: 'Template updated successfully'
+      message: 'Template updated successfully',
+      ...(versionError ? { warning: 'Template saved, but its English version was not updated' } : {}),
     })
 
   } catch (error) {
@@ -187,14 +207,23 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete template (and its variations, their children, its day
-// activities, and the company's quotes built only on it)
+// DELETE - Delete an unused template (and its variations, their children and
+// its day activities)
 //
 // Manager-and-above (the tour manager's role; RLS on tour_templates says the
 // same). Only the caller's company's template: another company's id is "not
-// found". The steps are not one transaction, so the first one that fails
-// stops the delete and is REPORTED (500, naming the step) — it used to be
-// logged and the route answered 200 with half a programme left behind.
+// found".
+//
+// REFUSED (409, with the counts by kind) while anything still refers to the
+// template or one of its variations: quotes of any status, departures, trips,
+// partner prices, seat holds. It used to delete every tour_quotes row on the
+// variations (sent, accepted and converted quotes alike), cascade the partner
+// prices away and unlink departures and trips — a catalogue tidy-up erasing
+// sales records. Such a template is deactivated instead (PUT is_active
+// false); the dialog offers that.
+//
+// The steps are not one transaction, so the first one that fails stops the
+// delete and is REPORTED (500, naming the step).
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -208,7 +237,7 @@ export async function DELETE(
 
     const { data: template } = await supabaseAdmin
       .from('tour_templates')
-      .select('id')
+      .select('id, template_name')
       .eq('id', id)
       .eq('org_id', orgId)
       .maybeSingle()
@@ -224,6 +253,29 @@ export async function DELETE(
       )
     }
 
+    const { data: variations, error: varReadErr } = await supabaseAdmin
+      .from('tour_variations')
+      .select('id')
+      .eq('template_id', id)
+      .eq('org_id', orgId)
+    if (varReadErr) return failed('variations', varReadErr)
+    const variationIds = (variations ?? []).map((v: { id: string }) => v.id)
+
+    // Nothing is deleted until we know nothing uses it.
+    const { counts, error: refErr } = await countCatalogueReferences(supabaseAdmin, orgId, { templateId: id, variationIds })
+    if (refErr) return failed('reference check', refErr)
+    if (referenceTotal(counts) > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: refusalMessage('template', (template as { template_name?: string }).template_name ?? null, counts),
+          references: counts,
+          can_deactivate: true,
+        },
+        { status: 409 }
+      )
+    }
+
     // tour_day_activities links by template_id (+ day_number).
     const { error: actErr } = await supabaseAdmin
       .from('tour_day_activities')
@@ -231,34 +283,7 @@ export async function DELETE(
       .eq('template_id', id)
     if (actErr) return failed('day activities', actErr)
 
-    const { data: variations, error: varReadErr } = await supabaseAdmin
-      .from('tour_variations')
-      .select('id')
-      .eq('template_id', id)
-      .eq('org_id', orgId)
-    if (varReadErr) return failed('variations', varReadErr)
-
-    if (variations && variations.length > 0) {
-      const variationIds = variations.map(v => v.id)
-
-      // Quotes that also have an itinerary keep it and lose the variation;
-      // quotes with nothing else are deleted. The company's own quotes only
-      // (a variation is one company's now, and so are the quotes built on it).
-      const { error: detachErr } = await supabaseAdmin
-        .from('tour_quotes')
-        .update({ variation_id: null })
-        .in('variation_id', variationIds)
-        .eq('org_id', orgId)
-        .not('itinerary_id', 'is', null)
-      if (detachErr) return failed('quote links', detachErr)
-
-      const { error: delQuotesErr } = await supabaseAdmin
-        .from('tour_quotes')
-        .delete()
-        .in('variation_id', variationIds)
-        .eq('org_id', orgId)
-      if (delQuotesErr) return failed('quotes', delQuotesErr)
-
+    if (variationIds.length > 0) {
       const { error: delDailyErr } = await supabaseAdmin
         .from('variation_daily_itinerary')
         .delete()

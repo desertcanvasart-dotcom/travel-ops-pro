@@ -1134,7 +1134,13 @@ export async function POST(request: NextRequest) {
           // The package for this cruise's length in days — a 4D and a 5D
           // package are different prices; none of that length adds none
           // (lib/pricing/cruise-package). It took the first package on file.
-          const pkg = packageForDuration(rawRates.cruiseTransportPkgs ?? [], cruiseEndIdx - cruiseStartIdx + 1) as any
+          // A Cruise Sightseeing package only, on this sailing's route (the
+          // boarding day before it through the disembark day).
+          const cruiseRoute = parsed.days
+            .slice(Math.max(0, cruiseStartIdx - 1), cruiseEndIdx + 1)
+            .map((d: any) => String(d?.city ?? '').trim().toLowerCase())
+            .filter(Boolean)
+          const pkg = packageForDuration(rawRates.cruiseTransportPkgs ?? [], cruiseEndIdx - cruiseStartIdx + 1, cruiseRoute) as any
 
           // On flight days, also ensure the departure city airport transfer is present
           // The flight-day code above should have added it, but verify it's in slots.route

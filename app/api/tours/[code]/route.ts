@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { findDefaultVariation, isWithdrawn } from '@/lib/tours/default-variation'
+import { defaultTierKey } from '@/lib/vocabulary'
+import { tierLadderForOrg } from '@/lib/vocabulary-server'
 
 // ============================================
 // TOUR DETAIL API - WITH VARIATION_ID
@@ -35,7 +38,8 @@ const VARIATION_SELECT = `
     duration_nights,
     cities_covered,
     itinerary,
-    theme_key
+    theme_key,
+    is_active
   )
 `
 
@@ -51,6 +55,15 @@ async function themeLabel(orgId: string, key: unknown): Promise<string> {
     .eq('key', key)
     .maybeSingle()
   return (data as { label?: string } | null)?.label || key
+}
+
+/** 410 for a tour or variation no longer offered — the page says it is
+ *  withdrawn rather than "not found" (it is there, just not for sale). */
+function withdrawnResponse() {
+  return NextResponse.json(
+    { success: false, withdrawn: true, error: 'This tour is no longer offered' },
+    { status: 410 }
+  )
 }
 
 /** The destination line shown on the tour: its cities, or 'Various'. */
@@ -90,90 +103,60 @@ export async function GET(
 
     // Every lookup below is within the caller's company: a code (or id) of
     // another company's programme is "not found".
-    let variation = null
+    let variation: any = null
 
     // First, try to find by variation_code
-    const { data: varByCode, error: varCodeError } = await supabase
+    const { data: varByCode } = await supabase
       .from('tour_variations')
       .select(VARIATION_SELECT)
       .eq('org_id', orgId)
       .eq('variation_code', code)
-      .single()
+      .maybeSingle()
 
+    let template: any = null
     if (varByCode) {
+      // A withdrawn variation (or one of a withdrawn tour) opened by its URL
+      // says so — it used to open and price as if it were still offered.
+      if (isWithdrawn(varByCode) || isWithdrawn((varByCode as any).tour_templates)) return withdrawnResponse()
       variation = varByCode
     } else {
-      // Check if it's a UUID (template_id) - UUIDs are 36 chars with dashes
+      // Otherwise the code names a template, by UUID or by template_code.
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)
-
-      if (isUUID) {
-        // Try to find by template_id and get the first variation
-        const { data: varByTemplateId } = await supabase
-          .from('tour_variations')
-          .select(VARIATION_SELECT)
-          .eq('org_id', orgId)
-          .eq('template_id', code)
-          .order('tier', { ascending: true })
-          .limit(1)
-          .single()
-
-        if (varByTemplateId) {
-          variation = varByTemplateId
-        }
-      } else {
-        // Try to find by template_code and get the first variation
-        const { data: template } = await supabase
-          .from('tour_templates')
-          .select('id')
-          .eq('org_id', orgId)
-          .eq('template_code', code)
-          .single()
-
-        if (template) {
-          const { data: varByTemplate } = await supabase
-            .from('tour_variations')
-            .select(VARIATION_SELECT)
-            .eq('org_id', orgId)
-            .eq('template_id', template.id)
-            .order('tier', { ascending: true })
-            .limit(1)
-            .single()
-
-          if (varByTemplate) {
-            variation = varByTemplate
-          }
-        }
-      }
-    }
-
-    if (!variation) {
-      // ============================================
-      // TEMPLATE FALLBACK — no variations exist
-      // ============================================
-      // Programmes imported from documents (the A.T.S catalogue) carry their
-      // day-by-day in tour_templates.itinerary and have NO variations. They
-      // must still open: build the detail from the template itself. Pricing
-      // runs template-direct — calculate-price accepts template_id and prices
-      // via the auto-pricing engine at the default tier.
-      const isTemplateUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)
-      const { data: template } = await supabase
+      const { data: tplRow } = await supabase
         .from('tour_templates')
         .select(`
           id, template_code, template_name, short_description, long_description,
           highlights, main_attractions, duration_days, duration_nights,
-          itinerary, cities_covered, theme_key
+          itinerary, cities_covered, theme_key, is_active
         `)
         .eq('org_id', orgId)
-        .eq(isTemplateUUID ? 'id' : 'template_code', code)
-        .single()
+        .eq(isUUID ? 'id' : 'template_code', code)
+        .maybeSingle()
 
-      if (!template) {
+      if (!tplRow) {
         return NextResponse.json(
           { success: false, error: 'Tour not found' },
           { status: 404 }
         )
       }
+      if (isWithdrawn(tplRow)) return withdrawnResponse()
+      template = tplRow
 
+      // Its active variations only, the company's default tier first — not
+      // the alphabetical first, which opened (and priced) a withdrawn budget
+      // variation the catalogue no longer lists.
+      variation = await findDefaultVariation(supabase, orgId, tplRow.id, VARIATION_SELECT)
+    }
+
+    if (!variation) {
+      // ============================================
+      // TEMPLATE FALLBACK — no active variations
+      // ============================================
+      // Programmes imported from documents (the A.T.S catalogue) carry their
+      // day-by-day in tour_templates.itinerary and have NO variations. They
+      // must still open: build the detail from the template itself. Pricing
+      // runs template-direct — calculate-price accepts template_id and prices
+      // via the auto-pricing engine at the company's default tier.
       const tpl = template as any
       const dailyItinerary = templateDailyItinerary(tpl.itinerary)
 
@@ -194,7 +177,7 @@ export async function GET(
           main_attractions: tpl.main_attractions || [],
           variation_name: null,
           variation_code: null,
-          tier: 'standard',
+          tier: defaultTierKey(await tierLadderForOrg(supabase, orgId)),
           group_type: 'private',
           min_pax: 1,
           max_pax: 15,
