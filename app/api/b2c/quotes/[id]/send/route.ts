@@ -10,6 +10,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUserRole, getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { sendEmailInternal } from '@/lib/email-send'
+import { effectiveQuoteStatus } from '@/lib/quotes/validity'
 import { orgIdentity } from '@/lib/org-identity'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 
@@ -36,6 +37,7 @@ export async function POST(
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
+    const actor = await getCurrentUserId()
     const body = await request.json().catch(() => ({}))
     const sendVia: 'email' | 'whatsapp' = body.send_via === 'whatsapp' ? 'whatsapp' : 'email'
 
@@ -49,6 +51,19 @@ export async function POST(
       .single()
     if (error || !quote) {
       return NextResponse.json({ success: false, error: 'Quote not found' }, { status: 404 })
+    }
+
+    // A rejected offer, or one past its valid-until date, is not sent again
+    // as if it stood: the customer would accept a price the office no longer
+    // offers. Set it back to draft, or extend the date, first.
+    const shownStatus = effectiveQuoteStatus(quote.status, quote.valid_until)
+    if (shownStatus === 'rejected' || shownStatus === 'expired') {
+      return NextResponse.json({
+        success: false,
+        error: shownStatus === 'rejected'
+          ? 'This offer was rejected. Set it back to draft before sending it again.'
+          : 'This offer has expired. Extend "Valid until" before sending it again.',
+      }, { status: 409 })
     }
 
     const itin = (quote as any).itineraries || {}
@@ -91,7 +106,7 @@ export async function POST(
       const html = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222;white-space:pre-wrap;line-height:1.6">${
         messageText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       }</div>`
-      const result = await sendEmailInternal({ to: clientEmail, subject, html, orgId, senderUserId: await getCurrentUserId() })
+      const result = await sendEmailInternal({ to: clientEmail, subject, html, orgId, senderUserId: actor })
       if (!result.success) {
         return NextResponse.json({ success: false, error: result.error || 'Email send failed' }, { status: 502 })
       }
@@ -114,7 +129,8 @@ export async function POST(
     try {
       await supabaseAdmin.rpc('create_b2c_quote_revision', {
         p_quote_id: id,
-        p_changed_by: null,
+        // Who sent it — the signed-in user (it was recorded as nobody).
+        p_changed_by: actor,
         p_change_reason: `Sent via ${sendVia}`,
       })
     } catch { /* non-fatal */ }

@@ -198,7 +198,8 @@ export async function processNewWebOrders(
         await notifyOrgManagers(db as never, orgId, {
           type: 'order_received',
           title: `ウェブ注文 ${quote.quote_number}: ${order.tourCode}`,
-          message: `ウェブサイトの注文メールより自動作成。${summary}`,
+          // A party larger than the seats left got no seat hold: say so.
+          message: `ウェブサイトの注文メールより自動作成。${result.body.departureFull ? `座席は未確保（出発の空き ${result.body.departureFull.free} 席に対し ${result.body.departureFull.requested} 名）。` : ''}${summary}`,
           link: `/b2b/quotes/${quote.id}`,
         })
         await checked()

@@ -30,8 +30,9 @@ interface Preview {
   }
   template?: { id: string; template_code: string; template_name: string; duration_days: number } | null
   matchedBy?: 'website' | 'code' | null
-  departure?: { id: string; start_date: string; status: string; max_pax: number; booked_pax: number } | null
+  departure?: { id: string; start_date: string; status: string; max_pax: number; booked_pax: number; seats_free?: number } | null
   departureBooking?: { id: string; departure_id: string } | null
+  departureFull?: { free: number; requested: number } | null
   client?: { id: string; name: string } | null
   pricing?: { total_cost: number; selling_price: number; price_per_person: number; currency: string; margin_percent: number; holes: { kind: string; message: string }[]; warnings: string[]; complete: boolean } | null
   quote?: { id: string; quote_number: string } | null
@@ -110,7 +111,7 @@ function OrderIntakeInner() {
     try {
       const res = await fetch('/api/intake/order-form', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, dryRun, intakeId: intake?.id }) })
       const j: Preview = await res.json()
-      if (dryRun) setPreview(j); else { setDone(j); setPreview(null); if (j.success) { setIntake(null); loadWebOrders() } }
+      if (dryRun) setPreview(j); else { setDone(j); setPreview(null); if (j.success || res.status === 409) { setIntake(null); loadWebOrders() } }
     } catch (e) {
       setPreview({ success: false, error: e instanceof Error ? e.message : String(e) })
     } finally { setBusy(false) }
@@ -173,7 +174,17 @@ function OrderIntakeInner() {
                 <div className="flex gap-2"><dt className="text-gray-500 w-32">{t('matched')}</dt><dd>{preview.template ? <span className="text-green-700">{preview.template.template_code} · {preview.template.template_name}{preview.matchedBy && <span className="text-gray-500"> ({t(preview.matchedBy === 'website' ? 'matchedByWebsite' : 'matchedByCode')})</span>}</span> : <span className="text-red-700 font-medium">{t('noMatch')}</span>}</dd></div>
                 <div className="flex gap-2"><dt className="text-gray-500 w-32">{t(o.productKind === 'optional' ? 'useDate' : 'departure')}</dt><dd>{o.departureDate1}{o.departureDate2 ? ` (${t('or')} ${o.departureDate2})` : ''}{o.departureAirport ? ` · ${o.departureAirport}` : ''}</dd></div>
                 <div className="flex gap-2"><dt className="text-gray-500 w-32">{t('party')}</dt><dd>{o.infants ? t('partyInfants', { adults: o.adults, children: o.children, infants: o.infants }) : t('partyValue', { adults: o.adults, children: o.children })}</dd></div>
-                {preview.template && <div className="flex gap-2"><dt className="text-gray-500 w-32" /><dd className={preview.departure ? 'text-green-700' : 'text-gray-500'}>{t(preview.departure ? 'departureFound' : 'departureNone')}</dd></div>}
+                {preview.template && (() => {
+                  // A departure with too few seats left for the party gets no hold.
+                  const dep = preview.departure
+                  const party = Math.max(1, o.adults + o.children)
+                  const noRoom = !!dep && dep.seats_free != null && dep.seats_free < party
+                  return (
+                    <div className="flex gap-2"><dt className="text-gray-500 w-32" /><dd className={!dep ? 'text-gray-500' : noRoom ? 'text-amber-700' : 'text-green-700'}>
+                      {!dep ? t('departureNone') : noRoom ? t('departureNoRoom', { free: dep.seats_free ?? 0, requested: party }) : <>{t('departureFound')}{dep.seats_free != null && <span className="text-gray-500"> · {t('departureSeatsFree', { free: dep.seats_free })}</span>}</>}
+                    </dd></div>
+                  )
+                })()}
               </dl>
             </section>
             <section>
@@ -240,6 +251,7 @@ function OrderIntakeInner() {
               <p className="font-medium flex items-center gap-2"><CheckCircle2 className="w-5 h-5" />{t('created', { quote: done.quote.quote_number })}</p>
               <p className="mt-1">{done.clientCreated ? t('clientCreated') : t('clientLinked')}</p>
               {done.departureBooking && <p className="mt-1">{t('departureHeld')}</p>}
+              {done.departureFull && <p className="mt-1 text-amber-800">{t('departureFull', { free: done.departureFull.free, requested: done.departureFull.requested })}</p>}
               <div className="mt-3 flex gap-2">
                 <Link href={`/b2b/quotes/${done.quote.id}`} className="px-4 py-2 bg-[#647C47] text-white rounded-lg font-medium">{t('openQuote')}</Link>
                 <button type="button" onClick={() => { setDone(null); setText(''); }} className="px-4 py-2 border border-gray-300 rounded-lg">{t('another')}</button>
