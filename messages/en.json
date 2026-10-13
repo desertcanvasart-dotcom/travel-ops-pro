@@ -3794,7 +3794,7 @@
     "fixedCosts": {
       "usedInPricing": "Used in pricing",
       "infoTitle": "Every active cost here is charged on quotes, per person for each sightseeing day",
-      "infoBody": "Each active cost is its own line, converted from its own currency. An inactive cost is not charged. Water is a pass-through cost with no profit margin applied. Changes affect all new pricing (a running server may keep the old figure for up to 5 minutes). Tips are managed separately under Rates > Tipping.",
+      "infoBody": "Each active cost is its own line, converted from its own currency. An inactive cost is not charged. The quote's margin is added to these costs like every other cost. Changes affect all new pricing (a running server may keep the old figure for up to 5 minutes). Tips are managed separately under Rates > Tipping.",
       "emptyBody": "Add a cost and it is charged per person for each sightseeing day."
     },
     "common": {
