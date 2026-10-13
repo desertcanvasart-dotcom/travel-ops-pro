@@ -19,10 +19,8 @@ describe('several vehicles for a big group', () => {
     expect(withFleet(item(bus), bus, 30)).toEqual(item(bus))
   })
 
-  it('a vehicle with no capacity, or a dated-period rate, stays one vehicle', () => {
+  it('a vehicle with no capacity stays one vehicle', () => {
     expect(withFleet(item({ ...bus, capacity_max: null }), { ...bus, capacity_max: null }, 60).rateEur).toBe(300)
-    const dated = { ...item(bus), periods: [{ from: '2026-01-01', to: '2026-12-31' }] }
-    expect(withFleet(dated, bus, 60)).toBe(dated)
   })
 
   it('is applied where the screen and the save both rebuild a route vehicle', () => {

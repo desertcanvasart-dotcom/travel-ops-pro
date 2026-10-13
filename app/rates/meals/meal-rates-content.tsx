@@ -133,7 +133,6 @@ interface MealRate {
   meal_category?: string
   dietary_options?: string[]
   per_person_rate?: boolean
-  minimum_pax?: number
   notes?: string
   is_active: boolean
   is_preferred?: boolean
@@ -238,7 +237,6 @@ export default function MealRatesContent() {
     meal_category: '',
     dietary_options: [] as string[],
     per_person_rate: true,
-    minimum_pax: 1,
     notes: '',
     is_active: true,
     is_preferred: false
@@ -337,7 +335,6 @@ export default function MealRatesContent() {
       meal_category: '',
       dietary_options: [],
       per_person_rate: true,
-      minimum_pax: 1,
       notes: '',
       is_active: true,
       is_preferred: false
@@ -381,7 +378,6 @@ export default function MealRatesContent() {
       meal_category: rate.meal_category || '',
       dietary_options: (rate.dietary_options || []).map((d: string) => slugifyKey(d)),
       per_person_rate: rate.per_person_rate !== false,
-      minimum_pax: rate.minimum_pax || 1,
       notes: rate.notes || '',
       is_active: rate.is_active,
       is_preferred: rate.is_preferred || false
@@ -432,7 +428,6 @@ export default function MealRatesContent() {
         meal_category: formData.meal_category || null,
         dietary_options: formData.dietary_options || [],
         per_person_rate: formData.per_person_rate,
-        minimum_pax: formData.minimum_pax || null,
         notes: formData.notes || null,
         is_active: formData.is_active,
         is_preferred: formData.is_preferred,
@@ -1310,17 +1305,6 @@ export default function MealRatesContent() {
                       />
                       <span className="text-sm font-medium text-gray-900">{t('perPersonRate')}</span>
                     </label>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('minimumPax')}</label>
-                    <input
-                      type="number"
-                      name="minimum_pax"
-                      value={formData.minimum_pax}
-                      onChange={handleChange}
-                      min="1"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
                   </div>
                 </div>
               </div>

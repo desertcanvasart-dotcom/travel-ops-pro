@@ -103,11 +103,11 @@ describe('meals: one restaurant, its basis and minimum (#7)', () => {
     expect(totalAt(r, 10) - totalAt(withoutMeal, 10)).toBeCloseTo(300)
   })
 
-  it('a per-person price with a minimum of 10 charges 10 at 2 travellers, 12 at 12', async () => {
+  it('a restaurant has no minimum group: a stored minimum_pax prices like none', async () => {
     const withMin = await price(t => { t.meal_rates = [meal({ id: 'm-min', restaurant_name: 'Nile Deck', base_rate_eur: 20, minimum_pax: 10 })] })
     const noMin = await price(t => { t.meal_rates = [meal({ id: 'm-min', restaurant_name: 'Nile Deck', base_rate_eur: 20, minimum_pax: 1 })] })
-    expect(totalAt(withMin, 2) - totalAt(noMin, 2)).toBeCloseTo(20 * 8)
-    expect(totalAt(withMin, 12) - totalAt(noMin, 12)).toBeCloseTo(0)
+    expect(totalAt(withMin, 2)).toBeCloseTo(totalAt(noMin, 2))
+    expect(totalAt(withMin, 12)).toBeCloseTo(totalAt(noMin, 12))
   })
 })
 

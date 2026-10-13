@@ -52,8 +52,7 @@ export function priceMealLine(
   if (!picked.perPerson) {
     return { unitCost: picked.rate, lineTotal: total, quantityMode: 'fixed', pricingNote: `${where}${line.rateSym}${picked.rate} per group`, rateSource: 'meal_rates' }
   }
-  const min = picked.minimumPax > Math.max(1, line.numPax) ? ` (minimum ${picked.minimumPax} people)` : ''
-  return { unitCost: picked.rate, lineTotal: total, quantityMode: 'per_pax', pricingNote: `${where}${line.rateSym}${picked.rate}/pax${min}`, rateSource: 'meal_rates' }
+  return { unitCost: picked.rate, lineTotal: total, quantityMode: 'per_pax', pricingNote: `${where}${line.rateSym}${picked.rate}/pax`, rateSource: 'meal_rates' }
 }
 
 /**

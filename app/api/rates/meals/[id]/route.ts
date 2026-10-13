@@ -110,7 +110,6 @@ export async function PUT(
       meal_category: (v) => v || null,
       dietary_options: (v) => v || [],
       per_person_rate: (v) => v,
-      minimum_pax: (v) => v ? parseInt(v) : null,
       notes: (v) => v || null,
       is_active: (v) => v,
       is_preferred: (v) => v === true,

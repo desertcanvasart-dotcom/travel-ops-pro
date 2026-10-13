@@ -143,21 +143,15 @@ export interface PickedMeal {
   rate: number
   /** false = one price for the whole group (meal_rates.per_person_rate). */
   perPerson: boolean
-  /** A per-person rate is charged for at least this many people. */
-  minimumPax: number
 }
 
 /** The legacy one-row-per-tier shape: lunch_rate_eur / dinner_rate_eur. */
 const legacyColumn = (mealType: string) => (mealType === 'lunch' ? 'lunch_rate_eur' : mealType === 'dinner' ? 'dinner_rate_eur' : null)
 
+// Restaurants have no minimum group (owner, 2026-10-13): meal_rates.minimum_pax
+// is kept in the table but never priced.
 function asPicked(row: Record<string, any>, rate: number): PickedMeal {
-  const min = Number(row.minimum_pax)
-  return {
-    row,
-    rate,
-    perPerson: row.per_person_rate !== false,
-    minimumPax: Number.isFinite(min) && min > 1 ? Math.floor(min) : 1,
-  }
+  return { row, rate, perPerson: row.per_person_rate !== false }
 }
 
 /**
@@ -189,28 +183,24 @@ export function pickMealRate(rows: Record<string, any>[], ask: MealAsk): PickedM
   const legacy = valid
     .filter(r => (Number(r[col]) || 0) > 0)
     .sort((a, b) => cityRank(a, ask.city) - cityRank(b, ask.city) || stableCompare(a, b))[0]
-  // A legacy row is per person with no minimum, as it always priced.
-  return legacy ? { row: legacy, rate: Number(legacy[col]), perPerson: true, minimumPax: 1 } : null
+  // A legacy row is per person, as it always priced.
+  return legacy ? { row: legacy, rate: Number(legacy[col]), perPerson: true } : null
 }
 
-/**
- * What a picked meal costs a group of `pax`: a per-group rate once; a
- * per-person rate × the group, but never fewer than its minimum.
- */
-export function mealCostForGroup(meal: Pick<PickedMeal, 'rate' | 'perPerson' | 'minimumPax'>, pax: number): number {
+/** What a picked meal costs a group of `pax`: a per-group rate once; a
+ *  per-person rate × the group. */
+export function mealCostForGroup(meal: Pick<PickedMeal, 'rate' | 'perPerson'>, pax: number): number {
   const people = Math.max(1, Math.floor(pax) || 1)
   if (!meal.perPerson) return meal.rate
-  return meal.rate * Math.max(people, meal.minimumPax)
+  return meal.rate * people
 }
 
 /**
  * How many times a voucher line charges a picked meal rate: once for a
- * per-group rate, else the party — never fewer than the restaurant's minimum.
- * The voucher multiplied every meal rate by the party, per group or not.
+ * per-group rate, else the party. The voucher multiplied every meal rate by
+ * the party, per group or not.
  */
-export function mealVoucherQuantity(rate: { per_person_rate?: boolean | null; minimum_pax?: number | null }, pax: number): number {
+export function mealVoucherQuantity(rate: { per_person_rate?: boolean | null }, pax: number): number {
   if (rate.per_person_rate === false) return 1
-  const people = Math.max(1, Math.floor(pax) || 1)
-  const min = Number(rate.minimum_pax)
-  return Math.max(people, Number.isFinite(min) && min > 1 ? Math.floor(min) : 1)
+  return Math.max(1, Math.floor(pax) || 1)
 }

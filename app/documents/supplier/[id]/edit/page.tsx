@@ -61,8 +61,6 @@ interface MealRate {
   notes: string | null
   /** false = one price for the whole group (meal_rates.per_person_rate). */
   per_person_rate?: boolean | null
-  /** A per-person rate is charged for at least this many people. */
-  minimum_pax?: number | null
 }
 
 interface SelectedMeal {
@@ -324,7 +322,6 @@ export default function EditSupplierDocumentPage() {
           supplier_name: r.supplier_name,
           notes: r.notes,
           per_person_rate: r.per_person_rate,
-          minimum_pax: r.minimum_pax
         })))
       }
     } catch (err) {

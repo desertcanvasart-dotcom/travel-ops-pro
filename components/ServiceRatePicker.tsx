@@ -51,7 +51,7 @@ export function normalizeRates(serviceType: string, data: any[], paxCount: numbe
         rate_non_eur: r.base_rate_non_eur || r.base_rate_eur || 0,
         supplier_id: r.supplier_id || null,
         supplier_name: r.supplier_name || r.supplier?.name || null,
-        details: [r.cuisine_type, r.meal_type, r.per_person_rate === false ? 'per group' : null, Number(r.minimum_pax) > 1 ? `min ${r.minimum_pax} pax` : null].filter(Boolean).join(' · ')
+        details: [r.cuisine_type, r.meal_type, r.per_person_rate === false ? 'per group' : null].filter(Boolean).join(' · ')
       }))
 
     case 'transportation':

@@ -99,7 +99,6 @@ export async function POST(request: NextRequest) {
       meal_category: body.meal_category || null,
       dietary_options: Array.isArray(body.dietary_options) ? body.dietary_options : [],
       per_person_rate: body.per_person_rate !== false,
-      minimum_pax: body.minimum_pax ? parseInt(body.minimum_pax) : null,
       notes: body.notes || null,
       ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
       is_active: body.is_active !== false,

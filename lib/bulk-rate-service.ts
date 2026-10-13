@@ -347,7 +347,6 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('tier', 'Tier', 'text', false),
       col('meal_category', 'Meal Category', 'text', false),
       col('per_person_rate', 'Per Person', 'boolean', false),
-      col('minimum_pax', 'Min Pax', 'number', false),
       season(), rateValidFrom(), rateValidTo(),
       supplierId(),
       col('supplier_name', 'Supplier Name', 'text', false),

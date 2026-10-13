@@ -138,12 +138,11 @@ function resolveItem(slotId: string, item: SelectedItem, options: RateOption[], 
  * A group bigger than the route's largest vehicle rides in several of it, as
  * trip pricing and quotes charge (lib/vocabulary vehicleFleetForPax): the line
  * reads "2 × Bus" at twice the rate. Rebuilt from the option every time, so
- * the count never compounds. A dated-period rate keeps one vehicle's periods
- * and is left as one vehicle rather than half-scaled.
+ * the count never compounds.
  */
 export function withFleet(item: SelectedItem, vehicle: RateOption, pax: number): SelectedItem {
   const cap = Number(vehicle.capacity_max) || 0
-  if (cap <= 0 || pax <= cap || item.periods) return item
+  if (cap <= 0 || pax <= cap) return item
   const count = Math.ceil(pax / cap)
   return {
     ...item,

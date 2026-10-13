@@ -399,13 +399,9 @@ const GUIDE_DURATION_LABEL: Record<string, string> = {
   half_day: 'half day', full_day: 'full day', extended: 'extended', hourly: 'hourly', meet_greet: 'meet & assist day',
 }
 
-/** A meal's restaurant and how its price applies — the grid charges a
- *  per-person meal per traveller and cannot add a restaurant's minimum, so
- *  the minimum is named for the person picking it. */
-function mealDetails(r: { restaurant_name?: string | null; per_person_rate?: boolean | null; minimum_pax?: number | null }): string {
-  const basis = r.per_person_rate === false
-    ? 'per group'
-    : Number(r.minimum_pax) > 1 ? `per person, minimum ${r.minimum_pax}` : 'per person'
+/** A meal's restaurant and how its price applies (per person or per group). */
+function mealDetails(r: { restaurant_name?: string | null; per_person_rate?: boolean | null }): string {
+  const basis = r.per_person_rate === false ? 'per group' : 'per person'
   return [r.restaurant_name, basis].filter(Boolean).join(' | ')
 }
 

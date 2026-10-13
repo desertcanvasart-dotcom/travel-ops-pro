@@ -82,16 +82,17 @@ describe('pickMealRate and the group cost (#7)', () => {
 
   it('legacy one-row-per-tier columns still price, per person', () => {
     const picked = pickMealRate([{ id: 'x', lunch_rate_eur: 30, dinner_rate_eur: 40 }], { mealType: 'dinner' })
-    expect(picked).toMatchObject({ rate: 40, perPerson: true, minimumPax: 1 })
+    expect(picked).toMatchObject({ rate: 40, perPerson: true })
   })
 
-  it('per group once; per person × party, never below the minimum', () => {
-    expect(mealCostForGroup({ rate: 300, perPerson: false, minimumPax: 1 }, 7)).toBe(300)
-    expect(mealCostForGroup({ rate: 20, perPerson: true, minimumPax: 10 }, 4)).toBe(200)
-    expect(mealCostForGroup({ rate: 20, perPerson: true, minimumPax: 10 }, 12)).toBe(240)
+  it('per group once; per person × the party — a restaurant has no minimum group', () => {
+    expect(mealCostForGroup({ rate: 300, perPerson: false }, 7)).toBe(300)
+    expect(mealCostForGroup({ rate: 20, perPerson: true }, 4)).toBe(80)
+    expect(mealCostForGroup({ rate: 20, perPerson: true }, 12)).toBe(240)
     expect(mealVoucherQuantity({ per_person_rate: false }, 6)).toBe(1)
-    expect(mealVoucherQuantity({ per_person_rate: true, minimum_pax: 8 }, 3)).toBe(8)
-    expect(mealVoucherQuantity({ minimum_pax: null }, 3)).toBe(3)
+    // A stored minimum_pax is never priced.
+    expect(mealVoucherQuantity({ per_person_rate: true, minimum_pax: 8 } as any, 3)).toBe(3)
+    expect(mealVoucherQuantity({}, 3)).toBe(3)
   })
 })
 

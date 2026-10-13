@@ -312,13 +312,13 @@ export default function ToursRatesPage() {
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Meals</h3>
         <p className="text-gray-600 mb-3">
           Fields: Restaurant name, Meal type, Cuisine, Restaurant type, City, Tier, Meal category, Dietary
-          options, Rate, Rate currency, Per Person Rate, Minimum Pax, Season, Valid From, Valid To, Supplier,
+          options, Rate, Rate currency, Per Person Rate, Season, Valid From, Valid To, Supplier,
           Notes, Active and Preferred (the star). Tiles: Total Rates, Active, Linked, Avg. rate, Cities.
         </p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>Automatic pricing prices each lunch or dinner the trip buys at <strong>one</strong> restaurant&apos;s rate of the trip&apos;s tier: the day&apos;s city first, a starred (Preferred) restaurant first, then by restaurant name. It does not average restaurants.</li>
-          <li>With <strong>Per Person Rate</strong> unticked, the rate is one price for the whole group. Ticked, it is per traveller, and a group smaller than <strong>Minimum Pax</strong> still pays for the minimum.</li>
-          <li>A supplier voucher charges a per-group meal once and a per-person meal for the party, at least the minimum. The Pricing Grid charges a per-group meal once, but shows the minimum only as a note.</li>
+          <li>With <strong>Per Person Rate</strong> unticked, the rate is one price for the whole group. Ticked, it is per traveller. A restaurant has no minimum group.</li>
+          <li>A supplier voucher and the Pricing Grid charge a per-group meal once and a per-person meal for the party.</li>
         </ul>
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Attractions</h3>
@@ -360,7 +360,6 @@ export default function ToursRatesPage() {
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>Automatic pricing never uses Extended or Hourly guide rates.</li>
           <li>Pricing does not choose a guide or restaurant supplier for you: with several rates for one city, the fixed order above decides.</li>
-          <li>The Pricing Grid does not add a restaurant&apos;s minimum group; check the note on the option.</li>
           <li>Entrance fees are priced at the fee valid on the trip&apos;s first day, not day by day.</li>
           <li>There is no Egyptian-resident or student price.</li>
         </ul>

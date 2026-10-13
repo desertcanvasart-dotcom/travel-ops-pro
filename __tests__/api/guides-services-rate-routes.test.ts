@@ -139,15 +139,15 @@ describe('an edit runs the money checks (#14)', () => {
 })
 
 describe("a company's first meal keeps every column (#3)", () => {
-  it('rate currency, per group, minimum, category, dietary and preferred are stored', async () => {
+  it('rate currency, per group, category, dietary and preferred are stored', async () => {
     const res = await postMeal(req('/api/rates/meals', {
       restaurant_name: 'Felucca Lunch', meal_type: 'lunch', city: 'Luxor', tier: 'standard',
-      base_rate_eur: 600, rate_currency: 'EGP', per_person_rate: false, minimum_pax: 6,
+      base_rate_eur: 600, rate_currency: 'EGP', per_person_rate: false,
       meal_category: 'buffet', restaurant_type: 'casual_dining', dietary_options: ['vegetarian'], is_preferred: true,
     }))
     expect(res.status).toBe(200)
     expect((await rows('meal_rates'))[0]).toMatchObject({
-      rate_currency: 'EGP', per_person_rate: false, minimum_pax: 6, meal_category: 'buffet',
+      rate_currency: 'EGP', per_person_rate: false, meal_category: 'buffet',
       restaurant_type: 'casual_dining', dietary_options: ['vegetarian'], is_preferred: true, org_id: 'org-1',
     })
   })

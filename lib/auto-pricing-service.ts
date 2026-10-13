@@ -4259,8 +4259,6 @@ export async function calculateDayBasedPricing(
 
   // ----- External Meals (per pax) -----
   let externalMealsPerPax = 0
-  /** Per-person meals with a minimum group (meal_rates.minimum_pax). */
-  const mealMinimums: Array<{ rate: number; minimumPax: number }> = []
 
   const MEAL_LABEL = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' } as const
   const includedMealReason = (day: ItineraryDay, meal: 'breakfast' | 'lunch' | 'dinner'): string => {
@@ -4299,9 +4297,6 @@ export async function calculateDayBasedPricing(
         })
       } else if (picked) {
         externalMealsPerPax += picked.rate
-        // A smaller group still pays the restaurant's minimum: the shortfall
-        // is added per group size in the pax table (mealMinimumsAt below).
-        if (picked.minimumPax > 1) mealMinimums.push({ rate: picked.rate, minimumPax: picked.minimumPax })
         services.push({
           ...line,
           quantity: 1,
@@ -4310,9 +4305,7 @@ export async function calculateDayBasedPricing(
           lineTotal: picked.rate,
           rateSource: 'meal_rates',
           isOptional: false,
-          ...(picked.row.restaurant_name || picked.minimumPax > 1
-            ? { notes: [picked.row.restaurant_name, picked.minimumPax > 1 ? `minimum ${picked.minimumPax} people` : ''].filter(Boolean).join(' — ') }
-            : {}),
+          ...(picked.row.restaurant_name ? { notes: String(picked.row.restaurant_name) } : {}),
         })
       } else {
         // The hole was recorded once per meal type above.
@@ -4620,10 +4613,6 @@ export async function calculateDayBasedPricing(
   /** Per-unit airport / hotel assistance at a group size (migration 20261104). */
   const staffUnitsAt = (pax: number): number =>
     staffUnitLines.reduce((sum, l) => sum + l.rate * unitsFor(pax, l.capacity), 0)
-  /** What a group smaller than a restaurant's minimum still pays: the empty
-   *  seats (lib/pricing/service-rates mealCostForGroup, less the per-person part). */
-  const mealMinimumsAt = (pax: number): number =>
-    mealMinimums.reduce((sum, m) => sum + mealCostForGroup({ ...m, perPerson: true }, pax) - m.rate * Math.max(1, Math.floor(pax) || 1), 0)
 
   const transportAtPax = (pax: number): number => {
     let total = 0
@@ -4667,10 +4656,9 @@ export async function calculateDayBasedPricing(
     // pax+1, the same treatment the tour-leader variant already gets inside
     // priceAcrossPax (both riding = both counted).
     // Per-unit assistance (a room of 2) steps with the group like transport.
-    // So does a restaurant's minimum group (a per-person meal for 10 at 4 pax).
     transportAt: guideMode === 'throughout'
-      ? (pax: number) => transportAtPax(pax + 1) + staffUnitsAt(pax) + mealMinimumsAt(pax)
-      : (pax: number) => transportAtPax(pax) + staffUnitsAt(pax) + mealMinimumsAt(pax),
+      ? (pax: number) => transportAtPax(pax + 1) + staffUnitsAt(pax)
+      : (pax: number) => transportAtPax(pax) + staffUnitsAt(pax),
     // The leader rides the ticket legs at customer fare, like everything else he consumes.
     tourLeaderCost: accommodationPPD + singleSupplement + entranceFeesPerPax + externalMealsPerPax + waterPerPax + ticketsPerPax + staffPerPax,
     accommodationAt,
