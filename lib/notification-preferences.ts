@@ -10,6 +10,10 @@
 // was ever saved. And no send path ever read the preference anyway. So turning
 // email off did nothing, and every owner/admin/manager kept getting flooded.
 //
+// Only what something reads is kept: the in-app switch was saved and never
+// honoured (the bell shows every notification), and task_completed toggled
+// email for a type nothing creates. Both are gone; a stored value is ignored.
+//
 // user_settings already has a per-user `user_id` column (UNIQUE, FK to
 // auth.users) — it was simply never used. Preferences are now keyed on it, and
 // the send path (lib/notifications.ts) consults this module before emailing.
@@ -20,10 +24,8 @@ export interface NotificationPreferences {
   task_assigned: boolean
   task_due_soon: boolean
   task_overdue: boolean
-  task_completed: boolean
   /** Master switch: false = never email this user, whatever the per-type flags. */
   email_enabled: boolean
-  in_app_enabled: boolean
 }
 
 // Matches the column default in migrations/20260829_baseline_schema.sql.
@@ -31,9 +33,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   task_assigned: true,
   task_due_soon: true,
   task_overdue: true,
-  task_completed: false,
   email_enabled: true,
-  in_app_enabled: true,
 }
 
 /** Coerce whatever is stored (possibly partial/legacy) into a full object. */
@@ -47,9 +47,7 @@ export function normalizePreferences(
     task_assigned: bool('task_assigned'),
     task_due_soon: bool('task_due_soon'),
     task_overdue: bool('task_overdue'),
-    task_completed: bool('task_completed'),
     email_enabled: bool('email_enabled'),
-    in_app_enabled: bool('in_app_enabled'),
   }
 }
 
@@ -80,7 +78,7 @@ export async function getNotificationPreferences(
 /**
  * Should we email this user for a notification of `type`?
  *
- * `email_enabled` is the master switch. On top of it, the four task_* types
+ * `email_enabled` is the master switch. On top of it, the three task_* types
  * have their own per-type toggle; every other type (trip/whatsapp/portal
  * change requests, digests) is governed by the master switch alone.
  */

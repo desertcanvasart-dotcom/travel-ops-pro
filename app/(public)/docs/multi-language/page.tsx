@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { Tip } from '../layout'
 
 export default function MultiLanguagePage() {
   return (
@@ -14,65 +14,101 @@ export default function MultiLanguagePage() {
 
       <h1 className="text-3xl font-bold text-gray-900 mb-4">Multi-Language</h1>
       <p className="text-gray-600 mb-8">
-        Autoura is fully bilingual in <strong>English</strong> and <strong>Japanese</strong>. The whole interface switches with one click, and any itinerary can carry a parallel Japanese version of its day-by-day content &mdash; so the same trip is ready to send to an English-speaking partner or a Japanese client without re-typing anything.
+        The app works in <strong>English</strong> and <strong>Japanese</strong>. There are two separate things: the
+        language of the screens you work in, and the language of the content you send to customers and partners
+        (itineraries, quotes, tours). Content can exist in both languages, and the app machine-translates between them
+        on request.
       </p>
 
       {/* Interface Language */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Interface Language</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Screen language</h2>
         <p className="text-gray-600 mb-3">
-          Every label, button, and message in the app is translated. Switch between the two supported locales at any time:
+          Choose <strong>English</strong> or <strong>日本語</strong> with the language selector at the bottom of the
+          sidebar, or in Settings. The page reloads in the new language. The choice is stored in this browser, so each
+          person (and each browser) can work in their own language.
         </p>
-        <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>English (&#127468;&#127463;)</strong> &mdash; The default locale</li>
-          <li><strong>&#26085;&#26412;&#35486; (&#127471;&#127477;)</strong> &mdash; Full Japanese translation of the interface</li>
-        </ul>
-        <p className="text-gray-600 mt-3">
-          Dates, times, and currency follow the locale too &mdash; English shows USD, Japanese shows JPY &mdash; so figures read naturally for each audience.
+        <p className="text-gray-600 mb-3">
+          Changing the screen language does not change the currency. Amounts are always shown in the currency of the
+          trip, quote or company, whichever language you read them in.
         </p>
-        <ScreenshotPlaceholder caption="Language switcher toggling the interface between English and Japanese" />
         <Tip>
-          Interface language decides <em>which language</em> the labels appear in.{' '}
+          Screen language decides <em>which language</em> the labels appear in.{' '}
           <Link href="/docs/vocabulary" className="text-primary-600 hover:underline">Vocabulary</Link>{' '}
-          decides <em>what those labels say</em> &mdash; relabel &ldquo;tour&rdquo; as
-          &ldquo;programme&rdquo;, in English or Japanese, without renaming anything underneath.
+          decides <em>what those labels say</em>.
         </Tip>
       </section>
 
       {/* Itinerary Language Versions */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Itinerary Language Versions</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Itineraries in two languages</h2>
         <p className="text-gray-600 mb-3">
-          Beyond the interface, each itinerary stores its content per language. Every day&rsquo;s title, description, city, and overnight city can exist in both English and Japanese, surfaced through a language tab on the itinerary.
+          An itinerary has a <strong>source language</strong>: the language its days are written in. The app reads it
+          off the text. AI-generated itineraries are written in English, so for them the source is English. The other
+          language is a translation, stored day by day next to the source. Services and prices are shared by every
+          language: changing one changes all of them.
         </p>
-        <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>Auto-populated on generation</strong> &mdash; When you generate an itinerary, its language version is created immediately, so the tab is ready right away</li>
-          <li><strong>Per-day content</strong> &mdash; Titles and descriptions are stored separately for each language</li>
-          <li><strong>Edit independently</strong> &mdash; Refine the Japanese wording without touching the English original</li>
+        <p className="text-gray-600 mb-3">On the itinerary, each target language shows a status:</p>
+        <ul className="list-disc list-inside space-y-1 text-gray-700 mb-3">
+          <li><strong>missing</strong> &mdash; no text in that language yet</li>
+          <li><strong>N/M days</strong> &mdash; only some days have text</li>
+          <li><strong>machine · N unreviewed</strong> &mdash; machine-translated and nobody has checked it</li>
+          <li><strong>N outdated</strong> &mdash; the source text changed after those days were translated</li>
+          <li><strong>reviewed</strong> &mdash; every day was saved by a person</li>
         </ul>
-        <ScreenshotPlaceholder caption="Itinerary editor with English and Japanese language tabs" />
+        <p className="text-gray-600 mb-3">To fill a language:</p>
+        <ul className="list-disc list-inside space-y-2 text-gray-700 mb-3">
+          <li><strong>Translate missing and outdated days</strong> &mdash; the first time, this also translates the trip
+            title, notes, pickup point, guide and vehicle notes, inclusions, exclusions and service names. After that it
+            translates only the days that are missing or outdated, plus service lines added since. An outdated day is
+            replaced even if someone had reviewed it before the source changed.</li>
+          <li><strong>Translate this day</strong> &mdash; one day at a time.</li>
+          <li><strong>Side by side</strong> &mdash; edit the translation next to the source. <strong>Save as reviewed</strong> or
+            <strong> Mark reviewed</strong> records that a person checked it.</li>
+        </ul>
+        <p className="text-gray-600">
+          If the client&apos;s preferred language has no text, or only unreviewed machine text, the itinerary lists it
+          under <strong>Needs attention</strong>. Sending a version that is not the client&apos;s language asks you first.
+        </p>
       </section>
 
-      {/* One-Click Translation */}
+      {/* Quotes & tours */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">One-Click Copy &amp; Translate</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">B2B quotes and tours</h2>
         <p className="text-gray-600 mb-3">
-          You don&rsquo;t have to write both versions by hand. The system detects the language of the generated content and routes it to the right version &mdash; Japanese trips fill the Japanese tab, everything else fills the English tab.
+          A B2B quote and a tour have language tabs. On a tab with no text yet you can choose
+          <strong> Create from scratch</strong> (an empty version you write yourself) or <strong>Copy &amp; Translate</strong>.
         </p>
-        <Tip>
-          Translation happens day by day, preserving structure. The English itinerary and its Japanese counterpart stay aligned, so what your client reads matches what your partner sees.
-        </Tip>
+        <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li>For a quote, Copy &amp; Translate translates the title, notes, terms and special requests. If the other
+            language has no version yet, it translates the quote&apos;s notes and reads their language off the text; if the
+            notes are already in the language you asked for, it says so instead of translating.</li>
+          <li>For a tour, it translates the other language&apos;s version.</li>
+          <li>If a translation fails, a message tells you why and nothing is created.</li>
+        </ul>
       </section>
 
-      {/* Quotes & Documents */}
+      {/* Engine & limits */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Quotes &amp; Documents</h2>
-        <p className="text-gray-600 mb-3">
-          Language carries through to what you send. Quote and itinerary PDFs render Japanese text with proper fonts, and client-facing emails can be sent in the recipient&rsquo;s language.
-        </p>
-        <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>PDF export</strong> &mdash; Japanese-safe fonts so quotes render correctly for Japanese partners</li>
-          <li><strong>Localized emails</strong> &mdash; Itinerary and payment-reminder emails available in English and Japanese</li>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Who can translate, and how</h2>
+        <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li>Translation is done by an OpenAI model on the app&apos;s own OpenAI account. Every translation is a paid model call; if no OpenAI key is configured, translating fails with a message saying so.</li>
+          <li>Only staff (owner, admin, manager, agent) can translate. Viewers cannot.</li>
+          <li>One request translates at most 200 pieces of text and 50,000 characters.</li>
+          <li>The WhatsApp and unified inbox use the same translation to read incoming messages and translate replies.</li>
+        </ul>
+      </section>
+
+      {/* Limits */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
+        <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li>Only English and Japanese. No other content or screen language.</li>
+          <li>It does not generate an itinerary directly in Japanese; generate, then translate.</li>
+          <li>Copy &amp; Translate makes a language once. If that language already exists, it refuses; use
+            <strong> Translate missing and outdated days</strong> on itineraries, or edit the text, instead.</li>
+          <li>It does not translate message templates. Keep separate EN and JA templates.</li>
+          <li>Machine translation is not checked by the app. Read it, then mark it reviewed.</li>
         </ul>
       </section>
     </div>

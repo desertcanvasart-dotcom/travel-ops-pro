@@ -3798,6 +3798,11 @@
       "all": "すべて",
       "en": "EN",
       "ja": "JA"
+    },
+    "errors": {
+      "saveFailed": "テンプレートを保存できませんでした",
+      "deleteFailed": "テンプレートを削除できませんでした",
+      "tryAgain": "問題が発生しました。もう一度お試しください。"
     }
   },
   "settings": {
@@ -4068,7 +4073,10 @@
       "invoice_paid": "支払い",
       "booking_confirmed": "予約",
       "client_created": "新規顧客",
-      "trip_assigned": "旅程が割り当てられました"
+      "trip_assigned": "旅程が割り当てられました",
+      "rate_changed": "料金変更",
+      "order_received": "注文受付",
+      "booking_change_request": "お客様からのご依頼"
     },
     "time": {
       "justNow": "たった今",
@@ -4095,7 +4103,18 @@
       "clearFilters": "フィルターをクリア"
     },
     "deleteConfirm": "この通知を削除しますか？",
-    "showingLatest": "最新100件の通知を表示中"
+    "showingLatest": "最新100件の通知を表示中",
+    "emailPrefs": {
+      "title": "通知のメール受信設定",
+      "help": "通知はすべてこの画面とベルに表示されます。メールでも受け取る通知を選んでください。この設定はあなた個人のもので、所属するすべての会社に適用されます。",
+      "emailEnabled": "通知をメールでも受け取る",
+      "task_assigned": "タスクが割り当てられたとき",
+      "task_due_soon": "タスクの期限が近いとき",
+      "task_overdue": "タスクが期限を過ぎたとき",
+      "save": "保存",
+      "saved": "保存しました",
+      "error": "保存できませんでした。もう一度お試しください。"
+    }
   },
   "validation": {
     "required": "{field}は必須です",
@@ -7105,6 +7124,7 @@
     "notifications": "通知",
     "markAllRead": "すべて既読にする",
     "clearAll": "すべて消去",
+    "clearAllConfirm": "この会社でのあなたの通知をすべて削除しますか？元に戻すことはできません。",
     "noNotificationsYet": "通知はまだありません",
     "deleteNotification": "通知を削除",
     "view": "表示",
@@ -7443,6 +7463,7 @@
     "failedToSave": "コミッションの保存に失敗しました"
   },
   "b2bQuotes": {
+    "versionFailed": "言語版を作成できませんでした",
     "title": "B2B見積",
     "subtitle": "保存された見積を管理",
     "newQuote": "ツアーから見積作成",

@@ -3028,6 +3028,11 @@
       "all": "All",
       "en": "EN",
       "ja": "JA"
+    },
+    "errors": {
+      "saveFailed": "The template was not saved",
+      "deleteFailed": "The template was not deleted",
+      "tryAgain": "Something went wrong. Please try again."
     }
   },
   "settings": {
@@ -3652,9 +3657,23 @@
       "task_overdue": "Task overdue",
       "trip_assigned": "Trip assigned",
       "whatsapp_assigned": "WhatsApp chat assigned",
-      "whatsapp_new_message": "New WhatsApp message"
+      "whatsapp_new_message": "New WhatsApp message",
+      "rate_changed": "Rates changed",
+      "order_received": "Order received",
+      "booking_change_request": "Customer request"
     },
-    "unread": "Unread"
+    "unread": " unread",
+    "emailPrefs": {
+      "title": "Email me about notifications",
+      "help": "Every notification appears here and in the bell. Choose which ones also arrive by email. This is your own setting, for every company you work in.",
+      "emailEnabled": "Send notifications to my email",
+      "task_assigned": "Task assigned to me",
+      "task_due_soon": "My task is due soon",
+      "task_overdue": "My task is overdue",
+      "save": "Save",
+      "saved": "Saved",
+      "error": "Could not save. Please try again."
+    }
   },
   "validation": {
     "required": "{field} is required",
@@ -5644,6 +5663,7 @@
     "notifications": "Notifications",
     "markAllRead": "Mark all read",
     "clearAll": "Clear all",
+    "clearAllConfirm": "Delete all of your notifications in this company? This cannot be undone.",
     "noNotificationsYet": "No notifications yet",
     "deleteNotification": "Delete notification",
     "view": "View",
@@ -6858,6 +6878,7 @@
     }
   },
   "b2bQuotes": {
+    "versionFailed": "The language version was not created",
     "title": "B2B Quotes",
     "subtitle": "Manage saved quotations",
     "newQuote": "New Quote from Tour",

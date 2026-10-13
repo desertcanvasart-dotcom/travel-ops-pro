@@ -60,9 +60,7 @@ export async function PUT(request: NextRequest) {
       task_assigned: Boolean(preferences.task_assigned),
       task_due_soon: Boolean(preferences.task_due_soon),
       task_overdue: Boolean(preferences.task_overdue),
-      task_completed: Boolean(preferences.task_completed),
       email_enabled: Boolean(preferences.email_enabled),
-      in_app_enabled: Boolean(preferences.in_app_enabled),
     }
 
     const { error } = await supabase

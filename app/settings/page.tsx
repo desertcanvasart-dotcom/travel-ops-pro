@@ -75,9 +75,7 @@ interface NotificationPreference {
   task_assigned: boolean
   task_due_soon: boolean
   task_overdue: boolean
-  task_completed: boolean
   email_enabled: boolean
-  in_app_enabled: boolean
 }
 
 interface UserPreferences {
@@ -153,9 +151,7 @@ function SettingsContent() {
     task_assigned: true,
     task_due_soon: true,
     task_overdue: true,
-    task_completed: false,
     email_enabled: true,
-    in_app_enabled: true
   })
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({
     default_tier: 'standard',
@@ -892,25 +888,6 @@ function SettingsContent() {
             <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#647C47]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#647C47]"></div>
           </label>
         </div>
-
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Bell className="w-5 h-5 text-gray-500" />
-            <div>
-              <p className="text-sm font-medium text-gray-700">{t('inAppNotifications')}</p>
-              <p className="text-xs text-gray-500">{t('showInApp')}</p>
-            </div>
-          </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={notificationPrefs.in_app_enabled}
-              onChange={(e) => setNotificationPrefs(prev => ({ ...prev, in_app_enabled: e.target.checked }))}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#647C47]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#647C47]"></div>
-          </label>
-        </div>
       </div>
 
       {/* Notification Types */}
@@ -921,7 +898,6 @@ function SettingsContent() {
           { key: 'task_assigned', labelKey: 'taskAssigned', descKey: 'taskAssignedDesc', icon: '📋' },
           { key: 'task_due_soon', labelKey: 'taskDueSoon', descKey: 'taskDueSoonDesc', icon: '⏰' },
           { key: 'task_overdue', labelKey: 'taskOverdue', descKey: 'taskOverdueDesc', icon: '🚨' },
-          { key: 'task_completed', labelKey: 'taskCompleted', descKey: 'taskCompletedDesc', icon: '✅' },
         ].map(item => (
           <div key={item.key} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
             <div className="flex items-center gap-3">
