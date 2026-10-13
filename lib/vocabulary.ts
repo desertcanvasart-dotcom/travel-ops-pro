@@ -795,16 +795,29 @@ export function tierOptionsFor(
 
 export interface VehicleBand { key: string; min_pax: number; max_pax: number }
 
-/** The smallest vehicle that seats the group; failing that, the smallest
- *  whose maximum covers it; failing that, the largest there is. */
-export function vehicleForPax(vehicles: readonly VehicleBand[], pax: number): string | null {
+/** The vehicle a group rides in, and how many of it.
+ *
+ *  The smallest vehicle that seats the group; failing that, the smallest
+ *  whose maximum covers it — one vehicle either way. A group bigger than
+ *  the largest vehicle is NOT one of it: it used to be, so a 12-person group
+ *  on a row offering a sedan and a 7-seat minivan was priced as one minivan,
+ *  silently. It is now as many of the largest vehicle as it takes to seat
+ *  everyone (12 → 2 minivans), and `count` says so. */
+export function vehicleFleetForPax(vehicles: readonly VehicleBand[], pax: number): { key: string; count: number } | null {
   if (vehicles.length === 0) return null
   const sized = [...vehicles].sort((a, b) => a.max_pax - b.max_pax || a.min_pax - b.min_pax)
   const exact = sized.find(v => pax >= v.min_pax && pax <= v.max_pax)
-  if (exact) return exact.key
+  if (exact) return { key: exact.key, count: 1 }
   const covers = sized.find(v => v.max_pax >= pax)
-  if (covers) return covers.key
-  return sized[sized.length - 1].key
+  if (covers) return { key: covers.key, count: 1 }
+  const largest = sized[sized.length - 1]
+  return { key: largest.key, count: largest.max_pax > 0 ? Math.ceil(pax / largest.max_pax) : 1 }
+}
+
+/** The vehicle kind a group rides in (vehicleFleetForPax without the count —
+ *  for callers that name the vehicle, not price it). */
+export function vehicleForPax(vehicles: readonly VehicleBand[], pax: number): string | null {
+  return vehicleFleetForPax(vehicles, pax)?.key ?? null
 }
 
 /** Which import/CSV columns are vocabulary keys, and of which kind —

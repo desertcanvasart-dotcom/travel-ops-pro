@@ -90,6 +90,9 @@ const WATANIA_SINGLE = {
 beforeEach(() => {
   vi.clearAllMocks()
   setMockTables({
+    // The supplier the rates name is the caller's company's: a train rate's
+    // supplier is checked on every write now (another company's is refused).
+    suppliers: [{ id: ENR, name: 'Egyptian National Railways (ENR)', org_id: 'org-1' }],
     train_rates: [structuredClone(TALGO_QENA)],
     sleeping_train_rates: [structuredClone(WATANIA_SINGLE)],
   })

@@ -6,6 +6,8 @@ import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-suppl
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
+import { OWN_SUPPLIER_EMBED, ownSupplierOnRow } from '@/lib/rates/own-supplier-embed'
+import { rateDeleteBlocked } from '@/lib/rates/rate-delete-guard'
 
 // ============================================
 // TRANSPORTATION RATES API - Single Record
@@ -32,10 +34,7 @@ export async function GET(
 
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
-      .select(`
-        *,
-        supplier:suppliers(id, name, city, contact_phone, contact_email)
-      `)
+      .select(`*, ${OWN_SUPPLIER_EMBED}`)
       .eq('org_id', orgId)
       .eq('id', id)
       .single()
@@ -45,7 +44,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Rate not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data: ownSupplierOnRow(data, orgId) })
   } catch (error: any) {
     console.error('GET transportation_rates/[id] catch error:', error)
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -71,7 +70,7 @@ export async function PUT(
     let resolvedSupplierId: string | null | undefined
     let resolvedSupplierName: string | null | undefined
     if (supplierFieldPresent) {
-      const supplierCheck = await validateAndResolveSupplierFields(body, supabaseAdmin)
+      const supplierCheck = await validateAndResolveSupplierFields(body, supabaseAdmin, orgId)
       if (!supplierCheck.ok) {
         return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
       }
@@ -153,6 +152,10 @@ export async function DELETE(
     if (!orgId) return noOrgResponse()
     const { id } = await params
     if (!(await rowInOrg(supabaseAdmin, 'transportation_rates', id, orgId))) return notFoundInOrg('Rate')
+
+    // In use → refused with what uses it (lib/rates/rate-delete-guard).
+    const blocked = await rateDeleteBlocked(supabaseAdmin, orgId, id)
+    if (blocked) return NextResponse.json({ success: false, error: blocked }, { status: 409 })
 
     const { error } = await supabaseAdmin
       .from('transportation_rates')

@@ -19,18 +19,19 @@ import { useCurrency } from '@/app/contexts/PreferencesContext'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
+import { useAirports } from '@/app/components/AirportOptions'
+import { airportChoices } from '@/lib/rates/airport-choices'
 
 // ============================================
 // CONSTANTS
 // ============================================
 
-const AIRPORTS = [
-  { code: 'CAI', name: 'Cairo International' },
-  { code: 'LXR', name: 'Luxor International' },
-  { code: 'ASW', name: 'Aswan International' },
-  { code: 'HRG', name: 'Hurghada International' },
-  { code: 'SSH', name: 'Sharm El-Sheikh' }
-]
+// The airports are the company's own (Settings → Vocabulary → Airports) —
+// the list pricing reads to find a day's airport code (cityAirportCode), so
+// a rate can be entered for every airport pricing can ask about. It was five
+// fixed Egyptian airports, and pricing told the operator to add a rate here
+// for one this form could not offer. Only airports with an IATA code are
+// listed: the code is what the rate stores and what pricing matches.
 const SERVICE_TYPES = ['meet_greet', 'customs_assist', 'full_service', 'vip_service']
 const DIRECTIONS = ['arrival', 'departure', 'both']
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
@@ -67,9 +68,6 @@ interface Toast {
 // HELPER FUNCTIONS
 // ============================================
 
-function getAirportName(code: string): string {
-  return AIRPORTS.find(a => a.code === code)?.name || code
-}
 
 // ============================================
 // PAGINATION COMPONENT
@@ -210,6 +208,9 @@ export default function AirportServicesPage() {
   const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
 
   const [rates, setRates] = useState<AirportStaffRate[]>([])
+  const { airports } = useAirports()
+  const AIRPORTS = airportChoices(airports, rates.map(r => r.airport_code))
+  const getAirportName = (code: string) => AIRPORTS.find(a => a.code === code)?.name || code
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedAirport, setSelectedAirport] = useState('all')
@@ -225,7 +226,7 @@ export default function AirportServicesPage() {
 
   const [formData, setFormData] = useState({
     service_code: '',
-    airport_code: 'CAI',
+    airport_code: '',
     service_type: 'meet_greet',
     direction: 'arrival' as 'arrival' | 'departure' | 'both',
     rate_eur: '' as number | '',
@@ -286,7 +287,7 @@ export default function AirportServicesPage() {
     setEditingRate(null)
     setFormData({
       service_code: '',
-      airport_code: 'CAI',
+      airport_code: AIRPORTS[0]?.code ?? '',
       service_type: 'meet_greet',
       direction: 'arrival',
       rate_eur: '' as number | '',
@@ -713,9 +714,11 @@ export default function AirportServicesPage() {
                     name="airport_code"
                     value={formData.airport_code}
                     onChange={handleChange}
+                    required
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
                     title={t('form.airport')}
                   >
+                    <option value="" disabled>{t('form.airport')}</option>
                     {AIRPORTS.map(a => (
                       <option key={a.code} value={a.code}>{a.code} - {a.name}</option>
                     ))}

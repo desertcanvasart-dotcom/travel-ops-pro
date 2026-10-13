@@ -45,10 +45,12 @@ import { priceAcrossPax } from '@/lib/pricing/pax-range'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { sortByItineraryFlow } from '@/lib/pricing/breakdown-order'
 import { periodRatesFor, plainPeriodName as seasonNameOf } from '@/lib/rates/rate-seasons'
-import { ticketsValidOn, outOfSeasonMessage, namedOutOfSeasonMessage } from '@/lib/pricing/ticket-validity'
+import { ticketsValidOn, ticketValidOn, outOfSeasonMessage, namedOutOfSeasonMessage } from '@/lib/pricing/ticket-validity'
 import { airportsFrom, airportsForCity, cityAirportCode, type Airport } from '@/lib/rates/airports'
 import { sailsOn, sailingDaysLabel } from '@/lib/rates/cruise-sailing'
 import { seasonsForRow as flightSeasonsForRow } from '@/lib/rates/rate-seasons'
+import { enteredFare, flightGuideFare } from '@/lib/rates/ticket-guide-fare'
+import { pickAirportServiceRow } from '@/lib/pricing/airport-service-pick'
 import { cruiseCandidates, hotelCandidates, propertyById } from '@/lib/pricing/property-candidates'
 import { choicesForTier, sanitizePropertyChoice } from '@/lib/pricing/property-choice'
 import { guideLanguageWord, sameGuideLanguage } from '@/lib/guides/guide-language'
@@ -2258,16 +2260,13 @@ export async function getAirportServiceRate(
       .select('*')
       .eq('org_id', orgId ?? NO_ORG)
       .eq('is_active', true)
-      .eq('airport_code', airportCode)
-      .or(`direction.eq.${direction},direction.eq.both`)
-      .limit(1)
+      .ilike('airport_code', airportCode)
     if (normalizer && rates) rates = await normalizer.normalize('airport_staff_rates', rates) as typeof rates
 
-    if (!rates || rates.length === 0) {
-      return null
-    }
-
-    return usableRate(rates[0].rate_eur)
+    // The same pick the day loop makes (lib/pricing/airport-service-pick) —
+    // `.limit(1)` on an unordered fetch was any row for the airport.
+    const row = pickAirportServiceRow((rates ?? []) as Record<string, unknown>[], airportCode, direction, getTierCategory(tier))
+    return row ? usableRate(row.rate_eur) : null
   } catch (err) {
     return null
   }
@@ -2337,17 +2336,67 @@ async function getItemizedTips(orgId: string | null | undefined, tier: ServiceTi
  * Build transport cache from database
  * Key format: "service_type|city|duration|area" (one entry per service, all vehicle rates in one row)
  */
-export async function buildTransportCache(orgId: string | null | undefined, normalizer?: RateNormalizer): Promise<Map<string, TransportRate>> {
+export async function buildTransportCache(
+  orgId: string | null | undefined,
+  normalizer?: RateNormalizer,
+  /** The day being priced: rows whose validity excludes it are left out. */
+  onDate?: string | null
+): Promise<Map<string, TransportRate>> {
+  return transportCacheFromRows(await fetchTransportRows(orgId, normalizer), onDate)
+}
+
+/** The company's active transportation rates, currency-normalized. */
+export async function fetchTransportRows(orgId: string | null | undefined, normalizer?: RateNormalizer): Promise<TransportRate[]> {
   let { data: allRates } = await supabaseAdmin
     .from('transportation_rates')
     .select('*')
     .eq('org_id', orgId ?? NO_ORG)
     .eq('is_active', true)
   if (normalizer && allRates) allRates = await normalizer.normalize('transportation_rates', allRates) as typeof allRates
+  return (allRates ?? []) as TransportRate[]
+}
 
+/**
+ * The order rows compete in for one lookup key — FIXED, so the same trip
+ * prices the same way on every run.
+ *
+ * Two rows can answer one key: a route quoted by two suppliers, or next
+ * year's price entered beside this year's. The cache used to keep whichever
+ * row the unordered fetch returned last, so the price changed between runs,
+ * and an expired rate priced like a current one.
+ *
+ *   1. A row whose validity window (rate_valid_from/to) excludes the day is
+ *      not a candidate at all (an absent edge does not exclude — see
+ *      lib/pricing/ticket-validity). With no day in hand, a row valid today
+ *      goes before one that is not.
+ *   2. The most recently started window first: next year's contract, once
+ *      it applies, wins over the open-ended row it replaces.
+ *   3. Then service_code, then id — arbitrary but stable.
+ */
+export function orderTransportRows<T extends Record<string, any>>(rows: readonly T[], onDate?: string | null): T[] {
+  const day = onDate ? String(onDate).slice(0, 10) : null
+  const today = new Date().toISOString().slice(0, 10)
+  const candidates = day ? rows.filter(r => ticketValidOn(r, day)) : [...rows]
+  const from = (r: T) => String(r.rate_valid_from ?? '').slice(0, 10)
+  return candidates.sort((a, b) => {
+    if (!day) {
+      const av = ticketValidOn(a, today) ? 0 : 1
+      const bv = ticketValidOn(b, today) ? 0 : 1
+      if (av !== bv) return av - bv
+    }
+    if (from(a) !== from(b)) return from(a) < from(b) ? 1 : -1
+    const ac = String(a.service_code ?? '').toLowerCase()
+    const bc = String(b.service_code ?? '').toLowerCase()
+    if (ac !== bc) return ac < bc ? -1 : 1
+    return String(a.id ?? '') < String(b.id ?? '') ? -1 : String(a.id ?? '') > String(b.id ?? '') ? 1 : 0
+  })
+}
+
+/** The lookup cache over rows already fetched — see buildTransportCache.
+ *  Every key keeps the FIRST row in orderTransportRows' order. */
+export function transportCacheFromRows(rows: readonly TransportRate[], onDate?: string | null): Map<string, TransportRate> {
   const cache = new Map<string, TransportRate>()
-
-  if (!allRates) return cache
+  const allRates = orderTransportRows(rows as Array<TransportRate & Record<string, any>>, onDate)
 
   for (const rate of allRates) {
     // Use origin_city as fallback for city (some records use origin_city instead)
@@ -2361,7 +2410,7 @@ export async function buildTransportCache(orgId: string | null | undefined, norm
       rate.area || ''
     ].join('|')
 
-    cache.set(baseKey, rate)
+    if (!cache.has(baseKey)) cache.set(baseKey, rate)
 
     // Also cache without area for fallback
     const keyNoArea = [
@@ -2397,7 +2446,7 @@ export async function buildTransportCache(orgId: string | null | undefined, norm
         (rate.origin_city || '').toLowerCase(),
         (rate.destination_city || '').toLowerCase()
       ].join('|')
-      cache.set(intercityKey, rate)
+      if (!cache.has(intercityKey)) cache.set(intercityKey, rate)
     }
 
     // Road transfers by ROUTE and SHAPE — the only way they are found
@@ -2409,12 +2458,12 @@ export async function buildTransportCache(orgId: string | null | undefined, norm
     }
 
     // Also cache by service_code for direct lookups
-    if (rate.service_code) {
+    if (rate.service_code && !cache.has(`code:${rate.service_code.toLowerCase()}`)) {
       cache.set(`code:${rate.service_code.toLowerCase()}`, rate)
     }
   }
 
-  debugLog(`📦 Built transport cache with ${cache.size} entries from ${allRates.length} DB records`)
+  debugLog(`📦 Built transport cache with ${cache.size} entries from ${allRates.length} rows valid${onDate ? ` on ${onDate}` : ''}`)
   // Log cache keys for debugging
   const keys = Array.from(cache.keys()).filter(k => !k.startsWith('code:')).slice(0, 20)
   debugLog('📦 Sample cache keys:', keys)
@@ -2592,7 +2641,8 @@ export function findCruiseTransportRule(
  * Select the vehicle + rate from a cruise transport package by group size —
  * the SAME rule as a transportation rate (lib/rates/vehicle-bands
  * vehicleRateForPax: the vehicle whose vocabulary size the group falls in,
- * else the smallest that covers it, else the largest offered). A package that
+ * else the smallest that covers it, else as many of the largest as seat the
+ * group). A package that
  * offers no vehicle answers rate 0, which pricing treats as No rate.
  */
 export function getCruiseTransportRate(
@@ -2600,7 +2650,9 @@ export function getCruiseTransportRate(
   numPax: number
 ): { vehicleType: string; rate: number } {
   const band = vehicleRateForPax(pkg as unknown as Record<string, unknown>, numPax)
-  return band ? { vehicleType: vehicleKeyLabel(band.key), rate: band.rate_eur } : { vehicleType: 'Vehicle', rate: 0 }
+  // A group bigger than every vehicle rides in several of the largest; the
+  // rate is already the whole fleet's.
+  return band ? { vehicleType: band.count > 1 ? `${band.count} × ${vehicleKeyLabel(band.key)}` : vehicleKeyLabel(band.key), rate: band.rate_eur } : { vehicleType: 'Vehicle', rate: 0 }
 }
 
 /**
@@ -2832,7 +2884,7 @@ export async function calculateDayBasedPricing(
   const ticketLegs = collectTicketLegs(itinerary)
 
   const [
-    transportCache,
+    transportRows,
     cruiseTransportPricingRules,
     cruiseStay,
     hotelStays,
@@ -2847,7 +2899,7 @@ export async function calculateDayBasedPricing(
     hotelStaffRows,
     attractionAliases,
   ] = await Promise.all([
-    buildTransportCache(orgId, rateNormalizer),
+    fetchTransportRows(orgId, rateNormalizer),
     // Fetch cruise transport packages from b2b_transport_packages
     fetchCruiseTransportPricingRules(params.orgId, rateNormalizer),
     // Cruise rates only apply when the itinerary has cruise nights
@@ -2941,7 +2993,8 @@ export async function calculateDayBasedPricing(
 
   // In-memory resolvers that replicate getAirportServiceRate/getHotelServiceRate
   // EXACTLY (same filters incl. direction/category "both"/"all" fallbacks, same
-  // first-matching-row-in-fetch-order semantics, same rate>0-else-null result).
+  // rate>0-else-null result). Airport rows are picked by service type and a
+  // fixed order (lib/pricing/airport-service-pick); hotel rows by fetch order.
   // The exported helpers remain for other callers.
   // `rowExists` separates "nobody has entered this service" from "the row is
   // there with a blank or zero price". Both block a definite price, but only
@@ -2956,11 +3009,9 @@ export async function calculateDayBasedPricing(
     airportCode: string,
     direction: 'arrival' | 'departure'
   ): { rate: number | null; rowExists: boolean; basis: PricingBasis; capacity: number | null } => {
-    const row = airportStaffRows.find(
-      (r: any) =>
-        r.airport_code === airportCode &&
-        (r.direction === direction || r.direction === 'both')
-    )
+    // By service type for the tier, then a fixed order (lib/pricing/airport-service-pick):
+    // the first row in fetch order could be the VIP row on a standard trip.
+    const row: any = pickAirportServiceRow(airportStaffRows as any[], airportCode, direction, getTierCategory(tier))
     if (!row) return { rate: null, rowExists: false, basis: 'flat', capacity: null }
     return { rate: usableRate(row.rate_eur), rowExists: true, ...basisOf(row) }
   }
@@ -3788,17 +3839,23 @@ export async function calculateDayBasedPricing(
    * NO default — a date outside every period has no fare, it does not quietly
    * take the first one.
    */
-  const flightRatesOn = (r: Record<string, any>, on: string | null): { rates: Record<string, number> | null; outside: boolean } => {
+  const flightRatesOn = (r: Record<string, any>, on: string | null): { rates: Record<string, number> | null; outside: boolean; season: { from: string; to: string } | null } => {
     const period = periodRatesFor(r, 'flight', on)
     // No periods at all: a row from before they existed. Its own columns are
     // the fare, which is what the engine has always read.
-    if (!period) return { rates: r as Record<string, number>, outside: false }
-    return period.outside ? { rates: null, outside: true } : { rates: period.rates, outside: false }
+    if (!period) return { rates: r as Record<string, number>, outside: false, season: null }
+    return period.outside ? { rates: null, outside: true, season: null } : { rates: period.rates, outside: false, season: period.season }
   }
 
-  const fareFrom = (rates: Record<string, number>): number =>
-    (isEurPassport ? money(rates.base_rate_eur) : money(rates.base_rate_non_eur) || money(rates.base_rate_eur)) +
-    (isEurPassport ? money(rates.tax_eur) : money(rates.tax_non_eur) || money(rates.tax_eur))
+  /** The fare + tax per person, or null when the period has no fare. A blank
+   *  fare is stored as 0 (lib/rates/rate-seasons) and is an unpriced HOLE —
+   *  it used to go through money(), so a leg dated in a period nobody priced
+   *  cost the tax alone, or nothing. */
+  const fareFrom = (rates: Record<string, number>): number | null => {
+    const base = isEurPassport ? usableRate(rates.base_rate_eur) : usableRate(rates.base_rate_non_eur) ?? usableRate(rates.base_rate_eur)
+    if (base == null) return null
+    return base + (isEurPassport ? money(rates.tax_eur) : money(rates.tax_non_eur) || money(rates.tax_eur))
+  }
 
   for (const leg of ticketLegs) {
     const routeLabel = `${leg.from} → ${leg.to}`
@@ -3841,8 +3898,19 @@ export async function calculateDayBasedPricing(
           : [p.row]
       })
       const pick = resolveTicketRow(candidates, leg.rateId)
-      if (pick.row) {
-        const fare = fareFrom(flightRatesOn(pick.row, legDate).rates!)
+      const picked = pick.row ? flightRatesOn(pick.row, legDate) : null
+      const pickedFare = picked?.rates ? fareFrom(picked.rates) : null
+      if (pick.row && pickedFare == null) {
+        // The fare is on file but its period carries no price — a hole the
+        // operator fixes in that fare's period, not by adding a new fare.
+        listUnpriced({ id: `day${leg.day}-ticket-flight`, dayNumber: leg.day, serviceType: 'flight', serviceName: `${flightLabel(fromAirports[0], toAirports[0])} ${routeLabel}`, isPerPax: true }, {
+          kind: 'transport', reason: 'unpriced',
+          dayNumber: leg.day, city: leg.to,
+          lookupAttempted: `flight_rates ${routeLabel} economy${legDate ? ` on ${legDate}` : ''} id=${pick.row.id}`,
+          message: `The ${pick.row.airline ? `${pick.row.airline} ` : ''}fare for ${routeLabel} has no price in the period covering ${legDate ?? 'this trip'}. Enter it in Rates → Flights.`,
+        })
+      } else if (pick.row && picked?.rates && pickedFare != null) {
+        const fare = pickedFare
         ticketsPerPax += fare
         services.push({
           id: `day${leg.day}-ticket-flight`, dayNumber: leg.day, serviceType: 'flight',
@@ -3854,15 +3922,18 @@ export async function calculateDayBasedPricing(
           notes: money(pick.row.tax_eur) > 0 ? 'Fare incl. tax, per person' : 'Per person',
         })
         if (guideMode === 'throughout') {
-          const periodRates = flightRatesOn(pick.row, legDate).rates!
-          const gFare = periodRates.guide_rate != null ? money(periodRates.guide_rate) : fareFrom(periodRates)
+          // The guide's fare as STORED for this period (lib/rates/ticket-guide-fare):
+          // blank = he pays the customer fare, 0 = he rides free. The period
+          // reader turns a blank into 0, which flew him free on every fare.
+          const guideFare = flightGuideFare(pick.row, picked.season)
+          const gFare = guideFare ?? fare
           fixedCosts += gFare
           services.push({
             id: `day${leg.day}-guide-ticket`, dayNumber: leg.day, serviceType: 'flight',
             serviceName: `Throughout Guide — flight ${routeLabel}`,
             quantity: 1, quantityMode: 'fixed', unitCost: gFare, lineTotal: gFare,
             rateSource: 'flight_rates', isPerPax: false, isOptional: false,
-            notes: periodRates.guide_rate != null ? 'Guide fare' : 'Customer fare (no guide fare entered)',
+            notes: guideFare != null ? 'Guide fare' : 'Customer fare (no guide fare entered)',
           })
         }
       } else {
@@ -3898,8 +3969,17 @@ export async function calculateDayBasedPricing(
         cityKey(r.origin_city) === cityKey(leg.from) && cityKey(r.destination_city) === cityKey(leg.to))
       const { valid: candidates, expired } = ticketsValidOn(onRoute, legDate)
       const pick = resolveTicketRow(candidates, leg.rateId)
-      if (pick.row) {
-        const fare = money(pick.row.rate_eur)
+      // A blank or zero fare is an unpriced hole, never a free ticket.
+      const trainFare = pick.row ? usableRate(pick.row.rate_eur) : null
+      if (pick.row && trainFare == null) {
+        listUnpriced({ id: `day${leg.day}-ticket-train`, dayNumber: leg.day, serviceType: 'transportation', serviceName: `Train ${routeLabel}`, isPerPax: true }, {
+          kind: 'transport', reason: 'unpriced',
+          dayNumber: leg.day, city: leg.to,
+          lookupAttempted: `train_rates ${routeLabel}${legDate ? ` on ${legDate}` : ''} id=${pick.row.id}`,
+          message: `The train rate for ${routeLabel}${pick.row.class_type ? ` (${pick.row.class_type})` : ''} has no price. Open it in Rates → Trains and set one.`,
+        })
+      } else if (pick.row && trainFare != null) {
+        const fare = trainFare
         ticketsPerPax += fare
         services.push({
           id: `day${leg.day}-ticket-train`, dayNumber: leg.day, serviceType: 'transportation',
@@ -3909,14 +3989,16 @@ export async function calculateDayBasedPricing(
           notes: pick.row.operator_name ? `Per person — ${pick.row.operator_name}` : 'Per person',
         })
         if (guideMode === 'throughout') {
-          const gFare = pick.row.guide_rate != null ? money(pick.row.guide_rate) : fare
+          // Blank ('' or null) = the customer fare; only a stored number is a guide fare.
+          const guideFare = enteredFare(pick.row.guide_rate)
+          const gFare = guideFare ?? fare
           fixedCosts += gFare
           services.push({
             id: `day${leg.day}-guide-ticket`, dayNumber: leg.day, serviceType: 'transportation',
             serviceName: `Throughout Guide — train ${routeLabel}`,
             quantity: 1, quantityMode: 'fixed', unitCost: gFare, lineTotal: gFare,
             rateSource: 'train_rates', isPerPax: false, isOptional: false,
-            notes: pick.row.guide_rate != null ? 'Guide fare' : 'Customer fare (no guide fare entered)',
+            notes: guideFare != null ? 'Guide fare' : 'Customer fare (no guide fare entered)',
           })
         }
       } else {
@@ -4267,6 +4349,21 @@ export async function calculateDayBasedPricing(
   const baseVehicleType = getVehicleTypeByPax(2)
   let baseTransportCost = 0
 
+  // Transport is looked up per DAY, among the rows valid on that day
+  // (orderTransportRows): a rate whose validity window has ended does not
+  // price, and next year's rate takes over on the day it starts.
+  const transportCaches = new Map<string, Map<string, TransportRate>>()
+  const transportCacheFor = (dayNumber: number): Map<string, TransportRate> => {
+    const on = dateForDay(dayNumber)
+    const key = on ?? ''
+    let cache = transportCaches.get(key)
+    if (!cache) {
+      cache = transportCacheFromRows(transportRows, on)
+      transportCaches.set(key, cache)
+    }
+    return cache
+  }
+
   for (const info of transportInfoByDay) {
     if (!info.requiresTransport) continue
 
@@ -4286,7 +4383,7 @@ export async function calculateDayBasedPricing(
     }
 
     // Find transport rate (resolves vehicle tier for 2 pax base)
-    const rate = findTransportRate(transportCache, {
+    const rate = findTransportRate(transportCacheFor(info.day), {
       serviceType: needs.serviceType,
       city: info.city,
       duration: needs.duration,
@@ -4426,7 +4523,7 @@ export async function calculateDayBasedPricing(
     for (const info of transportInfoByDay) {
       if (!info.requiresTransport) continue
       const { needs } = info
-      const rate = findTransportRate(transportCache, {
+      const rate = findTransportRate(transportCacheFor(info.day), {
         serviceType: needs.serviceType,
         city: info.city,
         duration: needs.duration,

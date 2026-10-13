@@ -10,6 +10,8 @@ import { PRESET_VEHICLE_KEYS, bodyTouchesVehicles } from '@/lib/rates/vehicle-ba
 import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
 import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { OWN_SUPPLIER_EMBED, ownSupplierOnRows } from '@/lib/rates/own-supplier-embed'
+import { rateDeleteBlocked } from '@/lib/rates/rate-delete-guard'
 
 // ============================================
 // TRANSPORTATION RATES API - Full CRUD
@@ -92,10 +94,8 @@ export async function GET(request: NextRequest) {
 
     let query = supabaseAdmin
       .from('transportation_rates')
-      .select(`
-        *,
-        supplier:suppliers(id, name, city, contact_phone, contact_email)
-      `)
+      // The supplier only when it is this company's (lib/rates/own-supplier-embed).
+      .select(`*, ${OWN_SUPPLIER_EMBED}`)
       .eq('org_id', orgId)
       .order('city')
       .order('service_type')
@@ -123,7 +123,7 @@ export async function GET(request: NextRequest) {
     // Also return enum options for UI dropdowns
     return NextResponse.json({
       success: true,
-      data: data || [],
+      data: ownSupplierOnRows(data, orgId),
       options: {
         serviceTypes: SERVICE_TYPES,
         durations: DURATIONS,
@@ -332,6 +332,17 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    // A supplier in the patch must be this company's ('__none__' = none):
+    // the raw spread stored any id, another company's included.
+    if ('supplier_id' in rawUpdates || 'supplier_name' in rawUpdates) {
+      const supplierCheck = await validateAndResolveSupplierFields(rawUpdates, supabaseAdmin, orgId)
+      if (!supplierCheck.ok) {
+        return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+      }
+      updates.supplier_id = supplierCheck.supplier_id
+      updates.supplier_name = supplierCheck.supplier_name
+    }
+
     // Regenerate route_name if relevant fields changed
     if (updates.city || updates.service_type || updates.duration || updates.area) {
       const { data: current } = await supabaseAdmin
@@ -379,6 +390,13 @@ export async function DELETE(request: NextRequest) {
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
+    }
+
+    // In use → refused with what uses it (lib/rates/rate-delete-guard).
+    const { data: own } = await supabaseAdmin.from('transportation_rates').select('id').eq('org_id', orgId).eq('id', id).maybeSingle()
+    if (own) {
+      const blocked = await rateDeleteBlocked(supabaseAdmin, orgId, id)
+      if (blocked) return NextResponse.json({ success: false, error: blocked }, { status: 409 })
     }
 
     const { error } = await supabaseAdmin

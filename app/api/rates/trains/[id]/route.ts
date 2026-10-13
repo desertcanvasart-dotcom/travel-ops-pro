@@ -5,6 +5,10 @@ import { clientMessage } from '@/lib/api-errors'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
+import { validateRatePayload } from '@/lib/rate-validation'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
+import { enteredFare } from '@/lib/rates/ticket-guide-fare'
+import { rateDeleteBlocked } from '@/lib/rates/rate-delete-guard'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
@@ -49,6 +53,23 @@ export async function PUT(
     if (!(await rowInOrg(supabaseAdmin, 'train_rates', id, orgId))) return notFoundInOrg('Rate')
     const body = await request.json()
 
+    // The edit is held to what the create is held to: a negative fare or
+    // guide fare was stored as sent.
+    const rateCheck = validateRatePayload(body)
+    if (!rateCheck.ok) {
+      return NextResponse.json({ error: 'Invalid rate values', violations: rateCheck.errors }, { status: 400 })
+    }
+
+    // The operator must be one of this company's suppliers ('__none__' = none).
+    let supplierId: string | null | undefined
+    if (body.supplier_id !== undefined) {
+      const supplierCheck = await validateAndResolveSupplierFields({ supplier_id: body.supplier_id }, supabaseAdmin, orgId)
+      if (!supplierCheck.ok) {
+        return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+      }
+      supplierId = supplierCheck.supplier_id
+    }
+
     const updateData: Record<string, any> = {}
 
     if (body.service_code !== undefined) updateData.service_code = body.service_code
@@ -56,7 +77,8 @@ export async function PUT(
     if (body.origin_city !== undefined) updateData.origin_city = body.origin_city || null
     if (body.destination_city !== undefined) updateData.destination_city = body.destination_city || null
     if (body.class_type !== undefined) updateData.class_type = body.class_type || null
-    if (body.rate_eur !== undefined) updateData.rate_eur = parseFloat(body.rate_eur) || 0
+    // Blank is "not priced yet" (NULL), never 0 — see the POST route.
+    if (body.rate_eur !== undefined) updateData.rate_eur = enteredFare(body.rate_eur)
     // Throughout-guide fare: blank clears back to NULL = pays the customer rate.
     if (body.guide_rate !== undefined) updateData.guide_rate = body.guide_rate === '' || body.guide_rate === null ? null : parseFloat(body.guide_rate)
     if (body.duration_hours !== undefined) updateData.duration_hours = body.duration_hours ? parseFloat(body.duration_hours) : null
@@ -69,15 +91,15 @@ export async function PUT(
     if (body.supplier_id !== undefined || body.operator_name !== undefined) {
       updateData.operator_name = await operatorNameForSupplier(
         supabaseAdmin,
-        body.supplier_id,
+        supplierId === undefined ? body.supplier_id : supplierId,
         body.operator_name
       )
     }
-    if (body.supplier_id !== undefined) updateData.supplier_id = body.supplier_id || null
+    if (supplierId !== undefined) updateData.supplier_id = supplierId
     if (body.property_id !== undefined) {
       const trainProp = await resolveRateProperty(supabaseAdmin, {
         propertyType: 'train',
-        supplierId: body.supplier_id || null,
+        supplierId: supplierId ?? null,
         name: null,
         propertyId: body.property_id,
       })
@@ -118,6 +140,10 @@ export async function DELETE(
     if (!orgId) return noOrgResponse()
     const { id } = await params
     if (!(await rowInOrg(supabaseAdmin, 'train_rates', id, orgId))) return notFoundInOrg('Rate')
+
+    // In use → refused with what uses it (lib/rates/rate-delete-guard).
+    const blocked = await rateDeleteBlocked(supabaseAdmin, orgId, id)
+    if (blocked) return NextResponse.json({ success: false, error: blocked }, { status: 409 })
 
     const { error } = await supabaseAdmin
       .from('train_rates')

@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import AirportOptions, { useAirports } from '@/app/components/AirportOptions'
 import RateSeasonsEditor from '@/components/rates/RateSeasonsEditor'
 import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
+import { flightGuideFare } from '@/lib/rates/ticket-guide-fare'
 import { useDestinationCities } from '@/app/components/useDestinationCities'
 import { flightTypeForRoute } from '@/lib/rates/flight-type'
 import { firstInvalidMessage } from '@/lib/form-guard'
@@ -243,7 +244,10 @@ export default function FlightsContent() {
       if (flightTypeFilter) params.append('flight_type', flightTypeFilter)
       if (cabinClassFilter) params.append('cabin_class', cabinClassFilter)
       if (supplierFilter) params.append('supplier_id', supplierFilter)
-      if (!showInactive) params.append('active_only', 'true')
+      // The API defaults to active fares only, so "Show Inactive" must say
+      // false — omitting it loaded active fares either way, and a deactivated
+      // fare could never be found again to reactivate.
+      params.append('active_only', showInactive ? 'false' : 'true')
       
       const response = await fetch(`/api/rates/flights?${params}`)
       if (response.ok) {
@@ -390,7 +394,16 @@ export default function FlightsContent() {
       season: rate.season || '',
       rate_currency: rate.rate_currency || '',
       rate_valid_from: rate.rate_valid_from,
-      seasons: seasonsForRow(rate, 'flight'),
+      // A guide fare nobody entered reads back as 0 from the period reader;
+      // the box must show it blank, or the next save stores a free seat
+      // (lib/rates/ticket-guide-fare).
+      seasons: seasonsForRow(rate, 'flight').map(p => {
+        const guide = flightGuideFare(rate as unknown as Record<string, unknown>, p)
+        const rates = { ...p.rates }
+        if (guide == null) delete rates.guide_rate
+        else rates.guide_rate = guide
+        return { ...p, rates }
+      }),
       rate_valid_to: rate.rate_valid_to,
       // A rate saved before the airline was a supplier has a name and no
       // link: point it at the carrier of that name, if one is on file now.
@@ -520,7 +533,9 @@ export default function FlightsContent() {
         fetchRates()
         await dialog.alert('Deleted', 'Flight rate has been deleted.', 'success')
       } else {
-        await dialog.alert('Error', 'Failed to delete flight rate. Please try again.', 'warning')
+        // A fare a trip, programme or rule uses is refused with what uses it.
+        const result = await response.json().catch(() => ({}))
+        await dialog.alert('Error', result.error || 'Failed to delete flight rate. Please try again.', 'warning')
       }
     } catch (error) {
       console.error('Error deleting flight rate:', error)

@@ -834,7 +834,7 @@ export async function POST(request: NextRequest) {
     // Day-tour vehicle rates come from transportation_rates (the operator's
     // catalog with their own capacity bands) — NOT the `vehicles` fleet list,
     // which has no rates and priced these lines at 0. Cache built once per request.
-    const findDayTourVehicle = makeDayTourVehicleFinder(orgId)
+    const findDayTourVehicle = makeDayTourVehicleFinder(orgId, rateCurrency)
     // Read once, and only when a line asks for a transport package.
     let sailing: Promise<{ durationDays: number; route: string[] }> | null = null
     const legacyCruise = () => (sailing ??= legacySailing(orgId, templateId, template?.duration_days || 1))

@@ -4466,7 +4466,8 @@
         "trainPickSupplier": "Pick a supplier above to choose one of its trains",
         "trainNone": "No trains recorded for this operator yet — add them on the supplier's Properties tab",
         "operatorFromSupplier": "Set from the supplier above",
-        "operatorNotRecorded": "Not a recorded supplier — pick one above to link this rate to its fleet"
+        "operatorNotRecorded": "Not a recorded supplier — pick one above to link this rate to its fleet",
+        "rateRequired": "Enter the rate per person — more than 0. A rate of 0 would price the ticket free."
       },
       "deleteModal": {
         "title": "Delete Train Rate?",
