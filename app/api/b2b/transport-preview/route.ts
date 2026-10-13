@@ -8,8 +8,9 @@
 // So what the editor shows is what Calculate Price will charge; there is no
 // second copy of the rules to drift.
 //
-// Body: { days: <editor days>, template_id?: string, num_pax?: number,
-//         guide_mode?: 'spot'|'throughout', tour_leader_included?: boolean }
+// Body: { days: <editor days>, template_id?: string, tour_type?: string,
+//         num_pax?: number, guide_mode?: 'spot'|'throughout',
+//         tour_leader_included?: boolean, tier?: string }
 
 import { planRoadTrips, type TripShape } from '@/lib/pricing/road-trips'
 import { choicesForTier } from '@/lib/pricing/property-choice'
@@ -62,6 +63,13 @@ export interface PreviewDay {
 
 const SINGLE_DAY_TOUR_TYPES = ['day_tour', 'half_day', 'stopover']
 
+/** The package the engine prices a template of this tour_type as
+ *  (lib/auto-pricing-service, effectivePackageType): a day tour, half day or
+ *  stopover is a day trip — no airport transfers, no hotel night. */
+export function packageTypeForTourType(tourType: unknown): string | undefined {
+  return SINGLE_DAY_TOUR_TYPES.includes(String(tourType ?? '')) ? 'day-trips' : undefined
+}
+
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null)
   const rawDays: unknown[] = Array.isArray(body?.days) ? body.days : []
@@ -83,10 +91,17 @@ export async function POST(request: NextRequest) {
     const currency = await getOrgRateCurrency(db, orgId)
 
     // Same package reading the engine does from the template's tour_type.
+    // The tour_type in the body wins: it is the one on screen (Tour Manager
+    // sends it always — a new template has no id yet, and an edited one may
+    // have just been switched to a day tour). Without it a one-day template
+    // previewed as a full package: two airport transfers Calculate Price
+    // never charges.
     let packageType: string | undefined
-    if (typeof body?.template_id === 'string' && body.template_id) {
+    if (typeof body?.tour_type === 'string' && body.tour_type) {
+      packageType = packageTypeForTourType(body.tour_type)
+    } else if (typeof body?.template_id === 'string' && body.template_id) {
       const { data } = await db.from('tour_templates').select('tour_type').eq('id', body.template_id).eq('org_id', orgId).maybeSingle()
-      if (SINGLE_DAY_TOUR_TYPES.includes(String(data?.tour_type ?? ''))) packageType = 'day-trips'
+      packageType = packageTypeForTourType(data?.tour_type)
     }
 
     const itinerary = parseItinerary(rawDays, { packageType })
