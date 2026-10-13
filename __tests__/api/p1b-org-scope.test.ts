@@ -17,7 +17,8 @@ const read = (f: string) =>
 const ROUTES = [
   'app/api/b2b/partners/route.ts',
   'app/api/b2b/partners/[id]/route.ts',
-  'app/api/b2b/pricing-rules/route.ts',
+  // app/api/b2b/pricing-rules was removed (Tours audit, 2026-10): nothing
+  // called it and the engine no longer reads b2b_pricing_rules.
   'app/api/b2b/transport-packages/route.ts',
   'app/api/b2b/transport-packages/[id]/route.ts',
 ]
@@ -31,7 +32,6 @@ describe('P1b routes are org-scoped', () => {
 
   const INSERTERS: Array<[string, string]> = [
     ['app/api/b2b/partners/route.ts', 'b2b_partners'],
-    ['app/api/b2b/pricing-rules/route.ts', 'b2b_pricing_rules'],
     ['app/api/b2b/transport-packages/route.ts', 'b2b_transport_packages'],
   ]
   it.each(INSERTERS)('%s stamps org_id on insert (NOT NULL → 23502 otherwise)', (file, table) => {

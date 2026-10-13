@@ -10,8 +10,9 @@ import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
 import { getOrgDefaultMargin } from '@/lib/org-default-margin'
-import { quoteMarginPercent } from '@/lib/b2b/partner-margin'
+import { quoteMarginPercent, partnerOverrideOn } from '@/lib/b2b/partner-margin'
 import { belowMinPaxMessage } from '@/lib/tours/min-pax'
+import { pickPackage, firstSailing } from '@/lib/pricing/cruise-package'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
 import { parseOptionalSelection, isOptionalSelected } from '@/lib/b2b/optional-selection'
@@ -142,9 +143,10 @@ interface PriceCalculationResult {
 }
 
 // The partner's own margins: its default, and its override for this
-// variation (an active b2b_partner_pricing row). The caller has checked the
-// partner is this org's.
-async function loadPartnerMargins(orgId: string, partnerId: string, variationId: string | null | undefined) {
+// variation (an active b2b_partner_pricing row valid on the travel date — its
+// valid_from/valid_to were never read, so an expired override still priced).
+// The caller has checked the partner is this org's.
+async function loadPartnerMargins(orgId: string, partnerId: string, variationId: string | null | undefined, travelDate: string) {
   const { data: partner } = await supabaseAdmin
     .from('b2b_partners')
     .select('default_margin_percent')
@@ -155,13 +157,11 @@ async function loadPartnerMargins(orgId: string, partnerId: string, variationId:
   if (variationId) {
     const { data } = await supabaseAdmin
       .from('b2b_partner_pricing')
-      .select('margin_percent_override')
+      .select('id, margin_percent_override, valid_from, valid_to')
       .eq('partner_id', partnerId)
       .eq('variation_id', variationId)
       .eq('is_active', true)
-      .limit(1)
-      .maybeSingle()
-    override = data?.margin_percent_override ?? null
+    override = partnerOverrideOn(data ?? [], travelDate)?.margin_percent_override ?? null
   }
   return { default: partner?.default_margin_percent ?? null, override }
 }
@@ -260,20 +260,42 @@ function foldExtras(
 // Get transport package for cruise sightseeing (kept for package deals) —
 // the org's own (b2b_transport_packages.org_id): this priced with whichever
 // company's package came first. No org, no package.
-async function getTransportPackage(orgId: string | null, packageType: string, originCity: string, destCity: string): Promise<any | null> {
+// It read Luxor→Aswan only, any length, `.limit(1)` in no order, and added the
+// package's own number to the total whatever currency it was in. Now: the
+// sailing's length (sightseeing) and route, the engine's fixed pick
+// (lib/pricing/cruise-package), converted into the run currency — a package
+// that cannot be converted is neutralised and the line falls through.
+async function getTransportPackage(
+  orgId: string | null,
+  packageType: string,
+  want: { durationDays?: number | null; route?: string[] },
+  runCurrency: string,
+): Promise<any | null> {
   if (!orgId) return null
   const { data, error } = await supabaseAdmin
     .from('b2b_transport_packages')
     .select('*')
     .eq('org_id', orgId)
     .eq('package_type', packageType)
-    .eq('origin_city', originCity)
-    .eq('destination_city', destCity)
     .eq('is_active', true)
-    .limit(1)
 
   if (error || !data || data.length === 0) return null
-  return data[0]
+  const rows = await createRateNormalizer(runCurrency).normalize('b2b_transport_packages', data as Record<string, unknown>[])
+  return pickPackage(rows as any[], { type: packageType, ...want })
+}
+
+// The sailing a variation's own service list is priced for: its template's
+// first run of cruise days (length nights + 1, route from the days' cities),
+// else the tour's length with no route to check.
+async function legacySailing(orgId: string | null, templateId: string | null | undefined, tourDays: number) {
+  if (!orgId || !templateId) return firstSailing(null, tourDays)
+  const { data } = await supabaseAdmin
+    .from('tour_templates')
+    .select('itinerary')
+    .eq('id', templateId)
+    .eq('org_id', orgId)
+    .maybeSingle()
+  return firstSailing((data as { itinerary?: unknown } | null)?.itinerary, tourDays)
 }
 
 // Select vehicle from transport package based on group size. A vehicle with no
@@ -470,7 +492,7 @@ export async function POST(request: NextRequest) {
     // and for the save's re-price (lib/b2b/partner-margin.ts) — the partner
     // used to override a margin the operator had typed, and the calculator
     // never sent the partner at all.
-    const partnerMargins = partner_id && orgId ? await loadPartnerMargins(orgId, partner_id, variation_id) : null
+    const partnerMargins = partner_id && orgId ? await loadPartnerMargins(orgId, partner_id, variation_id, travel_date) : null
     const margin_percent = quoteMarginPercent({
       requested: requestedMargin,
       partnerOverride: partnerMargins?.override,
@@ -813,6 +835,9 @@ export async function POST(request: NextRequest) {
     // catalog with their own capacity bands) — NOT the `vehicles` fleet list,
     // which has no rates and priced these lines at 0. Cache built once per request.
     const findDayTourVehicle = makeDayTourVehicleFinder(orgId)
+    // Read once, and only when a line asks for a transport package.
+    let sailing: Promise<{ durationDays: number; route: string[] }> | null = null
+    const legacyCruise = () => (sailing ??= legacySailing(orgId, templateId, template?.duration_days || 1))
 
     for (const service of (services || [])) {
       let unitCost = 0
@@ -845,28 +870,34 @@ export async function POST(request: NextRequest) {
       // ============================================
       // STEP 2: Check for B2B transport packages (cruise sightseeing)
       // ============================================
+      // The vehicle carries everyone aboard it — adults, children and
+      // infants (effectiveTotalPax); num_pax defaulted to 2 when the request
+      // sent only the breakdown. A sightseeing package must fit the sailing's
+      // length; a transfer is not sold by length.
       if (rateSource === 'manual' && service.service_category === 'transportation') {
         if (service.service_name?.toLowerCase().includes('sightseeing')) {
-          const pkg = await getTransportPackage(orgId, 'cruise_sightseeing', 'Luxor', 'Aswan')
-          const vehicle = pkg ? selectVehicleFromPackage(pkg, num_pax) : null
+          const { durationDays, route } = await legacyCruise()
+          const pkg = await getTransportPackage(orgId, 'cruise_sightseeing', { durationDays, route }, rateCurrency)
+          const vehicle = pkg ? selectVehicleFromPackage(pkg, effectiveTotalPax) : null
           if (vehicle) {
             unitCost = vehicle.rate
             lineTotal = vehicle.rate
             effectiveQuantityMode = 'fixed'
-            pricingNote = `${vehicle.vehicle}: ${rateSym}${vehicle.rate} (${num_pax} pax)`
+            pricingNote = `${vehicle.vehicle}: ${rateSym}${vehicle.rate} (${effectiveTotalPax} pax)`
             rateSource = 'b2b_package'
             console.log(`✅ B2B Package applied: ${service.service_name} -> ${pricingNote}`)
           }
         }
         else if (service.service_name?.toLowerCase().includes('transfer') || 
                  service.service_name?.toLowerCase().includes('airport')) {
-          const pkg = await getTransportPackage(orgId, 'cruise_transfer', 'Luxor', 'Aswan')
-          const vehicle = pkg ? selectVehicleFromPackage(pkg, num_pax) : null
+          const { route } = await legacyCruise()
+          const pkg = await getTransportPackage(orgId, 'cruise_transfer', { route }, rateCurrency)
+          const vehicle = pkg ? selectVehicleFromPackage(pkg, effectiveTotalPax) : null
           if (vehicle) {
             unitCost = vehicle.rate
             lineTotal = vehicle.rate
             effectiveQuantityMode = 'fixed'
-            pricingNote = `${vehicle.vehicle}: ${rateSym}${vehicle.rate} (${num_pax} pax)`
+            pricingNote = `${vehicle.vehicle}: ${rateSym}${vehicle.rate} (${effectiveTotalPax} pax)`
             rateSource = 'b2b_package'
           }
         }

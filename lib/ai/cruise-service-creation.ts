@@ -219,8 +219,13 @@ export async function createCruiseItineraryServices(
   // FETCH ALL REQUIRED RATES
   // ============================================
 
-  // 1. Cruise transport (bundled flat rate from b2b_pricing_rules)
-  const cruiseTransportRules = await fetchCruiseTransportPricingRules(orgId)
+  // Rate rows may be entered in another currency (per-rate currency work):
+  // each is converted into rateCurrency at the fetch, before toTarget.
+  const cruiseNormalizer = createRateNormalizer(rateCurrency)
+
+  // 1. Cruise transport (bundled flat rate from b2b_transport_packages) — in
+  // rateCurrency like the rest: an EGP package was costed as that many euros.
+  const cruiseTransportRules = await fetchCruiseTransportPricingRules(orgId, cruiseNormalizer)
   const cruiseTransportRule = findCruiseTransportRule(cruiseTransportRules, durationDays)
   let cruiseTransportRate = 0
   let cruiseTransportVehicle = 'Minivan'
@@ -241,7 +246,6 @@ export async function createCruiseItineraryServices(
 
   // 3. Tipping rates (itemized, tier-adjusted)
   // Tip rows may be entered in another currency (per-rate currency work).
-  const cruiseNormalizer = createRateNormalizer(rateCurrency)
   const cruiseTippingRates = await getItemizedTippingRates(supabase, orgId, tier, cruiseNormalizer)
   if (cruiseTippingRates.allRates.length === 0) {
     warnings.push('No tipping rates found — tips will be €0')
