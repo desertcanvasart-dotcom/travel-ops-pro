@@ -284,4 +284,24 @@ $$;
 
 DROP FUNCTION pg_temp.rls_role_rewrite(text);
 
+-- Money tables are written only by server routes (service role), which apply
+-- the role rules (agents issue invoices and record payments; expenses are
+-- manager-and-above). Their org policies let ANY member of the company, a
+-- viewer included, write them straight through PostgREST. Browser roles keep
+-- reading their own company's rows (the org SELECT policies) and lose writes.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['invoices', 'expenses', 'b2c_quotes', 'invoice_payments'] LOOP
+    IF to_regclass('public.' || t) IS NULL THEN CONTINUE; END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+      EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.%I FROM anon', t);
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+      EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.%I FROM authenticated', t);
+    END IF;
+  END LOOP;
+END
+$$;
+
 COMMIT;

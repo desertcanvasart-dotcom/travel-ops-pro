@@ -316,3 +316,13 @@ describe('20270105 applied twice', () => {
     expect(fn.rows[0].proconfig.join(',')).toMatch(/search_path/)
   })
 })
+
+describe('money tables: browser roles read, never write', () => {
+  it('authenticated has no INSERT/UPDATE/DELETE on invoices, expenses, b2c_quotes, invoice_payments', async () => {
+    const r = await db.query(`SELECT table_name, privilege_type FROM information_schema.role_table_grants
+      WHERE table_schema='public' AND grantee IN ('anon','authenticated')
+        AND table_name IN ('invoices','expenses','b2c_quotes','invoice_payments')
+        AND privilege_type IN ('INSERT','UPDATE','DELETE','TRUNCATE')`)
+    expect(r.rows).toEqual([])
+  })
+})
