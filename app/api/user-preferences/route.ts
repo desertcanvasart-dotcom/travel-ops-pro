@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
-import { getOrgRateCurrency } from '@/lib/org-rate-currency'
+import { getOrgRateCurrency, normaliseRateCurrency, RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { getOrgDefaultMargin, normaliseMargin, resolveMarginPercent } from '@/lib/org-default-margin'
+import { marginToStore } from '@/lib/settings/preferences'
 
 // Preferences are per (person, company) — user_preferences UNIQUE (user_id,
 // org_id), migration 20261209. default_tier is a key of the company's
@@ -100,9 +101,12 @@ export async function GET(request: NextRequest) {
     }
     // A user with no margin of their own — no row, or a row whose margin was
     // cleared so they follow the company — sees the company's figure, not a
-    // null the Settings form would render as 25 and save back as 25.
-    preferences.default_margin_percent =
-      normaliseMargin(preferences.default_margin_percent) ?? (await orgDefaultMargin(supabase))
+    // null the Settings form would render as 25. margin_follows_company says
+    // which it is, so a save sends it back and the figure is not pinned
+    // (lib/settings/preferences marginToStore).
+    const ownMargin = normaliseMargin(preferences.default_margin_percent)
+    const margin_follows_company = ownMargin === null
+    preferences.default_margin_percent = ownMargin ?? (await orgDefaultMargin(supabase))
 
     // Not a user preference — an org fact the client needs to label engine
     // amounts correctly (the rates are in this, the billing is in default_currency).
@@ -110,7 +114,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { ...preferences, rate_currency }
+      data: { ...preferences, margin_follows_company, rate_currency }
     })
   } catch (error: any) {
     console.error('API error:', error)
@@ -138,15 +142,33 @@ export async function PUT(request: NextRequest) {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
-    const prefData = {
+    // A currency is one of the app's five codes; anything else is refused
+    // rather than stored as the money format of every page this person opens.
+    let default_currency: string
+    if (body.default_currency) {
+      const code = normaliseRateCurrency(body.default_currency)
+      if (!code) {
+        return NextResponse.json(
+          { success: false, error: `Currency must be one of ${RATE_CURRENCIES.join(', ')}` },
+          { status: 400 }
+        )
+      }
+      default_currency = code
+    } else {
+      default_currency = await orgDefaultCurrency(supabase)
+    }
+
+    const prefData: Record<string, unknown> = {
       user_id: user.id,
       org_id: orgId,
       default_cost_mode: body.default_cost_mode || 'auto',
       default_tier: body.default_tier || 'standard',
-      default_margin_percent: normaliseMargin(body.default_margin_percent) ?? (await orgDefaultMargin(supabase)),
-      default_currency: body.default_currency || (await orgDefaultCurrency(supabase)),
+      default_currency,
       updated_at: new Date().toISOString()
     }
+    // Never the company's figure copied in: null follows the company.
+    const margin = marginToStore(body)
+    if (margin.write) prefData.default_margin_percent = margin.value
 
     const { data, error } = await supabase
       .from('user_preferences')

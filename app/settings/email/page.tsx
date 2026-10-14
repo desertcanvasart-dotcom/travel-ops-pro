@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/app/supabase'
 import { useConfirm } from '@/components/ConfirmDialog'
+import { useRole } from '@/hooks/useRole'
 
 interface EmailSignature {
   id: string
@@ -44,6 +45,10 @@ function EmailSettingsContent() {
   const { user } = useAuth()
   const confirmDialog = useConfirm()
   const searchParams = useSearchParams()
+  // Agents open this page too (their own mailbox, signatures and templates);
+  // the company's office addresses are the managers' (the route is
+  // admin/manager), and the way back is Settings only for those who have it.
+  const { canManageSettings } = useRole()
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
   const [gmailConnected, setGmailConnected] = useState(false)
@@ -52,7 +57,11 @@ function EmailSettingsContent() {
   const [gmailShared, setGmailShared] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   
-  const [activeTab, setActiveTab] = useState<'connection' | 'signatures' | 'templates'>('connection')
+  // ?tab=signatures — Settings › Email links straight to the signatures.
+  const [activeTab, setActiveTab] = useState<'connection' | 'signatures' | 'templates'>(() => {
+    const tab = searchParams.get('tab')
+    return tab === 'signatures' || tab === 'templates' ? tab : 'connection'
+  })
   const [signatures, setSignatures] = useState<EmailSignature[]>([])
   const [templates, setTemplates] = useState<EmailTemplate[]>([])
   const [showSignatureModal, setShowSignatureModal] = useState(false)
@@ -233,11 +242,11 @@ function EmailSettingsContent() {
           <div className="flex items-center justify-between">
             <div>
               <Link
-                href="/settings/profile"
+                href={canManageSettings ? '/settings?tab=email' : '/inbox'}
                 className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 mb-2"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                Back to Settings
+                {canManageSettings ? 'Back to Settings' : 'Back to the Email Inbox'}
               </Link>
               <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                 <Mail className="w-5 h-5 text-primary-600" />
@@ -385,7 +394,7 @@ function EmailSettingsContent() {
               </div>
             </div>
             {/* The office's own addresses — replies from them are ours (lib/email/office-addresses). */}
-            <OfficeAddressesCard />
+            {canManageSettings && <OfficeAddressesCard />}
             </div>
           )}
 

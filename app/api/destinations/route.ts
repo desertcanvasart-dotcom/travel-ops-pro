@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     const includeInactive = request.nextUrl.searchParams.get('include_inactive') === '1'
     let query = supabaseAdmin
       .from('destinations')
-      .select('id, country_code, name, name_ja, is_default, is_active, generation_brief, destination_cities(id, name, name_ja, aliases, lat, lng, airport_codes, timezone, sort_order, is_active)')
+      .select('id, country_code, name, name_ja, is_default, is_active, generation_brief, glossary, destination_cities(id, name, name_ja, aliases, lat, lng, airport_codes, timezone, sort_order, is_active)')
       .eq('org_id', orgId)
       .order('name')
     if (!includeInactive) query = query.eq('is_active', true)
@@ -45,6 +45,11 @@ export async function GET(request: NextRequest) {
       name_ja: d.name_ja,
       is_default: d.is_default,
       is_active: d.is_active,
+      // The destination's voice in the generation prompt, for the settings
+      // page only. They were selected (the brief) or not (the glossary) and
+      // never returned, so both boxes loaded blank — and saving one sent the
+      // other as '' and wiped it.
+      ...(includeInactive ? { generation_brief: d.generation_brief ?? null, glossary: d.glossary ?? null } : {}),
       cities: (d.destination_cities ?? [])
         .filter((c: { is_active: boolean }) => includeInactive || c.is_active)
         .sort((a: { sort_order: number }, b: { sort_order: number }) => a.sort_order - b.sort_order),

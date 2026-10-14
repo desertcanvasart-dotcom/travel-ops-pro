@@ -78,20 +78,38 @@ export async function POST(request: NextRequest) {
 
     if (action === 'update_destination') {
       const id = String(body.id ?? '')
+      // Checked FIRST: the default used to be cleared before this update ran,
+      // so an id that was not this company's (or a typo) failed .single() and
+      // left the company with no default destination at all.
+      if (!(await ownDestination(id))) {
+        return NextResponse.json({ success: false, error: 'Destination not found' }, { status: 404 })
+      }
       const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
-      if ('name' in body) update.name = String(body.name).trim()
+      if ('name' in body) {
+        const name = String(body.name ?? '').trim()
+        if (!name) return NextResponse.json({ success: false, error: 'A destination needs a name' }, { status: 400 })
+        update.name = name
+      }
       if ('name_ja' in body) update.name_ja = body.name_ja || null
       if ('is_active' in body) update.is_active = body.is_active === true
       // Phase 2 fields — the destination's voice in the generation prompt.
       if ('generation_brief' in body) update.generation_brief = String(body.generation_brief ?? '').trim() || null
       if ('glossary' in body) update.glossary = String(body.glossary ?? '').trim() ? { text: String(body.glossary).trim() } : null
-      if (body.is_default === true) {
-        // Exactly one default: quoting and new itineraries start from it.
-        await supabaseAdmin.from('destinations').update({ is_default: false }).eq('org_id', orgId).eq('is_default', true)
-        update.is_default = true
-      }
+      if (body.is_default === true) update.is_default = true
       const { data, error } = await supabaseAdmin.from('destinations').update(update).eq('org_id', orgId).eq('id', id).select().single()
       if (error) throw error
+      if (body.is_default === true) {
+        // Exactly one default: quoting and new itineraries start from it. The
+        // others are cleared only AFTER the new one is set, so a failure
+        // leaves two defaults for a moment at worst — never none.
+        const { error: clearError } = await supabaseAdmin
+          .from('destinations')
+          .update({ is_default: false })
+          .eq('org_id', orgId)
+          .eq('is_default', true)
+          .neq('id', id)
+        if (clearError) throw clearError
+      }
       return NextResponse.json({ success: true, data })
     }
 

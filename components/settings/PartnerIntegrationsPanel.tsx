@@ -15,6 +15,7 @@
 // arrived.
 
 import { useCallback, useEffect, useState } from 'react'
+import { useRole } from '@/hooks/useRole'
 import {
   Plug, Plus, Copy, Check, RefreshCw, Trash2, X, Loader2,
   AlertTriangle, ChevronDown, ChevronRight,
@@ -96,6 +97,10 @@ function CopyField({ label, value }: { label: string; value: string }) {
 }
 
 export function PartnerIntegrationsPanel() {
+  // Creating, pausing, rotating and disconnecting are admin-only on the
+  // server (owner included); a manager reads the connections and their
+  // delivery log, without buttons that could only be refused.
+  const { isAdmin } = useRole()
   const [integrations, setIntegrations] = useState<Integration[]>([])
   const [providers, setProviders] = useState<Provider[]>([])
   const [loading, setLoading] = useState(true)
@@ -255,14 +260,23 @@ export function PartnerIntegrationsPanel() {
             see <code className="text-xs">docs/INTEGRATIONS.md</code>.
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#647C47] text-white text-sm rounded hover:bg-[#4a5c35]"
-        >
-          <Plus className="w-4 h-4" />
-          Connect a platform
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#647C47] text-white text-sm rounded hover:bg-[#4a5c35]"
+          >
+            <Plus className="w-4 h-4" />
+            Connect a platform
+          </button>
+        )}
       </div>
+
+      {!isAdmin && (
+        <p className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+          You can see the connections and their deliveries but not change them. Only the agency owner or an
+          admin can connect a platform, pause it, rotate its credentials or disconnect it.
+        </p>
+      )}
 
       {message && (
         <p className={`text-sm ${message.kind === 'ok' ? 'text-[#647C47]' : 'text-red-600'}`}>
@@ -313,6 +327,7 @@ export function PartnerIntegrationsPanel() {
                   </div>
 
                   <div className="flex items-center gap-1.5 flex-wrap">
+                    {isAdmin && <>
                     <button
                       onClick={() => patch(i.id, { is_active: !i.is_active })}
                       disabled={busy === i.id}
@@ -328,6 +343,7 @@ export function PartnerIntegrationsPanel() {
                       <Trash2 className="w-3 h-3" />
                       Disconnect
                     </button>
+                    </>}
                     <button
                       onClick={() => toggleExpanded(i.id)}
                       className="p-1 text-gray-400 hover:text-gray-600"
@@ -354,6 +370,7 @@ export function PartnerIntegrationsPanel() {
                           {fmt(i.outbound_key_issued_at)}
                         </span>
                       )}
+                      {isAdmin && <>
                       <button
                         onClick={() =>
                           patch(i.id, { rotate_api_key: true }, `New API key for ${i.name}`)
@@ -384,6 +401,7 @@ export function PartnerIntegrationsPanel() {
                         <RefreshCw className="w-3 h-3" />
                         Rotate webhook URL
                       </button>
+                      </>}
                     </div>
                     <p className="text-xs text-gray-500">
                       Rotating takes effect immediately — the old credential stops working at once,

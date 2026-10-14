@@ -1533,7 +1533,7 @@ function WhatsAppParserContent() {
               </div>
             </div>
 
-            <Link href="/settings?tab=preferences" className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg">
+            <Link href="/settings/preferences" className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg">
               <Settings className="w-4 h-4" />
               <span className={`font-medium ${tierColor.text}`}>{selectedTier}</span>
               <span>• {userPreferences.default_currency}</span>

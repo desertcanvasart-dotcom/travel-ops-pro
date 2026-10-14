@@ -213,7 +213,9 @@ describe('preferences per (person, active company)', () => {
   })
 
   it('the browser no longer reads user_preferences directly (it cannot know the active company)', () => {
-    for (const f of ['app/settings/page.tsx', 'app/whatsapp-parser/whatsapp-parser-content.tsx']) {
+    // The Preferences tab moved out of app/settings/page.tsx into its own
+    // panel (shown on /settings and on /settings/preferences for agents).
+    for (const f of ['components/settings/PreferencesPanel.tsx', 'app/whatsapp-parser/whatsapp-parser-content.tsx']) {
       expect(src(f), f).not.toContain("from('user_preferences')")
       expect(src(f), f).toContain("fetch('/api/user-preferences')")
     }

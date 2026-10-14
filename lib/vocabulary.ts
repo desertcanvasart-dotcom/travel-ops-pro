@@ -28,7 +28,7 @@ export function isVocabularyKind(v: unknown): v is VocabularyKind {
   return (VOCABULARY_KINDS as readonly string[]).includes(String(v))
 }
 
-/** How the settings screen groups the kinds — a flat list of 29 is a wall. */
+/** How the settings screen groups the kinds — a flat list of 44 is a wall. */
 export const VOCABULARY_GROUPS = [
   'General', 'Tours', 'Hotels & cruises', 'Transport & tickets', 'Guides & tipping', 'Meals', 'Attractions & activities',
 ] as const

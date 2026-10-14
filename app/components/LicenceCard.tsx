@@ -8,6 +8,11 @@
 // set in the environment by whoever runs the server, and nothing here can
 // change what the app does: a missing or expired licence is shown, never
 // enforced by locking anyone out.
+//
+// One licence covers the whole INSTALL, every company on it — the card says
+// so. It used to list a seat count too; nothing counts or enforces seats (an
+// invitation never checks them), so a number there read as a limit that
+// does not exist.
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
@@ -77,8 +82,6 @@ export default function LicenceCard() {
               </dd>
               <dt className="text-gray-500">{t('domains')}</dt>
               <dd className="text-gray-900">{licence.domains.join(', ')}</dd>
-              <dt className="text-gray-500">{t('seats')}</dt>
-              <dd className="text-gray-900">{licence.seats}</dd>
               <dt className="text-gray-500">{t('features')}</dt>
               <dd className="text-gray-900">{licence.features.join(', ')}</dd>
             </dl>

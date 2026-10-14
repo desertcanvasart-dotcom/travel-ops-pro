@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { nonceMatches, clearNonceCookie } from '@/lib/oauth/csrf-nonce'
 import { encryptToken } from '@/lib/crypto/token-cipher'
 import { createClient } from '@supabase/supabase-js'
-import { getAccountingProvider, AccountingProviderType } from '@/lib/accounting'
+import { getAccountingProvider } from '@/lib/accounting'
 import { verifyState } from '@/lib/oauth-state'
+import { mayManageAccounting, otherAccountingProvider, parseAccountingState } from '@/lib/accounting/connection'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,7 +16,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const code = searchParams.get('code')
-  const state = searchParams.get('state') // userId:provider
+  const state = searchParams.get('state') // userId:provider:orgId:nonce
   const error = searchParams.get('error')
   const realmId = searchParams.get('realmId') // QuickBooks passes this
 
@@ -41,14 +42,17 @@ export async function GET(request: NextRequest) {
 
   // Verify the signed state before trusting the embedded user id / provider —
   // otherwise an attacker could attach their accounting tokens to any account.
-  const verified = verifyState(state)
-  // `${userId}:${provider}:${orgId||''}:${nonce}` since P4b-2.
-  const [userId, providerName, stateOrgId, stateNonce] = (verified || '').split(':')
-  if (!verified || !userId || !providerName) {
+  // `${userId}:${provider}:${orgId}:${nonce}`. A state without the company is
+  // refused: the connection is the company's, and guessing it from the
+  // person's oldest membership is how one company's books were bound to the
+  // other's.
+  const parsed = parseAccountingState(verifyState(state))
+  if (!parsed) {
     return NextResponse.redirect(
       new URL('/settings?tab=integrations&error=invalid_state', baseUrl)
     )
   }
+  const { userId, provider: providerName, orgId, nonce: stateNonce } = parsed
 
   // CSRF: the state nonce must match the httpOnly cookie set when this browser
   // began the flow — a signed state alone does not prove the victim started it.
@@ -59,7 +63,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const provider = getAccountingProvider(providerName as AccountingProviderType)
+    // Re-checked here, not only at connect: this route runs without a session,
+    // and a person demoted (or removed) between the two steps must not finish
+    // attaching their file to the company's books. Admin, owner included, in
+    // the company named in the signed state.
+    const { data: membership } = await supabase
+      .from('organization_members')
+      .select('role')
+      .eq('user_id', userId)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!mayManageAccounting((membership as { role?: string } | null)?.role)) {
+      return redirectTo('error=not_admin')
+    }
+
+    const provider = getAccountingProvider(providerName)
     const extras: Record<string, string> = {}
     if (realmId) extras.realmId = realmId
 
@@ -69,48 +87,20 @@ export async function GET(request: NextRequest) {
       throw new Error('No tokens received')
     }
 
-    // M3 Phase 1: resolve the connecting user's org so the new token row
-    // can satisfy the NOT NULL accounting_tokens.org_id added by
-    // 20260624_organizations_phase1.sql. The migration's backfill made
-    // every existing user_profiles row an owner of the default org, so
-    // there's always at least one membership to find here.
-    // The org the user had ACTIVE when they started the connect flow, carried
-    // in the signed state — not "their oldest membership", which bound a
-    // multi-org user's accounting tokens to the wrong tenant. Verified to be a
-    // real membership before use; fall back to the oldest only for states minted
-    // before this field existed.
-    let orgId: string | null = null
-    if (stateOrgId) {
-      const { data: m } = await supabase
-        .from('organization_members')
-        .select('org_id')
-        .eq('user_id', userId)
-        .eq('org_id', stateOrgId)
-        .maybeSingle()
-      orgId = (m as { org_id?: string } | null)?.org_id ?? null
-    }
-    if (!orgId) {
-      const { data: membership } = await supabase
-        .from('organization_members')
-        .select('org_id')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle()
-      orgId = (membership as { org_id?: string } | null)?.org_id ?? null
-    }
+    // One accounting provider per company (accounting_tokens_one_active_per_org):
+    // connecting Xero switches QuickBooks off, and the reverse. Said on the
+    // page, never done silently — the books the sync writes to just changed.
+    const other = otherAccountingProvider(providerName)
+    const { data: replaced } = await supabase
+      .from('accounting_tokens')
+      .update({ is_active: false, updated_at: new Date().toISOString() })
+      .eq('org_id', orgId)
+      .eq('provider', other)
+      .eq('is_active', true)
+      .select('id')
 
-    if (!orgId) {
-      // Hard-fail rather than silently inserting a NULL org_id — without an
-      // org we don't know which tenant this connection belongs to and the
-      // sync resolver would have to fall back to a singleton again.
-      console.error('Accounting OAuth callback: no organization_members row for user', userId)
-      return NextResponse.redirect(
-        new URL('/settings?tab=integrations&error=no_organization', baseUrl)
-      )
-    }
-
-    // Upsert token record
+    // The company's row for this provider: a reconnect (or a colleague's
+    // connection) replaces it. user_id records who connected it.
     const { error: dbError } = await supabase
       .from('accounting_tokens')
       .upsert({
@@ -126,7 +116,7 @@ export async function GET(request: NextRequest) {
         is_active: true,
         updated_at: new Date().toISOString(),
       }, {
-        onConflict: 'user_id,provider'
+        onConflict: 'org_id,provider'
       })
 
     if (dbError) {
@@ -134,8 +124,9 @@ export async function GET(request: NextRequest) {
       throw new Error('Failed to save accounting tokens')
     }
 
+    const replacedQs = (replaced ?? []).length > 0 ? `&replaced=${other}` : ''
     return NextResponse.redirect(
-      new URL(`/settings?tab=integrations&accounting=connected&provider=${providerName}`, baseUrl)
+      new URL(`/settings?tab=integrations&accounting=connected&provider=${providerName}${replacedQs}`, baseUrl)
     )
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'

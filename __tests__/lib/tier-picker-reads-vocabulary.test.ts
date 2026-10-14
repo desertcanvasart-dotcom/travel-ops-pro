@@ -29,7 +29,9 @@ const TIER_PICKERS = [
   'app/b2b/import/import-content.tsx',
   'app/pricing-grid/components/GridHeader.tsx',
   'app/whatsapp-parser/whatsapp-parser-content.tsx',
-  'app/settings/page.tsx',
+  // The user's default tier: the Preferences panel (it moved out of
+  // app/settings/page.tsx so agents can open it at /settings/preferences).
+  'components/settings/PreferencesPanel.tsx',
   'app/tours/tours-browser-page.tsx',
   // 2026-09-15: the tour TEMPLATE form was never converted, and it was the one
   // that mattered most — an agency could add a tier, watch it appear on the
