@@ -166,6 +166,11 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   // own second workspace. The route is still membership-checked in itself.
   { prefix: '/api/organizations/mine', roles: ['owner', 'admin', 'manager', 'agent', 'viewer'] },
   { prefix: '/api/organization', roles: ['admin'] },
+  // Connecting or disconnecting Xero/QuickBooks decides where every invoice,
+  // payment and expense is pushed: an admin's decision (Settings audit).
+  { prefix: '/api/auth/accounting', roles: ['admin'] },
+  // The company's own words (44 lists): admin-only, as the page renders.
+  { prefix: '/api/vocabulary', roles: ['admin'] },
   { prefix: '/api/invitations', roles: ['admin'] },
   // Email, notification and WhatsApp-AI settings are operating configuration,
   // not organisation administration: manager and above, like the rate
@@ -273,6 +278,8 @@ const FINANCIAL_API_PREFIXES = [
   // The accounting integration's chart of accounts and sync status are
   // financial data — manager and above, reads included.
   '/api/accounting',
+  // Which accounting company the org syncs to.
+  '/api/auth/accounting/status',
   // Rate management — supplier costs. The Rates pages are manager-and-above,
   // but their APIs answered any signed-in account (operator, 2026-10-11).
   // Only what the Rates screens use: the pickers agents need to build a trip

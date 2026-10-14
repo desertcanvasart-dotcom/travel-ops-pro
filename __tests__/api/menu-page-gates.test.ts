@@ -91,3 +91,15 @@ describe('Finance: the supplier-bill parser follows the Bills screen', () => {
     expect(block.slice(0, block.indexOf(']\n'))).toContain("'/api/ai/parse-supplier-invoice'")
   })
 })
+
+describe('Settings: accounting connection and vocabulary writes are admin-only', () => {
+  const mw = readFileSync('middleware.ts', 'utf8')
+  it('mutation gates', () => {
+    expect(mw).toContain("{ prefix: '/api/auth/accounting', roles: ['admin'] }")
+    expect(mw).toContain("{ prefix: '/api/vocabulary', roles: ['admin'] }")
+  })
+  it('accounting status is manager-and-above to read', () => {
+    const block = mw.slice(mw.indexOf('const FINANCIAL_API_PREFIXES'))
+    expect(block.slice(0, block.indexOf(']\n'))).toContain("'/api/auth/accounting/status'")
+  })
+})
