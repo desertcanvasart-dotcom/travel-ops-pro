@@ -664,6 +664,22 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     }
   }
 
+  // The roster, pending invitations and members list (names, emails, roles)
+  // are read by the admin and manager screens only. EXACT paths: /api/profiles/[id]
+  // stays self-service, and invitation accept/verify are self-auth.
+  const ADMIN_MANAGER_READ_PATHS = new Set(['/api/profiles', '/api/organization/members', '/api/invitations'])
+  if (
+    isApiRoute &&
+    user &&
+    !isSelfAuthApi &&
+    request.method === 'GET' &&
+    ADMIN_MANAGER_READ_PATHS.has(request.nextUrl.pathname)
+  ) {
+    if (!roleAllows(await membershipRole(user.id), ['admin', 'manager'])) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
+
   // Role-gate financial API MUTATIONS (the routes use the RLS-bypassing
   // service-role key, so this is the authorization layer for them).
   if (
@@ -677,23 +693,6 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
   }
 
   if (isApiRoute && user && MUTATING_METHODS.has(request.method)) {
-    // AUDIT TRAIL: every authenticated mutating API call is recorded here —
-    // the one chokepoint no screen or code path can route around. Deferred
-    // via waitUntil so the request never waits on the log write.
-    event.waitUntil(
-      recordActivity({
-        user_id: user.id,
-        user_email: user.email ?? null,
-        method: request.method,
-        path: request.nextUrl.pathname,
-        ip: clientIp(request.headers),
-        user_agent: request.headers.get('user-agent'),
-        // The workspace the request acts in (the same cookie the role gate
-        // and getCurrentOrgId() honour), not an arbitrary first membership.
-        active_org_id: request.cookies.get(ACTIVE_ORG_COOKIE)?.value ?? null,
-      })
-    )
-
     const matched = API_MUTATION_PERMISSIONS.find(p =>
       request.nextUrl.pathname.startsWith(p.prefix)
     )
@@ -714,6 +713,24 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
     }
+
+    // AUDIT TRAIL: every authenticated mutating API call that PASSES the role
+    // gate above is recorded here (a refused request changed nothing) —
+    // the one chokepoint no screen or code path can route around. Deferred
+    // via waitUntil so the request never waits on the log write.
+    event.waitUntil(
+      recordActivity({
+        user_id: user.id,
+        user_email: user.email ?? null,
+        method: request.method,
+        path: request.nextUrl.pathname,
+        ip: clientIp(request.headers),
+        user_agent: request.headers.get('user-agent'),
+        // The workspace the request acts in (the same cookie the role gate
+        // and getCurrentOrgId() honour), not an arbitrary first membership.
+        active_org_id: request.cookies.get(ACTIVE_ORG_COOKIE)?.value ?? null,
+      })
+    )
   }
 
   // If user is not logged in and trying to access a protected page

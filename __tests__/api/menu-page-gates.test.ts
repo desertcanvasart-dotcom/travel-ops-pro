@@ -103,3 +103,13 @@ describe('Settings: accounting connection and vocabulary writes are admin-only',
     expect(block.slice(0, block.indexOf(']\n'))).toContain("'/api/auth/accounting/status'")
   })
 })
+
+describe('Settings: activity is logged after the role gate; roster reads admin/manager', () => {
+  const mw = readFileSync('middleware.ts', 'utf8')
+  it('recordActivity comes after the mutation role check', () => {
+    expect(mw.indexOf('recordActivity({')).toBeGreaterThan(mw.indexOf('if (!roleAllows(await membershipRole(user.id), matched.roles))'))
+  })
+  it('exact-path read gate for the roster, members and invitations', () => {
+    expect(mw).toContain("new Set(['/api/profiles', '/api/organization/members', '/api/invitations'])")
+  })
+})
