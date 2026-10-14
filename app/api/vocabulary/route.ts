@@ -11,10 +11,8 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getAuthenticatedUser } from '@/lib/supabase-secure'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, requireRole } from '@/lib/auth/current-org'
 import { createServerClient } from '@/lib/supabase-server'
-import { roleAllows } from '@/lib/auth/roles'
 import {
   isVocabularyKind,
   nextRank,
@@ -30,11 +28,15 @@ export const WRITE_DENIED = 'Only the agency owner or an admin can change the vo
 export const COLS = 'id, org_id, kind, key, label, label_ja, description, behavior, rank, meta, is_active, created_at, updated_at'
 
 /** Shared auth for the vocabulary routes. Returns a deny response, or the
- *  service-role client + the caller's org id. `write` also gates on owner/admin. */
+ *  service-role client + the caller's org id. `write` also gates on owner/admin
+ *  IN THE COMPANY BEING WRITTEN (requireRole reads the active membership). It
+ *  used to read getAuthenticatedUser().role — an arbitrary one of the person's
+ *  memberships — so an admin of one company who is an agent in the other could
+ *  add, hide, delete and reset the other company's lists. */
 export async function vocabAuth(write: boolean): Promise<NextResponse | { supabase: SupabaseClient; orgId: string }> {
-  const { user, error } = await getAuthenticatedUser()
-  if (error || !user) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
-  if (write && !roleAllows(user.role, ['admin'])) {
+  const userId = await getCurrentUserId()
+  if (!userId) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
+  if (write && (await requireRole(['admin']))) {
     return NextResponse.json({ success: false, error: WRITE_DENIED }, { status: 403 })
   }
   const orgId = await getCurrentOrgId()

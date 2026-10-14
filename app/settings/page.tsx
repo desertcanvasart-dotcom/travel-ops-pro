@@ -4,11 +4,12 @@ import { useState, useEffect, Suspense } from 'react'
 import { PartnerIntegrationsPanel } from '@/components/settings/PartnerIntegrationsPanel'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { useTierOptions } from '@/hooks/useTierOptions'
+import Link from 'next/link'
 import { createClient } from '@/app/supabase'
 import { useAuth } from '@/app/contexts/AuthContext'
-import { usePreferences } from '@/app/contexts/PreferencesContext'
+import { useRole } from '@/hooks/useRole'
 import { useConfirm } from '@/components/ConfirmDialog'
+import PreferencesPanel from '@/components/settings/PreferencesPanel'
 import {
   User,
   Mail,
@@ -17,48 +18,38 @@ import {
   Settings,
   Save,
   Loader2,
-  Check,
   X,
-  Plus,
-  Trash2,
-  Edit2,
-  Eye,
-  EyeOff,
-  Globe,
-  Clock,
   Camera,
   Link as LinkIcon,
   Plug,
   CheckCircle,
   AlertCircle,
   FileText,
-  Send,
-  Crown,
   Calculator,
   Info,
+  Lock,
   Building2
 } from 'lucide-react'
 import { LanguageSelector } from '@/components/LanguageSelector'
-import { SignatureEditor } from '@/components/email/RichTextEditor'
 import PaymentTermsCard from '@/app/components/PaymentTermsCard'
 import CompanyProfileCard from '@/app/components/CompanyProfileCard'
 import LicenceCard from '@/app/components/LicenceCard'
-import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 
 // ============================================
 // TYPES
 // ============================================
 
+// Only what this tab shows or saves. Email is the sign-in identity (shown,
+// never sent); the role shown is the MEMBERSHIP role in this company
+// (useRole), not user_profiles.role, the display mirror. Timezone and company
+// name were stored and read by nothing — company identity is Settings ›
+// Organization › Company Profile.
 interface Profile {
   id: string
   full_name: string
   email: string
   phone?: string
-  role?: string
-  timezone?: string
   avatar_url?: string
-  company_name?: string
-  company_logo?: string
 }
 
 interface EmailSettings {
@@ -66,9 +57,6 @@ interface EmailSettings {
   gmail_email?: string
   /** The organisation's shared mailbox, connected by a colleague (lib/gmail-mailbox). */
   gmail_shared?: boolean
-  signature?: string
-  auto_reply_enabled: boolean
-  auto_reply_message?: string
 }
 
 interface NotificationPreference {
@@ -78,27 +66,9 @@ interface NotificationPreference {
   email_enabled: boolean
 }
 
-interface UserPreferences {
-  id?: string
-  user_id?: string
-  default_tier: string
-  default_margin_percent: number
-  default_currency: string
-}
-
 // ============================================
 // TAB CONFIGURATION
 // ============================================
-
-// The default-tier cards list whatever Settings → Vocabulary holds
-// (useTierOptions). What stays local is a PRESET's i18n label/description
-// keys, used when the vocabulary has no word of its own.
-const TIER_LABEL_KEYS: Record<string, string> = {
-  budget: 'tierBudget', standard: 'tierStandard', deluxe: 'tierDeluxe', luxury: 'tierLuxury',
-}
-const TIER_DESC_KEYS: Record<string, string> = {
-  budget: 'tierBudgetDesc', standard: 'tierStandardDesc', deluxe: 'tierDeluxeDesc', luxury: 'tierLuxuryDesc',
-}
 
 const TAB_IDS = ['profile', 'email', 'notifications', 'preferences', 'integrations', 'partners', 'organization'] as const
 const TAB_ICONS = {
@@ -111,18 +81,6 @@ const TAB_ICONS = {
   organization: Building2,
 }
 
-const TIMEZONES = [
-  { value: 'Africa/Cairo', label: 'Cairo (EET, UTC+2)' },
-  { value: 'Europe/London', label: 'London (GMT/BST)' },
-  { value: 'Europe/Paris', label: 'Paris (CET/CEST)' },
-  { value: 'America/New_York', label: 'New York (EST/EDT)' },
-  { value: 'America/Los_Angeles', label: 'Los Angeles (PST/PDT)' },
-  { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
-  { value: 'Asia/Dubai', label: 'Dubai (GST)' },
-  { value: 'Australia/Sydney', label: 'Sydney (AEST/AEDT)' },
-]
-
-
 // ============================================
 // MAIN COMPONENT
 // ============================================
@@ -133,9 +91,10 @@ function SettingsContent() {
   const tabParam = searchParams.get('tab')
   const { user } = useAuth()
   const t = useTranslations('settings')
-  // The agency's tiers (Settings → Vocabulary), presets falling back to the i18n words.
-  const tierOptions = useTierOptions(key => t(TIER_LABEL_KEYS[key]))
   const confirmDialog = useConfirm()
+  // The membership role in this company. Connecting the company's accounting
+  // software is admin-only on the server (owner included).
+  const { role, isAdmin } = useRole()
 
   const [activeTab, setActiveTab] = useState(tabParam || 'profile')
   const [loading, setLoading] = useState(true)
@@ -153,16 +112,6 @@ function SettingsContent() {
     task_overdue: true,
     email_enabled: true,
   })
-  const [userPreferences, setUserPreferences] = useState<UserPreferences>({
-    default_tier: 'standard',
-    default_margin_percent: 25,
-    default_currency: 'USD'
-  })
-  // Saving MUST go through the app-wide context, not a direct DB write: every
-  // page formats money via PreferencesContext, and a direct write leaves its
-  // in-memory currency stale until a full reload — Settings said USD, Rates
-  // kept showing €.
-  const { updatePreferences: applyPreferencesAppWide } = usePreferences()
   const [accountingStatus, setAccountingStatus] = useState<{
     xero: { connected: boolean; company_name: string; last_updated: string } | null
     quickbooks: { connected: boolean; company_name: string; last_updated: string } | null
@@ -174,6 +123,24 @@ function SettingsContent() {
   const [testingWhatsapp, setTestingWhatsapp] = useState(false)
   const [testPhone, setTestPhone] = useState('')
   const [showTestDialog, setShowTestDialog] = useState(false)
+  // What the accounting OAuth callback reported (?accounting=connected&…).
+  const [accountingNotice, setAccountingNotice] = useState<{ ok: boolean; text: string } | null>(() => {
+    const names: Record<string, string> = { xero: 'Xero', quickbooks: 'QuickBooks' }
+    if (searchParams.get('accounting') === 'connected') {
+      const now = names[searchParams.get('provider') || ''] || 'The accounting software'
+      const replaced = names[searchParams.get('replaced') || '']
+      return {
+        ok: true,
+        text: replaced
+          ? `${now} is connected. ${replaced} was switched off: a company sends its books to one accounting provider at a time.`
+          : `${now} is connected. New invoices, expenses and payments are sent to it.`,
+      }
+    }
+    if (searchParams.get('error') === 'not_admin') {
+      return { ok: false, text: 'Not connected: only the agency owner or an admin of this company can connect its accounting software.' }
+    }
+    return null
+  })
 
   // Update URL when tab changes
   const handleTabChange = (tabId: string) => {
@@ -197,9 +164,6 @@ function SettingsContent() {
             break
           case 'notifications':
             await fetchNotificationPrefs()
-            break
-          case 'preferences':
-            await fetchPreferences()
             break
           case 'integrations':
             await fetchAccountingStatus()
@@ -226,41 +190,18 @@ function SettingsContent() {
       const response = await fetch('/api/profile')
       if (response.ok) {
         const result = await response.json()
-        const profileData = result.data || result.profile || result
-        console.log('Profile loaded:', profileData)
-        setProfile(profileData)
+        setProfile(result.data || result.profile || result)
       }
     } catch (error) {
       console.error('Error fetching profile:', error)
     }
   }
 
-  const fetchPreferences = async () => {
-    try {
-      // Through the API: preferences are per (person, company), and only the
-      // server knows the active company (getCurrentOrgId).
-      const response = await fetch('/api/user-preferences')
-      if (!response.ok) return
-      const { data } = await response.json()
-
-      if (data) {
-        setUserPreferences({
-          id: data.id,
-          user_id: data.user_id,
-          default_tier: data.default_tier || 'standard',
-          default_margin_percent: data.default_margin_percent ?? 25,
-          default_currency: data.default_currency || 'USD'
-        })
-      }
-    } catch (error) {
-      console.error('Error fetching preferences:', error)
-    }
-  }
-
   const fetchAccountingStatus = async () => {
     try {
-      if (!user) return
-      const response = await fetch(`/api/auth/accounting/status?userId=${user.id}`)
+      // The COMPANY's connections, whoever made them (accounting_tokens is per
+      // (org_id, provider) since 20270104).
+      const response = await fetch('/api/auth/accounting/status')
       if (response.ok) {
         const data = await response.json()
         setAccountingStatus(data)
@@ -272,16 +213,23 @@ function SettingsContent() {
 
   const connectAccounting = async (provider: 'xero' | 'quickbooks') => {
     if (!user) return
+    // Connecting one provider switches the other off (one per company).
+    const other = provider === 'xero' ? 'quickbooks' : 'xero'
+    if (accountingStatus[other]?.connected && !(await confirmDialog(
+      `${provider === 'xero' ? 'QuickBooks' : 'Xero'} is connected. Connecting ${provider === 'xero' ? 'Xero' : 'QuickBooks'} switches it off — the company's invoices, expenses and payments then go only to ${provider === 'xero' ? 'Xero' : 'QuickBooks'}. Continue?`
+    ))) return
     setConnectingProvider(provider)
     try {
       const response = await fetch('/api/auth/accounting/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, provider }),
+        body: JSON.stringify({ provider }),
       })
       const data = await response.json()
       if (data.authUrl) {
         window.location.href = data.authUrl
+      } else {
+        setError(data.error || 'Failed to initiate connection')
       }
     } catch (error) {
       console.error('Error connecting accounting:', error)
@@ -294,11 +242,16 @@ function SettingsContent() {
   const disconnectAccounting = async (provider: 'xero' | 'quickbooks') => {
     if (!user || !(await confirmDialog(`Disconnect ${provider === 'xero' ? 'Xero' : 'QuickBooks'}?`))) return
     try {
-      await fetch('/api/auth/accounting/disconnect', {
+      const res = await fetch('/api/auth/accounting/disconnect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, provider }),
+        body: JSON.stringify({ provider }),
       })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error || 'Failed to disconnect')
+        return
+      }
       setAccountingStatus(prev => ({ ...prev, [provider]: null }))
     } catch (error) {
       console.error('Error disconnecting:', error)
@@ -344,29 +297,11 @@ function SettingsContent() {
 
   const fetchEmailSettings = async () => {
     try {
-      const response = await fetch(`/api/settings/email${user?.id ? `?userId=${user.id}` : ''}`)
-      if (response.ok) {
-        const data = await response.json()
-        setEmailSettings(data)
-      } else {
-        // Set defaults if no settings exist
-        setEmailSettings({
-          gmail_connected: false,
-          gmail_email: '',
-          signature: '',
-          auto_reply_enabled: false,
-          auto_reply_message: ''
-        })
-      }
+      const response = await fetch('/api/settings/email')
+      setEmailSettings(response.ok ? await response.json() : { gmail_connected: false, gmail_email: '' })
     } catch (error) {
       console.error('Error fetching email settings:', error)
-      setEmailSettings({
-        gmail_connected: false,
-        gmail_email: '',
-        signature: '',
-        auto_reply_enabled: false,
-        auto_reply_message: ''
-      })
+      setEmailSettings({ gmail_connected: false, gmail_email: '' })
     }
   }
 
@@ -382,31 +317,6 @@ function SettingsContent() {
     }
   }
 
-  const savePreferences = async () => {
-    setSaving(true)
-    setError(null)
-
-    try {
-      // Persists via PUT /api/user-preferences AND updates the context's
-      // in-memory state, so Rates/dashboards re-format in the new currency
-      // immediately — no reload, no window refocus.
-      const ok = await applyPreferencesAppWide({
-        default_tier: userPreferences.default_tier,
-        default_margin_percent: userPreferences.default_margin_percent,
-        default_currency: userPreferences.default_currency
-      })
-      if (!ok) throw new Error('Failed to save preferences')
-
-      setSaveSuccess(true)
-      setTimeout(() => setSaveSuccess(false), 3000)
-    } catch (err: any) {
-      console.error('Error saving preferences:', err)
-      setError(err.message || 'Failed to save preferences')
-    } finally {
-      setSaving(false)
-    }
-  }
-
   // ============================================
   // SAVE HANDLERS
   // ============================================
@@ -417,10 +327,11 @@ function SettingsContent() {
     setError(null)
 
     try {
+      // Name and phone only — the route refuses anything else (strict).
       const response = await fetch('/api/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profile)
+        body: JSON.stringify({ full_name: profile.full_name, phone: profile.phone ?? null })
       })
 
       if (response.ok) {
@@ -431,31 +342,6 @@ function SettingsContent() {
       }
     } catch (err) {
       setError('Failed to save profile')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const saveEmailSettings = async () => {
-    if (!emailSettings) return
-    setSaving(true)
-    setError(null)
-
-    try {
-      const response = await fetch('/api/settings/email', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(emailSettings)
-      })
-
-      if (response.ok) {
-        setSaveSuccess(true)
-        setTimeout(() => setSaveSuccess(false), 3000)
-      } else {
-        throw new Error('Failed to save email settings')
-      }
-    } catch (err) {
-      setError('Failed to save email settings')
     } finally {
       setSaving(false)
     }
@@ -664,10 +550,10 @@ function SettingsContent() {
           <input
             type="email"
             value={profile?.email || ''}
-            onChange={(e) => setProfile(prev => prev ? { ...prev, email: e.target.value } : null)}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-            placeholder={t('emailPlaceholder')}
+            readOnly
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-600"
           />
+          <p className="text-xs text-gray-500 mt-1">{t('emailReadOnlyHint')}</p>
         </div>
 
         <div>
@@ -685,41 +571,21 @@ function SettingsContent() {
           <label className="block text-sm font-medium text-gray-700 mb-1">{t('role')}</label>
           <input
             type="text"
-            value={profile?.role || ''}
-            onChange={(e) => setProfile(prev => prev ? { ...prev, role: e.target.value } : null)}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-            placeholder={t('rolePlaceholder')}
+            value={role ?? ''}
+            readOnly
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 text-gray-600 capitalize"
           />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">{t('timezone')}</label>
-          <select
-            value={profile?.timezone || 'Africa/Cairo'}
-            onChange={(e) => setProfile(prev => prev ? { ...prev, timezone: e.target.value } : null)}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
-          >
-            {TIMEZONES.map(tz => (
-              <option key={tz.value} value={tz.value}>{tz.label}</option>
-            ))}
-          </select>
+          <p className="text-xs text-gray-500 mt-1">{t('roleReadOnlyHint')}</p>
         </div>
 
         <div>
           <LanguageSelector />
         </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">{t('companyName')}</label>
-          <input
-            type="text"
-            value={profile?.company_name || ''}
-            onChange={(e) => setProfile(prev => prev ? { ...prev, company_name: e.target.value } : null)}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-            placeholder={t('companyNamePlaceholder')}
-          />
-        </div>
       </div>
+
+      <Link href="/settings/profile" className="inline-flex items-center gap-1.5 text-sm text-[#647C47] hover:underline">
+        <Lock className="w-4 h-4" /> {t('changePasswordLink')}
+      </Link>
 
       {/* Save Button */}
       <div className="flex justify-end pt-4 border-t border-gray-200">
@@ -805,56 +671,17 @@ function SettingsContent() {
         </div>
       </div>
 
-      {/* Email Signature */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">{t('emailSignature')}</label>
-        <SignatureEditor
-          content={emailSettings?.signature || ''}
-          onChange={(html) => setEmailSettings(prev => prev ? { ...prev, signature: html } : null)}
-          placeholder={t('signaturePlaceholder')}
-        />
-        <p className="text-xs text-gray-500 mt-1">{t('signatureHint')}</p>
-      </div>
-
-      {/* Auto Reply */}
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-gray-900">{t('autoReply')}</p>
-            <p className="text-xs text-gray-500">{t('autoReplyDescription')}</p>
-          </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={emailSettings?.auto_reply_enabled || false}
-              onChange={(e) => setEmailSettings(prev => prev ? { ...prev, auto_reply_enabled: e.target.checked } : null)}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#647C47]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#647C47]"></div>
-          </label>
-        </div>
-
-        {emailSettings?.auto_reply_enabled && (
-          <textarea
-            value={emailSettings?.auto_reply_message || ''}
-            onChange={(e) => setEmailSettings(prev => prev ? { ...prev, auto_reply_message: e.target.value } : null)}
-            rows={3}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
-            placeholder={t('autoReplyPlaceholder')}
-          />
-        )}
-      </div>
-
-      {/* Save Button */}
-      <div className="flex justify-end pt-4 border-t border-gray-200">
-        <button
-          onClick={saveEmailSettings}
-          disabled={saving}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors disabled:opacity-50"
+      {/* Signatures: the real ones (email_signatures) live on /settings/email.
+          This tab had its own Signature and Auto-Reply fields, saved to
+          user_settings and read by nothing — no email ever carried them. */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex items-center justify-between gap-4">
+        <p className="text-sm text-gray-600">{t('signaturesLiveElsewhere')}</p>
+        <Link
+          href="/settings/email?tab=signatures"
+          className="shrink-0 px-3 py-1.5 text-sm font-medium text-[#647C47] border border-[#647C47]/30 rounded-lg hover:bg-[#647C47]/10"
         >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          {saving ? t('saving') : t('saveChanges')}
-        </button>
+          {t('manageSignatures')}
+        </Link>
       </div>
     </div>
   )
@@ -934,143 +761,6 @@ function SettingsContent() {
     </div>
   )
 
-  const renderPreferencesTab = () => (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium text-gray-900">{t('itineraryPreferences')}</h3>
-        <p className="text-sm text-gray-500 mt-1">{t('configureDefaults')}</p>
-      </div>
-
-      {/* Default Tier Setting */}
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <Crown className="w-5 h-5 text-amber-600" />
-          <h4 className="text-sm font-bold text-gray-900">{t('defaultServiceTier')}</h4>
-        </div>
-
-        <p className="text-xs text-gray-600 mb-4">
-          {t('tierDescription')}
-        </p>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {tierOptions.map((tier) => {
-            const isSelected = userPreferences.default_tier === tier.value
-            const descKey = TIER_DESC_KEYS[tier.value]
-            const desc = tier.description || (descKey ? t(descKey) : '')
-
-            return (
-              <button
-                key={tier.value}
-                onClick={() => setUserPreferences(prev => ({ ...prev, default_tier: tier.value }))}
-                className={`p-3 rounded-lg border-2 text-center transition-all ${
-                  isSelected
-                    ? tier.value === 'luxury'
-                      ? 'border-amber-500 bg-amber-50'
-                      : tier.value === 'deluxe'
-                      ? 'border-purple-500 bg-purple-50'
-                      : tier.value === 'standard'
-                      ? 'border-blue-500 bg-blue-50'
-                      : tier.value === 'budget'
-                      ? 'border-gray-500 bg-gray-50'
-                      : 'border-[#647C47] bg-green-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="flex items-center justify-center gap-1 mb-1">
-                  {tier.value === 'luxury' && <Crown className="w-4 h-4 text-amber-600" />}
-                  <span className={`text-sm font-semibold ${
-                    isSelected ? 'text-gray-900' : 'text-gray-700'
-                  }`}>
-                    {tier.label}
-                  </span>
-                </div>
-                {desc && <p className="text-xs text-gray-500">{desc}</p>}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Default Margin Setting */}
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-lg">💰</span>
-          <h4 className="text-sm font-bold text-gray-900">{t('defaultProfitMargin')}</h4>
-        </div>
-
-        <p className="text-xs text-gray-600 mb-4">
-          {t('marginDescription')}
-        </p>
-
-        <div className="flex items-center gap-4">
-          <input
-            type="range"
-            min="0"
-            max="50"
-            step="5"
-            value={userPreferences.default_margin_percent}
-            onChange={(e) => setUserPreferences(prev => ({ ...prev, default_margin_percent: parseInt(e.target.value) }))}
-            className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#647C47]"
-          />
-          <div className="w-20 text-center">
-            <span className="text-2xl font-bold text-[#647C47]">{userPreferences.default_margin_percent}%</span>
-          </div>
-        </div>
-
-        <div className="flex justify-between mt-2 text-xs text-gray-500">
-          <span>0%</span>
-          <span>25%</span>
-          <span>50%</span>
-        </div>
-      </div>
-
-      {/* Default Currency Setting */}
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-lg">💱</span>
-          <h4 className="text-sm font-bold text-gray-900">{t('defaultCurrency')}</h4>
-        </div>
-
-        <p className="text-xs text-gray-600 mb-4">
-          {t('currencyDescription')}
-        </p>
-
-        <div className="flex gap-2">
-          {RATE_CURRENCIES.map((currency) => {
-            const isSelected = userPreferences.default_currency === currency
-            const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
-
-            return (
-              <button
-                key={currency}
-                onClick={() => setUserPreferences(prev => ({ ...prev, default_currency: currency }))}
-                className={`px-4 py-2 rounded-lg border-2 font-medium transition-all ${
-                  isSelected
-                    ? 'border-[#647C47] bg-[#647C47]/5 text-[#647C47]'
-                    : 'border-gray-200 hover:border-gray-300 text-gray-700'
-                }`}
-              >
-                {symbols[currency]} {currency}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Save Button */}
-      <div className="flex justify-end pt-4 border-t border-gray-200">
-        <button
-          onClick={savePreferences}
-          disabled={saving}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors disabled:opacity-50"
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          {saving ? t('saving') : t('saveChanges')}
-        </button>
-      </div>
-    </div>
-  )
-
   const renderIntegrationsTab = () => {
     const providers = [
       {
@@ -1094,9 +784,26 @@ function SettingsContent() {
         <div>
           <h3 className="text-lg font-medium text-gray-900">Accounting Integrations</h3>
           <p className="text-sm text-gray-500 mt-1">
-            Connect your accounting software to automatically sync invoices, expenses, and payments.
+            Connect your company's accounting software to automatically sync invoices, expenses, and payments.
+            The connection belongs to the company: every admin sees it, whoever connected it, and a company
+            sends its books to one provider at a time.
           </p>
         </div>
+
+        {accountingNotice && (
+          <div className={`flex items-start gap-2 p-3 rounded-lg border text-sm ${accountingNotice.ok ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-700'}`}>
+            {accountingNotice.ok ? <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" /> : <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />}
+            <span className="flex-1">{accountingNotice.text}</span>
+            <button onClick={() => setAccountingNotice(null)} className="p-0.5"><X className="w-4 h-4" /></button>
+          </div>
+        )}
+
+        {!isAdmin && (
+          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>Only the agency owner or an admin can connect or disconnect the accounting software.</span>
+          </div>
+        )}
 
         <div className="space-y-4">
           {providers.map(p => {
@@ -1127,14 +834,16 @@ function SettingsContent() {
                           <CheckCircle className="w-3 h-3" />
                           Connected
                         </span>
-                        <button
-                          onClick={() => disconnectAccounting(p.key)}
-                          className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-                        >
-                          Disconnect
-                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => disconnectAccounting(p.key)}
+                            className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                          >
+                            Disconnect
+                          </button>
+                        )}
                       </>
-                    ) : (
+                    ) : isAdmin ? (
                       <button
                         onClick={() => connectAccounting(p.key)}
                         disabled={connectingProvider === p.key}
@@ -1147,6 +856,8 @@ function SettingsContent() {
                         )}
                         Connect {p.name}
                       </button>
+                    ) : (
+                      <span className="text-xs text-gray-500">Not connected</span>
                     )}
                   </div>
                 </div>
@@ -1240,7 +951,7 @@ function SettingsContent() {
                   className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] transition-colors"
                 >
                   <LinkIcon className="w-4 h-4" />
-                  Set Up WhatsApp
+                  WhatsApp status
                 </a>
               )}
             </div>
@@ -1389,7 +1100,7 @@ function SettingsContent() {
               {activeTab === 'profile' && renderProfileTab()}
               {activeTab === 'email' && renderEmailTab()}
               {activeTab === 'notifications' && renderNotificationsTab()}
-              {activeTab === 'preferences' && renderPreferencesTab()}
+              {activeTab === 'preferences' && <PreferencesPanel />}
               {activeTab === 'integrations' && renderIntegrationsTab()}
               {activeTab === 'partners' && <PartnerIntegrationsPanel />}
               {activeTab === 'organization' && (

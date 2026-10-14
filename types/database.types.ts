@@ -5085,6 +5085,7 @@ export interface Database {
           is_default: boolean | null
           created_at: string | null
           updated_at: string | null
+          org_id: string | null
         }
         Insert: {
           id?: string
@@ -5094,6 +5095,7 @@ export interface Database {
           is_default?: boolean | null
           created_at?: string | null
           updated_at?: string | null
+          org_id?: string | null
         }
         Update: {
           id?: string
@@ -5103,8 +5105,17 @@ export interface Database {
           is_default?: boolean | null
           created_at?: string | null
           updated_at?: string | null
+          org_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "email_signatures_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       email_sync_state: {
         Row: {
