@@ -38,10 +38,10 @@ export async function buildCommunicationContext(
 
   // Run all queries in parallel for efficiency
   const [client, itineraries, invoices, payments, recentMessages] = await Promise.all([
-    thread.client_id ? fetchClient(thread.client_id, supabase) : Promise.resolve(null),
-    thread.client_id ? fetchItineraries(thread.client_id, supabase) : Promise.resolve([]),
-    thread.client_id ? fetchInvoices(thread.client_id, supabase) : Promise.resolve([]),
-    thread.client_id ? fetchPayments(thread.client_id, supabase) : Promise.resolve([]),
+    thread.client_id ? fetchClient(thread.client_id, thread.org_id, supabase) : Promise.resolve(null),
+    thread.client_id ? fetchItineraries(thread.client_id, thread.org_id, supabase) : Promise.resolve([]),
+    thread.client_id ? fetchInvoices(thread.client_id, thread.org_id, supabase) : Promise.resolve([]),
+    thread.client_id ? fetchPayments(thread.client_id, thread.org_id, supabase) : Promise.resolve([]),
     fetchRecentMessages(thread, supabase),
   ])
 
@@ -70,6 +70,7 @@ function emptyContext(): CopilotContext {
 
 async function fetchClient(
   clientId: string,
+  orgId: string,
   supabase: SupabaseClient
 ): Promise<CopilotContextClient | null> {
   const { data: client, error } = await supabase
@@ -78,6 +79,10 @@ async function fetchClient(
     // whole select and the draft never saw the client at all.
     .select('id, first_name, last_name, email, phone, nationality, preferred_language, internal_notes')
     .eq('id', clientId)
+    // The thread's own company's client only: this ran on the service role
+    // with the id alone, so a thread carrying another company's client id
+    // put that client's name, contact details and notes in the draft.
+    .eq('org_id', orgId)
     .single()
 
   if (error || !client) return null
@@ -87,6 +92,7 @@ async function fetchClient(
     .from('itineraries')
     .select('*', { count: 'exact', head: true })
     .eq('client_id', clientId)
+    .eq('org_id', orgId)
 
   return {
     id: client.id,
@@ -102,12 +108,14 @@ async function fetchClient(
 
 async function fetchItineraries(
   clientId: string,
+  orgId: string,
   supabase: SupabaseClient
 ): Promise<CopilotContextItinerary[]> {
   const { data, error } = await supabase
     .from('itineraries')
     .select('id, itinerary_code, trip_name, destinations, start_date, end_date, status, num_adults, num_children, total_cost, currency')
     .eq('client_id', clientId)
+    .eq('org_id', orgId)
     .order('start_date', { ascending: false })
     .limit(3)
 
@@ -129,12 +137,14 @@ async function fetchItineraries(
 
 async function fetchInvoices(
   clientId: string,
+  orgId: string,
   supabase: SupabaseClient
 ): Promise<CopilotContextInvoice[]> {
   const { data, error } = await supabase
     .from('invoices')
     .select('id, invoice_number, invoice_type, total_amount, amount_paid, balance_due, status, due_date, currency')
     .eq('client_id', clientId)
+    .eq('org_id', orgId)
     .order('created_at', { ascending: false })
     .limit(5)
 
@@ -155,6 +165,7 @@ async function fetchInvoices(
 
 async function fetchPayments(
   clientId: string,
+  orgId: string,
   supabase: SupabaseClient
 ): Promise<CopilotContextPayment[]> {
   // Payments are linked to invoices, which are linked to clients
@@ -162,6 +173,7 @@ async function fetchPayments(
     .from('invoices')
     .select('id')
     .eq('client_id', clientId)
+    .eq('org_id', orgId)
 
   if (invoiceError || !invoiceIds || invoiceIds.length === 0) return []
 

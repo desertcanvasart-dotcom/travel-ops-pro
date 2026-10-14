@@ -2572,6 +2572,29 @@ export interface Database {
           },
         ]
       }
+      client_code_counters: {
+        Row: {
+          last_value: number
+          org_id: string
+        }
+        Insert: {
+          last_value?: number
+          org_id: string
+        }
+        Update: {
+          last_value?: number
+          org_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_code_counters_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: true
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_contacts: {
         Row: {
           id: string

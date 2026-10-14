@@ -276,7 +276,7 @@ describe('inbox routes are scoped to the caller org', () => {
     expect(c).toContain('org_id: orgId,')
     expect(c).toMatch(/\.eq\('org_id', orgId\)\s*\n\s*\.eq\('phone_number', cleanPhone\)/)
     // The auto-assign queue is the org's own team (team_members.org_id).
-    expect(c).toMatch(/from\('team_members'\)\s*\n\s*\.select\('id'\)\s*\n\s*\.eq\('org_id', orgId\)/)
+    expect(c).toMatch(/from\('team_members'\)\s*\n\s*\.select\('id, user_id[^']*'\)\s*\n\s*\.eq\('org_id', orgId\)/)
   })
 
   it('assign: conversation and assignee are the org own', () => {

@@ -1,15 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase'
 import {
   Calendar, MessageSquare, Phone, Mail, FileText, MapPin,
   CheckCircle, Clock, AlertCircle, Users
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { formatMoney } from '@/lib/currency-totals'
-
-const supabase = createClient()
 
 interface TimelineEvent {
   id: string
@@ -40,40 +37,17 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
     setIsLoading(true)
 
     try {
-      // Fetch client creation
-      const { data: client } = await supabase
-        .from('clients')
-        .select('created_at, first_name, last_name')
-        .eq('id', clientId)
-        .single()
-
-      // Fetch communications
-      const { data: communications } = await supabase
-        .from('communication_history')
-        .select('*')
-        .eq('client_id', clientId)
-        .order('communication_date', { ascending: false })
-
-      // Fetch bookings/itineraries
-      const { data: bookings } = await supabase
-        .from('itineraries')
-        .select('*')
-        .eq('client_id', clientId)
-        .order('created_at', { ascending: false })
-
-      // Fetch notes
-      const { data: notes } = await supabase
-        .from('client_notes')
-        .select('*')
-        .eq('client_id', clientId)
-        .order('created_at', { ascending: false })
-
-      // Fetch follow-ups
-      const { data: followups } = await supabase
-        .from('client_followups')
-        .select('*')
-        .eq('client_id', clientId)
-        .order('due_date', { ascending: false })
+      // Everything comes from one server route scoped to the active company:
+      // the client's trips there match by client_id and by email, the same as
+      // the Bookings tab (lib/clients/trips).
+      const res = await fetch(`/api/clients/${clientId}/timeline`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const timeline = await res.json()
+      const client = timeline.client
+      const communications: any[] = timeline.communications ?? []
+      const bookings: any[] = timeline.trips ?? []
+      const notes: any[] = timeline.notes ?? []
+      const followups: any[] = timeline.followups ?? []
 
       // Combine all events
       const allEvents: TimelineEvent[] = []
@@ -161,7 +135,7 @@ export default function ClientTimeline({ clientId }: ClientTimelineProps) {
           type: 'followup',
           date: followup.due_date,
           title: t('eventTypes.followup', { type: followup.followup_type }),
-          description: followup.notes || t('eventTypes.noNotes'),
+          description: followup.description || followup.title || t('eventTypes.noNotes'),
           icon: statusIcon[followup.status] || Clock,
           color: followup.status === 'completed' ? 'green' :
                  followup.status === 'cancelled' ? 'red' : 'yellow',

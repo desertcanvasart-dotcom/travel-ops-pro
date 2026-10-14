@@ -14,6 +14,7 @@ import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
 import { parseFrozenFx, frozenToExchangeRates } from '@/lib/itinerary-fx'
 import { quoteAmountsInTripCurrency, allocateClientPrices } from '@/lib/b2b/convert-money'
 import { templateDaysToItineraryDays, packageTypeForTemplate, serviceLineForItinerary, type ItineraryServiceRow } from '@/lib/itineraries/template-days'
+import { escapeLike } from '@/lib/db/escape-like'
 
 // ============================================
 // B2B QUOTE CONVERT TO ITINERARY API
@@ -241,11 +242,17 @@ export async function POST(
       // Scoped: matching on email alone would attach this quote to another
       // organisation's customer, and clients is org-scoped as of
       // migrations/20260825_clients_org_id.sql.
+      // Case-insensitive, and the oldest when there are several: an exact match
+      // missed "John@x.com" against "john@x.com" and made a second client, and
+      // .maybeSingle() over two rows is an error that read as "not found" and
+      // made a third.
       const { data: existingClient } = await supabaseAdmin
         .from('clients')
         .select('id')
-        .eq('email', quote.client_email)
+        .ilike('email', escapeLike(String(quote.client_email).trim()))
         .eq('org_id', orgId)
+        .order('created_at', { ascending: true })
+        .limit(1)
         .maybeSingle()
 
       if (existingClient) {

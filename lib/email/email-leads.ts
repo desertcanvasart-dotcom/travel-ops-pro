@@ -194,7 +194,7 @@ export async function processNewEmailLeads(
       if (!x.is_travel_request) { await mark('not_a_request'); continue }
 
       // An existing client with this address (added since the contacts were loaded).
-      const { data: existing } = await db.from('clients').select('id').eq('org_id', orgId).ilike('email', sender).limit(1).maybeSingle()
+      const { data: existing } = await db.from('clients').select('id').eq('org_id', orgId).ilike('email', sender.replace(/[\\%_]/g, '\\$&')).limit(1).maybeSingle()
       let clientId = existing?.id as string | undefined
       const fallback = nameFromSender(msg.from_address)
       if (!clientId) {

@@ -43,6 +43,7 @@ import type { EmailSyncOptions, EmailSyncResult } from '@/types/unified'
 import { createCopilotInboxEntry } from '@/lib/copilot-intake'
 import { loadKnownContactEmails, looksAutomated } from '@/lib/email-scoping'
 import { mailboxConversationFilter, type MailboxRef } from '@/lib/email/conversation-access'
+import { escapeLike } from '@/lib/db/escape-like'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -631,13 +632,17 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
               // Try to find client by email
               const senderEmail = extractEmailAddress(msgFrom)
               // Another organisation's client with this address is not ours.
-              const { data: matchedClient } = await supabase
-                .from('clients')
-                .select('id, first_name, last_name')
-                .eq('org_id', orgId)
-                .eq('email', senderEmail)
-                .limit(1)
-                .maybeSingle()
+              // Case-insensitive: the address is the same however it is typed,
+              // and an exact match missed "John@x.com" against "john@x.com".
+              const { data: matchedClient } = senderEmail
+                ? await supabase
+                    .from('clients')
+                    .select('id, first_name, last_name')
+                    .eq('org_id', orgId)
+                    .ilike('email', escapeLike(senderEmail))
+                    .limit(1)
+                    .maybeSingle()
+                : { data: null }
 
               const senderDisplayName = msgFrom.match(/^([^<]+)<?/)
                 ? msgFrom.match(/^([^<]+)<?/)![1].trim()

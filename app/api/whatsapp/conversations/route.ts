@@ -4,7 +4,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
-import { teamMemberInOrg } from '@/lib/whatsapp-org'
+import { teamMemberInOrg, pickAutoAssignee, openChatsByMember } from '@/lib/whatsapp-org'
 
 // Every query here runs on the service role and filters on org_id itself:
 // each organization has its own WhatsApp number and only its own threads
@@ -169,17 +169,24 @@ export async function POST(request: NextRequest) {
     // (team_members.org_id); the first one in line used to be anyone in the
     // deployment.
     if (auto_assign !== false) {
-      const { data: candidate } = await supabase
-        .from('team_members')
-        .select('id')
-        .eq('org_id', orgId)
-        .eq('is_active', true)
-        .eq('is_available', true)
-        .order('last_assigned_at', { ascending: true, nullsFirst: true })
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle()
-      assignedTeamMemberId = candidate?.id ?? null
+      // Only members with a linked login (someone who can see the chat) who are
+      // available and below max_conversations; a Driver or Guide with no login
+      // used to receive chats nobody could open.
+      const [{ data: members }, { data: assigned }] = await Promise.all([
+        supabase
+          .from('team_members')
+          .select('id, user_id, max_conversations, last_assigned_at, created_at')
+          .eq('org_id', orgId)
+          .eq('is_active', true)
+          .eq('is_available', true)
+          .not('user_id', 'is', null),
+        supabase
+          .from('whatsapp_conversations')
+          .select('assigned_team_member_id, status, is_hidden')
+          .eq('org_id', orgId)
+          .not('assigned_team_member_id', 'is', null),
+      ])
+      assignedTeamMemberId = pickAutoAssignee(members ?? [], openChatsByMember(assigned ?? []))
     }
 
     const { data: newConversation, error } = await supabase

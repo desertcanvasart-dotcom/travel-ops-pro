@@ -14,7 +14,7 @@ import { fillTipRoles, type TipRoleReader } from '@/lib/pricing/tip-roles'
 import { dayDate } from '@/lib/rates/date-window'
 import { isOwnAddress, loadOwnAddresses } from '@/lib/email/own-address'
 import { gridOvernightCities } from '@/lib/itineraries/grid-overnight'
-import { quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
+import { quoteRefsInOrg, quoteRefNotFound, partnerIsInactive, inactivePartnerResponse } from '@/lib/b2b/quote-scope'
 import { rowInOrg } from '@/lib/api/org-scope'
 import { roundToCurrency } from '@/lib/currency-totals'
 import { seasonForDate, type SeasonWindow } from '@/lib/pricing/season-uplift'
@@ -252,10 +252,11 @@ export async function POST(request: NextRequest) {
     // overwrite another org's trip. Refuse anything not this org's, before any
     // write.
     let itineraryCurrency: string | null = null
+    let currentPartnerId: string | null = null
     if (isUpdate) {
       const { data: owned } = await supabase
         .from('itineraries')
-        .select('id, currency')
+        .select('id, currency, partner_id')
         .eq('id', config.itineraryId)
         .eq('org_id', callerOrgId)
         .maybeSingle()
@@ -263,6 +264,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
       }
       itineraryCurrency = owned.currency ?? null
+      currentPartnerId = owned.partner_id ?? null
+    }
+
+    // A NEW trip, or a trip moved to a new partner, is refused for a
+    // deactivated partner; a trip that already has it stays valid and re-saves.
+    if (partnerId && partnerId !== currentPartnerId && (await partnerIsInactive(supabase, callerOrgId, partnerId))) {
+      return inactivePartnerResponse()
     }
 
     const { rates: gridRates, rateCurrency, fixedCosts } = await loadGridRateOptions(supabase, callerOrgId, null)

@@ -3,7 +3,8 @@
 // ============================================
 // DEPARTMENTS — create, edit, route service types
 // ============================================
-// The routing table behind task generation, finally visible. Each service
+// The routing table behind task generation, finally visible. (Membership routes nothing: the
+// person for each department is picked in the Generate tasks dialog.) Each service
 // type may be owned by ONE active department (the API enforces it); the
 // picker greys out types another department already claims, because an
 // invisible, ambiguous mapping is exactly how 36 services once sat unrouted
@@ -36,6 +37,8 @@ export default function DepartmentsPage() {
   const [savedId, setSavedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
+  // Optional service types typed at creation (comma separated).
+  const [newTypes, setNewTypes] = useState('')
   const [creating, setCreating] = useState(false)
   // What the SERVER currently holds, per department. The picker greys pills
   // from local state (so deselecting a type unlocks it here immediately), but
@@ -71,7 +74,8 @@ export default function DepartmentsPage() {
     try {
       const [deptRes, memberRes] = await Promise.all([
         fetch('/api/departments?include_inactive=1'),
-        fetch('/api/team-members'),
+        // Active people only: a deactivated person is in no one's headcount.
+        fetch('/api/team-members?active=true'),
       ])
       const deptData = await deptRes.json()
       if (!deptRes.ok) throw new Error(deptData.error)
@@ -163,13 +167,17 @@ export default function DepartmentsPage() {
       const res = await fetch('/api/departments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName.trim(), service_types: [] }),
+        body: JSON.stringify({
+          name: newName.trim(),
+          service_types: [...new Set(newTypes.split(',').map(normalizeCustomType).filter(Boolean))],
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setDepartments(prev => [...prev, data.data].sort((a, b) => a.name.localeCompare(b.name)))
       setSavedTypes(prev => ({ ...prev, ...snapshot([data.data]) }))
       setNewName('')
+      setNewTypes('')
     } catch (err: any) {
       setError(err.message || 'Failed to create')
     } finally {
@@ -255,9 +263,14 @@ export default function DepartmentsPage() {
           const palette = [...new Set([...KNOWN_TYPES, ...types])]
           // Types this card has claimed that the SERVER still gives to someone
           // else — saving now would come back 400, so say so before the click.
-          const pending = types
+          // An inactive department claims nothing, so it has nothing to conflict
+          // until it is switched back on.
+          const pending = (dept.is_active ? types : [])
             .map(type => ({ type, owner: serverOwnerOf(type, dept.id) }))
             .filter((p): p is { type: string; owner: string } => p.owner !== null)
+          // Switching it back on is what makes the conflict real: say so here,
+          // not as an error after Save.
+          const reactivating = dept.is_active && savedTypes[dept.id]?.is_active === false
           return (
             <div key={dept.id} className={`bg-white border rounded-lg p-5 ${dept.is_active ? 'border-gray-200' : 'border-dashed border-gray-300 opacity-70'}`}>
               <div className="flex items-center gap-3 mb-3">
@@ -351,7 +364,7 @@ export default function DepartmentsPage() {
               )}
               {pending.length > 0 && (
                 <p className="-mt-2 mb-3 px-2.5 py-1.5 rounded border border-amber-200 bg-amber-50 text-xs text-amber-800">
-                  {t('saveOrder', {
+                  {t(reactivating ? 'reactivateConflict' : 'saveOrder', {
                     types: pending.map(p => p.type).join(', '),
                     names: [...new Set(pending.map(p => p.owner))].join(', '),
                   })}
@@ -431,12 +444,20 @@ export default function DepartmentsPage() {
         })}
       </div>
 
-      <div className="mt-6 flex items-center gap-2">
+      <div className="mt-6 flex flex-wrap items-center gap-2">
         <input
           className="flex-1 max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-sm"
           placeholder={t('newPlaceholder')}
           value={newName}
           onChange={e => setNewName(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && create()}
+        />
+        <input
+          className="flex-1 max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-sm"
+          placeholder={t('newTypesPlaceholder')}
+          title={t('customTypeNote')}
+          value={newTypes}
+          onChange={e => setNewTypes(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && create()}
         />
         <button

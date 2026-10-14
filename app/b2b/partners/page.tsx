@@ -21,14 +21,9 @@ interface B2BPartner {
   email: string | null
   phone: string | null
   country: string | null
-  currency: string
-  default_margin_percent: number
-  show_net_rates: boolean
-  show_cost_breakdown: boolean
-  pricing_model: string
+  default_margin_percent: number | null
+  commission_percent: number | null
   is_active: boolean
-  credit_limit: number | null
-  payment_terms: string | null
   notes: string | null
   created_at: string
 }
@@ -45,7 +40,16 @@ const COUNTRIES = [
   'Japan', 'China', 'UAE', 'Saudi Arabia', 'Egypt', 'Other'
 ]
 
-const CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF', 'AUD', 'CAD', 'JPY']
+// What the list endpoint counts over ALL the company's partners.
+interface PartnerCounts { total: number; active: number; countries: number; avg_margin: number | null }
+
+// Only fields something reads. currency, net-rate / cost-breakdown toggles,
+// pricing model, credit limit and payment terms were here but nothing used
+// them, so the form no longer offers them.
+const EMPTY_FORM = {
+  partner_code: '', company_name: '', contact_name: '', email: '', phone: '',
+  country: '', default_margin_percent: '20', commission_percent: '', is_active: true,
+}
 
 export default function B2BPartnersPage() {
   const t = useTranslations('b2bPartners')
@@ -57,20 +61,22 @@ export default function B2BPartnersPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingPartner, setEditingPartner] = useState<B2BPartner | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
-  const [formData, setFormData] = useState({
-    partner_code: '', company_name: '', contact_name: '', email: '', phone: '',
-    country: '', currency: 'EUR', default_margin_percent: 20, show_net_rates: false,
-    show_cost_breakdown: false, pricing_model: 'margin', is_active: true,
-    credit_limit: null as number | null, payment_terms: '', notes: ''
-  })
+  const [counts, setCounts] = useState<PartnerCounts | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [formData, setFormData] = useState(EMPTY_FORM)
 
   useEffect(() => { fetchPartners() }, [showInactive])
 
   const fetchPartners = async () => {
     try {
       const res = await fetch(`/api/b2b/partners?active_only=${!showInactive}`)
-      const data = await res.json()
-      if (data.success) setPartners(data.data)
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.success) {
+        setPartners(data.data)
+        setCounts(data.counts ?? null)
+      } else {
+        showToast('error', data.error || t('failedToLoad'))
+      }
     } catch (err) {
       showToast('error', t('failedToLoad'))
     } finally {
@@ -86,12 +92,7 @@ export default function B2BPartnersPage() {
 
   const handleAddNew = () => {
     setEditingPartner(null)
-    setFormData({
-      partner_code: '', company_name: '', contact_name: '', email: '', phone: '',
-      country: '', currency: 'EUR', default_margin_percent: 20, show_net_rates: false,
-      show_cost_breakdown: false, pricing_model: 'margin', is_active: true,
-      credit_limit: null, payment_terms: '', notes: ''
-    })
+    setFormData(EMPTY_FORM)
     setShowModal(true)
   }
 
@@ -100,26 +101,32 @@ export default function B2BPartnersPage() {
     setFormData({
       partner_code: partner.partner_code, company_name: partner.company_name,
       contact_name: partner.contact_name || '', email: partner.email || '',
-      phone: partner.phone || '', country: partner.country || '', currency: partner.currency,
-      default_margin_percent: partner.default_margin_percent, show_net_rates: partner.show_net_rates,
-      show_cost_breakdown: partner.show_cost_breakdown, pricing_model: partner.pricing_model,
-      is_active: partner.is_active, credit_limit: partner.credit_limit,
-      payment_terms: partner.payment_terms || '', notes: partner.notes || ''
+      phone: partner.phone || '', country: partner.country || '',
+      default_margin_percent: partner.default_margin_percent == null ? '' : String(partner.default_margin_percent),
+      commission_percent: partner.commission_percent == null ? '' : String(partner.commission_percent),
+      is_active: partner.is_active,
     })
     setShowModal(true)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setSaving(true)
     try {
       const url = editingPartner ? `/api/b2b/partners/${editingPartner.id}` : '/api/b2b/partners'
+      // A blank percentage is "none" (null), not 0; the server checks 0-100.
+      const pct = (v: string) => (v.trim() === '' ? null : Number(v))
       const res = await fetch(url, {
         method: editingPartner ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          ...formData,
+          default_margin_percent: pct(formData.default_margin_percent),
+          commission_percent: pct(formData.commission_percent),
+        })
       })
-      const data = await res.json()
-      if (data.success) {
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.success) {
         showToast('success', editingPartner ? t('partnerUpdated') : t('partnerCreated'))
         setShowModal(false)
         fetchPartners()
@@ -128,6 +135,8 @@ export default function B2BPartnersPage() {
       }
     } catch (err) {
       showToast('error', t('failedToSave'))
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -135,8 +144,8 @@ export default function B2BPartnersPage() {
     if (!(await confirmDialog(t('deleteConfirm', { companyName: partner.company_name })))) return
     try {
       const res = await fetch(`/api/b2b/partners/${partner.id}`, { method: 'DELETE' })
-      const data = await res.json()
-      if (data.success) {
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.success) {
         showToast('success', t('partnerDeleted'))
         fetchPartners()
       } else {
@@ -192,20 +201,20 @@ export default function B2BPartnersPage() {
       <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="bg-white rounded-lg border p-4">
           <p className="text-xs text-gray-500 mb-1">{t('statsTotal')}</p>
-          <p className="text-2xl font-bold">{partners.length}</p>
+          <p className="text-2xl font-bold">{counts?.total ?? partners.length}</p>
         </div>
         <div className="bg-white rounded-lg border p-4">
           <p className="text-xs text-gray-500 mb-1">{t('statsActive')}</p>
-          <p className="text-2xl font-bold text-green-600">{partners.filter(p => p.is_active).length}</p>
+          <p className="text-2xl font-bold text-green-600">{counts?.active ?? partners.filter(p => p.is_active).length}</p>
         </div>
         <div className="bg-white rounded-lg border p-4">
           <p className="text-xs text-gray-500 mb-1">{t('statsCountries')}</p>
-          <p className="text-2xl font-bold">{new Set(partners.map(p => p.country).filter(Boolean)).size}</p>
+          <p className="text-2xl font-bold">{counts?.countries ?? new Set(partners.map(p => p.country).filter(Boolean)).size}</p>
         </div>
         <div className="bg-white rounded-lg border p-4">
           <p className="text-xs text-gray-500 mb-1">{t('statsAvgMargin')}</p>
           <p className="text-2xl font-bold text-[#647C47]">
-            {partners.length > 0 ? (partners.reduce((sum, p) => sum + p.default_margin_percent, 0) / partners.length).toFixed(1) : 0}%
+            {counts?.avg_margin != null ? `${counts.avg_margin.toFixed(1)}%` : '-'}
           </p>
         </div>
       </div>
@@ -229,6 +238,7 @@ export default function B2BPartnersPage() {
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-600">{t('tableContact')}</th>
               <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tableCountry')}</th>
               <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tableMargin')}</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tableCommission')}</th>
               <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tableStatus')}</th>
               <th className="px-4 py-3 text-center text-xs font-medium text-gray-600">{t('tableActions')}</th>
             </tr>
@@ -246,7 +256,12 @@ export default function B2BPartnersPage() {
                 </td>
                 <td className="px-4 py-3 text-center text-sm">{partner.country || '-'}</td>
                 <td className="px-4 py-3 text-center">
-                  <span className="px-2 py-1 bg-[#647C47]/10 text-[#647C47] rounded text-sm font-medium">{partner.default_margin_percent}%</span>
+                  {partner.default_margin_percent != null && partner.default_margin_percent > 0
+                    ? <span className="px-2 py-1 bg-[#647C47]/10 text-[#647C47] rounded text-sm font-medium">{partner.default_margin_percent}%</span>
+                    : <span className="text-sm text-gray-400">-</span>}
+                </td>
+                <td className="px-4 py-3 text-center text-sm">
+                  {partner.commission_percent != null ? `${partner.commission_percent}%` : <span className="text-gray-400">-</span>}
                 </td>
                 <td className="px-4 py-3 text-center">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${partner.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
@@ -262,7 +277,7 @@ export default function B2BPartnersPage() {
               </tr>
             ))}
             {filteredPartners.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-12 text-center text-gray-500">{t('noPartnersFound')}</td></tr>
+              <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-500">{t('noPartnersFound')}</td></tr>
             )}
           </tbody>
         </table>
@@ -307,7 +322,11 @@ export default function B2BPartnersPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">{t('defaultMargin')}</label>
-                  <input type="number" value={formData.default_margin_percent} onChange={(e) => setFormData({ ...formData, default_margin_percent: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 text-sm border rounded-lg" />
+                  <input type="number" min="0" max="100" step="0.01" value={formData.default_margin_percent} onChange={(e) => setFormData({ ...formData, default_margin_percent: e.target.value })} className="w-full px-3 py-2 text-sm border rounded-lg" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('commissionPercent')}</label>
+                  <input type="number" min="0" max="100" step="0.01" value={formData.commission_percent} onChange={(e) => setFormData({ ...formData, commission_percent: e.target.value })} className="w-full px-3 py-2 text-sm border rounded-lg" />
                 </div>
                 <div className="col-span-2">
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -318,7 +337,7 @@ export default function B2BPartnersPage() {
               </div>
               <div className="flex gap-3 pt-4 border-t">
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-4 py-2 text-sm border rounded-lg hover:bg-gray-50 font-medium">{t('cancel')}</button>
-                <button type="submit" className="flex-1 px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] font-medium flex items-center justify-center gap-2">
+                <button type="submit" disabled={saving} className="flex-1 px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] font-medium flex items-center justify-center gap-2 disabled:opacity-50">
                   <Check className="w-4 h-4" /> {editingPartner ? t('update') : t('create')}
                 </button>
               </div>

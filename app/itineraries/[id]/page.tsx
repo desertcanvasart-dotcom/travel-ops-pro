@@ -693,7 +693,7 @@ export default function ViewItineraryPage() {
             last_name: lastName,
             email: itinerary.client_email || '',
             phone: itinerary.client_phone || '',
-            status: 'active',
+            status: 'lead',
             source: 'itinerary'
           })
         })

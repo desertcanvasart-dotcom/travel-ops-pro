@@ -8,20 +8,24 @@ import {
 } from 'lucide-react'
 
 import { useState, useEffect, useRef } from 'react'
-import { formatMoney, formatTotals, type CurrencyTotals } from '@/lib/currency-totals'
+import { type CurrencyTotals } from '@/lib/currency-totals'
+import { collectedTotals, formatMoneyTotals, invoicedTotals } from '@/lib/clients/stats'
+import { CLIENT_STATUSES, clientStatusClass } from '@/lib/clients/status'
+import { attachedKinds, requestDeleteClient, requestMarkInactive } from '@/lib/clients/delete-client'
+import type { ClientAttachments } from '@/lib/clients/delete-guard'
+import { useRole } from '@/hooks/useRole'
 import { useTranslations } from 'next-intl'
-import { createClient } from '@/lib/supabase'
-import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import Link from 'next/link'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 
+// One row of GET /api/clients.
 interface ClientSummary {
   id: string
   client_code: string
   first_name: string
   last_name: string
-  email: string
-  phone?: string
+  email: string | null
+  phone?: string | null
   nationality?: string
   client_type: string
   vip_status: boolean
@@ -29,21 +33,25 @@ interface ClientSummary {
   lead_source?: string
   total_bookings_count: number
   total_revenue_generated: number
-  /** Billed per currency — the truth behind the scalar above. */
+  /** Invoiced per currency (invoices not draft or cancelled). */
   revenue_by_currency?: Record<string, number> | null
-  /** Which currency the scalar figures are denominated in. */
+  /** Paid against those invoices, per currency. */
+  collected_by_currency?: Record<string, number> | null
+  /** Which currency the single total_revenue_generated figure is in. */
   revenue_currency?: string | null
   last_contacted_at?: string
   created_at: string
-  pending_followups: number
-  total_communications: number
 }
 
 interface DeleteModalState {
   isOpen: boolean
   clientId: string
   clientName: string
+  /** Set when the server refused because something is attached. */
+  blocked: ClientAttachments | null
 }
+
+const PAGE_SIZE = 50
 
 const LEAD_SOURCES = [
   { value: 'whatsapp', label: 'WhatsApp', icon: '💬', color: 'bg-green-100 text-green-700' },
@@ -60,16 +68,22 @@ export default function ClientsPage() {
   const t = useTranslations('clients')
   const tCommon = useTranslations('common')
   const dialog = useConfirmDialog()
+  // The database lets managers and admins delete a client; an agent would be
+  // refused by the server, so the button is not offered.
+  const canDelete = useRole().canAccess(['admin', 'manager'])
   const [clients, setClients] = useState<ClientSummary[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [showFilters, setShowFilters] = useState(false)
   const [deleteModal, setDeleteModal] = useState<DeleteModalState>({
     isOpen: false,
     clientId: '',
-    clientName: ''
+    clientName: '',
+    blocked: null
   })
   const [deleting, setDeleting] = useState(false)
-  
+
   // Enhanced Filters
   const [filters, setFilters] = useState({
     search: '',
@@ -81,17 +95,16 @@ export default function ClientsPage() {
     dateFrom: '',
     dateTo: ''
   })
-  
-  // Stats
+
+  // Stats: counts and money for the whole company, from the server
   const [stats, setStats] = useState({
     total: 0,
-    active: 0,
+    byStatus: { lead: 0, prospect: 0, customer: 0, inactive: 0 } as Record<string, number>,
     vip: 0,
     newThisMonth: 0,
-    totalRevenue: {} as CurrencyTotals
+    invoiced: {} as CurrencyTotals,
+    collected: {} as CurrencyTotals
   })
-
-  const supabase = createClient()
 
   // Debounced copy of the search text so typing doesn't fire a query per
   // keystroke; other filter changes (dropdowns/toggles) still apply instantly.
@@ -117,7 +130,8 @@ export default function ClientsPage() {
     filters.vipOnly,
     filters.sortBy,
     filters.dateFrom,
-    filters.dateTo
+    filters.dateTo,
+    page
   ])
 
   // Stats are independent of the list filters — fetch once on mount and
@@ -127,86 +141,33 @@ export default function ClientsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // The list is the server's: it filters, orders, pages and counts the ACTIVE
+  // company's clients (GET /api/clients). The page used to read a database view
+  // from the browser — every company the person belongs to at once, 200 rows
+  // at most, with nothing to say the rest existed.
   const fetchClients = async () => {
     const seq = ++fetchSeqRef.current
     try {
       setLoading(true)
-      let query = supabase
-        .from('client_summary')
-        .select('*')
-        .limit(200)
+      const qs = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE), sort: filters.sortBy })
+      if (debouncedSearch.trim()) qs.set('search', debouncedSearch.trim())
+      if (filters.status !== 'all') qs.set('status', filters.status)
+      if (filters.clientType !== 'all') qs.set('client_type', filters.clientType)
+      if (filters.leadSource !== 'all') qs.set('lead_source', filters.leadSource)
+      if (filters.vipOnly) qs.set('vip', '1')
+      if (filters.dateFrom) qs.set('date_from', filters.dateFrom)
+      if (filters.dateTo) qs.set('date_to', filters.dateTo)
 
-      // Apply search filter — sanitize before interpolating into the PostgREST
-      // .or() filter string (same fix as the API routes; raw input can inject
-      // arbitrary OR conditions)
-      const search = sanitizeSearchTerm(debouncedSearch)
-      if (search) {
-        query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,client_code.ilike.%${search}%`)
-      }
-
-      // Apply status filter
-      if (filters.status !== 'all') {
-        query = query.eq('status', filters.status)
-      }
-
-      // Apply client type filter
-      if (filters.clientType !== 'all') {
-        query = query.eq('client_type', filters.clientType)
-      }
-
-      // Apply lead source filter
-      if (filters.leadSource !== 'all') {
-        query = query.eq('lead_source', filters.leadSource)
-      }
-
-      // Apply VIP filter
-      if (filters.vipOnly) {
-        query = query.eq('vip_status', true)
-      }
-
-      // Apply date range filter
-      if (filters.dateFrom) {
-        query = query.gte('created_at', filters.dateFrom)
-      }
-      if (filters.dateTo) {
-        query = query.lte('created_at', filters.dateTo + 'T23:59:59')
-      }
-
-      // Apply sorting
-      switch (filters.sortBy) {
-        case 'name':
-          query = query.order('first_name', { ascending: true })
-          break
-        case 'name_desc':
-          query = query.order('first_name', { ascending: false })
-          break
-        case 'revenue':
-          query = query.order('total_revenue_generated', { ascending: false })
-          break
-        case 'revenue_asc':
-          query = query.order('total_revenue_generated', { ascending: true })
-          break
-        case 'bookings':
-          query = query.order('total_bookings_count', { ascending: false })
-          break
-        case 'recent':
-          query = query.order('created_at', { ascending: false })
-          break
-        case 'oldest':
-          query = query.order('created_at', { ascending: true })
-          break
-        default:
-          query = query.order('created_at', { ascending: false })
-      }
-
-      const { data, error } = await query
+      const res = await fetch(`/api/clients?${qs}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const body = await res.json()
 
       // A newer fetch started while this one was in flight — drop this
       // response so it can't overwrite fresher results.
       if (seq !== fetchSeqRef.current) return
 
-      if (error) throw error
-      setClients(data || [])
+      setClients(body.clients || [])
+      setTotal(body.total ?? 0)
     } catch (error) {
       if (seq !== fetchSeqRef.current) return
       console.error('Error fetching clients:', error)
@@ -219,7 +180,8 @@ export default function ClientsPage() {
     setDeleteModal({
       isOpen: true,
       clientId,
-      clientName
+      clientName,
+      blocked: null
     })
   }
 
@@ -227,39 +189,33 @@ export default function ClientsPage() {
     setDeleteModal({
       isOpen: false,
       clientId: '',
-      clientName: ''
+      clientName: '',
+      blocked: null
     })
   }
 
-  const confirmDelete = async (force = false) => {
+  const afterClientChange = () => {
+    closeDeleteModal()
+    fetchClients()
+    fetchStats() // deletion / status change moves the counts and the money
+  }
+
+  const confirmDelete = async () => {
     if (!deleteModal.clientId) return
 
     try {
       setDeleting(true)
-      const url = `/api/clients/${deleteModal.clientId}${force ? '?force=true' : ''}`
-      const response = await fetch(url, { method: 'DELETE' })
-      const data = await response.json()
-
-      if (!response.ok) {
-        if (data.blocking === 'itineraries' && !force) {
-          // Ask user if they want to force delete
-          const proceed = await dialog.confirm({
-            title: t('deleteBlockedTitle'),
-            message: `${data.error}\n\n${t('deleteForceConfirm')}`,
-            variant: 'warning',
-            confirmText: t('forceDelete'),
-          })
-          if (proceed) {
-            await confirmDelete(true)
-          }
-          return
-        }
-        throw new Error(data.error || 'Failed to delete client')
+      const outcome = await requestDeleteClient(deleteModal.clientId)
+      if (outcome.ok) {
+        afterClientChange()
+        return
       }
-
-      closeDeleteModal()
-      fetchClients()
-      fetchStats() // deletion changes totals/active/VIP/revenue
+      // Something is attached: say what, and offer "Mark inactive" instead.
+      if (outcome.blocked) {
+        setDeleteModal(prev => ({ ...prev, blocked: outcome.counts }))
+        return
+      }
+      throw new Error(outcome.message)
     } catch (error: any) {
       console.error('Error deleting client:', error)
       await dialog.alert(t('error'), error.message || t('failedToDelete'), 'warning')
@@ -268,34 +224,24 @@ export default function ClientsPage() {
     }
   }
 
+  const markInactive = async () => {
+    try {
+      setDeleting(true)
+      const outcome = await requestMarkInactive(deleteModal.clientId)
+      if (!outcome.ok) throw new Error(outcome.message)
+      afterClientChange()
+    } catch (error: any) {
+      await dialog.alert(t('error'), error.message || t('failedToUpdate'), 'warning')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const fetchStats = async () => {
     try {
-      const { data: allClients } = await supabase
-        .from('clients')
-        .select('status, vip_status, total_revenue_generated, revenue_currency, revenue_by_currency, created_at')
-
-      if (allClients) {
-        const now = new Date()
-        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-
-        setStats({
-          total: allClients.length,
-          active: allClients.filter(c => c.status === 'active').length,
-          vip: allClients.filter(c => c.vip_status).length,
-          newThisMonth: allClients.filter(c => new Date(c.created_at) >= firstDayOfMonth).length,
-          // Per currency: a yen client and a euro client have not generated one
-          // combined number, and this book is billed in both.
-          totalRevenue: allClients.reduce((acc: CurrencyTotals, c: any) => {
-            const byCurrency = (c.revenue_by_currency && typeof c.revenue_by_currency === 'object')
-              ? c.revenue_by_currency
-              : (c.total_revenue_generated ? { [c.revenue_currency || 'EUR']: c.total_revenue_generated } : {})
-            for (const [code, amount] of Object.entries(byCurrency)) {
-              acc[code] = (acc[code] || 0) + (Number(amount) || 0)
-            }
-            return acc
-          }, {} as CurrencyTotals)
-        })
-      }
+      const res = await fetch('/api/clients/stats')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setStats(await res.json())
     } catch (error) {
       console.error('Error fetching stats:', error)
     }
@@ -303,9 +249,11 @@ export default function ClientsPage() {
 
   const handleFilterChange = (key: string, value: any) => {
     setFilters(prev => ({ ...prev, [key]: value }))
+    setPage(1)
   }
 
   const clearFilters = () => {
+    setPage(1)
     setFilters({
       search: '',
       status: 'all',
@@ -328,15 +276,9 @@ export default function ClientsPage() {
     filters.dateTo ||
     filters.sortBy !== 'recent'
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-green-100 text-green-800'
-      case 'inactive': return 'bg-gray-100 text-gray-800'
-      case 'prospect': return 'bg-primary-100 text-primary-800'
-      case 'blacklisted': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
+  const getStatusColor = clientStatusClass
+  const statusText = (status: string) =>
+    (CLIENT_STATUSES as readonly string[]).includes(status) ? t(`status_${status}`) : status
 
   const getTypeColor = (type: string) => {
     switch (type) {
@@ -379,25 +321,43 @@ export default function ClientsPage() {
                   <AlertCircle className="w-6 h-6 text-red-600" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">{t('deleteConfirmTitle')}</h3>
-                  <p className="text-sm text-gray-500">{t('deleteConfirmSubtitle')}</p>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {deleteModal.blocked ? t('deleteBlockedTitle') : t('deleteConfirmTitle')}
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    {deleteModal.blocked ? deleteModal.clientName : t('deleteConfirmSubtitle')}
+                  </p>
                 </div>
               </div>
 
-              <p className="text-sm text-gray-700 mb-4">
-                {t('deleteConfirmMessage')} <strong>{deleteModal.clientName}</strong>?
-              </p>
+              {deleteModal.blocked ? (
+                <>
+                  <p className="text-sm text-gray-700 mb-3">{t('deleteBlockedBody')}</p>
+                  <ul className="text-sm text-gray-800 space-y-1 ml-4 list-disc mb-4">
+                    {attachedKinds(deleteModal.blocked).map(([kind, count]) => (
+                      <li key={kind}>{t(`attached.${kind}`, { count })}</li>
+                    ))}
+                  </ul>
+                  <p className="text-sm text-gray-600 mb-6">{t('deleteBlockedHint')}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-700 mb-4">
+                    {t('deleteConfirmMessage')} <strong>{deleteModal.clientName}</strong>?
+                  </p>
 
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-                <p className="text-sm text-red-800 font-medium mb-2">{t('deleteAlsoDeletes')}</p>
-                <ul className="text-sm text-red-700 space-y-1 ml-4 list-disc">
-                  <li>{t('deleteItemNotes')}</li>
-                  <li>{t('deleteItemCommunications')}</li>
-                  <li>{t('deleteItemFollowups')}</li>
-                  <li>{t('deleteItemPreferences')}</li>
-                </ul>
-              </div>
-              
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                    <p className="text-sm text-red-800 font-medium mb-2">{t('deleteAlsoDeletes')}</p>
+                    <ul className="text-sm text-red-700 space-y-1 ml-4 list-disc">
+                      <li>{t('deleteItemNotes')}</li>
+                      <li>{t('deleteItemCommunications')}</li>
+                      <li>{t('deleteItemFollowups')}</li>
+                      <li>{t('deleteItemPreferences')}</li>
+                    </ul>
+                  </div>
+                </>
+              )}
+
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
@@ -407,24 +367,35 @@ export default function ClientsPage() {
                 >
                   {tCommon('cancel')}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => confirmDelete()}
-                  disabled={deleting}
-                  className="px-4 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 shadow-sm flex items-center gap-2"
-                >
-                  {deleting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      {tCommon('loading')}
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="w-4 h-4" />
-                      {t('deleteClient')}
-                    </>
-                  )}
-                </button>
+                {deleteModal.blocked ? (
+                  <button
+                    type="button"
+                    onClick={markInactive}
+                    disabled={deleting}
+                    className="px-4 py-2.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 shadow-sm"
+                  >
+                    {deleting ? tCommon('loading') : t('markInactive')}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => confirmDelete()}
+                    disabled={deleting}
+                    className="px-4 py-2.5 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 shadow-sm flex items-center gap-2"
+                  >
+                    {deleting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        {tCommon('loading')}
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4" />
+                        {t('deleteClient')}
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -461,56 +432,29 @@ export default function ClientsPage() {
 
       {/* Stats Cards */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
-          {/* Total Clients */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-gray-400" />
-                <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+          {[
+            { label: t('title'), value: stats.total, dot: 'bg-primary-600', icon: Users },
+            { label: t('statsLeads'), value: stats.byStatus.lead ?? 0, dot: 'bg-amber-500', icon: Clock },
+            { label: t('statsProspects'), value: stats.byStatus.prospect ?? 0, dot: 'bg-blue-500', icon: TrendingUp },
+            { label: t('statsCustomers'), value: stats.byStatus.customer ?? 0, dot: 'bg-green-600', icon: CheckCircle },
+            { label: t('statsInactive'), value: stats.byStatus.inactive ?? 0, dot: 'bg-gray-400', icon: X },
+            { label: t('statsVipClients'), value: stats.vip, dot: 'bg-yellow-500', icon: Star },
+            { label: t('statsNewThisMonth'), value: stats.newThisMonth, dot: 'bg-blue-600', icon: Calendar },
+          ].map(({ label, value, dot, icon: Icon }) => (
+            <div key={label} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Icon className="w-4 h-4 text-gray-400" />
+                  <div className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+                </div>
               </div>
+              <p className="text-xs text-gray-600">{label}</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
             </div>
-            <p className="text-xs text-gray-600">{t('title')}</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{stats.total}</p>
-          </div>
+          ))}
 
-          {/* Active */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-gray-400" />
-                <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
-              </div>
-            </div>
-            <p className="text-xs text-gray-600">{t('statsActive')}</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{stats.active}</p>
-          </div>
-
-          {/* VIP */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <Star className="w-4 h-4 text-gray-400" />
-                <div className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
-              </div>
-            </div>
-            <p className="text-xs text-gray-600">{t('statsVipClients')}</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{stats.vip}</p>
-          </div>
-
-          {/* New This Month */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-gray-400" />
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
-              </div>
-            </div>
-            <p className="text-xs text-gray-600">{t('statsNewThisMonth')}</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{stats.newThisMonth}</p>
-          </div>
-
-          {/* Total Revenue */}
+          {/* Money, per currency: what was invoiced, and what has been paid against it */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -518,9 +462,22 @@ export default function ClientsPage() {
                 <div className="w-1.5 h-1.5 rounded-full bg-purple-600" />
               </div>
             </div>
-            <p className="text-xs text-gray-600">{t('statsTotalRevenue')}</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">
-              {formatTotals(stats.totalRevenue)}
+            <p className="text-xs text-gray-600">{t('statsInvoiced')}</p>
+            <p className="text-lg font-bold text-gray-900 mt-1 break-words">
+              {formatMoneyTotals(stats.invoiced)}
+            </p>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-gray-400" />
+                <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
+              </div>
+            </div>
+            <p className="text-xs text-gray-600">{t('statsCollected')}</p>
+            <p className="text-lg font-bold text-gray-900 mt-1 break-words">
+              {formatMoneyTotals(stats.collected)}
             </p>
           </div>
         </div>
@@ -582,10 +539,9 @@ export default function ClientsPage() {
                     className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white shadow-sm"
                   >
                     <option value="all">{t('filterAllStatuses')}</option>
-                    <option value="active">{t('statusActive')}</option>
-                    <option value="inactive">{t('statusInactive')}</option>
-                    <option value="prospect">{t('statusProspect')}</option>
-                    <option value="blacklisted">{t('statusBlacklisted')}</option>
+                    {CLIENT_STATUSES.map(status => (
+                      <option key={status} value={status}>{t(`status_${status}`)}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -769,7 +725,7 @@ export default function ClientsPage() {
                           <div className="flex items-center">
                             <div className="flex-shrink-0 h-9 w-9 rounded-full bg-primary-100 flex items-center justify-center">
                               <span className="text-primary-600 font-semibold text-xs">
-                                {client.first_name[0]}{client.last_name[0]}
+                                {client.first_name?.[0]}{client.last_name?.[0]}
                               </span>
                             </div>
                             <div className="ml-3">
@@ -800,7 +756,7 @@ export default function ClientsPage() {
                               {client.client_type}
                             </span>
                             <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusColor(client.status)}`}>
-                              {client.status}
+                              {statusText(client.status)}
                             </span>
                           </div>
                         </td>
@@ -820,8 +776,13 @@ export default function ClientsPage() {
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm">
                           <div className="font-semibold text-green-600">
-                            {formatMoney(client.total_revenue_generated || 0, client.revenue_currency || 'EUR')}
+                            {formatMoneyTotals(invoicedTotals(client))}
                           </div>
+                          {Object.keys(collectedTotals(client)).length > 0 && (
+                            <div className="text-xs text-gray-500">
+                              {t('collectedLabel', { amount: formatMoneyTotals(collectedTotals(client)) })}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm">
                           <div className="flex items-center gap-2">
@@ -838,14 +799,18 @@ export default function ClientsPage() {
                             >
                               {tCommon('edit')}
                             </Link>
-                            <span className="text-gray-300">|</span>
-                            <button
-                              type="button"
-                              onClick={() => openDeleteModal(client.id, `${client.first_name} ${client.last_name}`)}
-                              className="text-red-600 hover:text-red-800 font-medium"
-                            >
-                              {tCommon('delete')}
-                            </button>
+                            {canDelete && (
+                              <>
+                                <span className="text-gray-300">|</span>
+                                <button
+                                  type="button"
+                                  onClick={() => openDeleteModal(client.id, `${client.first_name} ${client.last_name}`)}
+                                  className="text-red-600 hover:text-red-800 font-medium"
+                                >
+                                  {tCommon('delete')}
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -857,13 +822,33 @@ export default function ClientsPage() {
           )}
         </div>
 
-        {/* Results Count */}
+        {/* Results Count and paging: the server's exact count, not the rows loaded */}
         {!loading && clients.length > 0 && (
-          <div className="mt-3 text-center text-xs text-gray-600">
-            {clients.length === 1
-              ? t('showingClients', { count: clients.length })
-              : t('showingClientsPlural', { count: clients.length })}
-            {hasActiveFilters && ` ${t('filtered')}`}
+          <div className="mt-3 flex items-center justify-center gap-4 text-xs text-gray-600">
+            <button
+              type="button"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-40"
+            >
+              {tCommon('previous')}
+            </button>
+            <span>
+              {t('showingRange', {
+                from: (page - 1) * PAGE_SIZE + 1,
+                to: (page - 1) * PAGE_SIZE + clients.length,
+                total
+              })}
+              {hasActiveFilters && ` ${t('filtered')}`}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage(p => p + 1)}
+              disabled={page * PAGE_SIZE >= total}
+              className="px-3 py-1.5 border border-gray-300 rounded-lg bg-white hover:bg-gray-50 disabled:opacity-40"
+            >
+              {tCommon('next')}
+            </button>
           </div>
         )}
       </div>
