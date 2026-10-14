@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
+import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { rateUnitPrice } from '@/lib/finance/supplier-bills'
 import {
   Plus,
   Search,
@@ -44,13 +46,13 @@ interface SupplierInvoice {
 
 interface Summary {
   total: number
-  total_amount: number
   received: number
   unmatched: number
   matched_pending: number
   approved: number
   paid: number
   disputed: number
+  cancelled: number
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; icon: React.ElementType }> = {
@@ -112,6 +114,8 @@ const emptyLineItem = (): LineItem => ({
 export default function SupplierInvoicesPage() {
   const router = useRouter()
   const t = useTranslations('common')
+  // The company's currency: a bill is in this unless the form says otherwise.
+  const { currency: orgCurrency } = useCurrency()
   const [invoices, setInvoices] = useState<SupplierInvoice[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -139,11 +143,12 @@ export default function SupplierInvoicesPage() {
     client_invoice_id: '',
     invoice_date: todayLocal(),
     due_date: '',
-    currency: 'EUR',
+    currency: '', // '' = the company's currency (billCurrency below)
     tax_amount: '',
     description: '',
     line_items: [emptyLineItem()] as LineItem[],
   })
+  const billCurrency = formData.currency || orgCurrency
   const [creating, setCreating] = useState(false)
   const [parsing, setParsing] = useState(false)
   const [parseError, setParseError] = useState<string | null>(null)
@@ -289,7 +294,8 @@ export default function SupplierInvoicesPage() {
         return false
       })
       if (matchingRate) {
-        const price = Number(matchingRate.base_rate_eur || matchingRate.rate_eur || matchingRate.base_rate || 0)
+        // Only a rate in the bill's own currency: a EUR rate is not a USD price.
+        const price = rateUnitPrice(matchingRate, billCurrency)
         if (price > 0) {
           updateLineItem(index, 'unit_price', price)
         }
@@ -306,7 +312,7 @@ export default function SupplierInvoicesPage() {
       client_invoice_id: '',
       invoice_date: todayLocal(),
       due_date: '',
-      currency: 'EUR',
+      currency: '',
       tax_amount: '',
       description: '',
       line_items: [emptyLineItem()],
@@ -363,7 +369,7 @@ export default function SupplierInvoicesPage() {
         supplier_id: matchedSupplier?.id || '',
         invoice_date: String(d.invoice_date || todayLocal()),
         due_date: String(d.due_date || ''),
-        currency: String(d.currency || 'EUR'),
+        currency: String(d.currency || ''),
         tax_amount: d.tax_amount ? String(d.tax_amount) : '',
         description: String(d.description || ''),
         line_items: parsedLineItems.length > 0 ? parsedLineItems : [emptyLineItem()],
@@ -416,7 +422,7 @@ export default function SupplierInvoicesPage() {
           client_invoice_id: formData.client_invoice_id || null,
           invoice_date: formData.invoice_date,
           due_date: formData.due_date || null,
-          currency: formData.currency,
+          currency: billCurrency,
           amount: computedGrandTotal,
           tax_amount: parseFloat(formData.tax_amount) || 0,
           description: formData.description,
@@ -508,6 +514,7 @@ export default function SupplierInvoicesPage() {
           <option value="approved">Approved</option>
           <option value="paid">Paid</option>
           <option value="disputed">Disputed</option>
+          <option value="cancelled">Cancelled</option>
         </select>
         <select
           value={matchFilter}
@@ -727,11 +734,11 @@ export default function SupplierInvoicesPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Currency</label>
                   <select
-                    value={formData.currency}
+                    value={billCurrency}
                     onChange={e => setFormData(prev => ({ ...prev, currency: e.target.value }))}
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                   >
-                    {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c} ({currencySymbol(c)})</option>)}
+                    {[...new Set<string>([billCurrency, ...RATE_CURRENCIES])].map(c => <option key={c} value={c}>{c} ({currencySymbol(c)})</option>)}
                   </select>
                 </div>
               </div>
@@ -763,7 +770,7 @@ export default function SupplierInvoicesPage() {
                     <option value="">None</option>
                     {clientInvoices.map(inv => (
                       <option key={inv.id} value={inv.id}>
-                        {inv.invoice_number} — {inv.client_name} ({CURRENCIES[formData.currency]}{inv.total_amount.toLocaleString()})
+                        {inv.invoice_number} — {inv.client_name} ({(CURRENCIES[billCurrency] || billCurrency)}{inv.total_amount.toLocaleString()})
                       </option>
                     ))}
                   </select>
@@ -859,7 +866,7 @@ export default function SupplierInvoicesPage() {
                   <div className="border-t border-gray-200 bg-gray-50 px-2 py-2">
                     <div className="flex justify-between text-xs">
                       <span className="text-gray-500">Subtotal</span>
-                      <span className="font-medium">{CURRENCIES[formData.currency]}{computedTotal.toFixed(2)}</span>
+                      <span className="font-medium">{(CURRENCIES[billCurrency] || billCurrency)}{computedTotal.toFixed(2)}</span>
                     </div>
                     <div className="flex items-center justify-between text-xs mt-1">
                       <span className="text-gray-500">Tax</span>
@@ -874,7 +881,7 @@ export default function SupplierInvoicesPage() {
                     </div>
                     <div className="flex justify-between text-sm font-semibold mt-2 pt-2 border-t border-gray-200">
                       <span>Total</span>
-                      <span className="text-[#647C47]">{CURRENCIES[formData.currency]}{computedGrandTotal.toFixed(2)}</span>
+                      <span className="text-[#647C47]">{(CURRENCIES[billCurrency] || billCurrency)}{computedGrandTotal.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
