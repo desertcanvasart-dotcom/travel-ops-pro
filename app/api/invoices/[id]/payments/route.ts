@@ -60,8 +60,10 @@ export async function POST(
     const { id } = await params
     const body = await request.json()
 
-    // Validate required fields
-    if (!body.amount || body.amount <= 0) {
+    // Validate required fields. A number: "abc" passed `!amount || amount <= 0`
+    // and surfaced as a 500, and "50" compared as text.
+    const amount = typeof body.amount === 'string' && body.amount.trim() === '' ? NaN : Number(body.amount)
+    if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json(
         { error: 'Valid payment amount is required' },
         { status: 400 }
@@ -71,7 +73,7 @@ export async function POST(
     // Verify invoice exists in this org and get current balance
     const { data: invoice, error: invoiceError } = await supabaseAdmin
       .from('invoices')
-      .select('balance_due, currency')
+      .select('balance_due, currency, status')
       .eq('id', id)
       .eq('org_id', orgId)
       .single()
@@ -80,13 +82,26 @@ export async function POST(
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
+    // Money is taken against an invoice that has been sent. The balance trigger
+    // turns the status into paid / partial whatever it was, so a payment on a
+    // cancelled invoice reopened it, and one on a draft that was never sent
+    // made it 'partial'.
+    if (invoice.status === 'cancelled' || invoice.status === 'draft') {
+      return NextResponse.json(
+        { error: invoice.status === 'cancelled'
+            ? 'This invoice is cancelled; payments cannot be recorded against it.'
+            : 'This invoice has not been sent yet; mark it as sent before recording a payment.' },
+        { status: 409 }
+      )
+    }
+
     // In the invoice's currency (lib/payment-currency): the balance trigger
     // sums amounts with no currency of their own.
     const paid = paymentCurrencyFor(body.currency, invoice.currency)
     if (!paid.ok) return NextResponse.json({ error: paid.error }, { status: 400 })
 
     // Check if payment exceeds balance (allow small overpayment for rounding)
-    if (body.amount > Number(invoice.balance_due) + 0.01) {
+    if (amount > Number(invoice.balance_due) + 0.01) {
       return NextResponse.json(
         { error: `Payment amount exceeds balance due (${invoice.balance_due})` },
         { status: 400 }
@@ -95,7 +110,7 @@ export async function POST(
 
     const newPayment = {
       invoice_id: id,
-      amount: body.amount,
+      amount,
       currency: paid.currency,
       payment_method: body.payment_method || 'bank_transfer',
       payment_date: body.payment_date || new Date().toISOString().split('T')[0],
@@ -111,6 +126,12 @@ export async function POST(
       .single()
 
     if (error) {
+      // The database refuses an amount above the balance too (a trigger that
+      // locks the invoice): two payments recorded at once both passed the
+      // check above. 23514 = check_violation.
+      if (error.code === '23514') {
+        return NextResponse.json({ error: 'Payment amount exceeds balance due' }, { status: 400 })
+      }
       console.error('Error creating payment:', error)
       return NextResponse.json({ error: 'Failed to record payment' }, { status: 500 })
     }

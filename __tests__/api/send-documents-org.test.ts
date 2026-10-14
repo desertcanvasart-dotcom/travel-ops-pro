@@ -140,7 +140,9 @@ describe('the pages', () => {
     expect(page).toContain('{received && payment.client_phone && (')
     expect(page).not.toContain('router.back()')
     expect(page).not.toContain('Cairo, Egypt')
-    expect(read('app/receipts/page.tsx')).toContain("itineraryPayments.filter((p: any) => p.payment_status === 'completed')")
+    // Completed and not a refund: lib/payments/stats isReceivedTripPayment (`payment_status === 'completed' && payment_type !== 'refund'`).
+    expect(read('app/receipts/page.tsx')).toContain('itineraryPayments.filter(isReceivedTripPayment)')
+    expect(read('lib/payments/stats.ts')).toContain("p.payment_status === 'completed' && p.payment_type !== 'refund'")
     expect(read('app/payments/[id]/page.tsx')).toMatch(/payment\.payment_status === 'completed' && \(\s*<Link\s+href=\{withReturnTo\(`\/documents\/receipt\//)
   })
 

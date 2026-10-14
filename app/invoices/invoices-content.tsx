@@ -5,7 +5,8 @@ import { addDays } from '@/lib/payment-schedule'
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
-import { formatMoney, formatTotals, sumByCurrency } from '@/lib/currency-totals'
+import { formatMoney, formatTotals } from '@/lib/currency-totals'
+import { displayStatus, invoiceTiles } from '@/lib/invoices/status'
 import {
   Search,
   Plus,
@@ -205,7 +206,9 @@ export default function InvoicesContent() {
   const fetchInvoices = useCallback(async () => {
     try {
       const params = new URLSearchParams()
-      if (statusFilter) params.append('status', statusFilter)
+      // The status filter is applied below on the status the table SHOWS:
+      // 'overdue' is never stored, so asking the API for it (or for 'sent')
+      // gave an empty list (or one that still held overdue invoices).
       if (typeFilter) params.append('type', typeFilter)
 
       // Walk every page — this IS the invoices list, and a one-shot request
@@ -217,7 +220,7 @@ export default function InvoicesContent() {
     } finally {
       setLoading(false)
     }
-  }, [statusFilter, typeFilter])
+  }, [typeFilter])
 
   const fetchClients = async () => {
     try {
@@ -513,7 +516,9 @@ export default function InvoicesContent() {
       if (response.ok) {
         fetchInvoices()
       } else {
-        await dialog.alert(t('error'), t('failedToDeleteInvoice'), 'warning')
+        // The API says why (409: payments are recorded, cancel it instead).
+        const refusal = await response.json().catch(() => null)
+        await dialog.alert(t('error'), refusal?.error || t('failedToDeleteInvoice'), 'warning')
       }
     } catch (error) {
       console.error('Error deleting invoice:', error)
@@ -536,35 +541,28 @@ export default function InvoicesContent() {
     }
   }
 
-  // Check for overdue invoices
-  const processedInvoices = invoices.map(inv => {
-    if (inv.status !== 'paid' && inv.status !== 'cancelled' && inv.due_date) {
-      const dueDate = new Date(inv.due_date)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      if (dueDate < today && inv.balance_due > 0) {
-        return { ...inv, status: 'overdue' }
-      }
-    }
-    return inv
-  })
+  // The status each invoice SHOWS: overdue is worked out, not stored, by the
+  // rule every finance screen shares (lib/invoices/status) — a draft that was
+  // never sent is not overdue.
+  const today = todayLocal()
+  const processedInvoices = invoices.map(inv => ({ ...inv, status: displayStatus(inv, today) }))
 
   const filteredInvoices = processedInvoices.filter(invoice => {
     const matchesSearch = 
       invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       invoice.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       invoice.client_email?.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesSearch
+    return matchesSearch && (!statusFilter || invoice.status === statusFilter)
   })
 
   // Stats
   const totalInvoices = invoices.length
   // Summed PER CURRENCY. A yen invoice and a euro invoice do not add up to a
   // number that is true in either, and this operator bills in yen while the
-  // rate tables are in euro — so the tiles have to say which is which.
-  const totalRevenue = sumByCurrency(invoices, inv => inv.total_amount, inv => inv.currency)
-  const totalPaid = sumByCurrency(invoices, inv => inv.amount_paid, inv => inv.currency)
-  const totalOutstanding = sumByCurrency(invoices, inv => inv.balance_due, inv => inv.currency)
+  // rate tables are in euro — so the tiles have to say which is which. Drafts
+  // (never sent) and cancelled invoices are not billed or owed, so they are
+  // not in Billed, Paid, Outstanding or Overdue.
+  const { billed: totalRevenue, paid: totalPaid, outstanding: totalOutstanding, overdue: overdueAmount } = invoiceTiles(invoices, today)
   // A tile that sums to zero still has to pick a symbol. Use the currency this
   // operator actually bills in — the invoices on screen — before falling back
   // to their preference, so an empty "Outstanding" does not read as euro on a
@@ -574,11 +572,6 @@ export default function InvoicesContent() {
     || preferences?.default_currency
     || 'EUR'
 
-  const overdueAmount = sumByCurrency(
-    processedInvoices.filter(inv => inv.status === 'overdue'),
-    inv => inv.balance_due,
-    inv => inv.currency
-  )
   const depositCount = invoices.filter(inv => inv.invoice_type === 'deposit').length
   const finalCount = invoices.filter(inv => inv.invoice_type === 'final').length
 

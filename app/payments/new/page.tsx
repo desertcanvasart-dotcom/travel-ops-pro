@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { ArrowLeft, Save, FileText, MapPin, DollarSign } from 'lucide-react'
 import { usePreferences } from '@/app/contexts/PreferencesContext'
 import { formatMoney } from '@/lib/currency-totals'
+import { useTripPaid } from '@/lib/payments/use-trip-paid'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
 
@@ -49,6 +50,8 @@ export default function RecordPaymentPage() {
   // Selected items
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [selectedItinerary, setSelectedItinerary] = useState<Itinerary | null>(null)
+  // From the trip's payment rows: itineraries.total_paid is never updated.
+  const paidSoFar = useTripPaid(selectedItinerary?.id) ?? 0
   
   const [error, setError] = useState<string | null>(null)
   // This form is long enough that the error banner sits well above the submit
@@ -120,7 +123,7 @@ export default function RecordPaymentPage() {
           currency: selectedItinerary.currency || prev.currency
         }))
       } else {
-        const balance = selectedItinerary.total_cost - (selectedItinerary.total_paid || 0)
+        const balance = selectedItinerary.total_cost - paidSoFar
         setFormData(prev => ({
           ...prev,
           target_id: selectedItinerary.id,
@@ -129,7 +132,7 @@ export default function RecordPaymentPage() {
         }))
       }
     }
-  }, [selectedInvoice, selectedItinerary, paymentTarget, formData.payment_type])
+  }, [selectedInvoice, selectedItinerary, paymentTarget, formData.payment_type, paidSoFar])
 
   const fetchInvoices = async () => {
     try {
@@ -137,8 +140,10 @@ export default function RecordPaymentPage() {
       const response = await fetch('/api/invoices?limit=1000')
       if (response.ok) {
         const data = await response.json()
-        // Filter to show only invoices with balance due
-        const unpaidInvoices = data.filter((inv: Invoice) => Number(inv.balance_due) > 0)
+        // Only invoices that can take a payment: a balance due, and sent (a
+        // draft or cancelled invoice is refused by the API).
+        const unpaidInvoices = data.filter((inv: Invoice & { status?: string }) =>
+          Number(inv.balance_due) > 0 && inv.status !== 'draft' && inv.status !== 'cancelled')
         setInvoices(unpaidInvoices)
       }
     } catch (error) {
@@ -256,7 +261,7 @@ export default function RecordPaymentPage() {
       return selectedInvoice.balance_due
     }
     if (paymentTarget === 'itinerary' && selectedItinerary) {
-      return selectedItinerary.total_cost - (selectedItinerary.total_paid || 0)
+      return selectedItinerary.total_cost - paidSoFar
     }
     return 0
   }
@@ -434,12 +439,12 @@ export default function RecordPaymentPage() {
                         </div>
                         <div>
                           <span className="text-gray-600">{t('alreadyPaid')}:</span>
-                          <p className="font-bold text-success">{formatMoney(selectedItinerary.total_paid || 0, selectedItinerary.currency || formData.currency || 'EUR')}</p>
+                          <p className="font-bold text-success">{formatMoney(paidSoFar, selectedItinerary.currency || formData.currency || 'EUR')}</p>
                         </div>
                         <div>
                           <span className="text-gray-600">{t('balanceDue')}:</span>
                           <p className="font-bold text-orange-600">
-                            {formatMoney(selectedItinerary.total_cost - (selectedItinerary.total_paid || 0), selectedItinerary.currency || formData.currency || 'EUR')}
+                            {formatMoney(selectedItinerary.total_cost - paidSoFar, selectedItinerary.currency || formData.currency || 'EUR')}
                           </p>
                         </div>
                         <div>

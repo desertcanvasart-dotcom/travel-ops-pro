@@ -2425,6 +2425,8 @@
     "noPaymentsFound": "支払が見つかりません",
     "recordFirstPayment": "最初の支払を記録してください",
     "orCreateInvoice": "または",
+    "refundTag": "返金（入金には含まれません）",
+    "notCompletedTag": "未完了（入金には含まれません）",
     "record": {
       "title": "支払を記録",
       "subtitle": "新しい支払取引を追加",

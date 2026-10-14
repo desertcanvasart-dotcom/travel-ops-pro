@@ -156,6 +156,35 @@ export interface Database {
           },
         ]
       }
+      invoice_number_counters: {
+        Row: {
+          org_id: string
+          kind: string
+          year: number
+          last_value: number
+        }
+        Insert: {
+          org_id: string
+          kind: string
+          year: number
+          last_value?: number
+        }
+        Update: {
+          org_id?: string
+          kind?: string
+          year?: number
+          last_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_number_counters_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       supplier_document_number_counters: {
         Row: {
           org_id: string
@@ -6547,6 +6576,8 @@ export interface Database {
           transaction_reference: string | null
           notes: string | null
           created_at: string | null
+          receipt_number: string | null
+          org_id: string | null
         }
         Insert: {
           id?: string
@@ -6558,6 +6589,8 @@ export interface Database {
           transaction_reference?: string | null
           notes?: string | null
           created_at?: string | null
+          receipt_number?: string | null
+          org_id?: string | null
         }
         Update: {
           id?: string
@@ -6569,6 +6602,8 @@ export interface Database {
           transaction_reference?: string | null
           notes?: string | null
           created_at?: string | null
+          receipt_number?: string | null
+          org_id?: string | null
         }
         Relationships: [
           {
@@ -8903,6 +8938,11 @@ export interface Database {
           created_at: string | null
           updated_at: string | null
           org_id: string
+          receipt_number: string | null
+          vat_applied: boolean | null
+          vat_rate: number | null
+          vat_amount: number | null
+          vat_base: number | null
         }
         Insert: {
           id?: string
@@ -8919,6 +8959,11 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
           org_id: string
+          receipt_number?: string | null
+          vat_applied?: boolean | null
+          vat_rate?: number | null
+          vat_amount?: number | null
+          vat_base?: number | null
         }
         Update: {
           id?: string
@@ -8935,6 +8980,11 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
           org_id?: string
+          receipt_number?: string | null
+          vat_applied?: boolean | null
+          vat_rate?: number | null
+          vat_amount?: number | null
+          vat_base?: number | null
         }
         Relationships: [
           {
@@ -13410,6 +13460,20 @@ export interface Database {
         Returns: any
       }
       next_expense_number: {
+        Args: {
+          p_org: string
+          p_year: number
+        }
+        Returns: string
+      }
+      next_invoice_number: {
+        Args: {
+          p_org: string
+          p_year: number
+        }
+        Returns: string
+      }
+      next_receipt_number: {
         Args: {
           p_org: string
           p_year: number
