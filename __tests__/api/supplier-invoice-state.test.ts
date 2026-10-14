@@ -32,8 +32,11 @@ describe('dispute', () => {
 
 describe('delete', () => {
   const code = src('app/api/supplier-invoices/[id]/route.ts')
-  it('only removes a draft/pending/cancelled invoice', () => {
-    expect(code).toMatch(/\.in\(['"]status['"], \[['"]draft['"], ['"]pending['"], ['"]cancelled['"]\]\)/)
+  // 'draft' and 'pending' are not statuses a bill can have (the CHECK allows
+  // received, matched, approved, paid, disputed, cancelled), so listing only
+  // them made every bill undeletable. Behaviour is pinned in finance-routes.test.ts.
+  it('only removes a received, matched or cancelled invoice, in the WHERE', () => {
+    expect(code).toMatch(/\.in\(['"]status['"], \[\.\.\.DELETABLE_BILL_STATUSES, ['"]cancelled['"]\]\)/)
   })
 })
 
@@ -46,8 +49,13 @@ describe('match', () => {
 })
 
 describe('amount validation', () => {
-  it('supplier invoice creation rejects a negative amount', () => {
-    expect(src('app/api/supplier-invoices/route.ts')).toMatch(/Number\(body\.amount\)\s*<\s*0/)
+  // The rule lives in lib/finance/supplier-bills.ts so create and edit share it
+  // (PUT used to accept a negative amount); behaviour is pinned in
+  // finance-routes.test.ts and finance-supplier-bills.test.ts.
+  it('supplier invoice creation and edit both reject a negative amount', () => {
+    expect(src('app/api/supplier-invoices/route.ts')).toMatch(/normalizeBillFields\(body, false\)/)
+    expect(src('app/api/supplier-invoices/[id]/route.ts')).toMatch(/normalizeBillFields\(updateData, true\)/)
+    expect(src('lib/finance/supplier-bills.ts')).toMatch(/n\s*<\s*0/)
   })
   it('expense creation rejects a negative amount', () => {
     expect(src('app/api/expenses/route.ts')).toMatch(/Number\(body\.amount\)\s*<\s*0/)

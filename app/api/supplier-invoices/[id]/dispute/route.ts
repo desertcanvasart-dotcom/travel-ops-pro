@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { statusAfterDispute } from '@/lib/finance/supplier-bills'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,7 +31,7 @@ export async function POST(
     if (fetchError || !existing) {
       return NextResponse.json({ error: 'Supplier invoice not found' }, { status: 404 })
     }
-    if (existing.status === 'paid' || existing.status === 'disputed') {
+    if (existing.status === 'paid' || existing.status === 'disputed' || existing.status === 'cancelled') {
       return NextResponse.json(
         { error: `Cannot dispute an invoice with status '${existing.status}'` },
         { status: 409 }
@@ -52,6 +53,7 @@ export async function POST(
       .eq('org_id', orgId)
       .neq('status', 'paid')
       .neq('status', 'disputed')
+      .neq('status', 'cancelled')
       .select()
       .maybeSingle()
 
@@ -69,6 +71,65 @@ export async function POST(
     return NextResponse.json({ success: true, data })
   } catch (error) {
     console.error('Error disputing supplier invoice:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+// DELETE - Resolve a dispute. Disputed was a dead end: approve, match, pay and
+// edit all refuse a disputed bill and nothing led out of it. The bill goes back
+// to what its match says ('matched' when fully matched, else 'received') and
+// must be approved again; an earlier approval does not survive a dispute.
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+
+    const { id } = await params
+
+    const { data: existing, error: fetchError } = await supabaseAdmin
+      .from('supplier_invoices')
+      .select('status, match_status')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .single()
+    if (fetchError || !existing) {
+      return NextResponse.json({ error: 'Supplier invoice not found' }, { status: 404 })
+    }
+    if (existing.status !== 'disputed') {
+      return NextResponse.json(
+        { error: `Only a disputed invoice can be resolved (status is '${existing.status}')` },
+        { status: 409 }
+      )
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('supplier_invoices')
+      .update({
+        status: statusAfterDispute(existing.match_status),
+        discrepancy_notes: null,
+        approved_by: null,
+        approved_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .eq('status', 'disputed')
+      .select()
+      .maybeSingle()
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to resolve dispute' }, { status: 500 })
+    }
+    if (!data) {
+      return NextResponse.json({ error: 'The dispute was already resolved.' }, { status: 409 })
+    }
+
+    return NextResponse.json({ success: true, data })
+  } catch (error) {
+    console.error('Error resolving supplier invoice dispute:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
