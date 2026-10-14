@@ -53,6 +53,9 @@ export async function GET(
   }
 }
 
+// The statuses an edit may set; paid and partial come from the payments.
+const CALLER_SETTABLE_STATUSES = ['draft', 'sent', 'viewed', 'overdue', 'cancelled']
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -87,15 +90,24 @@ export async function PUT(
       }
     }
 
+    // paid / partial are what the payments say, never the caller (AUDIT H22):
+    // a PUT { status: 'paid' } marked an unpaid invoice paid with money owing.
+    if (updateData.status !== undefined && !CALLER_SETTABLE_STATUSES.includes(updateData.status)) {
+      return NextResponse.json(
+        { error: `status must be one of ${CALLER_SETTABLE_STATUSES.join(', ')}; paid and partial follow the payments` },
+        { status: 400 }
+      )
+    }
+
     if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updateData.itinerary_id, client_id: updateData.client_id }))) {
       return NextResponse.json({ error: 'Itinerary or client not found' }, { status: 404 })
     }
 
-    // A new total or currency re-derives what the payments leave owing.
-    if (updateData.total_amount !== undefined || updateData.currency !== undefined) {
+    // A new total, currency or status re-derives what the payments leave owing.
+    if (updateData.total_amount !== undefined || updateData.currency !== undefined || updateData.status !== undefined) {
       const { data: currentInvoice } = await supabaseAdmin
         .from('invoices')
-        .select('amount_paid, currency, status, paid_at')
+        .select('amount_paid, total_amount, currency, status, paid_at')
         .eq('id', id)
         .eq('org_id', orgId)
         .single()
@@ -111,20 +123,26 @@ export async function PUT(
             { status: 409 }
           )
         }
+        let total = Number(currentInvoice.total_amount || 0)
         if (updateData.total_amount !== undefined) {
-          const total = Number(updateData.total_amount)
+          total = Number(updateData.total_amount)
           if (updateData.total_amount === '' || updateData.total_amount === null || !Number.isFinite(total) || total < 0) {
             return NextResponse.json({ error: 'total_amount must be a non-negative number' }, { status: 400 })
           }
           const currency = updateData.currency ?? currentInvoice.currency
           updateData.balance_due = roundToCurrency(total - paid, currency)
-          // As the payment routes: a 'paid' invoice raised above its payments
-          // is 'partial' again (and chased); one lowered to them is 'paid'.
-          // A status the caller set explicitly stands.
-          const status = updateData.status ?? currentInvoice.status
-          if (updateData.status === undefined && paid > 0 && !['draft', 'cancelled'].includes(status)) {
-            updateData.status = paid >= total ? 'paid' : 'partial'
-            updateData.paid_at = updateData.status === 'paid' ? (currentInvoice.paid_at || new Date().toISOString()) : null
+        }
+        // As the payment routes: an invoice with payments is 'paid' or
+        // 'partial' by its total; one whose payments are gone is 'sent'
+        // again. draft and cancelled — set now or before — stand.
+        const status = updateData.status ?? currentInvoice.status
+        if (!['draft', 'cancelled'].includes(status)) {
+          let derived = status
+          if (paid > 0) derived = paid >= total ? 'paid' : 'partial'
+          else if (['paid', 'partial'].includes(status)) derived = 'sent'
+          if (derived !== currentInvoice.status || updateData.status !== undefined) {
+            updateData.status = derived
+            updateData.paid_at = derived === 'paid' ? (currentInvoice.paid_at || new Date().toISOString()) : null
           }
         }
       }

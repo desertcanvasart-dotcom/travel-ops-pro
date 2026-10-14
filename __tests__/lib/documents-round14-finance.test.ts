@@ -157,7 +157,10 @@ describe('commissions', () => {
     expect(gen).toContain("if (itinerary.status === 'cancelled')")
     expect(gen).toContain('{ status: 409 }')
     const put = src('app/api/commissions/[id]/route.ts')
-    expect(put).toContain('org_id: _org, client_id: _client,')
+    // An allow-list since AUDIT H20: org_id and client_id are not on it.
+    const editable = put.slice(put.indexOf('const EDITABLE = ['), put.indexOf('] as const'))
+    expect(editable).not.toContain("'org_id'")
+    expect(editable).not.toContain("'client_id'")
   })
 })
 

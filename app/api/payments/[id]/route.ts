@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
+import { blankToNull } from '@/lib/blank-to-null'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { paymentCurrencyFor } from '@/lib/payment-currency'
+import { pickPaymentFields, positiveAmount } from '@/lib/payment-fields'
 
 export async function GET(
   request: NextRequest,
@@ -67,13 +69,24 @@ export async function PUT(
 
     const { id } = await params
     const supabase = createServerClient()
-    const body = await request.json()
+    // Only the payment's own fields; org_id, id and timestamps are not the
+    // caller's to change (M3 Phase 2A, AUDIT H26). As POST: blanks are null.
+    const safeBody = blankToNull(pickPaymentFields(await request.json()))
 
-    console.log('Updating payment:', id, body)
-
-    // M3 Phase 2A: strip any caller-supplied org_id so an update can't
-    // re-home a payment row into another org.
-    const { org_id: _ignoredOrgId, ...safeBody } = body
+    // As POST: an amount, when sent, is a positive, finite number.
+    if ('amount' in safeBody) {
+      const amount = positiveAmount(safeBody.amount)
+      if (amount === null) {
+        return NextResponse.json(
+          { success: false, error: 'amount must be a positive number' },
+          { status: 400 }
+        )
+      }
+      safeBody.amount = amount
+    }
+    if (Object.keys(safeBody).length === 0) {
+      return NextResponse.json({ success: false, error: 'Nothing to update' }, { status: 400 })
+    }
 
     // As POST: the trip is this org's and the payment is in its currency.
     if ('itinerary_id' in safeBody || 'currency' in safeBody) {

@@ -30,7 +30,8 @@ export async function POST(
     if (fetchError || !existing) {
       return NextResponse.json({ error: 'Supplier invoice not found' }, { status: 404 })
     }
-    if (existing.status === 'paid' || existing.status === 'disputed') {
+    // A cancelled invoice is closed: there is nothing left to dispute.
+    if (existing.status === 'paid' || existing.status === 'disputed' || existing.status === 'cancelled') {
       return NextResponse.json(
         { error: `Cannot dispute an invoice with status '${existing.status}'` },
         { status: 409 }
@@ -52,12 +53,13 @@ export async function POST(
       .eq('org_id', orgId)
       .neq('status', 'paid')
       .neq('status', 'disputed')
+      .neq('status', 'cancelled')
       .select()
       .maybeSingle()
 
     if (!error && !data) {
       return NextResponse.json(
-        { error: 'Invoice can no longer be disputed (it was paid or disputed concurrently).' },
+        { error: 'Invoice can no longer be disputed (it was paid, disputed or cancelled concurrently).' },
         { status: 409 }
       )
     }

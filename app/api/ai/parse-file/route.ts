@@ -11,6 +11,7 @@ import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { MODEL_PARSER } from '@/lib/ai/models'
+import { guardAiRate } from '@/lib/rate-limit/ai-limit'
 import { PACKAGE_TYPE_SLUGS } from '@/lib/package-types'
 
 // Allow longer execution for large PDFs
@@ -325,6 +326,10 @@ async function extractDocxText(base64Data: string): Promise<string> {
 
 export async function POST(request: Request) {
   try {
+    // Each call is a paid model read of up to 50MB of files (AUDIT M9).
+    const limited = await guardAiRate('parse')
+    if (limited) return limited
+
     const body: ParseFileRequest = await request.json()
     const { files, language } = body
 

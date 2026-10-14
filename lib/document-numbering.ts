@@ -11,8 +11,8 @@
  * This helper centralizes the safer pattern:
  *   1. Try `nextval` (sequence is the source of truth when healthy).
  *   2. On RPC failure, look at the highest existing document for the current
- *      year using lexicographic ordering — `SELECT … WHERE col LIKE 'PREFIX-YYYY-%'
- *      ORDER BY col DESC LIMIT 1`. This is year-scoped (the sequence was
+ *      year (numbers of four or more digits compared numerically, then
+ *      `SELECT … WHERE col LIKE 'PREFIX-YYYY-%' ORDER BY col DESC LIMIT 1`). This is year-scoped (the sequence was
  *      previously global, so 2027 kept climbing from 2026's count) and
  *      tolerates row deletions (count-based fallback regressed when rows
  *      were deleted).
@@ -57,32 +57,53 @@ export async function nextDocumentNumber(opts: NextDocumentNumberOpts): Promise<
     return `${opts.prefix}-${year}-${String(seqData).padStart(3, '0')}`
   }
 
-  // Fallback — year-scoped lexicographic MAX. The prior count-based fallback
-  // produced duplicates whenever a row was deleted OR two requests landed
-  // concurrently. Scoping by year additionally keeps each year's sequence
-  // starting at 1 (the global sequence used to climb forever).
-  const likeNeedle = `${opts.prefix}-${year}-%`
-  const { data: rows, error: scanError } = await opts.supabase
+  // Fallback — year-scoped MAX. The prior count-based fallback produced
+  // duplicates whenever a row was deleted OR two requests landed concurrently.
+  // Scoping by year additionally keeps each year's sequence starting at 1 (the
+  // global sequence used to climb forever).
+  //
+  // The column is text, so ORDER BY puts 'SI-2026-999' above 'SI-2026-1000':
+  // past 999 documents a year the text MAX kept handing out 1000, every retry
+  // collided and every create failed. Numbers of four or more digits are read
+  // first and compared as numbers; the zero-padded three-digit ones sort right
+  // as text.
+  const prefix = `${opts.prefix}-${year}-`
+  const wide = await opts.supabase
     .from(opts.table)
     .select(opts.column)
-    .like(opts.column, likeNeedle)
+    .filter(opts.column, 'match', `^${escapeRegex(prefix)}[0-9]{4,}(-[A-Z]+)?$`)
     .order(opts.column, { ascending: false })
-    .limit(1)
+    .limit(1000)
+  let rows = wide.data as unknown[] | null
+  let scanError = wide.error
+  if (!scanError && (!rows || rows.length === 0)) {
+    const narrow = await opts.supabase
+      .from(opts.table)
+      .select(opts.column)
+      .like(opts.column, `${prefix}%`)
+      .order(opts.column, { ascending: false })
+      .limit(1)
+    rows = narrow.data as unknown[] | null
+    scanError = narrow.error
+  }
   if (scanError) {
     throw new Error(`Failed to generate ${opts.prefix} number: sequence RPC failed (${seqError?.message || 'unknown'}) and fallback scan failed (${scanError.message})`)
   }
 
-  let next = 1
-  if (rows && rows.length > 0) {
-    const last = (rows[0] as unknown as Record<string, unknown>)[opts.column] as string | undefined
-    if (last) {
-      // Accept suffixes like '-DEP' or '-FIN' that follow the numeric portion
-      // (used by the deposit/final invoice variants).
-      const m = last.match(/-(\d+)(?:-[A-Z]+)?$/)
-      if (m) next = parseInt(m[1], 10) + 1
-    }
+  let highest = 0
+  for (const row of rows ?? []) {
+    const last = (row as Record<string, unknown>)[opts.column]
+    if (typeof last !== 'string') continue
+    // Accept suffixes like '-DEP' or '-FIN' that follow the numeric portion
+    // (used by the deposit/final invoice variants).
+    const m = last.match(/-(\d+)(?:-[A-Z]+)?$/)
+    if (m) highest = Math.max(highest, parseInt(m[1], 10))
   }
-  return `${opts.prefix}-${year}-${String(next).padStart(3, '0')}`
+  return `${opts.prefix}-${year}-${String(highest + 1).padStart(3, '0')}`
+}
+
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 interface InsertWithUniqueRetryOpts<T> {

@@ -57,17 +57,22 @@ export async function PUT(
       body.paid_date = new Date().toISOString().split('T')[0]
     }
 
-    // Strip computed/immutable fields — the commission amount, rate, base value
-    // and entity links are derived at generation time and must not be editable here.
-    // org_id and client_id too: the row is filtered by org below, but nothing
-    // stopped the body MOVING it to another org, or pointing it at another
-    // org's client.
-    const {
-      id: _, created_at, itinerary_id, supplier_id, service_id,
-      base_amount, commission_rate, commission_amount,
-      org_id: _org, client_id: _client,
-      ...updateData
-    } = body
+    // Only the fields a commission's edit form owns (AUDIT H20). The amount,
+    // rate, base value, cost and entity links are derived at generation time;
+    // org_id and client_id would move the row to another org or point it at
+    // another org's client. Everything else in the body is dropped.
+    const EDITABLE = [
+      'commission_type', 'category', 'source_name', 'source_contact', 'description',
+      'currency', 'status', 'transaction_date', 'due_date', 'paid_date',
+      'payment_method', 'payment_reference', 'notes',
+    ] as const
+    const updateData: Record<string, unknown> = {}
+    for (const key of EDITABLE) {
+      if (key in body) updateData[key] = body[key] === '' ? null : body[key]
+    }
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
+    }
 
     const { data, error } = await supabaseAdmin
       .from('commissions')

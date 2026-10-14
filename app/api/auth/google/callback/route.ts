@@ -130,9 +130,10 @@ export async function GET(request: NextRequest) {
       throw new Error('Failed to save tokens')
     }
 
-    return NextResponse.redirect(
-      new URL('/communications?gmail=connected', baseUrl)
-    )
+    // The nonce is single-use: a connected flow spends it.
+    const done = NextResponse.redirect(new URL('/communications?gmail=connected', baseUrl))
+    clearNonceCookie(done)
+    return done
   } catch (err: any) {
     console.error('OAuth callback error:', err)
     return NextResponse.redirect(
