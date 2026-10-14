@@ -97,7 +97,10 @@ describe('after the migration (applied twice — it is idempotent)', () => {
         AND p.prorettype <> 'trigger'::regtype
         AND has_function_privilege('authenticated', p.oid, 'EXECUTE')`)
     // user_shares_org_as: the user_profiles policies' helper (20261130).
-    expect(rows.map(r => r.sig).sort()).toEqual(['user_is_in_org(uuid)', 'user_is_org_owner(uuid)', 'user_shares_org_as(uuid,text[])'])
+    // user_has_org_role: the caller's role in a policy's company (20270105).
+    expect(rows.map(r => r.sig).sort()).toEqual([
+      'user_has_org_role(uuid,text[])', 'user_is_in_org(uuid)', 'user_is_org_owner(uuid)', 'user_shares_org_as(uuid,text[])',
+    ])
   })
 
   it('a database without one of them still migrates (guarded, not assumed)', () => {
