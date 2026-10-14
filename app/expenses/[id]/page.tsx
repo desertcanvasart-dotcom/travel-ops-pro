@@ -107,7 +107,8 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   pending: { label: 'Pending', color: 'text-yellow-700', bg: 'bg-yellow-100', icon: Clock },
   approved: { label: 'Approved', color: 'text-blue-700', bg: 'bg-blue-100', icon: CheckCircle },
   paid: { label: 'Paid', color: 'text-green-700', bg: 'bg-green-100', icon: CheckCircle },
-  rejected: { label: 'Rejected', color: 'text-red-700', bg: 'bg-red-100', icon: AlertCircle }
+  rejected: { label: 'Rejected', color: 'text-red-700', bg: 'bg-red-100', icon: AlertCircle },
+  cancelled: { label: 'Cancelled', color: 'text-gray-600', bg: 'bg-gray-100', icon: AlertCircle }
 }
 
 export default function ExpenseDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -196,7 +197,10 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
       if (response.ok) {
         router.push('/expenses')
       } else {
-        await dialog.alert(t('error'), t('failedToDeleteExpense'), 'warning')
+        // The server says why when it refuses (a paid expense, or one matched
+        // to a supplier invoice).
+        const body = await response.json().catch(() => ({}))
+        await dialog.alert(t('error'), body.error || t('failedToDeleteExpense'), 'warning')
       }
     } catch (error) {
       console.error('Error deleting expense:', error)

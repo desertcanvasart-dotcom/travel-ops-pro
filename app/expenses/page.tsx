@@ -34,6 +34,8 @@ import Link from 'next/link'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
+import { usePreferences } from '@/app/contexts/PreferencesContext'
+import { EXPENSE_NOT_A_COST_STATUSES } from '@/lib/expense-status'
 import { currencySymbol } from '@/lib/currency-totals'
 import ExpenseSupplierPicker from '@/components/expenses/ExpenseSupplierPicker'
 
@@ -150,7 +152,8 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   pending: { label: 'Pending', color: 'text-yellow-700', bg: 'bg-yellow-100', icon: Clock },
   approved: { label: 'Approved', color: 'text-blue-700', bg: 'bg-blue-100', icon: CheckCircle },
   paid: { label: 'Paid', color: 'text-green-700', bg: 'bg-green-100', icon: CheckCircle },
-  rejected: { label: 'Rejected', color: 'text-red-700', bg: 'bg-red-100', icon: AlertCircle }
+  rejected: { label: 'Rejected', color: 'text-red-700', bg: 'bg-red-100', icon: AlertCircle },
+  cancelled: { label: 'Cancelled', color: 'text-gray-600', bg: 'bg-gray-100', icon: AlertCircle }
 }
 
 const ITEMS_PER_PAGE = 15
@@ -162,6 +165,9 @@ export default function ExpensesPage() {
   const SUPPLIER_TYPES = [...agencySupplierTypes.options.filter(t => t.value !== 'other'), ...EXTRA_PAYEE_TYPES]
   const t = useTranslations('expenses')
   const dialog = useConfirmDialog()
+  // A new expense starts in the company's own currency (it was always EUR).
+  const { preferences, loading: prefsLoading } = usePreferences()
+  const orgCurrency = !prefsLoading && preferences?.default_currency ? preferences.default_currency : 'EUR'
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [itineraries, setItineraries] = useState<Itinerary[]>([])
   const [loading, setLoading] = useState(true)
@@ -227,7 +233,7 @@ export default function ExpensesPage() {
 
   const openAddModal = () => {
     setEditingExpense(null)
-    setFormData(initialFormData)
+    setFormData({ ...initialFormData, currency: orgCurrency })
     setSupplierCity('')
     setIsModalOpen(true)
   }
@@ -309,7 +315,10 @@ export default function ExpensesPage() {
         setExpenses(prev => prev.filter(x => x.id !== id))
         fetchExpenses()
       } else {
-        await dialog.alert(t('error'), t('failedToDeleteExpense'), 'warning')
+        // The server says why when it refuses (a paid expense, or one matched
+        // to a supplier invoice).
+        const body = await response.json().catch(() => ({}))
+        await dialog.alert(t('error'), body.error || t('failedToDeleteExpense'), 'warning')
       }
     } catch (error) {
       console.error('Error deleting expense:', error)
@@ -331,9 +340,14 @@ export default function ExpensesPage() {
         const saved = await response.json()
         setExpenses(prev => prev.map(x => (x.id === saved.id ? saved : x)))
         fetchExpenses()
+      } else {
+        // Not silent: the button looked like it worked.
+        const body = await response.json().catch(() => ({}))
+        await dialog.alert(t('error'), body.error || t('failedToSaveExpense'), 'warning')
       }
     } catch (error) {
       console.error('Error updating expense:', error)
+      await dialog.alert(t('error'), t('failedToSaveExpense'), 'warning')
     }
   }
 
@@ -424,7 +438,12 @@ export default function ExpensesPage() {
   // Stats
   // An expense carries its own currency — a Cairo taxi in EGP and a hotel
   // deposit in EUR are not one number — so the tiles keep them apart.
-  const totalsByCurrency = sumByCurrency(expenses, e => e.amount, e => e.currency)
+  // The total tile leaves out rejected and cancelled expenses, as the P&L does:
+  // they are not costs. The charts below still show every status.
+  const allByCurrency = sumByCurrency(expenses, e => e.amount, e => e.currency)
+  const totalsByCurrency = sumByCurrency(
+    expenses.filter(e => !(EXPENSE_NOT_A_COST_STATUSES as readonly string[]).includes(e.status)),
+    e => e.amount, e => e.currency)
   const pendingByCurrency = sumByCurrency(expenses.filter(e => e.status === 'pending'), e => e.amount, e => e.currency)
   const approvedByCurrency = sumByCurrency(expenses.filter(e => e.status === 'approved'), e => e.amount, e => e.currency)
   const paidByCurrency = sumByCurrency(expenses.filter(e => e.status === 'paid'), e => e.amount, e => e.currency)
@@ -432,7 +451,7 @@ export default function ExpensesPage() {
   // The charts show proportions, which need ONE denominator. They work in the
   // currency most of this list is in, and say so above the bars.
   const chartCurrency =
-    Object.entries(totalsByCurrency).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0] || 'EUR'
+    Object.entries(allByCurrency).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0] || orgCurrency
   const chartExpenses = expenses.filter(e => (e.currency || 'EUR').toUpperCase() === chartCurrency)
   const totalExpenses = chartExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0)
 
@@ -635,6 +654,7 @@ export default function ExpensesPage() {
                 <option value="approved">Approved</option>
                 <option value="paid">Paid</option>
                 <option value="rejected">Rejected</option>
+                <option value="cancelled">Cancelled</option>
               </select>
             </div>
 

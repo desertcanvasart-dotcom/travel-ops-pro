@@ -146,9 +146,13 @@ describe('financial reports', () => {
 
 describe('commissions', () => {
   it('the summary is per currency and rendered with formatTotals', () => {
+    // The summary moved to lib/commission-fields (summariseCommissions) so it
+    // can be tested; the route calls it.
     const api = src('app/api/commissions/route.ts')
-    expect(api).toContain('total_receivable: sumByCurrency(receivable, amount, cur)')
-    expect(api).not.toMatch(/reduce\(\(sum, c\) => sum \+ Number\(c\.commission_amount\)/)
+    expect(api).toContain('summariseCommissions(data || [])')
+    const lib = src('lib/commission-fields.ts')
+    expect(lib).toContain('total_receivable: sumByCurrency(receivable, amount, cur)')
+    expect(lib).not.toMatch(/reduce\(\(sum, c\) => sum \+ Number\(c\.commission_amount\)/)
     const page = src('app/commissions/page.tsx')
     expect(page).toContain('formatTotals(summary.total_receivable)')
     expect(page).toContain('formatTotals(summary.net_commission)')
@@ -159,8 +163,13 @@ describe('commissions', () => {
     const gen = src('app/api/itineraries/[id]/generate-commissions/route.ts')
     expect(gen).toContain("if (itinerary.status === 'cancelled')")
     expect(gen).toContain('{ status: 409 }')
+    // The PUT used to strip org_id and client_id from a spread body; it now
+    // applies a whitelist (COMMISSION_EDITABLE_FIELDS) that names neither.
     const put = src('app/api/commissions/[id]/route.ts')
-    expect(put).toContain('org_id: _org, client_id: _client,')
+    expect(put).toContain('buildCommissionUpdate(body, existing)')
+    const lib = src('lib/commission-fields.ts')
+    const list = lib.slice(lib.indexOf('COMMISSION_EDITABLE_FIELDS = ['), lib.indexOf('] as const', lib.indexOf('COMMISSION_EDITABLE_FIELDS = [')))
+    expect(list).not.toMatch(/org_id|client_id|itinerary_id|supplier_id/)
   })
 })
 

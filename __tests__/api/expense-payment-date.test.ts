@@ -33,7 +33,7 @@ vi.mock('@supabase/supabase-js', () => ({
     },
   }),
 }))
-vi.mock('@/lib/auth/current-org', () => ({ getCurrentOrgId: async () => 'org-1', noOrgResponse: () => new Response(null, { status: 403 }) }))
+vi.mock('@/lib/auth/current-org', () => ({ getCurrentOrgId: async () => 'org-1', noOrgResponse: () => new Response(null, { status: 403 }), requireRole: async () => null }))
 
 const put = async (body: Record<string, unknown>) => {
   const { PUT } = await import('@/app/api/expenses/[id]/route')
