@@ -14,7 +14,7 @@ export default function ReceiptsPage() {
 
       <h1 className="text-3xl font-bold text-gray-900 mb-4">Receipts</h1>
       <p className="text-gray-600 mb-8">
-        Open it from <strong>Home &rsaquo; Finance &rsaquo; Receipts</strong>. The Finance section of the menu is shown to the owner, admins and managers; agents and viewers do not have it. The page lists a receipt for each payment that has been received, to preview, download and send. Receipts are made from payments; you never create one by hand.
+        Open it from <strong>Home &rsaquo; Finance &rsaquo; Receipts</strong>. Receipts is shown to the owner, admins and managers; agents and viewers do not have it in their menu and cannot open the page. The page lists a receipt for each payment that has been received, to preview, download and send. Receipts are made from payments; you never create one by hand.
       </p>
 
       {/* Where receipts come from */}

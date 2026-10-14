@@ -14,7 +14,7 @@ export default function InvoicesPaymentsPage() {
 
       <h1 className="text-3xl font-bold text-gray-900 mb-4">Invoices &amp; Payments</h1>
       <p className="text-gray-600 mb-8">
-        Open the list from <strong>Home &rsaquo; Finance &rsaquo; Invoices</strong>. The Finance section of the menu is shown to the owner, admins and managers; agents and viewers do not have it. An invoice can also be raised from a trip, which any staff member who can open the trip can do. Money recorded against invoices is also listed on <Link href="/docs/payments" className="text-primary-600 hover:underline">Payments</Link>, and each payment has a <Link href="/docs/receipts" className="text-primary-600 hover:underline">receipt</Link>.
+        Open the list from <strong>Home &rsaquo; Finance &rsaquo; Invoices</strong>. The Finance section of the menu is shown to the owner, admins and managers; agents see only Invoices and Payments in it (they issue invoices and record customer payments); viewers do not have it. An invoice can also be raised from a trip, which any staff member who can open the trip can do. Money recorded against invoices is also listed on <Link href="/docs/payments" className="text-primary-600 hover:underline">Payments</Link>, and each payment has a <Link href="/docs/receipts" className="text-primary-600 hover:underline">receipt</Link>.
       </p>
 
       {/* Viewing Invoices */}

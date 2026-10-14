@@ -3225,6 +3225,32 @@ export interface Database {
           },
         ]
       }
+      commission_number_counters: {
+        Row: {
+          org_id: string
+          year: number
+          last_value: number
+        }
+        Insert: {
+          org_id: string
+          year: number
+          last_value?: number
+        }
+        Update: {
+          org_id?: string
+          year?: number
+          last_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commission_number_counters_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       commissions: {
         Row: {
           id: string

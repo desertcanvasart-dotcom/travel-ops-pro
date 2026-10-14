@@ -13,7 +13,7 @@ export default function PaymentsPage() {
 
       <h1 className="text-3xl font-bold text-gray-900 mb-4">Payments</h1>
       <p className="text-gray-600 mb-8">
-        Open it from <strong>Home &rsaquo; Finance &rsaquo; Payments</strong> (page title <strong>Payment Tracking</strong>). The Finance section of the menu is shown to the owner, admins and managers; agents and viewers do not have it. It lists every payment recorded against an <strong>invoice</strong> or directly against an <strong>itinerary</strong> (a deposit taken before invoicing), and totals them.
+        Open it from <strong>Home &rsaquo; Finance &rsaquo; Payments</strong> (page title <strong>Payment Tracking</strong>). The Finance section of the menu is shown to the owner, admins and managers; agents see only Invoices and Payments in it (they issue invoices and record customer payments); viewers do not have it. It lists every payment recorded against an <strong>invoice</strong> or directly against an <strong>itinerary</strong> (a deposit taken before invoicing), and totals them.
       </p>
 
       <section className="mb-10">
