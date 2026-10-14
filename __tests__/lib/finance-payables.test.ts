@@ -120,3 +120,12 @@ describe('the expense delete guard (for the Expenses route)', () => {
   it('blocks one matched to a bill', async () => expect(await expenseDeleteBlocker(db, 'o1', 'linked')).toMatch(/matched/))
   it('lets a free one go', async () => expect(await expenseDeleteBlocker(db, 'o1', 'free')).toBeNull())
 })
+
+describe('paying from Payables goes through approval', () => {
+  it('payExpenseAndSettleBills pays an approved expense only', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync('lib/finance/payables.ts', 'utf8')
+    expect(src).toContain(".eq('status', 'approved')")
+    expect(src).not.toContain("in('status', [...PAYABLE_EXPENSE_STATUSES])")
+  })
+})

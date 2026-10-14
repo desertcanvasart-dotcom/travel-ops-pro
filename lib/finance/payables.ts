@@ -7,7 +7,6 @@
 // Bills and the dashboard each show a different "owed".
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { PAYABLE_EXPENSE_STATUSES } from '@/lib/expense-status'
 import { billsWithoutExpenses } from '@/lib/dashboard/figures'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -131,11 +130,13 @@ export async function payExpenseAndSettleBills(
     })
     .eq('id', expenseId)
     .eq('org_id', orgId)
-    .in('status', [...PAYABLE_EXPENSE_STATUSES])
+    // Approved only: approving is where the approver is recorded and where the
+    // creator-cannot-approve rule applies, so a pending expense is approved first.
+    .eq('status', 'approved')
     .select()
     .maybeSingle()
   if (error) return { ok: false, status: 500, error: 'Failed to record payment' }
-  if (!expense) return { ok: false, status: 409, error: 'Only a pending or approved expense can be paid' }
+  if (!expense) return { ok: false, status: 409, error: 'Only an approved expense can be paid - approve it first' }
 
   const billsPaid = await settleBillsForPaidExpense(supabase, orgId, expenseId, input)
   return { ok: true, expense, bills_paid: billsPaid }
