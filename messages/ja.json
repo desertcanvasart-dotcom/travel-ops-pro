@@ -988,6 +988,7 @@
     "currencyFallback": "{requested}はレポート通貨に対応していないため、{currency}で表示しています。"
   },
   "expenses": {
+    "approvedBy": "承認者",
     "expenses": "経費",
     "expensesSubtitle": "運営コストとサプライヤー支払いを追跡",
     "exportCSV": "CSVエクスポート",
@@ -1006,6 +1007,7 @@
     "expense": "経費"
   },
   "expenseDetail": {
+    "approvedBy": "承認者",
     "failedToUpdateStatus": "ステータスの更新に失敗しました",
     "confirmDeleteExpense": "この経費を削除してもよろしいですか？この操作は元に戻せません。",
     "failedToDeleteExpense": "経費の削除に失敗しました",
@@ -7410,7 +7412,9 @@
     "noteText": "旅程の価格設定時に、チップ・備品・航空券を含むすべてのサービスに会社の利益率が適用されます。この旅程に入力した追加経費は利益を減らします。ここでの利益率は、損益計算ページと同じく、利益を顧客価格で割った値です。",
     "extraExpenses": "追加経費",
     "extraExpensesNote": "追加経費はマージンを減少させる運営費です",
-    "fromTripTotals": "サービス単価が未入力のため、旅程の合計金額から算出"
+    "fromTripTotals": "サービス単価が未入力のため、旅程の合計金額から算出",
+    "rateMissing": "為替レート未登録：追加経費{count}件を{currency}に換算できないため、利益率から除外しています：{list}。為替レートが登録されるまで、表示の利益率は実際より高くなっています。",
+    "extrasUnavailable": "為替レート未登録、または取得できません：この旅程の追加経費を現在換算できないため、表示の利益率から除外しています。"
   },
   "resourceAssignment": {
     "changeDates": "日付を変更",
@@ -7524,6 +7528,13 @@
     "title": "コミッション管理",
     "subtitle": "ホテル、ショップ、パートナーからのコミッションを追跡",
     "addCommission": "コミッションを追加",
+    "recalculateFromPrice": "価格から再計算",
+    "recalculateHint": "保留中のコミッションはサービスの現在の価格に合わせて更新されます。支払済みのものは変更されず、注意表示のみ付きます。",
+    "failedToRecalculate": "コミッションの再計算に失敗しました",
+    "priceChangedSincePaid": "支払後に価格が変更されました",
+    "priceChangedSinceInvoiced": "請求後に価格が変更されました",
+    "priceChangedWhileDisputed": "係争中に価格が変更されました",
+    "priceServiceGone": "元のサービスからこのコミッションは発生しなくなりました",
     "editCommission": "コミッションを編集",
     "updateCommission": "コミッションを更新",
     "deleteConfirm": "このコミッション記録を削除してもよろしいですか？",

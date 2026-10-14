@@ -93,6 +93,58 @@ export function buildCommissionUpdate(
   return update
 }
 
+// ============================================
+// A manual commission that repeats one already on the books
+// ============================================
+// Generating commissions and typing the same one in by hand put the money in
+// twice, and every figure that adds commissions (the cards, the trip P&L)
+// doubled it. Commissions have no number of their own, so the existing one is
+// named by a short reference made from its id, which the Commissions page shows.
+
+export interface DuplicateCheckRow {
+  id: string
+  itinerary_id?: string | null
+  supplier_id?: string | null
+  source_name?: string | null
+  commission_type?: string | null
+  commission_amount?: unknown
+  status?: string | null
+  description?: string | null
+  currency?: string | null
+}
+
+/** The short reference a commission is known by on screen and in messages. */
+export function commissionRef(id: string): string {
+  return `COM-${id.replace(/-/g, '').slice(0, 8).toUpperCase()}`
+}
+
+const sameCents = (a: unknown, b: unknown) => Math.round(Number(a) * 100) === Math.round(Number(b) * 100)
+
+/**
+ * The commission this one repeats, or null: same trip, same supplier (or, with
+ * none, the same source name), same type and same amount. A cancelled one does
+ * not count; it is not owed to or by anyone.
+ */
+export function findDuplicateCommission(existing: DuplicateCheckRow[], candidate: DuplicateCheckRow): DuplicateCheckRow | null {
+  if (!candidate.itinerary_id) return null
+  const source = (v: unknown) => String(v ?? '').trim().toLowerCase()
+  return existing.find(e =>
+    e.status !== 'cancelled' &&
+    e.itinerary_id === candidate.itinerary_id &&
+    e.commission_type === candidate.commission_type &&
+    sameCents(e.commission_amount, candidate.commission_amount) &&
+    (candidate.supplier_id || e.supplier_id
+      ? (e.supplier_id ?? null) === (candidate.supplier_id ?? null)
+      : source(e.source_name) === source(candidate.source_name))
+  ) ?? null
+}
+
+/** The 409 message for a duplicate. */
+export function duplicateCommissionMessage(existing: DuplicateCheckRow): string {
+  const what = existing.description ? ` "${existing.description}"` : ''
+  return `Commission ${commissionRef(existing.id)}${what} already records this: same trip, supplier, type and amount. Change the existing commission instead, or delete it first if this one replaces it.`
+}
+
 interface SummaryRow {
   commission_type?: string | null
   commission_amount?: unknown

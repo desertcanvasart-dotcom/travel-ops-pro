@@ -31,11 +31,13 @@ import {
   Sparkles,
   Ticket,
   Heart,
-  FileText
+  FileText,
+  RefreshCw
 } from 'lucide-react'
 import Link from 'next/link'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 import { formatTotals, formatMoney, type CurrencyTotals } from '@/lib/currency-totals'
+import { commissionRef } from '@/lib/commission-fields'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { usePreferences } from '@/app/contexts/PreferencesContext'
 import { useTranslations } from 'next-intl'
@@ -176,6 +178,11 @@ export default function CommissionsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formData, setFormData] = useState<FormData>(initialFormData)
   const [saving, setSaving] = useState(false)
+  // "Recalculate from price": the commissions it did not change because money
+  // already moved on them, by id -> status. Shown as a flag on the row until
+  // the page is reloaded.
+  const [recalculating, setRecalculating] = useState(false)
+  const [priceFlags, setPriceFlags] = useState<Record<string, string>>({})
 
   const fetchCommissions = useCallback(async () => {
     try {
@@ -350,6 +357,36 @@ export default function CommissionsPage() {
     }
   }
 
+  // Pending commissions follow their service's current price; settled ones are
+  // never changed, only flagged.
+  const handleRecalculate = async () => {
+    setRecalculating(true)
+    try {
+      const response = await fetch('/api/commissions/recalculate', { method: 'POST' })
+      const result = await response.json().catch(() => ({}))
+      if (response.ok && result.success) {
+        const flags: Record<string, string> = {}
+        for (const f of result.price_changed || []) flags[f.commission_id] = f.status
+        setPriceFlags(flags)
+        await fetchCommissions()
+        await dialog.alert(t('recalculateFromPrice'), result.message, 'success')
+      } else {
+        await dialog.alert(t('error'), result.error || t('failedToRecalculate'), 'warning')
+      }
+    } catch (error) {
+      console.error('Error recalculating commissions:', error)
+      await dialog.alert(t('error'), t('failedToRecalculate'), 'warning')
+    } finally {
+      setRecalculating(false)
+    }
+  }
+
+  const priceFlagLabel = (status: string) =>
+    status === 'invoiced' ? t('priceChangedSinceInvoiced')
+      : status === 'disputed' ? t('priceChangedWhileDisputed')
+      : status === 'pending' ? t('priceServiceGone')
+      : t('priceChangedSincePaid')
+
   const openAddModal = () => {
     setFormData({ ...initialFormData, currency: orgCurrency })
     setEditingId(null)
@@ -432,6 +469,16 @@ export default function CommissionsPage() {
           >
             <FileText className="w-3.5 h-3.5" />
             PDF
+          </button>
+          <button
+            type="button"
+            onClick={handleRecalculate}
+            disabled={recalculating}
+            title={t('recalculateHint')}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${recalculating ? 'animate-spin' : ''}`} />
+            {t('recalculateFromPrice')}
           </button>
           <button
             type="button"
@@ -628,6 +675,7 @@ export default function CommissionsPage() {
                       <p className="text-sm font-medium text-gray-900">
                         {commission.supplier?.name || commission.source_name || '-'}
                       </p>
+                      <p className="text-xs text-gray-400">{commissionRef(commission.id)}</p>
                       {commission.source_contact && (
                         <p className="text-xs text-gray-500">{commission.source_contact}</p>
                       )}
@@ -664,6 +712,9 @@ export default function CommissionsPage() {
                         <StatusIcon className="h-3 w-3" />
                         {t(statusConfig.labelKey)}
                       </span>
+                      {priceFlags[commission.id] && (
+                        <p className="mt-1 text-xs text-amber-700">{priceFlagLabel(priceFlags[commission.id])}</p>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-sm text-gray-600">

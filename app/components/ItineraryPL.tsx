@@ -6,10 +6,10 @@ import {
   DollarSign,
   Percent,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  AlertTriangle
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { getFallbackRates, convertCurrency } from '@/lib/currency-service'
 import { formatMoney } from '@/lib/currency-totals'
 import { marginOnPrice, recordedTripSupplierCost } from '@/lib/itinerary-pl'
 
@@ -44,6 +44,14 @@ interface ItineraryPLProps {
   currency: string
   days: DayWithServices[]
   extraExpenses?: ExtraExpense[]
+}
+
+/** The trip's extra expenses in the trip's currency, from /api/itineraries/[id]/extras-fx. */
+interface ExtrasFx {
+  total: number
+  count: number
+  /** Expenses with no exchange rate: not in total. */
+  missing: { reference: string; amount: number; fromCurrency: string }[]
 }
 
 interface PLBreakdown {
@@ -94,9 +102,40 @@ export default function ItineraryPL({
     marginPercent: 0
   })
 
+  // Extra expenses are converted on the server, with the P&L report's own FX
+  // (each at the rate on its date). null until it answers; failed when it could
+  // not, which the card says rather than showing a margin without them.
+  const [extrasFx, setExtrasFx] = useState<ExtrasFx | null>(null)
+  const [extrasFailed, setExtrasFailed] = useState(false)
+  const hasExtras = extraExpenses.some(exp => !exp.booking_supplier_status_id)
+  // The parent builds a new array every render; its content is what matters.
+  const extrasKey = JSON.stringify(extraExpenses)
+
+  useEffect(() => {
+    if (!hasExtras) {
+      setExtrasFx(null)
+      setExtrasFailed(false)
+      return
+    }
+    let live = true
+    fetch(`/api/itineraries/${itineraryId}/extras-fx`)
+      .then(res => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+      .then(result => {
+        if (!live) return
+        setExtrasFx({ total: Number(result.total) || 0, count: Number(result.count) || 0, missing: result.missing || [] })
+        setExtrasFailed(false)
+      })
+      .catch(() => {
+        if (!live) return
+        setExtrasFx(null)
+        setExtrasFailed(true)
+      })
+    return () => { live = false }
+  }, [itineraryId, hasExtras, extrasKey])
+
   useEffect(() => {
     calculatePL()
-  }, [days, extraExpenses, totalCost, supplierCost])
+  }, [days, extrasFx, totalCost, supplierCost])
 
   // True when the numbers came from the trip rather than from priced services.
   const [fromTripTotals, setFromTripTotals] = useState(false)
@@ -155,44 +194,19 @@ export default function ItineraryPL({
     // Add extra expenses (operational costs that reduce margin). Not a booking
     // supplier's confirmed cost: confirming a supplier records it as an expense
     // of this trip, but it is the same money already in the supplier cost.
-    const extras = extraExpenses.filter(exp => !exp.booking_supplier_status_id)
-    if (extras.length > 0) {
-      const fallbackRates = getFallbackRates(currency)
-      let extraTotal = 0
-      // Expenses whose currency could not be converted. They are LEFT OUT of
-      // the margin rather than added at face value (1,000 EGP is not €1,000),
-      // and counted so the panel can say the figure is short.
-      let unconvertedCount = 0
-
-      extras.forEach(exp => {
-        const converted = exp.currency === currency
-          ? Number(exp.amount)
-          : convertCurrency(Number(exp.amount), exp.currency, currency, fallbackRates)
-        if (converted === null) {
-          unconvertedCount += 1
-          return
-        }
-        extraTotal += converted
-      })
-
-      if (unconvertedCount > 0) {
-        console.warn(
-          `${unconvertedCount} expense(s) excluded from this P&L — no rate to ${currency}`
-        )
+    // Converted by the server as the P&L report does; one with no rate is left
+    // out and named in the "rate missing" note, never converted at a static rate.
+    if (extrasFx && extrasFx.total > 0) {
+      byType['extra_expenses'] = {
+        service_type: 'extra_expenses',
+        supplier_cost: extrasFx.total,
+        client_price: extrasFx.total, // pass-through, no markup
+        margin: 0,
+        margin_percent: 0,
+        count: extrasFx.count
       }
-
-      if (extraTotal > 0) {
-        byType['extra_expenses'] = {
-          service_type: 'extra_expenses',
-          supplier_cost: extraTotal,
-          client_price: extraTotal, // pass-through, no markup
-          margin: 0,
-          margin_percent: 0,
-          count: extras.length
-        }
-        totalSupplierCost += extraTotal
-        // Note: extra expenses do NOT increase client price — they reduce margin
-      }
+      totalSupplierCost += extrasFx.total
+      // Note: extra expenses do NOT increase client price — they reduce margin
     }
 
     // Margin is profit over what the client pays, the same definition as the
@@ -278,6 +292,21 @@ export default function ItineraryPL({
           {expanded ? <ChevronUp className="h-5 w-5 text-gray-400" /> : <ChevronDown className="h-5 w-5 text-gray-400" />}
         </div>
       </button>
+
+      {(extrasFailed || (extrasFx && extrasFx.missing.length > 0)) && (
+        <div className="mx-5 mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3" role="status">
+          <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+          <p className="text-xs text-amber-800">
+            {extrasFailed
+              ? t('extrasUnavailable')
+              : t('rateMissing', {
+                  count: extrasFx!.missing.length,
+                  list: extrasFx!.missing.map(m => `${m.reference} (${formatMoney(Number(m.amount), m.fromCurrency)})`).join(', '),
+                  currency
+                })}
+          </p>
+        </div>
+      )}
 
       <div className="md:hidden px-5 pb-4 grid grid-cols-3 gap-3">
         <div className="text-center p-2 bg-gray-50 rounded-lg">

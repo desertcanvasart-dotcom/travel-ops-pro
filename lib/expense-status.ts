@@ -82,3 +82,63 @@ export function expenseDeleteBlock(expense: { status?: string | null }, matchedI
   }
   return null
 }
+
+// ============================================
+// Who approved an expense
+// ============================================
+// An expense moved from Pending to Approved (or straight to Paid) with nothing
+// recording who did it, and nothing stopping the person who entered it from
+// approving it themselves. expenses.created_by / approved_by / approved_at
+// (migration 20261230) hold both; the routes set them from the session, never
+// from the request.
+
+export interface ApprovalState {
+  /** The status the expense has now; null for an expense being created. */
+  from: string | null
+  /** The status it is moving to. */
+  to: string
+  created_by?: string | null
+  approved_by?: string | null
+}
+
+export type ApprovalDecision =
+  | { ok: true; set: { approved_by: string | null; approved_at: string | null } | null }
+  | { ok: false; error: string }
+
+/**
+ * What moving an expense to `to` does to its approver.
+ *
+ *   Pending (or new) -> Approved / Paid   the signed-in user becomes the
+ *                                         approver, unless they created the
+ *                                         expense and are not an owner or admin
+ *                                         (refused)
+ *   -> Pending                            the approval is withdrawn
+ *   anything else                         unchanged (Approved -> Paid keeps its
+ *                                         approver; a rejected or cancelled
+ *                                         expense keeps whoever approved it)
+ *
+ * An expense with no creator on record (entered before created_by existed, or
+ * made by the system) can be approved by anyone who may approve expenses.
+ */
+export function approvalDecision(
+  state: ApprovalState,
+  userId: string | null,
+  isAdmin: boolean,
+  now: string = new Date().toISOString(),
+): ApprovalDecision {
+  const approving = state.to === 'approved' || state.to === 'paid'
+  const wasApproved = state.from === 'approved' || state.from === 'paid'
+  if (approving && !wasApproved) {
+    if (!isAdmin && userId && state.created_by && state.created_by === userId) {
+      return {
+        ok: false,
+        error: 'You created this expense, so someone else must approve it. An owner or admin can approve their own.',
+      }
+    }
+    return { ok: true, set: { approved_by: userId, approved_at: now } }
+  }
+  if (state.to === 'pending' && state.from !== 'pending') {
+    return { ok: true, set: { approved_by: null, approved_at: null } }
+  }
+  return { ok: true, set: null }
+}

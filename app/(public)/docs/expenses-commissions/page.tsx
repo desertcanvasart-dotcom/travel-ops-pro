@@ -56,7 +56,13 @@ export default function ExpensesCommissionsPage() {
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Approval and payment</h3>
         <p className="text-gray-600 mb-3">
-          The flow is Pending &rarr; Approved &rarr; Paid, or Rejected. On the expense&rsquo;s own page each status is a button. There is no separate approver role: any Admin or Manager can take every step on any expense, including one they entered, and the approver&rsquo;s name is not recorded.
+          The flow is Pending &rarr; Approved &rarr; Paid, or Rejected. On the expense&rsquo;s own page each status is a button; the edit form also has a Status field.
+        </p>
+        <p className="text-gray-600 mb-3">
+          The app records who <strong>created</strong> each expense and who <strong>approved</strong> it, taken from the person signed in, never from what is typed. When an expense moves out of Pending to <strong>Approved</strong> (or straight to <strong>Paid</strong>), that person becomes its approver and the time is kept. The list shows <strong>Approved by</strong> under the status, and the expense&rsquo;s own page shows the name and the date.
+        </p>
+        <p className="text-gray-600 mb-3">
+          <strong>You cannot approve an expense you created.</strong> A Manager who entered it is refused with the message &ldquo;You created this expense, so someone else must approve it&rdquo;, and the same applies to marking it Paid straight from Pending or entering it already Approved. The <strong>Owner and Admin</strong> may approve their own. Paying an expense that is already Approved keeps its approver; moving an expense back to Pending withdraws the approval. Expenses entered before this was recorded, and those the app makes itself (for example from a supplier confirmation), have no creator on record, so any Manager can approve them, and the approvals made before it have no approver to show.
         </p>
         <p className="text-gray-600 mb-3">
           The payment date follows the status. Setting an expense to <strong>Paid</strong> keeps the date it has, or uses the date you give, or today. Any other status clears it.
@@ -105,7 +111,7 @@ export default function ExpensesCommissionsPage() {
           <li>Choose the <strong>currency</strong> (it starts as your company&rsquo;s currency), the dates and the status</li>
         </ol>
         <p className="text-gray-600 mt-3">
-          The supplier, trip and client you pick must belong to your company. A manual commission is not checked against commissions generated for the same trip, so you can enter one twice: look at the list before adding.
+          The supplier, trip and client you pick must belong to your company. A commission that repeats one already on the books &mdash; <strong>same trip, same supplier (or source name), same type and same amount</strong>, whether generated or typed, and not cancelled &mdash; is refused with a message naming it, for example &ldquo;Commission COM-1A2B3C4D &hellip; already records this&rdquo;. Commissions have no number of their own; <strong>COM-</strong> followed by eight characters is the reference shown under the source name in the list. Change the existing commission, or delete it first if the new one replaces it. The check applies only when a trip is chosen.
         </p>
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Changing a commission</h3>
@@ -130,10 +136,20 @@ export default function ExpensesCommissionsPage() {
           The commission takes the trip&rsquo;s currency. A cancelled trip is refused. Services it cannot do anything with are listed in the result message with the reason (no supplier, no rate, no supplier cost, no profit&hellip;), not silently dropped.
         </p>
         <p className="text-gray-600 mb-3">
-          A service is marked as done only when everything it can give has been made. Running the button twice does not duplicate: a commission a service already has is not made again. A service that could only be generated in part (for example the seller&rsquo;s commission, while the supplier has no rate yet) stays open, so once you set the missing rate, running it again adds only what is missing. <strong>Deleting a generated commission releases its service</strong>, so it can be generated again. Commissions generated before this link existed carry no reference to their service, and releasing does not apply to them.
+          A service is marked as done only when everything it can give has been made. Running the button twice does not duplicate: a commission a service already has is not made again. A service that could only be generated in part (for example the seller&rsquo;s commission, while the supplier has no rate yet) stays open, so once you set the missing rate, running it again adds only what is missing. <strong>Deleting a generated commission releases its service</strong>, so it can be generated again. Commissions generated before the link existed were matched to their service once, when the app was updated: a commission is linked when exactly one service of its trip has the same supplier and amount and is still marked generated. Those that matched none, or more than one, were not guessed; they are listed for a person to review and, until linked, deleting them releases nothing.
         </p>
+
+        <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">When a service price changes</h3>
+        <p className="text-gray-600 mb-3">
+          A commission keeps the base it was made with. Every time you press <strong>Generate commissions</strong> on a trip, and when you press <strong>Recalculate from price</strong> at the top of the Commissions page (which looks at every trip with generated commissions, or only recalculates, without generating anything new), the app compares each commission linked to its service with what the service gives today:
+        </p>
+        <ul className="list-disc list-inside space-y-1 text-gray-700 mb-3">
+          <li><strong>Pending</strong> commission whose base differs: recalculated &mdash; base, rate and amount follow the current price. The message says how many.</li>
+          <li><strong>Paid</strong> or <strong>Received</strong> commission whose base differs: <strong>never changed</strong>. It is flagged &ldquo;Price changed since paid&rdquo; in the result message and under its status in the list, so you can settle the difference by hand. Invoiced and Disputed ones are also left as they are and flagged (&ldquo;Price changed since invoiced&rdquo;, &ldquo;Price changed while disputed&rdquo;).</li>
+          <li>A pending commission whose service can no longer give it (the price was removed, or the profit went to nothing) is left as it is and flagged, not set to zero.</li>
+        </ul>
         <p className="text-gray-600">
-          Changing a service&rsquo;s price or rate after generating does not update the commissions already made.
+          The flag on a row shows after you press the button and until the page is reloaded; press it again to see it again. Only commissions linked to their service are compared, so a manual commission is never changed. A change of the supplier&rsquo;s rate alone is not a price change and is not applied to existing commissions.
         </p>
         <Tip>
           Agent commissions on a trip (payable) are subtracted from that trip&rsquo;s profit in Profit &amp; Loss, except cancelled ones. Receivable commissions are shown there but never added, because owed is not earned.
@@ -144,10 +160,11 @@ export default function ExpensesCommissionsPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
-          <li>No approval chain: there is no separate approver role, no record of who approved, and no limit on what a manager can approve.</li>
+          <li>No approval chain: one approver is enough, there is no separate approver role and no approval limit. The only rule is that you cannot approve your own expense unless you are the Owner or Admin. Payables and supplier-invoice payments that mark expenses paid do not go through this check.</li>
           <li>No VAT on expenses: the tax fields on an expense are not filled in anywhere, so there is no input VAT to report.</li>
           <li>No conversion in the tiles and cards: amounts in different currencies are listed side by side. The Profit &amp; Loss screen is where costs are converted, at the exchange rate on each expense&rsquo;s date.</li>
-          <li>No automatic update of generated commissions when a service&rsquo;s price or rate changes.</li>
+          <li>No automatic update of commissions when a service&rsquo;s price changes: you press Generate commissions or Recalculate from price. A paid commission is never recalculated, only flagged, and the flag is not stored.</li>
+          <li>No commission numbers: the COM- reference is the start of the commission&rsquo;s id.</li>
           <li>No editing of a commission&rsquo;s amounts: delete it and add it again.</li>
         </ul>
       </section>
