@@ -35,7 +35,7 @@ export default function PaymentsPage() {
           Search by client, reference (invoice number or trip code) or transaction reference. Two filters: <strong>Source</strong> (All Sources, Invoice Payments, Itinerary Payments) and <strong>Method</strong>. There is no date filter. The columns are Date, Source (an Invoice or Itinerary badge), Reference (a link to the invoice or trip), Client, Amount, Method and Txn Ref. Amounts are in each row&apos;s own currency.
         </p>
         <p className="text-gray-600">
-          The list shows every payment row, including trip payments that are pending, failed or refunds, and trip payments on a trip that has an invoice. Those are marked under the amount (<strong>Not completed</strong>, <strong>Refund</strong> or <strong>Trip has an invoice (counted on the invoice)</strong>) and are not in the tiles. The <strong>CSV</strong> and <strong>PDF</strong> buttons export the rows listed. <strong>View Invoices</strong> opens the invoices list.
+          The list shows every payment row, including trip payments that are pending, failed or refunds, and trip payments on a trip that has an invoice. Those are marked under the amount (<strong>Not completed</strong>, <strong>Refund</strong> or <strong>Trip has an invoice (counted on the invoice)</strong>) and are not in the tiles. A completed trip payment of the last kind also has a <strong>Move to invoice</strong> button in its row (see below). The <strong>CSV</strong> and <strong>PDF</strong> buttons export the rows listed. <strong>View Invoices</strong> opens the invoices list.
         </p>
       </section>
 
@@ -70,7 +70,7 @@ export default function PaymentsPage() {
           <li><strong>Once a trip has an invoice that is not cancelled (a draft counts), payments go on the invoice.</strong> Recording a trip payment for such a trip is refused, from New Payment, from Record Payment and from any other route, with a message naming the invoice. A draft invoice must be marked as sent before it takes a payment. Moving an existing trip payment onto such a trip is refused too.</li>
           <li>A trip with no invoice, or whose invoices are all cancelled, takes trip payments as before.</li>
           <li><strong>Trips that already have both</strong> (a trip payment recorded before the rule, and an invoice made later) are not counted twice: the totals count the invoice&apos;s payments and skip that trip&apos;s trip payments. This applies to the Payments tiles, to the Receipts tiles, and to anything else that adds the two lists. The skipped rows stay in the list, marked, and can still be opened, edited or deleted; their receipts still exist.</li>
-          <li>If a trip payment on such a trip was real money that is not on the invoice yet, record it on the invoice, then delete the trip payment.</li>
+          <li><strong>Move to invoice.</strong> A completed trip payment on a trip that has a live invoice has a <strong>Move to invoice</strong> button (the two-arrow icon) at the end of its row. After you confirm, the app records the same amount, currency, payment date, method, transaction reference and notes as a payment on the trip&apos;s invoice, then deletes the trip payment, so the money is counted once, on the invoice. The invoice payment is created first; if deleting the trip payment then fails, the message says the payment is already on the invoice and the trip payment must be deleted by hand (it stays out of the totals meanwhile). It is refused, with the reason shown, when the payment would be more than the invoice&apos;s balance due, when the trip has more than one live invoice, when the invoice is still a draft, when the currencies differ, and for refunds and payments that are not Completed. It is available to the owner, admins and managers, and to agents who can open this page, as recording a payment is.</li>
         </ul>
       </section>
 
@@ -88,7 +88,7 @@ export default function PaymentsPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">What It Does Not Do</h2>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
-          <li>It does not move or merge money between the two places. It refuses new trip payments on a trip with an invoice and leaves older ones out of the totals, but it does not delete them or copy them onto the invoice.</li>
+          <li>It does not move money between the two places by itself. It refuses new trip payments on a trip with an invoice and leaves older ones out of the totals; moving one onto the invoice is a button you press for each payment, and it does not split a payment across invoices.</li>
           <li>It does not convert currencies. A payment is in its invoice&apos;s or trip&apos;s currency.</li>
           <li>It does not subtract refunds from the tiles; a refund is listed and marked but not counted.</li>
         </ul>

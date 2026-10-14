@@ -98,11 +98,12 @@ export function buildCommissionUpdate(
 // ============================================
 // Generating commissions and typing the same one in by hand put the money in
 // twice, and every figure that adds commissions (the cards, the trip P&L)
-// doubled it. Commissions have no number of their own, so the existing one is
-// named by a short reference made from its id, which the Commissions page shows.
+// doubled it. A commission has its own number (COM-YYYY-NNN, migration 20261231); the
+// short id-derived reference stays only as the fallback for a row without one.
 
 export interface DuplicateCheckRow {
   id: string
+  commission_number?: string | null
   itinerary_id?: string | null
   supplier_id?: string | null
   source_name?: string | null
@@ -142,7 +143,7 @@ export function findDuplicateCommission(existing: DuplicateCheckRow[], candidate
 /** The 409 message for a duplicate. */
 export function duplicateCommissionMessage(existing: DuplicateCheckRow): string {
   const what = existing.description ? ` "${existing.description}"` : ''
-  return `Commission ${commissionRef(existing.id)}${what} already records this: same trip, supplier, type and amount. Change the existing commission instead, or delete it first if this one replaces it.`
+  return `Commission ${existing.commission_number || commissionRef(existing.id)}${what} already records this: same trip, supplier, type and amount. Change the existing commission instead, or delete it first if this one replaces it.`
 }
 
 interface SummaryRow {

@@ -45,6 +45,9 @@ import { useConfirmDialog, useConfirm } from '@/components/ConfirmDialog'
 
 interface Commission {
   id: string
+  commission_number?: string | null
+  /** Set by the list when the linked service's price changed after this was paid, invoiced or disputed. */
+  price_changed_status?: string | null
   itinerary_id: string | null
   supplier_id: string | null
   client_id: string | null
@@ -179,8 +182,8 @@ export default function CommissionsPage() {
   const [formData, setFormData] = useState<FormData>(initialFormData)
   const [saving, setSaving] = useState(false)
   // "Recalculate from price": the commissions it did not change because money
-  // already moved on them, by id -> status. Shown as a flag on the row until
-  // the page is reloaded.
+  // already moved on them, by id -> status. The list also marks those on every
+  // load (price_changed_status); this adds what the last press found.
   const [recalculating, setRecalculating] = useState(false)
   const [priceFlags, setPriceFlags] = useState<Record<string, string>>({})
 
@@ -675,7 +678,7 @@ export default function CommissionsPage() {
                       <p className="text-sm font-medium text-gray-900">
                         {commission.supplier?.name || commission.source_name || '-'}
                       </p>
-                      <p className="text-xs text-gray-400">{commissionRef(commission.id)}</p>
+                      <p className="text-xs text-gray-400">{commission.commission_number || commissionRef(commission.id)}</p>
                       {commission.source_contact && (
                         <p className="text-xs text-gray-500">{commission.source_contact}</p>
                       )}
@@ -712,8 +715,8 @@ export default function CommissionsPage() {
                         <StatusIcon className="h-3 w-3" />
                         {t(statusConfig.labelKey)}
                       </span>
-                      {priceFlags[commission.id] && (
-                        <p className="mt-1 text-xs text-amber-700">{priceFlagLabel(priceFlags[commission.id])}</p>
+                      {(priceFlags[commission.id] || commission.price_changed_status) && (
+                        <p className="mt-1 text-xs text-amber-700">{priceFlagLabel(priceFlags[commission.id] || commission.price_changed_status || '')}</p>
                       )}
                     </td>
                     <td className="px-4 py-3">

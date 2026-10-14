@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 import { getOrgDefaultCurrency } from '@/lib/org-default-currency'
 import { recordsInOrg } from '@/lib/org-refs'
+import { priceChangeFlags } from '@/lib/commission-price-sync'
 import { commissionFieldError, commissionPaidDate, summariseCommissions, findDuplicateCommission, duplicateCommissionMessage } from '@/lib/commission-fields'
 
 const supabaseAdmin = createClient(
@@ -58,9 +59,15 @@ export async function GET(request: NextRequest) {
     // Per currency, and without cancelled commissions: see summariseCommissions.
     const summary = summariseCommissions(data || [])
 
+    // "Price changed since paid" on every load, not only after Recalculate:
+    // a paid, received, invoiced or disputed commission whose service now
+    // prices differently carries price_changed_status. Computed, not stored.
+    const flags = await priceChangeFlags(supabaseAdmin, orgId, data || [])
+    const rows = (data || []).map((c: { id: string }) => (flags[c.id] ? { ...c, price_changed_status: flags[c.id] } : c))
+
     return NextResponse.json({
       success: true,
-      data: data || [],
+      data: rows,
       summary
     })
   } catch (error) {
@@ -134,7 +141,7 @@ export async function POST(request: NextRequest) {
     if (body.itinerary_id) {
       const { data: onTrip, error: dupError } = await supabaseAdmin
         .from('commissions')
-        .select('id, itinerary_id, supplier_id, source_name, commission_type, commission_amount, status, description')
+        .select('id, commission_number, itinerary_id, supplier_id, source_name, commission_type, commission_amount, status, description')
         .eq('org_id', orgId)
         .eq('itinerary_id', body.itinerary_id)
         .eq('commission_type', body.commission_type)

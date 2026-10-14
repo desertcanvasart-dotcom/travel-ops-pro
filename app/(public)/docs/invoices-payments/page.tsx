@@ -206,7 +206,7 @@ export default function InvoicesPaymentsPage() {
           Delete removes an invoice that has no payments. If payments are recorded against it the app refuses and tells you; delete the payments first if they were entered by mistake. When an invoice is deleted, the extras it billed become billable again on the next invoice for the trip.
         </p>
         <p className="text-gray-600 mb-3">
-          <strong>Cancelling</strong> keeps the invoice on record with the status Cancelled (it is set through the invoice update; there is no Cancel button on the page). It releases the invoice&apos;s extras exactly as delete does, so they are billed on the next invoice. It is refused while money is recorded against the invoice, because that money would be left with no invoice: if the client was paid back (refunded), delete the payments from the invoice first, which is how a refund is recorded on an invoice, then cancel; if it was not refunded, leave the invoice as it is. A cancelled invoice cannot be reopened, because its extras may already be on another invoice; raise a new one. A cancelled invoice no longer blocks payments on its trip, or a new deposit or final.
+          <strong>Cancelling</strong> keeps the invoice on record with the status Cancelled (use <strong>Cancel invoice</strong> at the top of the invoice page, after a confirmation; it is not shown on an invoice that is already Cancelled or Paid). It releases the invoice&apos;s extras exactly as delete does, so they are billed on the next invoice. If money is recorded against the invoice the page shows the app&apos;s refusal message instead of cancelling, because that money would be left with no invoice: if the client was paid back (refunded), delete the payments from the invoice first, which is how a refund is recorded on an invoice, then cancel; if it was not refunded, leave the invoice as it is. A cancelled invoice cannot be reopened, because its extras may already be on another invoice; raise a new one. A cancelled invoice no longer blocks payments on its trip, or a new deposit or final.
         </p>
       </section>
 
@@ -218,8 +218,7 @@ export default function InvoicesPaymentsPage() {
           <li>It does not price a trip itself: it bills the trip&apos;s saved selling price. Change the price on the itinerary, not on the invoice (or use a manual amount, for an admin or manager).</li>
           <li>It does not work out an amount for an invoice that is not linked to a trip; that amount is typed in by an admin or manager.</li>
           <li>It does not convert currencies. An invoice, and the payments on it, stay in one currency, and a trip&apos;s invoice must be in the trip&apos;s currency.</li>
-          <li>It does not move money between the two places it can be recorded. A trip that was given payments directly before it had an invoice keeps them (see Payments for how the totals treat those).</li>
-          <li>There is no Cancel button on the invoice page.</li>
+          <li>It does not move money between the two places by itself. A trip that was given payments directly before it had an invoice keeps them until someone presses <strong>Move to invoice</strong> on the Payments list (see Payments).</li>
         </ul>
       </section>
     </div>

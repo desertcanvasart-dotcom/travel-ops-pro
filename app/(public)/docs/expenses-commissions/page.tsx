@@ -111,7 +111,7 @@ export default function ExpensesCommissionsPage() {
           <li>Choose the <strong>currency</strong> (it starts as your company&rsquo;s currency), the dates and the status</li>
         </ol>
         <p className="text-gray-600 mt-3">
-          The supplier, trip and client you pick must belong to your company. A commission that repeats one already on the books &mdash; <strong>same trip, same supplier (or source name), same type and same amount</strong>, whether generated or typed, and not cancelled &mdash; is refused with a message naming it, for example &ldquo;Commission COM-1A2B3C4D &hellip; already records this&rdquo;. Commissions have no number of their own; <strong>COM-</strong> followed by eight characters is the reference shown under the source name in the list. Change the existing commission, or delete it first if the new one replaces it. The check applies only when a trip is chosen.
+          The supplier, trip and client you pick must belong to your company. A commission that repeats one already on the books &mdash; <strong>same trip, same supplier (or source name), same type and same amount</strong>, whether generated or typed, and not cancelled &mdash; is refused with a message naming it, for example &ldquo;Commission COM-2026-014 &hellip; already records this&rdquo;. Every commission has its own number, <strong>COM-&lt;year&gt;-&lt;number&gt;</strong> (COM-2026-014), from a series that belongs to your company: it is shown under the source name in the list and is the number quoted in that message. It is given when the commission is made (by hand or generated) and does not change; commissions that existed before numbers were introduced were numbered once, oldest first, by the year they were created. Change the existing commission, or delete it first if the new one replaces it. The check applies only when a trip is chosen.
         </p>
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Changing a commission</h3>
@@ -144,12 +144,12 @@ export default function ExpensesCommissionsPage() {
           A commission keeps the base it was made with. Every time you press <strong>Generate commissions</strong> on a trip, and when you press <strong>Recalculate from price</strong> at the top of the Commissions page (which looks at every trip with generated commissions, or only recalculates, without generating anything new), the app compares each commission linked to its service with what the service gives today:
         </p>
         <ul className="list-disc list-inside space-y-1 text-gray-700 mb-3">
-          <li><strong>Pending</strong> commission whose base differs: recalculated &mdash; base, rate and amount follow the current price. The message says how many.</li>
-          <li><strong>Paid</strong> or <strong>Received</strong> commission whose base differs: <strong>never changed</strong>. It is flagged &ldquo;Price changed since paid&rdquo; in the result message and under its status in the list, so you can settle the difference by hand. Invoiced and Disputed ones are also left as they are and flagged (&ldquo;Price changed since invoiced&rdquo;, &ldquo;Price changed while disputed&rdquo;).</li>
+          <li><strong>Pending</strong> commission that differs from what the service gives today (the base, the supplier cost, the rate or the amount): recalculated &mdash; base, cost, rate and amount follow the current service cost, client price and rate. This includes a supplier&rsquo;s commission rate changed on its own, with the price unchanged. The message says how many.</li>
+          <li><strong>Paid</strong> or <strong>Received</strong> commission that differs in the same way: <strong>never changed</strong>. It is flagged &ldquo;Price changed since paid&rdquo; in the result message and under its status in the list, so you can settle the difference by hand. Invoiced and Disputed ones are also left as they are and flagged (&ldquo;Price changed since invoiced&rdquo;, &ldquo;Price changed while disputed&rdquo;).</li>
           <li>A pending commission whose service can no longer give it (the price was removed, or the profit went to nothing) is left as it is and flagged, not set to zero.</li>
         </ul>
         <p className="text-gray-600">
-          The flag on a row shows after you press the button and until the page is reloaded; press it again to see it again. Only commissions linked to their service are compared, so a manual commission is never changed. A change of the supplier&rsquo;s rate alone is not a price change and is not applied to existing commissions.
+          The flag under the status of a Paid, Received, Invoiced or Disputed commission is worked out every time the list loads, so it shows without pressing anything and disappears when the service goes back to the figures the commission was made with. It is not stored. Only commissions linked to their service are compared, so a manual commission is never changed or flagged.
         </p>
         <Tip>
           Agent commissions on a trip (payable) are subtracted from that trip&rsquo;s profit in Profit &amp; Loss, except cancelled ones. Receivable commissions are shown there but never added, because owed is not earned.
@@ -163,8 +163,7 @@ export default function ExpensesCommissionsPage() {
           <li>No approval chain: one approver is enough, there is no separate approver role and no approval limit. The only rule is that you cannot approve your own expense unless you are the Owner or Admin. Payables and supplier-invoice payments that mark expenses paid do not go through this check.</li>
           <li>No VAT on expenses: the tax fields on an expense are not filled in anywhere, so there is no input VAT to report.</li>
           <li>No conversion in the tiles and cards: amounts in different currencies are listed side by side. The Profit &amp; Loss screen is where costs are converted, at the exchange rate on each expense&rsquo;s date.</li>
-          <li>No automatic update of commissions when a service&rsquo;s price changes: you press Generate commissions or Recalculate from price. A paid commission is never recalculated, only flagged, and the flag is not stored.</li>
-          <li>No commission numbers: the COM- reference is the start of the commission&rsquo;s id.</li>
+          <li>No automatic recalculation of commissions when a service&rsquo;s price or a supplier&rsquo;s rate changes: you press Generate commissions or Recalculate from price. A settled commission is never recalculated, only flagged, and the flag is worked out on each load, not stored.</li>
           <li>No editing of a commission&rsquo;s amounts: delete it and add it again.</li>
         </ul>
       </section>

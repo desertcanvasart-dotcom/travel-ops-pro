@@ -4,7 +4,7 @@
 // The database side of lib/commission-price-changes.ts, shared by "Generate
 // commissions" on the trip and "Recalculate from price" on the Commissions page.
 
-import { planPriceChanges, type PriceChangePlan } from './commission-price-changes'
+import { planPriceChanges, type ExistingLinkedCommission, type PriceChangePlan } from './commission-price-changes'
 import type { CommissionContext, CommissionSourceService } from './commission-generation'
 
 /** Minimal client shape: the service-role client the routes already hold. */
@@ -100,7 +100,7 @@ export async function syncCommissionPrices(
   const failed: string[] = []
   const { data: existing, error } = await supabase
     .from('commissions')
-    .select('id, service_id, supplier_id, commission_type, description, status, base_amount, commission_amount')
+    .select('id, service_id, supplier_id, commission_type, description, status, base_amount, cost_amount, commission_rate, commission_amount')
     .eq('org_id', orgId)
     .eq('itinerary_id', loaded.ctx.itineraryId)
     .not('service_id', 'is', null)
@@ -130,4 +130,33 @@ export async function syncCommissionPrices(
     }
   }
   return { recalculated: done, flagged: plan.flagged, failed }
+}
+
+/** Statuses whose figure is never recalculated, so a changed price is only flagged. */
+const FLAGGED_STATUSES = new Set(['paid', 'received', 'invoiced', 'disputed'])
+
+/**
+ * Commission id -> status for every settled/invoiced/disputed commission in
+ * `rows` whose linked service now prices differently. Computed on every list
+ * load, so the "price changed since paid" label does not depend on pressing
+ * Recalculate. Nothing is stored. A trip that cannot be read is skipped.
+ */
+export async function priceChangeFlags(
+  supabase: DbClient,
+  orgId: string,
+  rows: Array<ExistingLinkedCommission & { itinerary_id?: string | null }>,
+  maxTrips = 200
+): Promise<Record<string, string>> {
+  const byTrip = new Map<string, ExistingLinkedCommission[]>()
+  for (const r of rows) {
+    if (!r.itinerary_id || !r.service_id || !r.status || !FLAGGED_STATUSES.has(r.status)) continue
+    byTrip.set(r.itinerary_id, [...(byTrip.get(r.itinerary_id) ?? []), r])
+  }
+  const flags: Record<string, string> = {}
+  for (const [tripId, commissions] of Array.from(byTrip).slice(0, maxTrips)) {
+    const loaded = await loadTripServices(supabase, orgId, tripId)
+    if (!loaded.ok) continue
+    for (const f of planPriceChanges(loaded.services, commissions, loaded.ctx).flagged) flags[f.commission_id] = f.status
+  }
+  return flags
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { SkeletonPageHeader, SkeletonStatCards, SkeletonTable } from '@/components/Skeleton'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
@@ -57,6 +58,7 @@ interface UnifiedPayment {
 
 export default function ReceiptsPage() {
   const router = useRouter()
+  const t = useTranslations('payments')
   // The operator's name and contacts for the receipt PDF (Company profile).
   const company = useCompanyInfo()
   const dialog = useConfirmDialog()
@@ -548,7 +550,7 @@ export default function ReceiptsPage() {
                           <span className="text-sm font-bold text-gray-900">
                             {formatCurrency(payment.amount, payment.currency)}
                             {payment.on_invoice && (
-                              <span className="block text-xs font-normal text-gray-500">Also on the trip&apos;s invoice (not counted)</span>
+                              <span className="block text-xs font-normal text-gray-500">{t('onInvoiceTag')}</span>
                             )}
                           </span>
                         </td>

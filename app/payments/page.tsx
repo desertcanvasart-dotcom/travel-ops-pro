@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { useConfirm, useConfirmDialog } from '@/components/ConfirmDialog'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { emptyTotals, formatMoney, formatTotals } from '@/lib/currency-totals'
 import { isReceivedTripPayment, paymentStats, type PaymentStats } from '@/lib/payments/stats'
@@ -18,7 +19,8 @@ import {
   ExternalLink,
   Plus,
   MapPin,
-  Download
+  Download,
+  ArrowRightLeft
 } from 'lucide-react'
 import Link from 'next/link'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
@@ -39,10 +41,15 @@ interface UnifiedPayment {
   created_at: string
   /** A trip payment that is not money received (pending, failed, refunded, or a refund): shown, not counted. */
   not_counted?: 'refund' | 'not_completed' | 'on_invoice'
+  /** A received trip payment on a trip that has a live invoice: can be moved onto that invoice. */
+  movable?: boolean
 }
 
 export default function PaymentsPage() {
   const t = useTranslations('payments')
+  const tCommon = useTranslations('common')
+  const dialog = useConfirmDialog()
+  const confirmDialog = useConfirm()
   const [payments, setPayments] = useState<UnifiedPayment[]>([])
   const [filteredPayments, setFilteredPayments] = useState<UnifiedPayment[]>([])
   const [loading, setLoading] = useState(true)
@@ -100,6 +107,7 @@ export default function PaymentsPage() {
             transaction_reference: p.transaction_reference,
             notes: p.notes,
             created_at: p.created_at,
+            movable: isOnInvoicedTrip(p, invoiced) && isReceivedTripPayment(p) ? true : undefined,
             not_counted: isOnInvoicedTrip(p, invoiced) ? 'on_invoice' : isReceivedTripPayment(p) ? undefined : p.payment_type === 'refund' ? 'refund' : 'not_completed'
           })
         })
@@ -173,6 +181,26 @@ export default function PaymentsPage() {
     }
 
     setFilteredPayments(filtered)
+  }
+
+  // Re-records the payment on the trip's invoice and deletes the trip row; the
+  // server refuses (and says why) when it would exceed the invoice balance.
+  const handleMoveToInvoice = async (payment: UnifiedPayment) => {
+    if (!(await confirmDialog(t('confirmMoveToInvoice')))) return
+    try {
+      const response = await fetch(`/api/payments/${payment.id}/move-to-invoice`, { method: 'POST' })
+      if (response.ok) {
+        await fetchAllPayments()
+      } else {
+        const result = await response.json().catch(() => ({}))
+        await dialog.alert(tCommon('error'), result.error || t('failedToMoveToInvoice'), 'warning')
+        // The invoice payment may exist even though the delete failed.
+        if (result.moved) await fetchAllPayments()
+      }
+    } catch (error) {
+      console.error('Error moving the payment to the invoice:', error)
+      await dialog.alert(tCommon('error'), t('failedToMoveToInvoice'), 'warning')
+    }
   }
 
   const getMethodLabel = (method: string) => {
@@ -458,6 +486,16 @@ export default function PaymentsPage() {
                       >
                         <ExternalLink className="w-4 h-4" />
                       </Link>
+                      {payment.movable && (
+                        <button
+                          onClick={() => handleMoveToInvoice(payment)}
+                          className="text-gray-400 hover:text-blue-600 transition-colors"
+                          title={t('moveToInvoice')}
+                          aria-label={t('moveToInvoice')}
+                        >
+                          <ArrowRightLeft className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

@@ -22,6 +22,10 @@
 // A pending commission whose service can no longer give one (the price was
 // removed, or the profit went to nothing) is flagged, not zeroed.
 //
+// "Changed" means the base, the cost, the rate or the amount differs from what
+// the generator makes today, so a supplier's rate changed on its own (or a
+// cost that moved with the client price) is caught too, not only a new base.
+//
 // Only commissions linked to their service (commissions.service_id) can be
 // compared; a manual commission, or one generated before the link existed and
 // not matched by migration 20261229, is left alone.
@@ -42,6 +46,8 @@ export interface ExistingLinkedCommission {
   description?: string | null
   status?: string | null
   base_amount?: number | string | null
+  cost_amount?: number | string | null
+  commission_rate?: number | string | null
   commission_amount?: number | string | null
 }
 
@@ -53,6 +59,9 @@ export interface CommissionRecalc {
   new_base: number
   old_amount: number
   new_amount: number
+  /** The service's current supplier cost and client price (what the new figures come from). */
+  service_cost: number
+  service_client_price: number
   /** The columns to write. */
   update: Pick<CommissionRow, 'base_amount' | 'cost_amount' | 'commission_rate' | 'commission_amount'>
 }
@@ -65,6 +74,9 @@ export interface CommissionPriceFlag {
   old_base: number
   /** null when the service can no longer produce this commission. */
   new_base: number | null
+  /** The service's current supplier cost and client price. */
+  service_cost: number
+  service_client_price: number
   /** What the Commissions page shows beside it. */
   label: string
 }
@@ -100,6 +112,7 @@ export function planPriceChanges(
   const { pairs } = buildCommissions(services.map(s => ({ ...s, commission_status: 'pending' })), ctx)
   const byService = new Map<string, CommissionPair[]>()
   for (const p of pairs) byService.set(p.serviceId, [...(byService.get(p.serviceId) ?? []), p])
+  const serviceById = new Map(services.map(s => [s.id, { cost: cents(num(s.total_cost)), price: cents(num(s.client_price)) }]))
   const nameOf = new Map(services.map(s => [s.id, s.service_name || s.service_type || 'service']))
   const taken = new Set<CommissionPair>()
 
@@ -114,6 +127,7 @@ export function planPriceChanges(
     const fresh = candidates.find(p => p.commission.description === c.description) ?? candidates[0]
     const oldBase = cents(num(c.base_amount))
     const serviceName = nameOf.get(c.service_id) ?? 'service'
+    const now = serviceById.get(c.service_id) ?? { cost: 0, price: 0 }
 
     if (!fresh) {
       // The service no longer yields this commission. Only a pending one is
@@ -122,6 +136,7 @@ export function planPriceChanges(
         plan.flagged.push({
           commission_id: c.id, service_id: c.service_id, service_name: serviceName,
           status: 'pending', old_base: oldBase, new_base: null,
+          service_cost: now.cost, service_client_price: now.price,
           label: 'service no longer gives this commission',
         })
       }
@@ -130,12 +145,24 @@ export function planPriceChanges(
     taken.add(fresh)
 
     const newBase = cents(fresh.commission.base_amount)
-    if (Math.abs(newBase - oldBase) < 0.005) continue
+    // Anything the generator would write differently today. The base alone
+    // missed a supplier's rate changing (same cost, new percentage); the cost
+    // is compared too, since a payable row's base is the profit and a cost and
+    // price moving together leave it where it was. A column the commission
+    // never stored (null) is not a difference.
+    const differs = (stored: unknown, fresh: number) => stored != null && stored !== '' && Math.abs(cents(num(stored)) - cents(fresh)) >= 0.005
+    const changed =
+      Math.abs(newBase - oldBase) >= 0.005 ||
+      differs(c.commission_amount, fresh.commission.commission_amount) ||
+      differs(c.commission_rate, fresh.commission.commission_rate) ||
+      differs(c.cost_amount, fresh.commission.cost_amount)
+    if (!changed) continue
 
     if (c.status === 'pending' || !c.status) {
       plan.recalculated.push({
         commission_id: c.id, service_id: c.service_id, service_name: serviceName,
         old_base: oldBase, new_base: newBase,
+        service_cost: now.cost, service_client_price: now.price,
         old_amount: cents(num(c.commission_amount)), new_amount: fresh.commission.commission_amount,
         update: {
           base_amount: fresh.commission.base_amount,
@@ -148,6 +175,7 @@ export function planPriceChanges(
       plan.flagged.push({
         commission_id: c.id, service_id: c.service_id, service_name: serviceName,
         status: c.status, old_base: oldBase, new_base: newBase,
+        service_cost: now.cost, service_client_price: now.price,
         label: FLAG_LABEL[c.status] || `price changed since ${c.status}`,
       })
     }

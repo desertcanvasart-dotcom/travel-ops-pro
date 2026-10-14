@@ -3252,6 +3252,7 @@ export interface Database {
           updated_at: string | null
           org_id: string
           service_id: string | null
+          commission_number: string | null
         }
         Insert: {
           id?: string
@@ -3279,6 +3280,7 @@ export interface Database {
           updated_at?: string | null
           org_id: string
           service_id?: string | null
+          commission_number?: string | null
         }
         Update: {
           id?: string
@@ -3306,6 +3308,7 @@ export interface Database {
           updated_at?: string | null
           org_id?: string
           service_id?: string | null
+          commission_number?: string | null
         }
         Relationships: [
           {
@@ -13482,6 +13485,13 @@ export interface Database {
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any
+      }
+      next_commission_number: {
+        Args: {
+          p_org: string
+          p_year: number
+        }
+        Returns: string
       }
       next_expense_number: {
         Args: {

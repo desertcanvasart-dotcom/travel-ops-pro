@@ -323,6 +323,28 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  // The server refuses when payments are recorded against the invoice and says
+  // why; that message is shown as it is.
+  const handleCancelInvoice = async () => {
+    if (!(await confirmDialog(t('confirmCancelInvoice')))) return
+    try {
+      const response = await fetch(`/api/invoices/${resolvedParams.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cancelled' })
+      })
+      if (response.ok) {
+        fetchInvoice()
+      } else {
+        const error = await response.json().catch(() => ({}))
+        await dialog.alert(tCommon('error'), error.error || t('failedToCancelInvoice'), 'warning')
+      }
+    } catch (error) {
+      console.error('Error cancelling invoice:', error)
+      await dialog.alert(tCommon('error'), t('failedToCancelInvoice'), 'warning')
+    }
+  }
+
   const handlePreviewInvoicePDF = async () => {
     if (!invoice) return
 
@@ -613,6 +635,16 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             >
               <Send className="h-4 w-4" />
               {t('markAsSent')}
+            </button>
+          )}
+
+          {invoice.status !== 'cancelled' && invoice.status !== 'paid' && (
+            <button
+              onClick={handleCancelInvoice}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+            >
+              <XCircle className="h-4 w-4" />
+              {t('cancelInvoice')}
             </button>
           )}
 
