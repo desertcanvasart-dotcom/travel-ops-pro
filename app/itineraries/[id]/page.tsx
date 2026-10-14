@@ -236,6 +236,9 @@ export default function ViewItineraryPage() {
   // Generating commissions is a manager's action (the route refuses agents).
   const { canAccess } = useRole()
   const canGenerateCommissions = canAccess(['admin', 'manager'])
+  // The money screens are a manager's (the finance routes answer an agent 403):
+  // Add expense, the expenses panel, the actual P&L and the P&L card are theirs too.
+  const canSeeFinance = canAccess(['admin', 'manager'])
 
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [days, setDays] = useState<DayWithServices[]>([])
@@ -1248,7 +1251,7 @@ export default function ViewItineraryPage() {
   const [assignments, setAssignments] = useState<CoverageAssignment[] | null>(null)
   const [resourceRefresh, setResourceRefresh] = useState(0)
   useEffect(() => {
-    if (!params.id) return
+    if (!params.id || !canSeeFinance) return
     let live = true
     fetch(`/api/profit-loss?itineraryId=${params.id}`)
       .then(r => r.json())
@@ -1256,7 +1259,7 @@ export default function ViewItineraryPage() {
       // Without it the page shows the quoted figures only.
       .catch(() => undefined)
     return () => { live = false }
-  }, [params.id, expenseRefreshTrigger])
+  }, [params.id, expenseRefreshTrigger, canSeeFinance])
   useEffect(() => {
     if (!params.id) return
     let live = true
@@ -1274,7 +1277,7 @@ export default function ViewItineraryPage() {
     status: itinerary.status,
     hasBooking: !!existingBooking,
     hasInvoice: !!existingInvoice,
-    invoiced: actualPnl && actualPnl.invoice_count > 0 ? actualPnl.total_revenue : null,
+    invoiced: actualPnl && actualPnl.invoice_count > 0 ? actualPnl.total_invoiced : null,
     paid: actualPnl && actualPnl.invoice_count > 0 ? actualPnl.total_paid : null,
     startDate: itinerary.start_date,
     endDate: itinerary.end_date,
@@ -1324,7 +1327,7 @@ export default function ViewItineraryPage() {
         startDate: itinerary.start_date,
         endDate: itinerary.end_date,
         currency: itinerary.currency || 'EUR',
-        invoiced: actualPnl && actualPnl.invoice_count > 0 ? actualPnl.total_revenue : null,
+        invoiced: actualPnl && actualPnl.invoice_count > 0 ? actualPnl.total_invoiced : null,
         paid: actualPnl && actualPnl.invoice_count > 0 ? actualPnl.total_paid : null,
         profit: actualPnl && actualPnl.invoice_count > 0 ? actualPnl.gross_profit : null,
         staleNights,
@@ -1760,7 +1763,9 @@ export default function ViewItineraryPage() {
                 icon={<MoreHorizontal className="w-4 h-4" />}
                 items={[
                   { label: tStage('editItinerary'), icon: <Edit2 className="w-4 h-4" />, href: `/itineraries/${itinerary.id}/edit` },
-                  { label: tStage('addExpense'), icon: <Receipt className="w-4 h-4" />, onSelect: () => setExpenseSignal(n => n + 1) },
+                  ...(canSeeFinance
+                    ? [{ label: tStage('addExpense'), icon: <Receipt className="w-4 h-4" />, onSelect: () => setExpenseSignal(n => n + 1) }]
+                    : []),
                   { label: generatingTasks ? t('generating') : t('operationsTasks'), icon: <ClipboardList className="w-4 h-4" />, onSelect: handleOpenTaskDialog, disabled: generatingTasks, title: t('generateOperationsTasks') },
                   ...(canGenerateCommissions
                     ? [{ label: generatingCommissions ? t('generating') : tStage('generateCommissions'), icon: <Handshake className="w-4 h-4" />, onSelect: handleGenerateCommissions, disabled: generatingCommissions }]
@@ -1825,14 +1830,16 @@ export default function ViewItineraryPage() {
       </header>
 
       {/* The dialogs the menus open; each component keeps its own form. */}
-      <AddExpenseFromItinerary
-        itineraryId={itinerary.id}
-        itineraryCode={itinerary.itinerary_code}
-        clientName={itinerary.client_name}
-        onExpenseAdded={() => setExpenseRefreshTrigger(prev => prev + 1)}
-        openSignal={expenseSignal}
-        hideTrigger
-      />
+      {canSeeFinance && (
+        <AddExpenseFromItinerary
+          itineraryId={itinerary.id}
+          itineraryCode={itinerary.itinerary_code}
+          clientName={itinerary.client_name}
+          onExpenseAdded={() => setExpenseRefreshTrigger(prev => prev + 1)}
+          openSignal={expenseSignal}
+          hideTrigger
+        />
+      )}
       <GenerateNitteiButton
         itineraryId={itinerary.id}
         clientName={itinerary.client_name}
@@ -2083,8 +2090,8 @@ export default function ViewItineraryPage() {
                       <dt className="text-gray-500">{tStage('paid')}</dt>
                       <dd className="text-right text-gray-900">{formatMoney(actualPnl.total_paid, itinerary.currency)}</dd>
                       <dt className="text-gray-500">{tStage('balanceDue')}</dt>
-                      <dd className={`text-right font-medium ${actualPnl.total_revenue - actualPnl.total_paid > 0.005 ? 'text-amber-700' : 'text-green-700'}`}>
-                        {formatMoney(Math.max(0, actualPnl.total_revenue - actualPnl.total_paid), itinerary.currency)}
+                      <dd className={`text-right font-medium ${actualPnl.total_invoiced - actualPnl.total_paid > 0.005 ? 'text-amber-700' : 'text-green-700'}`}>
+                        {formatMoney(Math.max(0, actualPnl.total_invoiced - actualPnl.total_paid), itinerary.currency)}
                       </dd>
                     </>
                   )}
@@ -2479,7 +2486,7 @@ export default function ViewItineraryPage() {
                     <h3 className="text-sm font-semibold text-gray-900">{tStage('invoicesPayments')}</h3>
                     <p className="text-xs text-gray-500">
                       {actualPnl && actualPnl.invoice_count > 0
-                        ? tStage('invoicedPaid', { invoiced: formatMoney(actualPnl.total_revenue, itinerary.currency), paid: formatMoney(actualPnl.total_paid, itinerary.currency) })
+                        ? tStage('invoicedPaid', { invoiced: formatMoney(actualPnl.total_invoiced, itinerary.currency), paid: formatMoney(actualPnl.total_paid, itinerary.currency) })
                         : tStage('noInvoiceYet')}
                     </p>
                   </div>
@@ -2502,12 +2509,11 @@ export default function ViewItineraryPage() {
                 </div>
 
                 {/* PROFIT & LOSS */}
-                {days.length > 0 && <ItineraryPL
+                {canSeeFinance && days.length > 0 && <ItineraryPL
                   itineraryId={itinerary.id}
                   totalCost={effectiveTotalCost}
                   supplierCost={itinerary.supplier_cost}
                   currency={itinerary.currency}
-                  marginPercent={25}
                   days={days}
                   extraExpenses={itineraryExpenses.map(exp => ({
                     amount: exp.amount,
@@ -2518,12 +2524,14 @@ export default function ViewItineraryPage() {
                 />}
 
                 {/* EXTRA EXPENSES */}
-                <ItineraryExpenses
-                  itineraryId={itinerary.id}
-                  currency={itinerary.currency}
-                  refreshTrigger={expenseRefreshTrigger}
-                  onExpensesChanged={(expenses) => setItineraryExpenses(expenses)}
-                />
+                {canSeeFinance && (
+                  <ItineraryExpenses
+                    itineraryId={itinerary.id}
+                    currency={itinerary.currency}
+                    refreshTrigger={expenseRefreshTrigger}
+                    onExpensesChanged={(expenses) => setItineraryExpenses(expenses)}
+                  />
+                )}
               </div>
             )}
 
@@ -2545,10 +2553,10 @@ export default function ViewItineraryPage() {
                           <span className="text-gray-600">{tStage('noInvoiceYet')}</span>
                         ) : (
                           <>
-                            <span className="text-gray-600">{tStage('invoiced')} <span className="font-semibold text-gray-900">{formatMoney(actualPnl.total_revenue, itinerary.currency)}</span></span>
+                            <span className="text-gray-600">{tStage('invoiced')} <span className="font-semibold text-gray-900">{formatMoney(actualPnl.total_invoiced, itinerary.currency)}</span></span>
                             <span className="text-gray-600">{tStage('paid')} <span className="font-semibold text-gray-900">{formatMoney(actualPnl.total_paid, itinerary.currency)}</span></span>
-                            {actualPnl.total_revenue - actualPnl.total_paid > 0.005 ? (
-                              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">{tStage('balanceDueAmount', { amount: formatMoney(actualPnl.total_revenue - actualPnl.total_paid, itinerary.currency) })}</span>
+                            {actualPnl.total_invoiced - actualPnl.total_paid > 0.005 ? (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">{tStage('balanceDueAmount', { amount: formatMoney(actualPnl.total_invoiced - actualPnl.total_paid, itinerary.currency) })}</span>
                             ) : (
                               <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-800 font-medium">{tStage('paidInFull')}</span>
                             )}

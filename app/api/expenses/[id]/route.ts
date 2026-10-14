@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
-import { paymentDateForStatus } from '@/lib/expense-status'
+import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
+import { paymentDateForStatus, expenseFieldError, expenseDeleteBlock } from '@/lib/expense-status'
 import { recordsInOrg } from '@/lib/org-refs'
 
 const supabaseAdmin = createClient(
@@ -16,6 +16,10 @@ export async function GET(
   try {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
+
+    // Finance is admin and manager; also enforced by the middleware prefix list.
+    const forbidden = await requireRole(['admin', 'manager'])
+    if (forbidden) return forbidden
 
     const { id } = await params
 
@@ -46,6 +50,9 @@ export async function PUT(
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
+    const forbidden = await requireRole(['admin', 'manager'])
+    if (forbidden) return forbidden
+
     const { id } = await params
     const body = await request.json()
 
@@ -59,7 +66,6 @@ export async function PUT(
       'receipt_url', 'receipt_filename', 'status', 'payment_method',
       'payment_date', 'payment_reference', 'notes',
     ] as const
-    const ALLOWED_STATUSES = ['pending', 'approved', 'paid', 'rejected', 'cancelled'] as const
 
     const updateData: Record<string, any> = {
       updated_at: new Date().toISOString(),
@@ -80,16 +86,20 @@ export async function PUT(
       }
       updateData.amount = amt
     }
-    // A supplier must be this company's (suppliers.org_id, 20261205).
-    if (updateData.supplier_id === '') updateData.supplier_id = null
-    if (!(await recordsInOrg(supabaseAdmin, orgId, { supplier_id: updateData.supplier_id }))) {
-      return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
+    // The same status, category and currency lists as the POST.
+    const fieldError = expenseFieldError(updateData)
+    if (fieldError) {
+      return NextResponse.json({ error: fieldError }, { status: 400 })
     }
-    if (updateData.status !== undefined && !ALLOWED_STATUSES.includes(updateData.status)) {
-      return NextResponse.json(
-        { error: `status must be one of: ${ALLOWED_STATUSES.join(', ')}` },
-        { status: 400 }
-      )
+    if (typeof updateData.currency === 'string') updateData.currency = updateData.currency.trim().toUpperCase()
+    if (updateData.currency === '' || updateData.currency === null) delete updateData.currency
+
+    // A supplier and a trip must be this company's (suppliers.org_id,
+    // 20261205; the trip was stored unchecked).
+    if (updateData.supplier_id === '') updateData.supplier_id = null
+    if (updateData.itinerary_id === '') updateData.itinerary_id = null
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { supplier_id: updateData.supplier_id, itinerary_id: updateData.itinerary_id }))) {
+      return NextResponse.json({ error: 'Supplier or trip not found' }, { status: 404 })
     }
 
     // The payment date follows the status: set when it becomes paid (keeping
@@ -114,11 +124,15 @@ export async function PUT(
       .eq('id', id)
       .eq('org_id', orgId)
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) {
       console.error('Error updating expense:', error)
       return NextResponse.json({ error: 'Failed to update expense' }, { status: 500 })
+    }
+    // No row for this id in this company: a 404, not a 500.
+    if (!data) {
+      return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
     }
 
     return NextResponse.json(data)
@@ -136,7 +150,31 @@ export async function DELETE(
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
+    const forbidden = await requireRole(['admin', 'manager'])
+    if (forbidden) return forbidden
+
     const { id } = await params
+
+    // A paid expense, or one matched to a supplier invoice, is not deleted:
+    // the delete used to go through and cascade the invoice match away.
+    const { data: existing } = await supabaseAdmin
+      .from('expenses')
+      .select('id, status')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!existing) {
+      return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
+    }
+    // The junction carries no org_id; the expense above is this company's.
+    const { count: matched } = await supabaseAdmin
+      .from('supplier_invoice_expenses')
+      .select('id', { count: 'exact', head: true })
+      .eq('expense_id', id)
+    const blocked = expenseDeleteBlock(existing, matched ?? 0)
+    if (blocked) {
+      return NextResponse.json({ error: blocked }, { status: 409 })
+    }
 
     const { error } = await supabaseAdmin
       .from('expenses')

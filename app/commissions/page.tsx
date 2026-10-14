@@ -35,7 +35,9 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
-import { formatTotals, type CurrencyTotals } from '@/lib/currency-totals'
+import { formatTotals, formatMoney, type CurrencyTotals } from '@/lib/currency-totals'
+import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
+import { usePreferences } from '@/app/contexts/PreferencesContext'
 import { useTranslations } from 'next-intl'
 import { useConfirmDialog, useConfirm } from '@/components/ConfirmDialog'
 
@@ -131,6 +133,7 @@ interface FormData {
   status: string
   transaction_date: string
   due_date: string
+  paid_date: string
   notes: string
 }
 
@@ -149,6 +152,7 @@ const initialFormData: FormData = {
   status: 'pending',
   transaction_date: todayLocal(),
   due_date: '',
+  paid_date: '',
   notes: ''
 }
 
@@ -156,6 +160,9 @@ export default function CommissionsPage() {
   const t = useTranslations('commissions')
   const dialog = useConfirmDialog()
   const confirmDialog = useConfirm()
+  // A new commission starts in the company's own currency (it was always EUR).
+  const { preferences, loading: prefsLoading } = usePreferences()
+  const orgCurrency = !prefsLoading && preferences?.default_currency ? preferences.default_currency : 'EUR'
   const [commissions, setCommissions] = useState<Commission[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -237,10 +244,19 @@ export default function CommissionsPage() {
       const url = editingId ? `/api/commissions/${editingId}` : '/api/commissions'
       const method = editingId ? 'PUT' : 'POST'
 
+      // An existing commission can change its status, paid date and notes only
+      // (the server persists nothing else); the amounts, rate, supplier and trip
+      // are what was owed and to whom: delete and make it again to change them.
+      const createData: Partial<FormData> = { ...formData }
+      delete createData.paid_date
+      const payload = editingId
+        ? { status: formData.status, paid_date: formData.paid_date || null, notes: formData.notes }
+        : createData
+
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       })
 
       if (response.ok) {
@@ -287,6 +303,7 @@ export default function CommissionsPage() {
       status: commission.status,
       transaction_date: commission.transaction_date,
       due_date: commission.due_date || '',
+      paid_date: commission.paid_date || '',
       notes: commission.notes || ''
     })
     setEditingId(commission.id)
@@ -301,9 +318,13 @@ export default function CommissionsPage() {
       if (response.ok) {
         setCommissions(prev => prev.filter(x => x.id !== id))
         fetchCommissions()
+      } else {
+        const body = await response.json().catch(() => ({}))
+        await dialog.alert(t('error'), body.error || t('failedToDelete'), 'warning')
       }
     } catch (error) {
       console.error('Error deleting commission:', error)
+      await dialog.alert(t('error'), t('failedToDelete'), 'warning')
     }
   }
 
@@ -318,14 +339,19 @@ export default function CommissionsPage() {
         const { data: saved } = await response.json()
         if (saved) setCommissions(prev => prev.map(x => (x.id === saved.id ? saved : x)))
         fetchCommissions()
+      } else {
+        // Not silent: the button looked like it worked.
+        const body = await response.json().catch(() => ({}))
+        await dialog.alert(t('error'), body.error || t('failedToSave'), 'warning')
       }
     } catch (error) {
       console.error('Error updating commission:', error)
+      await dialog.alert(t('error'), t('failedToSave'), 'warning')
     }
   }
 
   const openAddModal = () => {
-    setFormData(initialFormData)
+    setFormData({ ...initialFormData, currency: orgCurrency })
     setEditingId(null)
     setIsModalOpen(true)
   }
@@ -341,10 +367,8 @@ export default function CommissionsPage() {
     )
   })
 
-  const formatCurrency = (amount: number, currency: string = 'EUR') => {
-    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
-    return `${symbols[currency] || currency}${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  }
+  // At the currency's own precision: whole yen, not ¥1,234.00.
+  const formatCurrency = (amount: number, currency: string = 'EUR') => formatMoney(Number(amount) || 0, currency)
 
   if (loading) {
     return (
@@ -477,6 +501,8 @@ export default function CommissionsPage() {
         </div>
       )}
 
+      {summary && <p className="text-xs text-gray-500 -mt-2">{t('cardsNote')}</p>}
+
       {/* Filters */}
       <div className="flex items-center gap-4 bg-white rounded-lg border border-gray-200 shadow-sm p-4">
         <div className="relative flex-1 max-w-sm">
@@ -531,6 +557,7 @@ export default function CommissionsPage() {
             <option value="received">{t('statusReceived')}</option>
             <option value="paid">{t('statusPaid')}</option>
             <option value="cancelled">{t('statusCancelled')}</option>
+            <option value="disputed">{t('statusDisputed')}</option>
           </select>
           <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
         </div>
@@ -576,7 +603,7 @@ export default function CommissionsPage() {
                 const StatusIcon = statusConfig.icon
 
                 return (
-                  <tr key={commission.id} className="hover:bg-gray-50">
+                  <tr key={commission.id} className={`hover:bg-gray-50 ${commission.status === 'cancelled' ? 'opacity-60' : ''}`}>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
                         commission.commission_type === 'receivable'
@@ -700,6 +727,25 @@ export default function CommissionsPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
+              {editingId && (() => {
+                const row = commissions.find(c => c.id === editingId)
+                if (!row) return null
+                return (
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 space-y-1">
+                    <p className="font-medium text-gray-900">
+                      {row.commission_type === 'receivable' ? t('typeIn') : t('typeOut')} · {t(CATEGORY_CONFIG[row.category]?.labelKey || 'categoryOther')} · {row.supplier?.name || row.source_name || '-'}
+                    </p>
+                    <p>
+                      {row.itinerary?.itinerary_code ? `${row.itinerary.itinerary_code} · ` : ''}
+                      {row.base_amount > 0 ? `${formatCurrency(row.base_amount, row.currency)} × ${row.commission_rate ?? 0}% = ` : ''}
+                      <span className="font-semibold">{formatCurrency(row.commission_amount, row.currency)}</span>
+                    </p>
+                    <p className="text-xs text-gray-500">{t('editLockedNote')}</p>
+                  </div>
+                )
+              })()}
+
+              {!editingId && (<>
               {/* Type Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('formCommissionType')}</label>
@@ -813,7 +859,7 @@ export default function CommissionsPage() {
               </div>
 
               {/* Financial Details */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t('formBaseAmount')}</label>
                   <input
@@ -853,10 +899,24 @@ export default function CommissionsPage() {
                     className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('formCurrency')}</label>
+                  <select
+                    value={formData.currency}
+                    onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value }))}
+                    title={t('formCurrency')}
+                    className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] bg-white"
+                  >
+                    {RATE_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
               </div>
+
+              </>)}
 
               {/* Date and Status */}
               <div className="grid grid-cols-3 gap-4">
+                {!editingId && (<>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t('formTransactionDate')}</label>
                   <input
@@ -877,6 +937,7 @@ export default function CommissionsPage() {
                     className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                   />
                 </div>
+                </>)}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t('formStatus')}</label>
                   <select
@@ -893,9 +954,24 @@ export default function CommissionsPage() {
                     <option value="disputed">{t('statusDisputed')}</option>
                   </select>
                 </div>
+                {/* The date the money moved: only for paid / received (it is
+                    cleared when the commission goes back to another status). */}
+                {editingId && (formData.status === 'paid' || formData.status === 'received') && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('formPaidDate')}</label>
+                    <input
+                      type="date"
+                      value={formData.paid_date}
+                      onChange={(e) => setFormData(prev => ({ ...prev, paid_date: e.target.value }))}
+                      title={t('formPaidDate')}
+                      className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Description */}
+              {!editingId && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('formDescription')}</label>
                 <input
@@ -906,6 +982,7 @@ export default function CommissionsPage() {
                   className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47]"
                 />
               </div>
+              )}
 
               {/* Notes */}
               <div>

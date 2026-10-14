@@ -3222,6 +3222,7 @@ export interface Database {
           created_at: string | null
           updated_at: string | null
           org_id: string
+          service_id: string | null
         }
         Insert: {
           id?: string
@@ -3248,6 +3249,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
           org_id: string
+          service_id?: string | null
         }
         Update: {
           id?: string
@@ -3274,6 +3276,7 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
           org_id?: string
+          service_id?: string | null
         }
         Relationships: [
           {
@@ -3302,6 +3305,13 @@ export interface Database {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commissions_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "itinerary_services"
             referencedColumns: ["id"]
           },
         ]
@@ -5302,6 +5312,32 @@ export interface Database {
           created_at?: string
         }
         Relationships: []
+      }
+      expense_number_counters: {
+        Row: {
+          org_id: string
+          year: number
+          last_value: number
+        }
+        Insert: {
+          org_id: string
+          year: number
+          last_value?: number
+        }
+        Update: {
+          org_id?: string
+          year?: number
+          last_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_number_counters_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       expenses: {
         Row: {
@@ -13372,6 +13408,13 @@ export interface Database {
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any
+      }
+      next_expense_number: {
+        Args: {
+          p_org: string
+          p_year: number
+        }
+        Returns: string
       }
       next_supplier_document_number: {
         Args: {
