@@ -54,9 +54,14 @@ export default function InvoicesPaymentsPage() {
         <p className="text-gray-600 mt-3">
           Or click <strong>New Invoice</strong> on the Invoices page: pick the client, optionally link a trip, choose the type, set the currency, add line items, a discount, dates, payment terms and notes. If you leave the currency empty the invoice takes the trip&apos;s currency, or else your company&apos;s default currency (Settings).
         </p>
+        <p className="text-gray-600 mt-3">
+          <strong>The amount comes from the trip, worked out by the server.</strong> For an invoice linked to a trip the server reads the trip&apos;s saved selling price, the figure the itinerary page shows (its priced service lines, each at its client price or at cost plus the default 25% margin, plus the season supplement; the stored trip total only when no line is priced). The price the browser sends is not used. A full (Standard) invoice bills that price, a Deposit invoice bills its percentage of it, and a Final invoice bills the price minus the deposit invoice it follows. When you pick a trip on New Invoice the form asks the server and shows the amount the invoice will bill. Confirmed insurance and extras are added by the server as described below, and VAT is worked out on the result.
+        </p>
         <p className="text-gray-600 mt-3">The server checks what it is sent. These are refused:</p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>a negative or non-numeric total, trip cost or discount</li>
+          <li>an invoice in a different currency than its trip, and a trip that has no price yet</li>
+          <li>a discount on a trip invoice (a discount is a different amount; see the manual amount below)</li>
           <li>a deposit percentage of 0 or below, or above 100</li>
           <li>a second final invoice for a deposit invoice, and a second deposit invoice for a trip (a cancelled one does not count, so it can be replaced)</li>
           <li>a parent invoice that is not yours</li>
@@ -64,8 +69,18 @@ export default function InvoicesPaymentsPage() {
         <p className="text-gray-600 mt-3">
           For a trip with confirmed insurance or confirmed extras, the server adds them to a standard or final invoice itself (never to a deposit), and each extra is billed once. Insurance is priced in yen, so an invoice for such a trip in another currency is refused.
         </p>
+        <h3 className="text-lg font-semibold text-gray-900 mt-6 mb-2">Billing a different amount (manual amount)</h3>
+        <p className="text-gray-600 mb-3">
+          An <strong>admin</strong>, <strong>manager</strong> or the owner can bill an amount other than the one worked out from the trip. On New Invoice, change the amount (a line, or the discount) and a <strong>Reason for billing a different amount</strong> box appears; the reason is required. The invoice then records <strong>what the server worked out, the amount billed instead, the reason and who entered it</strong>. An amount equal to the server&apos;s is not an override. For a Deposit the manual amount replaces the deposit; the Final that follows still bills the trip price minus that deposit. For a Final it replaces the balance. Insurance and extras are still added on top.
+        </p>
+        <p className="text-gray-600 mb-3">
+          <strong>Agents cannot do this.</strong> An agent can raise an invoice for a trip at the server&apos;s amount; if the amount is changed the form says so and the server refuses (403).
+        </p>
+        <p className="text-gray-600">
+          An invoice that is not linked to a trip has nothing to work out from, so its amount is typed in: that is for an admin or manager only (an agent is refused) and the invoice records its source as a manual entry. A Final that follows a deposit with no trip bills the trip cost that deposit stored, less the deposit.
+        </p>
         <Tip>
-          The amounts are the ones on the form or the trip page. The server checks them but does not re-price the trip, so check the trip&apos;s price before you generate the invoice.
+          Check the trip&apos;s price on the itinerary page before you generate the invoice: that is the price the invoice bills. Invoices made before this rule have no recorded source, and keep the amounts they have.
         </Tip>
       </section>
 
@@ -73,9 +88,9 @@ export default function InvoicesPaymentsPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Invoice Types</h2>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
-          <li><strong>Standard</strong> &mdash; the full amount in one invoice</li>
+          <li><strong>Standard</strong> &mdash; the full trip price in one invoice (the &quot;full&quot; invoice)</li>
           <li><strong>Deposit</strong> &mdash; a percentage of the trip price to confirm the booking. The default is <strong>10%</strong>; you can enter any percentage above 0 and up to 100. Insurance and extras are not part of the deposit</li>
-          <li><strong>Final</strong> &mdash; the trip price minus the deposit invoice it follows, plus any confirmed insurance and extras</li>
+          <li><strong>Final</strong> &mdash; the trip price minus the deposit invoice it follows (that deposit&apos;s actual amount, so a deposit billed as a manual amount, or a trip repriced since, is settled correctly), plus any confirmed insurance and extras</li>
         </ul>
       </section>
 
@@ -163,6 +178,9 @@ export default function InvoicesPaymentsPage() {
           <li>Save</li>
         </ol>
         <p className="text-gray-600 mt-3">
+          <strong>Once a trip has an invoice, its money is recorded on the invoice.</strong> Money can be recorded on the trip (Payments &rsaquo; New Payment &rsaquo; Itinerary) or on an invoice, and counting both would count it twice. So a payment recorded on a trip that has a draft, sent, part-paid or paid invoice is refused, with a message pointing to the invoice; New Payment says the same and offers to record it on the invoice. A cancelled invoice does not count, so a trip whose only invoice is cancelled takes payments itself again.
+        </p>
+        <p className="text-gray-600 mt-3">
           A payment above the balance due is refused (<strong>Payment amount exceeds balance due</strong>), also when two people record one at the same moment. A draft or a cancelled invoice takes no payment. Each payment gets its own receipt number from your company&apos;s receipt series (see <Link href="/docs/receipts" className="text-primary-600 hover:underline">Receipts</Link>).
         </p>
         <Tip>
@@ -183,9 +201,12 @@ export default function InvoicesPaymentsPage() {
 
       {/* Delete */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Deleting an Invoice</h2>
-        <p className="text-gray-600">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Deleting and Cancelling an Invoice</h2>
+        <p className="text-gray-600 mb-3">
           Delete removes an invoice that has no payments. If payments are recorded against it the app refuses and tells you; delete the payments first if they were entered by mistake. When an invoice is deleted, the extras it billed become billable again on the next invoice for the trip.
+        </p>
+        <p className="text-gray-600 mb-3">
+          <strong>Cancelling</strong> keeps the invoice on record with the status Cancelled (it is set through the invoice update; there is no Cancel button on the page). It releases the invoice&apos;s extras exactly as delete does, so they are billed on the next invoice. It is refused while money is recorded against the invoice, because that money would be left with no invoice: if the client was paid back (refunded), delete the payments from the invoice first, which is how a refund is recorded on an invoice, then cancel; if it was not refunded, leave the invoice as it is. A cancelled invoice cannot be reopened, because its extras may already be on another invoice; raise a new one. A cancelled invoice no longer blocks payments on its trip, or a new deposit or final.
         </p>
       </section>
 
@@ -194,10 +215,11 @@ export default function InvoicesPaymentsPage() {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">What It Does Not Do</h2>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
           <li>It does not email invoices. Invoices go out on WhatsApp, or as a PDF you send yourself.</li>
-          <li>It does not re-price a trip. The amounts come from the form or the trip page; the server checks and records them.</li>
-          <li>It does not convert currencies. An invoice, and the payments on it, stay in one currency.</li>
-          <li>It does not stop the same money being recorded twice, once on a trip and once on its invoice. Record each payment once, in one place.</li>
-          <li>There is no button to cancel an invoice.</li>
+          <li>It does not price a trip itself: it bills the trip&apos;s saved selling price. Change the price on the itinerary, not on the invoice (or use a manual amount, for an admin or manager).</li>
+          <li>It does not work out an amount for an invoice that is not linked to a trip; that amount is typed in by an admin or manager.</li>
+          <li>It does not convert currencies. An invoice, and the payments on it, stay in one currency, and a trip&apos;s invoice must be in the trip&apos;s currency.</li>
+          <li>It does not move money between the two places it can be recorded. A trip that was given payments directly before it had an invoice keeps them (see Payments for how the totals treat those).</li>
+          <li>There is no Cancel button on the invoice page.</li>
         </ul>
       </section>
     </div>

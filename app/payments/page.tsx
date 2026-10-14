@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { emptyTotals, formatMoney, formatTotals } from '@/lib/currency-totals'
 import { isReceivedTripPayment, paymentStats, type PaymentStats } from '@/lib/payments/stats'
+import { invoicedTripIds, isOnInvoicedTrip } from '@/lib/payments/ledger'
 import { todayLocal } from '@/lib/today'
 import {
   DollarSign,
@@ -37,7 +38,7 @@ interface UnifiedPayment {
   notes: string | null
   created_at: string
   /** A trip payment that is not money received (pending, failed, refunded, or a refund): shown, not counted. */
-  not_counted?: 'refund' | 'not_completed'
+  not_counted?: 'refund' | 'not_completed' | 'on_invoice'
 }
 
 export default function PaymentsPage() {
@@ -78,6 +79,9 @@ export default function PaymentsPage() {
       ])
 
       const allPayments: UnifiedPayment[] = []
+      // A trip with an invoice takes its money on the invoice; an older trip
+      // payment on such a trip is listed but not added again (lib/payments/ledger).
+      const invoiced = invoicedTripIds(invoices)
 
       // Process itinerary payments
       {
@@ -96,7 +100,7 @@ export default function PaymentsPage() {
             transaction_reference: p.transaction_reference,
             notes: p.notes,
             created_at: p.created_at,
-            not_counted: isReceivedTripPayment(p) ? undefined : p.payment_type === 'refund' ? 'refund' : 'not_completed'
+            not_counted: isOnInvoicedTrip(p, invoiced) ? 'on_invoice' : isReceivedTripPayment(p) ? undefined : p.payment_type === 'refund' ? 'refund' : 'not_completed'
           })
         })
       }
@@ -434,7 +438,7 @@ export default function PaymentsPage() {
                       {formatMoney(payment.amount, payment.currency)}
                     </span>
                     {payment.not_counted && (
-                      <div className="text-xs text-gray-500">{payment.not_counted === 'refund' ? t('refundTag') : t('notCompletedTag')}</div>
+                      <div className="text-xs text-gray-500">{payment.not_counted === 'refund' ? t('refundTag') : payment.not_counted === 'on_invoice' ? t('onInvoiceTag') : t('notCompletedTag')}</div>
                     )}
                   </td>
                   <td className="px-4 py-3">

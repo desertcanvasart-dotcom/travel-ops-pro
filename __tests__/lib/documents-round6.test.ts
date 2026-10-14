@@ -63,8 +63,13 @@ describe('final invoice', () => {
     expect(deposit).toBe(370873)
     expect((deposit * 100) / 20).toBe(1854365)
     expect(roundToCurrency(1854367 * 0.2, 'JPY')).toBe(deposit)
-    // tax_amount since VAT (20261214): a deposit carrying VAT is compared by its net.
-    expect(src('app/api/invoices/route.ts')).toContain("select('total_amount, tax_amount, currency, full_trip_cost')")
+    // The final no longer rebuilds the trip cost by dividing the deposit by its percent: it
+    // works from the saved trip, else the trip cost the deposit stored (server amounts,
+    // 20261228). The parent row is read whole; a deposit carrying VAT is compared by its net.
+    const route = src('app/api/invoices/route.ts')
+    expect(route).toContain('Number(parentInvoice?.full_trip_cost)')
+    expect(route).toContain('invoiceNet(parentInvoice)')
+    expect(route).not.toContain('/ depositPercent')
   })
 })
 

@@ -7,6 +7,7 @@ import { paymentCurrencyFor } from '@/lib/payment-currency'
 import { checkPaymentAmount, pickPaymentFields } from '@/lib/payments/fields'
 import { tripPaymentVatColumns } from '@/lib/payments/vat'
 import { loadTripVatExtras } from '@/lib/vat'
+import { liveInvoicesOfTrip, tripHasInvoiceMessage } from '@/lib/payments/ledger'
 
 export async function GET(request: NextRequest) {
   try {
@@ -115,6 +116,12 @@ export async function POST(request: NextRequest) {
         .eq('org_id', orgId)
         .maybeSingle()
       if (!trip) return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
+      // One ledger per trip (lib/payments/ledger): once it has an invoice the
+      // money is recorded on the invoice, or the same deposit is counted twice.
+      const invoiceNumbers = await liveInvoicesOfTrip(supabase, orgId, trip.id)
+      if (invoiceNumbers.length) {
+        return NextResponse.json({ success: false, error: tripHasInvoiceMessage(invoiceNumbers) }, { status: 409 })
+      }
       const paid = paymentCurrencyFor(fields.currency, trip.currency)
       if (!paid.ok) return NextResponse.json({ success: false, error: paid.error }, { status: 400 })
       fields.currency = paid.currency

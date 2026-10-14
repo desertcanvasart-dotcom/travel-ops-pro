@@ -27,6 +27,9 @@ export default function ReceiptsPage() {
         <p className="text-gray-600 mt-3">
           The tiles at the top: <strong>Total Receipts</strong> (how many are listed), <strong>Total Received</strong> (their amounts, added up per currency, for example <strong>¥450,000 + $500</strong>; currencies are never added together) and <strong>Received This Month</strong> (how many receipts have a payment date in the current month). They follow the search box.
         </p>
+        <p className="text-gray-600 mt-3">
+          <strong>A trip is never counted twice.</strong> Once a trip has an invoice that is not cancelled, its money is recorded on the invoice (see <Link href="/docs/payments" className="text-primary-600 hover:underline">Payments</Link>). A trip payment recorded on such a trip before that rule is still listed, marked <strong>Also on the trip&apos;s invoice (not counted)</strong>, and its receipt still opens, but the three tiles count only the invoice&apos;s payments for that trip.
+        </p>
       </section>
 
       {/* Numbers */}
@@ -96,7 +99,7 @@ export default function ReceiptsPage() {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">What It Does Not Do</h2>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
           <li>It does not email receipts.</li>
-          <li>It does not link a trip payment to the trip&apos;s invoice: if the same money is recorded on both, there are two receipts and it is counted twice in Total Received. Record each payment once.</li>
+          <li>It does not merge two receipts for the same money. A trip that has both a trip payment and an invoice payment for it (recorded before the one-place rule) has two receipts; the tiles count only the invoice&apos;s, but the older receipt is not removed.</li>
           <li>It does not convert currencies; each receipt is in its payment&apos;s own currency.</li>
           <li>It does not issue receipts for refunds.</li>
         </ul>

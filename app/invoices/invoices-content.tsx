@@ -181,6 +181,40 @@ export default function InvoicesContent() {
   }, [prefsLoading, preferences?.default_currency])
   const [saving, setSaving] = useState(false)
 
+  // What the SERVER will bill for the chosen trip (GET /api/invoices/amounts —
+  // the same function POST /api/invoices uses). The form shows it instead of
+  // its own sum on the price it read earlier; billing another amount is a
+  // manual amount an admin or manager gives a reason for.
+  const [serverAmount, setServerAmount] = useState<{ amount: number; trip_total: number; currency: string; can_override: boolean } | null>(null)
+  const [manualReason, setManualReason] = useState('')
+  useEffect(() => {
+    if (!isModalOpen || !formData.itinerary_id) {
+      setServerAmount(null)
+      return
+    }
+    let cancelled = false
+    const query = new URLSearchParams({ itineraryId: formData.itinerary_id, type: formData.invoice_type, percent: String(formData.deposit_percent || 10) })
+    fetch(`/api/invoices/amounts?${query}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(json => {
+        if (cancelled || !json || typeof json.amount !== 'number') return
+        setServerAmount({ amount: json.amount, trip_total: json.trip_total, currency: json.currency, can_override: json.can_override === true })
+        setManualReason('')
+        setFormData(prev => ({
+          ...prev,
+          currency: json.currency || prev.currency,
+          full_trip_cost: json.trip_total,
+          line_items: [{ ...prev.line_items[0], quantity: 1, unit_price: json.amount, amount: json.amount }],
+          subtotal: json.amount,
+          discount_amount: 0,
+          total_amount: json.amount,
+        }))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [isModalOpen, formData.itinerary_id, formData.invoice_type, formData.deposit_percent])
+  const differsFromServer = !!serverAmount && Math.abs(formData.total_amount - serverAmount.amount) >= 0.005
+
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
       draft: t('draft'),
@@ -483,13 +517,28 @@ export default function InvoicesContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // A trip's invoice bills the server's amount. Another amount goes as a
+    // manual amount with its reason, which only an admin or manager may send.
+    if (differsFromServer && serverAmount) {
+      if (!serverAmount.can_override) {
+        await dialog.alert(t('error'), t('manualAmountNeedsManager'), 'warning')
+        return
+      }
+      if (!manualReason.trim()) {
+        await dialog.alert(t('error'), t('manualAmountReasonRequired'), 'warning')
+        return
+      }
+    }
     setSaving(true)
 
     try {
       const response = await fetch('/api/invoices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(differsFromServer
+          ? { ...formData, manual_override: { amount: formData.total_amount, reason: manualReason.trim() } }
+          : formData)
       })
 
       if (response.ok) {
@@ -1143,6 +1192,31 @@ export default function InvoicesContent() {
                   </div>
                 </div>
               </div>
+
+              {/* The server's amount for the chosen trip, and the reason for any other. */}
+              {serverAmount && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+                  <p className="text-sm text-blue-800">
+                    {t('serverAmountNote', { amount: formatMoney(serverAmount.amount, serverAmount.currency || formData.currency) })}
+                  </p>
+                  {differsFromServer && !serverAmount.can_override && (
+                    <p className="text-sm text-red-700">{t('manualAmountNeedsManager')}</p>
+                  )}
+                  {differsFromServer && serverAmount.can_override && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t('manualAmountReason')}</label>
+                      <input
+                        type="text"
+                        value={manualReason}
+                        onChange={(e) => setManualReason(e.target.value)}
+                        placeholder={t('manualAmountReasonPlaceholder')}
+                        maxLength={500}
+                        className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Notes & Terms */}
               <div className="grid grid-cols-2 gap-4">

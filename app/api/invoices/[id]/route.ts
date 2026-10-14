@@ -14,6 +14,42 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+/**
+ * Why an invoice cannot be cancelled now, or null. Every invoice_payments row
+ * is money received (a payment taken back is deleted from the invoice, not
+ * flagged), so any row — or a non-zero amount_paid — blocks it. invoice_payments
+ * has no org_id; the caller has checked the invoice is this company's.
+ */
+async function cancelRefusal(invoiceId: string, invoice: { amount_paid?: unknown; currency?: string | null }): Promise<string | null> {
+  const { data: rows } = await supabaseAdmin
+    .from('invoice_payments')
+    .select('amount')
+    .eq('invoice_id', invoiceId)
+  const recorded = (rows ?? []).reduce((sum: number, r: { amount: unknown }) => sum + (Number(r.amount) || 0), 0)
+  const paid = Math.max(recorded, Number(invoice.amount_paid) || 0)
+  if ((rows ?? []).length === 0 && paid <= 0) return null
+  return (
+    `This invoice has ${rows?.length || 1} payment(s) recorded against it (${invoice.currency || ''} ${paid}), so it cannot be cancelled: ` +
+    'cancelling would leave that money with no invoice. If it was paid back to the client (refunded), delete the payment(s) ' +
+    'from the invoice first, then cancel it. If it was not refunded, leave the invoice as it is.'
+  )
+}
+
+/**
+ * Give back the extras and upgrades this invoice billed (invoiced_at and
+ * invoice_id cleared), exactly as deleting the invoice does: they carry the
+ * stamp that stops them being billed twice, and a cancelled invoice bills
+ * nothing. A database without migration 20260828_booking_extras has no table.
+ */
+async function releaseExtras(invoiceId: string, orgId: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from('booking_extras')
+    .update({ invoiced_at: null, invoice_id: null })
+    .eq('invoice_id', invoiceId)
+    .eq('org_id', orgId)
+  if (error) console.error('invoices: could not release extras', error)
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -110,6 +146,32 @@ export async function PUT(
         { error: `status must be one of ${SETTABLE_INVOICE_STATUSES.join(', ')} (paid and partial follow from payments)` },
         { status: 400 }
       )
+    }
+
+    // Cancelling gives the invoice's extras back, as deleting does, and is
+    // refused while money is recorded against it: that money would be left
+    // with no invoice. A cancelled invoice stays cancelled (its extras may
+    // already be on a new one).
+    let cancelling = false
+    if (updateData.status !== undefined) {
+      const { data: statusRow } = await supabaseAdmin
+        .from('invoices')
+        .select('status, amount_paid, currency')
+        .eq('id', id)
+        .eq('org_id', orgId)
+        .maybeSingle()
+      if (!statusRow) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+      if (statusRow.status === 'cancelled' && updateData.status !== 'cancelled') {
+        return NextResponse.json(
+          { error: 'A cancelled invoice cannot be reopened, because its extras may already be on another invoice. Raise a new invoice instead.' },
+          { status: 409 }
+        )
+      }
+      if (updateData.status === 'cancelled' && statusRow.status !== 'cancelled') {
+        cancelling = true
+        const refusal = await cancelRefusal(id, statusRow)
+        if (refusal) return NextResponse.json({ error: refusal }, { status: 409 })
+      }
     }
 
     // The amounts of a VAT-applied invoice are worked out together (net, VAT,
@@ -211,6 +273,9 @@ export async function PUT(
       console.error('Error updating invoice:', error)
       return NextResponse.json({ error: 'Failed to update invoice' }, { status: 500 })
     }
+
+    // Cancelled: its extras are owed again (released, or they are never billed).
+    if (cancelling) await releaseExtras(id, orgId)
 
     return NextResponse.json(data)
   } catch (error) {

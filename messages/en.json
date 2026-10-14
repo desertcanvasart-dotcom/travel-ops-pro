@@ -1969,6 +1969,9 @@
     "orCreateInvoice": "or create an",
     "refundTag": "Refund (not counted as received)",
     "notCompletedTag": "Not completed (not counted as received)",
+    "onInvoiceTag": "Trip has an invoice (counted on the invoice)",
+    "tripHasInvoice": "This trip already has an invoice ({numbers}). Record the payment on the invoice so the same money is not counted twice.",
+    "useInvoiceInstead": "Record it on the invoice",
     "record": {
       "title": "Record Payment",
       "subtitle": "Add a new payment transaction",
@@ -2387,7 +2390,12 @@
     },
     "failedToCreateInvoice": "Failed to create the invoice",
     "failedToDeleteInvoice": "Failed to delete the invoice",
-    "depositWithPercent": "Deposit ({percent}%)"
+    "depositWithPercent": "Deposit ({percent}%)",
+    "serverAmountNote": "Worked out from the saved trip: {amount}. This is the amount the invoice will bill.",
+    "manualAmountNeedsManager": "This is not the amount worked out from the trip. Only an admin or manager can bill a different amount.",
+    "manualAmountReason": "Reason for billing a different amount",
+    "manualAmountReasonPlaceholder": "Why this amount differs from the trip price",
+    "manualAmountReasonRequired": "Give a reason for billing a different amount."
   },
   "whatsappParser": {
     "title": "WhatsApp to Itinerary",

@@ -2429,6 +2429,9 @@
     "orCreateInvoice": "または",
     "refundTag": "返金（入金には含まれません）",
     "notCompletedTag": "未完了（入金には含まれません）",
+    "onInvoiceTag": "旅程に請求書あり（請求書側で集計）",
+    "tripHasInvoice": "この旅程にはすでに請求書（{numbers}）があります。同じ入金が二重に集計されないよう、請求書に入金を記録してください。",
+    "useInvoiceInstead": "請求書に記録する",
     "record": {
       "title": "支払を記録",
       "subtitle": "新しい支払取引を追加",
@@ -3252,7 +3255,12 @@
     },
     "failedToCreateInvoice": "請求書の作成に失敗しました",
     "failedToDeleteInvoice": "請求書の削除に失敗しました",
-    "depositWithPercent": "デポジット（{percent}%）"
+    "depositWithPercent": "デポジット（{percent}%）",
+    "serverAmountNote": "保存済みの旅程から算出した金額：{amount}。請求書にはこの金額が請求されます。",
+    "manualAmountNeedsManager": "旅程から算出した金額と異なります。別の金額を請求できるのは管理者またはマネージャーのみです。",
+    "manualAmountReason": "別の金額を請求する理由",
+    "manualAmountReasonPlaceholder": "旅程の価格と金額が異なる理由",
+    "manualAmountReasonRequired": "別の金額を請求する理由を入力してください。"
   },
   "invite": {
     "invalidInvitationLink": "無効な招待リンクです",

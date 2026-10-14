@@ -433,6 +433,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
     setCreatingFinalInvoice(true)
     try {
+      // The server works the balance out (from the trip's saved total, or the
+      // trip cost this deposit stored, less this deposit's net) and ignores the
+      // amounts below; they are sent for a deposit with neither, which only an
+      // admin or manager can settle (POST /api/invoices).
       // From the deposit's NET: a deposit carrying VAT has it in its total.
       const depositNet = Number(invoice.total_amount) - Number(invoice.tax_amount || 0)
       const fullTripCost = (depositNet * 100) / invoice.deposit_percent

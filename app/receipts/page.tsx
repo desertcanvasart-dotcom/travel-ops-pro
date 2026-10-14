@@ -22,6 +22,7 @@ import {
 import { generateReceiptPDF, receiptBrand, downloadReceiptPDF, receiptNumberFor } from '@/lib/receipt-pdf-generator'
 import { receiptVat } from '@/lib/payments/vat'
 import { isReceivedTripPayment, monthStartOf, onOrAfterMonthStart } from '@/lib/payments/stats'
+import { invoicedTripIds, isOnInvoicedTrip } from '@/lib/payments/ledger'
 import { formatMoney, formatTotals, sumByCurrency } from '@/lib/currency-totals'
 import { todayLocal } from '@/lib/today'
 import { japaneseFontData } from '@/lib/pdf-fonts'
@@ -48,6 +49,8 @@ interface UnifiedPayment {
   receipt_number?: string | null
   notes: string | null
   created_at: string
+  /** A trip payment on a trip that has an invoice: listed (its receipt exists), not added to the totals. */
+  on_invoice?: boolean
   /** An invoice payment: the invoice's recorded VAT, for the receipt's VAT line. */
   invoice_vat?: { vat_applied?: boolean; tax_rate?: number | null; tax_amount?: number | null; total_amount?: number; vat_base?: number | null }
 }
@@ -84,6 +87,8 @@ export default function ReceiptsPage() {
       ])
 
       const allPayments: UnifiedPayment[] = []
+      // A trip with an invoice takes its money on the invoice (lib/payments/ledger).
+      const invoiced = invoicedTripIds(invoices)
 
       // Process itinerary payments
       {
@@ -105,7 +110,8 @@ export default function ReceiptsPage() {
             transaction_reference: p.transaction_reference,
             receipt_number: p.receipt_number,
             notes: p.notes,
-            created_at: p.created_at
+            created_at: p.created_at,
+            on_invoice: isOnInvoicedTrip(p, invoiced) || undefined
           })
         })
       }
@@ -297,17 +303,20 @@ export default function ReceiptsPage() {
   }
 
   // Stats
-  const totalReceipts = filteredPayments.length
+  // A trip payment on a trip that has an invoice is listed but not counted: the
+  // same money is on the invoice (lib/payments/ledger).
+  const countedPayments = filteredPayments.filter(p => !p.on_invoice)
+  const totalReceipts = countedPayments.length
   // Per currency: ¥450,000 and €500 do not add up to either.
-  const totalReceived = sumByCurrency(filteredPayments, p => p.amount, p => p.currency)
-  const totalReceivedLabel = formatTotals(totalReceived, { defaultCurrency: filteredPayments[0]?.currency || 'EUR' })
+  const totalReceived = sumByCurrency(countedPayments, p => p.amount, p => p.currency)
+  const totalReceivedLabel = formatTotals(totalReceived, { defaultCurrency: countedPayments[0]?.currency || 'EUR' })
   // This month, measured — the tile here used to be a hardcoded "100%
   // Completed Payments", which an empty account displayed as a perfect
   // ratio over zero records (audit AUT-L06). A receipt IS a completed
   // payment, so a completion ratio of receipts says nothing by definition.
   // Dates compared as text so 1 June cannot fall into May for a viewer west of UTC.
   const monthStart = monthStartOf(todayLocal())
-  const receiptsThisMonth = filteredPayments.filter(p => onOrAfterMonthStart(p.payment_date || p.created_at, monthStart)).length
+  const receiptsThisMonth = countedPayments.filter(p => onOrAfterMonthStart(p.payment_date || p.created_at, monthStart)).length
 
   if (loading) {
     // The page's own shape while payments load (AUT-H03): title, the three
@@ -538,6 +547,9 @@ export default function ReceiptsPage() {
                         <td className="px-4 py-3 text-right">
                           <span className="text-sm font-bold text-gray-900">
                             {formatCurrency(payment.amount, payment.currency)}
+                            {payment.on_invoice && (
+                              <span className="block text-xs font-normal text-gray-500">Also on the trip&apos;s invoice (not counted)</span>
+                            )}
                           </span>
                         </td>
                         <td className="px-4 py-3">
