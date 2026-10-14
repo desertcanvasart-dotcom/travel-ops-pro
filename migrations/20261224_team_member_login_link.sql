@@ -45,6 +45,16 @@ BEGIN
     RETURN;
   END IF;
 
+  -- team_members.org_id comes from 20261203_people_work_org_id. Without it
+  -- there is no company to match within, so do nothing (re-run after it).
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'team_members' AND column_name = 'org_id'
+  ) THEN
+    RAISE NOTICE '20261224: team_members.org_id is missing - apply 20261203_people_work_org_id first; nothing linked.';
+    RETURN;
+  END IF;
+
   -- Each (member, login) pair whose email matches, within the member's company.
   CREATE TEMP TABLE _tm_link_pairs ON COMMIT DROP AS
     SELECT DISTINCT t.id AS member_id, t.org_id, p.id AS user_id
