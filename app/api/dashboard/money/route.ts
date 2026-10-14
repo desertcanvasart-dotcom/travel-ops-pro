@@ -4,6 +4,7 @@ import { excludeDemoLinked, loadDemoItineraryIds, type DemoLookupClient } from '
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { countableTripPayments } from '@/lib/payments/ledger'
 import { addTo, billsWithoutExpenses, netReceived, receivableTotals, type CurrencyTotals } from '@/lib/dashboard/figures'
 
 // ============================================
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
       orgId,
     )
 
-    const [receivableInvoices, unpaidExpenses, unpaidBills, monthPayments, monthPaidExpenses] = await Promise.all([
+    const [receivableInvoices, unpaidExpenses, unpaidBills, monthPayments, monthPaidExpenses, monthInvoicePayments, liveInvoices] = await Promise.all([
       // Outstanding receivables — same filter as /api/accounts-receivable
       supabase.from('invoices')
         .select('balance_due, currency, due_date, itinerary_id')
@@ -59,6 +60,7 @@ export async function GET(request: NextRequest) {
       supabase.from('payments')
         .select('amount, currency, itinerary_id, payment_type')
         .eq('org_id', orgId)
+        .eq('payment_status', 'completed')
         .gte('payment_date', monthStart.slice(0, 10)),
       // Money that actually left this month (expenses marked paid this month)
       supabase.from('expenses')
@@ -66,8 +68,21 @@ export async function GET(request: NextRequest) {
         .eq('org_id', orgId)
         .eq('status', 'paid')
         .gte('payment_date', monthStart.slice(0, 10)),
+      // Money recorded on invoices this month (invoice_payments has no org_id
+      // on every database, so it is scoped through its invoice), and which
+      // trips have a live invoice: their trip-level payments are not added a
+      // second time (lib/payments/ledger).
+      supabase.from('invoice_payments')
+        .select('amount, currency, invoices!inner(org_id, itinerary_id)')
+        .eq('invoices.org_id', orgId)
+        .gte('payment_date', monthStart.slice(0, 10)),
+      supabase.from('invoices')
+        .select('itinerary_id, status')
+        .eq('org_id', orgId)
+        .not('itinerary_id', 'is', null)
+        .not('status', 'eq', 'cancelled'),
     ])
-    for (const r of [receivableInvoices, unpaidExpenses, unpaidBills, monthPayments, monthPaidExpenses]) {
+    for (const r of [receivableInvoices, unpaidExpenses, unpaidBills, monthPayments, monthPaidExpenses, monthInvoicePayments, liveInvoices]) {
       if (r.error) throw r.error
     }
 
@@ -104,7 +119,16 @@ export async function GET(request: NextRequest) {
     const billTotals: CurrencyTotals = {}
     for (const b of billsUnlinked) addTo(billTotals, b.currency, b.amount)
 
-    const received = netReceived(monthPaymentsReal.real)
+    const tripPaymentsCounted = countableTripPayments(monthPaymentsReal.real, liveInvoices.data || [])
+    const invoicePaymentsReal = excludeDemoLinked(
+      (monthInvoicePayments.data || []).map(p => ({
+        amount: p.amount,
+        currency: p.currency,
+        itinerary_id: (p.invoices as unknown as { itinerary_id: string | null } | null)?.itinerary_id ?? null,
+      })),
+      demoItineraryIds,
+    )
+    const received = netReceived([...tripPaymentsCounted, ...invoicePaymentsReal.real])
 
     const spentThisMonth: CurrencyTotals = {}
     for (const e of monthPaidExpensesReal.real) addTo(spentThisMonth, e.currency, e.amount)

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { SkeletonPageHeader, SkeletonStatCards, SkeletonTable } from '@/components/Skeleton'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
@@ -20,7 +21,11 @@ import {
   MapPin
 } from 'lucide-react'
 import { generateReceiptPDF, receiptBrand, downloadReceiptPDF, receiptNumberFor } from '@/lib/receipt-pdf-generator'
-import { vatInsideGross } from '@/lib/vat'
+import { receiptVat } from '@/lib/payments/vat'
+import { isReceivedTripPayment, monthStartOf, onOrAfterMonthStart } from '@/lib/payments/stats'
+import { invoicedTripIds, isOnInvoicedTrip } from '@/lib/payments/ledger'
+import { formatMoney, formatTotals, sumByCurrency } from '@/lib/currency-totals'
+import { todayLocal } from '@/lib/today'
 import { japaneseFontData } from '@/lib/pdf-fonts'
 import { useCompanyInfo } from '@/lib/use-company-info'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
@@ -41,14 +46,19 @@ interface UnifiedPayment {
   payment_method: string
   payment_date: string
   transaction_reference: string | null
+  /** The receipt's own number, from the company's series (payments.receipt_number). */
+  receipt_number?: string | null
   notes: string | null
   created_at: string
+  /** A trip payment on a trip that has an invoice: listed (its receipt exists), not added to the totals. */
+  on_invoice?: boolean
   /** An invoice payment: the invoice's recorded VAT, for the receipt's VAT line. */
   invoice_vat?: { vat_applied?: boolean; tax_rate?: number | null; tax_amount?: number | null; total_amount?: number; vat_base?: number | null }
 }
 
 export default function ReceiptsPage() {
   const router = useRouter()
+  const t = useTranslations('payments')
   // The operator's name and contacts for the receipt PDF (Company profile).
   const company = useCompanyInfo()
   const dialog = useConfirmDialog()
@@ -79,11 +89,14 @@ export default function ReceiptsPage() {
       ])
 
       const allPayments: UnifiedPayment[] = []
+      // A trip with an invoice takes its money on the invoice (lib/payments/ledger).
+      const invoiced = invoicedTripIds(invoices)
 
       // Process itinerary payments
       {
-        // Receipts are for money received: not pending, failed or refunded.
-        itineraryPayments.filter((p: any) => p.payment_status === 'completed').forEach((p: any) => {
+        // Receipts are for money received: not pending, failed or refunded, and
+        // not a refund (a refund row has a positive amount: lib/payments/stats).
+        itineraryPayments.filter(isReceivedTripPayment).forEach((p: any) => {
           allPayments.push({
             id: p.id,
             source: 'itinerary',
@@ -97,8 +110,10 @@ export default function ReceiptsPage() {
             payment_method: p.payment_method || 'unknown',
             payment_date: p.payment_date,
             transaction_reference: p.transaction_reference,
+            receipt_number: p.receipt_number,
             notes: p.notes,
-            created_at: p.created_at
+            created_at: p.created_at,
+            on_invoice: isOnInvoicedTrip(p, invoiced) || undefined
           })
         })
       }
@@ -124,6 +139,7 @@ export default function ReceiptsPage() {
                 payment_method: p.payment_method || 'unknown',
                 payment_date: p.payment_date,
                 transaction_reference: p.transaction_reference,
+                receipt_number: p.receipt_number,
                 notes: p.notes,
                 created_at: p.created_at,
                 invoice_vat: {
@@ -172,12 +188,12 @@ export default function ReceiptsPage() {
       const receiptNumber = receiptNumberFor(payment)
 
       // The VAT the receipt states (lib/vat.ts): an invoice payment's share of
-      // its invoice's recorded VAT; an itinerary payment's VAT inside the
-      // amount at its trip's rate, read from the payment's own record.
+      // its invoice's recorded VAT; an itinerary payment's VAT as recorded on
+      // the payment (else, for one from before that, the trip's rate).
       let vatSource: { vat_applied?: boolean; tax_rate?: number | null; tax_amount?: number | null; total_amount?: number; vat_base?: number | null } = payment.invoice_vat ?? {}
       if (payment.source === 'itinerary') {
         const res = await fetch(`/api/payments/${payment.id}`).then(r => r.json()).catch(() => null)
-        const vat = vatInsideGross(payment.amount, res?.data, payment.currency)
+        const vat = receiptVat(res?.data, payment.currency)
         vatSource = { vat_applied: vat.vat_applied, tax_rate: vat.vat_rate, tax_amount: vat.vat_amount, total_amount: payment.amount, vat_base: vat.vat_base ?? null }
       }
 
@@ -271,10 +287,8 @@ export default function ReceiptsPage() {
     })
   }
 
-  const formatCurrency = (amount: number, currency: string) => {
-    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
-    return `${symbols[currency] || currency} ${amount.toFixed(2)}`
-  }
+  // In the currency's own unit, with separators: ¥450,000, not "¥ 450000.00".
+  const formatCurrency = (amount: number, currency: string) => formatMoney(amount, currency)
 
   const getMethodLabel = (method: string) => {
     const labels: Record<string, string> = {
@@ -291,18 +305,20 @@ export default function ReceiptsPage() {
   }
 
   // Stats
-  const totalReceipts = filteredPayments.length
-  const totalAmount = filteredPayments.reduce((sum, p) => sum + p.amount, 0)
-  const mainCurrency = filteredPayments[0]?.currency || 'EUR'
+  // A trip payment on a trip that has an invoice is listed but not counted: the
+  // same money is on the invoice (lib/payments/ledger).
+  const countedPayments = filteredPayments.filter(p => !p.on_invoice)
+  const totalReceipts = countedPayments.length
+  // Per currency: ¥450,000 and €500 do not add up to either.
+  const totalReceived = sumByCurrency(countedPayments, p => p.amount, p => p.currency)
+  const totalReceivedLabel = formatTotals(totalReceived, { defaultCurrency: countedPayments[0]?.currency || 'EUR' })
   // This month, measured — the tile here used to be a hardcoded "100%
   // Completed Payments", which an empty account displayed as a perfect
   // ratio over zero records (audit AUT-L06). A receipt IS a completed
   // payment, so a completion ratio of receipts says nothing by definition.
-  const now = new Date()
-  const receiptsThisMonth = filteredPayments.filter(p => {
-    const d = new Date(p.payment_date || p.created_at)
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-  }).length
+  // Dates compared as text so 1 June cannot fall into May for a viewer west of UTC.
+  const monthStart = monthStartOf(todayLocal())
+  const receiptsThisMonth = countedPayments.filter(p => onOrAfterMonthStart(p.payment_date || p.created_at, monthStart)).length
 
   if (loading) {
     // The page's own shape while payments load (AUT-H03): title, the three
@@ -342,7 +358,7 @@ export default function ReceiptsPage() {
                   { key: 'payment_method', label: 'Method' },
                 ]
                 const data = filteredPayments.map(p => ({
-                  receipt_number: p.transaction_reference || `RCP-${p.id.slice(0, 8).toUpperCase()}`,
+                  receipt_number: receiptNumberFor(p),
                   source_reference: p.source_reference,
                   client_name: p.client_name,
                   amount: p.amount,
@@ -367,7 +383,7 @@ export default function ReceiptsPage() {
                   { key: 'payment_method', label: 'Method' },
                 ]
                 const data = filteredPayments.map(p => ({
-                  receipt_number: p.transaction_reference || `RCP-${p.id.slice(0, 8).toUpperCase()}`,
+                  receipt_number: receiptNumberFor(p),
                   source_reference: p.source_reference,
                   client_name: p.client_name,
                   amount: p.amount,
@@ -408,7 +424,7 @@ export default function ReceiptsPage() {
                 <CreditCard className="w-5 h-5 text-green-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalAmount, mainCurrency)}</p>
+                <p className="text-2xl font-bold text-gray-900">{totalReceivedLabel}</p>
                 <p className="text-xs text-gray-500">Total Received</p>
               </div>
             </div>
@@ -476,7 +492,7 @@ export default function ReceiptsPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filteredPayments.map((payment) => {
-                    const receiptNumber = payment.transaction_reference || `RCP-${payment.id.slice(0, 8).toUpperCase()}`
+                    const receiptNumber = receiptNumberFor(payment)
                     const isDownloading = downloadingId === payment.id
                     const isSending = sendingId === payment.id
                     const isSent = sentIds.includes(payment.id)
@@ -487,6 +503,9 @@ export default function ReceiptsPage() {
                           <span className="text-sm font-mono font-medium text-primary-600">
                             {receiptNumber}
                           </span>
+                          {payment.transaction_reference && (
+                            <p className="text-xs text-gray-400 font-mono mt-0.5">{payment.transaction_reference}</p>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
@@ -530,6 +549,9 @@ export default function ReceiptsPage() {
                         <td className="px-4 py-3 text-right">
                           <span className="text-sm font-bold text-gray-900">
                             {formatCurrency(payment.amount, payment.currency)}
+                            {payment.on_invoice && (
+                              <span className="block text-xs font-normal text-gray-500">{t('onInvoiceTag')}</span>
+                            )}
                           </span>
                         </td>
                         <td className="px-4 py-3">
@@ -591,7 +613,7 @@ export default function ReceiptsPage() {
         {filteredPayments.length > 0 && (
           <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
             <span>Showing {filteredPayments.length} receipt{filteredPayments.length !== 1 ? 's' : ''}</span>
-            <span>Total: <strong className="text-gray-900">{formatCurrency(totalAmount, mainCurrency)}</strong></span>
+            <span>Total: <strong className="text-gray-900">{totalReceivedLabel}</strong></span>
           </div>
         )}
       </div>

@@ -988,6 +988,7 @@
     "currencyFallback": "{requested}はレポート通貨に対応していないため、{currency}で表示しています。"
   },
   "expenses": {
+    "approvedBy": "承認者",
     "expenses": "経費",
     "expensesSubtitle": "運営コストとサプライヤー支払いを追跡",
     "exportCSV": "CSVエクスポート",
@@ -1006,6 +1007,7 @@
     "expense": "経費"
   },
   "expenseDetail": {
+    "approvedBy": "承認者",
     "failedToUpdateStatus": "ステータスの更新に失敗しました",
     "confirmDeleteExpense": "この経費を削除してもよろしいですか？この操作は元に戻せません。",
     "failedToDeleteExpense": "経費の削除に失敗しました",
@@ -2425,6 +2427,14 @@
     "noPaymentsFound": "支払が見つかりません",
     "recordFirstPayment": "最初の支払を記録してください",
     "orCreateInvoice": "または",
+    "refundTag": "返金（入金には含まれません）",
+    "notCompletedTag": "未完了（入金には含まれません）",
+    "onInvoiceTag": "旅程に請求書あり（請求書側で集計）",
+    "tripHasInvoice": "この旅程にはすでに請求書（{numbers}）があります。同じ入金が二重に集計されないよう、請求書に入金を記録してください。",
+    "useInvoiceInstead": "請求書に記録する",
+    "moveToInvoice": "請求書へ移す",
+    "confirmMoveToInvoice": "この入金を旅程の請求書に記録し、旅程側の入金を削除しますか？金額は請求書側で一度だけ集計されます。",
+    "failedToMoveToInvoice": "入金を請求書へ移せませんでした",
     "record": {
       "title": "支払を記録",
       "subtitle": "新しい支払取引を追加",
@@ -3151,6 +3161,9 @@
       "invoiceSentWhatsApp": "WhatsAppで請求書を送信しました！ ✅",
       "failedToSendError": "送信に失敗しました: {error}",
       "confirmDeletePayment": "この支払いを削除してもよろしいですか？",
+      "cancelInvoice": "請求書をキャンセル",
+      "confirmCancelInvoice": "この請求書をキャンセルしますか？キャンセルした請求書は再開できません。含まれていた追加項目は別の請求書で請求できるようになります。",
+      "failedToCancelInvoice": "請求書のキャンセルに失敗しました",
       "confirmCreateFinalInvoice": "残額の最終請求書を作成しますか？",
       "finalBalanceDescription": "最終残高 - {description}",
       "balancePaymentTerms": "残金は本請求書記載の期日までにお支払いください。",
@@ -3248,7 +3261,12 @@
     },
     "failedToCreateInvoice": "請求書の作成に失敗しました",
     "failedToDeleteInvoice": "請求書の削除に失敗しました",
-    "depositWithPercent": "デポジット（{percent}%）"
+    "depositWithPercent": "デポジット（{percent}%）",
+    "serverAmountNote": "保存済みの旅程から算出した金額：{amount}。請求書にはこの金額が請求されます。",
+    "manualAmountNeedsManager": "旅程から算出した金額と異なります。別の金額を請求できるのは管理者またはマネージャーのみです。",
+    "manualAmountReason": "別の金額を請求する理由",
+    "manualAmountReasonPlaceholder": "旅程の価格と金額が異なる理由",
+    "manualAmountReasonRequired": "別の金額を請求する理由を入力してください。"
   },
   "invite": {
     "invalidInvitationLink": "無効な招待リンクです",
@@ -6460,6 +6478,41 @@
   "profitLoss": {
     "title": "損益計算",
     "subtitle": "旅程の収益性分析",
+    "loadError": "レポートを読み込めませんでした。",
+    "tabs": {
+      "overview": "概要",
+      "tax": "税金"
+    },
+    "fx": {
+      "warningTitle": "このレポートは不完全です",
+      "warningBody": "為替レートがない日付の費用・入金が{count}件除外されています。レートが追加されるまで、費用はその分少なく、利益率は高く表示されます。",
+      "more": "ほか{count}件",
+      "tripExcluded": "{count}件除外：レートなし"
+    },
+    "scope": {
+      "excluded": "{statuses}の旅程はここでは集計されません。表示するにはフィルターで選択してください。"
+    },
+    "tax": {
+      "title": "発行済み請求書に記録されたVAT",
+      "intro": "請求書そのものから集計しています。各請求書が発行時に記録したVATです。会社の税率や収益から計算した値ではありません。",
+      "fromDate": "発行日（から）",
+      "toDate": "発行日（まで）",
+      "loadError": "税金レポートを読み込めませんでした。",
+      "empty": "この期間に発行された請求書はありません。",
+      "invoicesCount": "発行済み請求書 {count}件",
+      "invoices": "請求書",
+      "net": "VAT抜き金額",
+      "vatCollected": "預かりVAT",
+      "vatRecorded": "記録されたVAT",
+      "total": "請求合計",
+      "rate": "税率",
+      "notApplied": "VAT不適用の請求書",
+      "notAppliedNet": "{amount}を請求（VAT不適用）",
+      "excludedExtras": "{count}件の請求書は、オプションや保険をVATの対象から除外しています。",
+      "noteExtras": "オプションと保険にはVATがかかりません。除外した請求書には、課税した金額が記録されています。",
+      "noteScope": "発行済みの請求書のみ（下書きと取消済みは含みません）、発行日で集計します。通貨や税率は合算も換算もしません。",
+      "noteInput": "経費にかかったVAT（仕入VAT）はまだどこにも記録されていないため、表示していません。"
+    },
     "summary": {
       "totalTrips": "総旅程数",
       "totalRevenue": "総収益",
@@ -6467,7 +6520,9 @@
       "grossProfit": "粗利益",
       "avgMargin": "平均利益率",
       "profitable": "黒字",
-      "lossMaking": "赤字"
+      "lossMaking": "赤字",
+      "netOfVat": "VAT抜き",
+      "marginBasis": "利益 ÷ 収益"
     },
     "search": "旅程を検索...",
     "sort": {
@@ -6521,6 +6576,13 @@
     },
     "footer": "© 2024 Autoura オペレーションシステム",
     "detail": {
+      "loadError": "レポートを読み込めませんでした。",
+      "netOfVat": "VAT抜き",
+      "vatExcluded": "VAT {amount}は含みません",
+      "marginBasis": "利益 ÷ 収益",
+      "inclVat": "VAT {amount}を含む",
+      "fxWarningTitle": "この旅程のレポートは不完全です",
+      "fxWarningBody": "為替レートがない日付の費用・入金が{count}件除外されています。レートが追加されるまで、費用はその分少なく、利益率は高く表示されます。",
       "notFound": "旅程が見つかりません",
       "backToList": "損益計算に戻る",
       "viewItinerary": "旅程を表示",
@@ -6578,26 +6640,6 @@
         "fuel": "燃料",
         "other": "その他"
       }
-    },
-    "itineraryCard": {
-      "title": "損益",
-      "subtitle": "コスト内訳と利益率",
-      "supplierCost": "仕入原価",
-      "clientPrice": "顧客価格",
-      "margin": "利益",
-      "cost": "原価",
-      "price": "価格",
-      "whatYouPay": "支払額",
-      "whatClientPays": "顧客支払額",
-      "grossProfit": "粗利益",
-      "yourEarnings": "収益",
-      "marginPercent": "利益率",
-      "markupOnCost": "原価に対するマークアップ",
-      "breakdownByServiceType": "サービスタイプ別内訳",
-      "items": "件",
-      "marginLabel": "利益率",
-      "note": "注意:",
-      "noteText": "チップと水は通常、マージンなしのパススルー費用です。交通、ガイド、入場料には標準{marginPercent}%のマークアップが適用されます。"
     }
   },
   "modal": {
@@ -7376,14 +7418,17 @@
     "grossProfit": "粗利益",
     "yourEarnings": "収益",
     "marginPercent": "利益率 %",
-    "markupOnCost": "原価に対するマークアップ",
+    "marginOnPrice": "利益 ÷ 顧客価格",
+    "notRecorded": "未記録",
     "breakdownByServiceType": "サービス種別の内訳",
     "items": "件",
     "note": "注意:",
-    "noteText": "チップと飲料水は通常、利益なしのパススルーコストです。交通、ガイド、入場料には標準の{marginPercent}%マークアップが適用されます。",
+    "noteText": "旅程の価格設定時に、チップ・備品・航空券を含むすべてのサービスに会社の利益率が適用されます。この旅程に入力した追加経費は利益を減らします。ここでの利益率は、損益計算ページと同じく、利益を顧客価格で割った値です。",
     "extraExpenses": "追加経費",
     "extraExpensesNote": "追加経費はマージンを減少させる運営費です",
-    "fromTripTotals": "サービス単価が未入力のため、旅程の合計金額から算出"
+    "fromTripTotals": "サービス単価が未入力のため、旅程の合計金額から算出",
+    "rateMissing": "為替レート未登録：追加経費{count}件を{currency}に換算できないため、利益率から除外しています：{list}。為替レートが登録されるまで、表示の利益率は実際より高くなっています。",
+    "extrasUnavailable": "為替レート未登録、または取得できません：この旅程の追加経費を現在換算できないため、表示の利益率から除外しています。"
   },
   "resourceAssignment": {
     "changeDates": "日付を変更",
@@ -7497,6 +7542,13 @@
     "title": "コミッション管理",
     "subtitle": "ホテル、ショップ、パートナーからのコミッションを追跡",
     "addCommission": "コミッションを追加",
+    "recalculateFromPrice": "価格から再計算",
+    "recalculateHint": "保留中のコミッションはサービスの現在の価格に合わせて更新されます。支払済みのものは変更されず、注意表示のみ付きます。",
+    "failedToRecalculate": "コミッションの再計算に失敗しました",
+    "priceChangedSincePaid": "支払後に価格が変更されました",
+    "priceChangedSinceInvoiced": "請求後に価格が変更されました",
+    "priceChangedWhileDisputed": "係争中に価格が変更されました",
+    "priceServiceGone": "元のサービスからこのコミッションは発生しなくなりました",
     "editCommission": "コミッションを編集",
     "updateCommission": "コミッションを更新",
     "deleteConfirm": "このコミッション記録を削除してもよろしいですか？",
@@ -7573,11 +7625,16 @@
     "formTransactionDate": "取引日",
     "formDueDate": "支払期日",
     "formStatus": "ステータス",
+    "formCurrency": "通貨",
+    "formPaidDate": "支払・入金日",
+    "editLockedNote": "金額・料率・仕入先・旅程はここでは変更できません。訂正するには、このコミッションを削除して追加し直してください。",
+    "cardsNote": "取消済みのコミッションはこれらの金額に含まれません。",
     "formDescription": "説明",
     "descriptionPlaceholder": "例：ゲスト購入の10%コミッション",
     "formNotes": "備考",
     "notesPlaceholder": "追加のメモ...",
     "error": "エラー",
+    "failedToDelete": "コミッションの削除に失敗しました",
     "failedToSave": "コミッションの保存に失敗しました"
   },
   "b2bQuotes": {

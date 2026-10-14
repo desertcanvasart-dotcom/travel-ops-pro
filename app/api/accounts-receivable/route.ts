@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
 import { addToTotals, emptyTotals, type CurrencyTotals } from '@/lib/currency-totals'
+import { ageInvoice, fetchAllRows, isReceivable, localToday, AGING_FILTER_KEYS, type AgingKey } from '@/lib/finance/receivables'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,7 +13,9 @@ interface AgingBucket {
   current: number
   days30: number
   days60: number
+  days90: number
   days90Plus: number
+  noDueDate: number
 }
 
 interface ClientReceivable {
@@ -35,74 +38,43 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const clientId = searchParams.get('clientId')
-    const agingFilter = searchParams.get('aging') // current, 30, 60, 90
+    const agingFilter = searchParams.get('aging') // current, 30, 60, 90 (61-90), 90plus, nodate
 
     // TENANT BOUNDARY — invoices are org-scoped.
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
-    // Fetch all unpaid/partially paid invoices
-    let query = supabaseAdmin
-      .from('invoices')
-      .select('*')
-      .eq('org_id', orgId)
-      .gt('balance_due', 0)
-      .not('status', 'eq', 'cancelled')
-      .order('due_date', { ascending: true })
-      .limit(1000)
-
-    if (clientId) {
-      query = query.eq('client_id', clientId)
-    }
-
-    const { data: invoices, error } = await query
+    // Every invoice with a balance, read page by page: one fixed row cap
+    // silently dropped the newest invoices from every total past 1,000 open
+    // ones. Drafts and cancelled invoices are filtered out below (a draft was
+    // never sent, so it is not owed yet).
+    const { rows: openInvoices, truncated, error } = await fetchAllRows<any>((from, to) => {
+      let query = supabaseAdmin
+        .from('invoices')
+        .select('*')
+        .eq('org_id', orgId)
+        .gt('balance_due', 0)
+        .order('due_date', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to)
+      if (clientId) query = query.eq('client_id', clientId)
+      return query
+    })
 
     if (error) {
       console.error('Error fetching invoices:', error)
       return NextResponse.json({ error: 'Failed to fetch receivables' }, { status: 500 })
     }
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = localToday()
 
-    // Calculate aging for each invoice
-    const invoicesWithAging = (invoices || []).map(inv => {
-      const dueDate = new Date(inv.due_date)
-      dueDate.setHours(0, 0, 0, 0)
-      const daysPastDue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
-      
-      let agingBucket = 'current'
-      if (daysPastDue > 90) agingBucket = '90plus'
-      else if (daysPastDue > 60) agingBucket = '60'
-      else if (daysPastDue > 30) agingBucket = '30'
-      else if (daysPastDue > 0) agingBucket = 'overdue'
-
-      return {
-        ...inv,
-        days_past_due: Math.max(0, daysPastDue),
-        aging_bucket: agingBucket,
-        is_overdue: daysPastDue > 0
-      }
-    })
+    // Age each invoice once: the badge and the sums read the same bucket.
+    const invoicesWithAging = openInvoices.filter(isReceivable).map(inv => ageInvoice(inv, today))
 
     // Filter by aging if specified
     let filteredInvoices = invoicesWithAging
-    if (agingFilter) {
-      switch (agingFilter) {
-        case 'current':
-          filteredInvoices = invoicesWithAging.filter(inv => inv.days_past_due <= 0)
-          break
-        case '30':
-          filteredInvoices = invoicesWithAging.filter(inv => inv.days_past_due > 0 && inv.days_past_due <= 30)
-          break
-        case '60':
-          filteredInvoices = invoicesWithAging.filter(inv => inv.days_past_due > 30 && inv.days_past_due <= 60)
-          break
-        case '90':
-          filteredInvoices = invoicesWithAging.filter(inv => inv.days_past_due > 60)
-          break
-      }
-    }
+    const filterKey = agingFilter ? AGING_FILTER_KEYS[agingFilter] : undefined
+    if (filterKey) filteredInvoices = invoicesWithAging.filter(inv => inv.aging_key === filterKey)
 
     // Group by client
     const clientMap = new Map<string, ClientReceivable>()
@@ -124,7 +96,7 @@ export async function GET(request: NextRequest) {
           total_outstanding: 0,
           invoice_count: 0,
           oldest_invoice_date: inv.issue_date,
-          aging: { current: 0, days30: 0, days60: 0, days90Plus: 0 },
+          aging: { current: 0, days30: 0, days60: 0, days90: 0, days90Plus: 0, noDueDate: 0 },
           invoices: []
         })
       }
@@ -137,19 +109,10 @@ export async function GET(request: NextRequest) {
       client.invoices.push(inv)
 
       // Update aging buckets
-      const balanceDue = Number(inv.balance_due || 0)
-      if (inv.days_past_due <= 0) {
-        client.aging.current += balanceDue
-      } else if (inv.days_past_due <= 30) {
-        client.aging.days30 += balanceDue
-      } else if (inv.days_past_due <= 60) {
-        client.aging.days60 += balanceDue
-      } else {
-        client.aging.days90Plus += balanceDue
-      }
+      client.aging[inv.aging_key as AgingKey] += Number(inv.balance_due || 0)
 
       // Track oldest invoice
-      if (new Date(inv.issue_date) < new Date(client.oldest_invoice_date)) {
+      if (inv.issue_date && (!client.oldest_invoice_date || new Date(inv.issue_date) < new Date(client.oldest_invoice_date))) {
         client.oldest_invoice_date = inv.issue_date
       }
     })
@@ -183,10 +146,14 @@ export async function GET(request: NextRequest) {
         current: sumField(c => c.aging.current),
         days30: sumField(c => c.aging.days30),
         days60: sumField(c => c.aging.days60),
-        days90Plus: sumField(c => c.aging.days90Plus)
+        days90: sumField(c => c.aging.days90),
+        days90Plus: sumField(c => c.aging.days90Plus),
+        noDueDate: sumField(c => c.aging.noDueDate)
       },
       overdue_count: filteredInvoices.filter(inv => inv.is_overdue).length,
-      overdue_amount: overdueAmount
+      overdue_amount: overdueAmount,
+      // True only if the page walk hit its ceiling: the figures are then a floor.
+      truncated
     }
 
     return NextResponse.json({

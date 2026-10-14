@@ -190,7 +190,11 @@ async function processOrganisation(
     .not('due_date', 'is', null)
     .gt('balance_due', 0)
     .eq('reminder_paused', false)
-    .lte('next_reminder_date', today)
+    // Due today or earlier, or never scheduled: a new invoice has no
+    // next_reminder_date, and `lte` skips NULL, so the cron never reminded an
+    // invoice nobody had reminded by hand. The loop below sets the date from
+    // the due date (firstReminderDate) when it is too early to remind.
+    .or(`next_reminder_date.lte.${today},next_reminder_date.is.null`)
     .not('client_email', 'is', null)
     // Longest-waiting first. With no order, the same rows came back every
     // run — and a failed send left its row due — so invoices of an

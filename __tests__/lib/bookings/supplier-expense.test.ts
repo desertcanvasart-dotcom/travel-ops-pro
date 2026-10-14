@@ -8,6 +8,9 @@ vi.mock('@/lib/document-numbering', () => ({
   insertWithUniqueRetry: async (o: { generateRow: () => Promise<unknown>; insert: (r: unknown) => Promise<unknown> }) => o.insert(await o.generateRow()),
 }))
 let seq = 0
+vi.mock('@/lib/expense-number', () => ({
+  nextExpenseNumber: async () => `EXP-2026-${String(++seq).padStart(3, '0')}`,
+}))
 
 const {
   planSupplierExpense, supplierRowCost, expenseCategoryForSupplierType, supplierTypeKeyForSupplierType, syncSupplierExpense,

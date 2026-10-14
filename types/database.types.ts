@@ -156,6 +156,35 @@ export interface Database {
           },
         ]
       }
+      invoice_number_counters: {
+        Row: {
+          org_id: string
+          kind: string
+          year: number
+          last_value: number
+        }
+        Insert: {
+          org_id: string
+          kind: string
+          year: number
+          last_value?: number
+        }
+        Update: {
+          org_id?: string
+          kind?: string
+          year?: number
+          last_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_number_counters_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       supplier_document_number_counters: {
         Row: {
           org_id: string
@@ -3196,6 +3225,32 @@ export interface Database {
           },
         ]
       }
+      commission_number_counters: {
+        Row: {
+          org_id: string
+          year: number
+          last_value: number
+        }
+        Insert: {
+          org_id: string
+          year: number
+          last_value?: number
+        }
+        Update: {
+          org_id?: string
+          year?: number
+          last_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commission_number_counters_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       commissions: {
         Row: {
           id: string
@@ -3222,6 +3277,8 @@ export interface Database {
           created_at: string | null
           updated_at: string | null
           org_id: string
+          service_id: string | null
+          commission_number: string | null
         }
         Insert: {
           id?: string
@@ -3248,6 +3305,8 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
           org_id: string
+          service_id?: string | null
+          commission_number?: string | null
         }
         Update: {
           id?: string
@@ -3274,6 +3333,8 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
           org_id?: string
+          service_id?: string | null
+          commission_number?: string | null
         }
         Relationships: [
           {
@@ -3302,6 +3363,13 @@ export interface Database {
             columns: ["org_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commissions_service_id_fkey"
+            columns: ["service_id"]
+            isOneToOne: false
+            referencedRelation: "itinerary_services"
             referencedColumns: ["id"]
           },
         ]
@@ -5303,6 +5371,32 @@ export interface Database {
         }
         Relationships: []
       }
+      expense_number_counters: {
+        Row: {
+          org_id: string
+          year: number
+          last_value: number
+        }
+        Insert: {
+          org_id: string
+          year: number
+          last_value?: number
+        }
+        Update: {
+          org_id?: string
+          year?: number
+          last_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_number_counters_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           id: string
@@ -5330,6 +5424,9 @@ export interface Database {
           tax_amount: number | null
           tax_included: boolean | null
           org_id: string
+          created_by: string | null
+          approved_by: string | null
+          approved_at: string | null
         }
         Insert: {
           id?: string
@@ -5357,6 +5454,9 @@ export interface Database {
           tax_amount?: number | null
           tax_included?: boolean | null
           org_id: string
+          created_by?: string | null
+          approved_by?: string | null
+          approved_at?: string | null
         }
         Update: {
           id?: string
@@ -5384,6 +5484,9 @@ export interface Database {
           tax_amount?: number | null
           tax_included?: boolean | null
           org_id?: string
+          created_by?: string | null
+          approved_by?: string | null
+          approved_at?: string | null
         }
         Relationships: [
           {
@@ -6511,6 +6614,8 @@ export interface Database {
           transaction_reference: string | null
           notes: string | null
           created_at: string | null
+          receipt_number: string | null
+          org_id: string | null
         }
         Insert: {
           id?: string
@@ -6522,6 +6627,8 @@ export interface Database {
           transaction_reference?: string | null
           notes?: string | null
           created_at?: string | null
+          receipt_number?: string | null
+          org_id?: string | null
         }
         Update: {
           id?: string
@@ -6533,6 +6640,8 @@ export interface Database {
           transaction_reference?: string | null
           notes?: string | null
           created_at?: string | null
+          receipt_number?: string | null
+          org_id?: string | null
         }
         Relationships: [
           {
@@ -6626,6 +6735,11 @@ export interface Database {
           full_trip_cost: number | null
           vat_applied: boolean
           vat_base: number | null
+          amount_source: string | null
+          computed_amount: number | null
+          override_amount: number | null
+          override_reason: string | null
+          override_by: string | null
         }
         Insert: {
           id?: string
@@ -6664,6 +6778,11 @@ export interface Database {
           full_trip_cost?: number | null
           vat_applied?: boolean
           vat_base?: number | null
+          amount_source?: string | null
+          computed_amount?: number | null
+          override_amount?: number | null
+          override_reason?: string | null
+          override_by?: string | null
         }
         Update: {
           id?: string
@@ -6702,6 +6821,11 @@ export interface Database {
           full_trip_cost?: number | null
           vat_applied?: boolean
           vat_base?: number | null
+          amount_source?: string | null
+          computed_amount?: number | null
+          override_amount?: number | null
+          override_reason?: string | null
+          override_by?: string | null
         }
         Relationships: [
           {
@@ -8867,6 +8991,11 @@ export interface Database {
           created_at: string | null
           updated_at: string | null
           org_id: string
+          receipt_number: string | null
+          vat_applied: boolean | null
+          vat_rate: number | null
+          vat_amount: number | null
+          vat_base: number | null
         }
         Insert: {
           id?: string
@@ -8883,6 +9012,11 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
           org_id: string
+          receipt_number?: string | null
+          vat_applied?: boolean | null
+          vat_rate?: number | null
+          vat_amount?: number | null
+          vat_base?: number | null
         }
         Update: {
           id?: string
@@ -8899,6 +9033,11 @@ export interface Database {
           created_at?: string | null
           updated_at?: string | null
           org_id?: string
+          receipt_number?: string | null
+          vat_applied?: boolean | null
+          vat_rate?: number | null
+          vat_amount?: number | null
+          vat_base?: number | null
         }
         Relationships: [
           {
@@ -13372,6 +13511,34 @@ export interface Database {
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any
+      }
+      next_commission_number: {
+        Args: {
+          p_org: string
+          p_year: number
+        }
+        Returns: string
+      }
+      next_expense_number: {
+        Args: {
+          p_org: string
+          p_year: number
+        }
+        Returns: string
+      }
+      next_invoice_number: {
+        Args: {
+          p_org: string
+          p_year: number
+        }
+        Returns: string
+      }
+      next_receipt_number: {
+        Args: {
+          p_org: string
+          p_year: number
+        }
+        Returns: string
       }
       next_supplier_document_number: {
         Args: {

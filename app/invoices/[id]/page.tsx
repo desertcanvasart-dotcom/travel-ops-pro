@@ -1,6 +1,7 @@
 'use client'
 
 import { receiptNumberFor } from '@/lib/receipt-pdf-generator'
+import { displayStatus as invoiceDisplayStatus } from '@/lib/invoices/status'
 import { todayLocal } from '@/lib/today'
 import { readInvoiceVat } from '@/lib/vat'
 import { VatToken, VatToggle } from '@/app/components/Vat'
@@ -88,6 +89,8 @@ interface Payment {
   payment_method: string
   payment_date: string
   transaction_reference: string | null
+  /** The receipt's own number, from the company's series. */
+  receipt_number?: string | null
   notes: string | null
   created_at: string
 }
@@ -320,6 +323,28 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  // The server refuses when payments are recorded against the invoice and says
+  // why; that message is shown as it is.
+  const handleCancelInvoice = async () => {
+    if (!(await confirmDialog(t('confirmCancelInvoice')))) return
+    try {
+      const response = await fetch(`/api/invoices/${resolvedParams.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cancelled' })
+      })
+      if (response.ok) {
+        fetchInvoice()
+      } else {
+        const error = await response.json().catch(() => ({}))
+        await dialog.alert(tCommon('error'), error.error || t('failedToCancelInvoice'), 'warning')
+      }
+    } catch (error) {
+      console.error('Error cancelling invoice:', error)
+      await dialog.alert(tCommon('error'), t('failedToCancelInvoice'), 'warning')
+    }
+  }
+
   const handlePreviewInvoicePDF = async () => {
     if (!invoice) return
 
@@ -430,6 +455,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
     setCreatingFinalInvoice(true)
     try {
+      // The server works the balance out (from the trip's saved total, or the
+      // trip cost this deposit stored, less this deposit's net) and ignores the
+      // amounts below; they are sent for a deposit with neither, which only an
+      // admin or manager can settle (POST /api/invoices).
       // From the deposit's NET: a deposit carrying VAT has it in its total.
       const depositNet = Number(invoice.total_amount) - Number(invoice.tax_amount || 0)
       const fullTripCost = (depositNet * 100) / invoice.deposit_percent
@@ -491,16 +520,15 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   const getDisplayStatus = () => {
     if (!invoice) return 'draft'
-    if (invoice.status !== 'paid' && invoice.status !== 'cancelled' && invoice.due_date) {
-      const dueDate = new Date(invoice.due_date)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      if (dueDate < today && Number(invoice.balance_due) > 0) {
-        return 'overdue'
-      }
-    }
-    return invoice.status
+    // The same rule as the list and the Payments page (lib/invoices/status):
+    // a draft that was never sent is not overdue.
+    return invoiceDisplayStatus(invoice, todayLocal())
   }
+
+  // Money is recorded against an invoice that has been sent: the API refuses a
+  // payment on a draft or a cancelled one.
+  const canRecordPayment = () =>
+    !!invoice && Number(invoice.balance_due) > 0 && invoice.status !== 'draft' && invoice.status !== 'cancelled'
 
   const canCreateFinalInvoice = () => {
     if (!invoice) return false
@@ -610,6 +638,16 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             </button>
           )}
 
+          {invoice.status !== 'cancelled' && invoice.status !== 'paid' && (
+            <button
+              onClick={handleCancelInvoice}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+            >
+              <XCircle className="h-4 w-4" />
+              {t('cancelInvoice')}
+            </button>
+          )}
+
           {canCreateFinalInvoice() && (
             <button
               onClick={handleCreateFinalInvoice}
@@ -630,7 +668,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             </button>
           )}
 
-          {Number(invoice.balance_due) > 0 && (
+          {canRecordPayment() && (
             <button
               onClick={() => setShowPaymentModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4f6238] transition-colors"
@@ -879,7 +917,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               </div>
             </div>
 
-            {Number(invoice.balance_due) > 0 && (
+            {canRecordPayment() && (
               <button
                 onClick={() => setShowPaymentModal(true)}
                 className="w-full mt-5 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4f6238] transition-colors"

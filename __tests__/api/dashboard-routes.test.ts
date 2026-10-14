@@ -143,6 +143,22 @@ describe('/api/dashboard/money', () => {
     expect(body.data.month.refundCount).toBe(1)
   })
 
+  it('Received This Month adds invoice payments and does not count a trip payment twice', async () => {
+    answer = c => {
+      if (c.table === 'payments') return { data: [
+        { amount: 100_000, currency: 'JPY', itinerary_id: 'trip-invoiced', payment_type: 'deposit' },
+        { amount: 30_000, currency: 'JPY', itinerary_id: 'trip-plain', payment_type: 'deposit' },
+      ] }
+      if (c.table === 'invoice_payments') return { data: [{ amount: 100_000, currency: 'JPY', invoices: { org_id: 'org-1', itinerary_id: 'trip-invoiced' } }] }
+      if (c.table === 'invoices' && has(c, 'not', 'itinerary_id')) return { data: [{ itinerary_id: 'trip-invoiced', status: 'sent' }] }
+      return { data: [] }
+    }
+    const body = await (await moneyGET(req('/api/dashboard/money'))).json()
+    // 100,000 on the invoice + 30,000 on the plain trip; the invoiced trip's own
+    // trip-level 100,000 is the same money entered twice.
+    expect(body.data.month.received).toEqual({ JPY: 130_000 })
+  })
+
   it('an invoice due today is not overdue', async () => {
     answer = c => c.table === 'invoices'
       ? { data: [{ balance_due: 10, currency: 'EUR', due_date: TODAY, itinerary_id: null }] }

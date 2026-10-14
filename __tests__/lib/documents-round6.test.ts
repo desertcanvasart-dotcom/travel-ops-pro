@@ -33,9 +33,12 @@ describe('voucherMoney', () => {
 })
 
 describe('receipt numbers', () => {
-  it('one rule everywhere: the transaction reference, else RCP- and the payment id', () => {
-    expect(receiptNumberFor({ id: 'abcdef12-3456', transaction_reference: 'TX-9' })).toBe('TX-9')
-    expect(receiptNumberFor({ id: 'abcdef12-3456', transaction_reference: null })).toBe('RCP-ABCDEF12')
+  // Migration 20261225: a receipt has its own per-company number; the
+  // transaction reference (which two payments can share) is no longer the number.
+  it('one rule everywhere: the receipt number, else RCP- and the payment id', () => {
+    expect(receiptNumberFor({ id: 'abcdef12-3456', receipt_number: 'RCP-2026-0007' })).toBe('RCP-2026-0007')
+    expect(receiptNumberFor({ id: 'abcdef12-3456', receipt_number: null })).toBe('RCP-ABCDEF12')
+    expect(receiptNumberFor({ id: 'abcdef12-3456', transaction_reference: 'TX-9' } as never)).toBe('RCP-ABCDEF12')
     expect(src('app/invoices/[id]/page.tsx')).not.toContain('payments.indexOf(payment) + 1')
   })
 })
@@ -60,8 +63,13 @@ describe('final invoice', () => {
     expect(deposit).toBe(370873)
     expect((deposit * 100) / 20).toBe(1854365)
     expect(roundToCurrency(1854367 * 0.2, 'JPY')).toBe(deposit)
-    // tax_amount since VAT (20261214): a deposit carrying VAT is compared by its net.
-    expect(src('app/api/invoices/route.ts')).toContain("select('total_amount, tax_amount, currency, full_trip_cost')")
+    // The final no longer rebuilds the trip cost by dividing the deposit by its percent: it
+    // works from the saved trip, else the trip cost the deposit stored (server amounts,
+    // 20261228). The parent row is read whole; a deposit carrying VAT is compared by its net.
+    const route = src('app/api/invoices/route.ts')
+    expect(route).toContain('Number(parentInvoice?.full_trip_cost)')
+    expect(route).toContain('invoiceNet(parentInvoice)')
+    expect(route).not.toContain('/ depositPercent')
   })
 })
 

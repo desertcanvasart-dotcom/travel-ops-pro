@@ -200,7 +200,7 @@ export const CATEGORIES: DocCategory[] = [
       { href: '/docs/accounts-receivable', icon: Wallet, title: 'Receivables', description: 'Client-level aging analysis (current, 30, 60, 90+ days), outstanding balances, and payment reminder triggers.', covers: ['/accounts-receivable'] },
       { href: '/docs/accounts-payable', icon: CreditCard, title: 'Payables', description: 'Supplier-level aging reports, expense grouping by supplier, and payment approval workflows.', covers: ['/accounts-payable'] },
       { href: '/docs/supplier-invoices', icon: FileCheck, title: 'Bills', description: 'Supplier bills with three-way matching: bill → expense → payment. Upload, match, approve, pay, or dispute.', covers: ['/supplier-invoices'] },
-      { href: '/docs/expenses-commissions', icon: Wallet, title: 'Expenses & Commissions', description: 'Track expenses by category with supplier linking and receipt uploads, plus receivable/payable commissions auto-generated from itineraries.', covers: ['/expenses', '/commissions'] },
+      { href: '/docs/expenses-commissions', icon: Wallet, title: 'Expenses & Commissions', description: 'Track expenses by category with supplier linking and receipt uploads, plus receivable/payable commissions generated from itinerary services (and entered by hand).', covers: ['/expenses', '/commissions'] },
       { href: '/docs/profit-loss', icon: TrendingUp, title: 'Profit & Loss', description: 'Per-trip and aggregate P&L reports with supplier cost vs. client revenue analysis.', covers: ['/profit-loss'] },
       { href: '/docs/invoice-reminders', icon: BellRing, title: 'Invoice Reminders', description: 'Automated reminder scheduling with escalating urgency at 7, 3, and 0 days before due, plus overdue follow-ups.' },
     ],

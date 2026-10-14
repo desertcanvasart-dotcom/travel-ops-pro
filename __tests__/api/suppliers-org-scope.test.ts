@@ -25,6 +25,7 @@ vi.mock('@/lib/auth/current-org', async () => {
     getCurrentOrgId: async () => ctx.orgId,
     getCurrentUserId: async () => 'u1',
     noOrgResponse: () => NextResponse.json({ success: false }, { status: 403 }),
+    requireRole: async () => null,
   }
 })
 vi.mock('@/lib/vocabulary-server', () => ({

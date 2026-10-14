@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { checkMatchableExpenses } from '@/lib/finance/supplier-bills'
 
 // Matching is open only before review. A disputed invoice is contested and an
 // approved one is cleared for payment — re-matching or unlinking one flipped
@@ -38,7 +39,7 @@ export async function POST(
     // matched against, and to verify the parent before touching the junction.
     const { data: invoice, error: invoiceError } = await supabaseAdmin
       .from('supplier_invoices')
-      .select('amount, status, currency')
+      .select('amount, status, currency, supplier_id, supplier_name')
       .eq('id', id)
       .eq('org_id', orgId)
       .single()
@@ -58,12 +59,21 @@ export async function POST(
     // from another org into this org's supplier invoice.
     const { data: expenses, error: expError } = await supabaseAdmin
       .from('expenses')
-      .select('id, amount, currency')
+      .select('id, amount, currency, status, supplier_id, supplier_name')
       .in('id', expenseIds)
       .eq('org_id', orgId)
 
     if (expError || !expenses) {
       return NextResponse.json({ error: 'Failed to fetch expenses' }, { status: 500 })
+    }
+
+    // Only this supplier's expenses that are still owed (pending or approved):
+    // a paid or rejected one, or another supplier's, made the bill read
+    // "matched" against money that was never this bill's. Ids that do not exist
+    // in this company are refused by name, not silently dropped.
+    const refusal = checkMatchableExpenses(invoice, expenseIds, expenses)
+    if (refusal) {
+      return NextResponse.json({ error: refusal.error, details: refusal.details }, { status: refusal.status })
     }
 
     // Amounts are compared as numbers: a €1,000 expense "matched" a $1,000

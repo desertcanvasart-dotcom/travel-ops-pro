@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
-import { buildCommissions, summariseSkips } from '@/lib/commission-generation'
+import { buildCommissions, summariseSkips, describeSkips } from '@/lib/commission-generation'
+import { describePriceChanges } from '@/lib/commission-price-changes'
+import { loadTripServices, syncCommissionPrices } from '@/lib/commission-price-sync'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,17 +25,24 @@ export async function POST(
 
     const { id: itineraryId } = await params
 
-    // Get itinerary details
-    const { data: itinerary, error: itinError } = await supabaseAdmin
-      .from('itineraries')
-      .select('*, client:clients(id, first_name, last_name, email)')
-      .eq('id', itineraryId)
-      .eq('org_id', orgId)
-      .single()
-
-    if (itinError || !itinerary) {
-      return NextResponse.json({ error: 'Itinerary not found' }, { status: 404 })
+    // The trip and its priced services (lib/commission-price-sync.ts). The
+    // mapping to commission rows lives in lib/commission-generation.ts as a
+    // pure function — see the tests there.
+    //
+    // THE BUG THAT MADE THIS ROUTE UNUSABLE: it filtered services on `day_id`,
+    // which does not exist — the column is `itinerary_day_id`. PostgREST
+    // answered 42703 and every call returned "Failed to fetch services".
+    // Nothing in the app had ever created a commission.
+    //
+    // The supplier filter is deliberately NOT applied in SQL: a service with no
+    // supplier is REPORTED as a skip rather than silently vanishing, because
+    // "0 commissions" with no explanation is exactly what the broken version
+    // looked like.
+    const loaded = await loadTripServices(supabaseAdmin, orgId, itineraryId)
+    if (!loaded.ok) {
+      return NextResponse.json({ error: loaded.error }, { status: loaded.status })
     }
+    const { trip: itinerary, services, ctx } = loaded
 
     // A cancelled trip earns and owes no commission. Generating them anyway
     // put receivables and agent payables on the books for a trip that never ran.
@@ -44,63 +53,31 @@ export async function POST(
       )
     }
 
-    // Get all services with suppliers for this itinerary
-    const { data: days, error: daysError } = await supabaseAdmin
-      .from('itinerary_days')
-      .select('id')
-      .eq('itinerary_id', itineraryId)
-
-    if (daysError || !days) {
-      return NextResponse.json({ error: 'Failed to fetch itinerary days' }, { status: 500 })
+    // A service repriced since its commission was made: the pending commission
+    // follows the price, a paid one is left and flagged. Runs on every call, so
+    // it also answers when there is nothing new to generate.
+    const priceSync = await syncCommissionPrices(supabaseAdmin, orgId, { services, ctx })
+    const priceNote = describePriceChanges(priceSync)
+    const priceFields = {
+      recalculated: priceSync.recalculated,
+      price_changed: priceSync.flagged,
     }
 
-    const dayIds = days.map(d => d.id)
-
-    // THE BUG THAT MADE THIS ROUTE UNUSABLE: this filtered on `day_id`, which
-    // does not exist — the column is `itinerary_day_id`. PostgREST answered
-    // 42703 and every call returned "Failed to fetch services". Nothing in the
-    // app has ever created a commission.
-    //
-    // The supplier filter is deliberately NOT applied in SQL any more: a
-    // service with no supplier is now REPORTED as a skip rather than silently
-    // vanishing, because "0 commissions" with no explanation is exactly what
-    // the broken version looked like.
-    const { data: services, error: servicesError } = await supabaseAdmin
-      .from('itinerary_services')
-      // Two FKs point at suppliers (provider + seller) since
-      // 20260822_service_sold_by.sql, so each embed names its column — an
-      // unhinted `suppliers(...)` is PGRST201 (ambiguous) from then on. ONE
-      // literal string: supabase-js types the result by parsing it, and a
-      // concatenated or interpolated expression collapses to an error type.
-      .select('id, service_type, service_name, client_price, total_cost, supplier_id, commission_rate, commission_status, sold_by_supplier_id, supplier:suppliers!supplier_id(id, name, commission_type, default_commission_rate), seller:suppliers!sold_by_supplier_id(id, name, commission_type, default_commission_rate)')
-      .in('itinerary_day_id', dayIds)
-
-    if (servicesError) {
-      console.error('Error fetching services for commission generation:', servicesError)
-      return NextResponse.json({ error: 'Failed to fetch services' }, { status: 500 })
+    // "Recalculate from price" asks for exactly that and nothing else.
+    const body = await request.json().catch(() => ({}))
+    if (body?.action === 'recalculate') {
+      return NextResponse.json({
+        success: true,
+        message: priceNote || 'Every pending commission already matches its service price.',
+        generated: 0,
+        ...priceFields,
+      })
     }
 
-    // Build the commission rows. The mapping lives in
-    // lib/commission-generation.ts as a pure function — see the tests there.
-    //
-    // It reads client_price / total_cost / service_name; the previous code read
-    // selling_price / cost / description, none of which exist on this table.
-    const { pairs: commissionPairs, skipped } = buildCommissions(
-      (services || []).map(s => ({
-        ...s,
-        // PostgREST types an embedded row as an array; take the single row.
-        supplier: Array.isArray(s.supplier) ? s.supplier[0] : s.supplier,
-        seller: Array.isArray(s.seller) ? s.seller[0] : s.seller,
-      })),
-      {
-        orgId,
-        itineraryId,
-        itineraryCode: itinerary.itinerary_code,
-        clientId: itinerary.client?.id || null,
-        startDate: itinerary.start_date,
-        currency: itinerary.currency,
-      }
-    )
+    // Build the commission rows. It reads client_price / total_cost /
+    // service_name; the previous code read selling_price / cost / description,
+    // none of which exist on this table.
+    const { pairs: commissionPairs, skipped } = buildCommissions(services, ctx)
 
     const skipSummary = summariseSkips(skipped)
 
@@ -110,12 +87,14 @@ export async function POST(
       return NextResponse.json({
         success: true,
         message:
-          skipped.length === 0
+          (skipped.length === 0
             ? 'This itinerary has no services to generate commissions from.'
-            : `No commissions generated. ${skipped.length} service${skipped.length === 1 ? '' : 's'} skipped — see "skipped" for the reason on each.`,
+            : `No commissions generated. ${describeSkips(skipped) || `${skipped.length} service${skipped.length === 1 ? '' : 's'} skipped.`}`) +
+          (priceNote ? ` ${priceNote}` : ''),
         generated: 0,
         skipped,
         skip_summary: skipSummary,
+        ...priceFields,
       })
     }
 
@@ -134,7 +113,17 @@ export async function POST(
     // matches 0 rows, RETURNING gives back just the rows THIS request won. We
     // claim exactly the services that produce a commission (so base ≤ 0 rows are
     // never falsely marked 'generated').
-    const candidateIds = commissionPairs.map(p => p.serviceId)
+    const candidateIds = Array.from(new Set(commissionPairs.map(p => p.serviceId)))
+
+    // Flip claimed services back to pending (a failed insert, or a service
+    // only partly generated).
+    const releaseClaim = async (ids: string[]) => {
+      const { error } = await supabaseAdmin
+        .from('itinerary_services')
+        .update({ commission_status: 'pending' })
+        .in('id', ids)
+      return error
+    }
 
     const { data: claimedRows, error: claimError } = await supabaseAdmin
       .from('itinerary_services')
@@ -154,19 +143,37 @@ export async function POST(
       return NextResponse.json({
         success: true,
         message: 'No new commissions to generate (already claimed by a concurrent request)',
-        generated: 0
+        generated: 0,
+        ...priceFields,
       })
     }
 
+    // A service whose commission already exists is not made twice. This is
+    // what makes it safe to leave a service unmarked when only part of it could
+    // be generated (below), and to regenerate one whose commission was deleted
+    // while its sibling (seller / provider) was kept.
+    const { data: existingForServices, error: existingError } = await supabaseAdmin
+      .from('commissions')
+      .select('service_id, description')
+      .eq('org_id', orgId)
+      .in('service_id', Array.from(claimedIds))
+    if (existingError) {
+      await releaseClaim(Array.from(claimedIds))
+      console.error('Error reading existing commissions for generation:', existingError)
+      return NextResponse.json({ error: 'Failed to check existing commissions' }, { status: 500 })
+    }
+    const alreadyMade = new Set((existingForServices || []).map(c => `${c.service_id}|${c.description}`))
+
     const commissionsForClaimed = commissionPairs
       .filter(p => claimedIds.has(p.serviceId))
-      .map(p => p.commission)
+      .filter(p => !alreadyMade.has(`${p.serviceId}|${p.commission.description}`))
+      // The link back to the service: deleting the commission releases it.
+      .map(p => ({ ...p.commission, service_id: p.serviceId }))
 
     // Insert commissions for the claimed rows.
-    const { data: createdCommissions, error: createError } = await supabaseAdmin
-      .from('commissions')
-      .insert(commissionsForClaimed)
-      .select()
+    const { data: createdCommissions, error: createError } = commissionsForClaimed.length > 0
+      ? await supabaseAdmin.from('commissions').insert(commissionsForClaimed).select()
+      : { data: [], error: null }
 
     if (createError) {
       // Roll back the claim — flip the rows back to 'pending' so a retry
@@ -175,14 +182,24 @@ export async function POST(
       // affected rows. Without the rollback, the original bug (services
       // marked 'generated' but no commission rows) would re-emerge.
       console.error('Commission insert failed; rolling back claim:', createError)
-      const { error: rollbackError } = await supabaseAdmin
-        .from('itinerary_services')
-        .update({ commission_status: 'pending' })
-        .in('id', Array.from(claimedIds))
+      const rollbackError = await releaseClaim(Array.from(claimedIds))
       if (rollbackError) {
         console.error(`[M16] CRITICAL: rollback failed for itinerary ${itineraryId} services ${Array.from(claimedIds).join(',')} — manual reset required:`, rollbackError)
       }
       return NextResponse.json({ error: 'Failed to create commissions' }, { status: 500 })
+    }
+
+    // Mark a service 'generated' only when EVERY commission it can give was
+    // made. One that produced a seller commission but skipped the provider's
+    // (no rate yet, no supplier cost…) was marked done, so fixing the provider
+    // later never generated the rest. It goes back to pending; the commissions
+    // it already has are not made twice (alreadyMade above).
+    const partialIds = Array.from(claimedIds).filter(sid => skipped.some(sk => sk.service_id === sid))
+    if (partialIds.length > 0) {
+      const releaseError = await releaseClaim(partialIds)
+      if (releaseError) {
+        console.error(`[M16] services ${partialIds.join(',')} of itinerary ${itineraryId} stay marked generated although part was skipped — manual reset required:`, releaseError)
+      }
     }
 
     return NextResponse.json({
@@ -191,9 +208,10 @@ export async function POST(
       // commissions and got 3 needs to know what happened to the other 5.
       skipped,
       skip_summary: skipSummary,
-      message: `Generated ${createdCommissions?.length || 0} commission records`,
+      message: `Generated ${createdCommissions?.length || 0} commission records.${describeSkips(skipped) ? ` ${describeSkips(skipped)}` : ''}${priceNote ? ` ${priceNote}` : ''}`,
       generated: createdCommissions?.length || 0,
-      commissions: createdCommissions
+      commissions: createdCommissions,
+      ...priceFields,
     })
 
   } catch (error) {

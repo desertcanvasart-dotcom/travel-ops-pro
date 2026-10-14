@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
 import { addToTotals, emptyTotals, type CurrencyTotals } from '@/lib/currency-totals'
+import { OWED_BILL_STATUSES, PAYABLE_BUCKET_OF_KEY, payableAgingKey, payableDueDate, unmatchedBillRows } from '@/lib/finance/payables'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,7 +22,6 @@ interface SupplierPayable {
   supplier_name: string
   supplier_type: string
   total_expenses: CurrencyTotals
-  total_paid: CurrencyTotals
   total_outstanding: CurrencyTotals
   expense_count: number
   oldest_expense_date: string
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     const supplierName = searchParams.get('supplierName')
     const supplierType = searchParams.get('supplierType')
     const agingFilter = searchParams.get('aging')
-    const status = searchParams.get('status') // pending, approved, paid
+    const status = searchParams.get('status') // pending, approved, or bill (unmatched supplier bills only)
 
     // TENANT BOUNDARY — expenses are org-scoped; the service-role client
     // bypasses RLS, so without this every organisation's payables were pooled.
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
       .from('expenses')
       .select('*')
       .eq('org_id', orgId)
-      .in('status', ['pending', 'approved'])
+      .in('status', status === 'approved' ? ['approved'] : ['pending', 'approved'])
       .order('expense_date', { ascending: true })
 
     if (supplierName) {
@@ -59,16 +59,43 @@ export async function GET(request: NextRequest) {
       query = query.eq('supplier_type', supplierType)
     }
 
-    if (status) {
-      query = query.eq('status', status)
+    if (status === 'pending') {
+      query = query.eq('status', 'pending')
     }
 
-    const { data: expenses, error } = await query
+    // 'bill' asks for the unmatched supplier bills alone.
+    const { data: expenseRows, error } = status === 'bill' ? { data: [] as any[], error: null } : await query
 
     if (error) {
       console.error('Error fetching expenses:', error)
       return NextResponse.json({ error: 'Failed to fetch payables' }, { status: 500 })
     }
+
+    // Supplier bills with no expense behind them are owed too, and Payables read
+    // expenses only, so they were missing from "Total Payable" while the
+    // dashboard (which adds them) showed them. A bill matched to an expense is
+    // already counted through that expense, so only unmatched ones come in.
+    // They have no supplier type: they sit under 'other'.
+    let billRows: ReturnType<typeof unmatchedBillRows> = []
+    const wantBills = (!status || status === 'bill') && (!supplierType || supplierType === 'other')
+    if (wantBills) {
+      const { data: bills, error: billErr } = await supabaseAdmin
+        .from('supplier_invoices')
+        .select('id, internal_reference, supplier_invoice_number, supplier_name, invoice_date, due_date, amount, currency, status, description')
+        .eq('org_id', orgId)
+        .in('status', [...OWED_BILL_STATUSES])
+      if (billErr) console.error('[accounts-payable] unmatched bills:', billErr.message)
+      const billIds = (bills || []).map(b => b.id as string)
+      const { data: billLinks } = billIds.length
+        ? await supabaseAdmin.from('supplier_invoice_expenses').select('supplier_invoice_id').in('supplier_invoice_id', billIds)
+        : { data: [] as { supplier_invoice_id: string }[] }
+      billRows = unmatchedBillRows((bills || []) as any, billLinks || [])
+      if (supplierName) {
+        const needle = supplierName.toLowerCase()
+        billRows = billRows.filter(b => b.supplier_name.toLowerCase().includes(needle))
+      }
+    }
+    const expenses = [...(expenseRows || []), ...billRows] as any[]
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -81,7 +108,7 @@ export async function GET(request: NextRequest) {
     // so Payables and Supplier Invoices agree on what is overdue.
     // (Ported from autoura-saas.)
     const dueByExpense = new Map<string, { due_date: string; supplier_invoice_number: string | null }>()
-    const expenseIds = (expenses || []).map(e => e.id as string)
+    const expenseIds = (expenseRows || []).map(e => e.id as string)
     if (expenseIds.length) {
       const { data: links, error: linkErr } = await supabaseAdmin
         .from('supplier_invoice_expenses')
@@ -102,21 +129,21 @@ export async function GET(request: NextRequest) {
     const expensesWithAging = (expenses || []).map(exp => {
       const expenseDate = dateOnly(exp.expense_date)
       const daysOutstanding = Math.floor((today.getTime() - expenseDate.getTime()) / DAY)
-      const fromInvoice = dueByExpense.get(exp.id)
+      // A bill row is its own bill: its due date, else 14 days after its date.
+      const fromInvoice = exp.kind === 'bill'
+        ? { due_date: exp.bill_due_date || payableDueDate(exp.expense_date), supplier_invoice_number: exp.supplier_invoice_number as string | null }
+        : dueByExpense.get(exp.id)
       const dueDate = fromInvoice ? dateOnly(fromInvoice.due_date) : new Date(expenseDate.getTime() + 14 * DAY)
       const daysPastDue = Math.round((today.getTime() - dueDate.getTime()) / DAY)
 
-      let agingBucket = 'current'
-      if (daysPastDue > 60) agingBucket = '90plus'
-      else if (daysPastDue > 30) agingBucket = '60'
-      else if (daysPastDue > 0) agingBucket = '30'
+      const agingBucket = PAYABLE_BUCKET_OF_KEY[payableAgingKey(daysPastDue)]
 
       return {
         ...exp,
         days_outstanding: Math.max(0, daysOutstanding),
         due_date: fromInvoice ? fromInvoice.due_date : dueDate.toISOString().slice(0, 10),
         // The bill the due date came from (its number), or null for the 14-day default.
-        due_from_invoice: fromInvoice ? (fromInvoice.supplier_invoice_number || 'supplier invoice') : null,
+        due_from_invoice: fromInvoice && exp.kind !== 'bill' ? (fromInvoice.supplier_invoice_number || 'supplier invoice') : null,
         days_past_due: daysPastDue,
         aging_bucket: agingBucket,
         is_overdue: daysPastDue > 0,
@@ -153,7 +180,6 @@ export async function GET(request: NextRequest) {
           supplier_name: exp.supplier_name || 'Unknown Supplier',
           supplier_type: exp.supplier_type || 'other',
           total_expenses: emptyTotals(),
-          total_paid: emptyTotals(),
           total_outstanding: emptyTotals(),
           expense_count: 0,
           oldest_expense_date: exp.expense_date,
@@ -167,11 +193,11 @@ export async function GET(request: NextRequest) {
       const cur = exp.currency || 'EUR'
       addToTotals(supplier.total_expenses, amount, cur)
       addToTotals(supplier.total_outstanding, amount, cur)
-      supplier.expense_count += 1
+      supplier.expense_count += 1 // expenses and unmatched bills alike
       supplier.expenses.push(exp)
 
       // Update aging buckets
-      const bucket = exp.days_past_due <= 0 ? 'current' : exp.days_past_due <= 30 ? 'days30' : exp.days_past_due <= 60 ? 'days60' : 'days90Plus'
+      const bucket = payableAgingKey(exp.days_past_due)
       addToTotals(supplier.aging[bucket], amount, cur)
 
       // Track oldest expense
@@ -184,14 +210,17 @@ export async function GET(request: NextRequest) {
       // Ordering only — magnitudes across currencies, never shown as a sum.
       .sort((a, b) => sumAll(b.total_outstanding) - sumAll(a.total_outstanding))
 
-    // Fetch paid expenses for payment history
-    const { data: paidExpenses } = await supabaseAdmin
+    // Payment history: the 50 most recent payments (the page says so), within
+    // the supplier-type filter. Aging and status do not apply to a paid expense.
+    let paidQuery = supabaseAdmin
       .from('expenses')
       .select('*')
       .eq('org_id', orgId)
       .eq('status', 'paid')
       .order('payment_date', { ascending: false })
       .limit(50)
+    if (supplierType) paidQuery = paidQuery.eq('supplier_type', supplierType)
+    const { data: paidExpenses } = await paidQuery
 
     // Calculate summary
     const totalsOf = (rows: any[]) => { const t = emptyTotals(); for (const e of rows) addToTotals(t, Number(e.amount || 0), e.currency || 'EUR'); return t }
@@ -199,7 +228,9 @@ export async function GET(request: NextRequest) {
     const summary = {
       total_outstanding: mergeAll(s => s.total_outstanding),
       supplier_count: supplierPayables.length,
-      expense_count: filteredExpenses.length,
+      expense_count: filteredExpenses.filter(e => e.kind !== 'bill').length,
+      bill_count: filteredExpenses.filter(e => e.kind === 'bill').length,
+      bill_amount: totalsOf(filteredExpenses.filter(e => e.kind === 'bill')),
       aging: {
         current: mergeAll(s => s.aging.current),
         days30: mergeAll(s => s.aging.days30),
@@ -214,28 +245,12 @@ export async function GET(request: NextRequest) {
       overdue_amount: totalsOf(filteredExpenses.filter(e => e.is_overdue)),
     }
 
-    // Group expenses by category for breakdown
-    const categoryBreakdown: Record<string, number> = {}
-    filteredExpenses.forEach(exp => {
-      const cat = exp.category || 'other'
-      categoryBreakdown[cat] = (categoryBreakdown[cat] || 0) + Number(exp.amount || 0)
-    })
-
-    // Group by supplier type
-    const supplierTypeBreakdown: Record<string, number> = {}
-    filteredExpenses.forEach(exp => {
-      const type = exp.supplier_type || 'other'
-      supplierTypeBreakdown[type] = (supplierTypeBreakdown[type] || 0) + Number(exp.amount || 0)
-    })
-
     return NextResponse.json({
       success: true,
       data: supplierPayables,
       expenses: filteredExpenses,
       recentPayments: paidExpenses || [],
-      summary,
-      categoryBreakdown,
-      supplierTypeBreakdown
+      summary
     })
   } catch (error) {
     console.error('Error in AP GET:', error)

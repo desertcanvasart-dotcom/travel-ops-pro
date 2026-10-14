@@ -218,6 +218,6 @@ describe('the flag travels from the quote', () => {
     expect(convert.match(/tripVatFromQuote\(quote\)/g)?.length).toBe(2)
     expect(src('app/api/bookings/from-quote/route.ts')).toContain("update({ status: 'confirmed', ...tripVatFromQuote(quoteVat) })")
     // The invoice side is exercised in __tests__/api/vat-documents.test.ts.
-    expect(src('app/api/invoices/route.ts')).toContain('resolveInvoiceVat(undefined, { parent: parentRow, itinerary: tripRow })')
+    expect(src('app/api/invoices/route.ts')).toContain('resolveInvoiceVat(undefined, { parent: parentInvoice, itinerary: tripRow })')
   })
 })

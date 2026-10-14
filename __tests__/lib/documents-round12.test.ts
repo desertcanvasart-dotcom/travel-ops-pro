@@ -9,8 +9,8 @@ describe('supplier invoices', () => {
 
   it('AP payment history is the org’s own', () => {
     const ap = src('app/api/accounts-payable/route.ts')
-    const recent = ap.slice(ap.indexOf('// Fetch paid expenses for payment history'))
-    expect(recent.slice(0, 300)).toContain(".eq('org_id', orgId)")
+    const recent = ap.slice(ap.indexOf('// Payment history'))
+    expect(recent.slice(0, 600)).toContain(".eq('org_id', orgId)")
   })
 
   it('match and unmatch only before review, and the write is conditional', () => {
@@ -26,8 +26,8 @@ describe('supplier invoices', () => {
   })
 
   it('expenses match only in the invoice currency', () => {
-    expect(match).toContain(".select('amount, status, currency')")
-    expect(match).toContain(".select('id, amount, currency')")
+    expect(match).toContain(".select('amount, status, currency, supplier_id, supplier_name')")
+    expect(match).toContain(".select('id, amount, currency, status, supplier_id, supplier_name')")
     expect(match).toContain('Expenses must be in the invoice currency')
   })
 
@@ -53,7 +53,7 @@ describe('supplier invoices', () => {
     expect(src('app/supplier-invoices/page.tsx')).toContain('Creating the supplier invoice failed')
     const page = src('app/supplier-invoices/[id]/page.tsx')
     expect(page).toContain("const matchable = invoice.status === 'received' || invoice.status === 'matched'")
-    expect(page).toContain('=== invoiceCurrency')
+    expect(page).toContain('!== invoiceCurrency')
   })
 })
 

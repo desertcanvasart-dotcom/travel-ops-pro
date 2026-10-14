@@ -22,15 +22,30 @@
 // reported but never added: owed is not earned, and adding it would flatter
 // every trip by money that may never arrive.
 //
+// VAT. An invoice's total_amount INCLUDES the VAT recorded on it (tax_amount),
+// and VAT is owed to the tax authority, not earned. Revenue here is therefore
+// the invoice NET (invoiceNet), and the cash received is cut back to its net
+// share the same way. Nothing here computes VAT: only the amount the invoice
+// recorded is taken off. The VAT itself is reported by the Tax tab.
+//
 // FX. Each line is converted at the rate on ITS OWN date, per lib/fx-report.
 // A line with no usable rate is EXCLUDED and recorded as a hole — never summed
 // at face value, which would overstate an EGP cost ~56x in a EUR trip.
 
 import { convertLine, emptyFxSummary, type FxHole, type FxIndex } from './fx-report'
+import { invoiceNet } from './invoices/totals'
 import { type FxSummary } from './fx-conversion'
 
 /** Commission statuses that mean the money has actually moved. */
 export const COMMISSION_PAID_STATUSES = new Set(['paid', 'received', 'settled'])
+
+/**
+ * Trips that are not business yet. With no status filter the aggregate leaves
+ * them out: a draft or a cancelled trip would add its QUOTED price as revenue
+ * and its estimated supplier cost as cost. Pick one in the status filter to
+ * see it anyway.
+ */
+export const PNL_EXCLUDED_STATUSES = ['draft', 'cancelled'] as const
 
 export const REALIZED_BASIS =
   'Payments received, expenses marked paid, and commissions paid out — each converted at the rate on its own date. Excludes supplier_cost, which is a pricing estimate rather than a payment.'
@@ -71,6 +86,8 @@ export interface PnLInvoice {
   id?: string | null
   itinerary_id?: string | null
   total_amount?: number | string | null
+  /** The VAT recorded on the invoice; total_amount includes it. */
+  tax_amount?: number | string | null
   amount_paid?: number | string | null
   status?: string | null
 }
@@ -122,7 +139,13 @@ export interface TripPnL {
   extras_revenue: number
   /** Of supplier_cost, what those extras cost us. */
   extras_supplier_cost: number
+  /** Invoiced revenue NET of VAT (the quote, a net price, until invoiced). */
   total_revenue: number
+  /** Billed to the clients, VAT included — what balance due is measured against. */
+  total_invoiced: number
+  /** Of total_invoiced, the VAT the invoices recorded (owed to the tax authority). */
+  vat_recorded: number
+  /** Paid by the clients on those invoices, VAT included. */
   total_paid: number
   supplier_cost: number
   manual_expenses: number
@@ -170,6 +193,18 @@ export interface TripPnLResult {
   fx: FxSummary
 }
 
+/**
+ * The share of an invoice's total that is net of VAT: what a payment (or the
+ * running amount_paid) against it is worth once the VAT in it is taken out.
+ * 1 when the invoice recorded no VAT or has no total.
+ */
+export function netShareOfInvoice(inv: { total_amount?: unknown; tax_amount?: unknown }): number {
+  const total = Number(inv.total_amount) || 0
+  if (total <= 0) return 1
+  const share = invoiceNet(inv) / total
+  return share > 0 && share <= 1 ? share : 1
+}
+
 const pct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 100 : 0)
 
 /**
@@ -192,8 +227,21 @@ export function computeTripPnL(fxIndex: FxIndex, inputs: TripPnLInputs): TripPnL
   // A cancelled invoice bills nothing, so it is not revenue. Payments against
   // one are left to the realized layer: if money moved, it moved.
   const liveInvoices = invoices.filter(inv => inv.status !== 'cancelled')
-  const totalRevenue = liveInvoices.reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0)
+  //
+  // NET of VAT: the VAT on an invoice is owed to the tax authority, so it is
+  // neither revenue nor profit. Before the trip is invoiced the quote
+  // (total_cost, a net price) stands in, which is why revenue used to jump by
+  // the VAT the moment a trip was invoiced.
+  const totalRevenue = liveInvoices.reduce((sum, inv) => sum + invoiceNet(inv), 0)
+  // What the clients were billed and have paid, VAT included: the collection
+  // figures (balance due) stay on the invoice's own total.
+  const totalInvoiced = liveInvoices.reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0)
   const totalPaid = liveInvoices.reduce((sum, inv) => sum + Number(inv.amount_paid || 0), 0)
+  const vatRecorded = liveInvoices.reduce((sum, inv) => sum + Number(inv.tax_amount || 0), 0)
+  // Payments are matched to their invoice (cancelled ones too: money that moved
+  // is realized) to take the VAT out of each.
+  const netShareByInvoice = new Map<string, number>()
+  for (const inv of invoices) if (inv.id) netShareByInvoice.set(inv.id, netShareOfInvoice(inv))
 
   // ---- Expenses ---------------------------------------------------------
   let manualExpenses = 0
@@ -282,7 +330,12 @@ export function computeTripPnL(fxIndex: FxIndex, inputs: TripPnLInputs): TripPnL
   let agentCommissionsPaid = 0
   let supplierCommissionsReceivable = 0
 
+  let liveCommissionCount = 0
   for (const comm of commissions) {
+    // A cancelled commission is owed and earned by nobody. Skipped before
+    // conversion so it cannot raise an FX hole either.
+    if (String(comm.status || '').toLowerCase() === 'cancelled') continue
+    liveCommissionCount++
     const { amount, hole } = convertLine(fxIndex, fx, {
       amount: comm.commission_amount,
       fromCurrency: comm.currency,
@@ -327,7 +380,8 @@ export function computeTripPnL(fxIndex: FxIndex, inputs: TripPnLInputs): TripPnL
       holes.push(hole)
       continue
     }
-    realizedRevenue += amount ?? 0
+    // Cash received includes the VAT on it; only the net share is revenue.
+    realizedRevenue += (amount ?? 0) * (netShareByInvoice.get(String(pay.invoice_id)) ?? 1)
   }
 
   // supplier_cost is deliberately absent: it is what the pricing engine
@@ -364,6 +418,8 @@ export function computeTripPnL(fxIndex: FxIndex, inputs: TripPnLInputs): TripPnL
       extras_revenue: extrasRevenue,
       extras_supplier_cost: extrasSupplierCost,
       total_revenue: totalRevenue,
+      total_invoiced: totalInvoiced,
+      vat_recorded: vatRecorded,
       total_paid: totalPaid,
       supplier_cost: supplierCost,
       manual_expenses: manualExpenses,
@@ -379,7 +435,7 @@ export function computeTripPnL(fxIndex: FxIndex, inputs: TripPnLInputs): TripPnL
       agent_commissions: agentCommissions,
       agent_commissions_paid: agentCommissionsPaid,
       supplier_commissions_receivable: supplierCommissionsReceivable,
-      commission_count: commissions.length,
+      commission_count: liveCommissionCount,
       net_profit: netProfit,
       net_margin: pct(netProfit, revenueForCalc),
 

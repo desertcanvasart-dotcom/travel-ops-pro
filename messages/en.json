@@ -1967,6 +1967,14 @@
     "noPaymentsFound": "No Payments Found",
     "recordFirstPayment": "Record your first payment",
     "orCreateInvoice": "or create an",
+    "refundTag": "Refund (not counted as received)",
+    "notCompletedTag": "Not completed (not counted as received)",
+    "onInvoiceTag": "Trip has an invoice (counted on the invoice)",
+    "tripHasInvoice": "This trip already has an invoice ({numbers}). Record the payment on the invoice so the same money is not counted twice.",
+    "useInvoiceInstead": "Record it on the invoice",
+    "moveToInvoice": "Move to invoice",
+    "confirmMoveToInvoice": "Record this payment on the trip's invoice and delete the trip-level payment? The money is counted once, on the invoice.",
+    "failedToMoveToInvoice": "Failed to move the payment to the invoice",
     "record": {
       "title": "Record Payment",
       "subtitle": "Add a new payment transaction",
@@ -2321,6 +2329,9 @@
       "noRemindersSent": "No reminders sent",
       "to": "To",
       "confirmDeletePayment": "Are you sure you want to delete this payment?",
+      "cancelInvoice": "Cancel invoice",
+      "confirmCancelInvoice": "Cancel this invoice? A cancelled invoice cannot be reopened. Its extras become billable again on another invoice.",
+      "failedToCancelInvoice": "Failed to cancel the invoice",
       "confirmCreateFinalInvoice": "Create a final invoice for the remaining balance?",
       "failedToGeneratePDF": "Failed to generate PDF",
       "failedToRecordPayment": "Failed to record payment",
@@ -2385,7 +2396,12 @@
     },
     "failedToCreateInvoice": "Failed to create the invoice",
     "failedToDeleteInvoice": "Failed to delete the invoice",
-    "depositWithPercent": "Deposit ({percent}%)"
+    "depositWithPercent": "Deposit ({percent}%)",
+    "serverAmountNote": "Worked out from the saved trip: {amount}. This is the amount the invoice will bill.",
+    "manualAmountNeedsManager": "This is not the amount worked out from the trip. Only an admin or manager can bill a different amount.",
+    "manualAmountReason": "Reason for billing a different amount",
+    "manualAmountReasonPlaceholder": "Why this amount differs from the trip price",
+    "manualAmountReasonRequired": "Give a reason for billing a different amount."
   },
   "whatsappParser": {
     "title": "WhatsApp to Itinerary",
@@ -5613,6 +5629,41 @@
   "profitLoss": {
     "title": "Profit & Loss",
     "subtitle": "Trip profitability analysis",
+    "loadError": "The report could not be loaded.",
+    "tabs": {
+      "overview": "Overview",
+      "tax": "Tax"
+    },
+    "fx": {
+      "warningTitle": "This report is incomplete",
+      "warningBody": "{count} cost(s) or payment(s) were left out because no exchange rate covers their date. Costs are understated and margins overstated by that amount until a rate is added.",
+      "more": "and {count} more",
+      "tripExcluded": "{count} left out: no rate"
+    },
+    "scope": {
+      "excluded": "{statuses} trips are not counted here. Choose one in Filters to see it."
+    },
+    "tax": {
+      "title": "VAT recorded on issued invoices",
+      "intro": "Read from the invoices themselves: the VAT each one recorded when it was issued. Nothing is calculated from the company rate or from revenue.",
+      "fromDate": "Invoices issued from",
+      "toDate": "Invoices issued to",
+      "loadError": "The tax report could not be loaded.",
+      "empty": "No issued invoices in this period.",
+      "invoicesCount": "{count} issued invoices",
+      "invoices": "Invoices",
+      "net": "Net of VAT",
+      "vatCollected": "VAT collected",
+      "vatRecorded": "VAT recorded",
+      "total": "Total billed",
+      "rate": "Rate",
+      "notApplied": "Invoices without VAT",
+      "notAppliedNet": "{amount} billed, VAT not applied",
+      "excludedExtras": "{count} invoice(s) left extras or insurance out of the VAT base.",
+      "noteExtras": "Extras and insurance carry no VAT. An invoice that left them out records the amount it taxed.",
+      "noteScope": "Issued invoices only (drafts and cancelled invoices are not counted), by issue date. Currencies and rates are never added together or converted.",
+      "noteInput": "VAT paid on expenses (input VAT) is not recorded anywhere yet, so it is not shown."
+    },
     "summary": {
       "totalTrips": "Total Trips",
       "totalRevenue": "Total Revenue",
@@ -5620,7 +5671,9 @@
       "grossProfit": "Gross Profit",
       "avgMargin": "Avg Margin",
       "profitable": "Profitable",
-      "lossMaking": "Loss-Making"
+      "lossMaking": "Loss-Making",
+      "netOfVat": "net of VAT",
+      "marginBasis": "profit ÷ revenue"
     },
     "search": "Search trips...",
     "sort": {
@@ -5674,6 +5727,13 @@
     },
     "footer": "© 2024 Autoura Operations System",
     "detail": {
+      "loadError": "The report could not be loaded.",
+      "netOfVat": "net of VAT",
+      "vatExcluded": "{amount} VAT not counted",
+      "marginBasis": "profit ÷ revenue",
+      "inclVat": "incl. VAT {amount}",
+      "fxWarningTitle": "This trip's report is incomplete",
+      "fxWarningBody": "{count} cost(s) or payment(s) were left out because no exchange rate covers their date. Costs are understated and the margin overstated by that amount until a rate is added.",
       "notFound": "Trip not found",
       "backToList": "Back to Profit & Loss",
       "viewItinerary": "View Itinerary",
@@ -5731,26 +5791,6 @@
         "fuel": "Fuel",
         "other": "Other"
       }
-    },
-    "itineraryCard": {
-      "title": "Profit & Loss",
-      "subtitle": "Cost breakdown and margins",
-      "supplierCost": "Supplier Cost",
-      "clientPrice": "Client Price",
-      "margin": "Margin",
-      "cost": "Cost",
-      "price": "Price",
-      "whatYouPay": "What you pay",
-      "whatClientPays": "What client pays",
-      "grossProfit": "Gross Profit",
-      "yourEarnings": "Your earnings",
-      "marginPercent": "Margin %",
-      "markupOnCost": "Markup on cost",
-      "breakdownByServiceType": "Breakdown by Service Type",
-      "items": "items",
-      "marginLabel": "margin",
-      "note": "Note:",
-      "noteText": "Tips and water are typically pass-through costs with no margin. Transportation, guides, and entrances carry the standard {marginPercent}% markup."
     }
   },
   "attachmentList": {
@@ -5896,14 +5936,17 @@
     "grossProfit": "Gross Profit",
     "yourEarnings": "Your earnings",
     "marginPercent": "Margin %",
-    "markupOnCost": "Markup on cost",
+    "marginOnPrice": "Profit ÷ client price",
+    "notRecorded": "Not recorded",
     "breakdownByServiceType": "Breakdown by Service Type",
     "items": "items",
     "note": "Note:",
-    "noteText": "Tips and water are typically pass-through costs with no margin. Transportation, guides, and entrances carry the standard {marginPercent}% markup.",
+    "noteText": "The company margin is applied to every service when the trip is priced, tips, supplies and flights included. Extra expenses entered on this trip reduce it. Margin here is profit divided by the client price, the same as on the Profit & Loss page.",
     "extraExpenses": "Extra Expenses",
     "extraExpensesNote": "Extra expenses are operational costs that reduce margin",
-    "fromTripTotals": "From the trip's own total — no priced services yet"
+    "fromTripTotals": "From the trip's own total — no priced services yet",
+    "rateMissing": "Rate missing: {count, plural, one {1 extra expense} other {# extra expenses}} could not be converted to {currency} and {count, plural, one {is} other {are}} left out of the margin: {list}. The margin shown is higher than it really is until the exchange rate is added.",
+    "extrasUnavailable": "Rate missing or unavailable: this trip's extra expenses could not be converted just now, so they are left out of the margin shown."
   },
   "resourceAssignment": {
     "changeDates": "Change dates",
@@ -6017,6 +6060,13 @@
     "title": "Commission Tracking",
     "subtitle": "Track commissions from hotels, shops, and partners",
     "addCommission": "Add Commission",
+    "recalculateFromPrice": "Recalculate from price",
+    "recalculateHint": "Pending commissions follow their service's current price. Paid ones are never changed, only flagged.",
+    "failedToRecalculate": "Failed to recalculate commissions",
+    "priceChangedSincePaid": "Price changed since paid",
+    "priceChangedSinceInvoiced": "Price changed since invoiced",
+    "priceChangedWhileDisputed": "Price changed while disputed",
+    "priceServiceGone": "Its service no longer gives this commission",
     "editCommission": "Edit Commission",
     "updateCommission": "Update Commission",
     "deleteConfirm": "Are you sure you want to delete this commission record?",
@@ -6093,11 +6143,16 @@
     "formTransactionDate": "Transaction Date",
     "formDueDate": "Due Date",
     "formStatus": "Status",
+    "formCurrency": "Currency",
+    "formPaidDate": "Paid / received on",
+    "editLockedNote": "The amounts, rate, supplier and trip cannot be changed here. To correct them, delete this commission and add it again.",
+    "cardsNote": "Cancelled commissions are not counted in these figures.",
     "formDescription": "Description",
     "descriptionPlaceholder": "e.g., 10% commission on guest purchases",
     "formNotes": "Notes",
     "notesPlaceholder": "Additional notes...",
     "error": "Error",
+    "failedToDelete": "Failed to delete the commission",
     "failedToSave": "Failed to save the commission"
   },
   "financialReports": {
@@ -6169,6 +6224,7 @@
     "currencyFallback": "Figures are shown in {currency}: {requested} is not a supported reporting currency."
   },
   "expenses": {
+    "approvedBy": "Approved by",
     "expenses": "Expenses",
     "expensesSubtitle": "Track operational costs and supplier payments",
     "exportCSV": "Export CSV",
@@ -6187,6 +6243,7 @@
     "expense": "Expense"
   },
   "expenseDetail": {
+    "approvedBy": "Approved by",
     "failedToUpdateStatus": "Failed to update status",
     "confirmDeleteExpense": "Are you sure you want to delete this expense? This action cannot be undone.",
     "failedToDeleteExpense": "Failed to delete expense",

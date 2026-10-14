@@ -124,7 +124,7 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   { prefix: '/api/payments', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/commissions', roles: ['admin', 'manager'] },
   { prefix: '/api/supplier-invoices', roles: ['admin', 'manager'] },
-  { prefix: '/api/expenses', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/expenses', roles: ['admin', 'manager'] },
   // The season calendar sets what customers are charged on the operator's own
   // high dates — a pricing decision, same audience as the rate tables.
   // The Pricing Grid prices and saves a trip from the stored rates: agents
@@ -267,6 +267,8 @@ const FINANCIAL_API_PREFIXES = [
   '/api/supplier-invoices',
   '/api/accounts-receivable',
   '/api/accounts-payable',
+  // Reads a supplier bill to fill the Bills form: that screen is manager-and-above.
+  '/api/ai/parse-supplier-invoice',
   '/api/analytics',
   // The accounting integration's chart of accounts and sync status are
   // financial data — manager and above, reads included.
@@ -372,6 +374,9 @@ const STAFF_ONLY_API_PREFIXES = [
   '/api/supplier-documents',
   '/api/documents',
   '/api/payments',
+  // Invoices: client emails, balances and reminders. Agents issue them, a
+  // viewer's screens read none of it.
+  '/api/invoices',
 ]
 
 export async function middleware(request: NextRequest, event: NextFetchEvent) {

@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
+import { blankToNull } from '@/lib/blank-to-null'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { paymentCurrencyFor } from '@/lib/payment-currency'
 import { loadTripVatExtras } from '@/lib/vat'
+import { checkPaymentAmount, pickPaymentFields } from '@/lib/payments/fields'
+import { tripPaymentVatColumns } from '@/lib/payments/vat'
+import { liveInvoicesOfTrip, tripHasInvoiceMessage } from '@/lib/payments/ledger'
 
 export async function GET(
   request: NextRequest,
@@ -34,7 +38,11 @@ export async function GET(
     const trip = payment.itineraries?.org_id === orgId ? payment.itineraries : null
     // No VAT on the trip's extras (owner, 2026-10-13): the payment's VAT is
     // worked out on the taxed share of the trip (lib/vat.ts vatInsideGross).
-    const extras = trip?.vat_applied === true ? await loadTripVatExtras(supabase, trip.id) : null
+    // A payment records its own VAT when it is made (lib/payments/vat); one
+    // from before that has NULL and still reads the trip.
+    const recorded = typeof payment.vat_applied === 'boolean'
+    const taxed = recorded ? payment.vat_applied === true : trip?.vat_applied === true
+    const extras = taxed && trip ? await loadTripVatExtras(supabase, trip.id) : null
 
     const formattedPayment = {
       ...payment,
@@ -46,11 +54,11 @@ export async function GET(
       client_phone: trip?.client_phone,
       client_email: trip?.client_email,
       total_cost: trip?.total_cost,
-      // The trip's VAT (lib/vat.ts) — the payment's invoice and receipt state
-      // the VAT inside the amount paid. '*' above so a database without the
-      // columns (migration 20261214) still answers.
-      vat_applied: trip?.vat_applied === true,
-      vat_rate: trip?.vat_rate ?? null,
+      // The VAT (lib/vat.ts) the payment's invoice and receipt state inside the
+      // amount paid: the payment's own record, else the trip's. '*' above so a
+      // database without the columns (migration 20261214) still answers.
+      vat_recorded: recorded,
+      ...(recorded ? {} : { vat_applied: trip?.vat_applied === true, vat_rate: trip?.vat_rate ?? null }),
       ...(extras && extras.vat_excluded > 0 ? { vat_excluded: extras.vat_excluded, vat_net: extras.vat_net } : {}),
     }
 
@@ -77,19 +85,30 @@ export async function PUT(
 
     const { id } = await params
     const supabase = createServerClient()
-    const body = await request.json()
+    // As POST: a form field left alone arrives as "", and "" is not a date.
+    const body = blankToNull(await request.json())
 
-    console.log('Updating payment:', id, body)
+    // Only the columns a caller may set (lib/payments/fields), as POST: org_id
+    // (a payment cannot be re-homed into another org), the receipt number and
+    // the recorded VAT are not the caller's.
+    const safeBody = pickPaymentFields(body)
+    if (Object.keys(safeBody).length === 0) {
+      return NextResponse.json({ success: false, error: 'Nothing to update' }, { status: 400 })
+    }
 
-    // M3 Phase 2A: strip any caller-supplied org_id so an update can't
-    // re-home a payment row into another org.
-    const { org_id: _ignoredOrgId, ...safeBody } = body
+    // As POST, an amount must be a positive number.
+    if ('amount' in safeBody) {
+      const checked = checkPaymentAmount(safeBody.amount)
+      if (!checked.ok) return NextResponse.json({ success: false, error: checked.error }, { status: 400 })
+      safeBody.amount = checked.amount
+    }
 
     // As POST: the trip is this org's and the payment is in its currency.
-    if ('itinerary_id' in safeBody || 'currency' in safeBody) {
+    // A new amount, trip or currency re-records the VAT inside the payment.
+    if ('itinerary_id' in safeBody || 'currency' in safeBody || 'amount' in safeBody) {
       const { data: current } = await supabase
         .from('payments')
-        .select('itinerary_id')
+        .select('*')
         .eq('id', id)
         .eq('org_id', orgId)
         .maybeSingle()
@@ -101,14 +120,38 @@ export async function PUT(
         }
         const { data: trip } = await supabase
           .from('itineraries')
-          .select('id, currency')
+          .select('*')
           .eq('id', tripId)
           .eq('org_id', orgId)
           .maybeSingle()
         if (!trip) return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
-        const paid = paymentCurrencyFor(safeBody.currency, trip.currency)
-        if (!paid.ok) return NextResponse.json({ success: false, error: paid.error }, { status: 400 })
-        safeBody.currency = paid.currency
+        // A payment cannot be moved onto a trip that has an invoice: that trip
+        // takes its money on the invoice (lib/payments/ledger). One already on
+        // such a trip (recorded before the rule) can still be corrected.
+        if (tripId !== current.itinerary_id) {
+          const invoiceNumbers = await liveInvoicesOfTrip(supabase, orgId, trip.id)
+          if (invoiceNumbers.length) {
+            return NextResponse.json({ success: false, error: tripHasInvoiceMessage(invoiceNumbers) }, { status: 409 })
+          }
+        }
+        // Only a changed trip or currency is held to the trip's currency; a new
+        // amount alone leaves the payment's own.
+        let currency = current.currency
+        if ('itinerary_id' in safeBody || 'currency' in safeBody) {
+          const paid = paymentCurrencyFor(safeBody.currency, trip.currency)
+          if (!paid.ok) return NextResponse.json({ success: false, error: paid.error }, { status: 400 })
+          safeBody.currency = paid.currency
+          currency = paid.currency
+        }
+        // Same trip and a payment that already records its VAT: keep the
+        // flag and rate it was recorded with, re-work the amount.
+        const sameTrip = tripId === current.itinerary_id && typeof current.vat_applied === 'boolean'
+        const vatFacts = sameTrip ? { vat_applied: current.vat_applied, vat_rate: current.vat_rate } : trip
+        Object.assign(safeBody, tripPaymentVatColumns(
+          'amount' in safeBody ? safeBody.amount : current.amount,
+          vatFacts.vat_applied === true ? { ...vatFacts, ...(await loadTripVatExtras(supabase, trip.id)) } : vatFacts,
+          currency
+        ))
       }
     }
 

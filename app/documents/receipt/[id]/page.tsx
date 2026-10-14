@@ -20,12 +20,12 @@ import {
   Phone,
   Eye
 } from 'lucide-react'
-import { generateReceiptPDF, downloadReceiptPDF, receiptBrand } from '@/lib/receipt-pdf-generator'
+import { generateReceiptPDF, downloadReceiptPDF, receiptBrand, receiptNumberFor } from '@/lib/receipt-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import { BackLink } from '@/components/nav/TripNav'
 import { formatMoney } from '@/lib/currency-totals'
-import { vatInsideGross } from '@/lib/vat'
+import { receiptVat } from '@/lib/payments/vat'
 import { VatToken } from '@/app/components/Vat'
 
 interface Payment {
@@ -41,11 +41,17 @@ interface Payment {
   payment_method: string
   payment_status: string
   transaction_reference: string
+  /** The receipt's own number, from the company's series (null until completed). */
+  receipt_number?: string | null
   payment_date: string
   notes: string
   /** The trip's VAT (GET /api/payments/[id]); the amount paid includes it. */
   vat_applied?: boolean
   vat_rate?: number | null
+  /** Recorded on the payment when it was made (vat_recorded), else the trip's. */
+  vat_amount?: number | null
+  vat_base?: number | null
+  vat_recorded?: boolean
   /** The trip's extras (not taxed) and the client total they are part of. */
   vat_excluded?: number
   vat_net?: number
@@ -87,7 +93,7 @@ export default function ReceiptPage() {
   }
 
   const buildReceiptData = (p: Payment) => ({
-    receiptNumber: p.transaction_reference || `RCP-${p.id.slice(0, 8).toUpperCase()}`,
+    receiptNumber: receiptNumberFor(p),
     invoiceNumber: p.itinerary_code,
     clientName: p.client_name,
     clientEmail: p.client_email || '',
@@ -101,7 +107,7 @@ export default function ReceiptPage() {
 
   // The VAT inside the amount paid, at the trip's recorded rate (lib/vat.ts).
   const buildInvoiceData = (p: Payment) => {
-    const vat = vatInsideGross(p.amount, p, p.currency)
+    const vat = receiptVat(p, p.currency)
     return {
       invoice_number: p.itinerary_code,
       client_name: p.client_name,
@@ -192,10 +198,11 @@ export default function ReceiptPage() {
     )
   }
 
-  const receiptNumber = payment.transaction_reference || `RCP-${payment.id.slice(0, 8).toUpperCase()}`
+  const receiptNumber = receiptNumberFor(payment)
   // Every payment links here, pending, failed and refunded ones included. Only
   // a completed payment has been received; the rest get no receipt to send.
-  const received = payment.payment_status === 'completed'
+  // A refund is money handed back, not received: no receipt either.
+  const received = payment.payment_status === 'completed' && payment.payment_type !== 'refund'
   // The org's own city (Settings), never a hard-coded one.
   const place = [company?.city, company?.country].filter(Boolean).join(', ')
 
@@ -372,7 +379,7 @@ export default function ReceiptPage() {
               <p className="text-4xl font-bold">
                 {formatCurrency(payment.amount, payment.currency)}
               </p>
-              <VatToken vat={vatInsideGross(payment.amount, payment, payment.currency)} currency={payment.currency} className="mt-2" />
+              <VatToken vat={receiptVat(payment, payment.currency)} currency={payment.currency} className="mt-2" />
             </div>
 
             {/* Notes */}
@@ -409,8 +416,8 @@ export default function ReceiptPage() {
           setShowPdfPreview(false)
           setPdfPreviewBlob(null)
         }}
-        title={`Receipt ${payment ? (payment.transaction_reference || `RCP-${payment.id.slice(0, 8).toUpperCase()}`) : ''}`}
-        filename={`Receipt-${payment ? (payment.transaction_reference || `RCP-${payment.id.slice(0, 8).toUpperCase()}`) : ''}.pdf`}
+        title={`Receipt ${payment ? receiptNumberFor(payment) : ''}`}
+        filename={`Receipt-${payment ? receiptNumberFor(payment) : ''}.pdf`}
       />
     </div>
   )
