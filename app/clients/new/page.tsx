@@ -2,7 +2,6 @@
 
 import { Suspense, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { createClient } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
@@ -101,37 +100,41 @@ function NewClientForm() {
     ...prefill,
   })
 
-  const supabase = createClient()
+  // Set when the server found a client in this company with the same email.
+  const [duplicate, setDuplicate] = useState<{ id: string; name: string; client_code: string } | null>(null)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, allowDuplicate = false) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setDuplicate(null)
 
     try {
-      // Convert empty strings to null for date fields
-      const cleanedData = {
-        ...formData,
-        date_of_birth: formData.date_of_birth || null,
+      // Through the server: it files the client under the ACTIVE company, numbers
+      // it (CLI-nnnn, per company), stores a blank box as NULL rather than '',
+      // and refuses a second client with the same email unless told to go on.
+      // A new client starts as a lead; a trip that gets confirmed promotes it.
+      const res = await fetch('/api/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          status: 'lead',
+          client_source: formData.lead_source,
+          ...(allowDuplicate ? { allow_duplicate: true } : {}),
+        }),
+      })
+      const body = await res.json().catch(() => null)
+      if (res.status === 409 && body?.existing) {
+        setDuplicate(body.existing)
+        setLoading(false)
+        return
       }
-
-      // clients.org_id is NOT NULL (migrations/20260825_clients_org_id.sql) —
-      // this form writes to the table directly, so it has to supply the owning
-      // organisation. /api/auth/role is the existing browser-side window onto
-      // the caller's membership.
-      const membershipRes = await fetch('/api/auth/role')
-      const membership = await membershipRes.json().catch(() => null)
-      if (!membershipRes.ok || !membership?.orgId) {
-        throw new Error('Could not determine your organisation — please sign in again.')
+      if (!res.ok || !body?.data?.id) {
+        throw new Error(body?.error || t('failedToCreateClient'))
       }
+      const data = body.data
 
-      const { data, error: insertError } = await supabase
-        .from('clients')
-        .insert([{ ...cleanedData, org_id: membership.orgId }])
-        .select()
-        .single()
-
-      if (insertError) throw insertError
       // Keep the button in its saving state THROUGH the navigation.
       // router.push() does not await the destination page, so a finally{}
       // here re-enabled "Create Client" while this wizard stayed on screen
@@ -237,6 +240,30 @@ function NewClientForm() {
         {error && (
           <div className="mb-4 bg-white border border-red-200 rounded-lg p-3 shadow-sm border-l-4 border-l-red-500">
             <p className="text-xs text-red-600">{error}</p>
+          </div>
+        )}
+
+        {duplicate && (
+          <div className="mb-4 bg-white border border-amber-200 rounded-lg p-3 shadow-sm border-l-4 border-l-amber-500">
+            <p className="text-sm font-medium text-gray-800">{t('duplicateTitle')}</p>
+            <p className="text-xs text-gray-600 mt-1">
+              {t('duplicateBody', { name: duplicate.name, code: duplicate.client_code, email: formData.email })}
+            </p>
+            <div className="flex items-center gap-3 mt-3">
+              <Link
+                href={`/clients/${duplicate.id}`}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700"
+              >
+                {t('openExisting', { name: duplicate.name })}
+              </Link>
+              <button
+                type="button"
+                onClick={(e) => handleSubmit(e, true)}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                {t('createAnyway')}
+              </button>
+            </div>
           </div>
         )}
 

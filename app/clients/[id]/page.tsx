@@ -2,8 +2,12 @@
 
 import { todayLocal } from '@/lib/today'
 import { useState, useEffect } from 'react'
-import { formatMoney, formatTotals } from '@/lib/currency-totals'
-import { createClient } from '@/lib/supabase'
+import { formatMoney } from '@/lib/currency-totals'
+import { collectedTotals, formatMoneyTotals, invoicedTotals } from '@/lib/clients/stats'
+import { CLIENT_STATUSES, clientStatusClass } from '@/lib/clients/status'
+import { attachedKinds, requestDeleteClient, requestMarkInactive } from '@/lib/clients/delete-client'
+import type { ClientAttachments } from '@/lib/clients/delete-guard'
+import { useRole } from '@/hooks/useRole'
 import { useParams, useRouter } from 'next/navigation'
 import ClientTimeline from '@/components/ClientTimeline'
 import AddFollowupModal from '@/components/AddFollowupModal'
@@ -34,11 +38,12 @@ interface Client {
   status: string
   total_bookings_count: number
   total_revenue_generated: number
-  /** Billed per currency — the truth behind the scalar above. */
+  /** Invoiced per currency (invoices not draft or cancelled). */
   revenue_by_currency?: Record<string, number> | null
-  /** Which currency the scalar figures are denominated in. */
+  /** Paid against those invoices, per currency. */
+  collected_by_currency?: Record<string, number> | null
+  /** Which currency the single total_revenue_generated figure is in. */
   revenue_currency?: string | null
-  average_booking_value: number
   created_at: string
   last_contacted_at?: string
   internal_notes?: string
@@ -77,7 +82,7 @@ interface Note {
   created_at: string
   created_by?: string
 }
-const supabase = createClient()
+const COMMUNICATIONS_PAGE = 20
 
 export default function ClientProfilePage() {
   const params = useParams()
@@ -89,7 +94,12 @@ export default function ClientProfilePage() {
   const [communications, setCommunications] = useState<Communication[]>([])
   const [followups, setFollowups] = useState<Followup[]>([])
   const [notes, setNotes] = useState<Note[]>([])
-  const [deleteModal, setDeleteModal] = useState<{ open: boolean; blocking?: string; items?: any[]; force?: boolean }>({ open: false })
+  // blocked: the counts of what is attached, when the server refused the delete
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; blocked?: ClientAttachments }>({ open: false })
+  // The database reserves deleting a client to managers; an agent is not offered it.
+  const canDelete = useRole().canAccess(['admin', 'manager'])
+  const [communicationsTotal, setCommunicationsTotal] = useState(0)
+  const [loadingMoreComms, setLoadingMoreComms] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [bookings, setBookings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -114,25 +124,36 @@ export default function ClientProfilePage() {
     fetchClientData()
   }
 
-  const handleDeleteClient = async (force = false) => {
+  const handleDeleteClient = async () => {
     try {
       setDeleting(true)
-      const url = `/api/clients/${clientId}${force ? '?force=true' : ''}`
-      const response = await fetch(url, { method: 'DELETE' })
-      const data = await response.json()
-
-      if (!response.ok) {
-        if (data.blocking === 'itineraries') {
-          // Show modal with blocking info so user can choose to force delete
-          setDeleteModal({ open: true, blocking: 'itineraries', items: data.items, force: true })
-          return
-        }
-        throw new Error(data.error || 'Failed to delete client')
+      const outcome = await requestDeleteClient(clientId)
+      if (outcome.ok) {
+        router.push('/clients')
+        return
       }
-
-      router.push('/clients')
+      // Something is attached: the dialog says what and offers "Mark inactive".
+      if (outcome.blocked) {
+        setDeleteModal({ open: true, blocked: outcome.counts })
+        return
+      }
+      throw new Error(outcome.message)
     } catch (error: any) {
-      alert(error.message || 'Failed to delete client')
+      alert(error.message || t('failedToDelete'))
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const handleMarkInactive = async () => {
+    try {
+      setDeleting(true)
+      const outcome = await requestMarkInactive(clientId)
+      if (!outcome.ok) throw new Error(outcome.message)
+      setDeleteModal({ open: false })
+      fetchClientData()
+    } catch (error: any) {
+      alert(error.message || t('failedToUpdate'))
     } finally {
       setDeleting(false)
     }
@@ -162,58 +183,56 @@ export default function ClientProfilePage() {
     }
   }, [clientId])
 
+  // Everything is read through the server, scoped to the active company: the
+  // client page used to read these tables from the browser by client id, which
+  // the database answers for every company the person belongs to.
   const fetchClientData = async () => {
     try {
       setLoading(true)
 
-      // Fetch client details
-      const { data: clientData, error: clientError } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('id', clientId)
-        .single()
-
-      if (clientError) throw clientError
-      setClient(clientData)
-
-      // Fetch communications
-      const { data: commData } = await supabase
-        .from('communication_history')
-        .select('*')
-        .eq('client_id', clientId)
-        .order('communication_date', { ascending: false })
-        .limit(10)
-      setCommunications(commData || [])
-
-      // Fetch follow-ups
-      const { data: followupData } = await supabase
-        .from('client_followups')
-        .select('*')
-        .eq('client_id', clientId)
-        .order('due_date', { ascending: true })
-      setFollowups(followupData || [])
-
-      // Fetch notes
-      const { data: notesData } = await supabase
-        .from('client_notes')
-        .select('*')
-        .eq('client_id', clientId)
-        .order('created_at', { ascending: false })
-      setNotes(notesData || [])
-
-      // Fetch bookings (itineraries) via API to bypass RLS
-      try {
-        const bookingsRes = await fetch(`/api/clients/${clientId}/itineraries`)
-        const bookingsJson = await bookingsRes.json()
-        setBookings(bookingsJson.data || [])
-      } catch {
-        setBookings([])
+      const clientRes = await fetch(`/api/clients/${clientId}`)
+      if (!clientRes.ok) {
+        setClient(null)
+        return
       }
+      setClient(await clientRes.json())
 
+      const [commRes, followupRes, notesRes, bookingsRes] = await Promise.all([
+        fetch(`/api/clients/${clientId}/communications?page=1&limit=${COMMUNICATIONS_PAGE}`),
+        fetch(`/api/clients/${clientId}/followups`),
+        fetch(`/api/clients/${clientId}/notes`),
+        fetch(`/api/clients/${clientId}/itineraries`),
+      ])
+      const json = async (res: Response) => (res.ok ? res.json().catch(() => ({})) : {})
+
+      const comms = await json(commRes)
+      setCommunications(comms.data || [])
+      setCommunicationsTotal(comms.total ?? 0)
+      setFollowups((await json(followupRes)).data || [])
+      setNotes((await json(notesRes)).data || [])
+      setBookings((await json(bookingsRes)).data || [])
     } catch (error) {
       console.error('Error fetching client data:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Older communications, one page at a time.
+  const loadMoreCommunications = async () => {
+    try {
+      setLoadingMoreComms(true)
+      const nextPage = Math.floor(communications.length / COMMUNICATIONS_PAGE) + 1
+      const res = await fetch(`/api/clients/${clientId}/communications?page=${nextPage}&limit=${COMMUNICATIONS_PAGE}`)
+      if (!res.ok) return
+      const body = await res.json()
+      setCommunications(prev => {
+        const seen = new Set(prev.map(c => c.id))
+        return [...prev, ...(body.data || []).filter((c: Communication) => !seen.has(c.id))]
+      })
+      setCommunicationsTotal(body.total ?? communicationsTotal)
+    } finally {
+      setLoadingMoreComms(false)
     }
   }
 
@@ -247,16 +266,10 @@ export default function ClientProfilePage() {
     )
   }
   
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-green-100 text-green-800'
-      case 'inactive': return 'bg-gray-100 text-gray-800'
-      case 'prospect': return 'bg-blue-100 text-blue-800'
-      case 'blacklisted': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-  
+  const getStatusColor = clientStatusClass
+  const statusText = (status: string) =>
+    (CLIENT_STATUSES as readonly string[]).includes(status) ? t(`status_${status}`) : status
+
   const pendingFollowups = followups.filter(f => f.status === 'pending')
   // due_date is a calendar date: compare it as one, in our timezone. new Date()
   // of it is UTC midnight, so a follow-up turned overdue at 09:00 in Japan on its due day.
@@ -283,13 +296,15 @@ export default function ClientProfilePage() {
                 <Edit className="w-4 h-4" />
                 {t('editClient')}
               </Link>
-              <button
-                onClick={() => setDeleteModal({ open: true })}
-                className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200"
-              >
-                <Trash2 className="w-4 h-4" />
-                {t('delete')}
-              </button>
+              {canDelete && (
+                <button
+                  onClick={() => setDeleteModal({ open: true })}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {t('delete')}
+                </button>
+              )}
             </div>
           </div>
 
@@ -317,7 +332,7 @@ export default function ClientProfilePage() {
                 </div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusColor(client.status)}`}>
-                    {client.status}
+                    {statusText(client.status)}
                   </span>
                   <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
                     {client.client_type}
@@ -329,9 +344,13 @@ export default function ClientProfilePage() {
                 <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
                   <div className="flex items-center gap-2 text-gray-600">
                     <Mail className="w-3 h-3" />
-                    <a href={`mailto:${client.email}`} className="hover:text-blue-600">
-                      {client.email}
-                    </a>
+                    {client.email ? (
+                      <a href={`mailto:${client.email}`} className="hover:text-blue-600">
+                        {client.email}
+                      </a>
+                    ) : (
+                      <span className="text-gray-400">{t('notSpecified')}</span>
+                    )}
                   </div>
                   {client.phone && (
                     <div className="flex items-center gap-2 text-gray-600">
@@ -357,7 +376,10 @@ export default function ClientProfilePage() {
               </div>
             </div>
 
-            {/* Stats - Compact */}
+            {/* Stats - Compact. Money is per currency and labelled for what it is:
+                invoiced = the client's invoices that are not draft or cancelled;
+                collected = what has been paid against them. No average: a mean over
+                trips and invoices in different currencies is not a number. */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-3 text-center">
                 <div className="text-xl font-bold text-blue-600">
@@ -367,17 +389,15 @@ export default function ClientProfilePage() {
               </div>
               <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-3 text-center">
                 <div className="text-xl font-bold text-green-600">
-                  {client.revenue_by_currency && Object.keys(client.revenue_by_currency).length > 0
-                    ? formatTotals(client.revenue_by_currency)
-                    : formatMoney(client.total_revenue_generated || 0, client.revenue_currency || 'EUR')}
+                  {formatMoneyTotals(invoicedTotals(client))}
                 </div>
-                <div className="text-xs text-gray-600 mt-0.5">{t('statsRevenue')}</div>
+                <div className="text-xs text-gray-600 mt-0.5">{t('tileInvoiced')}</div>
               </div>
               <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-3 text-center">
                 <div className="text-xl font-bold text-purple-600">
-                  {formatMoney(client.average_booking_value || 0, client.revenue_currency || 'EUR')}
+                  {formatMoneyTotals(collectedTotals(client))}
                 </div>
-                <div className="text-xs text-gray-600 mt-0.5">{t('statsAvgValue')}</div>
+                <div className="text-xs text-gray-600 mt-0.5">{t('tileCollected')}</div>
               </div>
             </div>
           </div>
@@ -404,7 +424,7 @@ export default function ClientProfilePage() {
           <nav className="flex gap-6">
             {[
               { id: 'overview', label: t('tabOverview'), icon: User },
-              { id: 'communications', label: t('tabCommunications'), icon: MessageSquare, count: communications.length },
+              { id: 'communications', label: t('tabCommunications'), icon: MessageSquare, count: communicationsTotal },
               { id: 'bookings', label: t('tabBookings'), icon: Calendar, count: bookings.length },
               { id: 'notes', label: t('tabNotes'), icon: FileText, count: notes.length },
               { id: 'followups', label: t('tabFollowups'), icon: Clock, count: pendingFollowups.length }
@@ -665,6 +685,21 @@ export default function ClientProfilePage() {
                     )}
                   </div>
                 ))}
+                {communications.length < communicationsTotal && (
+                  <div className="text-center pt-1">
+                    <p className="text-xs text-gray-500 mb-2">
+                      {t('communicationsShown', { shown: communications.length, total: communicationsTotal })}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={loadMoreCommunications}
+                      disabled={loadingMoreComms}
+                      className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {t('loadMoreCommunications')}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -702,7 +737,7 @@ export default function ClientProfilePage() {
                   <div key={booking.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
                     <div className="flex items-start justify-between">
                       <div>
-                        <h3 className="text-base font-semibold mb-2">{booking.tour_name}</h3>
+                        <h3 className="text-base font-semibold mb-2">{booking.trip_name}</h3>
                         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-gray-600">
                           <div className="flex items-center gap-2">
                             <Calendar className="w-3 h-3" />
@@ -710,7 +745,7 @@ export default function ClientProfilePage() {
                           </div>
                           <div className="flex items-center gap-2">
                             <User className="w-3 h-3" />
-                            {booking.number_of_people} {t('people')}
+                            {(Number(booking.num_adults) || 0) + (Number(booking.num_children) || 0)} {t('people')}
                           </div>
                         </div>
                       </div>
@@ -962,25 +997,25 @@ export default function ClientProfilePage() {
               </div>
               <div>
                 <h3 className="text-sm font-semibold text-gray-900">
-                  {deleteModal.blocking ? t('deleteBlocked') : t('deleteConfirmTitle')}
+                  {deleteModal.blocked ? t('deleteBlockedTitle') : t('deleteConfirmTitle')}
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {deleteModal.blocking
-                    ? t('deleteBlockedMessage', { name: `${client?.first_name} ${client?.last_name}`, count: deleteModal.items?.length || 0 })
+                  {deleteModal.blocked
+                    ? t('deleteBlockedBody')
                     : t('deleteConfirmBody', { name: `${client?.first_name} ${client?.last_name}` })
                   }
                 </p>
               </div>
             </div>
 
-            {deleteModal.items && deleteModal.items.length > 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 max-h-32 overflow-y-auto">
-                <p className="text-xs font-medium text-amber-800 mb-1">{t('linkedItineraries')}</p>
-                <ul className="text-xs text-amber-700 space-y-0.5">
-                  {deleteModal.items.map((item: any) => (
-                    <li key={item.id}>• {item.code || item.id} — {item.name || 'Untitled'}</li>
+            {deleteModal.blocked && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+                <ul className="text-xs text-amber-800 space-y-0.5">
+                  {attachedKinds(deleteModal.blocked).map(([kind, count]) => (
+                    <li key={kind}>• {t(`attached.${kind}`, { count })}</li>
                   ))}
                 </ul>
+                <p className="text-xs text-amber-800 mt-2">{t('deleteBlockedHint')}</p>
               </div>
             )}
 
@@ -992,20 +1027,30 @@ export default function ClientProfilePage() {
               >
                 {t('cancel')}
               </button>
-              <button
-                onClick={() => handleDeleteClient(!!deleteModal.force)}
-                disabled={deleting}
-                className="px-4 py-2 text-sm text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors font-medium disabled:opacity-50"
-              >
-                {deleting ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                    {t('deleting')}
-                  </span>
-                ) : (
-                  deleteModal.force ? t('forceDelete') : t('delete')
-                )}
-              </button>
+              {deleteModal.blocked ? (
+                <button
+                  onClick={handleMarkInactive}
+                  disabled={deleting}
+                  className="px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50"
+                >
+                  {t('markInactive')}
+                </button>
+              ) : (
+                <button
+                  onClick={handleDeleteClient}
+                  disabled={deleting}
+                  className="px-4 py-2 text-sm text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors font-medium disabled:opacity-50"
+                >
+                  {deleting ? (
+                    <span className="flex items-center gap-2">
+                      <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      {t('deleting')}
+                    </span>
+                  ) : (
+                    t('delete')
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>
