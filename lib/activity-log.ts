@@ -1,13 +1,15 @@
 // ============================================
 // ACTIVITY LOG — the audit trail's write path
 // ============================================
-// Called from middleware for every authenticated mutating API request.
-// Fire-and-forget: an audit insert must never slow or fail a real request,
+// Called from middleware for every authenticated mutating API request, and by
+// the few routes whose changes need their before/after values kept
+// (recordChange, below). Fire-and-forget: an audit insert must never slow or fail a real request,
 // so callers wrap it in event.waitUntil and errors are swallowed after a
 // console.error (losing one log line beats failing the user's action).
 
 import { createClient } from '@supabase/supabase-js'
 import { pickActiveMembership } from '@/lib/auth/active-org'
+import type { ActivityDetail } from '@/lib/activity-detail'
 
 const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -71,6 +73,46 @@ export async function recordActivity(input: {
       entity_id,
       ip: input.ip,
       user_agent: input.user_agent?.slice(0, 300) ?? null,
+    })
+  } catch (err) {
+    console.error('activity log write failed:', err)
+  }
+}
+
+/**
+ * A row that says WHAT changed: the target and each field's value before and
+ * after (lib/activity-detail). Written by the route once the change has
+ * succeeded, into the company it was made in, so it never records a refused
+ * request. The middleware row for the same request stays; this one carries
+ * the values. Errors are swallowed like recordActivity's.
+ */
+export async function recordChange(input: {
+  org_id: string
+  user_id: string
+  /** Looked up from the profile when not given. */
+  user_email?: string | null
+  method: string
+  path: string
+  detail: ActivityDetail
+}): Promise<void> {
+  try {
+    if (input.detail.changes.length === 0) return
+    let email = input.user_email ?? null
+    if (!email) {
+      const { data } = await admin.from('user_profiles').select('email').eq('id', input.user_id).maybeSingle()
+      email = (data as { email?: string } | null)?.email ?? null
+    }
+    const { entity_type, entity_id } = parsePath(input.path)
+    await admin.from('activity_log').insert({
+      org_id: input.org_id,
+      user_id: input.user_id,
+      user_email: email,
+      method: input.method,
+      path: input.path.slice(0, 500),
+      action: actionFor(input.method),
+      entity_type,
+      entity_id,
+      detail: input.detail,
     })
   } catch (err) {
     console.error('activity log write failed:', err)

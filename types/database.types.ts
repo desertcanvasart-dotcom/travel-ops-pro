@@ -630,6 +630,7 @@ export interface Database {
           entity_id: string | null
           ip: string | null
           user_agent: string | null
+          detail: Json | null
           created_at: string
         }
         Insert: {
@@ -644,6 +645,7 @@ export interface Database {
           entity_id?: string | null
           ip?: string | null
           user_agent?: string | null
+          detail?: Json | null
           created_at?: string
         }
         Update: {
@@ -658,6 +660,7 @@ export interface Database {
           entity_id?: string | null
           ip?: string | null
           user_agent?: string | null
+          detail?: Json | null
           created_at?: string
         }
         Relationships: []

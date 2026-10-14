@@ -113,8 +113,11 @@ describe('deactivation cannot reach into another workspace', () => {
   it('PUT is_active:false on someone with another membership is refused (409)', () => {
     const s = src('app/api/profiles/[id]/route.ts')
     const put = s.slice(s.indexOf('export async function PUT'), s.indexOf('export async function DELETE'))
-    expect(put).toContain('if (body.is_active === false) {')
-    expect(put).toMatch(/\.eq\('user_id', id\)\s*\n\s*\.neq\('org_id', caller\.orgId\)/)
+    // The membership count moved into inOtherCompany(), shared with DELETE
+    // (Settings audit); behaviour is exercised in
+    // __tests__/api/profiles-authorization.test.ts.
+    expect(put).toContain('if (body.is_active === false && await inOtherCompany(id, caller.orgId)) {')
+    expect(s).toMatch(/\.eq\('user_id', userId\)\s*\n\s*\.neq\('org_id', orgId\)/)
     expect(put).toContain('{ status: 409 }')
   })
 })

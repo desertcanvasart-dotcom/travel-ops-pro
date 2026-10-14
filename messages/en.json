@@ -8285,7 +8285,7 @@
   },
   "activity": {
     "title": "Activity Log",
-    "subtitle": "Every change made in the system: who, what, and when. Records cannot be edited or deleted.",
+    "subtitle": "Changes saved through the app's server: who, what, and when. Role, membership and seasonal premium changes also show the values before and after. Records cannot be edited or deleted.",
     "filterUser": "Filter by user email",
     "filterEntity": "Filter by area (e.g. rates, bookings)",
     "allActions": "All actions",
@@ -8297,7 +8297,16 @@
     "colAction": "Action",
     "colTarget": "Target",
     "empty": "No activity recorded yet.",
-    "total": "{count} entries"
+    "total": "{count} entries",
+    "fieldRole": "Role",
+    "fieldActive": "Active",
+    "fieldPremium": "Premium",
+    "fieldName": "Name",
+    "fieldMembership": "Membership",
+    "fieldAccount": "Account",
+    "fieldDates": "Dates",
+    "valueYes": "Yes",
+    "valueNo": "No"
   },
   "bulkDelete": {
     "selected": "{count} selected",

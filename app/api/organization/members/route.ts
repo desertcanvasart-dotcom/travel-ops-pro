@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
+import { mayManage } from '@/lib/auth/member-management'
+import { recordChange } from '@/lib/activity-log'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,9 +13,13 @@ const supabaseAdmin = createClient(
 
 // GET — list members of the current org. Returns the membership join with
 // the matching user_profiles row so the settings page can render name +
-// email + role + joined-at without a second roundtrip.
+// email + role + joined-at without a second roundtrip. Admin and manager only
+// (owner passes), like the Settings screen that reads it: it lists every
+// member's email and role.
 export async function GET() {
   try {
+    const forbidden = await requireRole(['admin', 'manager'])
+    if (forbidden) return forbidden
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
@@ -50,7 +56,11 @@ export async function GET() {
   }
 }
 
-// DELETE — remove a member. Only owners can remove others; users can remove
+// DELETE — remove a member from THIS company. Their login, profile and any
+// other company's membership are untouched. The owner removes anyone; an
+// admin removes a manager, agent or viewer (the Users page rule, mayManage),
+// which is how a person who also works for another company leaves this one:
+// deactivating or deleting them would act in both. Users can remove
 // themselves (leave) UNLESS they are the last owner (that would orphan the org).
 export async function DELETE(request: NextRequest) {
   try {
@@ -87,22 +97,29 @@ export async function DELETE(request: NextRequest) {
     const actorRole = (actor as { role?: string } | null)?.role
     const isSelf = targetUserId === user.id
 
-    if (!isSelf && actorRole !== 'owner') {
-      return NextResponse.json(
-        { success: false, error: 'Only owners can remove other members' },
-        { status: 403 }
-      )
-    }
-
-    // Last-owner guard: if the target is an owner and there's only one
-    // owner in the org, refuse — removing them would lock the org.
     const { data: targetMembership } = await supabaseAdmin
       .from('organization_members')
       .select('role')
       .eq('org_id', orgId)
       .eq('user_id', targetUserId)
       .maybeSingle()
-    if ((targetMembership as { role?: string } | null)?.role === 'owner') {
+    const targetRole = (targetMembership as { role?: string } | null)?.role ?? null
+    if (!targetRole) {
+      return NextResponse.json({ success: false, error: 'Not a member of this company' }, { status: 404 })
+    }
+
+    if (!isSelf && actorRole !== 'owner' && !mayManage(actorRole ?? '', targetRole)) {
+      return NextResponse.json(
+        { success: false, error: targetRole === 'admin' || targetRole === 'owner'
+          ? 'Only the owner can remove an admin'
+          : 'Only an admin or the owner can remove a member' },
+        { status: 403 }
+      )
+    }
+
+    // Last-owner guard: if the target is an owner and there's only one
+    // owner in the org, refuse — removing them would lock the org.
+    if (targetRole === 'owner') {
       const { count: ownerCount } = await supabaseAdmin
         .from('organization_members')
         .select('user_id', { count: 'exact', head: true })
@@ -123,6 +140,17 @@ export async function DELETE(request: NextRequest) {
       .eq('user_id', targetUserId)
 
     if (error) throw error
+
+    const { data: target } = await supabaseAdmin
+      .from('user_profiles')
+      .select('email')
+      .eq('id', targetUserId)
+      .maybeSingle()
+    await recordChange({
+      org_id: orgId, user_id: user.id, user_email: user.email ?? null, method: 'DELETE',
+      path: `/api/organization/members`,
+      detail: { target: (target as { email?: string } | null)?.email ?? null, changes: [{ field: 'membership', from: targetRole, to: null }] },
+    })
 
     return NextResponse.json({ success: true })
   } catch (err) {

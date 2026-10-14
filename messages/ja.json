@@ -8870,7 +8870,7 @@
   },
   "activity": {
     "title": "操作ログ",
-    "subtitle": "システム内のすべての変更履歴：誰が・何を・いつ。記録の編集・削除はできません。",
+    "subtitle": "アプリのサーバー経由で保存された変更：誰が・何を・いつ。権限・所属・シーズン割増の変更は、変更前と変更後の値も表示します。記録の編集・削除はできません。",
     "filterUser": "ユーザーのメールで絞り込み",
     "filterEntity": "対象で絞り込み（例：rates、bookings）",
     "allActions": "すべての操作",
@@ -8882,7 +8882,16 @@
     "colAction": "操作",
     "colTarget": "対象",
     "empty": "まだ記録がありません。",
-    "total": "{count}件"
+    "total": "{count}件",
+    "fieldRole": "権限",
+    "fieldActive": "有効",
+    "fieldPremium": "割増",
+    "fieldName": "名前",
+    "fieldMembership": "所属",
+    "fieldAccount": "アカウント",
+    "fieldDates": "期間",
+    "valueYes": "はい",
+    "valueNo": "いいえ"
   },
   "bulkDelete": {
     "selected": "{count}件選択中",
