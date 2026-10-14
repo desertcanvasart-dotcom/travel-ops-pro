@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
-import { addToTotals, emptyTotals, formatMoney, formatTotals, type CurrencyTotals } from '@/lib/currency-totals'
+import { emptyTotals, formatMoney, formatTotals } from '@/lib/currency-totals'
+import { isReceivedTripPayment, paymentStats, type PaymentStats } from '@/lib/payments/stats'
+import { todayLocal } from '@/lib/today'
 import {
   DollarSign,
   TrendingUp,
@@ -34,15 +36,8 @@ interface UnifiedPayment {
   transaction_reference: string | null
   notes: string | null
   created_at: string
-}
-
-interface PaymentStats {
-  // Kept per currency: this operator collects in yen while the rate tables are
-  // in euro, and one merged number would be true in neither.
-  totalReceived: CurrencyTotals
-  pendingPayments: CurrencyTotals
-  overduePayments: CurrencyTotals
-  thisMonthRevenue: CurrencyTotals
+  /** A trip payment that is not money received (pending, failed, refunded, or a refund): shown, not counted. */
+  not_counted?: 'refund' | 'not_completed'
 }
 
 export default function PaymentsPage() {
@@ -83,9 +78,6 @@ export default function PaymentsPage() {
       ])
 
       const allPayments: UnifiedPayment[] = []
-      const totalReceived = emptyTotals()
-      const pendingPayments = emptyTotals()
-      const overduePayments = emptyTotals()
 
       // Process itinerary payments
       {
@@ -103,29 +95,15 @@ export default function PaymentsPage() {
             payment_date: p.payment_date,
             transaction_reference: p.transaction_reference,
             notes: p.notes,
-            created_at: p.created_at
+            created_at: p.created_at,
+            not_counted: isReceivedTripPayment(p) ? undefined : p.payment_type === 'refund' ? 'refund' : 'not_completed'
           })
-          addToTotals(totalReceived, p.amount, p.currency || 'EUR')
         })
       }
 
       // Process invoice payments
       {
-        const now = new Date()
-
         for (const invoice of invoices) {
-          // Track pending and overdue from invoices
-          if (['sent', 'partial', 'viewed'].includes(invoice.status)) {
-            addToTotals(pendingPayments, invoice.balance_due, invoice.currency)
-          }
-
-          if (invoice.status !== 'paid' && invoice.status !== 'cancelled' && invoice.due_date) {
-            const dueDate = new Date(invoice.due_date)
-            if (dueDate < now && Number(invoice.balance_due) > 0) {
-              addToTotals(overduePayments, invoice.balance_due, invoice.currency)
-            }
-          }
-
           // Payments come embedded on the invoice (?include=payments) — no
           // per-invoice fetch needed
           const invoicePayments = invoice.invoice_payments
@@ -146,7 +124,6 @@ export default function PaymentsPage() {
                 notes: p.notes,
                 created_at: p.created_at
               })
-              addToTotals(totalReceived, p.amount, p.currency || invoice.currency)
             })
           }
         }
@@ -159,25 +136,10 @@ export default function PaymentsPage() {
         return dateB.getTime() - dateA.getTime()
       })
 
-      // Calculate this month's revenue
-      const startOfMonth = new Date()
-      startOfMonth.setDate(1)
-      startOfMonth.setHours(0, 0, 0, 0)
-
-      const thisMonthRevenue = emptyTotals()
-      for (const p of allPayments) {
-        if (p.payment_date && new Date(p.payment_date) >= startOfMonth) {
-          addToTotals(thisMonthRevenue, p.amount, p.currency)
-        }
-      }
-
       setPayments(allPayments)
-      setStats({
-        totalReceived,
-        pendingPayments,
-        overduePayments,
-        thisMonthRevenue
-      })
+      // The four tiles (lib/payments/stats): completed payments only, overdue
+      // worked out the way the Invoices page does.
+      setStats(paymentStats(itineraryPayments, invoices, todayLocal()))
 
     } catch (error) {
       console.error('Error fetching payments:', error)
@@ -468,9 +430,12 @@ export default function PaymentsPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <span className="text-sm font-bold text-green-600">
+                    <span className={`text-sm font-bold ${payment.not_counted ? 'text-gray-400' : 'text-green-600'}`}>
                       {formatMoney(payment.amount, payment.currency)}
                     </span>
+                    {payment.not_counted && (
+                      <div className="text-xs text-gray-500">{payment.not_counted === 'refund' ? t('refundTag') : t('notCompletedTag')}</div>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium">

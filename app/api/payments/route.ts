@@ -4,6 +4,9 @@ import { blankToNull } from '@/lib/blank-to-null'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { paymentCurrencyFor } from '@/lib/payment-currency'
+import { checkPaymentAmount, pickPaymentFields } from '@/lib/payments/fields'
+import { tripPaymentVatColumns } from '@/lib/payments/vat'
+import { loadTripVatExtras } from '@/lib/vat'
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,12 +23,15 @@ export async function GET(request: NextRequest) {
     const requestedPage = parseInt(searchParams.get('page') || '1')
     const page = Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1
     const from = (page - 1) * limit
+    // One trip's payments (the New Payment screen works out what it has paid).
+    const itineraryId = searchParams.get('itineraryId')
 
-    const { data: payments, error } = await supabase
+    let query = supabase
       .from('payments')
       .select(`
         *,
         itineraries (
+          org_id,
           itinerary_code,
           client_name,
           client_phone,
@@ -34,19 +40,28 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('org_id', orgId)
+    if (itineraryId) query = query.eq('itinerary_id', itineraryId)
+    const { data: payments, error } = await query
       .order('created_at', { ascending: false })
       .range(from, from + limit - 1)
 
     if (error) throw error
 
-    const formattedPayments = payments?.map((p: any) => ({
-      ...p,
-      itinerary_code: p.itineraries?.itinerary_code,
-      client_name: p.itineraries?.client_name,
-      client_phone: p.itineraries?.client_phone,
-      client_email: p.itineraries?.client_email,
-      total_cost: p.itineraries?.total_cost
-    }))
+    // Only this org's trip (as GET /api/payments/[id] does): itinerary_id was
+    // stored as given on older payments, and another company's trip would
+    // show that company's client, phone, email and total on our pages.
+    const formattedPayments = payments?.map((p: any) => {
+      const trip = p.itineraries?.org_id === orgId ? p.itineraries : null
+      return {
+        ...p,
+        itineraries: trip,
+        itinerary_code: trip?.itinerary_code,
+        client_name: trip?.client_name,
+        client_phone: trip?.client_phone,
+        client_email: trip?.client_email,
+        total_cost: trip?.total_cost
+      }
+    })
 
     return NextResponse.json({
       success: true,
@@ -72,40 +87,48 @@ export async function POST(request: NextRequest) {
     // route silently discarded payments (AUT-W01).
     const body = blankToNull(await request.json())
 
+    // Only the columns a caller may set (lib/payments/fields): the body used
+    // to be spread into the insert, id and created_at included.
+    const fields = pickPaymentFields(body)
+
     // Validate the amount is a positive, finite number before recording — a
     // negative/NaN/string amount would silently corrupt invoice balances.
-    const amount = Number(body.amount)
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return NextResponse.json(
-        { success: false, error: 'amount must be a positive number' },
-        { status: 400 }
-      )
+    const checked = checkPaymentAmount(fields.amount)
+    if (!checked.ok) {
+      return NextResponse.json({ success: false, error: checked.error }, { status: 400 })
     }
-    body.amount = amount
+    fields.amount = checked.amount
 
     // The trip must be this org's, and the payment in its currency — the
-    // receipt prints it (lib/org-refs, lib/payment-currency).
-    if (body.itinerary_id) {
-      if (typeof body.itinerary_id !== 'string') {
+    // receipt prints it (lib/org-refs, lib/payment-currency). Its VAT is
+    // written on the payment (lib/payments/vat): the receipt states the VAT it
+    // was recorded with, whatever the trip says later.
+    let vatColumns: Record<string, unknown> = {}
+    if (fields.itinerary_id) {
+      if (typeof fields.itinerary_id !== 'string') {
         return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
       }
       const { data: trip } = await supabase
         .from('itineraries')
-        .select('id, currency')
-        .eq('id', body.itinerary_id)
+        .select('*')
+        .eq('id', fields.itinerary_id)
         .eq('org_id', orgId)
         .maybeSingle()
       if (!trip) return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
-      const paid = paymentCurrencyFor(body.currency, trip.currency)
+      const paid = paymentCurrencyFor(fields.currency, trip.currency)
       if (!paid.ok) return NextResponse.json({ success: false, error: paid.error }, { status: 400 })
-      body.currency = paid.currency
+      fields.currency = paid.currency
+      vatColumns = tripPaymentVatColumns(
+        checked.amount,
+        trip.vat_applied === true ? { ...trip, ...(await loadTripVatExtras(supabase, trip.id)) } : trip,
+        paid.currency
+      )
     }
 
-    // M3 Phase 2A: stamp org_id from the session, overriding any value the
-    // client might have tried to inject through the spread body.
+    // M3 Phase 2A: stamp org_id from the session, never from the body.
     const { data, error } = await supabase
       .from('payments')
-      .insert([{ ...body, org_id: orgId }])
+      .insert([{ ...fields, ...vatColumns, org_id: orgId }])
       .select()
       .single()
 

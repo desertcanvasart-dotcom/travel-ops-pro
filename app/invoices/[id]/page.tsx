@@ -1,6 +1,7 @@
 'use client'
 
 import { receiptNumberFor } from '@/lib/receipt-pdf-generator'
+import { displayStatus } from '@/lib/invoices/status'
 import { todayLocal } from '@/lib/today'
 import { readInvoiceVat } from '@/lib/vat'
 import { VatToken, VatToggle } from '@/app/components/Vat'
@@ -88,6 +89,8 @@ interface Payment {
   payment_method: string
   payment_date: string
   transaction_reference: string | null
+  /** The receipt's own number, from the company's series. */
+  receipt_number?: string | null
   notes: string | null
   created_at: string
 }
@@ -491,16 +494,15 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   const getDisplayStatus = () => {
     if (!invoice) return 'draft'
-    if (invoice.status !== 'paid' && invoice.status !== 'cancelled' && invoice.due_date) {
-      const dueDate = new Date(invoice.due_date)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      if (dueDate < today && Number(invoice.balance_due) > 0) {
-        return 'overdue'
-      }
-    }
-    return invoice.status
+    // The same rule as the list and the Payments page (lib/invoices/status):
+    // a draft that was never sent is not overdue.
+    return displayStatus(invoice, todayLocal())
   }
+
+  // Money is recorded against an invoice that has been sent: the API refuses a
+  // payment on a draft or a cancelled one.
+  const canRecordPayment = () =>
+    !!invoice && Number(invoice.balance_due) > 0 && invoice.status !== 'draft' && invoice.status !== 'cancelled'
 
   const canCreateFinalInvoice = () => {
     if (!invoice) return false
@@ -630,7 +632,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             </button>
           )}
 
-          {Number(invoice.balance_due) > 0 && (
+          {canRecordPayment() && (
             <button
               onClick={() => setShowPaymentModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4f6238] transition-colors"
@@ -879,7 +881,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               </div>
             </div>
 
-            {Number(invoice.balance_due) > 0 && (
+            {canRecordPayment() && (
               <button
                 onClick={() => setShowPaymentModal(true)}
                 className="w-full mt-5 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4f6238] transition-colors"

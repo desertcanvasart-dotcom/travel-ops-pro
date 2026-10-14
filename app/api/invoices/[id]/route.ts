@@ -4,6 +4,9 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { recordsInOrg } from '@/lib/org-refs'
 import { roundToCurrency } from '@/lib/currency-totals'
 import { switchInvoiceVat } from '@/lib/invoices/totals'
+import { isSettableInvoiceStatus, SETTABLE_INVOICE_STATUSES } from '@/lib/invoices/validate'
+import { displayStatus } from '@/lib/invoices/status'
+import { businessToday } from '@/lib/today'
 import { getOrgVatRate, loadTripVatExtras, parseVatApplied, tripVatExcludedShare } from '@/lib/vat'
 
 const supabaseAdmin = createClient(
@@ -48,7 +51,8 @@ export async function GET(
       balance_due_date = (booking?.balance_due_date as string | null) ?? null
     }
 
-    return NextResponse.json({ ...data, balance_due_date })
+    // display_status: 'overdue' worked out as the list does (lib/invoices/status).
+    return NextResponse.json({ ...data, balance_due_date, display_status: displayStatus(data, businessToday()) })
   } catch (error) {
     console.error('Error in invoice GET:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -78,9 +82,10 @@ export async function PUT(
     // amount_paid / balance_due / paid_at are DERIVED from payment activity (see
     // the payments routes) and are intentionally excluded — otherwise a caller
     // could mark an invoice paid or zero out the balance via this edit endpoint.
+    // So is subtotal: it is the total plus the discount, worked out below.
     const allowedFields = [
       'client_id', 'itinerary_id', 'client_name', 'client_email',
-      'line_items', 'subtotal', 'discount_amount',
+      'line_items', 'discount_amount',
       'total_amount', 'currency', 'status',
       'issue_date', 'due_date', 'notes', 'payment_terms', 'payment_instructions',
       'sent_at'
@@ -94,6 +99,34 @@ export async function PUT(
 
     if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updateData.itinerary_id, client_id: updateData.client_id }))) {
       return NextResponse.json({ error: 'Itinerary or client not found' }, { status: 404 })
+    }
+
+    // A status set by hand is one of draft / sent / viewed / cancelled. paid and
+    // partial follow from the payments (the trigger sets them) and overdue from
+    // the due date; `{status: 'paid'}` on an invoice with a balance still due
+    // was stored as sent.
+    if (updateData.status !== undefined && !isSettableInvoiceStatus(updateData.status)) {
+      return NextResponse.json(
+        { error: `status must be one of ${SETTABLE_INVOICE_STATUSES.join(', ')} (paid and partial follow from payments)` },
+        { status: 400 }
+      )
+    }
+
+    // The amounts of a VAT-applied invoice are worked out together (net, VAT,
+    // total): a new total here left tax_amount and the base stale, so the
+    // invoice stated the VAT of the old figure. Switch VAT off, change the
+    // amounts, switch it on.
+    const amountsTouched = ['total_amount', 'discount_amount', 'line_items', 'currency'].some(k => updateData[k] !== undefined)
+    if (amountsTouched) {
+      const { data: vatCheck } = await supabaseAdmin
+        .from('invoices')
+        .select('vat_applied')
+        .eq('id', id)
+        .eq('org_id', orgId)
+        .maybeSingle()
+      if (vatCheck?.vat_applied === true) {
+        return NextResponse.json({ error: 'This invoice carries VAT. Switch VAT off before changing its amounts, then switch it on again.' }, { status: 409 })
+      }
     }
 
     // VAT switched on or off: re-worked from the invoice's own net at the
@@ -127,7 +160,7 @@ export async function PUT(
     if (updateData.total_amount !== undefined || updateData.currency !== undefined) {
       const { data: currentInvoice } = await supabaseAdmin
         .from('invoices')
-        .select('amount_paid, currency, status, paid_at')
+        .select('amount_paid, currency, status, paid_at, discount_amount')
         .eq('id', id)
         .eq('org_id', orgId)
         .single()
@@ -150,6 +183,10 @@ export async function PUT(
           }
           const currency = updateData.currency ?? currentInvoice.currency
           updateData.balance_due = roundToCurrency(total - paid, currency)
+          // subtotal + tax - discount = total (lib/invoices/totals); no VAT
+          // here (guarded above), so the subtotal is the total plus the discount.
+          const discount = Number(updateData.discount_amount ?? currentInvoice.discount_amount) || 0
+          updateData.subtotal = roundToCurrency(total + discount, currency)
           // As the payment routes: a 'paid' invoice raised above its payments
           // is 'partial' again (and chased); one lowered to them is 'paid'.
           // A status the caller set explicitly stands.
@@ -193,12 +230,9 @@ export async function DELETE(
     const { id } = await params
 
     // Verify the invoice belongs to this org BEFORE touching its children.
-    // invoice_payments doesn't carry org_id (it inherits via FK), so deleting
-    // by invoice_id without this check would let one org delete another's
-    // payments while the parent invoice survives the org-scoped delete below.
     const { data: invoice } = await supabaseAdmin
       .from('invoices')
-      .select('id')
+      .select('id, amount_paid')
       .eq('id', id)
       .eq('org_id', orgId)
       .maybeSingle()
@@ -206,13 +240,34 @@ export async function DELETE(
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
-    // First delete related payments
-    await supabaseAdmin
+    // An invoice that has taken money is a record of it, and what was posted
+    // to the accounting system stays there: it is not deleted from under its
+    // payments. They are deleted first (the payment route flags what was
+    // already posted). invoice_payments has no org_id; the invoice was checked above.
+    const { count: paymentCount } = await supabaseAdmin
       .from('invoice_payments')
-      .delete()
+      .select('id', { count: 'exact', head: true })
       .eq('invoice_id', id)
+    if ((paymentCount ?? 0) > 0 || Number(invoice.amount_paid) > 0) {
+      return NextResponse.json(
+        { error: 'This invoice has payments recorded against it, so it cannot be deleted. If they were entered by mistake, delete the payments first.' },
+        { status: 409 }
+      )
+    }
 
-    // Then delete the invoice
+    // The extras and upgrades this invoice billed carry its id and invoiced_at,
+    // which is what stops them being billed twice. booking_extras.invoice_id is
+    // ON DELETE SET NULL, so the ids are read first: after the delete only
+    // invoiced_at would tell they were billed.
+    const { data: billed } = await supabaseAdmin
+      .from('booking_extras')
+      .select('id')
+      .eq('invoice_id', id)
+      .eq('org_id', orgId)
+    // A database without migration 20260828_booking_extras has no table: nothing to release.
+    const billedIds = (billed ?? []).map((e: { id: string }) => e.id)
+
+    // Delete the invoice
     const { error } = await supabaseAdmin
       .from('invoices')
       .delete()
@@ -222,6 +277,18 @@ export async function DELETE(
     if (error) {
       console.error('Error deleting invoice:', error)
       return NextResponse.json({ error: 'Failed to delete invoice' }, { status: 500 })
+    }
+
+    // With the invoice gone they are owed again: released, or they are never
+    // billed. After the delete, so a failed delete does not free the extras of
+    // an invoice that still exists to be billed a second time.
+    if (billedIds.length) {
+      const { error: releaseError } = await supabaseAdmin
+        .from('booking_extras')
+        .update({ invoiced_at: null, invoice_id: null })
+        .in('id', billedIds)
+        .eq('org_id', orgId)
+      if (releaseError) console.error('invoices: could not release extras', releaseError)
     }
 
     return NextResponse.json({ success: true })

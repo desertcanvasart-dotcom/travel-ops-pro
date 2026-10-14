@@ -5,7 +5,9 @@ import { createServerClient } from '@/lib/supabase-server'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { orgIdentity } from '@/lib/org-identity'
-import { loadTripVatExtras, vatInPayment, vatInsideGross, vatMarker, type VatRecord } from '@/lib/vat'
+import { loadTripVatExtras, vatInPayment, vatMarker, type VatRecord } from '@/lib/vat'
+import { receiptVat } from '@/lib/payments/vat'
+import { receiptNumberFor } from '@/lib/payments/receipt-number'
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,7 +48,7 @@ export async function POST(request: NextRequest) {
         .from('invoice_payments')
         // The invoice's '*': its VAT columns when the database has them —
         // vat_base (20261218) says it left extras and insurance out.
-        .select('id, amount, currency, payment_method, payment_date, transaction_reference, created_at, invoices!inner (*)')
+        .select('id, amount, currency, payment_method, payment_date, transaction_reference, receipt_number, created_at, invoices!inner (*)')
         .eq('id', invoicePaymentId)
         .eq('invoices.org_id', orgId)
         .single()
@@ -70,7 +72,7 @@ export async function POST(request: NextRequest) {
       receipt = {
         clientName: inv.client_name,
         clientPhone: phone,
-        receiptNumber: ip.transaction_reference || `RCP-${String(ip.id).slice(0, 8).toUpperCase()}`,
+        receiptNumber: receiptNumberFor(ip),
         amount: ip.amount,
         currency: ip.currency,
         paymentDate: ip.payment_date || ip.created_at,
@@ -98,6 +100,12 @@ export async function POST(request: NextRequest) {
 
       // A receipt says the money arrived; never send one for a pending, failed
       // or refunded payment.
+      if (payment.payment_type === 'refund') {
+        return NextResponse.json(
+          { success: false, error: 'This payment is a refund; a receipt is only sent for money received.' },
+          { status: 409 }
+        )
+      }
       if (payment.payment_status !== 'completed') {
         return NextResponse.json(
           { success: false, error: `This payment is ${payment.payment_status ?? 'not completed'}; a receipt is only sent once it is completed.` },
@@ -111,19 +119,20 @@ export async function POST(request: NextRequest) {
       receipt = {
         clientName: trip?.client_name ?? null,
         clientPhone: trip?.client_phone ?? null,
-        receiptNumber: payment.transaction_reference || `RCP-${payment.id.slice(0, 8).toUpperCase()}`,
+        receiptNumber: receiptNumberFor(payment),
         amount: payment.amount,
         currency: payment.currency,
         paymentDate: payment.payment_date || payment.created_at,
         paymentMethod: payment.payment_method,
         referenceLabel: 'Itinerary',
         reference: trip?.itinerary_code || 'N/A',
-        // The VAT inside the amount at the trip's recorded rate, on the
-        // trip's taxed share — its extras are not taxed (lib/vat.ts).
-        vat: vatInsideGross(
-          payment.amount,
-          trip?.vat_applied === true ? { ...trip, ...(await loadTripVatExtras(supabase, trip.id)) } : trip,
-          payment.currency
+        // The VAT recorded on the payment when it was made; one from before
+        // that is worked out from the trip's rate and taxed share — its extras
+        // are not taxed (lib/vat.ts, lib/payments/vat).
+        vat: receiptVat(
+          payment,
+          payment.currency,
+          trip?.vat_applied === true ? { ...trip, ...(await loadTripVatExtras(supabase, trip.id)) } : trip
         ),
       }
     }

@@ -1967,6 +1967,8 @@
     "noPaymentsFound": "No Payments Found",
     "recordFirstPayment": "Record your first payment",
     "orCreateInvoice": "or create an",
+    "refundTag": "Refund (not counted as received)",
+    "notCompletedTag": "Not completed (not counted as received)",
     "record": {
       "title": "Record Payment",
       "subtitle": "Add a new payment transaction",

@@ -13,6 +13,11 @@ import { currencyDecimals, roundToCurrency } from '@/lib/currency-totals'
 import { invoiceNet, invoiceTotals, resolveInvoiceVat } from '@/lib/invoices/totals'
 import { getOrgVatRate, invoiceVatExcluded, loadTripVatExtras, parseVatApplied, tripVatExcludedShare } from '@/lib/vat'
 import { recordsInOrg } from '@/lib/org-refs'
+import { checkInvoiceAmounts } from '@/lib/invoices/validate'
+import { displayStatus, OVERDUE_ELIGIBLE_STATUSES } from '@/lib/invoices/status'
+import { getOrgDefaultCurrency } from '@/lib/org-default-currency'
+import { businessToday } from '@/lib/today'
+import { firstReminderDate } from '@/lib/invoices/reminder-schedule'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -54,7 +59,15 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range(from, from + limit - 1)
 
-    if (status) {
+    const today = businessToday()
+    if (status === 'overdue') {
+      // Never stored: a sent invoice past its due date with a balance
+      // (lib/invoices/status). Asking the column for 'overdue' returned nothing.
+      query = query
+        .in('status', [...OVERDUE_ELIGIBLE_STATUSES])
+        .lt('due_date', today)
+        .gt('balance_due', 0)
+    } else if (status) {
       query = query.eq('status', status)
     }
 
@@ -81,6 +94,8 @@ export async function GET(request: NextRequest) {
     const formattedData = (data || []).map(invoice => ({
       ...invoice,
       client_phone: invoice.itineraries?.client_phone || null,
+      // What the screens show: 'overdue' worked out here, once, for all of them.
+      display_status: displayStatus(invoice, today),
       itineraries: undefined // Remove nested object
     }))
 
@@ -98,9 +113,10 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
 
-    // The trip and client must be this org's (lib/org-refs): the list embeds
-    // the trip's client phone through this key.
-    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: body.itinerary_id, client_id: body.client_id }))) {
+    // The trip, client and parent invoice must be this org's (lib/org-refs):
+    // the list embeds the trip's client phone through the first key, and a
+    // foreign parent id would be stored as the link.
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: body.itinerary_id, client_id: body.client_id, invoice_id: body.parent_invoice_id }))) {
       return NextResponse.json({ error: 'Itinerary or client not found' }, { status: 404 })
     }
 
@@ -112,12 +128,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // M19: invoice_number generation now goes through nextDocumentNumber
-    // (sequence-first, year-scoped MAX fallback, accepts 0 as a legitimate
-    // value), and the insert below is wrapped in a retry loop against the
-    // 23505 unique violation produced by the UNIQUE constraint in
-    // 20260624_unique_document_numbers.sql. The deposit/final type suffix
-    // is appended at row-build time so the same base number stays in sync.
+    // Invoice numbers are the COMPANY's own series (migration 20261225):
+    // next_invoice_number() hands out the next one under a row lock, or, where
+    // that function is missing, the company's own highest number + 1 is read as
+    // a number (never the install-wide sequence, never another company's
+    // invoices). The insert below is wrapped in a retry loop against the 23505
+    // unique violation of UNIQUE (org_id, invoice_number). The deposit/final
+    // type suffix is appended at row-build time to a fresh base number.
     const invoiceType = body.invoice_type || 'standard'
     const buildInvoiceNumber = async () => {
       const base = await nextDocumentNumber({
@@ -126,14 +143,24 @@ export async function POST(request: NextRequest) {
         sequenceName: 'invoice_number_seq',
         table: 'invoices',
         column: 'invoice_number',
+        orgId,
+        counterRpc: 'next_invoice_number',
       })
       if (invoiceType === 'deposit') return `${base}-DEP`
       if (invoiceType === 'final') return `${base}-FIN`
       return base
     }
 
+    // The amounts the caller may send are checked before any arithmetic
+    // (lib/invoices/validate): no negative or non-numeric total, a deposit
+    // between 0 (exclusive) and 100%.
+    const amounts = checkInvoiceAmounts(body)
+    if (!amounts.ok) {
+      return NextResponse.json({ error: amounts.error }, { status: 400 })
+    }
+
     // Calculate amounts based on invoice type
-    let totalAmount = body.total_amount || 0
+    let totalAmount = amounts.totalAmount
     // A line's `source` says the SERVER added it as insurance or an extra, and
     // VAT leaves those out (lib/vat.ts) — so a caller's line never carries one.
     let lineItems = Array.isArray(body.line_items)
@@ -144,13 +171,58 @@ export async function POST(request: NextRequest) {
           return rest
         })
       : []
-    const depositPercent = body.deposit_percent || 10
-    let fullTripCost = body.full_trip_cost || totalAmount // Store original trip cost
+    const depositPercent = amounts.depositPercent
+    let fullTripCost = amounts.fullTripCost || totalAmount // Store original trip cost
     // Every derived amount below is rounded to THIS currency's minor unit.
     // Without it a 20% deposit on ¥1,854,367 bills ¥370,873.4, and a yen with a
     // decimal place is not an amount of money that exists.
-    const currency = body.currency || 'EUR'
+    //
+    // None sent: the trip's, else the company's own (organizations.default_currency).
+    // It was 'EUR' for everyone, so a form submitted before the preference
+    // loaded filed a yen company's invoice in euro.
+    let currency = typeof body.currency === 'string' ? body.currency.trim().toUpperCase() : ''
+    if (!currency && body.itinerary_id) {
+      const { data: tripCurrency } = await supabaseAdmin
+        .from('itineraries')
+        .select('currency')
+        .eq('id', body.itinerary_id)
+        .eq('org_id', orgId)
+        .maybeSingle()
+      currency = typeof tripCurrency?.currency === 'string' ? tripCurrency.currency.trim().toUpperCase() : ''
+    }
+    if (!currency) currency = await getOrgDefaultCurrency(supabaseAdmin, orgId)
     const moneyDp = currencyDecimals(currency)
+
+    // One final invoice per deposit and one deposit per trip. The page hides
+    // the button once a child exists, but two clicks, a retry or two agents
+    // reached the API twice and billed the balance (or the deposit) twice.
+    // A cancelled invoice does not count: it can be replaced.
+    if (invoiceType === 'final' && body.parent_invoice_id) {
+      const { data: existing } = await supabaseAdmin
+        .from('invoices')
+        .select('id, invoice_number')
+        .eq('org_id', orgId)
+        .eq('parent_invoice_id', body.parent_invoice_id)
+        .eq('invoice_type', 'final')
+        .neq('status', 'cancelled')
+        .limit(1)
+      if (existing && existing.length) {
+        return NextResponse.json({ error: `A final invoice (${existing[0].invoice_number}) already exists for this deposit invoice` }, { status: 409 })
+      }
+    }
+    if (invoiceType === 'deposit' && body.itinerary_id) {
+      const { data: existing } = await supabaseAdmin
+        .from('invoices')
+        .select('id, invoice_number')
+        .eq('org_id', orgId)
+        .eq('itinerary_id', body.itinerary_id)
+        .eq('invoice_type', 'deposit')
+        .neq('status', 'cancelled')
+        .limit(1)
+      if (existing && existing.length) {
+        return NextResponse.json({ error: `A deposit invoice (${existing[0].invoice_number}) already exists for this trip` }, { status: 409 })
+      }
+    }
 
     // VAT (lib/vat.ts): as the caller chose, else as the source carries it —
     // the deposit a final settles, else the trip (which has it from its
@@ -403,7 +475,7 @@ export async function POST(request: NextRequest) {
         tripShare,
         currency,
       }),
-      discountAmount: body.discount_amount,
+      discountAmount: amounts.discountAmount,
       currency,
     })
 
@@ -431,6 +503,9 @@ export async function POST(request: NextRequest) {
       status: 'draft',
       issue_date: body.issue_date || new Date().toISOString().split('T')[0],
       due_date: body.due_date || null,
+      // Reminders start a week before it falls due. NULL here meant the daily
+      // cron (which asks for a date <= today) never picked a new invoice up.
+      next_reminder_date: /^\d{4}-\d{2}-\d{2}/.test(String(body.due_date ?? '')) ? firstReminderDate(String(body.due_date).slice(0, 10)) : null,
       notes: body.notes || null,
       payment_terms: body.payment_terms || getDefaultPaymentTerms(invoiceType),
       payment_instructions: body.payment_instructions || null,

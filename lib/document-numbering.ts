@@ -39,6 +39,49 @@ interface NextDocumentNumberOpts {
   column: string
   /** Optional override for the year (defaults to current year). */
   year?: number
+  /**
+   * A per-company document: the numbers are this company's own. With
+   * `counterRpc` they come from that function (p_org, p_year), which hands out
+   * the next free number under a row lock; without it (or while the function
+   * is missing) the scan below is limited to this company and compares the
+   * numbers as numbers. The install-wide `nextval` sequence is not used.
+   */
+  orgId?: string
+  /** Name of the per-company counter function, e.g. 'next_invoice_number'. */
+  counterRpc?: string
+}
+
+/** The function is not there (PostgREST PGRST202, Postgres 42883). */
+function functionMissing(error: { code?: string } | null | undefined): boolean {
+  return error?.code === 'PGRST202' || error?.code === '42883'
+}
+
+/**
+ * Highest number of the year among a company's documents, read as a number.
+ * 'INV-2026-999' sorts above 'INV-2026-1000' as text, so the highest-as-text
+ * row is not the highest.
+ */
+async function nextForCompany(opts: NextDocumentNumberOpts, year: number): Promise<string> {
+  let max = 0
+  // Walked in pages: the API answers at most 1000 rows to one request.
+  for (let from = 0; ; from += 1000) {
+    const { data: rows, error } = await opts.supabase
+      .from(opts.table)
+      .select(opts.column)
+      .eq('org_id', opts.orgId!)
+      .like(opts.column, `${opts.prefix}-${year}-%`)
+      .order(opts.column, { ascending: true })
+      .range(from, from + 999)
+    if (error) {
+      throw new Error(`Failed to generate ${opts.prefix} number: ${error.message}`)
+    }
+    for (const row of (rows ?? []) as unknown as Record<string, unknown>[]) {
+      const m = String(row[opts.column] ?? '').match(/-(\d+)(?:-[A-Z]+)?$/)
+      if (m) max = Math.max(max, parseInt(m[1], 10))
+    }
+    if (!rows || rows.length < 1000) break
+  }
+  return `${opts.prefix}-${year}-${String(max + 1).padStart(3, '0')}`
 }
 
 /**
@@ -48,6 +91,19 @@ interface NextDocumentNumberOpts {
  */
 export async function nextDocumentNumber(opts: NextDocumentNumberOpts): Promise<string> {
   const year = opts.year ?? new Date().getFullYear()
+
+  // A per-company series (migration 20261225): the company's counter, else
+  // its own highest number. Never the shared sequence.
+  if (opts.orgId) {
+    if (opts.counterRpc) {
+      const { data, error } = await opts.supabase.rpc(opts.counterRpc, { p_org: opts.orgId, p_year: year })
+      if (!error && typeof data === 'string' && data) return data
+      if (error && !functionMissing(error)) {
+        throw new Error(`Failed to generate ${opts.prefix} number: ${error.message}`)
+      }
+    }
+    return nextForCompany(opts, year)
+  }
 
   // Primary path — the sequence is the source of truth. `seqData != null`
   // accepts 0 as a legitimate value.
