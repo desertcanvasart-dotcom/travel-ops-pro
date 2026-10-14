@@ -214,17 +214,19 @@ export const navigationConfig: NavConfig[] = [
   {
     titleKey: 'finance',
     key: 'finance',
-    roles: ['admin', 'manager'],
+    // Section = union of its items. Invoices and Payments are agent-visible:
+    // reservation staff issue invoices and record customer payments.
+    roles: ['admin', 'manager', 'agent'],
     items: [
-      { labelKey: 'payments', href: '/payments', icon: DollarSign },
-      { labelKey: 'invoices', href: '/invoices', icon: FileText },
-      { labelKey: 'receipts', href: '/receipts', icon: Receipt },
-      { labelKey: 'receivables', href: '/accounts-receivable', icon: Wallet },
-      { labelKey: 'payables', href: '/accounts-payable', icon: CreditCard },
-      { labelKey: 'supplierInvoices', href: '/supplier-invoices', icon: ReceiptText },
-      { labelKey: 'expenses', href: '/expenses', icon: HandCoins },
-      { labelKey: 'commissions', href: '/commissions', icon: Handshake },
-      { labelKey: 'profitLoss', href: '/profit-loss', icon: TrendingUp },
+      { labelKey: 'payments', href: '/payments', icon: DollarSign, roles: ['admin', 'manager', 'agent'] },
+      { labelKey: 'invoices', href: '/invoices', icon: FileText, roles: ['admin', 'manager', 'agent'] },
+      { labelKey: 'receipts', href: '/receipts', icon: Receipt, roles: ['admin', 'manager'] },
+      { labelKey: 'receivables', href: '/accounts-receivable', icon: Wallet, roles: ['admin', 'manager'] },
+      { labelKey: 'payables', href: '/accounts-payable', icon: CreditCard, roles: ['admin', 'manager'] },
+      { labelKey: 'supplierInvoices', href: '/supplier-invoices', icon: ReceiptText, roles: ['admin', 'manager'] },
+      { labelKey: 'expenses', href: '/expenses', icon: HandCoins, roles: ['admin', 'manager'] },
+      { labelKey: 'commissions', href: '/commissions', icon: Handshake, roles: ['admin', 'manager'] },
+      { labelKey: 'profitLoss', href: '/profit-loss', icon: TrendingUp, roles: ['admin', 'manager'] },
     ]
   },
   // Configured once.

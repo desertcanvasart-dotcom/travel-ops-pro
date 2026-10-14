@@ -62,10 +62,7 @@ const sorted = (roles: string[]) => [...roles].sort().join(',')
 
 // Screens not yet audited, as "path: menu=… server=…". Each group's audit
 // fixes its gaps and deletes its lines here.
-const KNOWN_GAPS: string[] = [
-  '/payments: menu=admin,manager server=admin,agent,manager',
-  '/invoices: menu=admin,manager server=admin,agent,manager',
-]
+const KNOWN_GAPS: string[] = []
 
 describe('menu screens are gated on the server to the menu roles', () => {
   it('no screen lets in a role the menu hides it from, or keeps out one it shows it to', () => {
@@ -73,5 +70,16 @@ describe('menu screens are gated on the server to the menu roles', () => {
       .filter(s => sorted(s.roles) !== sorted(serverRoles(s.path)))
       .map(s => `${s.path}: menu=${sorted(s.roles)} server=${sorted(serverRoles(s.path))}`)
     expect(gaps).toEqual(KNOWN_GAPS)
+  })
+})
+
+describe('Finance: invoices are staff-only to read, expenses are manager-and-above to write', () => {
+  const mw = readFileSync('middleware.ts', 'utf8')
+  it('/api/invoices is in STAFF_ONLY_API_PREFIXES', () => {
+    const block = mw.slice(mw.indexOf('const STAFF_ONLY_API_PREFIXES'))
+    expect(block.slice(0, block.indexOf(']\n'))).toContain("'/api/invoices'")
+  })
+  it('/api/expenses mutations do not admit agents', () => {
+    expect(mw).toMatch(/prefix: '\/api\/expenses', roles: \['admin', 'manager'\]/)
   })
 })
