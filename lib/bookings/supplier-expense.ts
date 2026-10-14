@@ -23,7 +23,8 @@
 // (Ported from autoura-saas.)
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-numbering'
+import { insertWithUniqueRetry } from '@/lib/document-numbering'
+import { nextExpenseNumber } from '@/lib/expense-number'
 
 export interface SupplierRowForExpense {
   id: string
@@ -186,9 +187,7 @@ export async function syncSupplierExpense(
   const { data, error } = await insertWithUniqueRetry({
     generateRow: async () => ({
       ...base,
-      expense_number: await nextDocumentNumber({
-        supabase: db, prefix: 'EXP', sequenceName: 'expense_number_seq', table: 'expenses', column: 'expense_number',
-      }),
+      expense_number: await nextExpenseNumber(db, orgId),
     }),
     insert: async (rowToInsert) => await db.from('expenses').insert([rowToInsert]).select(EXPENSE_COLUMNS).single(),
   })

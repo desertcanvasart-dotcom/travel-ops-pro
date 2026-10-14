@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 import { paymentDateForStatus, expenseFieldError, expenseDeleteBlock } from '@/lib/expense-status'
 import { recordsInOrg } from '@/lib/org-refs'
+import { settleBillsForPaidExpense } from '@/lib/finance/payables'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -133,6 +134,12 @@ export async function PUT(
     // No row for this id in this company: a 404, not a 500.
     if (!data) {
       return NextResponse.json({ error: 'Expense not found' }, { status: 404 })
+    }
+
+    // Marked paid here: a bill whose expenses are all paid is paid too, as on
+    // Payables, so it is not left approved and payable a second time.
+    if (data.status === 'paid') {
+      await settleBillsForPaidExpense(supabaseAdmin, orgId, id)
     }
 
     return NextResponse.json(data)
