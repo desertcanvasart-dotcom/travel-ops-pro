@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
-import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 import { sendEmailInternal } from '@/lib/email-send'
 import { inviteDelivery, inviteDeliveryMessage } from '@/lib/invitation-accept'
 
@@ -10,9 +10,13 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET - List all invitations for the current org (admin/manager only)
+// GET - List all invitations for the current org (admin/manager only, owner
+// passes). It said so here and checked nothing: a viewer could read every
+// pending invitee's email, role and inviter.
 export async function GET(request: NextRequest) {
   try {
+    const forbidden = await requireRole(['admin', 'manager'])
+    if (forbidden) return forbidden
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 

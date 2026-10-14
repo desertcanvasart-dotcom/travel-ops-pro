@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { INVITABLE_ROLES } from '@/lib/auth/roles'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, getCurrentUserId, getCurrentUserRole } from '@/lib/auth/current-org'
+import {
+  OTHER_COMPANY_DEACTIVATE,
+  OTHER_COMPANY_DELETE,
+  OTHER_COMPANY_PROFILE,
+  OWNED_RECORD_REFS,
+  OWNS_RECORDS,
+  isAdminRole,
+  mayManage,
+} from '@/lib/auth/member-management'
+import { recordChange } from '@/lib/activity-log'
+import { diffChanges } from '@/lib/activity-detail'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,17 +48,28 @@ async function targetRoleIn(orgId: string, userId: string): Promise<string | nul
   return (data as { role?: string } | null)?.role ?? null
 }
 
-const isAdminRole = (role: string) => role === 'admin' || role === 'owner'
+/** Does the person also belong to a company other than `orgId`? */
+async function inOtherCompany(userId: string, orgId: string): Promise<boolean> {
+  const { count } = await supabase
+    .from('organization_members')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .neq('org_id', orgId)
+  return (count ?? 0) > 0
+}
 
-/**
- * May the caller change another member's role / active status, or delete them?
- * Never the owner (ownership is transferred, not edited); an admin only by the
- * owner, so two admins cannot lock each other out.
- */
-function mayManage(callerRole: string, targetRole: string): boolean {
-  if (targetRole === 'owner') return false
-  if (targetRole === 'admin') return callerRole === 'owner'
-  return isAdminRole(callerRole)
+/** The first table that still has a row naming this login, or null. */
+async function ownedRecordTable(userId: string): Promise<string | null> {
+  const counts = await Promise.all(OWNED_RECORD_REFS.map(async ref => {
+    const { count, error } = await supabase
+      .from(ref.table)
+      .select(ref.column, { count: 'exact', head: true })
+      .eq(ref.column, userId)
+    // A table this install does not have owns nothing.
+    return error ? 0 : (count ?? 0)
+  }))
+  const i = counts.findIndex(c => c > 0)
+  return i === -1 ? null : OWNED_RECORD_REFS[i].table
 }
 
 // GET - Get single profile
@@ -135,19 +157,16 @@ export async function PUT(
       // in every workspace). Deactivating someone who also belongs to another
       // agency would lock them out of that agency too — its owner included —
       // which is not this workspace's call, the same rule DELETE applies.
-      if (body.is_active === false) {
-        const { count: otherMemberships } = await supabase
-          .from('organization_members')
-          .select('user_id', { count: 'exact', head: true })
-          .eq('user_id', id)
-          .neq('org_id', caller.orgId)
-        if ((otherMemberships ?? 0) > 0) {
-          return NextResponse.json(
-            { success: false, error: 'This person also belongs to another workspace; remove them from this workspace instead of deactivating the account' },
-            { status: 409 }
-          )
-        }
+      if (body.is_active === false && await inOtherCompany(id, caller.orgId)) {
+        return NextResponse.json({ success: false, error: OTHER_COMPANY_DEACTIVATE }, { status: 409 })
       }
+    }
+
+    // Name, phone and time zone are one ACCOUNT's, shown in every company the
+    // person works in. An admin here may not rewrite how they appear in the
+    // other company; the person changes them on their own profile.
+    if (!isSelf && SELF_EDITABLE_FIELDS.some(f => body[f] !== undefined) && await inOtherCompany(id, caller.orgId)) {
+      return NextResponse.json({ success: false, error: OTHER_COMPANY_PROFILE }, { status: 409 })
     }
 
     // Block privilege escalation: only admins may set role / is_active.
@@ -198,6 +217,12 @@ export async function PUT(
       if (roleErr) throw roleErr
     }
 
+    const { data: before } = await supabase
+      .from('user_profiles')
+      .select('email, is_active')
+      .eq('id', id)
+      .maybeSingle()
+
     const { data, error } = await supabase
       .from('user_profiles')
       .update(updateData)
@@ -206,6 +231,18 @@ export async function PUT(
       .single()
 
     if (error) throw error
+
+    // Who may do what: the Activity Log keeps the role and active flag before
+    // and after (the middleware row alone said "update · profiles · ab12cd34").
+    const changes = diffChanges(
+      { role: targetRole, is_active: (before as { is_active?: boolean } | null)?.is_active },
+      { role: updateData.role ?? targetRole, is_active: updateData.is_active ?? (before as { is_active?: boolean } | null)?.is_active },
+      ['role', 'is_active']
+    )
+    await recordChange({
+      org_id: caller.orgId, user_id: caller.id, method: 'PUT', path: `/api/profiles/${id}`,
+      detail: { target: (before as { email?: string } | null)?.email ?? null, changes },
+    })
 
     return NextResponse.json({
       success: true,
@@ -256,33 +293,41 @@ export async function DELETE(
 
     // Deleting the account removes the person from EVERY workspace. If they
     // belong to another one, that is not this workspace's call to make.
-    const { count: otherMemberships } = await supabase
-      .from('organization_members')
-      .select('user_id', { count: 'exact', head: true })
-      .eq('user_id', id)
-      .neq('org_id', caller.orgId)
-    if ((otherMemberships ?? 0) > 0) {
+    if (await inOtherCompany(id, caller.orgId)) {
+      return NextResponse.json({ success: false, error: OTHER_COMPANY_DELETE }, { status: 409 })
+    }
+
+    // A login that still owns trips, departures or emails cannot be deleted
+    // (those foreign keys have no ON DELETE rule). Say so before touching
+    // anything: this deleted the PROFILE first and then ignored the auth
+    // error, which left a login with its membership and full access, missing
+    // from this list, and read as active by middleware (no profile = active).
+    const owned = await ownedRecordTable(id)
+    if (owned) {
+      return NextResponse.json({ success: false, error: OWNS_RECORDS, owns: owned }, { status: 409 })
+    }
+
+    const { data: gone } = await supabase.from('user_profiles').select('email').eq('id', id).maybeSingle()
+
+    // The login first. supabase-js REPORTS failure in { error }, it does not
+    // throw; nothing else is touched unless this succeeded.
+    const { error: authError } = await supabase.auth.admin.deleteUser(id)
+    if (authError) {
+      console.error('Could not delete auth user:', authError)
       return NextResponse.json(
-        { success: false, error: 'This person also belongs to another workspace; deactivate them here instead' },
+        { success: false, error: 'The login could not be deleted, so nothing was changed. Deactivate it instead.' },
         { status: 409 }
       )
     }
 
-    // Delete the user profile
-    const { error } = await supabase
-      .from('user_profiles')
-      .delete()
-      .eq('id', id)
+    // The profile and the membership go with the login (ON DELETE CASCADE);
+    // this catches an install where the profile has no such key.
+    await supabase.from('user_profiles').delete().eq('id', id)
 
-    if (error) throw error
-
-    // Also delete the auth user if possible (requires admin privileges)
-    try {
-      await supabase.auth.admin.deleteUser(id)
-    } catch (authError) {
-      console.warn('Could not delete auth user:', authError)
-      // Profile is already deleted, so we continue
-    }
+    await recordChange({
+      org_id: caller.orgId, user_id: caller.id, method: 'DELETE', path: `/api/profiles/${id}`,
+      detail: { target: (gone as { email?: string } | null)?.email ?? null, changes: [{ field: 'account', from: targetRole, to: null }] },
+    })
 
     return NextResponse.json({
       success: true,

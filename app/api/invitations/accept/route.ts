@@ -6,6 +6,7 @@ import {
   decideAcceptAction,
   emailsMatch,
 } from '@/lib/invitation-accept'
+import { recordChange } from '@/lib/activity-log'
 
 // ============================================
 // INVITATION ACCEPT — token-authenticated, NO session
@@ -121,6 +122,8 @@ export async function PUT(request: NextRequest) {
       .eq('id', invitation.id)
 
     if (acceptErr) throw acceptErr
+
+    await recordJoin(invitation.org_id, profile.id, invitation.email.toLowerCase(), invitation.role, 'PUT')
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -268,6 +271,8 @@ export async function POST(request: NextRequest) {
       .eq('id', invitation!.id)
     if (acceptErr) throw acceptErr
 
+    await recordJoin(invitation!.org_id, userId, email, invitation!.role, 'POST')
+
     return NextResponse.json({
       success: true,
       email,
@@ -280,6 +285,16 @@ export async function POST(request: NextRequest) {
     console.error('Error accepting invitation:', error)
     return NextResponse.json({ success: false, error: 'Failed to accept invitation' }, { status: 500 })
   }
+}
+
+/** The Activity Log entry for someone joining. The invitee has no session,
+ *  so the middleware logs nothing for this route; without this a person
+ *  joining as admin left no trace but the invitation it came from. */
+async function recordJoin(orgId: string, userId: string, email: string, role: string, method: string) {
+  await recordChange({
+    org_id: orgId, user_id: userId, user_email: email, method, path: '/api/invitations/accept',
+    detail: { target: email, changes: [{ field: 'membership', from: null, to: role }] },
+  })
 }
 
 /** Find an auth user by email. GoTrue's admin API has no by-email lookup that

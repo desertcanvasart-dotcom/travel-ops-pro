@@ -9,7 +9,14 @@ let caller = { id: 'u-admin', role: 'admin', orgId: 'org-a' }
 /** memberships: `${org}:${user}` → role */
 let members: Record<string, string> = {}
 const writes: { table: string; op: string; vals?: unknown }[] = []
-const deleteUser = vi.fn(async () => ({}))
+/** table → user ids that table has rows for (itineraries, tour_departures, …) */
+let owned: Record<string, string[]> = {}
+let deleteUserResult: { error?: unknown } = {}
+const deleteUser = vi.fn(async () => { writes.push({ table: 'auth.users', op: 'delete' }); return deleteUserResult })
+const logged = vi.hoisted(() => ({ calls: [] as Array<Record<string, unknown>> }))
+vi.mock('@/lib/activity-log', () => ({
+  recordChange: async (c: Record<string, unknown>) => { logged.calls.push(c) },
+}))
 
 function builder(table: string) {
   const f: Record<string, unknown> = {}
@@ -34,6 +41,10 @@ function builder(table: string) {
     },
     then: (resolve: (v: unknown) => void) => {
       if (op !== 'select') { writes.push({ table, op, vals }); return resolve({ error: null }) }
+      // a head count of the login's rows in a table it may own records in
+      if (table !== 'organization_members') {
+        return resolve({ count: (owned[table] ?? []).filter(u => Object.values(f).includes(u)).length, error: null })
+      }
       // count of the target's memberships outside the caller's org
       const count = Object.keys(members).filter(k => k.endsWith(`:${f.user_id}`) && !k.startsWith(`${neqOrg}:`)).length
       return resolve({ count, error: null })
@@ -52,6 +63,7 @@ vi.mock('@/lib/auth/current-org', () => ({
 }))
 
 import { PUT, DELETE, GET } from '@/app/api/profiles/[id]/route'
+import { OTHER_COMPANY_DEACTIVATE, OTHER_COMPANY_DELETE, OTHER_COMPANY_PROFILE, OWNS_RECORDS } from '@/lib/auth/member-management'
 
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) })
 const put = (id: string, body: unknown) =>
@@ -68,6 +80,9 @@ beforeEach(() => {
     'org-b:u-stranger': 'agent',
   }
   writes.length = 0
+  owned = {}
+  deleteUserResult = {}
+  logged.calls.length = 0
   deleteUser.mockClear()
 })
 
@@ -121,5 +136,59 @@ describe('DELETE /api/profiles/[id]', () => {
 describe('GET /api/profiles/[id]', () => {
   it('does not read profiles from another workspace', async () => {
     expect((await GET(new NextRequest('http://x'), ctx('u-stranger'))).status).toBe(404)
+  })
+})
+
+describe('Settings audit: delete, other company, activity detail', () => {
+  it('a login that owns trips is refused with a reason before anything is deleted', async () => {
+    owned = { itineraries: ['u-agent'] }
+    const r = await del('u-agent')
+    expect(r.status).toBe(409)
+    expect((await r.json()).error).toBe(OWNS_RECORDS)
+    expect(deleteUser).not.toHaveBeenCalled()
+    expect(writes).toEqual([])
+  })
+  it('when the login delete fails, the profile is NOT deleted and the answer is not success', async () => {
+    deleteUserResult = { error: { message: 'Database error deleting user' } }
+    const r = await del('u-agent')
+    expect(r.status).toBe(409)
+    expect(writes).toEqual([{ table: 'auth.users', op: 'delete' }])
+    expect(logged.calls).toEqual([])
+  })
+  it('a successful delete removes the login first, then the profile, and logs it', async () => {
+    expect((await del('u-agent')).status).toBe(200)
+    expect(writes.map(w => `${w.table}:${w.op}`)).toEqual(['auth.users:delete', 'user_profiles:delete'])
+    expect(logged.calls[0]).toMatchObject({ detail: { changes: [{ field: 'account', from: 'agent', to: null }] } })
+  })
+  it('deactivate and delete of someone in another company both point at Remove from this company', async () => {
+    members['org-b:u-agent'] = 'agent'
+    const d = await put('u-agent', { is_active: false })
+    expect(d.status).toBe(409)
+    expect((await d.json()).error).toBe(OTHER_COMPANY_DEACTIVATE)
+    const x = await del('u-agent')
+    expect((await x.json()).error).toBe(OTHER_COMPANY_DELETE)
+    expect(OTHER_COMPANY_DEACTIVATE).toMatch(/Remove from this company/)
+    expect(OTHER_COMPANY_DELETE).toMatch(/Remove from this company/)
+  })
+  it("an admin cannot rewrite the name or phone of someone who also works for another company", async () => {
+    members['org-b:u-agent'] = 'agent'
+    const r = await put('u-agent', { full_name: 'Renamed' })
+    expect(r.status).toBe(409)
+    expect((await r.json()).error).toBe(OTHER_COMPANY_PROFILE)
+    expect(writes).toEqual([])
+    // their role here is still this company's to change
+    expect((await put('u-agent', { role: 'viewer' })).status).toBe(200)
+  })
+  it('a role change is logged with the role before and after', async () => {
+    await put('u-agent', { role: 'manager' })
+    expect(logged.calls).toHaveLength(1)
+    expect(logged.calls[0]).toMatchObject({
+      org_id: 'org-a', user_id: 'u-admin', method: 'PUT',
+      detail: { changes: [{ field: 'role', from: 'agent', to: 'manager' }] },
+    })
+  })
+  it('a refused change logs nothing', async () => {
+    await put('u-owner', { role: 'viewer' })
+    expect(logged.calls).toEqual([])
   })
 })

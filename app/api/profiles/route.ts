@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 import { withMembershipRoles } from '@/lib/auth/profile-roles'
 
 const supabase = createClient(
@@ -16,9 +16,18 @@ const supabase = createClient(
 // manager) and this list showed the mirror, so the Users page role dropdown
 // already said "Manager" and could not be used to make it true. See
 // lib/auth/profile-roles.ts. `membership_role` says explicitly whether the
-// person has a membership here at all.
+// person has a membership here at all. `other_companies` says whether they
+// also belong to another company: the Users page then offers "Remove from
+// this company" instead of Deactivate and Delete, which would act in both.
+//
+// Admin and manager only (owner passes): the roster carries every member's
+// email, phone and last login, and only the managers' screens (Users, Team
+// Members) read it. A viewer could GET it although no menu shows it.
 export async function GET(request: NextRequest) {
   try {
+    const forbidden = await requireRole(['admin', 'manager'])
+    if (forbidden) return forbidden
+
     const { searchParams } = new URL(request.url)
     const activeOnly = searchParams.get('active') === 'true'
     const role = searchParams.get('role')
@@ -51,10 +60,17 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error
 
+    const { data: elsewhere } = await supabase
+      .from('organization_members')
+      .select('user_id')
+      .in('user_id', memberIds)
+      .neq('org_id', orgId)
+    const inOtherCompany = new Set(((elsewhere ?? []) as Array<{ user_id: string }>).map(m => m.user_id))
+
     let listed = withMembershipRoles(
       (data ?? []) as Array<{ id: string; role?: string | null }>,
       (memberships ?? []) as Array<{ user_id: string; role: string }>
-    )
+    ).map(p => ({ ...p, other_companies: inOtherCompany.has(p.id) }))
     // The ?role= filter applies to the role that gates, like everything else.
     if (role) listed = listed.filter(p => p.role === role)
 

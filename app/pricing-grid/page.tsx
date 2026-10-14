@@ -9,7 +9,7 @@ import type { GridConfig, GridDay, AllRates, SlotValue, GridTotals, GridFixedCos
 import { SLOT_DEFINITIONS } from './types'
 import { calculateGrandTotals, calculateDay, countMissingGuideBeds, convertAmount } from './lib/calculator'
 import { gridCompleteness } from './lib/grid-completeness'
-import type { SeasonWindow } from '@/lib/pricing/season-uplift'
+import { activeSeasonWindows, type SeasonWindow } from '@/lib/pricing/season-uplift'
 import { mapServicesToSlots } from './lib/slot-mapping'
 import { hydrateDays } from './lib/hydrate-items'
 import { dropLegacyFixedCostPicks } from './lib/fixed-cost-lines'
@@ -161,17 +161,9 @@ function PricingGridContent() {
         const res = await fetch('/api/pricing/seasons')
         const data = await res.json()
         if (cancelled || !data.success) return
-        setSeasonWindows(
-          (data.data || []).flatMap((season: any) =>
-            (season.pricing_season_dates || []).map((w: any) => ({
-              seasonId: season.id,
-              name: season.name,
-              upliftPercent: Number(season.uplift_percent) || 0,
-              startDate: w.start_date,
-              endDate: w.end_date,
-            }))
-          )
-        )
+        // Active seasons only, like the save: an inactive one previewed a
+        // premium the saved trip would not carry.
+        setSeasonWindows(activeSeasonWindows(data.data || []))
       } catch {
         // A calendar we cannot read is an ordinary date, never a guessed premium.
       }
