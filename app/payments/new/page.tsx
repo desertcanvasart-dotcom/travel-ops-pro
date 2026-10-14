@@ -9,6 +9,7 @@ import { ArrowLeft, Save, FileText, MapPin, DollarSign } from 'lucide-react'
 import { usePreferences } from '@/app/contexts/PreferencesContext'
 import { formatMoney } from '@/lib/currency-totals'
 import { useTripPaid } from '@/lib/payments/use-trip-paid'
+import { invoicedTripIds } from '@/lib/payments/ledger'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
 
@@ -22,6 +23,7 @@ interface Invoice {
   balance_due: number
   currency: string
   status: string
+  itinerary_id?: string | null
 }
 
 interface Itinerary {
@@ -45,6 +47,9 @@ export default function RecordPaymentPage() {
   
   // Data sources
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  // Every invoice (paid, draft...), to know which trips have one: such a trip
+  // takes its money on the invoice (lib/payments/ledger).
+  const [allInvoices, setAllInvoices] = useState<Invoice[]>([])
   const [itineraries, setItineraries] = useState<Itinerary[]>([])
   
   // Selected items
@@ -140,6 +145,7 @@ export default function RecordPaymentPage() {
       const response = await fetch('/api/invoices?limit=1000')
       if (response.ok) {
         const data = await response.json()
+        setAllInvoices(data)
         // Only invoices that can take a payment: a balance due, and sent (a
         // draft or cancelled invoice is refused by the API).
         const unpaidInvoices = data.filter((inv: Invoice & { status?: string }) =>
@@ -186,6 +192,18 @@ export default function RecordPaymentPage() {
     setSelectedItinerary(itinerary || null)
   }
 
+  // The chosen trip already has a live invoice: the money is recorded there.
+  const tripInvoiceNumbers = selectedItinerary
+    ? allInvoices.filter(inv => inv.itinerary_id === selectedItinerary.id && invoicedTripIds([inv]).size > 0).map(inv => inv.invoice_number)
+    : []
+  const tripHasInvoice = paymentTarget === 'itinerary' && tripInvoiceNumbers.length > 0
+  const payableInvoiceOfTrip = selectedItinerary ? invoices.find(inv => inv.itinerary_id === selectedItinerary.id) : undefined
+  const useInvoiceInstead = () => {
+    const invoiceId = payableInvoiceOfTrip?.id
+    handleTargetChange('invoice')
+    if (invoiceId) setSelectedInvoice(invoices.find(inv => inv.id === invoiceId) || null)
+  }
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
@@ -198,6 +216,11 @@ export default function RecordPaymentPage() {
 
     if (!formData.target_id || !formData.amount) {
       setError(t('errorRequired'))
+      setLoading(false)
+      return
+    }
+    if (tripHasInvoice) {
+      setError(t('tripHasInvoice', { numbers: tripInvoiceNumbers.join(', ') }))
       setLoading(false)
       return
     }
@@ -397,8 +420,22 @@ export default function RecordPaymentPage() {
                 </div>
               )}
 
+              {/* A trip with an invoice takes its money on the invoice. */}
+              {tripHasInvoice && (
+                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                  <p>{t('tripHasInvoice', { numbers: tripInvoiceNumbers.join(', ') })}</p>
+                  <button
+                    type="button"
+                    onClick={useInvoiceInstead}
+                    className="mt-2 px-3 py-1.5 bg-amber-600 text-white text-xs rounded-lg hover:bg-amber-700 font-semibold"
+                  >
+                    {t('useInvoiceInstead')}
+                  </button>
+                </div>
+              )}
+
               {/* Selected Item Info */}
-              {(selectedInvoice || selectedItinerary) && (
+              {(selectedInvoice || selectedItinerary) && !tripHasInvoice && (
                 <div className="mb-4 p-3 bg-primary-50 border border-primary-200 rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
                     <DollarSign className="w-4 h-4 text-primary-600" />
@@ -638,9 +675,9 @@ export default function RecordPaymentPage() {
                 </Link>
                 <button
                   type="submit"
-                  disabled={loading || !formData.target_id || !formData.amount}
+                  disabled={loading || !formData.target_id || !formData.amount || tripHasInvoice}
                   className={`px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors font-semibold flex items-center gap-2 ${
-                    (loading || !formData.target_id || !formData.amount) ? 'opacity-50 cursor-not-allowed' : ''
+                    (loading || !formData.target_id || !formData.amount || tripHasInvoice) ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
                 >
                   {loading ? (

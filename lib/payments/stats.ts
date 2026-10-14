@@ -11,8 +11,10 @@
 // payment routes only accept real payments.
 import { addToTotals, emptyTotals, type CurrencyTotals } from '@/lib/currency-totals'
 import { isOverdue, pendingInvoice, type InvoiceLike } from '@/lib/invoices/status'
+import { countableTripPayments, type TripInvoiceLike } from '@/lib/payments/ledger'
 
 export interface TripPaymentLike {
+  itinerary_id?: string | null
   amount?: unknown
   currency?: string | null
   payment_status?: string | null
@@ -42,11 +44,17 @@ export interface PaymentStats {
   thisMonthRevenue: CurrencyTotals
 }
 
-interface InvoiceWithPayments extends InvoiceLike {
+interface InvoiceWithPayments extends InvoiceLike, TripInvoiceLike {
   invoice_payments?: Array<{ amount?: unknown; currency?: string | null; payment_date?: string | null }> | null
 }
 
-/** The four tiles of the Payments page, per currency. `today` is YYYY-MM-DD. */
+/**
+ * The four tiles of the Payments page, per currency. `today` is YYYY-MM-DD.
+ *
+ * A trip that has a non-cancelled invoice takes its money on the invoice
+ * (lib/payments/ledger), so its trip payments are skipped here: a legacy trip
+ * with both would otherwise count the same deposit twice.
+ */
 export function paymentStats(
   tripPayments: TripPaymentLike[],
   invoices: InvoiceWithPayments[],
@@ -58,7 +66,7 @@ export function paymentStats(
   const overduePayments = emptyTotals()
   const thisMonthRevenue = emptyTotals()
 
-  for (const p of tripPayments) {
+  for (const p of countableTripPayments(tripPayments, invoices)) {
     if (!isReceivedTripPayment(p)) continue
     const currency = p.currency || 'EUR'
     addToTotals(totalReceived, p.amount, currency)

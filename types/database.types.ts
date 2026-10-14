@@ -6697,6 +6697,11 @@ export interface Database {
           full_trip_cost: number | null
           vat_applied: boolean
           vat_base: number | null
+          amount_source: string | null
+          computed_amount: number | null
+          override_amount: number | null
+          override_reason: string | null
+          override_by: string | null
         }
         Insert: {
           id?: string
@@ -6735,6 +6740,11 @@ export interface Database {
           full_trip_cost?: number | null
           vat_applied?: boolean
           vat_base?: number | null
+          amount_source?: string | null
+          computed_amount?: number | null
+          override_amount?: number | null
+          override_reason?: string | null
+          override_by?: string | null
         }
         Update: {
           id?: string
@@ -6773,6 +6783,11 @@ export interface Database {
           full_trip_cost?: number | null
           vat_applied?: boolean
           vat_base?: number | null
+          amount_source?: string | null
+          computed_amount?: number | null
+          override_amount?: number | null
+          override_reason?: string | null
+          override_by?: string | null
         }
         Relationships: [
           {

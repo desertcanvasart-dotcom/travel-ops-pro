@@ -7,6 +7,7 @@ import { paymentCurrencyFor } from '@/lib/payment-currency'
 import { loadTripVatExtras } from '@/lib/vat'
 import { checkPaymentAmount, pickPaymentFields } from '@/lib/payments/fields'
 import { tripPaymentVatColumns } from '@/lib/payments/vat'
+import { liveInvoicesOfTrip, tripHasInvoiceMessage } from '@/lib/payments/ledger'
 
 export async function GET(
   request: NextRequest,
@@ -124,6 +125,15 @@ export async function PUT(
           .eq('org_id', orgId)
           .maybeSingle()
         if (!trip) return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
+        // A payment cannot be moved onto a trip that has an invoice: that trip
+        // takes its money on the invoice (lib/payments/ledger). One already on
+        // such a trip (recorded before the rule) can still be corrected.
+        if (tripId !== current.itinerary_id) {
+          const invoiceNumbers = await liveInvoicesOfTrip(supabase, orgId, trip.id)
+          if (invoiceNumbers.length) {
+            return NextResponse.json({ success: false, error: tripHasInvoiceMessage(invoiceNumbers) }, { status: 409 })
+          }
+        }
         // Only a changed trip or currency is held to the trip's currency; a new
         // amount alone leaves the payment's own.
         let currency = current.currency

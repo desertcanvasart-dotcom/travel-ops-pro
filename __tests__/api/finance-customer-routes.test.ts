@@ -54,6 +54,8 @@ beforeEach(() => {
     clients: [{ id: 'cl-1', org_id: 'org-1' }],
     itineraries: [
       { id: 'it-jpy', org_id: 'org-1', currency: 'JPY', total_cost: 100000, vat_applied: false },
+      // A trip with no invoice: it still takes its payments itself (a trip with an invoice takes them on the invoice).
+      { id: 'it-plain', org_id: 'org-1', currency: 'JPY', total_cost: 100000, vat_applied: false },
       { id: 'it-eur', org_id: 'org-1', currency: 'EUR', total_cost: 1000, vat_applied: false },
       { id: 'it-vat', org_id: 'org-1', currency: 'JPY', total_cost: 114000, vat_applied: true, vat_rate: 14 },
       { id: 'it-theirs', org_id: 'org-2', currency: 'EUR', itinerary_code: 'THEIRS', client_name: 'Their client', client_phone: '+999', client_email: 't@x', total_cost: 7 },
@@ -263,7 +265,7 @@ describe('trip payments: POST and PUT', () => {
     const { json } = await call(await createPayment(req('POST', pay())))
     // ¥114,000 incl. 14% VAT: ¥14,000 of it is VAT.
     expect(json.data).toMatchObject({ vat_applied: true, vat_rate: 14, vat_amount: 14000 })
-    const plain = await call(await createPayment(req('POST', pay({ itinerary_id: 'it-jpy' }))))
+    const plain = await call(await createPayment(req('POST', pay({ itinerary_id: 'it-plain' }))))
     expect(plain.json.data).toMatchObject({ vat_applied: false, vat_amount: 0 })
   })
 
