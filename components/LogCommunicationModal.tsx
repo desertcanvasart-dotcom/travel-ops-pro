@@ -2,11 +2,8 @@
 
 import { todayLocal } from '@/lib/today'
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase'
 import { X, MessageSquare, AlertCircle, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-
-const supabase = createClient()
 
 interface LogCommunicationModalProps {
   isOpen: boolean
@@ -89,11 +86,16 @@ export default function LogCommunicationModal({
       // offset-less date-time parses as local; toISOString sends the instant.
       const communicationDateTime = new Date(`${formData.communication_date}T${formData.communication_time}:00`).toISOString()
 
-      if (isEditMode) {
-        // Update existing communication
-        const { error: updateError } = await supabase
-          .from('communication_history')
-          .update({
+      // Through the server: it checks the client belongs to the active company,
+      // records who logged it, and moves the client's last contact date.
+      const res = await fetch(
+        isEditMode
+          ? `/api/clients/${clientId}/communications/${editCommunication.id}`
+          : `/api/clients/${clientId}/communications`,
+        {
+          method: isEditMode ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
             communication_type: formData.communication_type,
             direction: formData.direction,
             subject: formData.subject || null,
@@ -101,25 +103,9 @@ export default function LogCommunicationModal({
             communication_date: communicationDateTime,
             status: formData.status
           })
-          .eq('id', editCommunication.id)
-
-        if (updateError) throw updateError
-      } else {
-        // Create new communication
-        const { error: insertError } = await supabase
-          .from('communication_history')
-          .insert({
-            client_id: clientId,
-            communication_type: formData.communication_type,
-            direction: formData.direction,
-            subject: formData.subject || null,
-            content: formData.content,
-            communication_date: communicationDateTime,
-            status: formData.status
-          })
-
-        if (insertError) throw insertError
-      }
+        }
+      )
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || t('failedToSave'))
 
       // Reset form
       setFormData({
@@ -149,12 +135,8 @@ export default function LogCommunicationModal({
     setError(null)
 
     try {
-      const { error: deleteError } = await supabase
-        .from('communication_history')
-        .delete()
-        .eq('id', editCommunication.id)
-
-      if (deleteError) throw deleteError
+      const res = await fetch(`/api/clients/${clientId}/communications/${editCommunication.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || t('failedToDelete'))
 
       // Success
       onSuccess()

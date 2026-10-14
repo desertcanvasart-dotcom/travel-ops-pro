@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase'
+import { CLIENT_STATUSES } from '@/lib/clients/status'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Save, Loader2, User, Mail, Phone, Globe, Building, Star, Tag } from 'lucide-react'
@@ -31,7 +31,6 @@ export default function EditClientPage() {
   const params = useParams()
   const router = useRouter()
   const clientId = params?.id as string
-  const supabase = createClient()
 
   // i18n hooks
   const t = useTranslations('clients')
@@ -55,7 +54,7 @@ export default function EditClientPage() {
     preferred_contact_method: '',
     client_type: 'individual',
     vip_status: false,
-    status: 'prospect',
+    status: 'lead',
     lead_source: '',
     company_name: '',
     internal_notes: '',
@@ -75,13 +74,11 @@ export default function EditClientPage() {
   const fetchClient = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('id', clientId)
-        .single()
-
-      if (error) throw error
+      // From the server, scoped to the active company (the page used to read the
+      // table from the browser by id alone).
+      const res = await fetch(`/api/clients/${clientId}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
 
       if (data) {
         setFormData({
@@ -95,7 +92,7 @@ export default function EditClientPage() {
           preferred_contact_method: data.preferred_contact_method || '',
           client_type: data.client_type || 'individual',
           vip_status: data.vip_status || false,
-          status: data.status || 'prospect',
+          status: data.status || 'lead',
           lead_source: data.lead_source || '',
           company_name: data.company_name || '',
           internal_notes: data.internal_notes || '',
@@ -165,7 +162,11 @@ export default function EditClientPage() {
         error = validate(value, [validationRules.required()], 'lastName')
         break
       case 'email':
-        error = validate(value, [validationRules.required(), validationRules.email()], 'email')
+        // Not required: a client made from a WhatsApp chat or a web order has
+        // no email, and could not otherwise be saved. A given one must be valid.
+        if (value) {
+          error = validate(value, [validationRules.email()], 'email')
+        }
         break
       case 'phone':
         if (value) {
@@ -197,7 +198,7 @@ export default function EditClientPage() {
     const validations = validateForm(formData, [
       { field: 'first_name', fieldKey: 'firstName', rules: [validationRules.required()] },
       { field: 'last_name', fieldKey: 'lastName', rules: [validationRules.required()] },
-      { field: 'email', fieldKey: 'email', rules: [validationRules.required(), validationRules.email()] },
+      { field: 'email', fieldKey: 'email', rules: formData.email ? [validationRules.email()] : [] },
       { field: 'phone', fieldKey: 'phone', rules: formData.phone ? [validationRules.phone()] : [] },
     ])
 
@@ -212,39 +213,42 @@ export default function EditClientPage() {
       setError(null)
       setFieldErrors({})
 
-      const { error: updateError } = await supabase
-        .from('clients')
-        .update({
+      // Through the server, which writes only the columns this form owns, checks
+      // the client belongs to the active company, and says why when it refuses.
+      const res = await fetch(`/api/clients/${clientId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           first_name: formData.first_name,
           last_name: formData.last_name,
           email: formData.email,
-          phone: formData.phone || null,
-          nationality: formData.nationality || null,
-          passport_type: formData.passport_type || null,
-          preferred_language: formData.preferred_language || null,
-          preferred_contact_method: formData.preferred_contact_method || null,
+          phone: formData.phone,
+          nationality: formData.nationality,
+          passport_type: formData.passport_type,
+          preferred_language: formData.preferred_language,
+          preferred_contact_method: formData.preferred_contact_method,
           client_type: formData.client_type,
           vip_status: formData.vip_status,
           status: formData.status,
-          lead_source: formData.lead_source || null,
-          company_name: formData.company_name || null,
-          internal_notes: formData.internal_notes || null,
+          lead_source: formData.lead_source,
+          company_name: formData.company_name,
+          internal_notes: formData.internal_notes,
           special_interests: formData.special_interests,
-          tags: formData.tags,
-          updated_at: new Date().toISOString()
+          tags: formData.tags
         })
-        .eq('id', clientId)
-
-      if (updateError) throw updateError
+      })
+      if (!res.ok) {
+        throw new Error((await res.json().catch(() => null))?.error || t('failedToUpdate'))
+      }
 
       // Keep the button in its saving state through the navigation —
       // router.push() does not await the destination, and a finally{} here
       // re-enabled Save while this page was still on screen (the AUT-W05
       // dead window, one page over). The page unmounts on success.
       router.push(`/clients/${clientId}`)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error updating client:', err)
-      setError(t('failedToUpdate'))
+      setError(err?.message || t('failedToUpdate'))
       setSaving(false)
     }
   }
@@ -338,7 +342,7 @@ export default function EditClientPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <Mail className="w-3 h-3 inline mr-1" />
-                  {getFieldName('email')} <span className="text-red-500">*</span>
+                  {getFieldName('email')}
                 </label>
                 <input
                   type="email"
@@ -433,10 +437,9 @@ export default function EditClientPage() {
                   onChange={handleChange}
                   className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm bg-white"
                 >
-                  <option value="prospect">{t('statusProspect')}</option>
-                  <option value="active">{t('statusActive')}</option>
-                  <option value="inactive">{t('statusInactive')}</option>
-                  <option value="blacklisted">{t('statusBlacklisted')}</option>
+                  {CLIENT_STATUSES.map(status => (
+                    <option key={status} value={status}>{t(`status_${status}`)}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -497,6 +500,13 @@ export default function EditClientPage() {
                   <option value="">{t('selectOption')}</option>
                   <option value="euro_passport">{t('euroPassport')}</option>
                   <option value="other_passport">{t('otherPassport')}</option>
+                  {/* Clients made from WhatsApp or the API hold 'other' (or 'eu' /
+                      'non-eu'); without an option for the stored value the select
+                      showed blank and Save wrote NULL over it. */}
+                  {formData.passport_type &&
+                    !['euro_passport', 'other_passport'].includes(formData.passport_type) && (
+                      <option value={formData.passport_type}>{formData.passport_type}</option>
+                    )}
                 </select>
               </div>
               <div>

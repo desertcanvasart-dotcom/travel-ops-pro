@@ -34,14 +34,20 @@ describe('share page total includes confirmed extras', () => {
 })
 
 describe('client trip history stays in the organisation', () => {
-  const s = src('app/api/clients/[id]/itineraries/route.ts')
+  const route = src('app/api/clients/[id]/itineraries/route.ts')
+  // The trip lookup is shared with the timeline (lib/clients/trips): the
+  // Bookings tab and the timeline must not disagree about which trips are a
+  // client's, and both must stay inside the company.
+  const trips = src('lib/clients/trips.ts')
   it('resolves the org and scopes the client and both itinerary queries', () => {
-    expect(s).toContain('getCurrentOrgId()')
-    expect(s.match(/\.eq\('org_id', orgId\)/g)?.length).toBe(3)
-    expect(s).toContain("{ status: 404 }")
+    expect(route).toContain('getCurrentOrgId()')
+    expect(route.match(/\.eq\('org_id', orgId\)/g)?.length).toBe(1) // the client
+    expect(route).toContain('listClientTrips(')
+    expect(route).toContain("{ status: 404 }")
+    expect(trips.match(/\.eq\('org_id', orgId\)/g)?.length).toBe(2) // by client id, by email
   })
   it('matches the email literally, not as a LIKE pattern', () => {
-    expect(s).toContain(".ilike('client_email', escapeLike(email))")
+    expect(trips).toContain(".ilike('client_email', escapeLike(address))")
     const escapeLike = (v: string) => v.replace(/[\\%_]/g, ch => `\\${ch}`)
     expect(escapeLike('j_hn%@x.com')).toBe('j\\_hn\\%@x.com')
   })
@@ -53,18 +59,30 @@ describe('client trip history stays in the organisation', () => {
 })
 
 describe('client delete does not destroy money records', () => {
+  // There is no force path any more: a client with anything attached is refused
+  // (409, with counts) before a single row is touched. clients-routes.test.ts
+  // runs the behaviour; these pin the shape.
   const s = src('app/api/clients/[id]/route.ts')
-  it('checks invoices before the force cascade', () => {
+  const guard = src('lib/clients/delete-guard.ts')
+  it('checks invoices, bookings and payments before anything is deleted — and has no force cascade', () => {
     const del = s.slice(s.indexOf('export async function DELETE'))
-    expect(del.indexOf(".from('invoices')")).toBeGreaterThan(-1)
-    expect(del.indexOf(".from('invoices')")).toBeLessThan(del.indexOf('for (const itin of itineraries)'))
+    expect(del).toContain('countClientAttachments(')
+    expect(del.indexOf('countClientAttachments(')).toBeLessThan(del.indexOf('.delete()'))
+    expect(del).not.toMatch(/force/i)
+    expect(del).not.toContain('for (const itin of itineraries)')
+    expect(guard).toContain(".from('invoices')")
+    expect(guard).toContain(".from('payments')")
   })
   it('refuses when the trips have bookings, and never deletes bookings itself', () => {
-    expect(s).toContain("blocking: 'bookings'")
+    expect(guard).toContain(".from('bookings')")
+    expect(s).toContain("blocking: 'attached'")
     expect(s).not.toMatch(/from\('bookings'\)\.delete\(\)/)
+    expect(s).not.toMatch(/from\('(itineraries|payments|invoices)'\)\.delete\(\)/)
   })
-  it('a referring client must be in the org', () => {
-    expect(s.match(/referrerInOrg\(updateData\.referred_by_client_id, orgId\)/g)?.length).toBe(2)
+  it('a referring client must be in the org (PUT and PATCH share one update)', () => {
+    expect(s.match(/referrerInOrg\(referrer, orgId\)/g)?.length).toBe(1)
+    expect(s).toContain("updateClient(request, params, 'PUT')")
+    expect(s).toContain("updateClient(request, params, 'PATCH')")
   })
 })
 
