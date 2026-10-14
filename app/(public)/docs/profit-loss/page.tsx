@@ -118,6 +118,9 @@ export default function ProfitLossPage() {
           On a trip page (Owner, Admin and Manager only) the card shows <strong>Supplier cost</strong>, <strong>Client price</strong>, <strong>Gross profit</strong> and <strong>Margin %</strong> (profit &divide; client price), a breakdown by service type, and the extra expenses entered on the trip, which reduce the margin. It is a quick estimate built in your browser from the trip&rsquo;s services; the report on this screen is the reference.
         </p>
         <p className="text-gray-600 mb-3">
+          <strong>Extra expenses</strong> on the card are converted the way this report converts them: each at the stored exchange rate on <strong>its own date</strong>, into the trip&rsquo;s currency. Rejected and Cancelled expenses, and the cost of a booking supplier already inside the supplier cost, are left out. When an expense has no rate, it is <strong>left out of the margin</strong> and an amber <strong>&ldquo;Rate missing&rdquo;</strong> note under the card&rsquo;s header names it and its amount; until a rate is added the margin shown is higher than it really is. If the conversion cannot be loaded at all, the same note says so. The card no longer falls back to built-in approximate rates.
+        </p>
+        <p className="text-gray-600 mb-3">
           When no supplier cost is recorded for the trip, the card says <strong>Not recorded</strong> instead of working one out. The company margin is applied to every service when the trip is priced, tips, supplies and flights included; there is no pass-through rule.
         </p>
         <Tip>
@@ -132,7 +135,7 @@ export default function ProfitLossPage() {
           <li>Realized cost covers expenses marked Paid and commissions paid. Supplier invoices paid without an expense row are not in it, so Realized profit can look better than your bank.</li>
           <li>A payment on a cancelled invoice still counts as cash received: the money moved.</li>
           <li>Insurance billed on an invoice has no matching cost in the report, so it reads as pure margin.</li>
-          <li>The trip-page card converts extra expenses with built-in approximate rates, not the dated rates of this report.</li>
+          <li>The trip-page card shows the &ldquo;Rate missing&rdquo; note but cannot fix it: add the exchange rate, or enter the expense in the trip&rsquo;s currency. It also builds its service figures in your browser, so for a trip with priced services the report on this screen is still the reference.</li>
           <li>The supplier cost is an estimate until supplier costs are entered as expenses; the report does not know what a supplier actually billed.</li>
           <li>No input VAT, and no month, quarter or year presets for the dates.</li>
           <li>Revenue is the trip&rsquo;s invoices; nothing is converted between currencies for the cards, so a mixed-currency list gives amounts per currency and no overall margin.</li>

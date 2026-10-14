@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 import { getOrgDefaultCurrency } from '@/lib/org-default-currency'
 import { recordsInOrg } from '@/lib/org-refs'
-import { commissionFieldError, commissionPaidDate, summariseCommissions } from '@/lib/commission-fields'
+import { commissionFieldError, commissionPaidDate, summariseCommissions, findDuplicateCommission, duplicateCommissionMessage } from '@/lib/commission-fields'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -127,6 +127,33 @@ export async function POST(request: NextRequest) {
     const commissionAmount = hasExplicitAmount
       ? Number(body.commission_amount)
       : (Number(body.base_amount) * Number(body.commission_rate)) / 100
+
+    // The same money must not be on the books twice: a manual commission for a
+    // trip, supplier, type and amount that already has one (generated or typed)
+    // is refused, naming the one that holds it.
+    if (body.itinerary_id) {
+      const { data: onTrip, error: dupError } = await supabaseAdmin
+        .from('commissions')
+        .select('id, itinerary_id, supplier_id, source_name, commission_type, commission_amount, status, description')
+        .eq('org_id', orgId)
+        .eq('itinerary_id', body.itinerary_id)
+        .eq('commission_type', body.commission_type)
+      if (dupError) {
+        console.error('Error checking for a duplicate commission:', dupError)
+        return NextResponse.json({ error: 'Failed to create commission' }, { status: 500 })
+      }
+      const duplicate = findDuplicateCommission(onTrip ?? [], {
+        id: '',
+        itinerary_id: body.itinerary_id,
+        supplier_id: body.supplier_id || null,
+        source_name: body.source_name || null,
+        commission_type: body.commission_type,
+        commission_amount: commissionAmount,
+      })
+      if (duplicate) {
+        return NextResponse.json({ error: duplicateCommissionMessage(duplicate), existing_commission_id: duplicate.id }, { status: 409 })
+      }
+    }
 
     const status = body.status || 'pending'
     const newCommission = {

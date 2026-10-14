@@ -60,6 +60,11 @@ interface Expense {
   notes: string | null
   created_at: string
   updated_at: string
+  created_by?: string | null
+  approved_by?: string | null
+  approved_at?: string | null
+  /** The approver's name, added by the API. */
+  approved_by_name?: string | null
 }
 
 interface Itinerary {
@@ -910,6 +915,11 @@ export default function ExpensesPage() {
                           <StatusIcon className="h-3 w-3" />
                           {statusConfig.label}
                         </span>
+                        {expense.approved_at && (
+                          <p className="mt-1 text-xs text-gray-500">
+                            {t('approvedBy')}: {expense.approved_by_name || '-'}
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center">
                         {expense.receipt_url ? (

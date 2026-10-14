@@ -5395,6 +5395,9 @@ export interface Database {
           tax_amount: number | null
           tax_included: boolean | null
           org_id: string
+          created_by: string | null
+          approved_by: string | null
+          approved_at: string | null
         }
         Insert: {
           id?: string
@@ -5422,6 +5425,9 @@ export interface Database {
           tax_amount?: number | null
           tax_included?: boolean | null
           org_id: string
+          created_by?: string | null
+          approved_by?: string | null
+          approved_at?: string | null
         }
         Update: {
           id?: string
@@ -5449,6 +5455,9 @@ export interface Database {
           tax_amount?: number | null
           tax_included?: boolean | null
           org_id?: string
+          created_by?: string | null
+          approved_by?: string | null
+          approved_at?: string | null
         }
         Relationships: [
           {

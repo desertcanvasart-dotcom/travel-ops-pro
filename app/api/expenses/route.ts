@@ -3,10 +3,11 @@ import { createClient } from '@supabase/supabase-js'
 import { syncExpense } from '@/lib/accounting'
 import { insertWithUniqueRetry } from '@/lib/document-numbering'
 import { nextExpenseNumber } from '@/lib/expense-number'
-import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 import { getOrgDefaultCurrency } from '@/lib/org-default-currency'
 import { recordsInOrg } from '@/lib/org-refs'
-import { paymentDateForStatus, expenseFieldError } from '@/lib/expense-status'
+import { paymentDateForStatus, expenseFieldError, approvalDecision } from '@/lib/expense-status'
+import { withApproverNames } from '@/lib/expense-approver'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -68,7 +69,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch expenses' }, { status: 500 })
     }
 
-    return NextResponse.json(data || [])
+    // "Approved by" shows a name, not an id.
+    return NextResponse.json(await withApproverNames(supabaseAdmin, data || []))
   } catch (error) {
     console.error('Error in expenses GET:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -115,6 +117,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Supplier or trip not found' }, { status: 404 })
     }
 
+    // Who entered it, and, when it is entered already approved or paid, who
+    // approved it: the signed-in user, never a value from the request. A
+    // manager cannot enter an expense as approved (they would be approving their
+    // own); an owner or admin may.
+    const userId = await getCurrentUserId()
+    const isAdmin = (await requireRole(['admin'])) === null
+    const approval = approvalDecision({ from: null, to: body.status || 'pending', created_by: userId }, userId, isAdmin)
+    if (!approval.ok) {
+      return NextResponse.json({ error: approval.error }, { status: 403 })
+    }
+
     // The company's own currency when none is sent — not a hardcoded EUR.
     const currency = typeof body.currency === 'string' && body.currency.trim()
       ? body.currency.trim().toUpperCase()
@@ -143,6 +156,8 @@ export async function POST(request: NextRequest) {
       payment_date: paymentDateForStatus(body.status || 'pending', body.payment_date),
       payment_reference: body.payment_reference || null,
       notes: body.notes || null,
+      created_by: userId,
+      ...(approval.set && approval.set.approved_by ? approval.set : {}),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }

@@ -45,6 +45,10 @@ interface Expense {
   notes: string | null
   created_at: string
   updated_at: string
+  approved_by?: string | null
+  approved_at?: string | null
+  /** The approver's name, added by the API. */
+  approved_by_name?: string | null
 }
 
 interface Itinerary {
@@ -177,7 +181,10 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
       if (response.ok) {
         fetchExpense()
       } else {
-        await dialog.alert(t('error'), t('failedToUpdateStatus'), 'warning')
+        // The server says why when it refuses (you created this expense, so
+        // someone else must approve it).
+        const body = await response.json().catch(() => ({}))
+        await dialog.alert(t('error'), body.error || t('failedToUpdateStatus'), 'warning')
       }
     } catch (error) {
       console.error('Error updating expense:', error)
@@ -443,6 +450,16 @@ export default function ExpenseDetailPage({ params }: { params: Promise<{ id: st
                 )
               })}
             </div>
+
+            {expense.approved_at && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('approvedBy')}</p>
+                <p className="text-sm text-gray-900">
+                  {expense.approved_by_name || '-'}
+                  <span className="text-gray-500"> · {new Date(expense.approved_at).toLocaleDateString()}</span>
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Payment Info Card */}
