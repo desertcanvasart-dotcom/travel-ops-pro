@@ -16,6 +16,11 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // the mutations (below) and in-route, not on the pages: a manager opens
   // Settings and User Management, reads the Activity Log, and cannot invite,
   // change a role, edit the vocabulary or the company identity.
+  // An agent's own pages under Settings: their preferences, their Gmail and
+  // signatures, and their profile and password. Before '/settings' (first match).
+  '/settings/preferences': ['admin', 'manager', 'agent'],
+  '/settings/email': ['admin', 'manager', 'agent'],
+  '/settings/profile': ['admin', 'manager', 'agent'],
   '/settings': ['admin', 'manager'],
   '/activity': ['admin', 'manager'],
   '/users': ['admin', 'manager'],

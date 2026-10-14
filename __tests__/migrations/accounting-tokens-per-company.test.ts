@@ -161,19 +161,17 @@ describe('accounting connections belong to the company', () => {
 })
 
 describe('email signatures belong to one company', () => {
-  it('a person in one company: theirs; a person in both: not guessed, listed', async () => {
+  it('a person in one company: theirs; a person in both: one copy per company, once', async () => {
     expect((await one(`SELECT org_id FROM email_signatures WHERE id = '${sig(1)}'`)).org_id).toBe(ORG_T)
     expect((await one(`SELECT org_id FROM email_signatures WHERE id = '${sig(2)}'`)).org_id).toBe(ORG_A)
-    expect((await one(`SELECT org_id FROM email_signatures WHERE id = '${sig(3)}'`)).org_id).toBeNull()
-    expect(await reviewed('email_signatures')).toEqual([{
-      row_id: sig(3), assigned_org: null,
-      reason: 'signature of a person in both companies — not assigned; set org_id to the company it signs for',
-    }])
+    const both = (await db.query(`SELECT org_id FROM email_signatures WHERE user_id = '${BOTH}' ORDER BY org_id`)).rows.map((r: any) => r.org_id)
+    expect(both.sort()).toEqual([ORG_T, ORG_A].sort())
+    expect(await reviewed('email_signatures')).toEqual([])
   })
 
   it('a signed-in user reads their own signatures of a company they are in, never an unassigned one', async () => {
     expect((await as<{ id: string }>(T_ONLY, 'SELECT id FROM email_signatures')).map(r => r.id)).toEqual([sig(1)])
-    expect(await as(BOTH, 'SELECT id FROM email_signatures')).toHaveLength(0)
+    expect(await as(BOTH, 'SELECT id FROM email_signatures')).toHaveLength(2)
     await expect(as(T_ONLY, `INSERT INTO email_signatures (user_id, org_id, name, content) VALUES ('${T_ONLY}', '${ORG_A}', 'x', 'y')`)).rejects.toThrow()
   })
 })

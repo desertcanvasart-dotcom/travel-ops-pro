@@ -113,3 +113,13 @@ describe('Settings: activity is logged after the role gate; roster reads admin/m
     expect(mw).toContain("new Set(['/api/profiles', '/api/organization/members', '/api/invitations'])")
   })
 })
+
+describe("Settings: an agent's own pages", () => {
+  const mw = readFileSync('middleware.ts', 'utf8')
+  it('preferences, email and profile admit agents and come before /settings', () => {
+    for (const p of ['/settings/preferences', '/settings/email', '/settings/profile']) {
+      expect(mw).toContain(`'${p}': ['admin', 'manager', 'agent'],`)
+      expect(mw.indexOf(`'${p}':`)).toBeLessThan(mw.indexOf("'/settings': ['admin', 'manager'],"))
+    }
+  })
+})

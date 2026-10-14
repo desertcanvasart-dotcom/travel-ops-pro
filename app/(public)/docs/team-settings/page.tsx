@@ -25,9 +25,10 @@ export default function TeamSettingsPage() {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Who can see and change what</h2>
         <p className="text-gray-600 mb-3">
           The Settings group of the menu is shown to the owner, admins and managers. Agents and viewers do not have it,
-          and an agent or viewer who opens a Settings address is sent to the dashboard, with two exceptions for agents:
-          their own <strong>Preferences</strong> page (<code>/settings/preferences</code>) and their own{' '}
-          <strong>Email Settings</strong> page (<code>/settings/email</code>). Viewers have no Settings page.
+          and an agent or viewer who opens a Settings address is sent to the dashboard, with three exceptions for agents:
+          their own <strong>Preferences</strong> page (<code>/settings/preferences</code>), their own{' '}
+          <strong>Email Settings</strong> page (<code>/settings/email</code>) and their own{' '}
+          <strong>Profile</strong> page (<code>/settings/profile</code>), where they also change their password. Viewers have no Settings page.
         </p>
         <p className="text-gray-600 mb-3">
           A manager can open every tab. Where the server refuses a manager&apos;s change, the form is shown read-only
@@ -176,7 +177,7 @@ export default function TeamSettingsPage() {
         <ul className="list-disc list-inside space-y-1 text-gray-700">
           <li>There is no auto-reply for email, and no Default Cost Mode setting on screen.</li>
           <li>Your sign-in email cannot be changed from Settings.</li>
-          <li>Agents cannot open the Profile page or change their password from Settings; viewers have no Settings page at all.</li>
+          <li>Viewers have no Settings page at all, so they cannot change their password from Settings.</li>
           <li>The licence does not count or limit seats.</li>
         </ul>
         <Tip>

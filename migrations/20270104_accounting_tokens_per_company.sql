@@ -173,6 +173,26 @@ BEGIN
    WHERE s.org_id IS NULL AND s.user_id IS NOT NULL
      AND public.org_backfill_user_org(s.user_id) IS NOT NULL;
 
+  -- A person in both companies signs for both: their signature is copied into
+  -- each other company, and the original row takes the earliest one. A
+  -- signature is the person's own words, so nothing crosses companies.
+  CREATE TEMP TABLE _sig_multi ON COMMIT DROP AS
+    SELECT s.id, s.user_id,
+           (SELECT m.org_id FROM public.organization_members m WHERE m.user_id = s.user_id
+             ORDER BY m.created_at, m.org_id LIMIT 1) AS first_org
+      FROM public.email_signatures s
+     WHERE s.org_id IS NULL AND s.user_id IS NOT NULL
+       AND (SELECT count(DISTINCT m.org_id) FROM public.organization_members m WHERE m.user_id = s.user_id) > 1;
+
+  INSERT INTO public.email_signatures (user_id, name, content, is_default, created_at, updated_at, org_id)
+  SELECT s.user_id, s.name, s.content, s.is_default, s.created_at, s.updated_at, m.org_id
+    FROM _sig_multi x
+    JOIN public.email_signatures s ON s.id = x.id
+    JOIN public.organization_members m ON m.user_id = x.user_id AND m.org_id <> x.first_org;
+
+  UPDATE public.email_signatures s SET org_id = x.first_org
+    FROM _sig_multi x WHERE s.id = x.id;
+
   INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
   SELECT 'email_signatures', s.id::text, NULL,
          CASE WHEN (SELECT count(DISTINCT m.org_id) FROM public.organization_members m WHERE m.user_id = s.user_id) > 1
