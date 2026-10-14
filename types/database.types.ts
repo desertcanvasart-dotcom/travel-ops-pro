@@ -13754,6 +13754,14 @@ export interface Database {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         Returns: any
       }
+      user_has_org_role: {
+        Args: {
+          p_org?: string
+          p_roles?: string[]
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Returns: any
+      }
       user_is_in_org: {
         Args: {
           p_org_id?: string
