@@ -25,7 +25,7 @@ export default function ReceiptsPage() {
           <li><strong>Itinerary payments</strong> &mdash; payments recorded directly on a trip, but only those with the status <strong>Completed</strong> (purple badge). A pending, failed or refunded payment has no receipt, and neither does a payment of the type refund: a refund is money handed back. If a trip payment&apos;s page is opened anyway, it offers no PDF and no WhatsApp.</li>
         </ul>
         <p className="text-gray-600 mt-3">
-          The tiles at the top: <strong>Total Receipts</strong> (how many are listed), <strong>Total Received</strong> (their amounts, added up per currency, for example <strong>¥450,000 + €500</strong>; currencies are never added together) and <strong>Received This Month</strong> (how many receipts have a payment date in the current month). They follow the search box.
+          The tiles at the top: <strong>Total Receipts</strong> (how many are listed), <strong>Total Received</strong> (their amounts, added up per currency, for example <strong>¥450,000 + $500</strong>; currencies are never added together) and <strong>Received This Month</strong> (how many receipts have a payment date in the current month). They follow the search box.
         </p>
       </section>
 

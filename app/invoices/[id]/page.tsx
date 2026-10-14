@@ -1,7 +1,7 @@
 'use client'
 
 import { receiptNumberFor } from '@/lib/receipt-pdf-generator'
-import { displayStatus } from '@/lib/invoices/status'
+import { displayStatus as invoiceDisplayStatus } from '@/lib/invoices/status'
 import { todayLocal } from '@/lib/today'
 import { readInvoiceVat } from '@/lib/vat'
 import { VatToken, VatToggle } from '@/app/components/Vat'
@@ -496,7 +496,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     if (!invoice) return 'draft'
     // The same rule as the list and the Payments page (lib/invoices/status):
     // a draft that was never sent is not overdue.
-    return displayStatus(invoice, todayLocal())
+    return invoiceDisplayStatus(invoice, todayLocal())
   }
 
   // Money is recorded against an invoice that has been sent: the API refuses a

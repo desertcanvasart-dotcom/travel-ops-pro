@@ -19,7 +19,7 @@ export default function PaymentsPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">The Four Tiles</h2>
         <p className="text-gray-600 mb-3">
-          Every tile is added up per currency. If you take yen and euro, a tile shows both, for example <strong>¥450,000 + €500</strong>; amounts in different currencies are never added together.
+          Every tile is added up per currency. If you take yen and euro, a tile shows both, for example <strong>¥450,000 + $500</strong>; amounts in different currencies are never added together.
         </p>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
           <li><strong>Total Received</strong> &mdash; every payment recorded against an invoice, plus every trip payment whose status is <strong>Completed</strong>. A trip payment that is Pending, Deposit received, Partially paid, Failed, Refunded or Partially refunded is not counted, and neither is a trip payment of the type refund: a refund is money handed back, not money received, and it is not subtracted either. The Receipts page counts the same way.</li>

@@ -35,7 +35,7 @@ export default function InvoicesPaymentsPage() {
           <li><strong>Overdue</strong> &mdash; the balance of the overdue ones</li>
         </ul>
         <p className="text-gray-600 mt-3">
-          Billed, Paid, Outstanding and Overdue leave out drafts (not sent, so nothing is owed yet) and cancelled invoices. They are added up per currency: a company with yen and euro invoices sees both, for example <strong>¥450,000 + €500</strong>, never one mixed figure.
+          Billed, Paid, Outstanding and Overdue leave out drafts (not sent, so nothing is owed yet) and cancelled invoices. They are added up per currency: a company with yen and euro invoices sees both, for example <strong>¥450,000 + $500</strong>, never one mixed figure.
         </p>
         <p className="text-gray-600 mt-3">
           Row actions: <strong>View</strong>, <strong>Mark as sent</strong> (drafts only) and <strong>Delete</strong>. The <strong>CSV</strong> and <strong>PDF</strong> buttons export the rows currently shown.

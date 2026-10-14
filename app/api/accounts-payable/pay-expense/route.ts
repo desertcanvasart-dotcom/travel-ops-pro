@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await payExpenseAndSettleBills(supabaseAdmin, orgId, body.expenseId, {
-      payment_date: paymentDateForStatus('paid', body.payment_date, null),
+      payment_date: paymentDateForStatus('paid', body.payment_date, null) ?? new Date().toISOString().slice(0, 10),
       payment_method: body.payment_method,
       payment_reference: body.payment_reference,
     })
