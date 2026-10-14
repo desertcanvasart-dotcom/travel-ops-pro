@@ -267,6 +267,8 @@ const FINANCIAL_API_PREFIXES = [
   '/api/supplier-invoices',
   '/api/accounts-receivable',
   '/api/accounts-payable',
+  // Reads a supplier bill to fill the Bills form: that screen is manager-and-above.
+  '/api/ai/parse-supplier-invoice',
   '/api/analytics',
   // The accounting integration's chart of accounts and sync status are
   // financial data — manager and above, reads included.

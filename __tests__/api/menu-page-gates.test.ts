@@ -83,3 +83,11 @@ describe('Finance: invoices are staff-only to read, expenses are manager-and-abo
     expect(mw).toMatch(/prefix: '\/api\/expenses', roles: \['admin', 'manager'\]/)
   })
 })
+
+describe('Finance: the supplier-bill parser follows the Bills screen', () => {
+  it('is in FINANCIAL_API_PREFIXES', () => {
+    const mw = readFileSync('middleware.ts', 'utf8')
+    const block = mw.slice(mw.indexOf('const FINANCIAL_API_PREFIXES'))
+    expect(block.slice(0, block.indexOf(']\n'))).toContain("'/api/ai/parse-supplier-invoice'")
+  })
+})
