@@ -150,6 +150,14 @@ export async function populateSuppliersFromItinerary(
     days.map((d: { id: string; date: string | null; day_number: number | null }) => [d.id, d])
   )
 
+  // total_cost is in the itinerary's currency; a row whose supplier charges
+  // in another one is costed in that (lib/bookings/supplier-lines).
+  const { data: itinerary } = await supabase
+    .from('itineraries')
+    .select('currency')
+    .eq('id', itineraryId)
+    .maybeSingle()
+
   // One row per supplier per day, without the lines nobody confirms (water,
   // tips…) — lib/bookings/supplier-lines, shared with sync-suppliers.
   const lines = supplierLinesFromServices(
@@ -158,6 +166,7 @@ export async function populateSuppliersFromItinerary(
       return { ...service, day_number: day?.day_number ?? null, day_date: day?.date ?? null } as ServiceForSupplier
     }),
     null,
+    (itinerary as { currency?: string | null } | null)?.currency ?? null,
   )
   if (lines.length === 0) return { inserted: 0 }
   const rows = lines.map(l => ({ ...l, booking_id: bookingId, status: 'pending' }))

@@ -62,7 +62,7 @@ export async function POST(
     // Get itinerary start_date as fallback for calculating service dates
     const { data: itinerary } = await supabaseAdmin
       .from('itineraries')
-      .select('start_date')
+      .select('start_date, currency')
       .eq('id', booking.itinerary_id)
       .eq('org_id', orgId)
       .single()
@@ -145,7 +145,9 @@ export async function POST(
     // One row per supplier per day, without the lines nobody confirms
     // (water, tips…) — lib/bookings/supplier-lines, shared with booking
     // creation. The id-or-name key keeps a linked supplier on its id and an
-    // unlinked line on its name; rows already listed are skipped.
+    // unlinked line on its name; rows already listed are skipped. Each row is
+    // costed in its supplier's own currency when that is safe, else in the
+    // itinerary's (whose currency total_cost is in).
     const existingKeys = new Set((existingSuppliers || []).map(supplierKey))
     const dayById = new Map(days.map(d => [d.id as string, d]))
     const lines = supplierLinesFromServices(
@@ -154,6 +156,7 @@ export async function POST(
         return { ...service, day_number: day?.day_number ?? null, day_date: day?.date ?? null }
       }),
       tripStartDate,
+      itinerary?.currency ?? null,
     )
     const supplierStatuses = lines
       .filter(l => !existingKeys.has(supplierKey(l)))

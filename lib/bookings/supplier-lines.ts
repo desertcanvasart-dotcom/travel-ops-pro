@@ -10,8 +10,16 @@
 //   * lines nobody confirms (tips, water, supplies, fees) are left out;
 //   * service types map to one set of supplier types;
 //   * the same supplier on the same day is ONE row (by supplier_id when the
-//     line is linked, else by name), its costs summed.
+//     line is linked, else by name), its costs summed;
+//   * the cost is in the supplier's OWN currency (EGP for a guide, USD for a
+//     cruise…) when every line of the row is in that one currency and its
+//     original still agrees with total_cost (lib/supplier-own-currency, the
+//     voucher's rule) — that is what the supplier confirms and is paid.
+//     Otherwise it is the lines' total_cost, in the trip's currency.
+//     cost_currency says which; null = the booking's currency.
 // (Matches autoura-saas lib/bookings/booking-suppliers.ts.)
+
+import { supplierOwnMoney, type OwnCurrencyLine } from '@/lib/supplier-own-currency'
 
 /** Service type → booking supplier type; null = nobody to confirm, left off. */
 export function supplierTypeForService(serviceType: string | null | undefined): string | null {
@@ -51,7 +59,7 @@ export function supplierKey(l: { supplier_id?: string | null; supplier_name?: st
     : `name:${(l.supplier_name ?? '').trim().toLowerCase()}|${l.supplier_type ?? ''}|${date}`
 }
 
-export interface ServiceForSupplier {
+export interface ServiceForSupplier extends OwnCurrencyLine {
   supplier_id?: string | null
   supplier_name?: string | null
   service_name?: string | null
@@ -70,30 +78,58 @@ export interface SupplierLine {
   service_description: string | null
   service_date: string | null
   quoted_cost: number | null
+  /** Currency of quoted_cost; null = the booking's currency. */
+  cost_currency: string | null
 }
 
-/** The booking's supplier rows implied by its itinerary's services. */
-export function supplierLinesFromServices(services: ServiceForSupplier[], tripStart: string | null | undefined): SupplierLine[] {
-  const byKey = new Map<string, SupplierLine>()
+/** The currency a row's quoted and confirmed cost are in: its own, else the booking's. */
+export function supplierCostCurrency(
+  row: { cost_currency?: string | null },
+  bookingCurrency: string | null | undefined,
+): string {
+  return String(row.cost_currency || bookingCurrency || 'EUR').trim().toUpperCase()
+}
+
+/**
+ * The booking's supplier rows implied by its itinerary's services.
+ * `tripCurrency` is the currency the services' total_cost is in (the
+ * itinerary's); without it, a row not in its supplier's own currency gets
+ * cost_currency null (= the booking's).
+ */
+export function supplierLinesFromServices(
+  services: ServiceForSupplier[],
+  tripStart: string | null | undefined,
+  tripCurrency?: string | null,
+): SupplierLine[] {
+  const trip = String(tripCurrency ?? '').trim().toUpperCase()
+  const byKey = new Map<string, { line: SupplierLine; group: ServiceForSupplier[] }>()
   for (const s of services) {
     const type = supplierTypeForService(s.service_type)
     if (!type) continue
-    const cost = Number(s.total_cost ?? s.rate_eur)
     const line: SupplierLine = {
       supplier_id: s.supplier_id || null,
       supplier_type: type,
       supplier_name: String(s.supplier_name || s.service_name || 'Unknown').trim(),
       service_description: s.notes || null,
       service_date: serviceDate(s.day_number, s.day_date, tripStart),
-      quoted_cost: Number.isFinite(cost) && cost !== 0 ? cost : null,
+      quoted_cost: null,
+      cost_currency: null,
     }
     const key = supplierKey(line)
     const seen = byKey.get(key)
-    if (seen) {
-      seen.quoted_cost = (seen.quoted_cost ?? 0) + (line.quoted_cost ?? 0) || null
-    } else {
-      byKey.set(key, line)
-    }
+    if (seen) seen.group.push(s)
+    else byKey.set(key, { line, group: [s] })
   }
-  return [...byKey.values()].sort((a, b) => (a.service_date ?? '').localeCompare(b.service_date ?? ''))
+  const lines = [...byKey.values()].map(({ line, group }): SupplierLine => {
+    // Only with a known trip currency: "foreign" means foreign to it.
+    const money = trip ? supplierOwnMoney(group, trip) : null
+    if (money?.own) return { ...line, quoted_cost: money.total || null, cost_currency: money.currency }
+    // The trip's currency: total_cost (rate_eur on lines saved before it).
+    const sum = group.reduce((acc, s) => {
+      const n = Number(s.total_cost ?? s.rate_eur)
+      return Number.isFinite(n) ? acc + n : acc
+    }, 0)
+    return { ...line, quoted_cost: Math.round(sum * 100) / 100 || null, cost_currency: trip || null }
+  })
+  return lines.sort((a, b) => (a.service_date ?? '').localeCompare(b.service_date ?? ''))
 }
