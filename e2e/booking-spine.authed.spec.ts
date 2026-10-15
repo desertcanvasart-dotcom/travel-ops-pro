@@ -119,7 +119,9 @@ const MANIFEST = [
 ]
 
 test.beforeAll(async () => {
-  itinerary = await createTestItinerary('SPINE')
+  // A yen trip at the quote's price: an invoice is in its trip's currency and
+  // its amount is worked out from the trip (lib/invoices/server-amounts).
+  itinerary = await createTestItinerary('SPINE', { currency: 'JPY', totalCost: SELLING_PRICE_JPY })
   itineraryId = itinerary.id
   orgId = itinerary.orgId
   itineraryStart = itinerary.startDate

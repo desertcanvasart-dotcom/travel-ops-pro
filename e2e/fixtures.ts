@@ -103,7 +103,7 @@ async function seededOrgId(): Promise<string> {
   return seed.org_id
 }
 
-export async function createTestItinerary(suffix: string): Promise<TestItinerary> {
+export async function createTestItinerary(suffix: string, opts: { currency?: string; totalCost?: number } = {}): Promise<TestItinerary> {
   const orgId = await seededOrgId()
 
   const start = new Date(Date.now() + 120 * 86_400_000).toISOString().slice(0, 10)
@@ -128,8 +128,8 @@ export async function createTestItinerary(suffix: string): Promise<TestItinerary
       total_days: 2,
       num_adults: 2,
       num_children: 0,
-      currency: 'EUR',
-      total_cost: 0,
+      currency: opts.currency ?? 'EUR',
+      total_cost: opts.totalCost ?? 0,
       status: 'draft',
     }),
   })
