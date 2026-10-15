@@ -4,8 +4,8 @@ import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { resolveMailbox } from '@/lib/gmail-mailbox'
 import { getCurrentOrgId, getCurrentUserId } from '@/lib/auth/current-org'
-import { storedReplyHeaders, type ThreadingHeaders } from '@/lib/email/reply-threading'
-import { headerSafe, encodeEmailHeader } from '@/lib/http/safe-header'
+import { gmailReplyHeaders, storedReplyHeaders, type ThreadingHeaders } from '@/lib/email/reply-threading'
+import { buildRawMessage, parseRecipients, type ComposeAttachment } from '@/lib/email/compose-mime'
 import { claimSend, finishSend, replyBodyHash, threadConflict } from '@/lib/email/send-guard'
 
 const supabase = createClient(
@@ -13,16 +13,12 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-interface Attachment {
-  filename: string
-  mimeType: string
-  data: string // base64 encoded
-}
-
 export async function POST(request: NextRequest) {
   try {
     const {
-      userId: bodyUserId, to, subject, body, threadId, attachments,
+      userId: bodyUserId, to, cc, bcc, subject, body, threadId, attachments,
+      // Sent from a saved draft: it is removed once the email has gone.
+      draftId,
       // The duplicate guard (lib/email/send-guard): one key per reply the
       // composer writes, the time of the newest message it was showing, and the
       // sender's "send anyway" after being told someone already answered.
@@ -37,6 +33,20 @@ export async function POST(request: NextRequest) {
     const userId = (await getCurrentUserId()) || bodyUserId
 
     if (!userId || !to || !subject || !body) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    // To, Cc and Bcc: lists, comma- or semicolon-separated. A part that is not
+    // an address is refused rather than dropped — sending to part of a list
+    // the sender typed is worse than asking them to fix it.
+    const toList = parseRecipients(to)
+    const ccList = parseRecipients(cc)
+    const bccList = parseRecipients(bcc)
+    const invalid = [...toList.invalid, ...ccList.invalid, ...bccList.invalid]
+    if (invalid.length > 0) {
+      return NextResponse.json({ error: `Not an email address: ${invalid.join(', ')}` }, { status: 400 })
+    }
+    if (toList.list.length === 0) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
@@ -120,16 +130,12 @@ export async function POST(request: NextRequest) {
 
     // Answer the thread's latest message by its Message-ID, so the reply stays
     // in the customer's conversation in every mail client, not only in Gmail.
-    const threading = storedThreading ?? (gmailThreadId ? await replyHeaders(gmail, gmailThreadId) : {})
+    const threading = storedThreading ?? (gmailThreadId ? await gmailReplyHeaders(gmail, gmailThreadId) : {})
 
-    // Build email with or without attachments
-    let rawEmail: string
-
-    if (attachments && attachments.length > 0) {
-      rawEmail = buildEmailWithAttachments(to, subject, body, attachments, threading)
-    } else {
-      rawEmail = buildSimpleEmail(to, subject, body, threading)
-    }
+    const rawEmail = buildRawMessage({
+      to: toList.list, cc: ccList.list, bcc: bccList.list,
+      subject, body, attachments, threading,
+    })
 
     // Send email
     let response
@@ -151,6 +157,16 @@ export async function POST(request: NextRequest) {
     const sentThreadId = response.data.threadId
     if (key) await finishSend(supabase, key, { ok: true, gmailMessageId: sentMessageId ?? null, gmailThreadId: sentThreadId ?? null })
 
+    // Sent from a saved draft: the draft goes, as in Gmail. A failure here
+    // leaves a stale draft, not an unsent email — logged, not raised.
+    if (typeof draftId === 'string' && /^[A-Za-z0-9_-]{1,200}$/.test(draftId)) {
+      try {
+        await gmail.users.drafts.delete({ userId: 'me', id: draftId })
+      } catch (draftError) {
+        console.warn('[gmail send] draft not removed after sending:', draftError instanceof Error ? draftError.message : draftError)
+      }
+    }
+
     if (sentMessageId && sentThreadId) {
       try {
         // Find or create conversation for this thread
@@ -170,7 +186,7 @@ export async function POST(request: NextRequest) {
               thread_id: sentThreadId,
               // The mailbox's owner — the shared mailbox's threads stay its own.
               user_id: mailboxUserId,
-              client_email: to,
+              client_email: toList.list[0],
               subject: subject,
               last_message_snippet: body.substring(0, 200).replace(/<[^>]*>/g, ''),
               last_message_at: new Date().toISOString(),
@@ -204,11 +220,13 @@ export async function POST(request: NextRequest) {
             thread_id: sentThreadId,
             direction: 'outbound',
             from_address: emailAddress,
-            to_addresses: [to],
+            to_addresses: toList.list,
+            cc_addresses: ccList.list,
+            bcc_addresses: bccList.list,
             subject: subject,
             body_html: body,
             snippet: body.substring(0, 200).replace(/<[^>]*>/g, ''),
-            attachments: attachments?.map((a: Attachment) => ({
+            attachments: attachments?.map((a: ComposeAttachment) => ({
               filename: a.filename,
               mimeType: a.mimeType,
               size: a.data ? Math.round(a.data.length * 0.75) : 0
@@ -229,95 +247,4 @@ export async function POST(request: NextRequest) {
     console.error('Send email error:', err)
     return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 500 })
   }
-}
-
-/** In-Reply-To / References for a reply in `threadId`: its latest message's
- *  Message-ID. Empty when Gmail cannot say (the reply still threads in Gmail
- *  by threadId). */
-async function replyHeaders(gmail: Awaited<ReturnType<typeof getAuthenticatedGmail>>['gmail'], threadId: string): Promise<ThreadingHeaders> {
-  try {
-    const thread = await gmail.users.threads.get({ userId: 'me', id: threadId, format: 'metadata', metadataHeaders: ['Message-ID', 'References'] })
-    const last = thread.data.messages?.[thread.data.messages.length - 1]
-    const header = (name: string) => last?.payload?.headers?.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || ''
-    const messageId = header('Message-ID')
-    if (!messageId) return {}
-    const refs = header('References')
-    return { inReplyTo: messageId, references: refs ? `${refs} ${messageId}` : messageId }
-  } catch {
-    return {}
-  }
-}
-
-const threadingLines = (t: ThreadingHeaders): string[] => [
-  ...(t.inReplyTo ? [`In-Reply-To: ${t.inReplyTo}`] : []),
-  ...(t.references ? [`References: ${t.references}`] : []),
-]
-
-// Headers built from the request: To and Subject went in raw — a CR/LF could
-// add a header, and a Japanese subject reached non-Gmail clients as mojibake
-// (the supplier-voucher send was fixed for this in #581). The subject is an
-// RFC 2047 encoded-word, the body base64, attachment names ASCII + RFC 2231.
-function buildSimpleEmail(to: string, subject: string, body: string, threading: ThreadingHeaders = {}): string {
-  const emailLines = [
-    `To: ${headerSafe(to)}`,
-    `Subject: ${encodeEmailHeader(headerSafe(subject))}`,
-    ...threadingLines(threading),
-    'MIME-Version: 1.0',
-    'Content-Type: text/html; charset=utf-8',
-    'Content-Transfer-Encoding: base64',
-    '',
-    Buffer.from(body).toString('base64'),
-  ]
-  
-  return Buffer.from(emailLines.join('\r\n'))
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
-}
-
-function buildEmailWithAttachments(
-  to: string, 
-  subject: string, 
-  body: string, 
-  attachments: Attachment[],
-  threading: ThreadingHeaders = {}
-): string {
-  const boundary = `boundary_${Date.now()}`
-  
-  const emailParts = [
-    `To: ${headerSafe(to)}`,
-    `Subject: ${encodeEmailHeader(headerSafe(subject))}`,
-    ...threadingLines(threading),
-    'MIME-Version: 1.0',
-    `Content-Type: multipart/mixed; boundary="${boundary}"`,
-    '',
-    `--${boundary}`,
-    'Content-Type: text/html; charset=utf-8',
-    'Content-Transfer-Encoding: base64',
-    '',
-    Buffer.from(body).toString('base64'),
-  ]
-
-  // Add attachments
-  for (const attachment of attachments) {
-    const safeName = headerSafe(attachment.filename).replace(/"/g, '')
-    const asciiName = safeName.replace(/[^\x20-\x7E]/g, '_')
-    emailParts.push(
-      `--${boundary}`,
-      `Content-Type: ${headerSafe(attachment.mimeType)}; name="${asciiName}"`,
-      'Content-Transfer-Encoding: base64',
-      `Content-Disposition: attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`,
-      '',
-      attachment.data
-    )
-  }
-
-  emailParts.push(`--${boundary}--`)
-
-  return Buffer.from(emailParts.join('\r\n'))
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
 }

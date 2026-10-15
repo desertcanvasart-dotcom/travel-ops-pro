@@ -123,7 +123,10 @@ describe('wiring', () => {
     expect(src.indexOf('threadConflict(')).toBeGreaterThan(0)
     expect(src.indexOf('threadConflict(')).toBeLessThan(send)
     expect(src.indexOf('claimSend(')).toBeLessThan(send)
-    expect(src).toContain('In-Reply-To:')
+    // Threading headers ride the shared builder (lib/email/compose-mime).
+    expect(src).toMatch(/buildRawMessage\(\{[\s\S]*?threading/)
+    expect(readFileSync('lib/email/compose-mime.ts', 'utf8')).toContain('threadingLines(m.threading')
+    expect(readFileSync('lib/email/reply-threading.ts', 'utf8')).toContain('In-Reply-To:')
     expect(src).toContain('sent_by: userId')
   })
 

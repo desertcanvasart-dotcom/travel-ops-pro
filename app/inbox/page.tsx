@@ -7,6 +7,7 @@ import { emailOrderText } from '@/lib/intake/tup-mail'
 import { stashHandoffText, encodeTextParam } from '@/lib/text-handoff'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
+import { replyAllRecipients } from '@/lib/email/reply-all'
 import { useAuth } from '@/app/contexts/AuthContext'
 import Link from 'next/link'
 import RichTextEditor from '@/components/email/RichTextEditor'
@@ -46,6 +47,9 @@ import {
   Tag,
   MailOpen,
   FolderInput,
+  Reply,
+  ReplyAll,
+  Forward,
   CheckSquare,
   Square,
   Bell,
@@ -116,6 +120,8 @@ interface Email {
   snippet: string
   from: string
   to: string
+  cc?: string
+  bcc?: string
   subject: string
   date: string
   body: string
@@ -174,6 +180,16 @@ interface Client {
 }
 
 type FilterType = 'all' | 'unread' | 'starred'
+type ComposeMode = 'new' | 'reply' | 'replyAll' | 'forward' | 'draft'
+interface DraftDoc {
+  id: string
+  threadId?: string
+  to: string
+  cc: string
+  bcc: string
+  subject: string
+  body: string
+}
 type SystemFolder = 'inbox' | 'sent' | 'drafts' | 'spam' | 'trash'
 // A folder the operator made is its Gmail label: `label:<label id>`.
 type FolderType = SystemFolder | `label:${string}`
@@ -209,6 +225,12 @@ export default function InboxPage() {
   const [connectedEmail, setConnectedEmail] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [showCompose, setShowCompose] = useState(false)
+  // What the compose window is for, and the draft it was opened from.
+  const [composeMode, setComposeMode] = useState<ComposeMode>('new')
+  const [composeDraft, setComposeDraft] = useState<DraftDoc | null>(null)
+  // The open email's whole conversation (its Gmail thread), oldest first.
+  const [thread, setThread] = useState<Email[] | null>(null)
+  const [expandedInThread, setExpandedInThread] = useState<Set<string>>(new Set())
   const [refreshing, setRefreshing] = useState(false)
   const [filter, setFilter] = useState<FilterType>('all')
   const [folder, setFolder] = useState<FolderType>('inbox')
@@ -643,6 +665,114 @@ ${bodyText}`
     fetchEmails(searchQuery)
   }
 
+  // The open email's conversation. Loaded when another thread is opened; a
+  // failure leaves just the email itself, as before.
+  useEffect(() => {
+    setThread(null)
+    setExpandedInThread(new Set())
+    const threadId = selectedEmail?.threadId
+    if (!threadId || folder === 'drafts') return
+    let cancelled = false
+    fetch(`/api/gmail/threads?id=${encodeURIComponent(threadId)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (!cancelled && data && Array.isArray(data.messages)) setThread(data.messages as Email[])
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [selectedEmail?.threadId, folder])
+
+  // The rest of the conversation, around the open email.
+  const threadIndex = thread && selectedEmail ? thread.findIndex(m => m.id === selectedEmail.id) : -1
+  const earlierInThread = thread && threadIndex > 0 ? thread.slice(0, threadIndex) : []
+  const laterInThread = thread && threadIndex >= 0 ? thread.slice(threadIndex + 1) : []
+
+  // One other message of the conversation: a line until opened, as in Gmail.
+  const renderThreadMessage = (message: Email) => {
+    const open = expandedInThread.has(message.id)
+    const toggle = () => setExpandedInThread(prev => {
+      const next = new Set(prev)
+      if (next.has(message.id)) next.delete(message.id)
+      else next.add(message.id)
+      return next
+    })
+    return (
+      <div key={message.id} className="border border-gray-200 rounded-lg">
+        <button onClick={toggle} className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-gray-50 rounded-lg">
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-medium flex-shrink-0 ${getAvatarColor(message.from)}`}>
+            {getInitials(extractName(message.from))}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-gray-900 truncate">{extractName(message.from)}</p>
+            {!open && <p className="text-xs text-gray-500 truncate">{decodeHtmlEntities(message.snippet || '')}</p>}
+          </div>
+          <span className="text-[11px] text-gray-400 flex-shrink-0">{new Date(message.date).toLocaleString()}</span>
+        </button>
+        {open && (
+          <div className="px-3 pb-3">
+            <p className="text-[11px] text-gray-500 mb-2 break-words">
+              To: {message.to}{message.cc ? ` · Cc: ${message.cc}` : ''}
+            </p>
+            <div
+              className="email-body-content"
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(formatEmailBody(message.body)) }}
+            />
+            {message.attachments && message.attachments.length > 0 && (
+              <AttachmentList attachments={message.attachments} messageId={message.id} userId={user!.id} />
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const openCompose = (mode: ComposeMode) => {
+    setComposeDraft(null)
+    setComposeMode(mode)
+    setShowExpandedEmail(false)
+    setShowCompose(true)
+  }
+
+  // A draft in the Drafts folder opens in compose, to finish and send.
+  const openDraft = async (email: Email) => {
+    try {
+      const res = await fetch(`/api/gmail/drafts?messageId=${encodeURIComponent(email.id)}`)
+      const data = await res.json()
+      if (!res.ok || !data.draft) throw new Error(data.error || 'Draft not found')
+      setComposeDraft(data.draft as DraftDoc)
+      setComposeMode('draft')
+      setShowCompose(true)
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  // Reply all only when there is someone besides the sender to answer.
+  const canReplyAll = (email: Email) =>
+    replyAllRecipients(email, connectedEmail ? [connectedEmail] : []).cc.length > 0
+
+  const renderReplyButtons = (email: Email) => {
+    const button = 'inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors'
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={() => openCompose('reply')} className={`${button} text-white bg-primary-600 hover:bg-primary-700 shadow-sm`}>
+          <Reply className="w-4 h-4" />
+          Reply
+        </button>
+        {canReplyAll(email) && (
+          <button onClick={() => openCompose('replyAll')} className={`${button} text-gray-700 bg-white border border-gray-300 hover:bg-gray-50`}>
+            <ReplyAll className="w-4 h-4" />
+            Reply all
+          </button>
+        )}
+        <button onClick={() => openCompose('forward')} className={`${button} text-gray-700 bg-white border border-gray-300 hover:bg-gray-50`}>
+          <Forward className="w-4 h-4" />
+          Forward
+        </button>
+      </div>
+    )
+  }
+
   const handleRefresh = () => {
     setShowNewEmailBanner(false)
     setNewEmailCount(0)
@@ -1014,7 +1144,7 @@ ${bodyText}`
                 Refresh
               </button>
               <button
-                onClick={() => setShowCompose(true)}
+                onClick={() => openCompose('new')}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors shadow-sm"
               >
                 <Send className="w-4 h-4" />
@@ -1274,7 +1404,8 @@ ${bodyText}`
                     return (
                       <div
                         key={email.id}
-                        onClick={() => setSelectedEmail(email)}
+                        // A draft opens in compose, to finish and send.
+                        onClick={() => (folder === 'drafts' ? openDraft(email) : setSelectedEmail(email))}
                         // Drag onto a folder in the sidebar: the ticked emails
                         // when this one is ticked, else just this one.
                         draggable={canMove}
@@ -1462,6 +1593,15 @@ ${bodyText}`
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
                 {decodeHtmlEntities(selectedEmail.subject || '(No subject)')}
               </h2>
+
+              {earlierInThread.length > 0 && (
+                <div className="mb-4 space-y-2">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                    Earlier in this conversation ({earlierInThread.length})
+                  </p>
+                  {earlierInThread.map(renderThreadMessage)}
+                </div>
+              )}
               
               <div className="flex items-center gap-3 mb-6 pb-6 border-b border-gray-200">
                 {folder === 'sent' || isFromMe(selectedEmail) ? (
@@ -1505,6 +1645,11 @@ ${bodyText}`
                   )}
                 </div>
               </div>
+              {!!selectedEmail.cc && (
+                <p className="-mt-4 mb-6 text-xs text-gray-500 break-words">
+                  <span className="font-medium text-gray-400">Cc:</span> {selectedEmail.cc}
+                </p>
+              )}
 
               <div 
               className="email-body-content"
@@ -1520,14 +1665,15 @@ ${bodyText}`
                 />
               )}
 
+              {laterInThread.length > 0 && (
+                <div className="mt-6 space-y-2">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Later in this conversation</p>
+                  {laterInThread.map(renderThreadMessage)}
+                </div>
+              )}
+
               <div className="mt-8 pt-6 border-t border-gray-200">
-                <button
-                  onClick={() => setShowCompose(true)}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors shadow-sm"
-                >
-                  <Send className="w-4 h-4" />
-                  {folder === 'sent' || isFromMe(selectedEmail) ? 'Forward' : 'Reply'}
-                </button>
+                {renderReplyButtons(selectedEmail)}
               </div>
             </div>
           </div>
@@ -1656,16 +1802,7 @@ ${bodyText}`
           </button>
         </div>
         
-        <button
-          onClick={() => {
-            setShowExpandedEmail(false)
-            setShowCompose(true)
-          }}
-          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors shadow-sm"
-        >
-          <Send className="w-4 h-4" />
-          {folder === 'sent' || isFromMe(selectedEmail) ? 'Forward' : 'Reply'}
-        </button>
+        {renderReplyButtons(selectedEmail)}
       </div>
     </div>
   </div>
@@ -1674,9 +1811,16 @@ ${bodyText}`
 {/* Compose Modal */}
 {showCompose && (
         <ComposeModal
-          onClose={() => setShowCompose(false)}
+          onClose={() => {
+            setShowCompose(false)
+            // A draft saved or discarded shows in (or leaves) the Drafts list.
+            if (folder === 'drafts') fetchEmails()
+          }}
           userId={user?.id || ''}
-          replyTo={selectedEmail && folder !== 'sent' && !isFromMe(selectedEmail) ? selectedEmail : null}
+          mode={composeMode}
+          source={composeMode === 'new' || composeMode === 'draft' ? null : selectedEmail}
+          draft={composeMode === 'draft' ? composeDraft : null}
+          ownAddresses={connectedEmail ? [connectedEmail] : []}
           onSent={() => {
             setShowCompose(false)
             fetchEmails()
@@ -1715,33 +1859,79 @@ function formatFileSize(bytes: number) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
+const reSubject = (subject: string) => (/^re:/i.test(subject || '') ? subject : `Re: ${subject || ''}`)
+const escapeHtml = (text: string) =>
+  String(text ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
 // UPDATED: Compose Modal Component with CLIENT + PARTNER template integration
 // Replace your existing ComposeModal in app/inbox/page.tsx with this version
 
 function ComposeModal({ 
   onClose, 
   userId, 
-  replyTo,
+  mode = 'new',
+  source = null,
+  draft = null,
+  ownAddresses = [],
   onSent,
   clients = []
 }: { 
   onClose: () => void
   userId: string
-  replyTo?: Email | null
+  /** new, reply, reply all, forward — or a saved draft reopened. */
+  mode?: ComposeMode
+  /** The email being answered or forwarded. */
+  source?: Email | null
+  draft?: DraftDoc | null
+  /** The mailbox's own address(es): never on a Reply all. */
+  ownAddresses?: string[]
   onSent: () => void
   clients?: Client[]
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
-  
-  const extractEmailAddr = (from: string) => {
-    const match = from.match(/<(.+)>/)
-    return match ? match[1] : from
-  }
 
-  const [to, setTo] = useState(replyTo ? extractEmailAddr(replyTo.from) : '')
-  const [subject, setSubject] = useState(replyTo ? `Re: ${replyTo.subject}` : '')
-  const [body, setBody] = useState('')
+  // A reply (or reply all) stays in the source's thread; a forward and a new
+  // message start their own; a draft keeps the thread it was saved in.
+  const replyTo = (mode === 'reply' || mode === 'replyAll') ? source : null
+  const replyThreadId = draft?.threadId || replyTo?.threadId
+
+  const initial = (() => {
+    if (draft) return { to: draft.to, cc: draft.cc, bcc: draft.bcc, subject: draft.subject, body: draft.body }
+    if (source && mode === 'replyAll') {
+      const r = replyAllRecipients(source, ownAddresses)
+      return { to: r.to.join(', '), cc: r.cc.join(', '), bcc: '', subject: reSubject(source.subject), body: '' }
+    }
+    if (source && mode === 'reply') {
+      // To the sender — or, for a message the office sent, to whom it went
+      // (as Gmail does); never back to the office's own address.
+      const r = replyAllRecipients(source, ownAddresses)
+      return { to: r.to[0] ?? source.from, cc: '', bcc: '', subject: reSubject(source.subject), body: '' }
+    }
+    if (source && mode === 'forward') {
+      const quoted = [
+        '<p></p><p>---------- Forwarded message ---------</p>',
+        `<p>From: ${escapeHtml(source.from)}<br>Date: ${escapeHtml(source.date)}<br>Subject: ${escapeHtml(source.subject)}<br>To: ${escapeHtml(source.to)}${source.cc ? `<br>Cc: ${escapeHtml(source.cc)}` : ''}</p>`,
+        sanitizeHtml(source.body || ''),
+      ].join('')
+      return { to: '', cc: '', bcc: '', subject: /^fwd?:/i.test(source.subject) ? source.subject : `Fwd: ${source.subject}`, body: quoted }
+    }
+    return { to: '', cc: '', bcc: '', subject: '', body: '' }
+  })()
+
+  const [to, setTo] = useState(initial.to)
+  const [cc, setCc] = useState(initial.cc)
+  const [bcc, setBcc] = useState(initial.bcc)
+  const [showCc, setShowCc] = useState(!!initial.cc)
+  const [showBcc, setShowBcc] = useState(!!initial.bcc)
+  const [subject, setSubject] = useState(initial.subject)
+  const [body, setBody] = useState(initial.body)
+  // The saved draft this compose writes to (Gmail's draft id), once saved.
+  const [draftId, setDraftId] = useState<string | null>(draft?.id ?? null)
+  const [savingDraft, setSavingDraft] = useState(false)
+  const [draftNote, setDraftNote] = useState<string | null>(null)
+  // "Draft saved" stands until the next edit.
+  useEffect(() => { setDraftNote(null) }, [to, cc, bcc, subject, body])
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // One key for this reply (lib/email/send-with-guard): a double click or a
@@ -2047,6 +2237,61 @@ function ComposeModal({
     setSelectedTemplate(null)
   }
 
+  // Save to Gmail's Drafts (created the first time, updated after). Quiet:
+  // `announce` only for the Save draft button.
+  const saveDraft = async (announce: boolean): Promise<boolean> => {
+    if (savingDraft) return false
+    setSavingDraft(true)
+    try {
+      const res = await fetch('/api/gmail/drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: draftId || undefined, to, cc, bcc, subject, body,
+          threadId: replyThreadId,
+          attachments: attachments.length > 0 ? attachments : undefined,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.id) throw new Error(data.error || 'The draft could not be saved')
+      setDraftId(data.id)
+      if (announce) setDraftNote('Draft saved')
+      return true
+    } catch (err: any) {
+      setError(err.message)
+      return false
+    } finally {
+      setSavingDraft(false)
+    }
+  }
+
+  // Anything written that is not in the draft yet.
+  const initialBody = initial.body
+  const isDirty = [to !== initial.to, cc !== initial.cc, bcc !== initial.bcc, subject !== initial.subject, body !== initialBody, attachments.length > 0].some(Boolean)
+
+  // Closing keeps what was written, as Gmail does: it is saved as a draft.
+  const handleClose = async () => {
+    const hasContent = !!(to.trim() || cc.trim() || bcc.trim() || body.replace(/<[^>]*>/g, '').trim())
+    if (isDirty && hasContent) {
+      const saved = await saveDraft(false)
+      if (!saved && !window.confirm('The draft could not be saved. Close and lose it?')) return
+    }
+    onClose()
+  }
+
+  // Throw the draft away: off Gmail's Drafts too, when it was saved.
+  const handleDiscard = async () => {
+    if (isDirty && !window.confirm('Discard this message?')) return
+    if (draftId) {
+      try {
+        await fetch(`/api/gmail/drafts?id=${encodeURIComponent(draftId)}`, { method: 'DELETE' })
+      } catch {
+        // It stays in Drafts; nothing is sent.
+      }
+    }
+    onClose()
+  }
+
   const handleSend = async () => {
     if (!to || !subject || !body) {
       setError('Please fill in all fields')
@@ -2077,9 +2322,13 @@ function ComposeModal({
       const sent = await sendGuardedEmail({
         userId,
         to,
+        cc: cc.trim() || undefined,
+        bcc: bcc.trim() || undefined,
         subject,
         body,
-        threadId: replyTo?.threadId,
+        threadId: replyThreadId,
+        // Sent from a saved draft: the server removes the draft.
+        draftId: draftId || undefined,
         attachments: attachments.length > 0 ? attachments : undefined,
       }, {
         requestKey: requestKeyRef.current,
@@ -2108,7 +2357,7 @@ function ComposeModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
           <h3 className="text-sm font-semibold text-gray-900">
-            {replyTo ? 'Reply' : 'New Message'}
+            {mode === 'reply' ? 'Reply' : mode === 'replyAll' ? 'Reply all' : mode === 'forward' ? 'Forward' : mode === 'draft' ? 'Draft' : 'New Message'}
           </h3>
           <div className="flex items-center gap-1">
             <button 
@@ -2119,8 +2368,9 @@ function ComposeModal({
               <Minus className="w-4 h-4 text-gray-500" />
             </button>
             <button 
-              onClick={onClose} 
+              onClick={handleClose} 
               className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Close (saves a draft)"
             >
               <X className="w-4 h-4 text-gray-500" />
             </button>
@@ -2143,13 +2393,46 @@ function ComposeModal({
           <div className="flex items-center px-5 py-2.5 border-b border-gray-100">
             <label className="w-16 text-xs font-medium text-gray-400">To</label>
             <input
-              type="email"
+              type="text"
               value={to}
               onChange={(e) => setTo(e.target.value)}
               className="flex-1 text-sm outline-none bg-transparent"
-              placeholder="recipient@example.com"
+              placeholder="recipient@example.com, another@example.com"
             />
+            {/* Cc / Bcc as Gmail shows them: links until wanted. */}
+            <div className="flex items-center gap-2 ml-2 text-xs text-gray-500">
+              {!showCc && <button type="button" onClick={() => setShowCc(true)} className="hover:text-gray-800">Cc</button>}
+              {!showBcc && <button type="button" onClick={() => setShowBcc(true)} className="hover:text-gray-800">Bcc</button>}
+            </div>
           </div>
+
+          {showCc && (
+            <div className="flex items-center px-5 py-2.5 border-b border-gray-100">
+              <label className="w-16 text-xs font-medium text-gray-400">Cc</label>
+              <input
+                type="text"
+                value={cc}
+                onChange={(e) => setCc(e.target.value)}
+                className="flex-1 text-sm outline-none bg-transparent"
+                placeholder="Copy to"
+                autoFocus={!initial.cc}
+              />
+            </div>
+          )}
+
+          {showBcc && (
+            <div className="flex items-center px-5 py-2.5 border-b border-gray-100">
+              <label className="w-16 text-xs font-medium text-gray-400">Bcc</label>
+              <input
+                type="text"
+                value={bcc}
+                onChange={(e) => setBcc(e.target.value)}
+                className="flex-1 text-sm outline-none bg-transparent"
+                placeholder="Hidden copy to"
+                autoFocus={!initial.bcc}
+              />
+            </div>
+          )}
 
           <div className="flex items-center px-5 py-2.5 border-b border-gray-100">
             <label className="w-16 text-xs font-medium text-gray-400">Subject</label>
@@ -2343,11 +2626,19 @@ function ComposeModal({
             </button>
           </div>
           <div className="flex items-center gap-2">
+            {draftNote && <span className="text-xs text-gray-500">{draftNote}</span>}
             <button 
-              onClick={onClose} 
+              onClick={handleDiscard} 
               className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
             >
               Discard
+            </button>
+            <button 
+              onClick={() => saveDraft(true)} 
+              disabled={savingDraft || sending}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {savingDraft ? 'Saving…' : 'Save draft'}
             </button>
             <button 
               onClick={handleSend} 
