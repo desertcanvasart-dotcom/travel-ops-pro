@@ -1886,6 +1886,10 @@ DECLARE
   pol record;
 BEGIN
   IF to_regclass('public.b2b_pricing_rules') IS NULL THEN RETURN; END IF;
+  -- A table that predates org_id (the E2E project's) gets it; production
+  -- and a fresh install have it NOT NULL already, so this is a no-op there.
+  ALTER TABLE public.b2b_pricing_rules
+    ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES public.organizations(id) ON DELETE CASCADE;
 
   FOR pol IN SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = 'b2b_pricing_rules' LOOP
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.b2b_pricing_rules', pol.policyname);
