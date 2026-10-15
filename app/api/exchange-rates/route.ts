@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!from || !to) {
+    if (!from || !to || typeof from !== 'string' || typeof to !== 'string') {
       return NextResponse.json(
         { success: false, error: 'Both "from" and "to" currencies are required' },
         { status: 400 }
@@ -72,13 +72,15 @@ export async function POST(request: NextRequest) {
     // M1: validate the requested currencies exist in the rate table — without
     // this an unknown code (e.g. "EURO" instead of "EUR") silently propagates
     // NaN through every downstream caller.
-    if (from !== 'USD' && rates.rates[from] === undefined) {
+    // Own keys only: "constructor" or "__proto__" is on every object.
+    const known = (code: string) => code === 'USD' || Object.prototype.hasOwnProperty.call(rates.rates, code)
+    if (!known(from)) {
       return NextResponse.json(
         { success: false, error: `Unsupported source currency: ${from}` },
         { status: 400 }
       )
     }
-    if (to !== 'USD' && rates.rates[to] === undefined) {
+    if (!known(to)) {
       return NextResponse.json(
         { success: false, error: `Unsupported target currency: ${to}` },
         { status: 400 }

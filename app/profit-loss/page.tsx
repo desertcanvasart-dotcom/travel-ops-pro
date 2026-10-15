@@ -67,17 +67,18 @@ interface Summary {
   mixed_currency?: boolean
   /** The real per-currency breakdown, which the flat totals below cannot be. */
   by_currency?: Record<string, Record<string, number>>
-  total_revenue: number
-  total_expenses: number
-  total_profit: number
-  average_margin: number
-  total_agent_commissions: number
-  total_net_profit: number
-  average_net_margin: number
-  total_realized_revenue: number
-  total_realized_cost: number
-  total_realized_profit: number
-  average_realized_margin: number
+  /** The flat money totals and margins are null when currencies are mixed. */
+  total_revenue: number | null
+  total_expenses: number | null
+  total_profit: number | null
+  average_margin: number | null
+  total_agent_commissions: number | null
+  total_net_profit: number | null
+  average_net_margin: number | null
+  total_realized_revenue: number | null
+  total_realized_cost: number | null
+  total_realized_profit: number | null
+  average_realized_margin: number | null
   profitable_trips: number
   loss_trips: number
 }
@@ -219,10 +220,10 @@ export default function ProfitLossPage() {
    * money. Per-trip margins in the table below stay meaningful, because each
    * trip has one currency.
    */
-  const summaryPercent = (value: number) =>
-    summary?.mixed_currency ? '—' : `${value.toFixed(1)}%`
+  const summaryPercent = (value: number | null) =>
+    summary?.mixed_currency || value == null ? '—' : `${value.toFixed(1)}%`
 
-  const summaryMoney = (field: string, flat: number) => {
+  const summaryMoney = (field: string, flat: number | null) => {
     if (!summary) return ''
     if (summary.mixed_currency && summary.by_currency) {
       const totals = Object.fromEntries(
@@ -230,7 +231,7 @@ export default function ProfitLossPage() {
       )
       return formatTotals(totals)
     }
-    return formatMoney(flat, summary.currency || 'EUR')
+    return formatMoney(flat ?? 0, summary.currency || 'EUR')
   }
 
   const getCurrencySymbol = (currency: string) => {
@@ -238,7 +239,8 @@ export default function ProfitLossPage() {
     return symbols[currency] || currency
   }
 
-  const getProfitColor = (profit: number) => {
+  const getProfitColor = (profit: number | null) => {
+    if (profit == null) return 'text-gray-600'
     if (profit > 0) return 'text-green-600'
     if (profit < 0) return 'text-red-600'
     return 'text-gray-600'
@@ -395,7 +397,9 @@ export default function ProfitLossPage() {
             <p className={`text-lg font-semibold truncate ${getProfitColor(summary.total_profit)}`} title={summaryMoney('profit', summary.total_profit)}>
               {summaryMoney('profit', summary.total_profit)}
             </p>
-            {summary.total_agent_commissions > 0 && (
+            {(summary.mixed_currency
+              ? Object.values(summary.by_currency ?? {}).some(b => Number(b?.agent_commissions) > 0)
+              : (summary.total_agent_commissions ?? 0) > 0) && (
               <p className="text-[11px] text-gray-500 mt-0.5">
                 before {summaryMoney('agent_commissions', summary.total_agent_commissions)} agent commission
               </p>

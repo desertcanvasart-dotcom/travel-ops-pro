@@ -128,6 +128,10 @@ export async function POST(request: NextRequest) {
     const commissionAmount = hasExplicitAmount
       ? Number(body.commission_amount)
       : (Number(body.base_amount) * Number(body.commission_rate)) / 100
+    // "abc" or a blank base made NaN, which the insert rejected as a 500.
+    if (!Number.isFinite(commissionAmount)) {
+      return NextResponse.json({ error: 'The commission amount must be a number' }, { status: 400 })
+    }
 
     const newCommission = {
       org_id: orgId,

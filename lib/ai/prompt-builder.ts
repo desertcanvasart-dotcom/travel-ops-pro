@@ -91,7 +91,7 @@ ${seg.rawContent}
     throw new Error('Failed to parse AI response as JSON')
   }
 
-  const result = JSON.parse(jsonMatch[0])
+  const result = parseModelJson(jsonMatch[0])
 
   // ============================================
   // POST-GENERATION VALIDATION
@@ -280,7 +280,17 @@ export async function generateCreativeItinerary(
     throw new Error('Failed to parse AI response as JSON')
   }
 
-  return JSON.parse(jsonMatch[0])
+  return parseModelJson(jsonMatch[0])
+}
+
+// The greedy match can span prose between two JSON-looking bits (AUDIT L3):
+// say what failed rather than surface a bare SyntaxError.
+function parseModelJson(raw: string): any {
+  try {
+    return JSON.parse(raw)
+  } catch {
+    throw new Error('Failed to parse AI response as JSON')
+  }
 }
 
 // ============================================

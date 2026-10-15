@@ -280,8 +280,9 @@ export async function GET(request: NextRequest) {
     // Currency-aware breakdown: each itinerary can carry a different currency
     // (EUR/USD/GBP/EGP). Summing them directly is meaningless, so expose a
     // per-currency breakdown and flag when more than one currency is present.
-    // Flat totals below are retained for backward compatibility but should only
-    // be treated as authoritative when mixed_currency is false.
+    // With mixed currencies the flat money totals and margins are null (AUDIT
+    // H3): a € and a ¥ figure added together is no figure, and a reader that
+    // missed mixed_currency printed it. by_currency carries the real totals.
     const byCurrency: Record<string, { revenue: number; supplier_cost: number; manual_expenses: number; total_expenses: number; profit: number; agent_commissions: number; net_profit: number; realized_revenue: number; realized_cost: number; realized_profit: number; trips: number }> = {}
     for (const p of pnlData) {
       const cur = p.currency || 'EUR'
@@ -303,30 +304,31 @@ export async function GET(request: NextRequest) {
     const currencies = Object.keys(byCurrency)
     const mixedCurrency = currencies.length > 1
 
+    const flat = (n: number): number | null => (mixedCurrency ? null : n)
     const summary = {
       total_trips: pnlData.length,
       currency: mixedCurrency ? null : (currencies[0] || 'EUR'),
       mixed_currency: mixedCurrency,
       by_currency: byCurrency,
-      total_revenue: totalRevenue,
-      total_supplier_cost: totalSupplierCost,
-      total_manual_expenses: totalManualExpenses,
-      total_expenses: totalExpenses,
-      total_profit: totalProfit,
-      average_margin: totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0,
+      total_revenue: flat(totalRevenue),
+      total_supplier_cost: flat(totalSupplierCost),
+      total_manual_expenses: flat(totalManualExpenses),
+      total_expenses: flat(totalExpenses),
+      total_profit: flat(totalProfit),
+      average_margin: flat(totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0),
 
       // Net of what agents take. This, not total_profit, is what the business
       // keeps on trips sold through an agent.
-      total_agent_commissions: totalAgentCommissions,
-      total_net_profit: totalNetProfit,
-      average_net_margin: totalRevenue > 0 ? (totalNetProfit / totalRevenue) * 100 : 0,
+      total_agent_commissions: flat(totalAgentCommissions),
+      total_net_profit: flat(totalNetProfit),
+      average_net_margin: flat(totalRevenue > 0 ? (totalNetProfit / totalRevenue) * 100 : 0),
 
       // Cash that actually moved, no estimates.
-      total_realized_revenue: totalRealizedRevenue,
-      total_realized_cost: totalRealizedCost,
-      total_realized_profit: totalRealizedProfit,
-      average_realized_margin:
-        totalRealizedRevenue > 0 ? (totalRealizedProfit / totalRealizedRevenue) * 100 : 0,
+      total_realized_revenue: flat(totalRealizedRevenue),
+      total_realized_cost: flat(totalRealizedCost),
+      total_realized_profit: flat(totalRealizedProfit),
+      average_realized_margin: flat(
+        totalRealizedRevenue > 0 ? (totalRealizedProfit / totalRealizedRevenue) * 100 : 0),
 
       // Counted on net, not gross: a trip whose whole margin goes to the agent
       // is not a profitable trip, however good the gross looks.

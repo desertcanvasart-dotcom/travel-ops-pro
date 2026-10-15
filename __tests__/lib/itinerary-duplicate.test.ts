@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 // Duplicate trip (lib/itineraries/duplicate, ported from autoura-saas): what
 // the copy keeps, what it leaves behind, and that every listed column exists.
 import { describe, it, expect } from 'vitest'
@@ -81,5 +82,28 @@ describe('the copied columns exist', () => {
   ] as const)('%s', (table, columns) => {
     const have = rowColumns(table)
     expect(columns.filter(c => !have.has(c))).toEqual([])
+  })
+})
+
+describe('itinerary codes (AUDIT L8)', () => {
+  it('a new code is 8 hex characters after the year', async () => {
+    const { newItineraryCode } = await import('@/lib/itineraries/itinerary-code')
+    expect(newItineraryCode('ITN-S', 2026)).toMatch(/^ITN-S-2026-[0-9A-F]{8}$/)
+    expect(newItineraryCode()).toMatch(/^ITN-\d{4}-[0-9A-F]{8}$/)
+  })
+  it('a copy of a hex-coded itinerary keeps its prefix', () => {
+    expect(copyCode('ITN-S-2026-3FA9C01B', 2027, 'ABCDEF01')).toBe('ITN-S-2027-ABCDEF01')
+  })
+  it('no generator draws from a small random range any more', () => {
+    for (const f of [
+      'app/api/ai/generate-itinerary/route.ts',
+      'app/api/itineraries/route.ts',
+      'app/api/itineraries/[id]/duplicate/route.ts',
+      'app/api/b2b/quotes/[id]/convert/route.ts',
+      'app/api/pricing-grid/save/route.ts',
+      'lib/concierge/commit-brief-to-itinerary.ts',
+    ]) {
+      expect(readFileSync(f, 'utf8'), f).not.toMatch(/Math\.floor\(Math\.random\(\) \* (1000|9000)\)/)
+    }
   })
 })

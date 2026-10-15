@@ -111,3 +111,61 @@ describe('H1/H14 — the OAuth nonce is spent on success', () => {
     expect(src(f)).toMatch(/clearNonceCookie\(done\)/)
   })
 })
+
+describe('H30 — the season premium is priced on the server', async () => {
+  const { settleSeasonUplift } = await import('@/lib/pricing/season-uplift')
+  const high = { seasonId: 's', name: 'Golden Week', upliftPercent: 15 }
+  it('no season on the departure: no premium, whatever the request says', () => {
+    expect(settleSeasonUplift({ sellingPrice: 1000, season: null, claimed: 500 })).toBe(0)
+  })
+  it("the grid's figure stands when it agrees to rounding", () => {
+    expect(settleSeasonUplift({ sellingPrice: 1000, season: high, claimed: 150.4 })).toBe(150.4)
+  })
+  it("an inflated figure is capped at the season's", () => {
+    expect(settleSeasonUplift({ sellingPrice: 1000, season: high, claimed: 900 })).toBe(150)
+  })
+  it('a premium the grid did not show is not added', () => {
+    expect(settleSeasonUplift({ sellingPrice: 1000, season: high, claimed: undefined })).toBe(0)
+    expect(settleSeasonUplift({ sellingPrice: 1000, season: high, claimed: -5 })).toBe(0)
+  })
+  it('the save route uses it', () => {
+    expect(src('app/api/pricing-grid/save/route.ts')).toContain('settleSeasonUplift({ sellingPrice: actualClientTotal, season, claimed: totals?.seasonUplift })')
+  })
+})
+
+describe('H31 — a failed days write undoes the header', () => {
+  const code = src('app/api/pricing-grid/save/route.ts')
+  it('an update restores the previous header; a create removes the new trip', () => {
+    expect(code).toContain(".update(before).eq('id', config.itineraryId).eq('org_id', callerOrgId)")
+    expect(code).toContain(".from('itineraries').delete().eq('id', createdId)")
+  })
+  it('the undo is disarmed once the days are written and run from the catch', () => {
+    const rpc = code.indexOf("supabase.rpc('save_pricing_grid_days'")
+    expect(code.indexOf('undoHeader = null', rpc)).toBeGreaterThan(rpc)
+    expect(code).toMatch(/catch \(error: any\) \{[\s\S]*?await undoHeader\(\)/)
+  })
+})
+
+describe('H3 — no flat P&L total across currencies', () => {
+  it('the flat totals and margins are null when currencies are mixed', () => {
+    const code = src('app/api/profit-loss/route.ts')
+    expect(code).toContain('const flat = (n: number): number | null => (mixedCurrency ? null : n)')
+    for (const k of ['total_revenue', 'total_profit', 'total_net_profit', 'total_realized_profit', 'average_margin', 'average_net_margin']) {
+      expect(code).toMatch(new RegExp(`${k}: flat\\(`))
+    }
+  })
+})
+
+describe('L4 — customer text stays data', () => {
+  it('parse-whatsapp defuses the tag and keeps only contacts the customer wrote', () => {
+    const code = src('app/api/ai/parse-whatsapp/route.ts')
+    expect(code).toContain("wrapUntrusted('conversation', conversation)")
+    expect(code).toContain("contactFromText(extracted.client_email, conversation, 'email') || regexEmail")
+    expect(code).toContain("contactFromText(extracted.client_phone, conversation, 'phone') || regexPhone")
+  })
+  it('parse-file sends its instructions as system and wraps document text', () => {
+    const code = src('app/api/ai/parse-file/route.ts')
+    expect(code).toMatch(/system: prompt,/)
+    expect(code).toContain("wrapUntrusted('document', text)")
+  })
+})

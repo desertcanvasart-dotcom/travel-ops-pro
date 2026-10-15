@@ -49,6 +49,7 @@ import { ticketsValidOn, outOfSeasonMessage, namedOutOfSeasonMessage } from '@/l
 import { airportsFrom, airportsForCity, cityAirportCode, type Airport } from '@/lib/rates/airports'
 import { sailsOn, sailingDaysLabel } from '@/lib/rates/cruise-sailing'
 import { seasonsForRow as flightSeasonsForRow } from '@/lib/rates/rate-seasons'
+import { seasonWindowsOn } from '@/lib/pricing/season-windows'
 import { cruiseCandidates, hotelCandidates, propertyById } from '@/lib/pricing/property-candidates'
 import { choicesForTier, sanitizePropertyChoice } from '@/lib/pricing/property-choice'
 import { guideLanguageWord, sameGuideLanguage } from '@/lib/guides/guide-language'
@@ -4691,29 +4692,7 @@ export async function loadSeasonWindows(
   orgId: string | undefined,
   travelDate: string | undefined
 ): Promise<SeasonWindow[]> {
-  if (!orgId || !travelDate) return []
-  const on = travelDate.slice(0, 10)
-
-  const { data, error } = await supabaseAdmin
-    .from('pricing_season_dates')
-    .select('season_id, start_date, end_date, pricing_seasons!inner(name, uplift_percent, is_active)')
-    .eq('org_id', orgId)
-    .lte('start_date', on)
-    .gte('end_date', on)
-    .eq('pricing_seasons.is_active', true)
-
-  if (error || !data) return []
-
-  return data.map(row => {
-    const season = row.pricing_seasons as unknown as { name: string; uplift_percent: number }
-    return {
-      seasonId: String(row.season_id),
-      name: String(season?.name ?? ''),
-      upliftPercent: Number(season?.uplift_percent) || 0,
-      startDate: String(row.start_date),
-      endDate: String(row.end_date),
-    }
-  })
+  return seasonWindowsOn(supabaseAdmin, orgId, travelDate)
 }
 
 /**

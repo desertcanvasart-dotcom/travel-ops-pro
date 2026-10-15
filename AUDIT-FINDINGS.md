@@ -24,15 +24,16 @@ role gates for reads and writes) plus org-scoped queries in the routes.
   - H1/H14: the OAuth nonce cookie is cleared on a successful connect too.
   - M19/M31/M15 (found in the re-check): `lib/document-numbering.ts` took the year's highest number by text sort, so past 999 documents a year every invoice/expense/supplier-invoice create would fail; it now compares numerically.
   - The middleware matcher skipped `/api` paths ending in an image extension; every `/api` path now runs through it.
-- **Still open (larger changes, not done):**
-  - H3: the flat `total_*` P&L fields still sum mixed currencies (the UI uses `by_currency`; other consumers should too).
-  - H7: no provider idempotency key on QuickBooks/Xero payments; a crash between create and sync-log write can double-post on retry.
-  - H30/H31: pricing-grid save writes the itinerary header outside the days transaction, and trusts the client's `seasonUplift`.
-  - M30: concurrent matches can over-commit one expense across invoices (needs a DB constraint/RPC).
-  - L4: prompt-injection hardening in parse-file and the email/phone preference in parse-whatsapp.
-  - L6: the rate limiter is in-memory; move it to a shared store before running more than one instance.
-  - L8: other itinerary-code generators still use small random ranges (concierge commit: 1000 a year).
-
+- **Fixed in the second pass (2026-10-15):**
+  - H3: the flat P&L money totals and margins are null when currencies are mixed; the page reads `by_currency`.
+  - H7: QuickBooks (`requestid`) and Xero (`Idempotency-Key`) payments carry a key per payment, so a retry after a lost sync-log write returns the original payment.
+  - H30: the pricing-grid save prices the departure's season itself and caps the requested premium there.
+  - H31: if the days write fails, the save restores the itinerary header (update) or removes the new trip (create).
+  - M30: migration `20261129_supplier_invoice_expense_cap.sql` — the table refuses links that match an expense past its amount, serialised on the expense row; the route answers 409.
+  - L4: parse-file sends its instructions as `system` and wraps document text; customer text can no longer close its tag (`lib/ai/untrusted-text.ts`); parse-whatsapp keeps a model-reported email/phone only if the customer wrote it.
+  - L8: one generator for itinerary codes (`lib/itineraries/itinerary-code.ts`, 8 hex characters) in every place a code is made.
+  - Smaller leftovers: H24 (booking payment_type → 400), H34 (an approved supplier invoice's supplier and tax are locked), M1 (currency codes checked as own keys), M5 (an unnamed activity rate no longer matches every attraction), M13 (NaN commission → 400), L3 (prompt-builder), L9 (generate-itinerary dates in UTC).
+- **Deferred:** L6 — the rate limiter is in-memory, correct on today's single container; DEFERRED_GATES.md G4 makes a shared store required before a second instance.
 
 ## CRITICAL (4)
 
