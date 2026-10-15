@@ -280,6 +280,11 @@ test('5 — a bank transfer against the deposit updates the invoice', async ({ r
   const [before] = await rest(`invoices?id=eq.${depositInvoiceId}&select=total_amount,balance_due`)
   const depositAmount = Number(before.total_amount)
 
+  // A payment is recorded against an invoice the customer has been sent (a
+  // draft refuses one, 409): mark it sent, as the Send button does.
+  const sent = await request.put(`/api/invoices/${depositInvoiceId}`, { data: { status: 'sent' } })
+  expect(sent.ok(), await sent.text()).toBeTruthy()
+
   // A.T.S is paid by bank transfer; nothing reflects automatically, so this is
   // the manual record their whole process depends on.
   const res = await request.post(`/api/invoices/${depositInvoiceId}/payments`, {
