@@ -178,6 +178,8 @@ export interface BookingSupplierStatus {
   // Cost
   quoted_cost: number | null
   confirmed_cost: number | null
+  /** Currency of both costs (the supplier's own, e.g. EGP); null = the booking's. */
+  cost_currency?: string | null
 
   /** The expense recorded when this supplier was confirmed (lib/bookings/supplier-expense). */
   expense?: { id: string; expense_number: string; status: string; amount: number; currency: string } | null

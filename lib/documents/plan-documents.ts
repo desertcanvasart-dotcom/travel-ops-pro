@@ -35,6 +35,7 @@
 
 import { docMappingFor, serviceCity, PlaceNames, entranceLineName, type ServiceMapping } from './group-services'
 import { propertyFromService } from '@/lib/itineraries/overnight-property'
+import { supplierOwnMoney } from '@/lib/supplier-own-currency'
 
 export interface PlanService {
   id?: string | null
@@ -449,41 +450,15 @@ export function staleDocuments(
  * The money a voucher states. A supplier confirms what it charges in its own
  * currency: itinerary_services.total_cost is converted to the TRIP's currency
  * (and moves with every FX reprice), so an Egyptian hotel contracted at
- * EGP 15,000 on a yen trip was asked to confirm "¥45,xxx".
- *
- * supplier_cost_original is written when the line is created and NOT kept in
- * step when the line is edited (2 rooms → 3 changes total_cost only). So a
- * line's own-currency cost is used only while it still agrees with total_cost
- * at the rate it was converted at; a voucher never states a stale amount.
- * When every line is in one foreign currency and agrees, the voucher is in
- * that currency; otherwise it stays in the trip's, at total_cost.
+ * EGP 15,000 on a yen trip was asked to confirm "¥45,xxx". The rule (own
+ * currency only while every line's original still agrees with its total, and
+ * all lines share one currency) lives in lib/supplier-own-currency, shared
+ * with a booking's supplier rows so the voucher and the expense agree.
  */
 export function voucherMoney(
   services: Array<Pick<PlannedService, 'total_cost' | 'supplier_currency' | 'supplier_cost_original' | 'exchange_rate_used'>>,
   tripCurrency: string
 ): { currency: string; total: number; lineAmounts: number[] } {
-  const num = (v: unknown) => {
-    if (v === null || v === undefined || v === '') return null
-    const n = parseFloat(String(v))
-    return Number.isFinite(n) ? n : null
-  }
-  const trip = String(tripCurrency || '').trim().toUpperCase()
-  const currencies = new Set(services.map(s => String(s.supplier_currency ?? '').trim().toUpperCase()))
-  const [only] = [...currencies]
-  const current = (s: (typeof services)[number]) => {
-    const original = num(s.supplier_cost_original)
-    const rate = num(s.exchange_rate_used)
-    const total = num(s.total_cost)
-    if (original === null || rate === null || rate <= 0 || total === null) return false
-    // Within a cent per unit of trip currency, or 0.5% — rounding, not an edit.
-    return Math.abs(original * rate - total) <= Math.max(0.01, Math.abs(total) * 0.005)
-  }
-  const own = services.length > 0
-    && currencies.size === 1
-    && !!only
-    && only !== trip
-    && services.every(current)
-  const lineAmounts = services.map(s => (own ? num(s.supplier_cost_original) : num(s.total_cost)) ?? 0)
-  const total = Math.round(lineAmounts.reduce((a, b) => a + b, 0) * 100) / 100
-  return { currency: own ? only : tripCurrency, total, lineAmounts }
+  const { currency, total, lineAmounts } = supplierOwnMoney(services, tripCurrency)
+  return { currency, total, lineAmounts }
 }

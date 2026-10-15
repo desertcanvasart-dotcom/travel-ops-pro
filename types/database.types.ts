@@ -2382,6 +2382,7 @@ export interface Database {
           contact_email: string | null
           contact_phone: string | null
           confirmed_cost: number | null
+          cost_currency: string | null
           updated_at: string | null
         }
         Insert: {
@@ -2402,6 +2403,7 @@ export interface Database {
           contact_email?: string | null
           contact_phone?: string | null
           confirmed_cost?: number | null
+          cost_currency?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -2422,6 +2424,7 @@ export interface Database {
           contact_email?: string | null
           contact_phone?: string | null
           confirmed_cost?: number | null
+          cost_currency?: string | null
           updated_at?: string | null
         }
         Relationships: [

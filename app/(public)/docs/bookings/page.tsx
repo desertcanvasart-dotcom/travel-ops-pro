@@ -84,8 +84,19 @@ export default function BookingsPage() {
           </li>
           <li>
             <strong>Suppliers</strong> &mdash; one row per supplier and day from the trip&apos;s services;{' '}
-            <strong>Sync from Itinerary</strong> adds new ones. Confirming a row with a cost records an expense in the
-            booking&apos;s currency.
+            <strong>Sync from Itinerary</strong> adds new ones. Each row&apos;s cost is in the{' '}
+            <strong>supplier&apos;s own currency</strong> when its services were priced in it (EGP for a guide, driver or
+            entrance tickets, USD for a hotel or Nile cruise, for example): the amount the supplier quoted, shown with its
+            currency code beside the cost box. When the row&apos;s services are in more than one currency, or a service
+            was edited after it was priced so its own-currency amount is out of date, the row is in the trip&apos;s
+            currency at the trip-currency cost instead. A row you add by hand is in the booking&apos;s currency.
+          </li>
+          <li>
+            The cost box is the <strong>confirmed cost</strong>; type it in the currency shown. When it differs from the
+            quote, the quote is shown under it with the same currency. Confirming a row with a cost records a Pending
+            expense for that amount <strong>in the row&apos;s currency</strong>, which is what you pay the supplier; the
+            Profit &amp; Loss converts it at the exchange rate on the expense date. While the expense is Pending it
+            follows the row (cost, currency and date); once it is Approved, Paid or Rejected it is left alone.
           </li>
           <li><strong>Payments</strong> &mdash; the trip&apos;s invoices and the payments against them.</li>
           <li><strong>Passengers</strong> and <strong>Notes</strong> (special requests and operational notes).</li>
@@ -136,6 +147,10 @@ export default function BookingsPage() {
           <li>Moving a booked trip to new dates is not done for you: the calendar refuses to drag it.</li>
           <li>Bookings are not linked to a client record; they carry the client&apos;s name and contact details.</li>
           <li>There is no booking delete button; cancelling is the normal way out.</li>
+          <li>
+            A supplier row&apos;s currency cannot be changed on the screen. Rows confirmed before supplier currencies were
+            recorded, and their expenses, stay in the currency they were entered in.
+          </li>
         </ul>
       </section>
     </div>

@@ -55,6 +55,7 @@ import BookingExtrasPanel from '@/app/components/BookingExtrasPanel'
 import InsuranceCard from '@/app/components/InsuranceCard'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { isSupplierBacked } from '@/lib/bookings/supplier-backing'
+import { supplierCostCurrency } from '@/lib/bookings/supplier-lines'
 import { BackLink, TripBreadcrumb } from '@/components/nav/TripNav'
 import { withReturnTo } from '@/lib/nav/return-to'
 import { useRole } from '@/hooks/useRole'
@@ -769,10 +770,12 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                             {supplier.service_date ? formatDate(supplier.service_date) : '-'}
                           </td>
                           <td className="px-4 py-3 text-right whitespace-nowrap">
-                            {/* The cost the supplier confirmed (defaults to the quote); it is what the expense records. */}
+                            {/* The cost the supplier confirmed (defaults to the quote); it is what the expense records.
+                                Both are in the row's currency — the supplier's own (EGP, USD…) when its lines were priced in it, else the booking's. */}
+                            <span className="mr-1 text-[11px] font-medium text-gray-500">{supplierCostCurrency(supplier, booking.currency)}</span>
                             <input
                               key={`${supplier.id}:${supplier.confirmed_cost ?? ''}`}
-                              aria-label={`Confirmed cost for ${supplier.supplier_name}`}
+                              aria-label={`Confirmed cost for ${supplier.supplier_name} in ${supplierCostCurrency(supplier, booking.currency)}`}
                               type="number"
                               step="0.01"
                               min="0"
@@ -788,7 +791,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                               className="w-24 px-2 py-1 text-xs text-right border border-gray-200 rounded-md"
                             />
                             {supplier.confirmed_cost != null && supplier.quoted_cost != null && Number(supplier.confirmed_cost) !== Number(supplier.quoted_cost) && (
-                              <div className="text-[10px] text-gray-400">quoted {Number(supplier.quoted_cost).toFixed(2)}</div>
+                              <div className="text-[10px] text-gray-400">quoted {supplierCostCurrency(supplier, booking.currency)} {Number(supplier.quoted_cost).toFixed(2)}</div>
                             )}
                           </td>
                           <td className="px-4 py-3">
@@ -1123,7 +1126,8 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('fields.quotedCost')}</label>
+                  {/* A row added by hand is in the booking's currency (cost_currency null). */}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('fields.quotedCost')} ({booking.currency || 'EUR'})</label>
                   <input
                     type="number"
                     value={supplierForm.quoted_cost}
