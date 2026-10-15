@@ -11,6 +11,10 @@ import { replyAllRecipients } from '@/lib/email/reply-all'
 import { useAuth } from '@/app/contexts/AuthContext'
 import Link from 'next/link'
 import RichTextEditor from '@/components/email/RichTextEditor'
+import RecipientField from '@/components/email/RecipientField'
+import SchedulePicker, { type ScheduleChoice } from '@/components/email/SchedulePicker'
+import ScheduledPanel from '@/components/email/ScheduledPanel'
+import { parseRecipients } from '@/lib/email/compose-mime'
 // NEW IMPORTS FOR GMAIL ENHANCEMENTS
 import AttachmentList, { AttachmentIndicator } from '@/components/AttachmentList'
 import ClientLinkButton from '@/components/ClientLinkButton'
@@ -47,6 +51,8 @@ import {
   Tag,
   MailOpen,
   FolderInput,
+  Pencil,
+  Clock,
   Reply,
   ReplyAll,
   Forward,
@@ -189,7 +195,17 @@ interface DraftDoc {
   bcc: string
   subject: string
   body: string
+  attachments?: Array<{ filename: string; mimeType: string; data: string; size: number }>
 }
+
+// A send waiting out its Undo window (the message is already a saved draft).
+interface PendingSend {
+  payload: Record<string, unknown>
+  requestKey: string
+  seenUpTo?: string | null
+  restore: DraftDoc
+}
+const UNDO_SECONDS = 10
 type SystemFolder = 'inbox' | 'sent' | 'drafts' | 'spam' | 'trash'
 // A folder the operator made is its Gmail label: `label:<label id>`.
 type FolderType = SystemFolder | `label:${string}`
@@ -228,6 +244,14 @@ export default function InboxPage() {
   // What the compose window is for, and the draft it was opened from.
   const [composeMode, setComposeMode] = useState<ComposeMode>('new')
   const [composeDraft, setComposeDraft] = useState<DraftDoc | null>(null)
+  // Undo send: the message waiting out its window, and the seconds left.
+  const [pendingSend, setPendingSend] = useState<PendingSend | null>(null)
+  const [undoSecondsLeft, setUndoSecondsLeft] = useState(0)
+  const [sendNotice, setSendNotice] = useState<{ text: string; draft?: DraftDoc } | null>(null)
+  const pendingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pendingRef = useRef<PendingSend | null>(null)
+  const pageConfirmSendConflict = useSendConflictConfirm()
+  const [showScheduled, setShowScheduled] = useState(false)
   // The open email's whole conversation (its Gmail thread), oldest first.
   const [thread, setThread] = useState<Email[] | null>(null)
   const [expandedInThread, setExpandedInThread] = useState<Set<string>>(new Set())
@@ -726,6 +750,95 @@ ${bodyText}`
     )
   }
 
+  // ---- Undo send ----
+  const stopPendingTimer = () => {
+    if (pendingTimerRef.current) clearInterval(pendingTimerRef.current)
+    pendingTimerRef.current = null
+  }
+
+  const fireSend = async (job: PendingSend) => {
+    if (pendingRef.current === job) {
+      stopPendingTimer()
+      pendingRef.current = null
+      setPendingSend(null)
+    }
+    setSendNotice({ text: 'Sending…' })
+    const sent = await sendGuardedEmail(job.payload, {
+      requestKey: job.requestKey,
+      seenUpTo: job.seenUpTo,
+      confirmConflict: pageConfirmSendConflict,
+    })
+    if (sent.ok) {
+      setSendNotice({ text: 'Message sent' })
+      setTimeout(() => setSendNotice(n => (n?.text === 'Message sent' ? null : n)), 4000)
+      fetchEmails()
+      return
+    }
+    // Not sent (refused, cancelled at the duplicate question, or an error):
+    // it is still the saved draft.
+    setSendNotice({
+      text: sent.cancelled ? 'Not sent — kept in Drafts' : `Not sent: ${sent.error || 'error'} — kept in Drafts`,
+      draft: job.restore,
+    })
+  }
+
+  const queueSend = (job: PendingSend) => {
+    // A message still waiting goes now: one Undo bar at a time, and the
+    // earlier message is never left unsent.
+    if (pendingRef.current) fireSend(pendingRef.current)
+    stopPendingTimer()
+    setSendNotice(null)
+    pendingRef.current = job
+    setPendingSend(job)
+    setUndoSecondsLeft(UNDO_SECONDS)
+    let left = UNDO_SECONDS
+    pendingTimerRef.current = setInterval(() => {
+      left -= 1
+      setUndoSecondsLeft(left)
+      if (left <= 0) fireSend(job)
+    }, 1000)
+  }
+
+  // Undo: back to the compose, as it was (it is a saved draft).
+  const undoSend = () => {
+    const job = pendingRef.current
+    if (!job) return
+    stopPendingTimer()
+    pendingRef.current = null
+    setPendingSend(null)
+    reopenDraft(job.restore)
+  }
+
+  const openDraftById = async (draftId: string) => {
+    try {
+      const res = await fetch(`/api/gmail/drafts?id=${encodeURIComponent(draftId)}`)
+      const data = await res.json()
+      if (!res.ok || !data.draft) throw new Error(data.error || 'Draft not found')
+      setShowScheduled(false)
+      reopenDraft(data.draft as DraftDoc)
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  const reopenDraft = (draft: DraftDoc) => {
+    setSendNotice(null)
+    setComposeDraft(draft)
+    setComposeMode('draft')
+    setShowCompose(true)
+  }
+
+  // Leaving the page during the Undo window: warn — the message would stay
+  // in Drafts unsent.
+  useEffect(() => {
+    if (!pendingSend) return
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [pendingSend])
+
+  useEffect(() => () => stopPendingTimer(), [])
+
   const openCompose = (mode: ComposeMode) => {
     setComposeDraft(null)
     setComposeMode(mode)
@@ -922,6 +1035,41 @@ ${bodyText}`
       )}
     </div>
   )
+
+  const renameFolder = async (label: GmailLabel) => {
+    const name = window.prompt('Rename folder', label.name)?.trim()
+    if (!name || name === label.name) return
+    try {
+      const res = await fetch('/api/gmail/labels', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ labelId: label.id, name }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.error) throw new Error(data.error || 'The folder could not be renamed')
+      await fetchLabels()
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  // Its emails go back to the Inbox (the server does it before deleting).
+  const deleteFolder = async (label: GmailLabel) => {
+    if (!window.confirm(`Delete the folder "${label.name}"? Its emails go back to the Inbox.`)) return
+    try {
+      const res = await fetch('/api/gmail/labels', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ labelId: label.id }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.error) throw new Error(data.error || 'The folder could not be deleted')
+      if (currentLabelId === label.id) setFolder('inbox')
+      await fetchLabels()
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
 
   // Drag emails from the list onto a folder (or the inbox) in the sidebar.
   const DRAG_TYPE = 'application/x-autoura-emails'
@@ -1237,6 +1385,16 @@ ${bodyText}`
               ))}
             </nav>
 
+            {/* Emails waiting to be sent later — kept by the app, not a Gmail folder. */}
+            <button
+              onClick={() => setShowScheduled(true)}
+              className={`mt-1 w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-gray-600 hover:bg-gray-50 transition-colors ${isFolderCollapsed ? 'justify-center' : ''}`}
+              title={isFolderCollapsed ? 'Scheduled' : ''}
+            >
+              <Clock className="w-4 h-4 flex-shrink-0 text-gray-400" />
+              {!isFolderCollapsed && <span className="flex-1 text-left">Scheduled</span>}
+            </button>
+
             {!isFolderCollapsed && customLabels.length > 0 && (
               <div className="mt-4 pt-3 border-t border-gray-200">
                 <p className="px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
@@ -1244,21 +1402,31 @@ ${bodyText}`
                 </p>
                 <nav className="space-y-0.5">
                   {customLabels.map((label) => (
-                    <button
-                      key={label.id}
-                      onClick={() => setFolder(`label:${label.id}`)}
-                      {...dragHandlers(label.id)}
-                      className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors ${
-                        dropTarget === label.id
-                          ? 'bg-primary-100 ring-1 ring-primary-300 text-primary-800'
-                          : currentLabelId === label.id
-                            ? 'bg-primary-50 text-primary-700 font-medium'
-                            : 'text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      <Tag className={`w-3.5 h-3.5 ${currentLabelId === label.id ? 'text-primary-600' : 'text-gray-400'}`} />
-                      <span className="flex-1 text-left truncate">{label.name}</span>
-                    </button>
+                    <div key={label.id} className="group/folder relative">
+                      <button
+                        onClick={() => setFolder(`label:${label.id}`)}
+                        {...dragHandlers(label.id)}
+                        className={`w-full flex items-center gap-2 px-2 py-1 pr-12 rounded-md text-xs transition-colors ${
+                          dropTarget === label.id
+                            ? 'bg-primary-100 ring-1 ring-primary-300 text-primary-800'
+                            : currentLabelId === label.id
+                              ? 'bg-primary-50 text-primary-700 font-medium'
+                              : 'text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        <Tag className={`w-3.5 h-3.5 ${currentLabelId === label.id ? 'text-primary-600' : 'text-gray-400'}`} />
+                        <span className="flex-1 text-left truncate">{label.name}</span>
+                      </button>
+                      {/* Rename / delete, on hover (and always for the open folder). */}
+                      <div className={`absolute right-1 top-1/2 -translate-y-1/2 items-center gap-0.5 ${currentLabelId === label.id ? 'flex' : 'hidden group-hover/folder:flex'}`}>
+                        <button onClick={() => renameFolder(label)} className="p-0.5 rounded hover:bg-gray-200" title="Rename folder">
+                          <Pencil className="w-3 h-3 text-gray-500" />
+                        </button>
+                        <button onClick={() => deleteFolder(label)} className="p-0.5 rounded hover:bg-gray-200" title="Delete folder">
+                          <Trash2 className="w-3 h-3 text-gray-500" />
+                        </button>
+                      </div>
+                    </div>
                   ))}
                 </nav>
               </div>
@@ -1821,12 +1989,44 @@ ${bodyText}`
           source={composeMode === 'new' || composeMode === 'draft' ? null : selectedEmail}
           draft={composeMode === 'draft' ? composeDraft : null}
           ownAddresses={connectedEmail ? [connectedEmail] : []}
+          onQueueSend={queueSend}
+          onScheduled={(label) => {
+            setSendNotice({ text: `Scheduled for ${label}` })
+            setTimeout(() => setSendNotice(n => (n?.text.startsWith('Scheduled for') ? null : n)), 6000)
+          }}
           onSent={() => {
             setShowCompose(false)
             fetchEmails()
           }}
           clients={clients}
         />
+      )}
+
+      {showScheduled && (
+        <ScheduledPanel onClose={() => setShowScheduled(false)} onOpenDraft={openDraftById} />
+      )}
+
+      {/* Undo send / send result */}
+      {(pendingSend || sendNotice) && (
+        <div className="fixed bottom-6 left-6 z-50 flex items-center gap-4 px-4 py-3 rounded-lg bg-gray-900 text-white text-sm shadow-xl" role="status">
+          {pendingSend ? (
+            <>
+              <span>Sending in {undoSecondsLeft}s…</span>
+              <button onClick={undoSend} className="font-semibold text-primary-200 hover:text-white">Undo</button>
+              <button onClick={() => fireSend(pendingSend)} className="text-gray-300 hover:text-white">Send now</button>
+            </>
+          ) : sendNotice && (
+            <>
+              <span>{sendNotice.text}</span>
+              {sendNotice.draft && (
+                <button onClick={() => reopenDraft(sendNotice.draft!)} className="font-semibold text-primary-200 hover:text-white">Open draft</button>
+              )}
+              <button onClick={() => setSendNotice(null)} className="text-gray-400 hover:text-white" aria-label="Dismiss">
+                <X className="w-4 h-4" />
+              </button>
+            </>
+          )}
+        </div>
       )}
 
       {/* Create Label Modal */}
@@ -1874,6 +2074,8 @@ function ComposeModal({
   draft = null,
   ownAddresses = [],
   onSent,
+  onQueueSend,
+  onScheduled,
   clients = []
 }: { 
   onClose: () => void
@@ -1886,6 +2088,10 @@ function ComposeModal({
   /** The mailbox's own address(es): never on a Reply all. */
   ownAddresses?: string[]
   onSent: () => void
+  /** Send after the Undo window; the compose closes at once. */
+  onQueueSend?: (job: PendingSend) => void
+  /** Scheduled to send later; `label` says when. */
+  onScheduled?: (label: string) => void
   clients?: Client[]
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -1930,6 +2136,8 @@ function ComposeModal({
   const [draftId, setDraftId] = useState<string | null>(draft?.id ?? null)
   const [savingDraft, setSavingDraft] = useState(false)
   const [draftNote, setDraftNote] = useState<string | null>(null)
+  const [showSchedule, setShowSchedule] = useState(false)
+  const [scheduling, setScheduling] = useState(false)
   // "Draft saved" stands until the next edit.
   useEffect(() => { setDraftNote(null) }, [to, cc, bcc, subject, body])
   const [sending, setSending] = useState(false)
@@ -1939,7 +2147,8 @@ function ComposeModal({
   const requestKeyRef = useRef<string>(newRequestKey())
   const confirmSendConflict = useSendConflictConfirm()
   const [isExpanded, setIsExpanded] = useState(false)
-  const [attachments, setAttachments] = useState<Attachment[]>([])
+  // A reopened draft keeps what it carried.
+  const [attachments, setAttachments] = useState<Attachment[]>(draft?.attachments ?? [])
   const [signatures, setSignatures] = useState<EmailSignature[]>([])
   const [templates, setTemplates] = useState<EmailTemplate[]>([])
   const [showSignatureDropdown, setShowSignatureDropdown] = useState(false)
@@ -2239,8 +2448,8 @@ function ComposeModal({
 
   // Save to Gmail's Drafts (created the first time, updated after). Quiet:
   // `announce` only for the Save draft button.
-  const saveDraft = async (announce: boolean): Promise<boolean> => {
-    if (savingDraft) return false
+  const saveDraft = async (announce: boolean): Promise<string | null> => {
+    if (savingDraft) return null
     setSavingDraft(true)
     try {
       const res = await fetch('/api/gmail/drafts', {
@@ -2256,10 +2465,10 @@ function ComposeModal({
       if (!res.ok || !data.id) throw new Error(data.error || 'The draft could not be saved')
       setDraftId(data.id)
       if (announce) setDraftNote('Draft saved')
-      return true
+      return data.id as string
     } catch (err: any) {
       setError(err.message)
-      return false
+      return null
     } finally {
       setSavingDraft(false)
     }
@@ -2267,7 +2476,7 @@ function ComposeModal({
 
   // Anything written that is not in the draft yet.
   const initialBody = initial.body
-  const isDirty = [to !== initial.to, cc !== initial.cc, bcc !== initial.bcc, subject !== initial.subject, body !== initialBody, attachments.length > 0].some(Boolean)
+  const isDirty = [to !== initial.to, cc !== initial.cc, bcc !== initial.bcc, subject !== initial.subject, body !== initialBody, attachments.length !== (draft?.attachments?.length ?? 0)].some(Boolean)
 
   // Closing keeps what was written, as Gmail does: it is saved as a draft.
   const handleClose = async () => {
@@ -2290,6 +2499,48 @@ function ComposeModal({
       }
     }
     onClose()
+  }
+
+  // Send later: saved as a draft, and the draft is sent at the chosen time
+  // (app/api/gmail/scheduled, sent by the scheduler).
+  const handleSchedule = async (choice: ScheduleChoice) => {
+    if (!to || !subject || !body) {
+      setError('Please fill in all fields')
+      return
+    }
+    // Nobody is there to fix a bad address at 9:00 — refuse it now.
+    const invalid = [...parseRecipients(to).invalid, ...parseRecipients(cc).invalid, ...parseRecipients(bcc).invalid]
+    if (invalid.length > 0) {
+      setError(`Not an email address: ${invalid.join(', ')}`)
+      return
+    }
+    setScheduling(true)
+    setError(null)
+    try {
+      const savedId = await saveDraft(false)
+      if (!savedId) return
+      const res = await fetch('/api/gmail/scheduled', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          draftId: savedId,
+          sendAt: choice.sendAt.toISOString(),
+          timeZone: choice.timeZone,
+          toSummary: to,
+          subject,
+          threadId: replyThreadId,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Could not schedule it')
+      setShowSchedule(false)
+      onScheduled?.(choice.label)
+      onClose()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setScheduling(false)
+    }
   }
 
   const handleSend = async () => {
@@ -2319,7 +2570,8 @@ function ComposeModal({
       // Replying: the message being answered is the newest one on screen — a
       // reply sent after it (by a colleague, or from Gmail) is reported first.
       const answered = replyTo?.date ? new Date(replyTo.date) : null
-      const sent = await sendGuardedEmail({
+      const seenUpTo = replyTo ? (answered && !isNaN(answered.getTime()) ? answered.toISOString() : null) : undefined
+      const payload: Record<string, unknown> = {
         userId,
         to,
         cc: cc.trim() || undefined,
@@ -2330,9 +2582,30 @@ function ComposeModal({
         // Sent from a saved draft: the server removes the draft.
         draftId: draftId || undefined,
         attachments: attachments.length > 0 ? attachments : undefined,
-      }, {
+      }
+
+      // Undo send: saved as a draft now — so a closed tab or a lost
+      // connection leaves it in Drafts, never lost — and sent when the Undo
+      // window ends (the page holds it). If the draft cannot be saved, it is
+      // sent at once, as before.
+      if (onQueueSend) {
+        const savedId = await saveDraft(false)
+        if (savedId) {
+          onQueueSend({
+            payload: { ...payload, draftId: savedId },
+            requestKey: requestKeyRef.current,
+            seenUpTo,
+            restore: { id: savedId, threadId: replyThreadId, to, cc, bcc, subject, body, attachments },
+          })
+          onClose()
+          return
+        }
+        setError(null)
+      }
+
+      const sent = await sendGuardedEmail(payload, {
         requestKey: requestKeyRef.current,
-        seenUpTo: replyTo ? (answered && !isNaN(answered.getTime()) ? answered.toISOString() : null) : undefined,
+        seenUpTo,
         confirmConflict: confirmSendConflict,
       })
       if (!sent.ok) {
@@ -2392,12 +2665,10 @@ function ComposeModal({
         <div className="flex-1 overflow-y-auto flex flex-col">
           <div className="flex items-center px-5 py-2.5 border-b border-gray-100">
             <label className="w-16 text-xs font-medium text-gray-400">To</label>
-            <input
-              type="text"
+            <RecipientField
               value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="flex-1 text-sm outline-none bg-transparent"
-              placeholder="recipient@example.com, another@example.com"
+              onChange={setTo}
+              placeholder="Name or email — suggestions as you type"
             />
             {/* Cc / Bcc as Gmail shows them: links until wanted. */}
             <div className="flex items-center gap-2 ml-2 text-xs text-gray-500">
@@ -2409,28 +2680,14 @@ function ComposeModal({
           {showCc && (
             <div className="flex items-center px-5 py-2.5 border-b border-gray-100">
               <label className="w-16 text-xs font-medium text-gray-400">Cc</label>
-              <input
-                type="text"
-                value={cc}
-                onChange={(e) => setCc(e.target.value)}
-                className="flex-1 text-sm outline-none bg-transparent"
-                placeholder="Copy to"
-                autoFocus={!initial.cc}
-              />
+              <RecipientField value={cc} onChange={setCc} placeholder="Copy to" autoFocus={!initial.cc} />
             </div>
           )}
 
           {showBcc && (
             <div className="flex items-center px-5 py-2.5 border-b border-gray-100">
               <label className="w-16 text-xs font-medium text-gray-400">Bcc</label>
-              <input
-                type="text"
-                value={bcc}
-                onChange={(e) => setBcc(e.target.value)}
-                className="flex-1 text-sm outline-none bg-transparent"
-                placeholder="Hidden copy to"
-                autoFocus={!initial.bcc}
-              />
+              <RecipientField value={bcc} onChange={setBcc} placeholder="Hidden copy to" autoFocus={!initial.bcc} />
             </div>
           )}
 
@@ -2640,6 +2897,24 @@ function ComposeModal({
             >
               {savingDraft ? 'Saving…' : 'Save draft'}
             </button>
+            {onScheduled && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowSchedule(v => !v)}
+                  disabled={sending || scheduling}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50"
+                  title="Send later"
+                >
+                  <Clock className="w-4 h-4" />
+                  {scheduling ? 'Scheduling…' : 'Schedule'}
+                </button>
+                {showSchedule && (
+                  <div className="absolute right-0 bottom-full mb-2 z-30">
+                    <SchedulePicker onPick={handleSchedule} onCancel={() => setShowSchedule(false)} busy={scheduling} />
+                  </div>
+                )}
+              </div>
+            )}
             <button 
               onClick={handleSend} 
               disabled={sending} 

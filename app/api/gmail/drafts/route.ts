@@ -62,6 +62,13 @@ export async function GET(request: NextRequest) {
     const { data } = await gmail.users.drafts.get({ userId: 'me', id, format: 'full' })
     if (!data.message) return NextResponse.json({ error: 'Draft not found' }, { status: 404 })
     const m = parseEmailMessage(data.message)
+    // Its attachments, with their contents: compose re-sends them on save and
+    // send, so a draft reopened here does not lose what it carried.
+    const attachments = await Promise.all((m.attachments || []).map(async (a: { id: string; filename: string; mimeType: string; size: number }) => {
+      const { data: file } = await gmail.users.messages.attachments.get({ userId: 'me', messageId: m.id, id: a.id })
+      const base64 = String(file.data || '').replace(/-/g, '+').replace(/_/g, '/')
+      return { filename: a.filename, mimeType: a.mimeType, size: a.size, data: base64 }
+    }))
     return NextResponse.json({
       draft: {
         id: data.id,
@@ -72,6 +79,7 @@ export async function GET(request: NextRequest) {
         bcc: m.bcc,
         subject: m.subject,
         body: m.body,
+        attachments,
       },
     })
   } catch (err) {

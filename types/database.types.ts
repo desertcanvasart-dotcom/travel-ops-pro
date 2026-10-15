@@ -9729,6 +9729,66 @@ export interface Database {
         }
         Relationships: []
       }
+      scheduled_emails: {
+        Row: {
+          id: string
+          org_id: string
+          created_by: string | null
+          mailbox_user_id: string
+          draft_id: string
+          thread_id: string | null
+          to_summary: string | null
+          subject: string | null
+          send_at: string
+          time_zone: string | null
+          status: string
+          attempts: number
+          sent_message_id: string | null
+          sent_at: string | null
+          error: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          created_by?: string | null
+          mailbox_user_id: string
+          draft_id: string
+          thread_id?: string | null
+          to_summary?: string | null
+          subject?: string | null
+          send_at: string
+          time_zone?: string | null
+          status?: string
+          attempts?: number
+          sent_message_id?: string | null
+          sent_at?: string | null
+          error?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          created_by?: string | null
+          mailbox_user_id?: string
+          draft_id?: string
+          thread_id?: string | null
+          to_summary?: string | null
+          subject?: string | null
+          send_at?: string
+          time_zone?: string | null
+          status?: string
+          attempts?: number
+          sent_message_id?: string | null
+          sent_at?: string | null
+          error?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       schema_migrations: {
         Row: {
           name: string
