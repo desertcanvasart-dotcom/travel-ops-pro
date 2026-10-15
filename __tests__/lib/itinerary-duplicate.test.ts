@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs'
 // Duplicate trip (lib/itineraries/duplicate, ported from autoura-saas): what
 // the copy keeps, what it leaves behind, and that every listed column exists.
 import { describe, it, expect } from 'vitest'

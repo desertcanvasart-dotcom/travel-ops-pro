@@ -288,10 +288,22 @@ export async function POST(request: NextRequest) {
       if (body.parent_invoice_id) {
         const { data: parent } = await supabaseAdmin
           .from('invoices')
-          .select('total_amount, currency, full_trip_cost')
+          .select('total_amount, currency, full_trip_cost, invoice_type, status')
           .eq('id', body.parent_invoice_id)
           .eq('org_id', orgId)
-          .single()
+          .maybeSingle()
+        // The balance is billed against the deposit invoice named: a missing
+        // one silently fell back to the percentage, and a cancelled one (or a
+        // final) was taken as paid-in deposit (AUDIT M17).
+        if (!parent) {
+          return NextResponse.json({ error: 'Deposit invoice not found' }, { status: 404 })
+        }
+        if (parent.status === 'cancelled' || parent.invoice_type === 'final') {
+          return NextResponse.json(
+            { error: parent.status === 'cancelled' ? 'The deposit invoice is cancelled' : 'The parent invoice is a final invoice, not a deposit' },
+            { status: 409 }
+          )
+        }
         // The trip cost the deposit invoice STORED, not the page's rebuild of
         // it (deposit × 100 / percent): dividing a rounded deposit back out
         // loses what rounding removed — 20% of ¥1,854,367 is ¥370,873, which

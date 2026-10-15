@@ -557,6 +557,7 @@ export async function POST(request: NextRequest) {
         .from('itineraries')
         .update({ total_cost: authoritativeTotal })
         .eq('id', itineraryId)
+        .eq('org_id', callerOrgId)
       if (updErr) {
         console.warn('[pricing-grid save] total_cost reconciliation update failed:', updErr.message)
       }

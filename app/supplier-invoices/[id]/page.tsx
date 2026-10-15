@@ -117,7 +117,12 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ payment_method: method, payment_reference: ref }),
       })
-      if (!(await reportFailure(res, 'Recording the payment'))) fetchInvoice()
+      if (!(await reportFailure(res, 'Recording the payment'))) {
+        // Paid, but its linked expenses may not have followed.
+        const data = await res.json().catch(() => ({}))
+        if (Array.isArray(data.warnings) && data.warnings.length) alert(data.warnings.join('\n'))
+        fetchInvoice()
+      }
     } finally {
       setActionLoading(null)
     }

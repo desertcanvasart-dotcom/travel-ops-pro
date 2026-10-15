@@ -33,6 +33,7 @@ role gates for reads and writes) plus org-scoped queries in the routes.
   - L4: parse-file sends its instructions as `system` and wraps document text; customer text can no longer close its tag (`lib/ai/untrusted-text.ts`); parse-whatsapp keeps a model-reported email/phone only if the customer wrote it.
   - L8: one generator for itinerary codes (`lib/itineraries/itinerary-code.ts`, 8 hex characters) in every place a code is made.
   - Smaller leftovers: H24 (booking payment_type → 400), H34 (an approved supplier invoice's supplier and tax are locked), M1 (currency codes checked as own keys), M5 (an unnamed activity rate no longer matches every attraction), M13 (NaN commission → 400), L3 (prompt-builder), L9 (generate-itinerary dates in UTC).
+- **Third pass (2026-10-15), the minor leftovers:** H16 (B2B pricing rules readable by managers and above only, reads included), M10 (the Gmail callback no longer redirects to the caller's x-forwarded-host), M16 (services with no commission status are generated too), M17 (a final invoice's parent must be a live deposit invoice), M29 (a failed expense cascade on pay is reported), L1 (negative conversion amounts refused), expenses check their trip belongs to the org, and the pricing-grid total reconciliation is org-scoped.
 - **Deferred:** L6 — the rate limiter is in-memory, correct on today's single container; DEFERRED_GATES.md G4 makes a shared store required before a second instance.
 
 ## CRITICAL (4)

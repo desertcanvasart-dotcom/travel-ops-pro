@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { syncExpense } from '@/lib/accounting'
 import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-numbering'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { recordsInOrg } from '@/lib/org-refs'
 import { paymentDateForStatus } from '@/lib/expense-status'
 
 const supabaseAdmin = createClient(
@@ -87,6 +88,12 @@ export async function POST(request: NextRequest) {
         { error: 'Category, amount, and expense date are required' },
         { status: 400 }
       )
+    }
+
+    // The trip is this org's (lib/org-refs): the service role would book an
+    // expense against another org's trip.
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: body.itinerary_id }))) {
+      return NextResponse.json({ error: 'Itinerary not found' }, { status: 404 })
     }
 
     // A picked supplier must exist (the picker sends its id; a stale or

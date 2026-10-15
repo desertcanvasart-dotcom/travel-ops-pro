@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { recordsInOrg } from '@/lib/org-refs'
 import { paymentDateForStatus } from '@/lib/expense-status'
 import { syncExpense } from '@/lib/accounting'
 
@@ -67,6 +68,25 @@ export async function PUT(
     for (const field of ALLOWED_FIELDS) {
       if (body[field] !== undefined) {
         updateData[field] = body[field]
+      }
+    }
+
+    // An emptied picker sends '' — a uuid column needs null.
+    for (const key of ['itinerary_id', 'supplier_id']) {
+      if (updateData[key] === '') updateData[key] = null
+    }
+    // As POST: the trip is this org's, the supplier exists.
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updateData.itinerary_id }))) {
+      return NextResponse.json({ error: 'Itinerary not found' }, { status: 404 })
+    }
+    if (updateData.supplier_id) {
+      const { data: supplier } = await supabaseAdmin
+        .from('suppliers')
+        .select('id')
+        .eq('id', updateData.supplier_id)
+        .maybeSingle()
+      if (!supplier) {
+        return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
       }
     }
 

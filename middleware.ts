@@ -197,6 +197,9 @@ const FINANCIAL_API_PREFIXES = [
   '/api/rates/cruises',
   '/api/suppliers/export',
   '/api/suppliers/import',
+  // B2B margins and markups. The Pricing Rules page is manager-and-above;
+  // its API answered any member, viewers included (AUDIT H16).
+  '/api/b2b/pricing-rules',
 ]
 
 // Staff-only, READS INCLUDED (agent and above). Customer conversations are

@@ -52,7 +52,8 @@ export async function POST(request: NextRequest) {
     const { amount, from, to } = body
 
     // Validate inputs
-    if (typeof amount !== 'number' || isNaN(amount)) {
+    // A conversion is of an amount of money: negative or infinite is not one (L1).
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) {
       return NextResponse.json(
         { success: false, error: 'Invalid amount' },
         { status: 400 }

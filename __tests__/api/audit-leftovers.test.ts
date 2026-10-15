@@ -169,3 +169,35 @@ describe('L4 — customer text stays data', () => {
     expect(code).toContain("wrapUntrusted('document', text)")
   })
 })
+
+describe('smaller leftovers (second pass)', () => {
+  it('M10: the Google callback no longer trusts x-forwarded-host', () => {
+    const code = src('app/api/auth/google/callback/route.ts')
+    expect(code).not.toMatch(/fwdHost/)
+    expect(code).toContain('const baseUrl = BASE_URL || new URL(request.url).origin')
+  })
+  it('M16: services with no commission status are claimed too', () => {
+    expect(src('app/api/itineraries/[id]/generate-commissions/route.ts'))
+      .toContain(".or('commission_status.is.null,commission_status.eq.pending')")
+  })
+  it('M17: a final invoice needs a live deposit invoice as its parent', () => {
+    const code = src('app/api/invoices/route.ts')
+    expect(code).toContain("error: 'Deposit invoice not found' }, { status: 404 }")
+    expect(code).toContain("parent.status === 'cancelled' || parent.invoice_type === 'final'")
+  })
+  it('M29: a failed expense cascade on pay is reported, not swallowed', () => {
+    const code = src('app/api/supplier-invoices/[id]/pay/route.ts')
+    expect(code).toContain('const { error: cascadeError } = await supabaseAdmin')
+    expect(code).toMatch(/warnings\.length \? \{ warnings \}/)
+  })
+  it('L1: a negative or infinite conversion amount is refused', () => {
+    expect(src('app/api/exchange-rates/route.ts')).toContain('!Number.isFinite(amount) || amount < 0')
+  })
+  it("expenses: the trip is checked against the caller's org on create and edit", () => {
+    expect(src('app/api/expenses/route.ts')).toContain('recordsInOrg(supabaseAdmin, orgId, { itinerary_id: body.itinerary_id })')
+    expect(src('app/api/expenses/[id]/route.ts')).toContain('recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updateData.itinerary_id })')
+  })
+  it('pricing-grid: the total reconciliation is org-scoped', () => {
+    expect(src('app/api/pricing-grid/save/route.ts')).toMatch(/update\(\{ total_cost: authoritativeTotal \}\)\s*\.eq\('id', itineraryId\)\s*\.eq\('org_id', callerOrgId\)/)
+  })
+})
