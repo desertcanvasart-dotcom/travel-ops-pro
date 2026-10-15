@@ -6,7 +6,7 @@ import { getCurrentUserId } from '@/lib/auth/current-org'
 
 export async function POST(request: NextRequest) {
   try {
-    const { messageIds, threadIds, action, labelId } = await request.json()
+    const { messageIds, threadIds, action, labelId, fromLabelId } = await request.json()
 
     // Derive the user from the session, never a client-supplied userId (IDOR).
     const userId = await getCurrentUserId()
@@ -18,6 +18,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
+    // A label id is Gmail's (INBOX, Label_123 …); anything else is refused.
+    const LABEL_ID = /^[A-Za-z0-9_-]{1,100}$/
+    if (labelId !== undefined && (typeof labelId !== 'string' || !LABEL_ID.test(labelId))) {
+      return NextResponse.json({ error: 'Invalid label id' }, { status: 400 })
+    }
+    if (fromLabelId !== undefined && (typeof fromLabelId !== 'string' || !LABEL_ID.test(fromLabelId))) {
+      return NextResponse.json({ error: 'Invalid label id' }, { status: 400 })
+    }
+    const moveFrom: string = fromLabelId || 'INBOX'
+    if (action === 'move' && labelId === moveFrom) {
+      return NextResponse.json({ error: 'The email is already in that folder' }, { status: 400 })
+    }
+
     // What each action does to the labels. (permanentDelete is the one action
     // that is not a label change.)
     const LABEL_CHANGES: Record<string, { add?: string[]; remove?: string[] } | undefined> = {
@@ -27,7 +40,9 @@ export async function POST(request: NextRequest) {
       unstar: { remove: ['STARRED'] },
       markRead: { remove: ['UNREAD'] },
       markUnread: { add: ['UNREAD'] },
-      move: labelId ? { add: [labelId], remove: ['INBOX'] } : undefined,
+      // Out of the folder it is in (the inbox unless said), into the one
+      // picked. From a folder, moving "to Inbox" is labelId INBOX.
+      move: labelId ? { add: [labelId], remove: [moveFrom] } : undefined,
       // Out of Spam, back to the inbox — Gmail's "Not spam".
       notSpam: { add: ['INBOX'], remove: ['SPAM'] },
       addLabel: labelId ? { add: [labelId] } : undefined,
