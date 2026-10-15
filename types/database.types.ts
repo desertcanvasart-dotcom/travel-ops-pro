@@ -4970,6 +4970,45 @@ export interface Database {
           },
         ]
       }
+      email_rules: {
+        Row: {
+          id: string
+          org_id: string
+          name: string | null
+          enabled: boolean
+          conditions: Json
+          actions: Json
+          applied_count: number
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          name?: string | null
+          enabled?: boolean
+          conditions?: Json
+          actions?: Json
+          applied_count?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          name?: string | null
+          enabled?: boolean
+          conditions?: Json
+          actions?: Json
+          applied_count?: number
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       email_messages: {
         Row: {
           id: string
@@ -4995,6 +5034,7 @@ export interface Database {
           sent_by: string | null
           rfc_message_id: string | null
           order_checked_at: string | null
+          rules_checked_at: string | null
         }
         Insert: {
           id?: string
@@ -5020,6 +5060,7 @@ export interface Database {
           sent_by?: string | null
           rfc_message_id?: string | null
           order_checked_at?: string | null
+          rules_checked_at?: string | null
         }
         Update: {
           id?: string
@@ -5045,6 +5086,7 @@ export interface Database {
           sent_by?: string | null
           rfc_message_id?: string | null
           order_checked_at?: string | null
+          rules_checked_at?: string | null
         }
         Relationships: [
           {

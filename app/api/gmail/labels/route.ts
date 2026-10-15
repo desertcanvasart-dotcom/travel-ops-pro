@@ -3,6 +3,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { GmailAuthError } from '@/lib/gmail'
 import { getMailboxGmail } from '@/lib/gmail-mailbox'
 import { getCurrentUserId } from '@/lib/auth/current-org'
+import { paletteColor } from '@/lib/email/label-colors'
 
 // One Gmail client per request, for the session user's own mailbox. This route
 // used to keep a single module-level OAuth2 client and setCredentials() on it
@@ -70,10 +71,8 @@ export async function POST(request: NextRequest) {
         name,
         labelListVisibility: 'labelShow',
         messageListVisibility: 'show',
-        color: backgroundColor && textColor ? {
-          backgroundColor,
-          textColor,
-        } : undefined,
+        // Only Gmail's palette (lib/email/label-colors); anything else is dropped.
+        color: paletteColor(backgroundColor, textColor) ?? undefined,
       },
     })
 
@@ -93,11 +92,18 @@ export async function PATCH(request: NextRequest) {
     const auth = await mailbox()
     if (auth instanceof NextResponse) return auth
     const { gmail } = auth
-    const { labelId, name } = await request.json()
+    const { labelId, name, backgroundColor, textColor } = await request.json()
 
+    // A new name, a new colour, or both. A colour is changed, not removed:
+    // Gmail's palette has Grey for a quiet one.
     const newName = typeof name === 'string' ? name.trim() : ''
-    if (!labelId || !newName) {
+    const colorGiven = backgroundColor !== undefined
+    const color = colorGiven ? paletteColor(backgroundColor, textColor) : undefined
+    if (!labelId || (!newName && !colorGiven)) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+    if (colorGiven && !color) {
+      return NextResponse.json({ error: 'Pick one of the folder colours' }, { status: 400 })
     }
     if (!USER_LABEL_ID.test(String(labelId))) {
       return NextResponse.json({ error: 'Only a folder you created can be renamed' }, { status: 400 })
@@ -109,7 +115,10 @@ export async function PATCH(request: NextRequest) {
     const response = await gmail.users.labels.patch({
       userId: 'me',
       id: String(labelId),
-      requestBody: { name: newName },
+      requestBody: {
+        ...(newName ? { name: newName } : {}),
+        ...(color ? { color } : {}),
+      },
     })
     return NextResponse.json({ label: response.data })
   } catch (err: any) {

@@ -26,7 +26,9 @@ import { jobRunHeaders, withJobRun } from '@/lib/support/job-runs'
 import { createServerClient } from '@/lib/supabase-server'
 import { syncMailbox } from '@/lib/email/sync-mailbox'
 import { applyOfficeRuleWhenDue, loadOfficeRule } from '@/lib/email/office-addresses-server'
-import { processNewEmailLeads } from '@/lib/email/email-leads'
+import { processNewEmailLeads, orgForMailbox } from '@/lib/email/email-leads'
+import { applyRulesToNewMail } from '@/lib/email/rules'
+import { getAuthenticatedGmail } from '@/lib/gmail'
 import { processNewWebOrders, type WebOrderResult } from '@/lib/intake/web-order-intake'
 
 export const dynamic = 'force-dynamic'
@@ -84,6 +86,19 @@ async function getHandler(request: NextRequest) {
     console.error('[gmail-sync] lead detection failed:', e)
   }
 
+  // Inbox rules on the new mail (lib/email/rules) — after orders and leads,
+  // which read the stored copy, so filing it in Gmail changes nothing for them.
+  let rules = { checked: 0, applied: 0, errors: 0 }
+  try {
+    rules = await applyRulesToNewMail({
+      db,
+      orgForMailbox,
+      gmailFor: async (userId) => (await getAuthenticatedGmail(userId)).gmail,
+    })
+  } catch (e) {
+    console.error('[gmail-sync] inbox rules failed:', e)
+  }
+
   const failed = results.filter(r => !r.ok)
   const leadsCreated = leads.filter(l => l.outcome === 'lead_created').length
   const ordersQuoted = orders.filter(o => o.outcome === 'quote_created').length
@@ -96,7 +111,8 @@ async function getHandler(request: NextRequest) {
   const summary = `${results.length} mailbox(es), ${failed.length} failed (${modes}): fetched ${sum('messages_fetched')} new, `
     + `${sum('messages_already_stored')} already stored, ${sum('messages_created')} stored; `
     + `office repair ${reclassified ? `${reclassified.messages} msg(s)` : 'not due'}; `
-    + `web orders ${ordersQuoted} quoted, ${ordersNeedingAttention} need attention; ${leadsCreated} lead(s)`
+    + `web orders ${ordersQuoted} quoted, ${ordersNeedingAttention} need attention; ${leadsCreated} lead(s); `
+    + `rules applied to ${rules.applied} of ${rules.checked}`
   return NextResponse.json(
     {
       ok: failed.length === 0, mailboxes: results.length, results, reclassified, leads_created: leadsCreated,
