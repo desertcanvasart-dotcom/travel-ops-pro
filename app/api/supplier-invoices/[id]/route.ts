@@ -42,8 +42,20 @@ export async function GET(
       .select('*, expense:expenses(*)')
       .eq('supplier_invoice_id', id)
 
+    // The name of whoever disputed it, for the page (AUDIT H32).
+    let disputed_by_name: string | null = null
+    if (invoice.disputed_by) {
+      const { data: who } = await supabaseAdmin
+        .from('user_profiles')
+        .select('full_name, email')
+        .eq('id', invoice.disputed_by)
+        .maybeSingle()
+      disputed_by_name = who?.full_name || who?.email || null
+    }
+
     return NextResponse.json({
       ...invoice,
+      disputed_by_name,
       matched_expenses: matches || [],
     })
   } catch (error) {

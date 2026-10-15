@@ -201,3 +201,20 @@ describe('smaller leftovers (second pass)', () => {
     expect(src('app/api/pricing-grid/save/route.ts')).toMatch(/update\(\{ total_cost: authoritativeTotal \}\)\s*\.eq\('id', itineraryId\)\s*\.eq\('org_id', callerOrgId\)/)
   })
 })
+
+describe('the last optional items', () => {
+  it('H32: a dispute records who and when, and the page shows it', () => {
+    const route = src('app/api/supplier-invoices/[id]/dispute/route.ts')
+    expect(route).toContain('.update({ disputed_by: disputedBy, disputed_at: disputedAt })')
+    expect(src('migrations/20261130_supplier_invoice_disputed_by.sql')).toMatch(/ADD COLUMN IF NOT EXISTS disputed_by uuid/)
+    expect(src('app/supplier-invoices/[id]/page.tsx')).toContain('invoice.disputed_by_name')
+  })
+  it.each([
+    ['app/api/rates/bulk/import/route.ts', "requireRole(['admin', 'manager'])"],
+    ['app/api/rates/bulk/export/route.ts', "requireRole(['admin', 'manager'])"],
+    ['app/api/rates/bulk/periods/export/route.ts', "requireRole(['admin', 'manager'])"],
+    ['app/api/ai/build-quote/route.ts', "requireRole(['admin', 'manager', 'agent'])"],
+  ])('C2/H12/H15: %s checks the role in-route', (f, call) => {
+    expect(src(f)).toContain(call)
+  })
+})

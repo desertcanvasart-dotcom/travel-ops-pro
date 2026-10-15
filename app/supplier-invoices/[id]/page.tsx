@@ -318,6 +318,25 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
         </div>
       </div>
 
+      {/* Dispute Banner: why, who and when (AUDIT H32) */}
+      {invoice.status === 'disputed' && (
+        <div className="flex items-center gap-2 p-3 mb-6 bg-red-50 border border-red-200 rounded-lg">
+          <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
+          <div className="text-sm">
+            <span className="font-medium text-red-700">Disputed</span>
+            {!!invoice.disputed_at && (
+              <span className="text-red-600">
+                {' '}on {new Date(invoice.disputed_at as string).toLocaleDateString()}
+                {!!invoice.disputed_by_name && <> by {invoice.disputed_by_name as string}</>}
+              </span>
+            )}
+            {!!invoice.discrepancy_notes && (
+              <span className="text-red-600">: {invoice.discrepancy_notes as string}</span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Discrepancy Banner */}
       {invoice.match_status === 'discrepancy' && (
         <div className="flex items-center gap-2 p-3 mb-6 bg-red-50 border border-red-200 rounded-lg">

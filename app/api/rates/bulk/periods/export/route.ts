@@ -10,6 +10,7 @@
 // the spreadsheet, import back.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { requireRole } from '@/lib/auth/current-org'
 import { createServerClient } from '@/lib/supabase-server'
 import Papa from 'papaparse'
 import { PERIOD_SHEETS, periodHeaders, periodsToRows, periodTemplateRows, withSupplementColumns } from '@/lib/rates/period-csv'
@@ -21,6 +22,10 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
+    // As the import beside it: in-route as well as the middleware (AUDIT H15).
+    const denied = await requireRole(['admin', 'manager'])
+    if (denied) return denied
+
     const entity = request.nextUrl.searchParams.get('entity')
     if (entity !== 'accommodation' && entity !== 'cruise') {
       return NextResponse.json(

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireRole } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { matchTourTemplate, getTemplateWithPricing } from '@/lib/tour-matcher-service'
@@ -28,6 +29,11 @@ import type { PricingHole } from '@/lib/pricing-types'
 
 export async function POST(request: NextRequest) {
   try {
+    // In-route as well as the middleware's staff gate on /api/ai (AUDIT H12):
+    // it reads supplier rates on the service role.
+    const denied = await requireRole(['admin', 'manager', 'agent'])
+    if (denied) return denied
+
     const body = await request.json()
     const {
       // From WhatsApp parser

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -68,7 +68,22 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to dispute' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data })
+    // Who and when (AUDIT H32, migration 20261130). A separate write: before
+    // the migration the columns do not exist, and that must not fail the
+    // dispute itself.
+    const disputedAt = new Date().toISOString()
+    const disputedBy = await getCurrentUserId()
+    const { error: whoError } = await supabaseAdmin
+      .from('supplier_invoices')
+      .update({ disputed_by: disputedBy, disputed_at: disputedAt })
+      .eq('id', id)
+      .eq('org_id', orgId)
+    if (whoError) console.warn('[supplier-invoice dispute] disputed_by/at not stored:', whoError.message)
+
+    return NextResponse.json({
+      success: true,
+      data: whoError ? data : { ...data, disputed_by: disputedBy, disputed_at: disputedAt },
+    })
   } catch (error) {
     console.error('Error disputing supplier invoice:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
