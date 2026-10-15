@@ -8,12 +8,17 @@ import { stashHandoffText, encodeTextParam } from '@/lib/text-handoff'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
 import { replyAllRecipients } from '@/lib/email/reply-all'
+import { printEmail } from '@/lib/email/print-email'
+import { parseListUnsubscribe } from '@/lib/email/list-unsubscribe'
+import { LABEL_COLORS } from '@/lib/email/label-colors'
 import { useAuth } from '@/app/contexts/AuthContext'
 import Link from 'next/link'
 import RichTextEditor from '@/components/email/RichTextEditor'
 import RecipientField from '@/components/email/RecipientField'
 import SchedulePicker, { type ScheduleChoice } from '@/components/email/SchedulePicker'
 import ScheduledPanel from '@/components/email/ScheduledPanel'
+import RulesPanel, { type RulePrefill } from '@/components/email/RulesPanel'
+import { useRole } from '@/hooks/useRole'
 import { parseRecipients } from '@/lib/email/compose-mime'
 // NEW IMPORTS FOR GMAIL ENHANCEMENTS
 import AttachmentList, { AttachmentIndicator } from '@/components/AttachmentList'
@@ -51,6 +56,8 @@ import {
   Tag,
   MailOpen,
   FolderInput,
+  Printer,
+  Filter,
   Pencil,
   Clock,
   Reply,
@@ -128,6 +135,7 @@ interface Email {
   to: string
   cc?: string
   bcc?: string
+  listUnsubscribe?: string
   subject: string
   date: string
   body: string
@@ -252,6 +260,11 @@ export default function InboxPage() {
   const pendingRef = useRef<PendingSend | null>(null)
   const pageConfirmSendConflict = useSendConflictConfirm()
   const [showScheduled, setShowScheduled] = useState(false)
+  // The folder being edited (name, colour); null with the modal = a new one.
+  const [editingLabel, setEditingLabel] = useState<GmailLabel | null>(null)
+  // Rules: the panel, and what a "Filter emails like this" filled in.
+  const [rulesPrefill, setRulesPrefill] = useState<RulePrefill | null | undefined>(undefined)
+  const { canAccess } = useRole()
   // The open email's whole conversation (its Gmail thread), oldest first.
   const [thread, setThread] = useState<Email[] | null>(null)
   const [expandedInThread, setExpandedInThread] = useState<Set<string>>(new Set())
@@ -273,6 +286,10 @@ export default function InboxPage() {
   // (bulk bar and detail view), so the ref rides on whichever is open.
   useDismissOnOutside(showMoveMenu !== null, moveMenuRef, () => setShowMoveMenu(null))
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set())
+  // "Select all N": the action applies to every email in the folder/search,
+  // not just the loaded page (the server resolves them).
+  const [selectAllMatching, setSelectAllMatching] = useState(false)
+  const [totalEstimate, setTotalEstimate] = useState<number | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
 
   // NEW: State for polling notifications
@@ -483,6 +500,8 @@ export default function InboxPage() {
 
       // Store next page token for pagination
       setNextPageToken(data.nextPageToken || null)
+      setTotalEstimate(typeof data.resultSizeEstimate === 'number' ? data.resultSizeEstimate : null)
+      setSelectAllMatching(false)
       setHasMore(!!data.nextPageToken)
 
       // PARSE ATTACHMENTS from each email
@@ -906,6 +925,13 @@ ${bodyText}`
     })
   }
 
+  // The search behind "Select all N": the typed search plus the Unread /
+  // Starred filter, as Gmail search terms.
+  const matchQuery = () => [
+    searchQuery.trim(),
+    filter === 'unread' ? 'is:unread' : filter === 'starred' ? 'is:starred' : '',
+  ].filter(Boolean).join(' ')
+
   const handleEmailAction = async (
     action: string, 
     messageIds?: string[], 
@@ -915,6 +941,22 @@ ${bodyText}`
     
     const ids = messageIds || (selectedEmail ? [selectedEmail.id] : Array.from(selectedEmails))
     if (ids.length === 0) return
+
+    // "Select all N": the whole folder/search, resolved on the server. Asked
+    // first — it reaches emails nobody has on screen.
+    const allMatching = selectAllMatching && !selectedEmail
+    if (allMatching) {
+      if (action === 'permanentDelete') {
+        setError('Delete forever works on chosen emails only — select them on the page.')
+        return
+      }
+      const verb: Record<string, string> = {
+        delete: 'Move to Trash', archive: 'Archive', move: 'Move', markRead: 'Mark as read', markUnread: 'Mark as unread',
+        spam: 'Report as spam', notSpam: 'Mark as not spam', restore: 'Restore', star: 'Star', unstar: 'Unstar',
+      }
+      const about = totalEstimate ? `about ${totalEstimate.toLocaleString()}` : 'all'
+      if (!window.confirm(`${verb[action] ?? action}: ${about} emails in this ${searchQuery ? 'search' : 'folder'}?`)) return
+    }
   
     setActionLoading(true)
     try {
@@ -923,16 +965,23 @@ ${bodyText}`
         headers: { 'Content-Type': 'application/json' },
         // A move from a made folder takes the email out of it (not the inbox).
         body: JSON.stringify({
-          userId: user.id, messageIds: ids, action, labelId,
+          userId: user.id, action, labelId,
+          ...(allMatching
+            ? { match: { labelIds: [currentLabelId ?? FOLDER_LABEL[folder as SystemFolder]], query: matchQuery() } }
+            : { messageIds: ids }),
           ...(action === 'move' && currentLabelId ? { fromLabelId: currentLabelId } : {}),
         }),
       })
   
       const data = await response.json()
       if (!response.ok || data.error) throw new Error(data.error || `The action failed (${response.status})`)
+      if (allMatching) {
+        setSelectAllMatching(false)
+        setSendNotice({ text: `Done: ${Number(data.count || 0).toLocaleString()} emails${data.capped ? ' (the first 5,000 — run it again for the rest)' : ''}` })
+      }
 
       // Out of this folder now: off the list at once, not on the next fetch.
-      const leavesFolder = ['delete', 'archive', 'move', 'restore', 'notSpam', 'permanentDelete'].includes(action)
+      const leavesFolder = ['delete', 'archive', 'move', 'restore', 'notSpam', 'permanentDelete', 'spam'].includes(action)
       if (leavesFolder) {
         setEmails(prev => prev.filter(e => !ids.includes(e.id)))
       }
@@ -980,7 +1029,37 @@ ${bodyText}`
   const archiveLabel = currentLabelId ? 'Move to Inbox' : folder === 'trash' ? 'Restore' : folder === 'spam' ? 'Not spam' : 'Archive'
   const ArchiveIcon = currentLabelId ? Inbox : folder === 'trash' ? RotateCcw : folder === 'spam' ? ShieldCheck : Archive
   const deleteLabel = folder === 'trash' ? 'Delete forever' : 'Delete'
+  // Print the open email — the whole conversation when it has one.
+  const handlePrint = () => {
+    if (!selectedEmail) return
+    const messages = thread && thread.length > 0 ? thread : [selectedEmail]
+    const ok = printEmail(selectedEmail.subject, messages.map(m => ({
+      from: m.from, to: m.to, cc: m.cc, date: new Date(m.date).toLocaleString(),
+      bodyHtml: sanitizeHtml(formatEmailBody(m.body)),
+    })))
+    if (!ok) setError('The print window was blocked — allow pop-ups for this site and try again.')
+  }
+  // Unsubscribe from a newsletter: its link opens in this browser; a mailto
+  // is sent from the mailbox after asking.
+  const handleUnsubscribe = async (email: Email) => {
+    const how = parseListUnsubscribe(email.listUnsubscribe)
+    if (!how) return
+    if (how.url) {
+      window.open(how.url, '_blank', 'noopener,noreferrer')
+      return
+    }
+    if (!how.mailto) return
+    if (!window.confirm(`Unsubscribe by sending an email to ${how.mailto.to}?`)) return
+    const sent = await sendGuardedEmail(
+      { userId: user?.id, to: how.mailto.to, subject: how.mailto.subject, body: escapeHtml(how.mailto.body) },
+      { requestKey: newRequestKey(), confirmConflict: pageConfirmSendConflict },
+    )
+    setSendNotice({ text: sent.ok ? `Unsubscribe request sent to ${how.mailto.to}` : `Could not unsubscribe: ${sent.ok ? '' : sent.error}` })
+  }
   const handleMarkRead = () => handleEmailAction('markRead')
+  // Report spam: from the inbox and made folders (Spam has "Not spam").
+  const canReportSpam = folder === 'inbox' || currentLabelId !== null
+  const handleReportSpam = (ids?: string[]) => handleEmailAction('spam', ids)
   const handleMarkUnread = () => handleEmailAction('markUnread')
   const handleStarEmail = () => handleEmailAction('star')
   const handleUnstarEmail = () => handleEmailAction('unstar')
@@ -1025,7 +1104,7 @@ ${bodyText}`
           ))}
           <div className="my-1 border-t border-gray-100" />
           <button
-            onClick={() => { setShowMoveMenu(null); setShowLabelModal(true) }}
+            onClick={() => { setShowMoveMenu(null); setEditingLabel(null); setShowLabelModal(true) }}
             className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2 text-gray-600"
           >
             <FolderPlus className="w-3.5 h-3.5 text-gray-400" />
@@ -1036,21 +1115,10 @@ ${bodyText}`
     </div>
   )
 
-  const renameFolder = async (label: GmailLabel) => {
-    const name = window.prompt('Rename folder', label.name)?.trim()
-    if (!name || name === label.name) return
-    try {
-      const res = await fetch('/api/gmail/labels', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ labelId: label.id, name }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || data.error) throw new Error(data.error || 'The folder could not be renamed')
-      await fetchLabels()
-    } catch (err: any) {
-      setError(err.message)
-    }
+  // Rename / recolour: the folder window, filled in.
+  const renameFolder = (label: GmailLabel) => {
+    setEditingLabel(label)
+    setShowLabelModal(true)
   }
 
   // Its emails go back to the Inbox (the server does it before deleting).
@@ -1096,6 +1164,7 @@ ${bodyText}`
   
   const toggleEmailSelection = (emailId: string, e: React.MouseEvent) => {
     e.stopPropagation()
+    setSelectAllMatching(false)
     setSelectedEmails(prev => {
       const next = new Set(prev)
       if (next.has(emailId)) {
@@ -1108,6 +1177,7 @@ ${bodyText}`
   }
   
   const selectAllEmails = () => {
+    setSelectAllMatching(false)
     if (selectedEmails.size === filteredEmails.length) {
       setSelectedEmails(new Set())
     } else {
@@ -1394,6 +1464,14 @@ ${bodyText}`
               <Clock className="w-4 h-4 flex-shrink-0 text-gray-400" />
               {!isFolderCollapsed && <span className="flex-1 text-left">Scheduled</span>}
             </button>
+            <button
+              onClick={() => setRulesPrefill(null)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-gray-600 hover:bg-gray-50 transition-colors ${isFolderCollapsed ? 'justify-center' : ''}`}
+              title={isFolderCollapsed ? 'Rules' : ''}
+            >
+              <Filter className="w-4 h-4 flex-shrink-0 text-gray-400" />
+              {!isFolderCollapsed && <span className="flex-1 text-left">Rules</span>}
+            </button>
 
             {!isFolderCollapsed && customLabels.length > 0 && (
               <div className="mt-4 pt-3 border-t border-gray-200">
@@ -1414,12 +1492,15 @@ ${bodyText}`
                               : 'text-gray-600 hover:bg-gray-50'
                         }`}
                       >
-                        <Tag className={`w-3.5 h-3.5 ${currentLabelId === label.id ? 'text-primary-600' : 'text-gray-400'}`} />
+                        <Tag
+                          className={`w-3.5 h-3.5 ${label.color ? '' : currentLabelId === label.id ? 'text-primary-600' : 'text-gray-400'}`}
+                          style={label.color ? { color: label.color.backgroundColor } : undefined}
+                        />
                         <span className="flex-1 text-left truncate">{label.name}</span>
                       </button>
                       {/* Rename / delete, on hover (and always for the open folder). */}
                       <div className={`absolute right-1 top-1/2 -translate-y-1/2 items-center gap-0.5 ${currentLabelId === label.id ? 'flex' : 'hidden group-hover/folder:flex'}`}>
-                        <button onClick={() => renameFolder(label)} className="p-0.5 rounded hover:bg-gray-200" title="Rename folder">
+                        <button onClick={() => renameFolder(label)} className="p-0.5 rounded hover:bg-gray-200" title="Rename or recolour folder">
                           <Pencil className="w-3 h-3 text-gray-500" />
                         </button>
                         <button onClick={() => deleteFolder(label)} className="p-0.5 rounded hover:bg-gray-200" title="Delete folder">
@@ -1434,7 +1515,7 @@ ${bodyText}`
 
             {!isFolderCollapsed && (
               <button
-                onClick={() => setShowLabelModal(true)}
+                onClick={() => { setEditingLabel(null); setShowLabelModal(true) }}
                 className="mt-2 w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
               >
                 <FolderPlus className="w-4 h-4" />
@@ -1490,7 +1571,7 @@ ${bodyText}`
               {selectedEmails.size > 0 && (
                 <>
                   <span className="text-xs text-gray-500">
-                    {selectedEmails.size} selected
+                    {selectAllMatching ? `All${totalEstimate ? ` ~${totalEstimate.toLocaleString()}` : ''}` : selectedEmails.size} selected
                   </span>
                   <div className="flex items-center gap-1 ml-2">
                     <button
@@ -1517,6 +1598,16 @@ ${bodyText}`
                     >
                       <MailOpen className="w-4 h-4 text-gray-500" />
                     </button>
+                    {canReportSpam && (
+                      <button
+                        onClick={() => handleReportSpam(Array.from(selectedEmails))}
+                        disabled={actionLoading}
+                        className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
+                        title="Report spam"
+                      >
+                        <ShieldAlert className="w-4 h-4 text-gray-500" />
+                      </button>
+                    )}
                     
                     {canMove && renderMoveMenu('bulk', Array.from(selectedEmails))}
                   </div>
@@ -1528,6 +1619,25 @@ ${bodyText}`
                 <span className="text-xs text-gray-400 ml-auto">
                   {filteredEmails.length} emails
                 </span>
+              )}
+            </div>
+          )}
+
+          {/* "Select all N": the page is all selected and there is more. */}
+          {selectedEmails.size > 0 && selectedEmails.size === filteredEmails.length && !!nextPageToken && (
+            <div className="px-3 py-1.5 text-xs text-center bg-primary-50 border-b border-primary-100 text-gray-700">
+              {selectAllMatching ? (
+                <>
+                  All {totalEstimate ? `about ${totalEstimate.toLocaleString()} ` : ''}emails in this {searchQuery ? 'search' : 'folder'} are selected.{' '}
+                  <button onClick={() => { setSelectAllMatching(false); setSelectedEmails(new Set()) }} className="font-medium text-primary-700 hover:underline">Clear selection</button>
+                </>
+              ) : (
+                <>
+                  All {selectedEmails.size} on this page are selected.{' '}
+                  <button onClick={() => { setSelectAllMatching(true); setSelectedEmail(null) }} className="font-medium text-primary-700 hover:underline">
+                    Select all {totalEstimate ? `about ${totalEstimate.toLocaleString()} ` : ''}emails in this {searchQuery ? 'search' : 'folder'}
+                  </button>
+                </>
               )}
             </div>
           )}
@@ -1643,6 +1753,21 @@ ${bodyText}`
                               {email.isUnread && !isSentByMe && (
                                 <div className="w-1.5 h-1.5 rounded-full bg-primary-500 flex-shrink-0" />
                               )}
+                              {/* Its folders, as Gmail shows labels — not the one being viewed. */}
+                              {customLabels
+                                .filter(l => l.id !== currentLabelId && email.labelIds?.includes(l.id))
+                                .slice(0, 2)
+                                .map(l => (
+                                  <span
+                                    key={l.id}
+                                    className="px-1.5 py-px rounded text-[10px] leading-4 flex-shrink-0 max-w-[90px] truncate"
+                                    style={l.color
+                                      ? { backgroundColor: l.color.backgroundColor, color: l.color.textColor }
+                                      : { backgroundColor: '#f3f4f6', color: '#4b5563' }}
+                                  >
+                                    {l.name}
+                                  </span>
+                                ))}
                               <p className={`text-xs truncate ${email.isUnread && !isSentByMe ? 'font-medium text-gray-900' : 'text-gray-600'}`}>
                                 {decodeHtmlEntities(email.subject || '(No subject)')}
                               </p>
@@ -1726,6 +1851,30 @@ ${bodyText}`
                     )}
                   </button>
                   
+                  <button
+                    onClick={handlePrint}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Print"
+                  >
+                    <Printer className="w-4 h-4 text-gray-500" />
+                  </button>
+                  <button
+                    onClick={() => setRulesPrefill({ from: extractEmailAddress(selectedEmail.from) })}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Filter emails like this"
+                  >
+                    <Filter className="w-4 h-4 text-gray-500" />
+                  </button>
+                  {canReportSpam && (
+                    <button
+                      onClick={() => handleReportSpam()}
+                      disabled={actionLoading}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                      title="Report spam"
+                    >
+                      <ShieldAlert className="w-4 h-4 text-gray-500" />
+                    </button>
+                  )}
                   {canMove && renderMoveMenu('detail')}
                   
                   {/* Parse Email Button */}
@@ -1801,6 +1950,15 @@ ${bodyText}`
                           fromEmail={extractEmailAddress(selectedEmail.from)}
                           fromName={extractName(selectedEmail.from)}
                         />
+                        {parseListUnsubscribe(selectedEmail.listUnsubscribe) && (
+                          <button
+                            onClick={() => handleUnsubscribe(selectedEmail)}
+                            className="text-xs text-gray-500 underline hover:text-gray-800"
+                            title="Stop receiving these emails"
+                          >
+                            Unsubscribe
+                          </button>
+                        )}
                       </div>
                       <p className="text-xs text-gray-500">{extractEmailAddress(selectedEmail.from)}</p>
                     </div>
@@ -2002,6 +2160,16 @@ ${bodyText}`
         />
       )}
 
+      {rulesPrefill !== undefined && (
+        <RulesPanel
+          folders={customLabels.map(l => ({ id: l.id, name: l.name }))}
+          prefill={rulesPrefill}
+          canEdit={canAccess(['admin', 'manager'])}
+          onClose={() => setRulesPrefill(undefined)}
+          onApplied={() => fetchEmails()}
+        />
+      )}
+
       {showScheduled && (
         <ScheduledPanel onClose={() => setShowScheduled(false)} onOpenDraft={openDraftById} />
       )}
@@ -2032,10 +2200,13 @@ ${bodyText}`
       {/* Create Label Modal */}
       {showLabelModal && (
         <CreateLabelModal
-          onClose={() => setShowLabelModal(false)}
+          key={editingLabel?.id ?? 'new'}
+          label={editingLabel}
+          onClose={() => { setShowLabelModal(false); setEditingLabel(null) }}
           userId={user?.id || ''}
           onCreated={() => {
             setShowLabelModal(false)
+            setEditingLabel(null)
             fetchLabels()
           }}
         />
@@ -3203,17 +3374,21 @@ function ComposeModal({
     </div>
   )
 }
-// Create Label Modal Component
+// Create or edit a folder: its name and colour (Gmail's palette).
 function CreateLabelModal({ 
   onClose, 
   userId, 
-  onCreated 
+  onCreated,
+  label = null,
 }: { 
   onClose: () => void
   userId: string
   onCreated: () => void
+  /** Editing this folder; creating a new one when null. */
+  label?: GmailLabel | null
 }) {
-  const [name, setName] = useState('')
+  const [name, setName] = useState(label?.name ?? '')
+  const [color, setColor] = useState<string | null>(label?.color?.backgroundColor ?? null)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -3224,10 +3399,21 @@ function CreateLabelModal({
     setError(null)
     
     try {
+      const picked = LABEL_COLORS.find(c => c.backgroundColor === color)
       const response = await fetch('/api/gmail/labels', {
-        method: 'POST',
+        method: label ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, name: name.trim() }),
+        body: JSON.stringify(label
+          ? {
+              labelId: label.id,
+              ...(name.trim() !== label.name ? { name: name.trim() } : {}),
+              ...(picked && picked.backgroundColor !== label.color?.backgroundColor
+                ? { backgroundColor: picked.backgroundColor, textColor: picked.textColor } : {}),
+            }
+          : {
+              userId, name: name.trim(),
+              ...(picked ? { backgroundColor: picked.backgroundColor, textColor: picked.textColor } : {}),
+            }),
       })
       
       const data = await response.json()
@@ -3245,31 +3431,60 @@ function CreateLabelModal({
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm">
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
-          <h3 className="text-sm font-semibold text-gray-900">Create New Folder</h3>
+          <h3 className="text-sm font-semibold text-gray-900">{label ? 'Edit Folder' : 'Create New Folder'}</h3>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
         
-        <div className="p-5">
+        <div className="p-5 space-y-4">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs">
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs">
               {error}
             </div>
           )}
           
-          <label className="block text-xs font-medium text-gray-600 mb-1">
-            Folder Name
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g., Important Clients"
-            className="w-full h-10 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
-            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-            autoFocus
-          />
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Folder Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Important Clients"
+              className="w-full h-10 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-gray-600 mb-2">Colour</p>
+            <div className="flex flex-wrap gap-2">
+              {!label && (
+                <button
+                  type="button"
+                  onClick={() => setColor(null)}
+                  className={`w-7 h-7 rounded-full border border-gray-300 bg-white text-[10px] text-gray-400 ${color === null ? 'ring-2 ring-offset-1 ring-primary-500' : ''}`}
+                  title="No colour"
+                >
+                  —
+                </button>
+              )}
+              {LABEL_COLORS.map(c => (
+                <button
+                  key={c.backgroundColor}
+                  type="button"
+                  onClick={() => setColor(c.backgroundColor)}
+                  style={{ backgroundColor: c.backgroundColor }}
+                  className={`w-7 h-7 rounded-full ${color === c.backgroundColor ? 'ring-2 ring-offset-1 ring-primary-500' : ''}`}
+                  title={c.name}
+                  aria-label={c.name}
+                />
+              ))}
+            </div>
+          </div>
         </div>
         
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-200 bg-gray-50">
@@ -3284,7 +3499,7 @@ function CreateLabelModal({
             disabled={creating || !name.trim()}
             className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
           >
-            {creating ? 'Creating...' : 'Create Folder'}
+            {creating ? 'Saving...' : label ? 'Save' : 'Create Folder'}
           </button>
         </div>
       </div>

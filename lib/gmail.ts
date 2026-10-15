@@ -187,7 +187,8 @@ export async function fetchEmails(
     })
   )
 
-  return { messages: fullMessages, nextPageToken }
+  // Gmail's own estimate of the whole folder/search (for "Select all N").
+  return { messages: fullMessages, nextPageToken, resultSizeEstimate: response.data.resultSizeEstimate ?? null }
 }
 
 // A whole conversation: every message in the Gmail thread, oldest first.
@@ -372,6 +373,8 @@ export function parseEmailMessage(message: any) {
     to: getHeader('To'),
     cc: getHeader('Cc'),
     bcc: getHeader('Bcc'),
+    // A newsletter's unsubscribe link(s), RFC 2369 (lib/email/list-unsubscribe).
+    listUnsubscribe: getHeader('List-Unsubscribe'),
     subject: getHeader('Subject'),
     date: getHeader('Date'),
     body,

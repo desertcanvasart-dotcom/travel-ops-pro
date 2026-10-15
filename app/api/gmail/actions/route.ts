@@ -6,7 +6,11 @@ import { getCurrentUserId } from '@/lib/auth/current-org'
 
 export async function POST(request: NextRequest) {
   try {
-    const { messageIds, threadIds, action, labelId, fromLabelId } = await request.json()
+    const body = await request.json()
+    const { threadIds, action, labelId, fromLabelId, match } = body
+    // `match` instead of ids: every email in a folder (and search), across
+    // pages — the "Select all N" of the list (resolved below).
+    let messageIds = body.messageIds
 
     // Derive the user from the session, never a client-supplied userId (IDOR).
     const userId = await getCurrentUserId()
@@ -14,7 +18,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    if ((!messageIds && !threadIds) || !action) {
+    const matchSel = parseMatch(match)
+    if (match !== undefined && !matchSel) {
+      return NextResponse.json({ error: 'Invalid selection' }, { status: 400 })
+    }
+    if (matchSel && action === 'permanentDelete') {
+      return NextResponse.json({ error: 'Delete forever takes chosen emails only' }, { status: 400 })
+    }
+    if ((!messageIds && !threadIds && !matchSel) || !action) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
@@ -45,6 +56,8 @@ export async function POST(request: NextRequest) {
       move: labelId ? { add: [labelId], remove: [moveFrom] } : undefined,
       // Out of Spam, back to the inbox — Gmail's "Not spam".
       notSpam: { add: ['INBOX'], remove: ['SPAM'] },
+      // Gmail's "Report spam": into Spam, out of the inbox (Gmail learns from it).
+      spam: { add: ['SPAM'], remove: ['INBOX'] },
       addLabel: labelId ? { add: [labelId] } : undefined,
       removeLabel: labelId ? { remove: [labelId] } : undefined,
     }
@@ -67,6 +80,15 @@ export async function POST(request: NextRequest) {
     // Your own mailbox, else the organisation's shared one (lib/gmail-mailbox).
     const { gmail } = await getMailboxGmail(userId)
 
+    let capped = false
+    if (matchSel) {
+      const found = await matchingMessageIds(gmail, matchSel)
+      messageIds = found.ids
+      capped = found.capped
+      if (messageIds.length === 0) return NextResponse.json({ success: true, count: 0 })
+    }
+    const ids: string[] = Array.isArray(messageIds) ? messageIds : messageIds ? [messageIds] : []
+
     // Delete is Gmail's own trash call, not a label edit: it is what Gmail's
     // trash button does, and the message leaves the inbox for certain.
     if (action === 'delete') {
@@ -75,11 +97,9 @@ export async function POST(request: NextRequest) {
           await gmail.users.threads.trash({ userId: 'me', id })
         }
       } else {
-        for (const id of Array.isArray(messageIds) ? messageIds : [messageIds]) {
-          await gmail.users.messages.trash({ userId: 'me', id })
-        }
+        await inBatches(ids, id => gmail.users.messages.trash({ userId: 'me', id }))
       }
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true, count: ids.length, capped })
     }
 
     // Out of Trash, back where it was — Gmail's own untrash.
@@ -89,16 +109,14 @@ export async function POST(request: NextRequest) {
           await gmail.users.threads.untrash({ userId: 'me', id })
         }
       } else {
-        for (const id of Array.isArray(messageIds) ? messageIds : [messageIds]) {
-          await gmail.users.messages.untrash({ userId: 'me', id })
-        }
+        await inBatches(ids, id => gmail.users.messages.untrash({ userId: 'me', id }))
       }
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true, count: ids.length, capped })
     }
 
     if (action === 'permanentDelete') {
       // Permanently delete (use with caution)
-      for (const id of Array.isArray(messageIds) ? messageIds : [messageIds]) {
+      for (const id of ids) {
         await gmail.users.messages.delete({ userId: 'me', id })
       }
       return NextResponse.json({ success: true })
@@ -118,17 +136,20 @@ export async function POST(request: NextRequest) {
         })
       }
     } else {
-      await gmail.users.messages.batchModify({
-        userId: 'me',
-        requestBody: {
-          ids: Array.isArray(messageIds) ? messageIds : [messageIds],
-          addLabelIds: change.add,
-          removeLabelIds: change.remove,
-        },
-      })
+      // Gmail takes up to 1,000 ids per batchModify.
+      for (let i = 0; i < ids.length; i += 1000) {
+        await gmail.users.messages.batchModify({
+          userId: 'me',
+          requestBody: {
+            ids: ids.slice(i, i + 1000),
+            addLabelIds: change.add,
+            removeLabelIds: change.remove,
+          },
+        })
+      }
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, count: ids.length, capped })
   } catch (err: any) {
     console.error('Email action error:', err)
     // A mailbox that needs reconnecting is not a server fault, and telling the
@@ -137,5 +158,49 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: err.message }, { status: 401 })
     }
     return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 500 })
+  }
+}
+// ---- "Select all N": every email in a folder (and search) ----
+
+/** At most this many emails per action; the response says when there were more. */
+const MATCH_LIMIT = 5000
+const LABEL = /^[A-Za-z0-9_-]{1,100}$/
+
+interface MatchSelection { labelIds: string[]; query: string }
+
+function parseMatch(match: unknown): MatchSelection | null {
+  if (!match || typeof match !== 'object') return null
+  const m = match as { labelIds?: unknown; query?: unknown }
+  const labelIds = Array.isArray(m.labelIds) ? m.labelIds.filter((l): l is string => typeof l === 'string' && LABEL.test(l)) : []
+  // A folder is required: "all mail" in one click is not a selection anyone means.
+  if (labelIds.length === 0) return null
+  const query = typeof m.query === 'string' ? m.query.trim().slice(0, 500) : ''
+  return { labelIds, query }
+}
+
+type ListingGmail = {
+  users: { messages: { list: (p: { userId: string; labelIds: string[]; q?: string; maxResults: number; pageToken?: string; includeSpamTrash?: boolean }) => Promise<{ data: { messages?: Array<{ id?: string | null }>; nextPageToken?: string | null } }> } }
+}
+
+async function matchingMessageIds(gmail: unknown, sel: MatchSelection): Promise<{ ids: string[]; capped: boolean }> {
+  const g = gmail as ListingGmail
+  const ids: string[] = []
+  let pageToken: string | undefined
+  do {
+    const { data } = await g.users.messages.list({
+      userId: 'me', labelIds: sel.labelIds, maxResults: 500, pageToken,
+      ...(sel.query ? { q: sel.query } : {}),
+      ...(sel.labelIds.some(l => l === 'TRASH' || l === 'SPAM') ? { includeSpamTrash: true } : {}),
+    })
+    for (const m of data.messages || []) if (m.id) ids.push(m.id)
+    pageToken = data.nextPageToken || undefined
+  } while (pageToken && ids.length < MATCH_LIMIT)
+  return { ids: ids.slice(0, MATCH_LIMIT), capped: !!pageToken || ids.length > MATCH_LIMIT }
+}
+
+/** One call per id, ten at a time (Gmail has no batch trash). */
+async function inBatches(ids: string[], call: (id: string) => Promise<unknown>): Promise<void> {
+  for (let i = 0; i < ids.length; i += 10) {
+    await Promise.all(ids.slice(i, i + 10).map(call))
   }
 }
