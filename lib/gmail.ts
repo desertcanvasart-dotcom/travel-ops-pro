@@ -190,6 +190,18 @@ export async function fetchEmails(
   return { messages: fullMessages, nextPageToken }
 }
 
+// A whole conversation: every message in the Gmail thread, oldest first.
+// Drafts in the thread are left out — they are not part of what was said.
+export async function fetchThread(
+  gmail: ReturnType<typeof getGmailClient>,
+  threadId: string
+) {
+  const response = await gmail.users.threads.get({ userId: 'me', id: threadId, format: 'full' })
+  return (response.data.messages || [])
+    .filter(m => !(m.labelIds || []).includes('DRAFT'))
+    .map(m => parseEmailMessage(m))
+}
+
 // Fetch single email by ID
 export async function fetchEmail(
   accessToken: string,
@@ -265,7 +277,7 @@ export async function markAsRead(
 }
 
 // Parse email message from Gmail API response
-function parseEmailMessage(message: any) {
+export function parseEmailMessage(message: any) {
   const headers = message.payload?.headers || []
   const getHeader = (name: string) =>
     headers.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value || ''
@@ -358,6 +370,8 @@ function parseEmailMessage(message: any) {
     snippet: message.snippet,
     from: getHeader('From'),
     to: getHeader('To'),
+    cc: getHeader('Cc'),
+    bcc: getHeader('Bcc'),
     subject: getHeader('Subject'),
     date: getHeader('Date'),
     body,
