@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,7 +30,8 @@ export async function POST(
     if (fetchError || !existing) {
       return NextResponse.json({ error: 'Supplier invoice not found' }, { status: 404 })
     }
-    if (existing.status === 'paid' || existing.status === 'disputed') {
+    // A cancelled invoice is closed: there is nothing left to dispute.
+    if (existing.status === 'paid' || existing.status === 'disputed' || existing.status === 'cancelled') {
       return NextResponse.json(
         { error: `Cannot dispute an invoice with status '${existing.status}'` },
         { status: 409 }
@@ -52,12 +53,13 @@ export async function POST(
       .eq('org_id', orgId)
       .neq('status', 'paid')
       .neq('status', 'disputed')
+      .neq('status', 'cancelled')
       .select()
       .maybeSingle()
 
     if (!error && !data) {
       return NextResponse.json(
-        { error: 'Invoice can no longer be disputed (it was paid or disputed concurrently).' },
+        { error: 'Invoice can no longer be disputed (it was paid, disputed or cancelled concurrently).' },
         { status: 409 }
       )
     }
@@ -66,7 +68,22 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to dispute' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data })
+    // Who and when (AUDIT H32, migration 20261130). A separate write: before
+    // the migration the columns do not exist, and that must not fail the
+    // dispute itself.
+    const disputedAt = new Date().toISOString()
+    const disputedBy = await getCurrentUserId()
+    const { error: whoError } = await supabaseAdmin
+      .from('supplier_invoices')
+      .update({ disputed_by: disputedBy, disputed_at: disputedAt })
+      .eq('id', id)
+      .eq('org_id', orgId)
+    if (whoError) console.warn('[supplier-invoice dispute] disputed_by/at not stored:', whoError.message)
+
+    return NextResponse.json({
+      success: true,
+      data: whoError ? data : { ...data, disputed_by: disputedBy, disputed_at: disputedAt },
+    })
   } catch (error) {
     console.error('Error disputing supplier invoice:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -23,6 +23,11 @@ vi.mock('@/lib/supabase-server', () => {
   }
   return { createServerClient: () => client }
 })
+// The route checks the role in-route too (AUDIT C2): a manager.
+vi.mock('@/lib/auth/current-org', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/auth/current-org')>()),
+  requireRole: async () => null,
+}))
 vi.mock('@/lib/vocabulary-server', () => ({
   vocabularyItemsForCurrentOrg: vi.fn(async () => []),
   supplierTypesForCurrentOrg: vi.fn(async () => []),

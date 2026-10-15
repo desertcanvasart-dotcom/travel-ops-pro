@@ -263,7 +263,7 @@ export async function createCruiseItineraryServices(
 
   for (const dayData of cruiseContent.dayByDay) {
     const dayDate = new Date(startDateObj)
-    dayDate.setDate(startDateObj.getDate() + dayData.day_number - 1)
+    dayDate.setUTCDate(startDateObj.getUTCDate() + dayData.day_number - 1)
 
     const dayTitle = dayData.title
     const dayDescription = dayData.description
@@ -471,11 +471,12 @@ export async function createCruiseItineraryServices(
 
         // M5 fallback: when entrance_fees has no match, check activity_rates
         // (mirrors lib/ai/service-creation.ts:1653-1678).
-        const activityMatch = (activityRates || []).find((ar: any) =>
-          ar.activity_name?.toLowerCase() === resolvedName.toLowerCase()
-          || ar.activity_name?.toLowerCase().includes(resolvedName.toLowerCase())
-          || resolvedName.toLowerCase().includes(ar.activity_name?.toLowerCase() || '')
-        )
+        // A row with no name matched everything ('' is in every string).
+        const activityMatch = (activityRates || []).find((ar: any) => {
+          const name = String(ar.activity_name ?? '').trim().toLowerCase()
+          const wanted = resolvedName.toLowerCase()
+          return !!name && (name === wanted || name.includes(wanted) || wanted.includes(name))
+        })
         if (activityMatch) {
           const activityRate = isEuroPassport
             ? toNumber(activityMatch.base_rate_eur || activityMatch.eur_rate, 0)

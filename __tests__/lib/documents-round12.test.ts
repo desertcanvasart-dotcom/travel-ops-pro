@@ -93,7 +93,7 @@ describe('invoice reminders and payments', () => {
 
   it('editing the total re-derives the status; payments pin the currency', () => {
     const u = src('app/api/invoices/[id]/route.ts')
-    expect(u).toContain("updateData.status = paid >= total ? 'paid' : 'partial'")
+    expect(u).toContain("if (paid > 0) derived = paid >= total ? 'paid' : 'partial'")
     expect(u).toContain('An invoice with payments keeps its currency')
   })
 })
@@ -284,9 +284,10 @@ describe('round 12 follow-ups (regression pass)', () => {
     const at = cb.indexOf('error=missing_permissions')
     expect(cb.slice(at, at + 200)).toContain('clearNonceCookie(res)')
   })
-  it('an explicit invoice status stands; a bad total is refused', () => {
+  it('an explicit draft or cancelled stands, paid/partial are the payments\' (AUDIT H22); a bad total is refused', () => {
     const u = src('app/api/invoices/[id]/route.ts')
-    expect(u).toContain('updateData.status === undefined && paid > 0')
+    expect(u).toContain("if (!['draft', 'cancelled'].includes(status))")
+    expect(u).toContain('!CALLER_SETTABLE_STATUSES.includes(updateData.status)')
     expect(u).toContain('total_amount must be a non-negative number')
   })
 })

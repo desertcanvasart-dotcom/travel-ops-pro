@@ -45,7 +45,7 @@ import {
   FolderPlus,
   Tag,
   MailOpen,
-  Move,
+  FolderInput,
   CheckSquare,
   Square,
   Bell,
@@ -174,7 +174,9 @@ interface Client {
 }
 
 type FilterType = 'all' | 'unread' | 'starred'
-type FolderType = 'inbox' | 'sent' | 'drafts' | 'spam' | 'trash'
+type SystemFolder = 'inbox' | 'sent' | 'drafts' | 'spam' | 'trash'
+// A folder the operator made is its Gmail label: `label:<label id>`.
+type FolderType = SystemFolder | `label:${string}`
 
 /** A folder is its Gmail label, listed from the mailbox itself — not the
  *  search index, which lags behind changes: a trashed email came back on the
@@ -185,9 +187,14 @@ type FolderType = 'inbox' | 'sent' | 'drafts' | 'spam' | 'trash'
 // Spam and Trash are listed too: a deleted email had nowhere to be seen or
 // restored from, and one Gmail filed as spam never showed in the system at
 // all (operator, 2026-10-11).
-const FOLDER_LABEL: Record<FolderType, string> = { inbox: 'INBOX', sent: 'SENT', drafts: 'DRAFT', spam: 'SPAM', trash: 'TRASH' }
+const FOLDER_LABEL: Record<SystemFolder, string> = { inbox: 'INBOX', sent: 'SENT', drafts: 'DRAFT', spam: 'SPAM', trash: 'TRASH' }
+/** The folder's own label, null for a system folder. */
+const customLabelOf = (folder: FolderType): string | null => (folder.startsWith('label:') ? folder.slice(6) : null)
+// A made folder is listed by its label like the others. It was a search,
+// `label:<name>`, inside the INBOX — so an email moved into it (which leaves
+// the inbox) never showed there, and names with spaces matched nothing.
 function folderListParams(folder: FolderType, query: string | undefined, params: URLSearchParams) {
-  params.append('labelIds', FOLDER_LABEL[folder])
+  params.append('labelIds', customLabelOf(folder) ?? FOLDER_LABEL[folder as SystemFolder])
   if (query && query.trim()) params.append('query', query.trim())
 }
 
@@ -205,12 +212,15 @@ export default function InboxPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [filter, setFilter] = useState<FilterType>('all')
   const [folder, setFolder] = useState<FolderType>('inbox')
+  const currentLabelId = customLabelOf(folder)
   const [starredEmails, setStarredEmails] = useState<Set<string>>(new Set())
   const [isFolderCollapsed, setIsFolderCollapsed] = useState(false)
   
   const [customLabels, setCustomLabels] = useState<GmailLabel[]>([])
   const [showLabelModal, setShowLabelModal] = useState(false)
   const [showMoveMenu, setShowMoveMenu] = useState<string | null>(null)
+  // The sidebar folder an email is being dragged over.
+  const [dropTarget, setDropTarget] = useState<string | null>(null)
   const moveMenuRef = useRef<HTMLDivElement>(null)
   // No backdrop: the old fixed-inset-0 layer swallowed the press that closed
   // it — see lib/use-dismiss-on-outside.ts (AUT-W02). One menu, two triggers
@@ -668,7 +678,11 @@ ${bodyText}`
       const response = await fetch('/api/gmail/actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, messageIds: ids, action, labelId }),
+        // A move from a made folder takes the email out of it (not the inbox).
+        body: JSON.stringify({
+          userId: user.id, messageIds: ids, action, labelId,
+          ...(action === 'move' && currentLabelId ? { fromLabelId: currentLabelId } : {}),
+        }),
       })
   
       const data = await response.json()
@@ -715,17 +729,91 @@ ${bodyText}`
     }
     return handleEmailAction('delete')
   }
+  // In a made folder the archive button puts the email back in the inbox.
   const handleArchive = () =>
-    handleEmailAction(folder === 'trash' ? 'restore' : folder === 'spam' ? 'notSpam' : 'archive')
-  const archiveLabel = folder === 'trash' ? 'Restore' : folder === 'spam' ? 'Not spam' : 'Archive'
-  const ArchiveIcon = folder === 'trash' ? RotateCcw : folder === 'spam' ? ShieldCheck : Archive
+    currentLabelId
+      ? handleMoveToLabel('INBOX')
+      : handleEmailAction(folder === 'trash' ? 'restore' : folder === 'spam' ? 'notSpam' : 'archive')
+  const archiveLabel = currentLabelId ? 'Move to Inbox' : folder === 'trash' ? 'Restore' : folder === 'spam' ? 'Not spam' : 'Archive'
+  const ArchiveIcon = currentLabelId ? Inbox : folder === 'trash' ? RotateCcw : folder === 'spam' ? ShieldCheck : Archive
   const deleteLabel = folder === 'trash' ? 'Delete forever' : 'Delete'
   const handleMarkRead = () => handleEmailAction('markRead')
   const handleMarkUnread = () => handleEmailAction('markUnread')
   const handleStarEmail = () => handleEmailAction('star')
   const handleUnstarEmail = () => handleEmailAction('unstar')
-  const handleMoveToLabel = (labelId: string) => {
-    handleEmailAction('move', undefined, labelId)
+  // `ids`: the ticked emails from the list toolbar. Without it an open email
+  // took precedence, so a bulk move moved only the email being read.
+  const handleMoveToLabel = (labelId: string, ids?: string[]) => {
+    handleEmailAction('move', ids, labelId)
+  }
+
+  // Moving is from the inbox or a made folder; Sent, Drafts, Spam and Trash
+  // have their own actions.
+  const canMove = folder === 'inbox' || currentLabelId !== null
+  const moveTargets: Array<{ id: string; name: string }> = [
+    ...(currentLabelId ? [{ id: 'INBOX', name: 'Inbox' }] : []),
+    ...customLabels.filter(l => l.id !== currentLabelId).map(l => ({ id: l.id, name: l.name })),
+  ]
+  const renderMoveMenu = (where: 'bulk' | 'detail', ids?: string[]) => (
+    <div className="relative" ref={showMoveMenu === where ? moveMenuRef : undefined}>
+      <button
+        onClick={() => setShowMoveMenu(showMoveMenu === where ? null : where)}
+        disabled={actionLoading}
+        className="flex items-center gap-1 px-2 py-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50 text-xs text-gray-600"
+        title="Move to folder"
+      >
+        <FolderInput className="w-4 h-4 text-gray-500" />
+        <span>Move to</span>
+      </button>
+      {showMoveMenu === where && (
+        <div className="absolute left-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+          {moveTargets.length === 0 && (
+            <p className="px-3 py-1.5 text-xs text-gray-400">No folders yet</p>
+          )}
+          {moveTargets.map((target) => (
+            <button
+              key={target.id}
+              onClick={() => handleMoveToLabel(target.id, ids)}
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
+            >
+              {target.id === 'INBOX' ? <Inbox className="w-3.5 h-3.5 text-gray-400" /> : <Tag className="w-3.5 h-3.5 text-gray-400" />}
+              <span className="truncate">{target.name}</span>
+            </button>
+          ))}
+          <div className="my-1 border-t border-gray-100" />
+          <button
+            onClick={() => { setShowMoveMenu(null); setShowLabelModal(true) }}
+            className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2 text-gray-600"
+          >
+            <FolderPlus className="w-3.5 h-3.5 text-gray-400" />
+            New folder…
+          </button>
+        </div>
+      )}
+    </div>
+  )
+
+  // Drag emails from the list onto a folder (or the inbox) in the sidebar.
+  const DRAG_TYPE = 'application/x-autoura-emails'
+  const dragHandlers = (targetId: string) => {
+    const isHere = targetId === (currentLabelId ?? (folder === 'inbox' ? 'INBOX' : null))
+    return {
+      onDragOver: (e: React.DragEvent) => {
+        if (isHere || !e.dataTransfer.types.includes(DRAG_TYPE)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        if (dropTarget !== targetId) setDropTarget(targetId)
+      },
+      onDragLeave: () => setDropTarget(prev => (prev === targetId ? null : prev)),
+      onDrop: (e: React.DragEvent) => {
+        setDropTarget(null)
+        if (isHere) return
+        e.preventDefault()
+        let ids: string[] = []
+        try { ids = JSON.parse(e.dataTransfer.getData(DRAG_TYPE) || '[]') } catch { ids = [] }
+        if (ids.length > 0) handleMoveToLabel(targetId, ids)
+      },
+    }
   }
   
   const toggleEmailSelection = (emailId: string, e: React.MouseEvent) => {
@@ -991,8 +1079,12 @@ ${bodyText}`
                 <button
                   key={item.id}
                   onClick={() => setFolder(item.id)}
+                  // From a made folder, an email dragged onto Inbox goes back.
+                  {...(item.id === 'inbox' ? dragHandlers('INBOX') : {})}
                   className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${
-                    folder === item.id
+                    item.id === 'inbox' && dropTarget === 'INBOX'
+                      ? 'bg-primary-100 ring-1 ring-primary-300 text-primary-800'
+                      : folder === item.id
                       ? 'bg-primary-50 text-primary-700 font-medium'
                       : 'text-gray-600 hover:bg-gray-50'
                   } ${isFolderCollapsed ? 'justify-center' : ''}`}
@@ -1024,10 +1116,17 @@ ${bodyText}`
                   {customLabels.map((label) => (
                     <button
                       key={label.id}
-                      onClick={() => fetchEmails(`label:${label.name}`)}
-                      className="w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+                      onClick={() => setFolder(`label:${label.id}`)}
+                      {...dragHandlers(label.id)}
+                      className={`w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs transition-colors ${
+                        dropTarget === label.id
+                          ? 'bg-primary-100 ring-1 ring-primary-300 text-primary-800'
+                          : currentLabelId === label.id
+                            ? 'bg-primary-50 text-primary-700 font-medium'
+                            : 'text-gray-600 hover:bg-gray-50'
+                      }`}
                     >
-                      <Tag className="w-3.5 h-3.5 text-gray-400" />
+                      <Tag className={`w-3.5 h-3.5 ${currentLabelId === label.id ? 'text-primary-600' : 'text-gray-400'}`} />
                       <span className="flex-1 text-left truncate">{label.name}</span>
                     </button>
                   ))}
@@ -1121,30 +1220,7 @@ ${bodyText}`
                       <MailOpen className="w-4 h-4 text-gray-500" />
                     </button>
                     
-                    <div className="relative" ref={showMoveMenu === 'bulk' ? moveMenuRef : undefined}>
-                      <button
-                        onClick={() => setShowMoveMenu(showMoveMenu ? null : 'bulk')}
-                        disabled={actionLoading || customLabels.length === 0}
-                        className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
-                        title="Move to folder"
-                      >
-                        <Move className="w-4 h-4 text-gray-500" />
-                      </button>
-                      {showMoveMenu === 'bulk' && (
-                        <div className="absolute left-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-                          {customLabels.map((label) => (
-                            <button
-                              key={label.id}
-                              onClick={() => handleMoveToLabel(label.id)}
-                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
-                            >
-                              <Tag className="w-3.5 h-3.5 text-gray-400" />
-                              {label.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    {canMove && renderMoveMenu('bulk', Array.from(selectedEmails))}
                   </div>
                 </>
               )}
@@ -1199,6 +1275,15 @@ ${bodyText}`
                       <div
                         key={email.id}
                         onClick={() => setSelectedEmail(email)}
+                        // Drag onto a folder in the sidebar: the ticked emails
+                        // when this one is ticked, else just this one.
+                        draggable={canMove}
+                        onDragStart={(e) => {
+                          const ids = isSelected ? Array.from(selectedEmails) : [email.id]
+                          e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(ids))
+                          e.dataTransfer.effectAllowed = 'move'
+                        }}
+                        onDragEnd={() => setDropTarget(null)}
                         className={`group px-3 py-2.5 border-b border-gray-100 cursor-pointer transition-colors ${
                           selectedEmail?.id === email.id
                             ? 'bg-primary-50'
@@ -1342,32 +1427,7 @@ ${bodyText}`
                     )}
                   </button>
                   
-                  {customLabels.length > 0 && (
-                    <div className="relative" ref={showMoveMenu === 'detail' ? moveMenuRef : undefined}>
-                      <button 
-                        onClick={() => setShowMoveMenu(showMoveMenu === 'detail' ? null : 'detail')}
-                        disabled={actionLoading}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" 
-                        title="Move to folder"
-                      >
-                        <Move className="w-4 h-4 text-gray-500" />
-                      </button>
-                      {showMoveMenu === 'detail' && (
-                        <div className="absolute left-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-                          {customLabels.map((label) => (
-                            <button
-                              key={label.id}
-                              onClick={() => handleMoveToLabel(label.id)}
-                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
-                            >
-                              <Tag className="w-3.5 h-3.5 text-gray-400" />
-                              {label.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {canMove && renderMoveMenu('detail')}
                   
                   {/* Parse Email Button */}
                   <button

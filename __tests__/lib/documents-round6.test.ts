@@ -60,7 +60,7 @@ describe('final invoice', () => {
     expect(deposit).toBe(370873)
     expect((deposit * 100) / 20).toBe(1854365)
     expect(roundToCurrency(1854367 * 0.2, 'JPY')).toBe(deposit)
-    expect(src('app/api/invoices/route.ts')).toContain("select('total_amount, currency, full_trip_cost')")
+    expect(src('app/api/invoices/route.ts')).toContain("select('total_amount, currency, full_trip_cost, invoice_type, status')")
   })
 })
 

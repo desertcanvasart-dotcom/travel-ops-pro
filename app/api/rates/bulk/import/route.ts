@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireRole } from '@/lib/auth/current-org'
 import { createServerClient } from '@/lib/supabase-server'
 import { RATE_TABLE_CONFIGS, validateImportData, isExampleRow, transportationConfigFor, vehicleColumnSpecsFor } from '@/lib/bulk-rate-service'
 import { stripVehicleFields, vehiclesFromFlatRow } from '@/lib/rates/vehicle-bands'
@@ -31,6 +32,11 @@ const VALIDITY_REQUIRED_TABLES = new Set(['transportation_rates', 'entrance_fees
  */
 export async function POST(request: NextRequest) {
   try {
+    // In-route as well as the middleware's financial gate (AUDIT C2/H15):
+    // this runs on the service role, so it must not depend on one layer.
+    const denied = await requireRole(['admin', 'manager'])
+    if (denied) return denied
+
     const body = await request.json()
     const { table, csvData, dryRun = false } = body
 

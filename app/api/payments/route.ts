@@ -4,6 +4,7 @@ import { blankToNull } from '@/lib/blank-to-null'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { paymentCurrencyFor } from '@/lib/payment-currency'
+import { pickPaymentFields, positiveAmount } from '@/lib/payment-fields'
 
 export async function GET(request: NextRequest) {
   try {
@@ -70,12 +71,14 @@ export async function POST(request: NextRequest) {
     // A form field the user left alone arrives as "", and "" is not a date:
     // `due_date: ""` made Postgres reject the whole insert, which is how this
     // route silently discarded payments (AUT-W01).
-    const body = blankToNull(await request.json())
+    // Only the payment's own fields; id, timestamps and org_id are not the
+    // caller's to set (AUDIT H25).
+    const body = blankToNull(pickPaymentFields(await request.json()))
 
     // Validate the amount is a positive, finite number before recording — a
     // negative/NaN/string amount would silently corrupt invoice balances.
-    const amount = Number(body.amount)
-    if (!Number.isFinite(amount) || amount <= 0) {
+    const amount = positiveAmount(body.amount)
+    if (amount === null) {
       return NextResponse.json(
         { success: false, error: 'amount must be a positive number' },
         { status: 400 }
@@ -101,8 +104,7 @@ export async function POST(request: NextRequest) {
       body.currency = paid.currency
     }
 
-    // M3 Phase 2A: stamp org_id from the session, overriding any value the
-    // client might have tried to inject through the spread body.
+    // M3 Phase 2A: org_id comes from the session.
     const { data, error } = await supabase
       .from('payments')
       .insert([{ ...body, org_id: orgId }])

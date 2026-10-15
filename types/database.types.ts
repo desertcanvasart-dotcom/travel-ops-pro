@@ -10269,6 +10269,8 @@ export interface Database {
           client_invoice_id: string | null
           approved_at: string | null
           paid_at: string | null
+          disputed_by: string | null
+          disputed_at: string | null
           payment_method: string | null
           payment_reference: string | null
           notes: string | null
@@ -10303,6 +10305,8 @@ export interface Database {
           client_invoice_id?: string | null
           approved_at?: string | null
           paid_at?: string | null
+          disputed_by?: string | null
+          disputed_at?: string | null
           payment_method?: string | null
           payment_reference?: string | null
           notes?: string | null
@@ -10337,6 +10341,8 @@ export interface Database {
           client_invoice_id?: string | null
           approved_at?: string | null
           paid_at?: string | null
+          disputed_by?: string | null
+          disputed_at?: string | null
           payment_method?: string | null
           payment_reference?: string | null
           notes?: string | null

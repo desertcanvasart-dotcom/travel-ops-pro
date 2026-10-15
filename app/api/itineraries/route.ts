@@ -3,13 +3,10 @@ import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { reassertClientId } from '@/lib/itineraries/reassert-client'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { newItineraryCode } from '@/lib/itineraries/itinerary-code'
 
-// Generate unique itinerary code
-function generateItineraryCode(): string {
-  const year = new Date().getFullYear()
-  const random = Math.floor(Math.random() * 9000) + 1000
-  return `ITN-${year}-${random}`
-}
+// Generate unique itinerary code (lib/itineraries/itinerary-code, AUDIT L8)
+const generateItineraryCode = () => newItineraryCode()
 
 // Calculate days between two dates
 function calculateTotalDays(startDate: string, endDate: string): number {

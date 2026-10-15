@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import { itineraryCodeSuffix } from '@/lib/itineraries/itinerary-code'
 import { NextResponse } from 'next/server'
 import { orgAuth } from '@/lib/auth/org-auth'
 import { clientMessage } from '@/lib/api-errors'
@@ -59,7 +60,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   // The new itinerary; the code is unique, so a collision draws another.
   let copy: { id: string; itinerary_code: string } | null = null
   for (let attempt = 0; attempt < 4 && !copy; attempt++) {
-    const code = copyCode(original.itinerary_code as string, new Date().getFullYear(), Math.floor(Math.random() * 9000) + 1000)
+    const code = copyCode(original.itinerary_code as string, new Date().getFullYear(), itineraryCodeSuffix())
     const now = new Date().toISOString()
     const { data, error } = await supabase
       .from('itineraries')

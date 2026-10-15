@@ -128,12 +128,15 @@ export class QuickBooksProvider implements AccountingProvider {
     }
   }
 
-  private async apiRequest(method: string, endpoint: string, body?: unknown) {
+  private async apiRequest(method: string, endpoint: string, body?: unknown, idempotencyKey?: string) {
     if (!this.accessToken || !this.realmId) {
       throw new AccountingAuthError('QuickBooks not authenticated. Call setCredentials() first.')
     }
 
-    const url = `${getQBApiBase(this.realmId)}${endpoint}`
+    // QuickBooks answers a repeated requestid with the original response
+    // instead of creating the entity again (audit H7).
+    const requestId = idempotencyKey ? `${endpoint.includes('?') ? '&' : '?'}requestid=${encodeURIComponent(idempotencyKey.slice(0, 50))}` : ''
+    const url = `${getQBApiBase(this.realmId)}${endpoint}${requestId}`
     const response = await fetch(url, {
       method,
       headers: {
@@ -276,7 +279,7 @@ export class QuickBooksProvider implements AccountingProvider {
           }],
         }],
       }
-      const data = await this.apiRequest('POST', '/payment', qbPayment)
+      const data = await this.apiRequest('POST', '/payment', qbPayment, payment.idempotency_key)
       return {
         id: data.Payment?.Id || '',
         number: data.Payment?.DocNumber,
@@ -316,7 +319,7 @@ export class QuickBooksProvider implements AccountingProvider {
           }],
         }],
       }
-      const data = await this.apiRequest('POST', '/billpayment', qbBillPayment)
+      const data = await this.apiRequest('POST', '/billpayment', qbBillPayment, payment.idempotency_key)
       return {
         id: data.BillPayment?.Id || '',
         number: data.BillPayment?.DocNumber,

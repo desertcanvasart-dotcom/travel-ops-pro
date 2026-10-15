@@ -22,6 +22,8 @@ const OFFICE: Record<string, any[]> = {
   organizations: [{ office_email_addresses: [] }],
   team_members: [{ email: 'rabab.saber85@gmail.com' }],
   organization_members: [],
+  // A 15% demand season over every departure (AUDIT H30: the server prices it).
+  pricing_season_dates: [{ season_id: 's', start_date: '2000-01-01', end_date: '2100-12-31', pricing_seasons: { name: 'High', uplift_percent: 15, is_active: true } }],
 }
 function readChain(rows: any[]) {
   const p: any = new Proxy({}, { get: (_t, k: string) => k === 'then' ? (r: any) => r({ data: rows, error: null }) : () => p })
@@ -152,6 +154,10 @@ describe('the throughout guide', () => {
 describe('the season premium', () => {
   it('stays in the stored total', async () => {
     await save([{ dayNumber: 1, slots: [slot('accommodation', [hotel])] }], config(), { sellingPriceTotal: 230, seasonUplift: 30 })
+    expect(state.totalUpdate).toBe(230)
+  })
+  it('is the departure season\'s, not whatever the request claims (AUDIT H30)', async () => {
+    await save([{ dayNumber: 1, slots: [slot('accommodation', [hotel])] }], config(), { sellingPriceTotal: 230, seasonUplift: 5000 })
     expect(state.totalUpdate).toBe(230)
   })
 })

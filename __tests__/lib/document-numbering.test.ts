@@ -14,6 +14,8 @@ function makeStub(opts: {
   rpc?: { data?: any; error?: any }
   scanRows?: any[]
   scanError?: any
+  /** Rows the four-or-more-digit query returns (default none). */
+  wideRows?: any[]
 }) {
   return {
     rpc: vi.fn(async (_name: string, _args: any) => ({
@@ -22,6 +24,14 @@ function makeStub(opts: {
     })),
     from: vi.fn(() => ({
       select: () => ({
+        filter: () => ({
+          order: () => ({
+            limit: async () => ({
+              data: opts.wideRows ?? [],
+              error: opts.scanError ?? null,
+            }),
+          }),
+        }),
         like: () => ({
           order: () => ({
             limit: async () => ({
@@ -70,6 +80,16 @@ describe('nextDocumentNumber', () => {
     })
     const n = await nextDocumentNumber({ supabase, prefix: 'INV', sequenceName: 'invoice_number_seq', table: 'invoices', column: 'invoice_number', year: 2026 })
     expect(n).toBe('INV-2026-006')
+  })
+
+  it('past 999 a year, takes the highest number numerically (text sorts 999 above 1000)', async () => {
+    const supabase = makeStub({
+      rpc: { error: { message: 'x' } },
+      scanRows: [{ internal_reference: 'SI-2026-999' }],
+      wideRows: [{ internal_reference: 'SI-2026-1000' }, { internal_reference: 'SI-2026-10000' }, { internal_reference: 'SI-2026-1001-DEP' }],
+    })
+    const n = await nextDocumentNumber({ supabase, prefix: 'SI', sequenceName: 'supplier_invoice_number_seq', table: 'supplier_invoices', column: 'internal_reference', year: 2026 })
+    expect(n).toBe('SI-2026-10001')
   })
 
   it('throws when both the sequence and the fallback scan fail', async () => {

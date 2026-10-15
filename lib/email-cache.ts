@@ -166,6 +166,21 @@ export async function cacheEmails(
 
     const now = Date.now()
 
+    // The fresh list IS the folder now: drop what is cached for it and no
+    // longer in it. Only adding meant a message archived, trashed or moved
+    // in Gmail — or one from a mailbox connected before — stayed cached for
+    // good: every Refresh showed it from the cache, then the live list
+    // replaced it, and the next Refresh brought it back (operator,
+    // 2026-10-15: "loads emails from October 5th, then they vanish").
+    const fresh = new Set(emails.map(e => e.id))
+    const stale = store.index('userId_folder').openCursor(IDBKeyRange.only([userId, folder]))
+    stale.onsuccess = () => {
+      const cursor = stale.result
+      if (!cursor) return
+      if (!fresh.has((cursor.value as CachedEmail).id)) cursor.delete()
+      cursor.continue()
+    }
+
     // Add/update each email
     for (const email of emails) {
       store.put({

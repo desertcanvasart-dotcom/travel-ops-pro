@@ -924,7 +924,7 @@ export async function createLandItineraryServices(
     const dayData = allDays[dayIndex]
     const dayNumber = dayData.day_number || 1
     const dayDate = new Date(startDateObj)
-    dayDate.setDate(startDateObj.getDate() + dayNumber - 1)
+    dayDate.setUTCDate(startDateObj.getUTCDate() + dayNumber - 1)
 
     const isLastDay = dayNumber === durationDays
     const isTransferOnly = dayData.is_transfer_only || false

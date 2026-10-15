@@ -134,9 +134,12 @@ export async function GET(request: NextRequest) {
       throw new Error('Failed to save accounting tokens')
     }
 
-    return NextResponse.redirect(
+    // The nonce is single-use: a connected flow spends it.
+    const done = NextResponse.redirect(
       new URL(`/settings?tab=integrations&accounting=connected&provider=${providerName}`, baseUrl)
     )
+    clearNonceCookie(done)
+    return done
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     console.error('Accounting OAuth callback error:', err)

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { recordsInOrg } from '@/lib/org-refs'
 import { paymentDateForStatus } from '@/lib/expense-status'
+import { syncExpense } from '@/lib/accounting'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -69,6 +71,25 @@ export async function PUT(
       }
     }
 
+    // An emptied picker sends '' — a uuid column needs null.
+    for (const key of ['itinerary_id', 'supplier_id']) {
+      if (updateData[key] === '') updateData[key] = null
+    }
+    // As POST: the trip is this org's, the supplier exists.
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updateData.itinerary_id }))) {
+      return NextResponse.json({ error: 'Itinerary not found' }, { status: 404 })
+    }
+    if (updateData.supplier_id) {
+      const { data: supplier } = await supabaseAdmin
+        .from('suppliers')
+        .select('id')
+        .eq('id', updateData.supplier_id)
+        .maybeSingle()
+      if (!supplier) {
+        return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
+      }
+    }
+
     if (updateData.amount !== undefined) {
       const amt = Number(updateData.amount)
       if (!Number.isFinite(amt) || amt < 0) {
@@ -114,6 +135,10 @@ export async function PUT(
       console.error('Error updating expense:', error)
       return NextResponse.json({ error: 'Failed to update expense' }, { status: 500 })
     }
+
+    // As POST: the books follow the edit (syncExpense updates a synced bill).
+    // Non-blocking (AUDIT M14).
+    syncExpense(data.id).catch(err => console.error('Accounting sync failed:', err))
 
     return NextResponse.json(data)
   } catch (error) {

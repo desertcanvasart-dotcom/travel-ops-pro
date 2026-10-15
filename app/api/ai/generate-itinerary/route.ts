@@ -52,6 +52,7 @@ import { activeInOrder } from '@/lib/vocabulary'
 import { applyDayRules } from '@/lib/ai/day-rules-engine'
 import { reconcileWithParserData } from '@/lib/ai/reconciliation'
 import { getMemoriesForPrompt, logAgentRun } from '@/lib/agent-memory'
+import { newItineraryCode } from '@/lib/itineraries/itinerary-code'
 
 
 // Admin client for bypassing RLS on content library
@@ -413,15 +414,14 @@ export async function POST(request: NextRequest) {
     // selects the EU / non-EU price tier.
     const effectiveCurrency = currency
 
-    // Calculate dates
+    // Calculate dates. In UTC: new Date("YYYY-MM-DD") is UTC midnight, and
+    // local setDate shifted it a day west of UTC (AUDIT L9).
     const startDateObj = new Date(start_date)
     const endDate = new Date(startDateObj)
-    endDate.setDate(startDateObj.getDate() + duration_days - 1)
+    endDate.setUTCDate(startDateObj.getUTCDate() + duration_days - 1)
 
-    const year = new Date().getFullYear()
-    const randomNum = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
     const tierPrefix = tier.charAt(0).toUpperCase()
-    const itinerary_code = `ITN-${tierPrefix}-${year}-${randomNum}`
+    const itinerary_code = newItineraryCode(`ITN-${tierPrefix}`)
 
     // ============================================
     // CRUISE PATH (creative mode ONLY, cruise-package or cruise-land)
@@ -444,7 +444,7 @@ export async function POST(request: NextRequest) {
         if (cruiseContent.content.duration_days) {
           duration_days = cruiseContent.content.duration_days
           endDate.setTime(startDateObj.getTime())
-          endDate.setDate(startDateObj.getDate() + duration_days - 1)
+          endDate.setUTCDate(startDateObj.getUTCDate() + duration_days - 1)
         }
         
         const nights = duration_days - 1
@@ -833,7 +833,7 @@ export async function POST(request: NextRequest) {
 
     // Recalculate end date
     const finalEndDate = new Date(startDateObj)
-    finalEndDate.setDate(startDateObj.getDate() + duration_days - 1)
+    finalEndDate.setUTCDate(startDateObj.getUTCDate() + duration_days - 1)
 
     // Build itinerary-specific inclusions/exclusions BEFORE creating the record
     // so they are part of the initial INSERT (not a separate UPDATE that could fail silently)

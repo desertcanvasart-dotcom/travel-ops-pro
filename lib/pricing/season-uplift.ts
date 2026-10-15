@@ -104,3 +104,25 @@ export function computeUplift(input: {
     seasonName: input.season?.name ?? null,
   }
 }
+
+/**
+ * The premium a save stores (AUDIT H30). The grid sends the premium it
+ * showed; the server prices the departure's season on the lines it wrote and
+ * caps the grid's figure there (with room for rounding: the grid rounds per
+ * person, the server per line). A request cannot add a premium the season
+ * does not carry; it is never raised above what the operator was shown
+ * either — a premium the grid did not show is not stored behind their back.
+ */
+export function settleSeasonUplift(input: {
+  /** Selling price of the saved lines, before any premium. */
+  sellingPrice: number
+  season: SeasonMatch | null
+  /** What the client says the premium is. */
+  claimed: unknown
+}): number {
+  const own = Math.round(computeUplift({ sellingPrice: input.sellingPrice, season: input.season }).amount * 100) / 100
+  if (own <= 0) return 0
+  const n = Number(input.claimed)
+  const claimed = Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0
+  return claimed <= own + Math.max(1, own * 0.005) ? claimed : own
+}

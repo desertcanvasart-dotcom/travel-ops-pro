@@ -13,6 +13,9 @@ const supabaseAdmin = createClient(
 )
 
 // GET - List payments for a booking
+// booking_payments.payment_type CHECK (baseline schema).
+const BOOKING_PAYMENT_TYPES = ['deposit', 'partial', 'final', 'refund', 'adjustment']
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -98,6 +101,13 @@ export async function POST(
         success: false,
         error: 'payment_type, amount, and payment_date are required'
       }, { status: 400 })
+    }
+    // The table's CHECK; a bad value was a 500 from the RPC.
+    if (!BOOKING_PAYMENT_TYPES.includes(payment_type)) {
+      return NextResponse.json(
+        { success: false, error: `payment_type must be one of ${BOOKING_PAYMENT_TYPES.join(', ')}` },
+        { status: 400 }
+      )
     }
 
     // Amount must be a positive, finite number — a negative/NaN amount would
