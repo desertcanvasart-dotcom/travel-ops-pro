@@ -10,6 +10,7 @@
 // the spreadsheet, import back.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { requireRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createServerClient } from '@/lib/supabase-server'
 import { selectAllRows } from '@/lib/db/select-all-rows'
 import Papa from 'papaparse'
@@ -17,12 +18,15 @@ import { PERIOD_SHEETS, periodHeaders, periodsToRows, periodTemplateRows, withSu
 import { seasonsForRow } from '@/lib/rates/rate-seasons'
 import { supplementsForRow } from '@/lib/rates/supplements'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
+    // As the import beside it: in-route as well as the middleware (AUDIT H15).
+    const denied = await requireRole(['admin', 'manager'])
+    if (denied) return denied
+
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
     const entity = request.nextUrl.searchParams.get('entity')

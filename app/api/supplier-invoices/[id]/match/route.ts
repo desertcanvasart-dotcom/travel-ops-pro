@@ -146,6 +146,14 @@ export async function POST(
       .upsert(links, { onConflict: 'supplier_invoice_id,expense_id' })
 
     if (insertError) {
+      // The table refuses a link that matches an expense past its amount
+      // (migration 20261129): another match of it landed meanwhile.
+      if (insertError.code === '23514') {
+        return NextResponse.json(
+          { error: 'An expense was matched to another invoice meanwhile and has too little left. Reload and match again.' },
+          { status: 409 }
+        )
+      }
       console.error('Error linking expenses:', insertError)
       return NextResponse.json({ error: 'Failed to link expenses' }, { status: 500 })
     }

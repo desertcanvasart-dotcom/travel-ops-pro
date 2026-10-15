@@ -59,3 +59,25 @@ export async function storedReplyHeaders(db: Db, conversationId: string | null |
     return {}
   }
 }
+
+/** The slice of a Gmail client the lookup below uses. */
+type GmailThreads = {
+  users: { threads: { get: (params: { userId: string; id: string; format: string; metadataHeaders: string[] }) => Promise<{ data: { messages?: Array<{ payload?: { headers?: Array<{ name?: string | null; value?: string | null }> } }> } }> } }
+}
+
+/** In-Reply-To / References for a reply in a Gmail thread: its latest
+ *  message's Message-ID. Empty when Gmail cannot say (the reply still threads
+ *  in Gmail by threadId). Used by the send route and by saved drafts. */
+export async function gmailReplyHeaders(gmail: unknown, threadId: string): Promise<ThreadingHeaders> {
+  try {
+    const thread = await (gmail as GmailThreads).users.threads.get({ userId: 'me', id: threadId, format: 'metadata', metadataHeaders: ['Message-ID', 'References'] })
+    const last = thread.data.messages?.[thread.data.messages.length - 1]
+    const header = (name: string) => last?.payload?.headers?.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || ''
+    const messageId = header('Message-ID')
+    if (!messageId) return {}
+    const refs = header('References')
+    return { inReplyTo: messageId, references: refs ? `${refs} ${messageId}` : messageId }
+  } catch {
+    return {}
+  }
+}

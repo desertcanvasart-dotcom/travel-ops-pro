@@ -40,11 +40,36 @@ export type RecomputeResult =
     }
   | { ok: false; error: string; status: number }
 
+// AUDIT M20: a payment recorded while this runs. record_booking_payment
+// locks the booking, inserts the payment and writes payment_status /
+// balance_due; this read the booking and its payments without a lock and then
+// wrote its own payment_status from what it had read — so a payment landing
+// in between was overwritten with the standing from before it. The write is
+// now conditional on the booking's updated_at being what was read (the RPC
+// always sets it); if it moved, the whole recompute runs again on fresh rows.
+const MAX_ATTEMPTS = 3
+
 export async function recomputeBookingExtras(
   admin: DbClient,
   bookingId: string,
   orgId: string
 ): Promise<RecomputeResult> {
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const result = await recomputeOnce(admin, bookingId, orgId)
+    if (result !== 'moved') return result
+  }
+  return {
+    ok: false,
+    status: 409,
+    error: 'The booking kept changing while its total was being updated. Reload and try again.',
+  }
+}
+
+async function recomputeOnce(
+  admin: DbClient,
+  bookingId: string,
+  orgId: string
+): Promise<RecomputeResult | 'moved'> {
   // `*`: base_total_cost and extras_total must not be named in a select, so
   // that a deployment running ahead of the migration fails HERE, loudly and
   // without touching money, instead of 400ing on every read.
@@ -108,7 +133,7 @@ export async function recomputeBookingExtras(
     depositAmount: applied.deposit_amount,
   })
 
-  const { error } = await admin
+  let write = admin
     .from('bookings')
     .update({
       ...applied,
@@ -120,10 +145,14 @@ export async function recomputeBookingExtras(
     })
     .eq('id', bookingId)
     .eq('org_id', orgId)
+  // Only if nothing wrote the booking since it was read (M20).
+  write = booking.updated_at == null ? write.is('updated_at', null) : write.eq('updated_at', booking.updated_at)
+  const { data: written, error } = await write.select('id')
 
   if (error) {
     return { ok: false, status: 500, error: 'Could not update the booking total' }
   }
+  if (!Array.isArray(written) || written.length === 0) return 'moved'
 
   return { ok: true, ...applied, payment_status: standing.payment_status, excluded: totals.excluded }
 }

@@ -189,7 +189,20 @@ export async function fetchEmails(
     })
   )
 
-  return { messages: fullMessages, nextPageToken }
+  // Gmail's own estimate of the whole folder/search (for "Select all N").
+  return { messages: fullMessages, nextPageToken, resultSizeEstimate: response.data.resultSizeEstimate ?? null }
+}
+
+// A whole conversation: every message in the Gmail thread, oldest first.
+// Drafts in the thread are left out — they are not part of what was said.
+export async function fetchThread(
+  gmail: ReturnType<typeof getGmailClient>,
+  threadId: string
+) {
+  const response = await gmail.users.threads.get({ userId: 'me', id: threadId, format: 'full' })
+  return (response.data.messages || [])
+    .filter(m => !(m.labelIds || []).includes('DRAFT'))
+    .map(m => parseEmailMessage(m))
 }
 
 // Fetch single email by ID
@@ -267,7 +280,7 @@ export async function markAsRead(
 }
 
 // Parse email message from Gmail API response
-function parseEmailMessage(message: any) {
+export function parseEmailMessage(message: any) {
   const headers = message.payload?.headers || []
   const getHeader = (name: string) =>
     headers.find((h: any) => h.name.toLowerCase() === name.toLowerCase())?.value || ''
@@ -360,6 +373,10 @@ function parseEmailMessage(message: any) {
     snippet: message.snippet,
     from: getHeader('From'),
     to: getHeader('To'),
+    cc: getHeader('Cc'),
+    bcc: getHeader('Bcc'),
+    // A newsletter's unsubscribe link(s), RFC 2369 (lib/email/list-unsubscribe).
+    listUnsubscribe: getHeader('List-Unsubscribe'),
     subject: getHeader('Subject'),
     date: getHeader('Date'),
     body,

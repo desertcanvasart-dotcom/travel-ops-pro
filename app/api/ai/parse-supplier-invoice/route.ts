@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { MODEL_PARSER } from '@/lib/ai/models'
+import { parseMoney } from '@/lib/parse-money'
+import { guardAiRate } from '@/lib/rate-limit/ai-limit'
 
 const ACCEPTED_TYPES: Record<string, 'pdf' | 'image'> = {
   'application/pdf': 'pdf',
@@ -14,20 +16,12 @@ const ACCEPTED_TYPES: Record<string, 'pdf' | 'image'> = {
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
 
 /**
- * Strict money parser (L2): handles values that come back from the model as
- * "€1,234.50", "1.234,50", "EGP 950", "950.00" — strips anything that isn't
- * a digit, '.', or '-', then parses. Returns null when the value can't be
- * sensibly coerced, so callers can fall back to a default explicitly rather
- * than silently storing NaN.
+ * Strict money parser (L2): values come back from the model as "€1,234.50",
+ * "1.234,50", "EGP 950" (lib/parse-money). Returns null when the value can't
+ * be sensibly coerced, so callers fall back to a default explicitly rather
+ * than storing NaN.
  */
-function toMoney(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null
-  const cleaned = String(value).replace(/[^0-9.\-]/g, '')
-  if (cleaned === '' || cleaned === '-' || cleaned === '.') return null
-  const n = Number(cleaned)
-  return Number.isFinite(n) ? n : null
-}
+const toMoney = parseMoney
 
 const EXTRACTION_PROMPT = `You are an expert at reading supplier invoices for a travel/tour operations company.
 
@@ -82,6 +76,10 @@ Return ONLY a valid JSON object (no markdown, no explanation) with this exact st
 
 export async function POST(request: NextRequest) {
   try {
+    // Each call is a paid vision read of up to 20MB (AUDIT M8).
+    const limited = await guardAiRate('parse')
+    if (limited) return limited
+
     const formData = await request.formData()
     const file = formData.get('file') as File
 

@@ -1,8 +1,7 @@
 import { BASIS_SLOTS, itemCost } from '@/app/pricing-grid/lib/item-basis'
-import { insertItineraryWithCode } from '@/lib/itineraries/itinerary-code'
+import { insertItineraryWithCode, newItineraryCode } from '@/lib/itineraries/itinerary-code'
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { randomBytes } from 'crypto'
 import { createServerClient } from '@/lib/supabase-server'
 import { gridCompleteness } from '@/app/pricing-grid/lib/grid-completeness'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
@@ -55,15 +54,10 @@ const UUID_PREFIX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 // Save pricing grid state → itineraries + itinerary_days + itinerary_services
 // ============================================
 
-// L8: the prior implementation used Math.random() in the 1000-9999 range,
-// giving only 9000 codes per year. Birthday-paradox collision probability
-// becomes meaningful at very modest volume. randomBytes(4).toString('hex') gives
-// ~4.3B values (8 hex chars), reducing collision probability to negligible
-// across any realistic per-year throughput.
+// L8: 8 hex characters (lib/itineraries/itinerary-code); the 1000-9999 range
+// clashed at modest volume against the UNIQUE itinerary_code.
 function generateItineraryCode(): string {
-  const year = new Date().getFullYear()
-  const random = randomBytes(4).toString('hex').toUpperCase()
-  return `ITN-S-${year}-${random}`  // S = from pricing grid (slot-based)
+  return newItineraryCode('ITN-S')  // S = from pricing grid (slot-based)
 }
 
 // L9: do date math in UTC. The prior implementation used new Date(dateStr)
@@ -179,6 +173,7 @@ async function storedLinePrices(
 }
 
 export async function POST(request: NextRequest) {
+  let undoHeader: (() => Promise<void>) | null = null
   try {
     const supabase = createServerClient()
     const body = await request.json()
@@ -625,7 +620,19 @@ export async function POST(request: NextRequest) {
 
     console.log('Pricing grid save - itinerary data:', JSON.stringify(itineraryData, null, 2))
 
+    // H31: the header is written before the days, and the days' RPC is its
+    // own transaction. Should anything fail before the days land, this puts
+    // the header back (an update) or removes the new trip (a create), so a
+    // failed save leaves no trip with new dates and totals over its old days,
+    // and no trip without days.
     if (isUpdate) {
+      const { data: before } = await supabase
+        .from('itineraries')
+        .select(Object.keys(itineraryData).join(', '))
+        .eq('id', config.itineraryId)
+        .eq('org_id', callerOrgId)
+        .maybeSingle()
+
       // Update existing itinerary
       const { data, error } = await supabase
         .from('itineraries')
@@ -638,6 +645,11 @@ export async function POST(request: NextRequest) {
       if (error) throw new Error(`Failed to update itinerary: ${error.message}`)
       itineraryId = data.id
       itineraryCode = data.itinerary_code
+      if (before) {
+        undoHeader = async () => {
+          await supabase.from('itineraries').update(before).eq('id', config.itineraryId).eq('org_id', callerOrgId)
+        }
+      }
     } else {
       // Create new itinerary — M3 Phase 2A requires org_id NOT NULL on
       // itineraries. Resolve from the operator's session.
@@ -660,6 +672,11 @@ export async function POST(request: NextRequest) {
       if (error || !data) throw new Error(`Failed to create itinerary: ${error?.message ?? 'no row returned'}`)
       itineraryId = data.id
       itineraryCode = data.itinerary_code
+      const createdId = data.id
+      undoHeader = async () => {
+        await supabase.from('itinerary_versions').delete().eq('itinerary_id', createdId)
+        await supabase.from('itineraries').delete().eq('id', createdId).eq('org_id', orgId)
+      }
 
       // Create English version
       await supabase.from('itinerary_versions').insert({
@@ -688,6 +705,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (saveError) throw new Error(`Failed to save days/services: ${saveError.message}`)
+    undoHeader = null
 
     const savedCounts = Array.isArray(saveResult) ? saveResult[0] : saveResult
 
@@ -722,6 +740,13 @@ export async function POST(request: NextRequest) {
     })
   } catch (error: any) {
     console.error('Save pricing grid error:', error)
+    if (undoHeader) {
+      try {
+        await undoHeader()
+      } catch (undoError) {
+        console.error('[pricing-grid save] could not undo the header write:', undoError)
+      }
+    }
     return NextResponse.json(
       { success: false, error: clientMessage(error, 'Internal server error') },
       { status: 500 }

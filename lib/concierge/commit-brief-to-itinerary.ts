@@ -39,6 +39,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { reassertClientId } from '@/lib/itineraries/reassert-client'
+import { newItineraryCode } from '@/lib/itineraries/itinerary-code'
 
 const PG_UNIQUE_VIOLATION = '23505'
 const MAX_CODE_ATTEMPTS = 5
@@ -109,11 +110,8 @@ function deriveStartEnd(brief: ConciergeBrief): { start_date: string; end_date: 
 function generateItineraryCode(): string {
   // Mirror format from app/api/ai/generate-itinerary/route.ts:317.
   // 'S' = standard tier (briefs don't carry tier — operator tunes on edit).
-  const year = new Date().getUTCFullYear()
-  const randomNum = Math.floor(Math.random() * 1000)
-    .toString()
-    .padStart(3, '0')
-  return `ITN-S-${year}-${randomNum}`
+  // 8 hex characters: 1000 codes a year clashed (AUDIT L8).
+  return newItineraryCode('ITN-S')
 }
 
 export async function commitBriefToItinerary(

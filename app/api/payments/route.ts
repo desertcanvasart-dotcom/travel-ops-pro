@@ -86,7 +86,9 @@ export async function POST(request: NextRequest) {
     // A form field the user left alone arrives as "", and "" is not a date:
     // `due_date: ""` made Postgres reject the whole insert, which is how this
     // route silently discarded payments (AUT-W01).
-    const body = blankToNull(await request.json())
+    // Only the payment's own fields; id, timestamps and org_id are not the
+    // caller's to set (AUDIT H25).
+    const body = blankToNull(pickPaymentFields(await request.json()))
 
     // Only the columns a caller may set (lib/payments/fields): the body used
     // to be spread into the insert, id and created_at included.

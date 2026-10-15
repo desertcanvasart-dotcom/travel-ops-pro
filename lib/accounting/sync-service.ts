@@ -462,7 +462,9 @@ export async function syncInvoicePayment(paymentId: string): Promise<void> {
       }
       invoiceExternalId = reSync.external_id
     }
-    const payload = mapInvoicePaymentToPayload(payment, invoiceExternalId)
+    // Keyed on the payment: a retry after a lost sync-log write gets the
+    // provider's original payment back, not a second one (audit H7).
+    const payload = { ...mapInvoicePaymentToPayload(payment, invoiceExternalId), idempotency_key: `ip-${paymentId}` }
     const ref = await provider.createPayment(payload)
 
     await upsertSyncLog(providerType, 'invoice_payment', paymentId, orgId, {
@@ -553,7 +555,10 @@ export async function syncExpensePayment(expenseId: string): Promise<void> {
     const vendorKey = expense.supplier_id || expense.supplier_name || 'unknown'
     const vendorExternalId = await getCachedContactId(providerType, orgId, vendorKey)
 
-    const payload = mapExpensePaymentToPayload(expense, billExternalId, vendorExternalId || undefined)
+    const payload = {
+      ...mapExpensePaymentToPayload(expense, billExternalId, vendorExternalId || undefined),
+      idempotency_key: `ep-${expenseId}`,
+    }
     const ref = await provider.createPayment(payload)
 
     await upsertSyncLog(providerType, 'expense_payment', expenseId, orgId, {

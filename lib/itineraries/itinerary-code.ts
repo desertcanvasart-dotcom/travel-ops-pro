@@ -9,6 +9,8 @@
 // on the code draws another and retries the same insert. Any other error
 // (one itinerary per thread, a missing column) comes back unchanged.
 
+import { randomBytes } from 'crypto'
+
 type DbClient = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   from: (table: string) => any
@@ -18,10 +20,9 @@ export interface DbError { code?: string; message?: string; details?: string }
 
 const ATTEMPTS = 6
 
-/** ITN-YYYY-NNNN (manual) or ITN-<T>-YYYY-NNNN (generated, T = tier initial). */
-export function itineraryCode(year: number, tierInitial?: string | null, random = Math.random()): string {
-  const digits = String(Math.floor(random * 9000) + 1000)
-  return tierInitial ? `ITN-${tierInitial.toUpperCase()}-${year}-${digits}` : `ITN-${year}-${digits}`
+/** ITN-YYYY-XXXXXXXX (manual) or ITN-<T>-YYYY-XXXXXXXX (generated, T = tier initial). */
+export function itineraryCode(year: number, tierInitial?: string | null): string {
+  return newItineraryCode(tierInitial ? `ITN-${tierInitial.toUpperCase()}` : 'ITN', year)
 }
 
 export function isItineraryCodeClash(error: DbError | null | undefined): boolean {
@@ -52,4 +53,21 @@ export async function insertItineraryWithCode<Row>(
     if (!error || !isItineraryCodeClash(error)) return last
   }
   return last
+}
+// ---- the code itself ----
+// itinerary_code is UNIQUE across every organisation. The generators drew
+// from 1000 (concierge commit, AI generate) or 9000 (create, duplicate,
+// quote convert) random numbers a year, so clashes came at modest volume —
+// and the concierge commit read a code clash as a thread race and threw
+// (AUDIT L8). Eight hex characters give ~4.3 billion codes a year.
+
+
+/** Eight random upper-case hex characters. */
+export function itineraryCodeSuffix(): string {
+  return randomBytes(4).toString('hex').toUpperCase()
+}
+
+/** `${prefix}-${year}-XXXXXXXX`, e.g. ITN-2026-3FA9C01B or ITN-S-2026-…. */
+export function newItineraryCode(prefix = 'ITN', year = new Date().getUTCFullYear()): string {
+  return `${prefix}-${year}-${itineraryCodeSuffix()}`
 }

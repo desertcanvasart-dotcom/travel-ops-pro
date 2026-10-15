@@ -32,7 +32,9 @@ export function pickPaymentFields(body: unknown): Record<string, unknown> {
 
 /** A payment amount is a positive, finite number (a string amount is read as a number, "abc" is refused). */
 export function checkPaymentAmount(raw: unknown): { ok: true; amount: number } | { ok: false; error: string } {
-  const amount = typeof raw === 'string' && raw.trim() === '' ? NaN : Number(raw)
+  const amount = typeof raw === 'number' ? raw
+    : typeof raw === 'string' && raw.trim() !== '' ? Number(raw)
+    : NaN
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, error: 'amount must be a positive number' }
   return { ok: true, amount }
 }

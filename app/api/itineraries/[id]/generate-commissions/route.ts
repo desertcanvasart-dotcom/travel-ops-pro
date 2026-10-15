@@ -129,7 +129,10 @@ export async function POST(
       .from('itinerary_services')
       .update({ commission_status: 'generated' })
       .in('id', candidateIds)
-      .eq('commission_status', 'pending')
+      // NULL is unclaimed too — eligibility (lib/commission-generation) treats
+      // it so, and a pending-only claim reported such rows as "claimed by a
+      // concurrent request" and never generated them (AUDIT M16).
+      .or('commission_status.is.null,commission_status.eq.pending')
       .select('id')
 
     if (claimError) {

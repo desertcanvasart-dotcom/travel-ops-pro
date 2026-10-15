@@ -315,6 +315,9 @@ const FINANCIAL_API_PREFIXES = [
   '/api/departures',
   '/api/capacity',
   '/api/surveys',
+  // B2B margins and markups. The Pricing Rules page is manager-and-above;
+  // its API answered any member, viewers included (AUDIT H16).
+  '/api/b2b/pricing-rules',
 ]
 
 // Staff-only, READS INCLUDED (agent and above). Customer conversations are
@@ -806,5 +809,9 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
 export const config = {
   matcher: [
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // The image exclusion above also skipped /api paths ending in .png and
+    // the like — a dynamic segment such as /api/x/[id] with id "a.png" got
+    // past every gate here. Every API path runs through this file.
+    '/api/:path*',
   ],
 }

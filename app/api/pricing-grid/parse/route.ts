@@ -14,6 +14,7 @@ import { packageRules } from '@/lib/ai/package-prompt-rules'
 import { createServerClient } from '@/lib/supabase-server'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { MODEL_PARSER } from '@/lib/ai/models'
+import { guardAiRate } from '@/lib/rate-limit/ai-limit'
 import { enrichSlots } from '@/app/pricing-grid/lib/enrich-slots'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
@@ -541,6 +542,19 @@ Output ONLY valid JSON, no other text.`
 // MAIN HANDLER
 // ============================================
 
+// Pasted inquiries and emails run to a few thousand characters; the WhatsApp
+// parser allows 50,000 for whole conversations.
+const MAX_PARSE_TEXT = 50000
+
+function parseJsonOrNull(raw: string): any {
+  try {
+    const value = JSON.parse(raw)
+    return value && typeof value === 'object' ? value : null
+  } catch {
+    return null
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = createServerClient()
@@ -555,6 +569,16 @@ export async function POST(request: NextRequest) {
     if (!text || typeof text !== 'string') {
       return NextResponse.json({ success: false, error: 'No text provided' }, { status: 400 })
     }
+    // Up to two paid model calls per request (AUDIT M27): a cap on the text
+    // and a per-user budget, as the other parse endpoints.
+    if (text.length > MAX_PARSE_TEXT) {
+      return NextResponse.json(
+        { success: false, error: `Text too long (max ${MAX_PARSE_TEXT} characters)` },
+        { status: 413 }
+      )
+    }
+    const limited = await guardAiRate('parse')
+    if (limited) return limited
 
     // 1. Fetch all rates from DB
     // The org's rate-currency symbol: the catalogue the AI reads, and the logs, both say what the numbers are.
@@ -591,7 +615,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Failed to parse AI response' }, { status: 500 })
     }
 
-    let parsed = JSON.parse(jsonMatch[0])
+    // The greedy match can span prose between two JSON-looking bits: a bad
+    // reply is the model's, not a server error (AUDIT L3).
+    let parsed = parseJsonOrNull(jsonMatch[0])
+    if (!parsed) {
+      return NextResponse.json({ success: false, error: 'Failed to parse AI response' }, { status: 422 })
+    }
     let generationMode: 'parsed' | 'generated' = 'parsed'
 
     // 4b. Fallback: if AI returned 0 days (vague inquiry), retry with generative prompt
@@ -618,8 +647,8 @@ export async function POST(request: NextRequest) {
         .join('')
 
       const genJsonMatch = genText.match(/\{[\s\S]*\}/)
-      if (genJsonMatch) {
-        const genParsed = JSON.parse(genJsonMatch[0])
+      const genParsed = genJsonMatch ? parseJsonOrNull(genJsonMatch[0]) : null
+      if (genParsed) {
         // Merge: keep metadata from first pass if generative didn't extract it
         parsed = {
           metadata: { ...(parsed.metadata || {}), ...(genParsed.metadata || {}) },

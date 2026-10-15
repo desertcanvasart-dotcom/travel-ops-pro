@@ -432,10 +432,11 @@ export async function POST(request: NextRequest) {
     // selects the EU / non-EU price tier.
     const effectiveCurrency = currency
 
-    // Calculate dates
+    // Calculate dates. In UTC: new Date("YYYY-MM-DD") is UTC midnight, and
+    // local setDate shifted it a day west of UTC (AUDIT L9).
     const startDateObj = new Date(start_date)
     const endDate = new Date(startDateObj)
-    endDate.setDate(startDateObj.getDate() + duration_days - 1)
+    endDate.setUTCDate(startDateObj.getUTCDate() + duration_days - 1)
 
     // The code is drawn at insert time and drawn again if it is taken (see
     // lib/itineraries/itinerary-code) — a clash used to surface as a 500 only
@@ -465,7 +466,7 @@ export async function POST(request: NextRequest) {
         if (cruiseContent.content.duration_days) {
           duration_days = cruiseContent.content.duration_days
           endDate.setTime(startDateObj.getTime())
-          endDate.setDate(startDateObj.getDate() + duration_days - 1)
+          endDate.setUTCDate(startDateObj.getUTCDate() + duration_days - 1)
         }
         
         const nights = duration_days - 1
@@ -854,7 +855,7 @@ export async function POST(request: NextRequest) {
 
     // Recalculate end date
     const finalEndDate = new Date(startDateObj)
-    finalEndDate.setDate(startDateObj.getDate() + duration_days - 1)
+    finalEndDate.setUTCDate(startDateObj.getUTCDate() + duration_days - 1)
 
     // Build itinerary-specific inclusions/exclusions BEFORE creating the record
     // so they are part of the initial INSERT (not a separate UPDATE that could fail silently)

@@ -222,7 +222,7 @@ export async function PUT(
     if (updateData.total_amount !== undefined || updateData.currency !== undefined) {
       const { data: currentInvoice } = await supabaseAdmin
         .from('invoices')
-        .select('amount_paid, currency, status, paid_at, discount_amount')
+        .select('amount_paid, total_amount, currency, status, paid_at, discount_amount')
         .eq('id', id)
         .eq('org_id', orgId)
         .single()
@@ -238,8 +238,9 @@ export async function PUT(
             { status: 409 }
           )
         }
+        let total = Number(currentInvoice.total_amount || 0)
         if (updateData.total_amount !== undefined) {
-          const total = Number(updateData.total_amount)
+          total = Number(updateData.total_amount)
           if (updateData.total_amount === '' || updateData.total_amount === null || !Number.isFinite(total) || total < 0) {
             return NextResponse.json({ error: 'total_amount must be a non-negative number' }, { status: 400 })
           }

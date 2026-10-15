@@ -192,6 +192,18 @@ export async function POST(request: NextRequest) {
         .eq('org_id', orgId)
         .maybeSingle()
       parentInvoice = parentRow
+      // The balance is billed against the deposit invoice named: a missing
+      // one silently fell back to the percentage, and a cancelled one (or a
+      // final) was taken as paid-in deposit (AUDIT M17).
+      if (!parentInvoice) {
+        return NextResponse.json({ error: 'Deposit invoice not found' }, { status: 404 })
+      }
+      if (parentInvoice.status === 'cancelled' || parentInvoice.invoice_type === 'final') {
+        return NextResponse.json(
+          { error: parentInvoice.status === 'cancelled' ? 'The deposit invoice is cancelled' : 'The parent invoice is a final invoice, not a deposit' },
+          { status: 409 }
+        )
+      }
     }
     if (body.itinerary_id && parentInvoice?.itinerary_id && body.itinerary_id !== parentInvoice.itinerary_id) {
       return NextResponse.json({ error: 'The deposit invoice belongs to another trip' }, { status: 400 })

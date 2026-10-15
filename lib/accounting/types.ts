@@ -79,6 +79,13 @@ export interface PaymentPayload {
    * swap downstream; it has to be carried explicitly.
    */
   vendor_external_id?: string
+  /**
+   * Sent to the provider so a retry of the SAME payment cannot post it twice
+   * (audit H7): if createPayment succeeded but writing the sync log failed,
+   * the next retry would otherwise create a second payment. QuickBooks takes
+   * it as `requestid` (max 50 chars), Xero as the `Idempotency-Key` header.
+   */
+  idempotency_key?: string
   // Internal reference
   internalId: string
 }

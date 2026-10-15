@@ -3,6 +3,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { GmailAuthError } from '@/lib/gmail'
 import { getMailboxGmail } from '@/lib/gmail-mailbox'
 import { getCurrentUserId } from '@/lib/auth/current-org'
+import { paletteColor } from '@/lib/email/label-colors'
 
 // One Gmail client per request, for the session user's own mailbox. This route
 // used to keep a single module-level OAuth2 client and setCredentials() on it
@@ -70,16 +71,62 @@ export async function POST(request: NextRequest) {
         name,
         labelListVisibility: 'labelShow',
         messageListVisibility: 'show',
-        color: backgroundColor && textColor ? {
-          backgroundColor,
-          textColor,
-        } : undefined,
+        // Only Gmail's palette (lib/email/label-colors); anything else is dropped.
+        color: paletteColor(backgroundColor, textColor) ?? undefined,
       },
     })
 
     return NextResponse.json({ label: response.data })
   } catch (err: any) {
     console.error('Create label error:', err)
+    return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 500 })
+  }
+}
+
+const USER_LABEL_ID = /^Label_[0-9]+$/
+
+// PATCH - Rename a folder { labelId, name }. Gmail keeps the emails filed
+// under it; only the name changes.
+export async function PATCH(request: NextRequest) {
+  try {
+    const auth = await mailbox()
+    if (auth instanceof NextResponse) return auth
+    const { gmail } = auth
+    const { labelId, name, backgroundColor, textColor } = await request.json()
+
+    // A new name, a new colour, or both. A colour is changed, not removed:
+    // Gmail's palette has Grey for a quiet one.
+    const newName = typeof name === 'string' ? name.trim() : ''
+    const colorGiven = backgroundColor !== undefined
+    const color = colorGiven ? paletteColor(backgroundColor, textColor) : undefined
+    if (!labelId || (!newName && !colorGiven)) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+    if (colorGiven && !color) {
+      return NextResponse.json({ error: 'Pick one of the folder colours' }, { status: 400 })
+    }
+    if (!USER_LABEL_ID.test(String(labelId))) {
+      return NextResponse.json({ error: 'Only a folder you created can be renamed' }, { status: 400 })
+    }
+    if (newName.length > 225) {
+      return NextResponse.json({ error: 'Folder name is too long' }, { status: 400 })
+    }
+
+    const response = await gmail.users.labels.patch({
+      userId: 'me',
+      id: String(labelId),
+      requestBody: {
+        ...(newName ? { name: newName } : {}),
+        ...(color ? { color } : {}),
+      },
+    })
+    return NextResponse.json({ label: response.data })
+  } catch (err: any) {
+    console.error('Rename label error:', err)
+    // Gmail answers 409 when a folder of that name exists.
+    if (err?.code === 409 || err?.status === 409) {
+      return NextResponse.json({ error: 'A folder with that name already exists' }, { status: 409 })
+    }
     return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 500 })
   }
 }
@@ -96,6 +143,23 @@ export async function DELETE(request: NextRequest) {
 
     if (!labelId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+    // Only a folder someone made (Gmail's user labels are Label_<n>).
+    if (!USER_LABEL_ID.test(String(labelId))) {
+      return NextResponse.json({ error: 'Only a folder you created can be deleted' }, { status: 400 })
+    }
+
+    // Its emails go back to the Inbox first: one moved into the folder left
+    // the inbox, and with the folder gone it would be in "All Mail" only.
+    let pageToken: string | undefined
+    for (let page = 0; page < 20; page++) {
+      const { data } = await gmail.users.messages.list({ userId: 'me', labelIds: [String(labelId)], maxResults: 500, pageToken })
+      const ids = (data.messages || []).map(m => m.id).filter((id): id is string => !!id)
+      if (ids.length > 0) {
+        await gmail.users.messages.batchModify({ userId: 'me', requestBody: { ids, addLabelIds: ['INBOX'] } })
+      }
+      if (!data.nextPageToken) break
+      pageToken = data.nextPageToken
     }
 
     await gmail.users.labels.delete({

@@ -115,7 +115,7 @@ export class XeroProvider implements AccountingProvider {
     }
   }
 
-  private async apiRequest(method: string, endpoint: string, body?: unknown) {
+  private async apiRequest(method: string, endpoint: string, body?: unknown, idempotencyKey?: string) {
     if (!this.accessToken || !this.tenantId) {
       throw new AccountingAuthError('Xero not authenticated. Call setCredentials() first.')
     }
@@ -127,6 +127,9 @@ export class XeroProvider implements AccountingProvider {
         'xero-tenant-id': this.tenantId,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
+        // Xero answers a repeated key with the original response instead of
+        // creating the entity again (audit H7).
+        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey.slice(0, 128) } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
     })
@@ -267,7 +270,7 @@ export class XeroProvider implements AccountingProvider {
 
     const data = await this.apiRequest('POST', '/Payments', {
       Payments: [xeroPayment],
-    })
+    }, payment.idempotency_key)
 
     const created = data.Payments?.[0]
     return {

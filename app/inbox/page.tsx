@@ -7,9 +7,19 @@ import { emailOrderText } from '@/lib/intake/tup-mail'
 import { stashHandoffText, encodeTextParam } from '@/lib/text-handoff'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
+import { replyAllRecipients } from '@/lib/email/reply-all'
+import { printEmail } from '@/lib/email/print-email'
+import { parseListUnsubscribe } from '@/lib/email/list-unsubscribe'
+import { LABEL_COLORS } from '@/lib/email/label-colors'
 import { useAuth } from '@/app/contexts/AuthContext'
 import Link from 'next/link'
 import RichTextEditor from '@/components/email/RichTextEditor'
+import RecipientField from '@/components/email/RecipientField'
+import SchedulePicker, { type ScheduleChoice } from '@/components/email/SchedulePicker'
+import ScheduledPanel from '@/components/email/ScheduledPanel'
+import RulesPanel, { type RulePrefill } from '@/components/email/RulesPanel'
+import { useRole } from '@/hooks/useRole'
+import { parseRecipients } from '@/lib/email/compose-mime'
 // NEW IMPORTS FOR GMAIL ENHANCEMENTS
 import AttachmentList, { AttachmentIndicator } from '@/components/AttachmentList'
 import ClientLinkButton from '@/components/ClientLinkButton'
@@ -45,7 +55,14 @@ import {
   FolderPlus,
   Tag,
   MailOpen,
-  Move,
+  FolderInput,
+  Printer,
+  Filter,
+  Pencil,
+  Clock,
+  Reply,
+  ReplyAll,
+  Forward,
   CheckSquare,
   Square,
   Bell,
@@ -116,6 +133,9 @@ interface Email {
   snippet: string
   from: string
   to: string
+  cc?: string
+  bcc?: string
+  listUnsubscribe?: string
   subject: string
   date: string
   body: string
@@ -174,7 +194,29 @@ interface Client {
 }
 
 type FilterType = 'all' | 'unread' | 'starred'
-type FolderType = 'inbox' | 'sent' | 'drafts' | 'spam' | 'trash'
+type ComposeMode = 'new' | 'reply' | 'replyAll' | 'forward' | 'draft'
+interface DraftDoc {
+  id: string
+  threadId?: string
+  to: string
+  cc: string
+  bcc: string
+  subject: string
+  body: string
+  attachments?: Array<{ filename: string; mimeType: string; data: string; size: number }>
+}
+
+// A send waiting out its Undo window (the message is already a saved draft).
+interface PendingSend {
+  payload: Record<string, unknown>
+  requestKey: string
+  seenUpTo?: string | null
+  restore: DraftDoc
+}
+const UNDO_SECONDS = 10
+type SystemFolder = 'inbox' | 'sent' | 'drafts' | 'spam' | 'trash'
+// A folder the operator made is its Gmail label: `label:<label id>`.
+type FolderType = SystemFolder | `label:${string}`
 
 /** A folder is its Gmail label, listed from the mailbox itself — not the
  *  search index, which lags behind changes: a trashed email came back on the
@@ -185,9 +227,14 @@ type FolderType = 'inbox' | 'sent' | 'drafts' | 'spam' | 'trash'
 // Spam and Trash are listed too: a deleted email had nowhere to be seen or
 // restored from, and one Gmail filed as spam never showed in the system at
 // all (operator, 2026-10-11).
-const FOLDER_LABEL: Record<FolderType, string> = { inbox: 'INBOX', sent: 'SENT', drafts: 'DRAFT', spam: 'SPAM', trash: 'TRASH' }
+const FOLDER_LABEL: Record<SystemFolder, string> = { inbox: 'INBOX', sent: 'SENT', drafts: 'DRAFT', spam: 'SPAM', trash: 'TRASH' }
+/** The folder's own label, null for a system folder. */
+const customLabelOf = (folder: FolderType): string | null => (folder.startsWith('label:') ? folder.slice(6) : null)
+// A made folder is listed by its label like the others. It was a search,
+// `label:<name>`, inside the INBOX — so an email moved into it (which leaves
+// the inbox) never showed there, and names with spaces matched nothing.
 function folderListParams(folder: FolderType, query: string | undefined, params: URLSearchParams) {
-  params.append('labelIds', FOLDER_LABEL[folder])
+  params.append('labelIds', customLabelOf(folder) ?? FOLDER_LABEL[folder as SystemFolder])
   if (query && query.trim()) params.append('query', query.trim())
 }
 
@@ -204,21 +251,47 @@ export default function InboxPage() {
   const [mailboxShared, setMailboxShared] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showCompose, setShowCompose] = useState(false)
+  // What the compose window is for, and the draft it was opened from.
+  const [composeMode, setComposeMode] = useState<ComposeMode>('new')
+  const [composeDraft, setComposeDraft] = useState<DraftDoc | null>(null)
+  // Undo send: the message waiting out its window, and the seconds left.
+  const [pendingSend, setPendingSend] = useState<PendingSend | null>(null)
+  const [undoSecondsLeft, setUndoSecondsLeft] = useState(0)
+  const [sendNotice, setSendNotice] = useState<{ text: string; draft?: DraftDoc } | null>(null)
+  const pendingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pendingRef = useRef<PendingSend | null>(null)
+  const pageConfirmSendConflict = useSendConflictConfirm()
+  const [showScheduled, setShowScheduled] = useState(false)
+  // The folder being edited (name, colour); null with the modal = a new one.
+  const [editingLabel, setEditingLabel] = useState<GmailLabel | null>(null)
+  // Rules: the panel, and what a "Filter emails like this" filled in.
+  const [rulesPrefill, setRulesPrefill] = useState<RulePrefill | null | undefined>(undefined)
+  const { canAccess } = useRole()
+  // The open email's whole conversation (its Gmail thread), oldest first.
+  const [thread, setThread] = useState<Email[] | null>(null)
+  const [expandedInThread, setExpandedInThread] = useState<Set<string>>(new Set())
   const [refreshing, setRefreshing] = useState(false)
   const [filter, setFilter] = useState<FilterType>('all')
   const [folder, setFolder] = useState<FolderType>('inbox')
+  const currentLabelId = customLabelOf(folder)
   const [starredEmails, setStarredEmails] = useState<Set<string>>(new Set())
   const [isFolderCollapsed, setIsFolderCollapsed] = useState(false)
   
   const [customLabels, setCustomLabels] = useState<GmailLabel[]>([])
   const [showLabelModal, setShowLabelModal] = useState(false)
   const [showMoveMenu, setShowMoveMenu] = useState<string | null>(null)
+  // The sidebar folder an email is being dragged over.
+  const [dropTarget, setDropTarget] = useState<string | null>(null)
   const moveMenuRef = useRef<HTMLDivElement>(null)
   // No backdrop: the old fixed-inset-0 layer swallowed the press that closed
   // it — see lib/use-dismiss-on-outside.ts (AUT-W02). One menu, two triggers
   // (bulk bar and detail view), so the ref rides on whichever is open.
   useDismissOnOutside(showMoveMenu !== null, moveMenuRef, () => setShowMoveMenu(null))
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set())
+  // "Select all N": the action applies to every email in the folder/search,
+  // not just the loaded page (the server resolves them).
+  const [selectAllMatching, setSelectAllMatching] = useState(false)
+  const [totalEstimate, setTotalEstimate] = useState<number | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
 
   // NEW: State for polling notifications
@@ -430,6 +503,8 @@ export default function InboxPage() {
 
       // Store next page token for pagination
       setNextPageToken(data.nextPageToken || null)
+      setTotalEstimate(typeof data.resultSizeEstimate === 'number' ? data.resultSizeEstimate : null)
+      setSelectAllMatching(false)
       setHasMore(!!data.nextPageToken)
 
       // PARSE ATTACHMENTS from each email
@@ -636,6 +711,203 @@ ${bodyText}`
     fetchEmails(searchQuery)
   }
 
+  // The open email's conversation. Loaded when another thread is opened; a
+  // failure leaves just the email itself, as before.
+  useEffect(() => {
+    setThread(null)
+    setExpandedInThread(new Set())
+    const threadId = selectedEmail?.threadId
+    if (!threadId || folder === 'drafts') return
+    let cancelled = false
+    fetch(`/api/gmail/threads?id=${encodeURIComponent(threadId)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (!cancelled && data && Array.isArray(data.messages)) setThread(data.messages as Email[])
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [selectedEmail?.threadId, folder])
+
+  // The rest of the conversation, around the open email.
+  const threadIndex = thread && selectedEmail ? thread.findIndex(m => m.id === selectedEmail.id) : -1
+  const earlierInThread = thread && threadIndex > 0 ? thread.slice(0, threadIndex) : []
+  const laterInThread = thread && threadIndex >= 0 ? thread.slice(threadIndex + 1) : []
+
+  // One other message of the conversation: a line until opened, as in Gmail.
+  const renderThreadMessage = (message: Email) => {
+    const open = expandedInThread.has(message.id)
+    const toggle = () => setExpandedInThread(prev => {
+      const next = new Set(prev)
+      if (next.has(message.id)) next.delete(message.id)
+      else next.add(message.id)
+      return next
+    })
+    return (
+      <div key={message.id} className="border border-gray-200 rounded-lg">
+        <button onClick={toggle} className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-gray-50 rounded-lg">
+          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-medium flex-shrink-0 ${getAvatarColor(message.from)}`}>
+            {getInitials(extractName(message.from))}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-gray-900 truncate">{extractName(message.from)}</p>
+            {!open && <p className="text-xs text-gray-500 truncate">{decodeHtmlEntities(message.snippet || '')}</p>}
+          </div>
+          <span className="text-[11px] text-gray-400 flex-shrink-0">{new Date(message.date).toLocaleString()}</span>
+        </button>
+        {open && (
+          <div className="px-3 pb-3">
+            <p className="text-[11px] text-gray-500 mb-2 break-words">
+              To: {message.to}{message.cc ? ` · Cc: ${message.cc}` : ''}
+            </p>
+            <div
+              className="email-body-content"
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(formatEmailBody(message.body)) }}
+            />
+            {message.attachments && message.attachments.length > 0 && (
+              <AttachmentList attachments={message.attachments} messageId={message.id} userId={user!.id} />
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ---- Undo send ----
+  const stopPendingTimer = () => {
+    if (pendingTimerRef.current) clearInterval(pendingTimerRef.current)
+    pendingTimerRef.current = null
+  }
+
+  const fireSend = async (job: PendingSend) => {
+    if (pendingRef.current === job) {
+      stopPendingTimer()
+      pendingRef.current = null
+      setPendingSend(null)
+    }
+    setSendNotice({ text: 'Sending…' })
+    const sent = await sendGuardedEmail(job.payload, {
+      requestKey: job.requestKey,
+      seenUpTo: job.seenUpTo,
+      confirmConflict: pageConfirmSendConflict,
+    })
+    if (sent.ok) {
+      setSendNotice({ text: 'Message sent' })
+      setTimeout(() => setSendNotice(n => (n?.text === 'Message sent' ? null : n)), 4000)
+      fetchEmails()
+      return
+    }
+    // Not sent (refused, cancelled at the duplicate question, or an error):
+    // it is still the saved draft.
+    setSendNotice({
+      text: sent.cancelled ? 'Not sent — kept in Drafts' : `Not sent: ${sent.error || 'error'} — kept in Drafts`,
+      draft: job.restore,
+    })
+  }
+
+  const queueSend = (job: PendingSend) => {
+    // A message still waiting goes now: one Undo bar at a time, and the
+    // earlier message is never left unsent.
+    if (pendingRef.current) fireSend(pendingRef.current)
+    stopPendingTimer()
+    setSendNotice(null)
+    pendingRef.current = job
+    setPendingSend(job)
+    setUndoSecondsLeft(UNDO_SECONDS)
+    let left = UNDO_SECONDS
+    pendingTimerRef.current = setInterval(() => {
+      left -= 1
+      setUndoSecondsLeft(left)
+      if (left <= 0) fireSend(job)
+    }, 1000)
+  }
+
+  // Undo: back to the compose, as it was (it is a saved draft).
+  const undoSend = () => {
+    const job = pendingRef.current
+    if (!job) return
+    stopPendingTimer()
+    pendingRef.current = null
+    setPendingSend(null)
+    reopenDraft(job.restore)
+  }
+
+  const openDraftById = async (draftId: string) => {
+    try {
+      const res = await fetch(`/api/gmail/drafts?id=${encodeURIComponent(draftId)}`)
+      const data = await res.json()
+      if (!res.ok || !data.draft) throw new Error(data.error || 'Draft not found')
+      setShowScheduled(false)
+      reopenDraft(data.draft as DraftDoc)
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  const reopenDraft = (draft: DraftDoc) => {
+    setSendNotice(null)
+    setComposeDraft(draft)
+    setComposeMode('draft')
+    setShowCompose(true)
+  }
+
+  // Leaving the page during the Undo window: warn — the message would stay
+  // in Drafts unsent.
+  useEffect(() => {
+    if (!pendingSend) return
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [pendingSend])
+
+  useEffect(() => () => stopPendingTimer(), [])
+
+  const openCompose = (mode: ComposeMode) => {
+    setComposeDraft(null)
+    setComposeMode(mode)
+    setShowExpandedEmail(false)
+    setShowCompose(true)
+  }
+
+  // A draft in the Drafts folder opens in compose, to finish and send.
+  const openDraft = async (email: Email) => {
+    try {
+      const res = await fetch(`/api/gmail/drafts?messageId=${encodeURIComponent(email.id)}`)
+      const data = await res.json()
+      if (!res.ok || !data.draft) throw new Error(data.error || 'Draft not found')
+      setComposeDraft(data.draft as DraftDoc)
+      setComposeMode('draft')
+      setShowCompose(true)
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  // Reply all only when there is someone besides the sender to answer.
+  const canReplyAll = (email: Email) =>
+    replyAllRecipients(email, connectedEmail ? [connectedEmail] : []).cc.length > 0
+
+  const renderReplyButtons = (email: Email) => {
+    const button = 'inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors'
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={() => openCompose('reply')} className={`${button} text-white bg-primary-600 hover:bg-primary-700 shadow-sm`}>
+          <Reply className="w-4 h-4" />
+          Reply
+        </button>
+        {canReplyAll(email) && (
+          <button onClick={() => openCompose('replyAll')} className={`${button} text-gray-700 bg-white border border-gray-300 hover:bg-gray-50`}>
+            <ReplyAll className="w-4 h-4" />
+            Reply all
+          </button>
+        )}
+        <button onClick={() => openCompose('forward')} className={`${button} text-gray-700 bg-white border border-gray-300 hover:bg-gray-50`}>
+          <Forward className="w-4 h-4" />
+          Forward
+        </button>
+      </div>
+    )
+  }
+
   const handleRefresh = () => {
     setShowNewEmailBanner(false)
     setNewEmailCount(0)
@@ -656,6 +928,13 @@ ${bodyText}`
     })
   }
 
+  // The search behind "Select all N": the typed search plus the Unread /
+  // Starred filter, as Gmail search terms.
+  const matchQuery = () => [
+    searchQuery.trim(),
+    filter === 'unread' ? 'is:unread' : filter === 'starred' ? 'is:starred' : '',
+  ].filter(Boolean).join(' ')
+
   const handleEmailAction = async (
     action: string, 
     messageIds?: string[], 
@@ -665,20 +944,47 @@ ${bodyText}`
     
     const ids = messageIds || (selectedEmail ? [selectedEmail.id] : Array.from(selectedEmails))
     if (ids.length === 0) return
+
+    // "Select all N": the whole folder/search, resolved on the server. Asked
+    // first — it reaches emails nobody has on screen.
+    const allMatching = selectAllMatching && !selectedEmail
+    if (allMatching) {
+      if (action === 'permanentDelete') {
+        setError('Delete forever works on chosen emails only — select them on the page.')
+        return
+      }
+      const verb: Record<string, string> = {
+        delete: 'Move to Trash', archive: 'Archive', move: 'Move', markRead: 'Mark as read', markUnread: 'Mark as unread',
+        spam: 'Report as spam', notSpam: 'Mark as not spam', restore: 'Restore', star: 'Star', unstar: 'Unstar',
+      }
+      const about = totalEstimate ? `about ${totalEstimate.toLocaleString()}` : 'all'
+      if (!window.confirm(`${verb[action] ?? action}: ${about} emails in this ${searchQuery ? 'search' : 'folder'}?`)) return
+    }
   
     setActionLoading(true)
     try {
       const response = await fetch('/api/gmail/actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, messageIds: ids, action, labelId }),
+        // A move from a made folder takes the email out of it (not the inbox).
+        body: JSON.stringify({
+          userId: user.id, action, labelId,
+          ...(allMatching
+            ? { match: { labelIds: [currentLabelId ?? FOLDER_LABEL[folder as SystemFolder]], query: matchQuery() } }
+            : { messageIds: ids }),
+          ...(action === 'move' && currentLabelId ? { fromLabelId: currentLabelId } : {}),
+        }),
       })
   
       const data = await response.json()
       if (!response.ok || data.error) throw new Error(data.error || `The action failed (${response.status})`)
+      if (allMatching) {
+        setSelectAllMatching(false)
+        setSendNotice({ text: `Done: ${Number(data.count || 0).toLocaleString()} emails${data.capped ? ' (the first 5,000 — run it again for the rest)' : ''}` })
+      }
 
       // Out of this folder now: off the list at once, not on the next fetch.
-      const leavesFolder = ['delete', 'archive', 'move', 'restore', 'notSpam', 'permanentDelete'].includes(action)
+      const leavesFolder = ['delete', 'archive', 'move', 'restore', 'notSpam', 'permanentDelete', 'spam'].includes(action)
       if (leavesFolder) {
         setEmails(prev => prev.filter(e => !ids.includes(e.id)))
       }
@@ -718,21 +1024,150 @@ ${bodyText}`
     }
     return handleEmailAction('delete')
   }
+  // In a made folder the archive button puts the email back in the inbox.
   const handleArchive = () =>
-    handleEmailAction(folder === 'trash' ? 'restore' : folder === 'spam' ? 'notSpam' : 'archive')
-  const archiveLabel = folder === 'trash' ? 'Restore' : folder === 'spam' ? 'Not spam' : 'Archive'
-  const ArchiveIcon = folder === 'trash' ? RotateCcw : folder === 'spam' ? ShieldCheck : Archive
+    currentLabelId
+      ? handleMoveToLabel('INBOX')
+      : handleEmailAction(folder === 'trash' ? 'restore' : folder === 'spam' ? 'notSpam' : 'archive')
+  const archiveLabel = currentLabelId ? 'Move to Inbox' : folder === 'trash' ? 'Restore' : folder === 'spam' ? 'Not spam' : 'Archive'
+  const ArchiveIcon = currentLabelId ? Inbox : folder === 'trash' ? RotateCcw : folder === 'spam' ? ShieldCheck : Archive
   const deleteLabel = folder === 'trash' ? 'Delete forever' : 'Delete'
+  // Print the open email — the whole conversation when it has one.
+  const handlePrint = () => {
+    if (!selectedEmail) return
+    const messages = thread && thread.length > 0 ? thread : [selectedEmail]
+    const ok = printEmail(selectedEmail.subject, messages.map(m => ({
+      from: m.from, to: m.to, cc: m.cc, date: new Date(m.date).toLocaleString(),
+      bodyHtml: sanitizeHtml(formatEmailBody(m.body)),
+    })))
+    if (!ok) setError('The print window was blocked — allow pop-ups for this site and try again.')
+  }
+  // Unsubscribe from a newsletter: its link opens in this browser; a mailto
+  // is sent from the mailbox after asking.
+  const handleUnsubscribe = async (email: Email) => {
+    const how = parseListUnsubscribe(email.listUnsubscribe)
+    if (!how) return
+    if (how.url) {
+      window.open(how.url, '_blank', 'noopener,noreferrer')
+      return
+    }
+    if (!how.mailto) return
+    if (!window.confirm(`Unsubscribe by sending an email to ${how.mailto.to}?`)) return
+    const sent = await sendGuardedEmail(
+      { userId: user?.id, to: how.mailto.to, subject: how.mailto.subject, body: escapeHtml(how.mailto.body) },
+      { requestKey: newRequestKey(), confirmConflict: pageConfirmSendConflict },
+    )
+    setSendNotice({ text: sent.ok ? `Unsubscribe request sent to ${how.mailto.to}` : `Could not unsubscribe: ${sent.ok ? '' : sent.error}` })
+  }
   const handleMarkRead = () => handleEmailAction('markRead')
+  // Report spam: from the inbox and made folders (Spam has "Not spam").
+  const canReportSpam = folder === 'inbox' || currentLabelId !== null
+  const handleReportSpam = (ids?: string[]) => handleEmailAction('spam', ids)
   const handleMarkUnread = () => handleEmailAction('markUnread')
   const handleStarEmail = () => handleEmailAction('star')
   const handleUnstarEmail = () => handleEmailAction('unstar')
-  const handleMoveToLabel = (labelId: string) => {
-    handleEmailAction('move', undefined, labelId)
+  // `ids`: the ticked emails from the list toolbar. Without it an open email
+  // took precedence, so a bulk move moved only the email being read.
+  const handleMoveToLabel = (labelId: string, ids?: string[]) => {
+    handleEmailAction('move', ids, labelId)
+  }
+
+  // Moving is from the inbox or a made folder; Sent, Drafts, Spam and Trash
+  // have their own actions.
+  const canMove = folder === 'inbox' || currentLabelId !== null
+  const moveTargets: Array<{ id: string; name: string }> = [
+    ...(currentLabelId ? [{ id: 'INBOX', name: 'Inbox' }] : []),
+    ...customLabels.filter(l => l.id !== currentLabelId).map(l => ({ id: l.id, name: l.name })),
+  ]
+  const renderMoveMenu = (where: 'bulk' | 'detail', ids?: string[]) => (
+    <div className="relative" ref={showMoveMenu === where ? moveMenuRef : undefined}>
+      <button
+        onClick={() => setShowMoveMenu(showMoveMenu === where ? null : where)}
+        disabled={actionLoading}
+        className="flex items-center gap-1 px-2 py-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50 text-xs text-gray-600"
+        title="Move to folder"
+      >
+        <FolderInput className="w-4 h-4 text-gray-500" />
+        <span>Move to</span>
+      </button>
+      {showMoveMenu === where && (
+        <div className="absolute left-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+          {moveTargets.length === 0 && (
+            <p className="px-3 py-1.5 text-xs text-gray-400">No folders yet</p>
+          )}
+          {moveTargets.map((target) => (
+            <button
+              key={target.id}
+              onClick={() => handleMoveToLabel(target.id, ids)}
+              className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
+            >
+              {target.id === 'INBOX' ? <Inbox className="w-3.5 h-3.5 text-gray-400" /> : <Tag className="w-3.5 h-3.5 text-gray-400" />}
+              <span className="truncate">{target.name}</span>
+            </button>
+          ))}
+          <div className="my-1 border-t border-gray-100" />
+          <button
+            onClick={() => { setShowMoveMenu(null); setEditingLabel(null); setShowLabelModal(true) }}
+            className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2 text-gray-600"
+          >
+            <FolderPlus className="w-3.5 h-3.5 text-gray-400" />
+            New folder…
+          </button>
+        </div>
+      )}
+    </div>
+  )
+
+  // Rename / recolour: the folder window, filled in.
+  const renameFolder = (label: GmailLabel) => {
+    setEditingLabel(label)
+    setShowLabelModal(true)
+  }
+
+  // Its emails go back to the Inbox (the server does it before deleting).
+  const deleteFolder = async (label: GmailLabel) => {
+    if (!window.confirm(`Delete the folder "${label.name}"? Its emails go back to the Inbox.`)) return
+    try {
+      const res = await fetch('/api/gmail/labels', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ labelId: label.id }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.error) throw new Error(data.error || 'The folder could not be deleted')
+      if (currentLabelId === label.id) setFolder('inbox')
+      await fetchLabels()
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
+  // Drag emails from the list onto a folder (or the inbox) in the sidebar.
+  const DRAG_TYPE = 'application/x-autoura-emails'
+  const dragHandlers = (targetId: string) => {
+    const isHere = targetId === (currentLabelId ?? (folder === 'inbox' ? 'INBOX' : null))
+    return {
+      onDragOver: (e: React.DragEvent) => {
+        if (isHere || !e.dataTransfer.types.includes(DRAG_TYPE)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        if (dropTarget !== targetId) setDropTarget(targetId)
+      },
+      onDragLeave: () => setDropTarget(prev => (prev === targetId ? null : prev)),
+      onDrop: (e: React.DragEvent) => {
+        setDropTarget(null)
+        if (isHere) return
+        e.preventDefault()
+        let ids: string[] = []
+        try { ids = JSON.parse(e.dataTransfer.getData(DRAG_TYPE) || '[]') } catch { ids = [] }
+        if (ids.length > 0) handleMoveToLabel(targetId, ids)
+      },
+    }
   }
   
   const toggleEmailSelection = (emailId: string, e: React.MouseEvent) => {
     e.stopPropagation()
+    setSelectAllMatching(false)
     setSelectedEmails(prev => {
       const next = new Set(prev)
       if (next.has(emailId)) {
@@ -745,6 +1180,7 @@ ${bodyText}`
   }
   
   const selectAllEmails = () => {
+    setSelectAllMatching(false)
     if (selectedEmails.size === filteredEmails.length) {
       setSelectedEmails(new Set())
     } else {
@@ -944,7 +1380,7 @@ ${bodyText}`
                 Refresh
               </button>
               <button
-                onClick={() => setShowCompose(true)}
+                onClick={() => openCompose('new')}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors shadow-sm"
               >
                 <Send className="w-4 h-4" />
@@ -1009,8 +1445,12 @@ ${bodyText}`
                 <button
                   key={item.id}
                   onClick={() => setFolder(item.id)}
+                  // From a made folder, an email dragged onto Inbox goes back.
+                  {...(item.id === 'inbox' ? dragHandlers('INBOX') : {})}
                   className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${
-                    folder === item.id
+                    item.id === 'inbox' && dropTarget === 'INBOX'
+                      ? 'bg-primary-100 ring-1 ring-primary-300 text-primary-800'
+                      : folder === item.id
                       ? 'bg-primary-50 text-primary-700 font-medium'
                       : 'text-gray-600 hover:bg-gray-50'
                   } ${isFolderCollapsed ? 'justify-center' : ''}`}
@@ -1033,6 +1473,24 @@ ${bodyText}`
               ))}
             </nav>
 
+            {/* Emails waiting to be sent later — kept by the app, not a Gmail folder. */}
+            <button
+              onClick={() => setShowScheduled(true)}
+              className={`mt-1 w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-gray-600 hover:bg-gray-50 transition-colors ${isFolderCollapsed ? 'justify-center' : ''}`}
+              title={isFolderCollapsed ? 'Scheduled' : ''}
+            >
+              <Clock className="w-4 h-4 flex-shrink-0 text-gray-400" />
+              {!isFolderCollapsed && <span className="flex-1 text-left">Scheduled</span>}
+            </button>
+            <button
+              onClick={() => setRulesPrefill(null)}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-gray-600 hover:bg-gray-50 transition-colors ${isFolderCollapsed ? 'justify-center' : ''}`}
+              title={isFolderCollapsed ? 'Rules' : ''}
+            >
+              <Filter className="w-4 h-4 flex-shrink-0 text-gray-400" />
+              {!isFolderCollapsed && <span className="flex-1 text-left">Rules</span>}
+            </button>
+
             {!isFolderCollapsed && customLabels.length > 0 && (
               <div className="mt-4 pt-3 border-t border-gray-200">
                 <p className="px-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
@@ -1040,14 +1498,34 @@ ${bodyText}`
                 </p>
                 <nav className="space-y-0.5">
                   {customLabels.map((label) => (
-                    <button
-                      key={label.id}
-                      onClick={() => fetchEmails(`label:${label.name}`)}
-                      className="w-full flex items-center gap-2 px-2 py-1 rounded-md text-xs text-gray-600 hover:bg-gray-50 transition-colors"
-                    >
-                      <Tag className="w-3.5 h-3.5 text-gray-400" />
-                      <span className="flex-1 text-left truncate">{label.name}</span>
-                    </button>
+                    <div key={label.id} className="group/folder relative">
+                      <button
+                        onClick={() => setFolder(`label:${label.id}`)}
+                        {...dragHandlers(label.id)}
+                        className={`w-full flex items-center gap-2 px-2 py-1 pr-12 rounded-md text-xs transition-colors ${
+                          dropTarget === label.id
+                            ? 'bg-primary-100 ring-1 ring-primary-300 text-primary-800'
+                            : currentLabelId === label.id
+                              ? 'bg-primary-50 text-primary-700 font-medium'
+                              : 'text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        <Tag
+                          className={`w-3.5 h-3.5 ${label.color ? '' : currentLabelId === label.id ? 'text-primary-600' : 'text-gray-400'}`}
+                          style={label.color ? { color: label.color.backgroundColor } : undefined}
+                        />
+                        <span className="flex-1 text-left truncate">{label.name}</span>
+                      </button>
+                      {/* Rename / delete, on hover (and always for the open folder). */}
+                      <div className={`absolute right-1 top-1/2 -translate-y-1/2 items-center gap-0.5 ${currentLabelId === label.id ? 'flex' : 'hidden group-hover/folder:flex'}`}>
+                        <button onClick={() => renameFolder(label)} className="p-0.5 rounded hover:bg-gray-200" title="Rename or recolour folder">
+                          <Pencil className="w-3 h-3 text-gray-500" />
+                        </button>
+                        <button onClick={() => deleteFolder(label)} className="p-0.5 rounded hover:bg-gray-200" title="Delete folder">
+                          <Trash2 className="w-3 h-3 text-gray-500" />
+                        </button>
+                      </div>
+                    </div>
                   ))}
                 </nav>
               </div>
@@ -1055,7 +1533,7 @@ ${bodyText}`
 
             {!isFolderCollapsed && (
               <button
-                onClick={() => setShowLabelModal(true)}
+                onClick={() => { setEditingLabel(null); setShowLabelModal(true) }}
                 className="mt-2 w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
               >
                 <FolderPlus className="w-4 h-4" />
@@ -1111,7 +1589,7 @@ ${bodyText}`
               {selectedEmails.size > 0 && (
                 <>
                   <span className="text-xs text-gray-500">
-                    {selectedEmails.size} selected
+                    {selectAllMatching ? `All${totalEstimate ? ` ~${totalEstimate.toLocaleString()}` : ''}` : selectedEmails.size} selected
                   </span>
                   <div className="flex items-center gap-1 ml-2">
                     <button
@@ -1138,31 +1616,18 @@ ${bodyText}`
                     >
                       <MailOpen className="w-4 h-4 text-gray-500" />
                     </button>
-                    
-                    <div className="relative" ref={showMoveMenu === 'bulk' ? moveMenuRef : undefined}>
+                    {canReportSpam && (
                       <button
-                        onClick={() => setShowMoveMenu(showMoveMenu ? null : 'bulk')}
-                        disabled={actionLoading || customLabels.length === 0}
+                        onClick={() => handleReportSpam(Array.from(selectedEmails))}
+                        disabled={actionLoading}
                         className="p-1.5 hover:bg-gray-100 rounded transition-colors disabled:opacity-50"
-                        title="Move to folder"
+                        title="Report spam"
                       >
-                        <Move className="w-4 h-4 text-gray-500" />
+                        <ShieldAlert className="w-4 h-4 text-gray-500" />
                       </button>
-                      {showMoveMenu === 'bulk' && (
-                        <div className="absolute left-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-                          {customLabels.map((label) => (
-                            <button
-                              key={label.id}
-                              onClick={() => handleMoveToLabel(label.id)}
-                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
-                            >
-                              <Tag className="w-3.5 h-3.5 text-gray-400" />
-                              {label.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    )}
+                    
+                    {canMove && renderMoveMenu('bulk', Array.from(selectedEmails))}
                   </div>
                 </>
               )}
@@ -1172,6 +1637,25 @@ ${bodyText}`
                 <span className="text-xs text-gray-400 ml-auto">
                   {filteredEmails.length} emails
                 </span>
+              )}
+            </div>
+          )}
+
+          {/* "Select all N": the page is all selected and there is more. */}
+          {selectedEmails.size > 0 && selectedEmails.size === filteredEmails.length && !!nextPageToken && (
+            <div className="px-3 py-1.5 text-xs text-center bg-primary-50 border-b border-primary-100 text-gray-700">
+              {selectAllMatching ? (
+                <>
+                  All {totalEstimate ? `about ${totalEstimate.toLocaleString()} ` : ''}emails in this {searchQuery ? 'search' : 'folder'} are selected.{' '}
+                  <button onClick={() => { setSelectAllMatching(false); setSelectedEmails(new Set()) }} className="font-medium text-primary-700 hover:underline">Clear selection</button>
+                </>
+              ) : (
+                <>
+                  All {selectedEmails.size} on this page are selected.{' '}
+                  <button onClick={() => { setSelectAllMatching(true); setSelectedEmail(null) }} className="font-medium text-primary-700 hover:underline">
+                    Select all {totalEstimate ? `about ${totalEstimate.toLocaleString()} ` : ''}emails in this {searchQuery ? 'search' : 'folder'}
+                  </button>
+                </>
               )}
             </div>
           )}
@@ -1216,7 +1700,17 @@ ${bodyText}`
                     return (
                       <div
                         key={email.id}
-                        onClick={() => setSelectedEmail(email)}
+                        // A draft opens in compose, to finish and send.
+                        onClick={() => (folder === 'drafts' ? openDraft(email) : setSelectedEmail(email))}
+                        // Drag onto a folder in the sidebar: the ticked emails
+                        // when this one is ticked, else just this one.
+                        draggable={canMove}
+                        onDragStart={(e) => {
+                          const ids = isSelected ? Array.from(selectedEmails) : [email.id]
+                          e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(ids))
+                          e.dataTransfer.effectAllowed = 'move'
+                        }}
+                        onDragEnd={() => setDropTarget(null)}
                         className={`group px-3 py-2.5 border-b border-gray-100 cursor-pointer transition-colors ${
                           selectedEmail?.id === email.id
                             ? 'bg-primary-50'
@@ -1277,6 +1771,21 @@ ${bodyText}`
                               {email.isUnread && !isSentByMe && (
                                 <div className="w-1.5 h-1.5 rounded-full bg-primary-500 flex-shrink-0" />
                               )}
+                              {/* Its folders, as Gmail shows labels — not the one being viewed. */}
+                              {customLabels
+                                .filter(l => l.id !== currentLabelId && email.labelIds?.includes(l.id))
+                                .slice(0, 2)
+                                .map(l => (
+                                  <span
+                                    key={l.id}
+                                    className="px-1.5 py-px rounded text-[10px] leading-4 flex-shrink-0 max-w-[90px] truncate"
+                                    style={l.color
+                                      ? { backgroundColor: l.color.backgroundColor, color: l.color.textColor }
+                                      : { backgroundColor: '#f3f4f6', color: '#4b5563' }}
+                                  >
+                                    {l.name}
+                                  </span>
+                                ))}
                               <p className={`text-xs truncate ${email.isUnread && !isSentByMe ? 'font-medium text-gray-900' : 'text-gray-600'}`}>
                                 {decodeHtmlEntities(email.subject || '(No subject)')}
                               </p>
@@ -1360,32 +1869,31 @@ ${bodyText}`
                     )}
                   </button>
                   
-                  {customLabels.length > 0 && (
-                    <div className="relative" ref={showMoveMenu === 'detail' ? moveMenuRef : undefined}>
-                      <button 
-                        onClick={() => setShowMoveMenu(showMoveMenu === 'detail' ? null : 'detail')}
-                        disabled={actionLoading}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50" 
-                        title="Move to folder"
-                      >
-                        <Move className="w-4 h-4 text-gray-500" />
-                      </button>
-                      {showMoveMenu === 'detail' && (
-                        <div className="absolute left-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
-                          {customLabels.map((label) => (
-                            <button
-                              key={label.id}
-                              onClick={() => handleMoveToLabel(label.id)}
-                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 flex items-center gap-2"
-                            >
-                              <Tag className="w-3.5 h-3.5 text-gray-400" />
-                              {label.name}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                  <button
+                    onClick={handlePrint}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Print"
+                  >
+                    <Printer className="w-4 h-4 text-gray-500" />
+                  </button>
+                  <button
+                    onClick={() => setRulesPrefill({ from: extractEmailAddress(selectedEmail.from) })}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    title="Filter emails like this"
+                  >
+                    <Filter className="w-4 h-4 text-gray-500" />
+                  </button>
+                  {canReportSpam && (
+                    <button
+                      onClick={() => handleReportSpam()}
+                      disabled={actionLoading}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                      title="Report spam"
+                    >
+                      <ShieldAlert className="w-4 h-4 text-gray-500" />
+                    </button>
                   )}
+                  {canMove && renderMoveMenu('detail')}
                   
                   {/* Parse Email Button */}
                   <button
@@ -1420,6 +1928,15 @@ ${bodyText}`
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
                 {decodeHtmlEntities(selectedEmail.subject || '(No subject)')}
               </h2>
+
+              {earlierInThread.length > 0 && (
+                <div className="mb-4 space-y-2">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                    Earlier in this conversation ({earlierInThread.length})
+                  </p>
+                  {earlierInThread.map(renderThreadMessage)}
+                </div>
+              )}
               
               <div className="flex items-center gap-3 mb-6 pb-6 border-b border-gray-200">
                 {folder === 'sent' || isFromMe(selectedEmail) ? (
@@ -1451,6 +1968,15 @@ ${bodyText}`
                           fromEmail={extractEmailAddress(selectedEmail.from)}
                           fromName={extractName(selectedEmail.from)}
                         />
+                        {parseListUnsubscribe(selectedEmail.listUnsubscribe) && (
+                          <button
+                            onClick={() => handleUnsubscribe(selectedEmail)}
+                            className="text-xs text-gray-500 underline hover:text-gray-800"
+                            title="Stop receiving these emails"
+                          >
+                            Unsubscribe
+                          </button>
+                        )}
                       </div>
                       <p className="text-xs text-gray-500">{extractEmailAddress(selectedEmail.from)}</p>
                     </div>
@@ -1463,6 +1989,11 @@ ${bodyText}`
                   )}
                 </div>
               </div>
+              {!!selectedEmail.cc && (
+                <p className="-mt-4 mb-6 text-xs text-gray-500 break-words">
+                  <span className="font-medium text-gray-400">Cc:</span> {selectedEmail.cc}
+                </p>
+              )}
 
               <div 
               className="email-body-content"
@@ -1478,14 +2009,15 @@ ${bodyText}`
                 />
               )}
 
+              {laterInThread.length > 0 && (
+                <div className="mt-6 space-y-2">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Later in this conversation</p>
+                  {laterInThread.map(renderThreadMessage)}
+                </div>
+              )}
+
               <div className="mt-8 pt-6 border-t border-gray-200">
-                <button
-                  onClick={() => setShowCompose(true)}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors shadow-sm"
-                >
-                  <Send className="w-4 h-4" />
-                  {folder === 'sent' || isFromMe(selectedEmail) ? 'Forward' : 'Reply'}
-                </button>
+                {renderReplyButtons(selectedEmail)}
               </div>
             </div>
           </div>
@@ -1614,16 +2146,7 @@ ${bodyText}`
           </button>
         </div>
         
-        <button
-          onClick={() => {
-            setShowExpandedEmail(false)
-            setShowCompose(true)
-          }}
-          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors shadow-sm"
-        >
-          <Send className="w-4 h-4" />
-          {folder === 'sent' || isFromMe(selectedEmail) ? 'Forward' : 'Reply'}
-        </button>
+        {renderReplyButtons(selectedEmail)}
       </div>
     </div>
   </div>
@@ -1632,9 +2155,21 @@ ${bodyText}`
 {/* Compose Modal */}
 {showCompose && (
         <ComposeModal
-          onClose={() => setShowCompose(false)}
+          onClose={() => {
+            setShowCompose(false)
+            // A draft saved or discarded shows in (or leaves) the Drafts list.
+            if (folder === 'drafts') fetchEmails()
+          }}
           userId={user?.id || ''}
-          replyTo={selectedEmail && folder !== 'sent' && !isFromMe(selectedEmail) ? selectedEmail : null}
+          mode={composeMode}
+          source={composeMode === 'new' || composeMode === 'draft' ? null : selectedEmail}
+          draft={composeMode === 'draft' ? composeDraft : null}
+          ownAddresses={connectedEmail ? [connectedEmail] : []}
+          onQueueSend={queueSend}
+          onScheduled={(label) => {
+            setSendNotice({ text: `Scheduled for ${label}` })
+            setTimeout(() => setSendNotice(n => (n?.text.startsWith('Scheduled for') ? null : n)), 6000)
+          }}
           onSent={() => {
             setShowCompose(false)
             fetchEmails()
@@ -1643,13 +2178,53 @@ ${bodyText}`
         />
       )}
 
+      {rulesPrefill !== undefined && (
+        <RulesPanel
+          folders={customLabels.map(l => ({ id: l.id, name: l.name }))}
+          prefill={rulesPrefill}
+          canEdit={canAccess(['admin', 'manager'])}
+          onClose={() => setRulesPrefill(undefined)}
+          onApplied={() => fetchEmails()}
+        />
+      )}
+
+      {showScheduled && (
+        <ScheduledPanel onClose={() => setShowScheduled(false)} onOpenDraft={openDraftById} />
+      )}
+
+      {/* Undo send / send result */}
+      {(pendingSend || sendNotice) && (
+        <div className="fixed bottom-6 left-6 z-50 flex items-center gap-4 px-4 py-3 rounded-lg bg-gray-900 text-white text-sm shadow-xl" role="status">
+          {pendingSend ? (
+            <>
+              <span>Sending in {undoSecondsLeft}s…</span>
+              <button onClick={undoSend} className="font-semibold text-primary-200 hover:text-white">Undo</button>
+              <button onClick={() => fireSend(pendingSend)} className="text-gray-300 hover:text-white">Send now</button>
+            </>
+          ) : sendNotice && (
+            <>
+              <span>{sendNotice.text}</span>
+              {sendNotice.draft && (
+                <button onClick={() => reopenDraft(sendNotice.draft!)} className="font-semibold text-primary-200 hover:text-white">Open draft</button>
+              )}
+              <button onClick={() => setSendNotice(null)} className="text-gray-400 hover:text-white" aria-label="Dismiss">
+                <X className="w-4 h-4" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Create Label Modal */}
       {showLabelModal && (
         <CreateLabelModal
-          onClose={() => setShowLabelModal(false)}
+          key={editingLabel?.id ?? 'new'}
+          label={editingLabel}
+          onClose={() => { setShowLabelModal(false); setEditingLabel(null) }}
           userId={user?.id || ''}
           onCreated={() => {
             setShowLabelModal(false)
+            setEditingLabel(null)
             fetchLabels()
           }}
         />
@@ -1673,33 +2248,87 @@ function formatFileSize(bytes: number) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
+const reSubject = (subject: string) => (/^re:/i.test(subject || '') ? subject : `Re: ${subject || ''}`)
+const escapeHtml = (text: string) =>
+  String(text ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
 // UPDATED: Compose Modal Component with CLIENT + PARTNER template integration
 // Replace your existing ComposeModal in app/inbox/page.tsx with this version
 
 function ComposeModal({ 
   onClose, 
   userId, 
-  replyTo,
+  mode = 'new',
+  source = null,
+  draft = null,
+  ownAddresses = [],
   onSent,
+  onQueueSend,
+  onScheduled,
   clients = []
 }: { 
   onClose: () => void
   userId: string
-  replyTo?: Email | null
+  /** new, reply, reply all, forward — or a saved draft reopened. */
+  mode?: ComposeMode
+  /** The email being answered or forwarded. */
+  source?: Email | null
+  draft?: DraftDoc | null
+  /** The mailbox's own address(es): never on a Reply all. */
+  ownAddresses?: string[]
   onSent: () => void
+  /** Send after the Undo window; the compose closes at once. */
+  onQueueSend?: (job: PendingSend) => void
+  /** Scheduled to send later; `label` says when. */
+  onScheduled?: (label: string) => void
   clients?: Client[]
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
-  
-  const extractEmailAddr = (from: string) => {
-    const match = from.match(/<(.+)>/)
-    return match ? match[1] : from
-  }
 
-  const [to, setTo] = useState(replyTo ? extractEmailAddr(replyTo.from) : '')
-  const [subject, setSubject] = useState(replyTo ? `Re: ${replyTo.subject}` : '')
-  const [body, setBody] = useState('')
+  // A reply (or reply all) stays in the source's thread; a forward and a new
+  // message start their own; a draft keeps the thread it was saved in.
+  const replyTo = (mode === 'reply' || mode === 'replyAll') ? source : null
+  const replyThreadId = draft?.threadId || replyTo?.threadId
+
+  const initial = (() => {
+    if (draft) return { to: draft.to, cc: draft.cc, bcc: draft.bcc, subject: draft.subject, body: draft.body }
+    if (source && mode === 'replyAll') {
+      const r = replyAllRecipients(source, ownAddresses)
+      return { to: r.to.join(', '), cc: r.cc.join(', '), bcc: '', subject: reSubject(source.subject), body: '' }
+    }
+    if (source && mode === 'reply') {
+      // To the sender — or, for a message the office sent, to whom it went
+      // (as Gmail does); never back to the office's own address.
+      const r = replyAllRecipients(source, ownAddresses)
+      return { to: r.to[0] ?? source.from, cc: '', bcc: '', subject: reSubject(source.subject), body: '' }
+    }
+    if (source && mode === 'forward') {
+      const quoted = [
+        '<p></p><p>---------- Forwarded message ---------</p>',
+        `<p>From: ${escapeHtml(source.from)}<br>Date: ${escapeHtml(source.date)}<br>Subject: ${escapeHtml(source.subject)}<br>To: ${escapeHtml(source.to)}${source.cc ? `<br>Cc: ${escapeHtml(source.cc)}` : ''}</p>`,
+        sanitizeHtml(source.body || ''),
+      ].join('')
+      return { to: '', cc: '', bcc: '', subject: /^fwd?:/i.test(source.subject) ? source.subject : `Fwd: ${source.subject}`, body: quoted }
+    }
+    return { to: '', cc: '', bcc: '', subject: '', body: '' }
+  })()
+
+  const [to, setTo] = useState(initial.to)
+  const [cc, setCc] = useState(initial.cc)
+  const [bcc, setBcc] = useState(initial.bcc)
+  const [showCc, setShowCc] = useState(!!initial.cc)
+  const [showBcc, setShowBcc] = useState(!!initial.bcc)
+  const [subject, setSubject] = useState(initial.subject)
+  const [body, setBody] = useState(initial.body)
+  // The saved draft this compose writes to (Gmail's draft id), once saved.
+  const [draftId, setDraftId] = useState<string | null>(draft?.id ?? null)
+  const [savingDraft, setSavingDraft] = useState(false)
+  const [draftNote, setDraftNote] = useState<string | null>(null)
+  const [showSchedule, setShowSchedule] = useState(false)
+  const [scheduling, setScheduling] = useState(false)
+  // "Draft saved" stands until the next edit.
+  useEffect(() => { setDraftNote(null) }, [to, cc, bcc, subject, body])
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // One key for this reply (lib/email/send-with-guard): a double click or a
@@ -1707,7 +2336,8 @@ function ComposeModal({
   const requestKeyRef = useRef<string>(newRequestKey())
   const confirmSendConflict = useSendConflictConfirm()
   const [isExpanded, setIsExpanded] = useState(false)
-  const [attachments, setAttachments] = useState<Attachment[]>([])
+  // A reopened draft keeps what it carried.
+  const [attachments, setAttachments] = useState<Attachment[]>(draft?.attachments ?? [])
   const [signatures, setSignatures] = useState<EmailSignature[]>([])
   const [templates, setTemplates] = useState<EmailTemplate[]>([])
   const [showSignatureDropdown, setShowSignatureDropdown] = useState(false)
@@ -2005,6 +2635,103 @@ function ComposeModal({
     setSelectedTemplate(null)
   }
 
+  // Save to Gmail's Drafts (created the first time, updated after). Quiet:
+  // `announce` only for the Save draft button.
+  const saveDraft = async (announce: boolean): Promise<string | null> => {
+    if (savingDraft) return null
+    setSavingDraft(true)
+    try {
+      const res = await fetch('/api/gmail/drafts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: draftId || undefined, to, cc, bcc, subject, body,
+          threadId: replyThreadId,
+          attachments: attachments.length > 0 ? attachments : undefined,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.id) throw new Error(data.error || 'The draft could not be saved')
+      setDraftId(data.id)
+      if (announce) setDraftNote('Draft saved')
+      return data.id as string
+    } catch (err: any) {
+      setError(err.message)
+      return null
+    } finally {
+      setSavingDraft(false)
+    }
+  }
+
+  // Anything written that is not in the draft yet.
+  const initialBody = initial.body
+  const isDirty = [to !== initial.to, cc !== initial.cc, bcc !== initial.bcc, subject !== initial.subject, body !== initialBody, attachments.length !== (draft?.attachments?.length ?? 0)].some(Boolean)
+
+  // Closing keeps what was written, as Gmail does: it is saved as a draft.
+  const handleClose = async () => {
+    const hasContent = !!(to.trim() || cc.trim() || bcc.trim() || body.replace(/<[^>]*>/g, '').trim())
+    if (isDirty && hasContent) {
+      const saved = await saveDraft(false)
+      if (!saved && !window.confirm('The draft could not be saved. Close and lose it?')) return
+    }
+    onClose()
+  }
+
+  // Throw the draft away: off Gmail's Drafts too, when it was saved.
+  const handleDiscard = async () => {
+    if (isDirty && !window.confirm('Discard this message?')) return
+    if (draftId) {
+      try {
+        await fetch(`/api/gmail/drafts?id=${encodeURIComponent(draftId)}`, { method: 'DELETE' })
+      } catch {
+        // It stays in Drafts; nothing is sent.
+      }
+    }
+    onClose()
+  }
+
+  // Send later: saved as a draft, and the draft is sent at the chosen time
+  // (app/api/gmail/scheduled, sent by the scheduler).
+  const handleSchedule = async (choice: ScheduleChoice) => {
+    if (!to || !subject || !body) {
+      setError('Please fill in all fields')
+      return
+    }
+    // Nobody is there to fix a bad address at 9:00 — refuse it now.
+    const invalid = [...parseRecipients(to).invalid, ...parseRecipients(cc).invalid, ...parseRecipients(bcc).invalid]
+    if (invalid.length > 0) {
+      setError(`Not an email address: ${invalid.join(', ')}`)
+      return
+    }
+    setScheduling(true)
+    setError(null)
+    try {
+      const savedId = await saveDraft(false)
+      if (!savedId) return
+      const res = await fetch('/api/gmail/scheduled', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          draftId: savedId,
+          sendAt: choice.sendAt.toISOString(),
+          timeZone: choice.timeZone,
+          toSummary: to,
+          subject,
+          threadId: replyThreadId,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Could not schedule it')
+      setShowSchedule(false)
+      onScheduled?.(choice.label)
+      onClose()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setScheduling(false)
+    }
+  }
+
   const handleSend = async () => {
     if (!to || !subject || !body) {
       setError('Please fill in all fields')
@@ -2032,16 +2759,42 @@ function ComposeModal({
       // Replying: the message being answered is the newest one on screen — a
       // reply sent after it (by a colleague, or from Gmail) is reported first.
       const answered = replyTo?.date ? new Date(replyTo.date) : null
-      const sent = await sendGuardedEmail({
+      const seenUpTo = replyTo ? (answered && !isNaN(answered.getTime()) ? answered.toISOString() : null) : undefined
+      const payload: Record<string, unknown> = {
         userId,
         to,
+        cc: cc.trim() || undefined,
+        bcc: bcc.trim() || undefined,
         subject,
         body,
-        threadId: replyTo?.threadId,
+        threadId: replyThreadId,
+        // Sent from a saved draft: the server removes the draft.
+        draftId: draftId || undefined,
         attachments: attachments.length > 0 ? attachments : undefined,
-      }, {
+      }
+
+      // Undo send: saved as a draft now — so a closed tab or a lost
+      // connection leaves it in Drafts, never lost — and sent when the Undo
+      // window ends (the page holds it). If the draft cannot be saved, it is
+      // sent at once, as before.
+      if (onQueueSend) {
+        const savedId = await saveDraft(false)
+        if (savedId) {
+          onQueueSend({
+            payload: { ...payload, draftId: savedId },
+            requestKey: requestKeyRef.current,
+            seenUpTo,
+            restore: { id: savedId, threadId: replyThreadId, to, cc, bcc, subject, body, attachments },
+          })
+          onClose()
+          return
+        }
+        setError(null)
+      }
+
+      const sent = await sendGuardedEmail(payload, {
         requestKey: requestKeyRef.current,
-        seenUpTo: replyTo ? (answered && !isNaN(answered.getTime()) ? answered.toISOString() : null) : undefined,
+        seenUpTo,
         confirmConflict: confirmSendConflict,
       })
       if (!sent.ok) {
@@ -2066,7 +2819,7 @@ function ComposeModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
           <h3 className="text-sm font-semibold text-gray-900">
-            {replyTo ? 'Reply' : 'New Message'}
+            {mode === 'reply' ? 'Reply' : mode === 'replyAll' ? 'Reply all' : mode === 'forward' ? 'Forward' : mode === 'draft' ? 'Draft' : 'New Message'}
           </h3>
           <div className="flex items-center gap-1">
             <button 
@@ -2077,8 +2830,9 @@ function ComposeModal({
               <Minus className="w-4 h-4 text-gray-500" />
             </button>
             <button 
-              onClick={onClose} 
+              onClick={handleClose} 
               className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Close (saves a draft)"
             >
               <X className="w-4 h-4 text-gray-500" />
             </button>
@@ -2100,14 +2854,31 @@ function ComposeModal({
         <div className="flex-1 overflow-y-auto flex flex-col">
           <div className="flex items-center px-5 py-2.5 border-b border-gray-100">
             <label className="w-16 text-xs font-medium text-gray-400">To</label>
-            <input
-              type="email"
+            <RecipientField
               value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="flex-1 text-sm outline-none bg-transparent"
-              placeholder="recipient@example.com"
+              onChange={setTo}
+              placeholder="Name or email — suggestions as you type"
             />
+            {/* Cc / Bcc as Gmail shows them: links until wanted. */}
+            <div className="flex items-center gap-2 ml-2 text-xs text-gray-500">
+              {!showCc && <button type="button" onClick={() => setShowCc(true)} className="hover:text-gray-800">Cc</button>}
+              {!showBcc && <button type="button" onClick={() => setShowBcc(true)} className="hover:text-gray-800">Bcc</button>}
+            </div>
           </div>
+
+          {showCc && (
+            <div className="flex items-center px-5 py-2.5 border-b border-gray-100">
+              <label className="w-16 text-xs font-medium text-gray-400">Cc</label>
+              <RecipientField value={cc} onChange={setCc} placeholder="Copy to" autoFocus={!initial.cc} />
+            </div>
+          )}
+
+          {showBcc && (
+            <div className="flex items-center px-5 py-2.5 border-b border-gray-100">
+              <label className="w-16 text-xs font-medium text-gray-400">Bcc</label>
+              <RecipientField value={bcc} onChange={setBcc} placeholder="Hidden copy to" autoFocus={!initial.bcc} />
+            </div>
+          )}
 
           <div className="flex items-center px-5 py-2.5 border-b border-gray-100">
             <label className="w-16 text-xs font-medium text-gray-400">Subject</label>
@@ -2301,12 +3072,38 @@ function ComposeModal({
             </button>
           </div>
           <div className="flex items-center gap-2">
+            {draftNote && <span className="text-xs text-gray-500">{draftNote}</span>}
             <button 
-              onClick={onClose} 
+              onClick={handleDiscard} 
               className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
             >
               Discard
             </button>
+            <button 
+              onClick={() => saveDraft(true)} 
+              disabled={savingDraft || sending}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {savingDraft ? 'Saving…' : 'Save draft'}
+            </button>
+            {onScheduled && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowSchedule(v => !v)}
+                  disabled={sending || scheduling}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50"
+                  title="Send later"
+                >
+                  <Clock className="w-4 h-4" />
+                  {scheduling ? 'Scheduling…' : 'Schedule'}
+                </button>
+                {showSchedule && (
+                  <div className="absolute right-0 bottom-full mb-2 z-30">
+                    <SchedulePicker onPick={handleSchedule} onCancel={() => setShowSchedule(false)} busy={scheduling} />
+                  </div>
+                )}
+              </div>
+            )}
             <button 
               onClick={handleSend} 
               disabled={sending} 
@@ -2595,17 +3392,21 @@ function ComposeModal({
     </div>
   )
 }
-// Create Label Modal Component
+// Create or edit a folder: its name and colour (Gmail's palette).
 function CreateLabelModal({ 
   onClose, 
   userId, 
-  onCreated 
+  onCreated,
+  label = null,
 }: { 
   onClose: () => void
   userId: string
   onCreated: () => void
+  /** Editing this folder; creating a new one when null. */
+  label?: GmailLabel | null
 }) {
-  const [name, setName] = useState('')
+  const [name, setName] = useState(label?.name ?? '')
+  const [color, setColor] = useState<string | null>(label?.color?.backgroundColor ?? null)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -2616,10 +3417,21 @@ function CreateLabelModal({
     setError(null)
     
     try {
+      const picked = LABEL_COLORS.find(c => c.backgroundColor === color)
       const response = await fetch('/api/gmail/labels', {
-        method: 'POST',
+        method: label ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, name: name.trim() }),
+        body: JSON.stringify(label
+          ? {
+              labelId: label.id,
+              ...(name.trim() !== label.name ? { name: name.trim() } : {}),
+              ...(picked && picked.backgroundColor !== label.color?.backgroundColor
+                ? { backgroundColor: picked.backgroundColor, textColor: picked.textColor } : {}),
+            }
+          : {
+              userId, name: name.trim(),
+              ...(picked ? { backgroundColor: picked.backgroundColor, textColor: picked.textColor } : {}),
+            }),
       })
       
       const data = await response.json()
@@ -2637,31 +3449,60 @@ function CreateLabelModal({
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm">
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
-          <h3 className="text-sm font-semibold text-gray-900">Create New Folder</h3>
+          <h3 className="text-sm font-semibold text-gray-900">{label ? 'Edit Folder' : 'Create New Folder'}</h3>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
         
-        <div className="p-5">
+        <div className="p-5 space-y-4">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs">
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs">
               {error}
             </div>
           )}
           
-          <label className="block text-xs font-medium text-gray-600 mb-1">
-            Folder Name
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g., Important Clients"
-            className="w-full h-10 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
-            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-            autoFocus
-          />
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Folder Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Important Clients"
+              className="w-full h-10 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
+              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-gray-600 mb-2">Colour</p>
+            <div className="flex flex-wrap gap-2">
+              {!label && (
+                <button
+                  type="button"
+                  onClick={() => setColor(null)}
+                  className={`w-7 h-7 rounded-full border border-gray-300 bg-white text-[10px] text-gray-400 ${color === null ? 'ring-2 ring-offset-1 ring-primary-500' : ''}`}
+                  title="No colour"
+                >
+                  —
+                </button>
+              )}
+              {LABEL_COLORS.map(c => (
+                <button
+                  key={c.backgroundColor}
+                  type="button"
+                  onClick={() => setColor(c.backgroundColor)}
+                  style={{ backgroundColor: c.backgroundColor }}
+                  className={`w-7 h-7 rounded-full ${color === c.backgroundColor ? 'ring-2 ring-offset-1 ring-primary-500' : ''}`}
+                  title={c.name}
+                  aria-label={c.name}
+                />
+              ))}
+            </div>
+          </div>
         </div>
         
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-200 bg-gray-50">
@@ -2676,7 +3517,7 @@ function CreateLabelModal({
             disabled={creating || !name.trim()}
             className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 transition-colors"
           >
-            {creating ? 'Creating...' : 'Create Folder'}
+            {creating ? 'Saving...' : label ? 'Save' : 'Create Folder'}
           </button>
         </div>
       </div>

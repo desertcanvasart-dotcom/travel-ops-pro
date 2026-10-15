@@ -13,7 +13,7 @@
 // role; notes show the saved description; snooze moves later from the due
 // date; the filters offer everything the modal does; a follow-up due today
 // gives its scheduler one in-app reminder.
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { NextRequest } from 'next/server'
@@ -76,6 +76,10 @@ import { FOLLOWUP_PRIORITIES, FOLLOWUP_TYPES, snoozeDate } from '@/lib/followups
 import { INACTIVE_ASSIGNEE } from '@/lib/org-refs'
 
 const TODAY = '2026-10-13'
+// The routes accept ?today= only near the real date (lib/today): the clock is
+// pinned to TODAY so the dates below stay "today" whenever the suite runs.
+beforeAll(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(`${TODAY}T12:00:00Z`)) })
+afterAll(() => { vi.useRealTimers() })
 const req = (url: string, init?: { method?: string; body?: unknown }) =>
   new NextRequest(`http://x${url}`, { method: init?.method ?? 'GET', ...(init?.body !== undefined ? { body: JSON.stringify(init.body) } : {}) })
 const params = (id: string) => ({ params: Promise.resolve({ id }) })

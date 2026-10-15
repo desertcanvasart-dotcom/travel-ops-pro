@@ -276,6 +276,11 @@ describe('P2 — deactivated accounts and financial reads', () => {
     expect(block).toContain("'/api/accounting'")
   })
 
+  it('B2B pricing rules (margins) are under the financial read gate (AUDIT H16)', () => {
+    const block = source.match(/const FINANCIAL_API_PREFIXES = \[([\s\S]*?)\]/)![1]
+    expect(block).toContain("'/api/b2b/pricing-rules'")
+  })
+
   it('the specific pricing/transport gates precede the general /api/b2b entry', () => {
     const idx = (s: string) => source.indexOf(s)
     expect(idx("prefix: '/api/b2b/pricing-rules'")).toBeGreaterThan(-1)

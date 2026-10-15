@@ -291,3 +291,24 @@ The 7 we classified are exactly the ones whose `entity_kind` actually
 mattered for Phase 3 (they got the type-rename + FK backfill in the same
 pass). Classifying the other 101 is bulk operator work with no
 downstream consumer today — premature without a use case.
+
+---
+
+## G4. Rate limits must move to a shared store before a second app instance
+
+**Status:** Deferred — one long-lived Railway container today (the in-process
+cron in `lib/cron/scheduler.ts` assumes it too). AUDIT-FINDINGS.md L6.
+**Trigger:** [GATE — REQUIRED BEFORE RUNNING MORE THAN ONE WEB INSTANCE]
+**Related code:** `lib/rate-limit.ts`, `lib/rate-limit/memory-limiter.ts`,
+`lib/rate-limit/ai-limit.ts`, `app/api/portal/[token]/verify-code/route.ts`.
+
+Every limiter keeps its counts in a `Map` in the process. With one instance
+that is the whole picture. With two, each counts alone: the portal's
+verify-code limit (the one brute-force guard on a 6-digit code) doubles per
+instance, and the AI draft/parse budgets do too.
+
+- [ ] Back the limiter with a shared store (a Postgres table with an
+      atomic `INSERT … ON CONFLICT DO UPDATE` counter per key and window, or
+      Redis/Upstash), keeping the same `rateLimit(key, limit, windowMs)` API.
+- [ ] Do the portal `auth` limits first; the AI budgets are cost guards and
+      can follow.

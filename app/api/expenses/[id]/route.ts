@@ -5,6 +5,7 @@ import { paymentDateForStatus, expenseFieldError, expenseDeleteBlock, approvalDe
 import { withApproverNames } from '@/lib/expense-approver'
 import { recordsInOrg } from '@/lib/org-refs'
 import { settleBillsForPaidExpense } from '@/lib/finance/payables'
+import { syncExpense } from '@/lib/accounting'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -157,6 +158,10 @@ export async function PUT(
     if (data.status === 'paid') {
       await settleBillsForPaidExpense(supabaseAdmin, orgId, id)
     }
+
+    // As POST: the books follow the edit (syncExpense updates a synced bill).
+    // Non-blocking (AUDIT M14).
+    syncExpense(data.id).catch(err => console.error('Accounting sync failed:', err))
 
     return NextResponse.json((await withApproverNames(supabaseAdmin, [data]))[0])
   } catch (error) {

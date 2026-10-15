@@ -15,6 +15,7 @@ import { parseFrozenFx, frozenToExchangeRates } from '@/lib/itinerary-fx'
 import { quoteAmountsInTripCurrency, allocateClientPrices } from '@/lib/b2b/convert-money'
 import { templateDaysToItineraryDays, packageTypeForTemplate, serviceLineForItinerary, type ItineraryServiceRow } from '@/lib/itineraries/template-days'
 import { escapeLike } from '@/lib/db/escape-like'
+import { newItineraryCode } from '@/lib/itineraries/itinerary-code'
 
 // ============================================
 // B2B QUOTE CONVERT TO ITINERARY API
@@ -288,8 +289,6 @@ export async function POST(
     // organisation (printed on this org's documents), and after any delete it
     // re-issued a code already taken, so the UNIQUE insert failed and the
     // quote could not be converted.
-    const newItineraryCode = () =>
-      `ITN-${new Date().getFullYear()}-${Math.floor(Math.random() * 9000) + 1000}`
     let itineraryCode = newItineraryCode()
 
     const startDate = new Date(`${String(startIso).slice(0, 10)}T00:00:00Z`)

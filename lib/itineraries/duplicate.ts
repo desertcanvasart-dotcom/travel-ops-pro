@@ -79,8 +79,8 @@ const pick = (row: Row, columns: readonly string[]): Row => {
 }
 
 /** A new code in the original's style: "ITN-2026-8987" → "ITN-<this year>-<4 digits>". */
-export function copyCode(original: string | null | undefined, year: number, random: number): string {
-  const m = String(original ?? '').match(/^([A-Z]+(?:-[A-Z]+)?)-\d{4}-\d+$/)
+export function copyCode(original: string | null | undefined, year: number, random: number | string): string {
+  const m = String(original ?? '').match(/^([A-Z]+(?:-[A-Z]+)?)-\d{4}-[0-9A-F]+$/)
   const prefix = m ? m[1] : 'ITN'
   return `${prefix}-${year}-${random}`
 }

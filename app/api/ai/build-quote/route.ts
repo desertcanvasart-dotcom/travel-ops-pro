@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { matchTourTemplate, getTemplateWithPricing } from '@/lib/tour-matcher-service'
 import { isEuroPassport as isEuroPassportFromNationality } from '@/lib/passport'
 import type { PricingHole } from '@/lib/pricing-types'
@@ -29,6 +29,11 @@ import type { PricingHole } from '@/lib/pricing-types'
 
 export async function POST(request: NextRequest) {
   try {
+    // In-route as well as the middleware's staff gate on /api/ai (AUDIT H12):
+    // it reads supplier rates on the service role.
+    const denied = await requireRole(['admin', 'manager', 'agent'])
+    if (denied) return denied
+
     // Templates and destination cities are the caller's company's (20261206 /
     // 20261207): the matcher reads only those.
     const orgId = await getCurrentOrgId()

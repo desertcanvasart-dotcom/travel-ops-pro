@@ -25,13 +25,13 @@ export async function GET(request: NextRequest) {
     const { accessToken, refreshToken } = await getMailboxGmail(userId)
 
     // Fetch emails
-    const { messages, nextPageToken } = await fetchEmails(
+    const { messages, nextPageToken, resultSizeEstimate } = await fetchEmails(
       accessToken,
       refreshToken,
       { maxResults, query, pageToken, labelIds }
     )
 
-    return NextResponse.json({ messages, nextPageToken })
+    return NextResponse.json({ messages, nextPageToken, resultSizeEstimate })
   } catch (err: any) {
     if (err instanceof GmailAuthError) {
       return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 401 })

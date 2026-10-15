@@ -78,10 +78,17 @@ export async function POST(
     // was the winning racer — the conditional UPDATE above guarantees
     // exactly one winner per concurrent batch, so expenses can't be
     // double-cascaded.
-    const { data: links } = await supabaseAdmin
+    // The invoice is paid either way; a cascade that failed is said so, not
+    // swallowed — its expenses still read as owed (AUDIT M29).
+    const warnings: string[] = []
+    const { data: links, error: linksError } = await supabaseAdmin
       .from('supplier_invoice_expenses')
       .select('expense_id')
       .eq('supplier_invoice_id', id)
+    if (linksError) {
+      console.error('[supplier-invoice pay] could not read linked expenses:', linksError)
+      warnings.push('The invoice is paid, but its linked expenses could not be read — mark them paid by hand.')
+    }
 
     if (links && links.length > 0) {
       // An expense is settled only when the amount matched to PAID bills
@@ -108,7 +115,7 @@ export async function POST(
       // Org-scope the expense cascade. The junction rows above belong to a
       // supplier_invoice this org owns (the conditional UPDATE confirmed
       // ownership), but expenses gets its own filter as defense in depth.
-      await supabaseAdmin
+      const { error: cascadeError } = await supabaseAdmin
         .from('expenses')
         .update({
           status: 'paid',
@@ -122,9 +129,13 @@ export async function POST(
         // Only what is still owed: a rejected expense was never owed, and a
         // paid one keeps its own date, method and reference.
         .in('status', [...PAYABLE_EXPENSE_STATUSES])
+      if (cascadeError) {
+        console.error('[supplier-invoice pay] expense cascade failed:', cascadeError)
+        warnings.push('The invoice is paid, but its linked expenses were not marked paid — mark them paid by hand.')
+      }
     }
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data, ...(warnings.length ? { warnings } : {}) })
   } catch (error) {
     console.error('Error paying supplier invoice:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

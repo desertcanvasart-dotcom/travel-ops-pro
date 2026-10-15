@@ -25,8 +25,12 @@ export async function GET(request: NextRequest) {
   // parsed as `(BASE_URL || header) ? https://header : request.url`, so even
   // when BASE_URL was configured the ternary still used the (attacker-set)
   // x-forwarded-host header. Parenthesize so BASE_URL really wins when set.
-  const fwdHost = request.headers.get('x-forwarded-host')
-  const baseUrl = BASE_URL || (fwdHost ? `https://${fwdHost}` : request.url)
+  //
+  // Without BASE_URL it fell back to x-forwarded-host, which the caller sets:
+  // a crafted callback redirected to a host of their choosing. The fallback is
+  // the request's own origin now, as the accounting callback does — set
+  // NEXT_PUBLIC_APP_URL in production (on Railway request.url is internal).
+  const baseUrl = BASE_URL || new URL(request.url).origin
 
   if (error) {
     // L5: encode + validate. Without these, `?error=` from Google was
@@ -162,9 +166,10 @@ export async function GET(request: NextRequest) {
       throw new Error('Failed to save tokens')
     }
 
-    return NextResponse.redirect(
-      new URL('/communications?gmail=connected', baseUrl)
-    )
+    // The nonce is single-use: a connected flow spends it.
+    const done = NextResponse.redirect(new URL('/communications?gmail=connected', baseUrl))
+    clearNonceCookie(done)
+    return done
   } catch (err: any) {
     console.error('OAuth callback error:', err)
     return NextResponse.redirect(

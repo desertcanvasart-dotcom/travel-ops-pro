@@ -43,8 +43,20 @@ export async function GET(
       .select('*, expense:expenses(*)')
       .eq('supplier_invoice_id', id)
 
+    // The name of whoever disputed it, for the page (AUDIT H32).
+    let disputed_by_name: string | null = null
+    if (invoice.disputed_by) {
+      const { data: who } = await supabaseAdmin
+        .from('user_profiles')
+        .select('full_name, email')
+        .eq('id', invoice.disputed_by)
+        .maybeSingle()
+      disputed_by_name = who?.full_name || who?.email || null
+    }
+
     return NextResponse.json({
       ...invoice,
+      disputed_by_name,
       matched_expenses: matches || [],
     })
   } catch (error) {
@@ -90,7 +102,7 @@ export async function PUT(
 
     const { data: current } = await supabaseAdmin
       .from('supplier_invoices')
-      .select('status, amount, currency, matched_amount, supplier_invoice_number, supplier_name, supplier_id')
+      .select('status, amount, currency, matched_amount, supplier_invoice_number, supplier_name, supplier_id, tax_amount')
       .eq('id', id)
       .eq('org_id', orgId)
       .maybeSingle()
@@ -106,6 +118,18 @@ export async function PUT(
     if ((amountChanges || currencyChanges) && !['received', 'matched'].includes(current.status)) {
       return NextResponse.json(
         { error: `Cannot change the amount of an invoice with status '${current.status}'` },
+        { status: 409 }
+      )
+    }
+    // Nor who is paid, or the tax in the figure (AUDIT H34): an approved bill
+    // re-pointed at another supplier was paid to someone nobody approved.
+    const payeeOrTaxChanges =
+      ('supplier_id' in updateData && (updateData.supplier_id ?? null) !== (current.supplier_id ?? null)) ||
+      ('supplier_name' in updateData && String(updateData.supplier_name ?? '') !== String(current.supplier_name ?? '')) ||
+      ('tax_amount' in updateData && Number(updateData.tax_amount || 0) !== Number(current.tax_amount || 0))
+    if (payeeOrTaxChanges && !['received', 'matched'].includes(current.status)) {
+      return NextResponse.json(
+        { error: `Cannot change the supplier or tax of an invoice with status '${current.status}'` },
         { status: 409 }
       )
     }
@@ -149,10 +173,10 @@ export async function PUT(
       .eq('id', id)
       .eq('org_id', orgId)
     // A money change applies only if nothing approved it meanwhile.
-    if (amountChanges || currencyChanges) query = query.eq('status', current.status)
+    if (amountChanges || currencyChanges || payeeOrTaxChanges) query = query.eq('status', current.status)
     const { data, error } = await query.select().single()
 
-    if (error?.code === 'PGRST116' && (amountChanges || currencyChanges)) {
+    if (error?.code === 'PGRST116' && (amountChanges || currencyChanges || payeeOrTaxChanges)) {
       // The status moved (approved, paid) between the read and this write.
       return NextResponse.json({ error: 'The invoice changed meanwhile — reload and try again' }, { status: 409 })
     }

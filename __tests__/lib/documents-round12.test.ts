@@ -284,9 +284,10 @@ describe('round 12 follow-ups (regression pass)', () => {
     const at = cb.indexOf('error=missing_permissions')
     expect(cb.slice(at, at + 200)).toContain('clearNonceCookie(res)')
   })
-  it('an explicit invoice status stands; a bad total is refused', () => {
+  it('an explicit draft or cancelled stands, paid/partial are the payments\' (AUDIT H22); a bad total is refused', () => {
     const u = src('app/api/invoices/[id]/route.ts')
-    expect(u).toContain('updateData.status === undefined && paid > 0')
+    expect(u).toContain("!['draft', 'cancelled'].includes(status)")
+    expect(u).toContain('!isSettableInvoiceStatus(updateData.status)')
     expect(u).toContain('total_amount must be a non-negative number')
   })
 })

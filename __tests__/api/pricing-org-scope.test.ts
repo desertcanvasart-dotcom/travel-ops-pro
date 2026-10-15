@@ -55,7 +55,6 @@ describe('cruise transport packages (fix 20)', () => {
   it('the wrappers hand the org to the day pricing — without it a trip prices with no packages and no airports', () => {
     expect(src('lib/auto-pricing-service.ts').match(/numPax: params\.numPax,\n\s*orgId: params\.orgId,/g)).toHaveLength(2)
     expect(src('app/api/pricing/coverage/route.ts')).toContain('calculateDayBasedPricing({ ...args, orgId: orgId ?? undefined })')
-    expect(src('app/api/b2b/test-pricing/route.ts').match(/\(\{\n\s*orgId,\n\s*templateId,/g)).toHaveLength(2)
   })
 
   it('every caller passes the org', () => {

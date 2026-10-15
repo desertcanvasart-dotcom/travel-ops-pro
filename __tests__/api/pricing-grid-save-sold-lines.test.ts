@@ -193,6 +193,11 @@ describe('the season premium', () => {
     await save([{ dayNumber: 1, slots: [slot('accommodation', [hotel])] }], config(), { sellingPriceTotal: 999, seasonUplift: 799 })
     expect(state.totalUpdate).toBe(230)
   })
+  it('is the departure season\'s, not whatever the request claims (AUDIT H30)', async () => {
+    state.seasons = [{ season_id: 's1', start_date: '2026-12-15', end_date: '2027-01-05', pricing_seasons: { name: 'Christmas', uplift_percent: 15, is_active: true } }]
+    await save([{ dayNumber: 1, slots: [slot('accommodation', [hotel])] }], config(), { sellingPriceTotal: 230, seasonUplift: 5000 })
+    expect(state.totalUpdate).toBe(230)
+  })
 })
 
 describe('the client’s email', () => {

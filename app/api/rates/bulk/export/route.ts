@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createServerClient } from '@/lib/supabase-server'
 import {
   RATE_TABLE_CONFIGS,
@@ -12,7 +13,6 @@ import { flattenVehicles } from '@/lib/rates/vehicle-bands'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
 import { selectAllRows } from '@/lib/db/select-all-rows'
 import { supplierOrgId } from '@/lib/suppliers/supplier-org'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createServerClient()
 
@@ -25,6 +25,11 @@ const supabase = createServerClient()
  */
 export async function GET(request: NextRequest) {
   try {
+    // In-route as well as the middleware's financial gate (AUDIT C2/H15):
+    // this runs on the service role, so it must not depend on one layer.
+    const denied = await requireRole(['admin', 'manager'])
+    if (denied) return denied
+
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
     const table = request.nextUrl.searchParams.get('table')

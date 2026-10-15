@@ -65,7 +65,7 @@ describe('POST /api/itineraries writes a new trip, nothing else', () => {
     expect(trip).toMatchObject({ org_id: 'org-1', status: 'draft', total_cost: 0, client_id: 'c-own', total_days: 3, currency: 'JPY' })
     expect(trip.id).not.toBe('chosen-id')
     for (const col of ['total_paid', 'payment_status', 'fx_frozen', 'assigned_vehicle_id']) expect(trip[col], col).toBeUndefined()
-    expect(trip.itinerary_code).toMatch(/^ITN-\d{4}-\d{4}$/)
+    expect(trip.itinerary_code).toMatch(/^ITN-\d{4}-[0-9A-F]{8}$/)
   })
 
   it("another company's client → 404 and nothing is created", async () => {
@@ -116,8 +116,8 @@ describe('the itinerary code is drawn again when it is taken', () => {
   })
 
   it('code shapes', () => {
-    expect(itineraryCode(2026, null, 0)).toBe('ITN-2026-1000')
-    expect(itineraryCode(2026, 's', 0.9999)).toBe('ITN-S-2026-9999')
+    expect(itineraryCode(2026, null)).toMatch(/^ITN-2026-[0-9A-F]{8}$/)
+    expect(itineraryCode(2026, 's')).toMatch(/^ITN-S-2026-[0-9A-F]{8}$/)
   })
 })
 

@@ -181,4 +181,56 @@ describe('recomputeBookingExtras', () => {
     expect(r.ok).toBe(false)
     expect(!r.ok && r.status).toBe(404)
   })
+
+  // The mock hands back its live row objects; a real read is a copy. A write
+  // landing in between is therefore a NEW row object in the table, which the
+  // recompute's earlier read does not see.
+  const landWrite = (tables: { bookings: Record<string, unknown>[] }, patch: Record<string, unknown>) => {
+    tables.bookings[0] = { ...tables.bookings[0], ...patch }
+  }
+
+  it('a payment landing mid-recompute is not overwritten (AUDIT M20)', async () => {
+    const tables = {
+      bookings: [booking({ updated_at: '2026-10-15T08:00:00.000000+00:00' })] as Record<string, unknown>[],
+      booking_extras: [extra()],
+      booking_payments: [] as Record<string, unknown>[],
+    }
+    setMockTables(tables)
+    // record_booking_payment commits between the recompute's read (1st
+    // bookings query) and its write (2nd): a €1,000 deposit.
+    let bookingQueries = 0
+    const racing = {
+      from(table: string) {
+        if (table === 'bookings' && ++bookingQueries === 2) {
+          tables.booking_payments.push({ booking_id: BOOKING, amount: 1000, payment_type: 'deposit', currency: 'EUR' })
+          landWrite(tables, { payment_status: 'deposit_received', updated_at: '2026-10-15T08:00:01.000000+00:00' })
+        }
+        return client.from(table)
+      },
+    }
+
+    const r = await recomputeBookingExtras(racing, BOOKING, ORG)
+    expect(r.ok).toBe(true)
+    const after = await read()
+    // Recomputed on the fresh rows: the deposit counts.
+    expect(after.payment_status).toBe('deposit_received')
+    expect(after.balance_due).toBe(4340)
+    expect(after.total_cost).toBe(5340)
+  })
+
+  it('gives up with 409 if the booking never stops moving', async () => {
+    const tables = { bookings: [booking({ updated_at: 't0' })] as Record<string, unknown>[], booking_extras: [extra()], booking_payments: [] }
+    setMockTables(tables)
+    let bookingQueries = 0
+    const restless = {
+      from(table: string) {
+        if (table === 'bookings' && ++bookingQueries % 2 === 0) landWrite(tables, { updated_at: `t${bookingQueries}` })
+        return client.from(table)
+      },
+    }
+    const r = await recomputeBookingExtras(restless, BOOKING, ORG)
+    expect(r.ok).toBe(false)
+    expect(!r.ok && r.status).toBe(409)
+    expect((await read()).total_cost).toBe(5000)
+  })
 })
