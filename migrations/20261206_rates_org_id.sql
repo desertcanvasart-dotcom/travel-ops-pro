@@ -226,6 +226,11 @@ ALTER TABLE IF EXISTS public.vehicles DROP CONSTRAINT IF EXISTS vehicles_license
 ALTER TABLE IF EXISTS public.attraction_aliases DROP CONSTRAINT IF EXISTS attraction_aliases_alias_key;
 ALTER TABLE IF EXISTS public.destinations DROP CONSTRAINT IF EXISTS destinations_country_code_key;
 ALTER TABLE IF EXISTS public.b2b_transport_packages DROP CONSTRAINT IF EXISTS b2b_transport_packages_package_code_key;
+-- A database whose b2b_transport_packages predates org_id (the E2E project's:
+-- see 20261018) gets the column here, so the per-company key and the
+-- policies below have it. Production and a fresh install have it already.
+ALTER TABLE IF EXISTS public.b2b_transport_packages
+  ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 -- ---------------------------------------------------------------------------
 -- Migration-only helpers (dropped at the end).
