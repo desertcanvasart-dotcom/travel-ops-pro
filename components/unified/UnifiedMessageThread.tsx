@@ -65,6 +65,14 @@ const QUICK_LANGUAGES = [
   { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
 ]
 
+/** "Moved out of the Inbox by rule "Booking.com"" — what an inbox rule did to an email. */
+function ruleNote(r: NonNullable<UnifiedMessage['rule_applied']>): string {
+  const names = (r.rules ?? []).map(x => (x.name ? `"${x.name}"` : '(unnamed)')).join(', ')
+  const a = r.actions ?? {}
+  const what = a.trash ? 'Moved to Trash' : a.spam ? 'Marked as spam' : a.skip_inbox ? 'Moved out of the Inbox' : a.label_id ? 'Filed in a folder' : 'Changed'
+  return `${what} by inbox rule ${names}`
+}
+
 interface UnifiedMessageThreadProps {
   conversation: UnifiedConversation | null
   onConversationUpdate?: (conversation: UnifiedConversation) => void
@@ -333,6 +341,7 @@ export function UnifiedMessageThread({
           subject: msg.subject,
           from_address: msg.from_address ?? msg.sender_name ?? undefined,
           to_addresses: msg.to_addresses,
+          rule_applied: msg.rule_applied ?? null,
           media_url: msg.media_url,
           media_type: msg.media_type,
           attachments: msg.attachments,
@@ -1287,6 +1296,13 @@ export function UnifiedMessageThread({
                               </span>
                             </div>
                           )}
+
+                          {/* An inbox rule moved it: said here, since it is no longer in the Inbox. */}
+                          {isEmail && msg.rule_applied?.rules?.length ? (
+                            <div className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-1 mb-2">
+                              {ruleNote(msg.rule_applied)}
+                            </div>
+                          ) : null}
 
                           {/* Message content */}
                           {msg.isHtml ? (

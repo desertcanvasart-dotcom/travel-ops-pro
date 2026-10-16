@@ -206,6 +206,24 @@ export async function cacheEmails(
 }
 
 /**
+ * Add emails to a folder's cache without touching the rest of it — mail the
+ * 2-minute poll brought in. Only the list fetch replaced the cache, so a
+ * Refresh within the cache's 5 minutes showed it without them first.
+ */
+export async function addCachedEmails(userId: string, folder: string, emails: CachedEmail[]): Promise<void> {
+  if (!db) await initEmailCache()
+  if (!db || emails.length === 0) return
+  return new Promise((resolve, reject) => {
+    const transaction = db!.transaction([STORE_NAME], 'readwrite')
+    const store = transaction.objectStore(STORE_NAME)
+    const now = Date.now()
+    for (const email of emails) store.put({ ...email, userId, folder, cachedAt: now })
+    transaction.oncomplete = () => resolve()
+    transaction.onerror = () => reject(transaction.error)
+  })
+}
+
+/**
  * Get a single cached email by ID
  */
 export async function getCachedEmail(emailId: string): Promise<CachedEmail | null> {

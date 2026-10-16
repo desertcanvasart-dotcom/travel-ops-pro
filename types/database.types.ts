@@ -4999,6 +4999,7 @@ export interface Database {
           id: string
           conversation_id: string | null
           message_id: string
+          rule_applied: Json | null
           thread_id: string
           direction: string
           from_address: string
@@ -5026,6 +5027,7 @@ export interface Database {
           id?: string
           conversation_id?: string | null
           message_id: string
+          rule_applied?: Json | null
           thread_id: string
           direction: string
           from_address: string
@@ -5053,6 +5055,7 @@ export interface Database {
           id?: string
           conversation_id?: string | null
           message_id?: string
+          rule_applied?: Json | null
           thread_id?: string
           direction?: string
           from_address?: string

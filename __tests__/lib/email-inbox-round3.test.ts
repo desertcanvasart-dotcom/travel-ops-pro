@@ -18,7 +18,7 @@ describe('rules: matching', () => {
     expect(ruleMatches({ from: '@booking.com', subject: 'cancelled' }, msg())).toBe(false)
   })
   it('"to" also looks at Cc; "has the words" needs every word, in subject or text', () => {
-    expect(ruleMatches({ to: 'agent@' }, msg({ cc: ['agent@hisgo.jp'] }))).toBe(true)
+    expect(ruleMatches({ to: 'agent@hisgo.jp' }, msg({ cc: ['Agent <agent@hisgo.jp>'] }))).toBe(true)
     expect(ruleMatches({ has_words: 'luxor stay' }, msg())).toBe(true)
     expect(ruleMatches({ has_words: 'luxor aswan' }, msg())).toBe(false)
   })

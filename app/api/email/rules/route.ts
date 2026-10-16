@@ -15,7 +15,8 @@ import { clientMessage } from '@/lib/api-errors'
 import { GmailAuthError } from '@/lib/gmail'
 import { getMailboxGmail } from '@/lib/gmail-mailbox'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
-import { cleanActions, cleanConditions, gmailQuery, labelChange, type RuleActions, type RuleConditions } from '@/lib/email/rules'
+import { cleanActions, cleanConditions, conditionProblem, gmailQuery, labelChange, type RuleActions, type RuleConditions } from '@/lib/email/rules'
+import { connectedMailboxes } from '@/lib/email/connected-mailboxes'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,6 +25,11 @@ const supabase = createClient(
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const EXISTING_LIMIT = 2000
+
+/** The conditions' problem against the organisation's own addresses, or null. */
+async function problemWith(c: RuleConditions, orgId: string): Promise<string | null> {
+  return conditionProblem(c, (await connectedMailboxes(supabase, orgId)).emails)
+}
 
 async function caller() {
   // Rules move mail for everyone: manager and above.
@@ -87,6 +93,8 @@ export async function POST(request: NextRequest) {
     const actions = cleanActions(body.actions)
     if (!conditions) return NextResponse.json({ error: 'Give at least one condition (from, to, subject or words)' }, { status: 400 })
     if (!actions) return NextResponse.json({ error: 'Choose at least one thing to do' }, { status: 400 })
+    const problem = await problemWith(conditions, who.orgId)
+    if (problem) return NextResponse.json({ error: problem }, { status: 400 })
 
     const { data, error } = await supabase
       .from('email_rules')
@@ -129,6 +137,8 @@ export async function PATCH(request: NextRequest) {
     if (body.conditions !== undefined) {
       const c = cleanConditions(body.conditions)
       if (!c) return NextResponse.json({ error: 'Give at least one condition' }, { status: 400 })
+      const problem = await problemWith(c, who.orgId)
+      if (problem) return NextResponse.json({ error: problem }, { status: 400 })
       update.conditions = c
     }
     if (body.actions !== undefined) {

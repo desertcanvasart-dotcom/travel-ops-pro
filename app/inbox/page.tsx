@@ -24,6 +24,7 @@ import { parseRecipients } from '@/lib/email/compose-mime'
 import AttachmentList, { AttachmentIndicator } from '@/components/AttachmentList'
 import ClientLinkButton from '@/components/ClientLinkButton'
 import { useEmailPolling, useEmailCache } from '@/lib/use-email-polling'
+import { addCachedEmails, removeCachedEmails, type CachedEmail } from '@/lib/email-cache'
 import { sanitizeHtml } from '@/lib/sanitize-html'
 import { replacePlaceholders, buildPlaceholderData, getPlaceholders } from '@/lib/template-placeholders'
 import { 
@@ -328,6 +329,8 @@ export default function InboxPage() {
       // the inbox; a message just sent, or filed straight to spam, is not.
       const arrived = newEmails.filter(e => e.labelIds?.includes('INBOX'))
       if (folder === 'inbox' && arrived.length > 0) {
+        // Kept in the cache too: a Refresh shows the cache first.
+        if (user?.id) void addCachedEmails(user.id, 'inbox', arrived as unknown as CachedEmail[]).catch(() => {})
         setEmails(prev => {
           const newIds = new Set(arrived.map(e => e.id))
           const filtered = prev.filter(e => !newIds.has(e.id))
@@ -340,6 +343,7 @@ export default function InboxPage() {
       }
     },
     onDeletedEmails: (deletedIds) => {
+      void removeCachedEmails(deletedIds).catch(() => {})
       setEmails(prev => prev.filter(e => !deletedIds.includes(e.id)))
       if (selectedEmail && deletedIds.includes(selectedEmail.id)) {
         setSelectedEmail(null)
@@ -354,6 +358,7 @@ export default function InboxPage() {
         .filter(c => c.labelsRemoved?.includes('INBOX') || c.labelsAdded?.some(l => l === 'TRASH' || l === 'SPAM'))
         .map(c => c.messageId)
       if (gone.length > 0) {
+        void removeCachedEmails(gone).catch(() => {})
         setEmails(prev => prev.filter(e => !gone.includes(e.id)))
         if (selectedEmail && gone.includes(selectedEmail.id)) setSelectedEmail(null)
       }

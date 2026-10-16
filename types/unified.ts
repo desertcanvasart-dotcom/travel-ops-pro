@@ -204,6 +204,8 @@ export interface UnifiedMessage {
   subject?: string | null
   from_address?: string
   to_addresses?: string[]
+  /** An inbox rule moved this email (email_messages.rule_applied). */
+  rule_applied?: { rules?: Array<{ id: string; name: string | null }>; actions?: Record<string, unknown> } | null
 
   // Media/Attachments
   media_url?: string | null // WhatsApp
