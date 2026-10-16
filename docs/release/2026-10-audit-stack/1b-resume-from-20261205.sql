@@ -1,14 +1,15 @@
 -- ============================================================
--- RESUME step 1 from 20261205 — for the Supabase SQL editor
+-- RESUME step 1 from 20261205 — for the Supabase SQL editor (v2)
 -- ============================================================
--- The SQL editor does not keep a temporary table from one statement to the
--- next when it was made "ON COMMIT DROP", so 20261205's supplier backfill
--- failed ("relation _sup_use does not exist"), and 20261206–20261208's
--- backfills the same way, while the migrations were still recorded.
+-- The SQL editor keeps no temporary table or temporary function from one
+-- statement to the next, so 20261205–20261208's backfills failed
+-- ("relation _sup_use does not exist") while the migrations were recorded.
 -- This is 20261205–20261209 exactly as in 1-before-deploy.sql, except that
--- every temporary table is dropped first and kept for the session (no ON
--- COMMIT DROP). Each migration is written to be safe to run again, so this
--- completes what was skipped and applies 20261209.
+-- the helpers and working tables live in a scratch schema, release_tmp,
+-- made here and removed at the end. Each migration is written to be safe
+-- to run again, so this completes what was skipped and applies 20261209.
+DROP SCHEMA IF EXISTS release_tmp CASCADE;
+CREATE SCHEMA release_tmp;
 
 -- 20261205_suppliers_org_id
 -- ==================================================================
@@ -141,12 +142,12 @@
 BEGIN;
 
 -- pg_temp helpers for this migration only.
-CREATE OR REPLACE FUNCTION pg_temp.has_col(t text, c text) RETURNS boolean
+CREATE OR REPLACE FUNCTION release_tmp.has_col(t text, c text) RETURNS boolean
   LANGUAGE sql STABLE AS $$
   SELECT EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_schema = 'public' AND table_name = t AND column_name = c)
 $$;
-CREATE OR REPLACE FUNCTION pg_temp.set_trigger(t text, trg text, enabled boolean) RETURNS void
+CREATE OR REPLACE FUNCTION release_tmp.set_trigger(t text, trg text, enabled boolean) RETURNS void
   LANGUAGE plpgsql AS $$
 BEGIN
   IF to_regclass('public.' || t) IS NOT NULL
@@ -248,8 +249,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 -- ---------------------------------------------------------------------------
 -- Backfill
 -- ---------------------------------------------------------------------------
-DROP TABLE IF EXISTS _sup_use;
-CREATE TEMP TABLE _sup_use (supplier_id uuid NOT NULL, org_id uuid NOT NULL, signal text NOT NULL);
+DROP TABLE IF EXISTS release_tmp._sup_use;
+CREATE TABLE release_tmp._sup_use (supplier_id uuid NOT NULL, org_id uuid NOT NULL, signal text NOT NULL);
 
 DO $$
 DECLARE
@@ -275,8 +276,8 @@ BEGIN
 
   -- The backfill must not stamp every row as just edited, nor recompute a
   -- trip's totals because a service's supplier id moved to the copy.
-  PERFORM pg_temp.set_trigger('suppliers', 'set_updated_at', false);
-  PERFORM pg_temp.set_trigger('suppliers', 'update_suppliers_timestamp', false);
+  PERFORM release_tmp.set_trigger('suppliers', 'set_updated_at', false);
+  PERFORM release_tmp.set_trigger('suppliers', 'update_suppliers_timestamp', false);
 
   -- 1–2. Who uses each supplier still without a company.
   FOREACH spec SLICE 1 IN ARRAY ARRAY[
@@ -293,20 +294,20 @@ BEGIN
   ] LOOP
     tbl := spec[1];
     col := spec[2];
-    IF NOT pg_temp.has_col(tbl, col) OR NOT pg_temp.has_col(tbl, 'org_id') THEN CONTINUE; END IF;
+    IF NOT release_tmp.has_col(tbl, col) OR NOT release_tmp.has_col(tbl, 'org_id') THEN CONTINUE; END IF;
     EXECUTE format($f$
-      INSERT INTO _sup_use (supplier_id, org_id, signal)
+      INSERT INTO release_tmp._sup_use (supplier_id, org_id, signal)
       SELECT s.id, r.org_id, 'use'
         FROM public.%1$I r JOIN public.suppliers s ON s.id = r.%2$I
        WHERE r.org_id IS NOT NULL AND s.org_id IS NULL
     $f$, tbl, col);
   END LOOP;
 
-  IF pg_temp.has_col('itinerary_services', 'itinerary_day_id') AND to_regclass('public.itinerary_days') IS NOT NULL THEN
+  IF release_tmp.has_col('itinerary_services', 'itinerary_day_id') AND to_regclass('public.itinerary_days') IS NOT NULL THEN
     FOREACH col IN ARRAY ARRAY['supplier_id', 'sold_by_supplier_id'] LOOP
-      IF NOT pg_temp.has_col('itinerary_services', col) THEN CONTINUE; END IF;
+      IF NOT release_tmp.has_col('itinerary_services', col) THEN CONTINUE; END IF;
       EXECUTE format($f$
-        INSERT INTO _sup_use (supplier_id, org_id, signal)
+        INSERT INTO release_tmp._sup_use (supplier_id, org_id, signal)
         SELECT s.id, i.org_id, 'use'
           FROM public.itinerary_services r
           JOIN public.itinerary_days d ON d.id = r.itinerary_day_id
@@ -317,8 +318,8 @@ BEGIN
     END LOOP;
   END IF;
 
-  IF pg_temp.has_col('itinerary_resources', 'resource_id') THEN
-    INSERT INTO _sup_use (supplier_id, org_id, signal)
+  IF release_tmp.has_col('itinerary_resources', 'resource_id') THEN
+    INSERT INTO release_tmp._sup_use (supplier_id, org_id, signal)
     SELECT s.id, i.org_id, 'use'
       FROM public.itinerary_resources r
       JOIN public.itineraries i ON i.id = r.itinerary_id
@@ -326,8 +327,8 @@ BEGIN
      WHERE i.org_id IS NOT NULL AND s.org_id IS NULL;
   END IF;
 
-  IF pg_temp.has_col('booking_supplier_status', 'supplier_id') THEN
-    INSERT INTO _sup_use (supplier_id, org_id, signal)
+  IF release_tmp.has_col('booking_supplier_status', 'supplier_id') THEN
+    INSERT INTO release_tmp._sup_use (supplier_id, org_id, signal)
     SELECT s.id, b.org_id, 'use'
       FROM public.booking_supplier_status r
       JOIN public.bookings b ON b.id = r.booking_id
@@ -343,16 +344,16 @@ BEGIN
       'nile_cruises', 'seasonal_rates', 'sleeping_train_rates', 'train_rates',
       'transportation_rates', 'vehicle_rates'
     ] LOOP
-      IF NOT pg_temp.has_col(tbl, 'supplier_id') THEN CONTINUE; END IF;
+      IF NOT release_tmp.has_col(tbl, 'supplier_id') THEN CONTINUE; END IF;
       EXECUTE format($f$
-        INSERT INTO _sup_use (supplier_id, org_id, signal)
+        INSERT INTO release_tmp._sup_use (supplier_id, org_id, signal)
         SELECT s.id, public.org_backfill_user_org(l.changed_by), 'rate'
           FROM public.%1$I r
           JOIN public.suppliers s ON s.id = r.supplier_id
           JOIN public.rate_audit_log l ON l.table_name = %1$L AND l.record_id = r.id AND l.action = 'INSERT'
          WHERE s.org_id IS NULL AND l.changed_by IS NOT NULL
            AND public.org_backfill_user_org(l.changed_by) IS NOT NULL
-           AND NOT EXISTS (SELECT 1 FROM _sup_use u WHERE u.supplier_id = s.id AND u.signal = 'use')
+           AND NOT EXISTS (SELECT 1 FROM release_tmp._sup_use u WHERE u.supplier_id = s.id AND u.signal = 'use')
       $f$, tbl);
     END LOOP;
   END IF;
@@ -360,15 +361,15 @@ BEGIN
   -- The plan: per supplier, its companies ranked — most rows first, a tie to
   -- the catalogue default, then the lower id. Rank 1 keeps the original;
   -- every other company gets a copy.
-  DROP TABLE IF EXISTS _sup_plan;
-  CREATE TEMP TABLE _sup_plan AS
+  DROP TABLE IF EXISTS release_tmp._sup_plan;
+  CREATE TABLE release_tmp._sup_plan AS
   SELECT supplier_id, org_id, n,
          row_number() OVER (PARTITION BY supplier_id ORDER BY n DESC, (org_id = cat) DESC, org_id::text) AS rnk,
          count(*) OVER (PARTITION BY supplier_id) AS orgs
-    FROM (SELECT supplier_id, org_id, count(*) AS n FROM _sup_use GROUP BY supplier_id, org_id) g;
+    FROM (SELECT supplier_id, org_id, count(*) AS n FROM release_tmp._sup_use GROUP BY supplier_id, org_id) g;
 
   UPDATE public.suppliers s SET org_id = p.org_id
-    FROM _sup_plan p
+    FROM release_tmp._sup_plan p
    WHERE p.supplier_id = s.id AND p.rnk = 1 AND s.org_id IS NULL;
 
   -- 4. Nothing traces it: the catalogue default, listed.
@@ -400,7 +401,7 @@ BEGIN
 
   FOR rec IN
     SELECT p.supplier_id, p.org_id
-      FROM _sup_plan p
+      FROM release_tmp._sup_plan p
      WHERE p.rnk > 1
        AND NOT EXISTS (SELECT 1 FROM public.org_backfill_supplier_copies m
                         WHERE m.original_id = p.supplier_id AND m.org_id = p.org_id)
@@ -431,8 +432,8 @@ BEGIN
     END IF;
   END LOOP;
 
-  PERFORM pg_temp.set_trigger('suppliers', 'set_updated_at', true);
-  PERFORM pg_temp.set_trigger('suppliers', 'update_suppliers_timestamp', true);
+  PERFORM release_tmp.set_trigger('suppliers', 'set_updated_at', true);
+  PERFORM release_tmp.set_trigger('suppliers', 'update_suppliers_timestamp', true);
 END
 $$;
 
@@ -457,7 +458,7 @@ BEGIN
     ARRAY['itinerary_resources', 'set_updated_at'], ARRAY['booking_supplier_status', 'set_updated_at'],
     ARRAY['itinerary_services', 'trg_recalc_on_service_update']
   ] LOOP
-    PERFORM pg_temp.set_trigger(spec[1], spec[2], false);
+    PERFORM release_tmp.set_trigger(spec[1], spec[2], false);
   END LOOP;
 
   FOREACH spec SLICE 1 IN ARRAY ARRAY[
@@ -474,7 +475,7 @@ BEGIN
   ] LOOP
     tbl := spec[1];
     col := spec[2];
-    IF NOT pg_temp.has_col(tbl, col) OR NOT pg_temp.has_col(tbl, 'org_id') THEN CONTINUE; END IF;
+    IF NOT release_tmp.has_col(tbl, col) OR NOT release_tmp.has_col(tbl, 'org_id') THEN CONTINUE; END IF;
     EXECUTE format($f$
       UPDATE public.%1$I r SET %2$I = m.copy_id
         FROM public.org_backfill_supplier_copies m
@@ -482,9 +483,9 @@ BEGIN
     $f$, tbl, col);
   END LOOP;
 
-  IF pg_temp.has_col('itinerary_services', 'itinerary_day_id') AND to_regclass('public.itinerary_days') IS NOT NULL THEN
+  IF release_tmp.has_col('itinerary_services', 'itinerary_day_id') AND to_regclass('public.itinerary_days') IS NOT NULL THEN
     FOREACH col IN ARRAY ARRAY['supplier_id', 'sold_by_supplier_id'] LOOP
-      IF NOT pg_temp.has_col('itinerary_services', col) THEN CONTINUE; END IF;
+      IF NOT release_tmp.has_col('itinerary_services', col) THEN CONTINUE; END IF;
       EXECUTE format($f$
         UPDATE public.itinerary_services r SET %1$I = m.copy_id
           FROM public.itinerary_days d, public.itineraries i, public.org_backfill_supplier_copies m
@@ -494,13 +495,13 @@ BEGIN
     END LOOP;
   END IF;
 
-  IF pg_temp.has_col('itinerary_resources', 'resource_id') THEN
+  IF release_tmp.has_col('itinerary_resources', 'resource_id') THEN
     UPDATE public.itinerary_resources r SET resource_id = m.copy_id
       FROM public.itineraries i, public.org_backfill_supplier_copies m
      WHERE i.id = r.itinerary_id AND r.resource_id = m.original_id AND m.org_id = i.org_id;
   END IF;
 
-  IF pg_temp.has_col('booking_supplier_status', 'supplier_id') THEN
+  IF release_tmp.has_col('booking_supplier_status', 'supplier_id') THEN
     UPDATE public.booking_supplier_status r SET supplier_id = m.copy_id
       FROM public.bookings b, public.org_backfill_supplier_copies m
      WHERE b.id = r.booking_id AND r.supplier_id = m.original_id AND m.org_id = b.org_id;
@@ -514,7 +515,7 @@ BEGIN
     ARRAY['itinerary_resources', 'set_updated_at'], ARRAY['booking_supplier_status', 'set_updated_at'],
     ARRAY['itinerary_services', 'trg_recalc_on_service_update']
   ] LOOP
-    PERFORM pg_temp.set_trigger(spec[1], spec[2], true);
+    PERFORM release_tmp.set_trigger(spec[1], spec[2], true);
   END LOOP;
 END
 $$;
@@ -1175,11 +1176,11 @@ BEGIN
   has_code := EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = p_table AND column_name = 'service_code');
 
   -- This table's uses, by company.
-  DELETE FROM _org_t_use;
-  EXECUTE format('INSERT INTO _org_t_use SELECT DISTINCT u.rid, u.org FROM _org_rate_use u JOIN public.%I r ON r.id = u.rid', p_table);
+  DELETE FROM release_tmp._org_t_use;
+  EXECUTE format('INSERT INTO release_tmp._org_t_use SELECT DISTINCT u.rid, u.org FROM release_tmp._org_rate_use u JOIN public.%I r ON r.id = u.rid', p_table);
   IF has_code AND to_regclass('public.itinerary_services') IS NOT NULL THEN
     EXECUTE format($q$
-      INSERT INTO _org_t_use
+      INSERT INTO release_tmp._org_t_use
       SELECT DISTINCT r.id, i.org_id
         FROM public.%I r
         JOIN public.itinerary_services s ON s.service_code = r.service_code
@@ -1210,7 +1211,7 @@ BEGIN
   -- 3. The one company whose trips use it.
   EXECUTE format($q$
     UPDATE public.%I r SET org_id = u.o
-      FROM (SELECT rid, min(org::text)::uuid AS o FROM _org_t_use GROUP BY rid HAVING count(DISTINCT org) = 1) u
+      FROM (SELECT rid, min(org::text)::uuid AS o FROM release_tmp._org_t_use GROUP BY rid HAVING count(DISTINCT org) = 1) u
      WHERE r.org_id IS NULL AND u.rid = r.id
   $q$, p_table);
 
@@ -1218,10 +1219,10 @@ BEGIN
   EXECUTE format($q$
     WITH filled AS (
       UPDATE public.%1$I r SET org_id = coalesce(
-          (SELECT x.org FROM _org_t_use x WHERE x.rid = r.id AND x.org = %2$L::uuid LIMIT 1),
-          (SELECT x.org FROM _org_t_use x JOIN public.organizations o ON o.id = x.org
+          (SELECT x.org FROM release_tmp._org_t_use x WHERE x.rid = r.id AND x.org = %2$L::uuid LIMIT 1),
+          (SELECT x.org FROM release_tmp._org_t_use x JOIN public.organizations o ON o.id = x.org
             WHERE x.rid = r.id ORDER BY o.created_at, o.id LIMIT 1))
-       WHERE r.org_id IS NULL AND r.id IN (SELECT rid FROM _org_t_use)
+       WHERE r.org_id IS NULL AND r.id IN (SELECT rid FROM release_tmp._org_t_use)
       RETURNING r.id, r.org_id
     )
     INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
@@ -1242,7 +1243,7 @@ BEGIN
   -- A row another company's trips use: a copy for that company.
   FOR rec IN EXECUTE format($q$
     SELECT DISTINCT u.rid, u.org, r.org_id AS home
-      FROM _org_t_use u JOIN public.%I r ON r.id = u.rid
+      FROM release_tmp._org_t_use u JOIN public.%I r ON r.id = u.rid
      WHERE u.org <> r.org_id
        AND NOT EXISTS (SELECT 1 FROM public.org_backfill_rate_copies c
                         WHERE c.table_name = %L AND c.original_id = u.rid AND c.org_id = u.org)
@@ -1283,17 +1284,17 @@ $fn$;
 -- What trips use: (row id, company). Ids are uuids, unique across tables, so
 -- one list serves every table.
 -- ---------------------------------------------------------------------------
-DROP TABLE IF EXISTS _org_rate_use;
-CREATE TEMP TABLE _org_rate_use (rid uuid, org uuid);
-DROP TABLE IF EXISTS _org_t_use;
-CREATE TEMP TABLE _org_t_use (rid uuid, org uuid);
+DROP TABLE IF EXISTS release_tmp._org_rate_use;
+CREATE TABLE release_tmp._org_rate_use (rid uuid, org uuid);
+DROP TABLE IF EXISTS release_tmp._org_t_use;
+CREATE TABLE release_tmp._org_t_use (rid uuid, org uuid);
 
 DO $$
 DECLARE
   spec text[];
 BEGIN
   IF to_regclass('public.itinerary_services') IS NOT NULL THEN
-    INSERT INTO _org_rate_use
+    INSERT INTO release_tmp._org_rate_use
     SELECT m[1]::uuid, i.org_id
       FROM public.itinerary_services s
       JOIN public.itinerary_days d ON d.id = s.itinerary_day_id
@@ -1302,12 +1303,12 @@ BEGIN
      WHERE s.notes LIKE '%rate_id:%' AND i.org_id IS NOT NULL;
   END IF;
   IF to_regclass('public.itinerary_resources') IS NOT NULL THEN
-    INSERT INTO _org_rate_use
+    INSERT INTO release_tmp._org_rate_use
     SELECT r.resource_id, i.org_id FROM public.itinerary_resources r JOIN public.itineraries i ON i.id = r.itinerary_id
      WHERE i.org_id IS NOT NULL;
   END IF;
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'b2b_pricing_rules' AND column_name = 'org_id') THEN
-    INSERT INTO _org_rate_use SELECT rate_id, org_id FROM public.b2b_pricing_rules WHERE rate_id IS NOT NULL AND org_id IS NOT NULL;
+    INSERT INTO release_tmp._org_rate_use SELECT rate_id, org_id FROM public.b2b_pricing_rules WHERE rate_id IS NOT NULL AND org_id IS NOT NULL;
   END IF;
   FOREACH spec SLICE 1 IN ARRAY ARRAY[
     ARRAY['itineraries', 'assigned_vehicle_id'],
@@ -1319,7 +1320,7 @@ BEGIN
   ] LOOP
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = spec[1] AND column_name = spec[2])
        AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = spec[1] AND column_name = 'org_id') THEN
-      EXECUTE format('INSERT INTO _org_rate_use SELECT %2$I, org_id FROM public.%1$I WHERE %2$I IS NOT NULL AND org_id IS NOT NULL', spec[1], spec[2]);
+      EXECUTE format('INSERT INTO release_tmp._org_rate_use SELECT %2$I, org_id FROM public.%1$I WHERE %2$I IS NOT NULL AND org_id IS NOT NULL', spec[1], spec[2]);
     END IF;
   END LOOP;
 END
@@ -1387,15 +1388,15 @@ BEGIN
   -- These are fix-ups, not edits: no recalculation, no "updated" stamp, no
   -- client-status side effects. Only triggers that are on are turned off,
   -- and only those are turned back on.
-  DROP TABLE IF EXISTS _org_trg_off;
-  CREATE TEMP TABLE _org_trg_off (tbl text, tg text);
+  DROP TABLE IF EXISTS release_tmp._org_trg_off;
+  CREATE TABLE release_tmp._org_trg_off (tbl text, tg text);
   FOR trg IN
     SELECT c.relname AS tbl, t.tgname AS tg FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
      WHERE NOT t.tgisinternal AND t.tgenabled = 'O' AND c.relnamespace = 'public'::regnamespace
        AND c.relname IN ('itinerary_services', 'itinerary_resources', 'b2b_pricing_rules', 'itineraries', 'bookings', 'tour_departures')
   LOOP
     EXECUTE format('ALTER TABLE public.%I DISABLE TRIGGER %I', trg.tbl, trg.tg);
-    INSERT INTO _org_trg_off VALUES (trg.tbl, trg.tg);
+    INSERT INTO release_tmp._org_trg_off VALUES (trg.tbl, trg.tg);
   END LOOP;
 
   IF to_regclass('public.itinerary_services') IS NOT NULL THEN
@@ -1430,10 +1431,10 @@ BEGIN
     END IF;
   END LOOP;
 
-  FOR trg IN SELECT * FROM _org_trg_off LOOP
+  FOR trg IN SELECT * FROM release_tmp._org_trg_off LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE TRIGGER %I', trg.tbl, trg.tg);
   END LOOP;
-  DELETE FROM _org_trg_off;
+  DELETE FROM release_tmp._org_trg_off;
 END
 $$;
 
@@ -2142,41 +2143,41 @@ $$;
 -- ---------------------------------------------------------------------------
 -- Who uses what: (template id, company), (variation id, company).
 -- ---------------------------------------------------------------------------
-DROP TABLE IF EXISTS _tour_t_use;
-CREATE TEMP TABLE _tour_t_use (tid uuid, org uuid);
-DROP TABLE IF EXISTS _tour_v_use;
-CREATE TEMP TABLE _tour_v_use (vid uuid, org uuid);
+DROP TABLE IF EXISTS release_tmp._tour_t_use;
+CREATE TABLE release_tmp._tour_t_use (tid uuid, org uuid);
+DROP TABLE IF EXISTS release_tmp._tour_v_use;
+CREATE TABLE release_tmp._tour_v_use (vid uuid, org uuid);
 
 DO $$
 BEGIN
   IF to_regclass('public.tour_templates') IS NULL THEN RETURN; END IF;
-  DELETE FROM _tour_t_use;
-  DELETE FROM _tour_v_use;
+  DELETE FROM release_tmp._tour_t_use;
+  DELETE FROM release_tmp._tour_v_use;
 
   IF to_regclass('public.itineraries') IS NOT NULL THEN
-    INSERT INTO _tour_t_use SELECT template_id, org_id FROM public.itineraries
+    INSERT INTO release_tmp._tour_t_use SELECT template_id, org_id FROM public.itineraries
      WHERE template_id IS NOT NULL AND org_id IS NOT NULL;
   END IF;
   IF to_regclass('public.tour_departures') IS NOT NULL THEN
-    INSERT INTO _tour_t_use SELECT template_id, org_id FROM public.tour_departures
+    INSERT INTO release_tmp._tour_t_use SELECT template_id, org_id FROM public.tour_departures
      WHERE template_id IS NOT NULL AND org_id IS NOT NULL;
-    INSERT INTO _tour_v_use SELECT variation_id, org_id FROM public.tour_departures
+    INSERT INTO release_tmp._tour_v_use SELECT variation_id, org_id FROM public.tour_departures
      WHERE variation_id IS NOT NULL AND org_id IS NOT NULL;
   END IF;
   IF to_regclass('public.tour_quotes') IS NOT NULL THEN
-    INSERT INTO _tour_v_use SELECT variation_id, org_id FROM public.tour_quotes
+    INSERT INTO release_tmp._tour_v_use SELECT variation_id, org_id FROM public.tour_quotes
      WHERE variation_id IS NOT NULL AND org_id IS NOT NULL;
   END IF;
   IF to_regclass('public.b2b_partner_pricing') IS NOT NULL AND to_regclass('public.b2b_partners') IS NOT NULL THEN
-    INSERT INTO _tour_v_use SELECT pp.variation_id, p.org_id
+    INSERT INTO release_tmp._tour_v_use SELECT pp.variation_id, p.org_id
       FROM public.b2b_partner_pricing pp JOIN public.b2b_partners p ON p.id = pp.partner_id
      WHERE pp.variation_id IS NOT NULL AND p.org_id IS NOT NULL;
   END IF;
   -- A variation's use is its template's use.
-  INSERT INTO _tour_t_use SELECT v.template_id, u.org FROM _tour_v_use u
+  INSERT INTO release_tmp._tour_t_use SELECT v.template_id, u.org FROM release_tmp._tour_v_use u
     JOIN public.tour_variations v ON v.id = u.vid WHERE v.template_id IS NOT NULL;
   IF to_regclass('public.web_order_intakes') IS NOT NULL THEN
-    INSERT INTO _tour_t_use SELECT t.id, w.org_id FROM public.web_order_intakes w
+    INSERT INTO release_tmp._tour_t_use SELECT t.id, w.org_id FROM public.web_order_intakes w
       JOIN public.tour_templates t ON lower(trim(t.template_code)) = lower(trim(w.tour_code))
      WHERE coalesce(trim(w.tour_code), '') <> '' AND w.org_id IS NOT NULL;
   END IF;
@@ -2205,17 +2206,17 @@ BEGIN
 
   -- 1. Used by exactly one company.
   UPDATE public.tour_templates t SET org_id = u.o
-    FROM (SELECT tid, min(org::text)::uuid AS o FROM _tour_t_use GROUP BY tid HAVING count(DISTINCT org) = 1) u
+    FROM (SELECT tid, min(org::text)::uuid AS o FROM release_tmp._tour_t_use GROUP BY tid HAVING count(DISTINCT org) = 1) u
    WHERE t.org_id IS NULL AND u.tid = t.id;
 
   -- 2. Used by both: the catalogue default when it is one of them, else the
   --    older company.
   WITH filled AS (
     UPDATE public.tour_templates t SET org_id = coalesce(
-        (SELECT x.org FROM _tour_t_use x WHERE x.tid = t.id AND x.org = cat LIMIT 1),
-        (SELECT x.org FROM _tour_t_use x JOIN public.organizations o ON o.id = x.org
+        (SELECT x.org FROM release_tmp._tour_t_use x WHERE x.tid = t.id AND x.org = cat LIMIT 1),
+        (SELECT x.org FROM release_tmp._tour_t_use x JOIN public.organizations o ON o.id = x.org
           WHERE x.tid = t.id ORDER BY o.created_at, o.id LIMIT 1))
-     WHERE t.org_id IS NULL AND t.id IN (SELECT tid FROM _tour_t_use)
+     WHERE t.org_id IS NULL AND t.id IN (SELECT tid FROM release_tmp._tour_t_use)
     RETURNING t.id, t.org_id
   )
   INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
@@ -2245,14 +2246,14 @@ BEGIN
    WHERE v.org_id IS NULL AND t.id = v.template_id;
   -- No template: the company of what uses it.
   UPDATE public.tour_variations v SET org_id = u.o
-    FROM (SELECT vid, min(org::text)::uuid AS o FROM _tour_v_use GROUP BY vid HAVING count(DISTINCT org) = 1) u
+    FROM (SELECT vid, min(org::text)::uuid AS o FROM release_tmp._tour_v_use GROUP BY vid HAVING count(DISTINCT org) = 1) u
    WHERE v.org_id IS NULL AND u.vid = v.id;
   WITH filled AS (
     UPDATE public.tour_variations v SET org_id = coalesce(
-        (SELECT x.org FROM _tour_v_use x WHERE x.vid = v.id AND x.org = cat LIMIT 1),
-        (SELECT x.org FROM _tour_v_use x JOIN public.organizations o ON o.id = x.org
+        (SELECT x.org FROM release_tmp._tour_v_use x WHERE x.vid = v.id AND x.org = cat LIMIT 1),
+        (SELECT x.org FROM release_tmp._tour_v_use x JOIN public.organizations o ON o.id = x.org
           WHERE x.vid = v.id ORDER BY o.created_at, o.id LIMIT 1))
-     WHERE v.org_id IS NULL AND v.id IN (SELECT vid FROM _tour_v_use)
+     WHERE v.org_id IS NULL AND v.id IN (SELECT vid FROM release_tmp._tour_v_use)
     RETURNING v.id, v.org_id
   )
   INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
@@ -2278,7 +2279,7 @@ BEGIN
   -- A template another company uses: a copy for that company.
   FOR rec IN
     SELECT DISTINCT u.tid, u.org, t.org_id AS home
-      FROM _tour_t_use u JOIN public.tour_templates t ON t.id = u.tid
+      FROM release_tmp._tour_t_use u JOIN public.tour_templates t ON t.id = u.tid
      WHERE u.org <> t.org_id
        AND NOT EXISTS (SELECT 1 FROM public.org_backfill_tour_copies c
                         WHERE c.table_name = 'tour_templates' AND c.original_id = u.tid AND c.org_id = u.org)
@@ -2295,7 +2296,7 @@ BEGIN
   -- A template-less variation another company uses: likewise.
   FOR rec IN
     SELECT DISTINCT u.vid, u.org, v.org_id AS home
-      FROM _tour_v_use u JOIN public.tour_variations v ON v.id = u.vid
+      FROM release_tmp._tour_v_use u JOIN public.tour_variations v ON v.id = u.vid
      WHERE v.template_id IS NULL AND u.org <> v.org_id
        AND NOT EXISTS (SELECT 1 FROM public.org_backfill_tour_copies c
                         WHERE c.table_name = 'tour_variations' AND c.original_id = u.vid AND c.org_id = u.org)
@@ -2322,15 +2323,15 @@ BEGIN
 
   -- Fix-ups, not edits: no recalculation, no "updated" stamp, no revision
   -- rows. Only triggers that are on are turned off, and only those back on.
-  DROP TABLE IF EXISTS _tour_trg_off;
-  CREATE TEMP TABLE _tour_trg_off (tbl text, tg text);
+  DROP TABLE IF EXISTS release_tmp._tour_trg_off;
+  CREATE TABLE release_tmp._tour_trg_off (tbl text, tg text);
   FOR trg IN
     SELECT c.relname AS tbl, t.tgname AS tg FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
      WHERE NOT t.tgisinternal AND t.tgenabled = 'O' AND c.relnamespace = 'public'::regnamespace
        AND c.relname IN ('itineraries', 'tour_departures', 'tour_quotes', 'b2b_partner_pricing', 'quote_revisions', 'content_usage_log')
   LOOP
     EXECUTE format('ALTER TABLE public.%I DISABLE TRIGGER %I', trg.tbl, trg.tg);
-    INSERT INTO _tour_trg_off VALUES (trg.tbl, trg.tg);
+    INSERT INTO release_tmp._tour_trg_off VALUES (trg.tbl, trg.tg);
   END LOOP;
 
   IF to_regclass('public.itineraries') IS NOT NULL THEN
@@ -2368,10 +2369,10 @@ BEGIN
        AND c.original_id = l.variation_id AND c.org_id = i.org_id;
   END IF;
 
-  FOR trg IN SELECT * FROM _tour_trg_off LOOP
+  FOR trg IN SELECT * FROM release_tmp._tour_trg_off LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE TRIGGER %I', trg.tbl, trg.tg);
   END LOOP;
-  DELETE FROM _tour_trg_off;
+  DELETE FROM release_tmp._tour_trg_off;
 END
 $$;
 
@@ -2386,9 +2387,9 @@ BEGIN
   IF to_regclass('public.org_backfill_rate_copies') IS NULL THEN RETURN; END IF;
 
   -- Every rate's company. Ids are uuids, unique across the rate tables.
-  DROP TABLE IF EXISTS _tour_rate_home;
-  CREATE TEMP TABLE _tour_rate_home (id uuid PRIMARY KEY, org uuid);
-  DELETE FROM _tour_rate_home;
+  DROP TABLE IF EXISTS release_tmp._tour_rate_home;
+  CREATE TABLE release_tmp._tour_rate_home (id uuid PRIMARY KEY, org uuid);
+  DELETE FROM release_tmp._tour_rate_home;
   FOREACH t IN ARRAY ARRAY[
     'accommodation_rates', 'activity_rates', 'airport_staff_rates', 'hotel_staff_rates', 'guide_rates',
     'meal_rates', 'nile_cruises', 'flight_rates', 'train_rates', 'sleeping_train_rates',
@@ -2399,18 +2400,18 @@ BEGIN
        OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = t AND column_name = 'org_id') THEN
       CONTINUE;
     END IF;
-    EXECUTE format('INSERT INTO _tour_rate_home SELECT id, org_id FROM public.%I ON CONFLICT (id) DO NOTHING', t);
+    EXECUTE format('INSERT INTO release_tmp._tour_rate_home SELECT id, org_id FROM public.%I ON CONFLICT (id) DO NOTHING', t);
   END LOOP;
 
   -- The same rate in a given company: the copy made for it, or the original
   -- a copy was made from.
-  DROP TABLE IF EXISTS _tour_rate_twin;
-  CREATE TEMP TABLE _tour_rate_twin (rid uuid, org uuid, twin uuid);
-  DELETE FROM _tour_rate_twin;
-  INSERT INTO _tour_rate_twin SELECT original_id, org_id, copy_id FROM public.org_backfill_rate_copies;
-  INSERT INTO _tour_rate_twin SELECT c.copy_id, h.org, c.original_id
-    FROM public.org_backfill_rate_copies c JOIN _tour_rate_home h ON h.id = c.original_id;
-  INSERT INTO _tour_rate_twin SELECT c1.copy_id, c2.org_id, c2.copy_id
+  DROP TABLE IF EXISTS release_tmp._tour_rate_twin;
+  CREATE TABLE release_tmp._tour_rate_twin (rid uuid, org uuid, twin uuid);
+  DELETE FROM release_tmp._tour_rate_twin;
+  INSERT INTO release_tmp._tour_rate_twin SELECT original_id, org_id, copy_id FROM public.org_backfill_rate_copies;
+  INSERT INTO release_tmp._tour_rate_twin SELECT c.copy_id, h.org, c.original_id
+    FROM public.org_backfill_rate_copies c JOIN release_tmp._tour_rate_home h ON h.id = c.original_id;
+  INSERT INTO release_tmp._tour_rate_twin SELECT c1.copy_id, c2.org_id, c2.copy_id
     FROM public.org_backfill_rate_copies c1 JOIN public.org_backfill_rate_copies c2
       ON c2.original_id = c1.original_id AND c2.org_id <> c1.org_id;
 
@@ -2421,7 +2422,7 @@ BEGIN
     ] LOOP
       EXECUTE format($q$
         UPDATE public.tour_days d SET %1$I = w.twin
-          FROM public.tours tr, _tour_rate_home h, _tour_rate_twin w
+          FROM public.tours tr, release_tmp._tour_rate_home h, release_tmp._tour_rate_twin w
          WHERE tr.id = d.tour_id AND h.id = d.%1$I AND h.org <> tr.org_id
            AND w.rid = d.%1$I AND w.org = tr.org_id
       $q$, spec[1]);
@@ -2429,7 +2430,7 @@ BEGIN
         INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
         SELECT 'tour_days', d.id::text, tr.org_id, 'rate belongs to another company'
           FROM public.tour_days d JOIN public.tours tr ON tr.id = d.tour_id
-          JOIN _tour_rate_home h ON h.id = d.%1$I
+          JOIN release_tmp._tour_rate_home h ON h.id = d.%1$I
          WHERE h.org <> tr.org_id
         ON CONFLICT (table_name, row_id, reason) DO NOTHING
       $q$, spec[1]);
@@ -2438,13 +2439,13 @@ BEGIN
 
   IF to_regclass('public.tour_variation_services') IS NOT NULL THEN
     UPDATE public.tour_variation_services s SET rate_id = w.twin
-      FROM public.tour_variations v, _tour_rate_home h, _tour_rate_twin w
+      FROM public.tour_variations v, release_tmp._tour_rate_home h, release_tmp._tour_rate_twin w
      WHERE v.id = s.variation_id AND h.id = s.rate_id AND h.org <> v.org_id
        AND w.rid = s.rate_id AND w.org = v.org_id;
     INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
     SELECT 'tour_variation_services', s.id::text, v.org_id, 'rate belongs to another company'
       FROM public.tour_variation_services s JOIN public.tour_variations v ON v.id = s.variation_id
-      JOIN _tour_rate_home h ON h.id = s.rate_id
+      JOIN release_tmp._tour_rate_home h ON h.id = s.rate_id
      WHERE h.org <> v.org_id
     ON CONFLICT (table_name, row_id, reason) DO NOTHING;
   END IF;
@@ -2809,11 +2810,11 @@ $fn$;
 
 -- Rows placed in THIS run, by table: only these are copied for each company
 -- (a re-run must not copy what a company created after the first one).
-DROP TABLE IF EXISTS _org_content_placed;
-CREATE TEMP TABLE _org_content_placed (tbl text, id uuid);
+DROP TABLE IF EXISTS release_tmp._org_content_placed;
+CREATE TABLE release_tmp._org_content_placed (tbl text, id uuid);
 -- What uses a content item: (content id, company).
-DROP TABLE IF EXISTS _org_content_use;
-CREATE TEMP TABLE _org_content_use (cid uuid, org uuid);
+DROP TABLE IF EXISTS release_tmp._org_content_use;
+CREATE TABLE release_tmp._org_content_use (cid uuid, org uuid);
 
 -- One copy per other company of every row placed in this run.
 CREATE OR REPLACE FUNCTION public.org_backfill_copy_content_for_each(p_table text)
@@ -2825,7 +2826,7 @@ BEGIN
   FOR rec IN EXECUTE format($q$
     SELECT r.id, o.id AS org
       FROM public.%I r
-      JOIN _org_content_placed p ON p.tbl = %L AND p.id = r.id
+      JOIN release_tmp._org_content_placed p ON p.tbl = %L AND p.id = r.id
       CROSS JOIN public.organizations o
      WHERE o.id <> r.org_id
        AND NOT EXISTS (SELECT 1 FROM public.org_backfill_content_copies c WHERE c.table_name = %L AND c.copy_id = r.id)
@@ -2860,7 +2861,7 @@ BEGIN
     WITH filled AS (
       UPDATE public.content_categories SET org_id = cat WHERE org_id IS NULL RETURNING id
     )
-    INSERT INTO _org_content_placed SELECT 'content_categories', id FROM filled;
+    INSERT INTO release_tmp._org_content_placed SELECT 'content_categories', id FROM filled;
     PERFORM public.org_backfill_copy_content_for_each('content_categories');
   END IF;
 
@@ -2874,13 +2875,13 @@ BEGIN
            AND public.org_backfill_user_org(r.created_by) IS NOT NULL
         RETURNING r.id
       )
-      INSERT INTO _org_content_placed SELECT %L, id FROM filled
+      INSERT INTO release_tmp._org_content_placed SELECT %L, id FROM filled
     $q$, t, t);
     EXECUTE format($q$
       WITH filled AS (
         UPDATE public.%1$I SET org_id = %2$L::uuid WHERE org_id IS NULL RETURNING id
       ), placed AS (
-        INSERT INTO _org_content_placed SELECT %1$L, id FROM filled RETURNING id
+        INSERT INTO release_tmp._org_content_placed SELECT %1$L, id FROM filled RETURNING id
       )
       INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
       SELECT %1$L, id::text, %2$L::uuid, 'no single-company author — catalogue default' FROM placed
@@ -2905,37 +2906,37 @@ BEGIN
   IF cat IS NULL THEN RETURN; END IF;
 
   -- What uses it, by company.
-  DELETE FROM _org_content_use;
+  DELETE FROM release_tmp._org_content_use;
   IF to_regclass('public.tour_day_activities') IS NOT NULL
      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'tour_templates' AND column_name = 'org_id') THEN
     EXECUTE $q$
-      INSERT INTO _org_content_use
+      INSERT INTO release_tmp._org_content_use
       SELECT DISTINCT a.content_id, t.org_id
         FROM public.tour_day_activities a JOIN public.tour_templates t ON t.id = a.template_id
        WHERE a.content_id IS NOT NULL AND t.org_id IS NOT NULL
     $q$;
   END IF;
   IF to_regclass('public.content_usage_log') IS NOT NULL THEN
-    INSERT INTO _org_content_use
+    INSERT INTO release_tmp._org_content_use
     SELECT DISTINCT l.content_id, i.org_id
       FROM public.content_usage_log l JOIN public.itineraries i ON i.id = l.itinerary_id
      WHERE l.content_id IS NOT NULL AND i.org_id IS NOT NULL;
   END IF;
   -- Only items that exist (tour_day_activities.content_id has no FK).
-  DELETE FROM _org_content_use u WHERE NOT EXISTS (SELECT 1 FROM public.content_library c WHERE c.id = u.cid);
+  DELETE FROM release_tmp._org_content_use u WHERE NOT EXISTS (SELECT 1 FROM public.content_library c WHERE c.id = u.cid);
 
   -- 1. The one company that uses it.
   UPDATE public.content_library c SET org_id = u.o
-    FROM (SELECT cid, min(org::text)::uuid AS o FROM _org_content_use GROUP BY cid HAVING count(DISTINCT org) = 1) u
+    FROM (SELECT cid, min(org::text)::uuid AS o FROM release_tmp._org_content_use GROUP BY cid HAVING count(DISTINCT org) = 1) u
    WHERE c.org_id IS NULL AND u.cid = c.id;
 
   -- 2. Both: the catalogue default when it is one of them, else the older.
   WITH filled AS (
     UPDATE public.content_library c SET org_id = coalesce(
-        (SELECT x.org FROM _org_content_use x WHERE x.cid = c.id AND x.org = cat LIMIT 1),
-        (SELECT x.org FROM _org_content_use x JOIN public.organizations o ON o.id = x.org
+        (SELECT x.org FROM release_tmp._org_content_use x WHERE x.cid = c.id AND x.org = cat LIMIT 1),
+        (SELECT x.org FROM release_tmp._org_content_use x JOIN public.organizations o ON o.id = x.org
           WHERE x.cid = c.id ORDER BY o.created_at, o.id LIMIT 1))
-     WHERE c.org_id IS NULL AND c.id IN (SELECT cid FROM _org_content_use)
+     WHERE c.org_id IS NULL AND c.id IN (SELECT cid FROM release_tmp._org_content_use)
     RETURNING c.id, c.org_id
   )
   INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
@@ -2969,7 +2970,7 @@ BEGIN
   -- An item another company uses: a copy for that company.
   FOR rec IN
     SELECT DISTINCT u.cid, u.org, c.org_id AS home
-      FROM _org_content_use u JOIN public.content_library c ON c.id = u.cid
+      FROM release_tmp._org_content_use u JOIN public.content_library c ON c.id = u.cid
      WHERE u.org <> c.org_id
        AND NOT EXISTS (SELECT 1 FROM public.org_backfill_content_copies m
                         WHERE m.table_name = 'content_library' AND m.original_id = u.cid AND m.org_id = u.org)
@@ -2995,15 +2996,15 @@ DECLARE
 BEGIN
   -- Fix-ups, not edits: only triggers that are on are turned off, and only
   -- those are turned back on.
-  DROP TABLE IF EXISTS _org_content_trg_off;
-  CREATE TEMP TABLE _org_content_trg_off (tbl text, tg text);
+  DROP TABLE IF EXISTS release_tmp._org_content_trg_off;
+  CREATE TABLE release_tmp._org_content_trg_off (tbl text, tg text);
   FOR trg IN
     SELECT c.relname AS tbl, t.tgname AS tg FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
      WHERE NOT t.tgisinternal AND t.tgenabled = 'O' AND c.relnamespace = 'public'::regnamespace
        AND c.relname IN ('tour_day_activities', 'content_usage_log')
   LOOP
     EXECUTE format('ALTER TABLE public.%I DISABLE TRIGGER %I', trg.tbl, trg.tg);
-    INSERT INTO _org_content_trg_off VALUES (trg.tbl, trg.tg);
+    INSERT INTO release_tmp._org_content_trg_off VALUES (trg.tbl, trg.tg);
   END LOOP;
 
   -- Tour day activities: their template's company's copy.
@@ -3057,10 +3058,10 @@ BEGIN
     END LOOP;
   END IF;
 
-  FOR trg IN SELECT * FROM _org_content_trg_off LOOP
+  FOR trg IN SELECT * FROM release_tmp._org_content_trg_off LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE TRIGGER %I', trg.tbl, trg.tg);
   END LOOP;
-  DELETE FROM _org_content_trg_off;
+  DELETE FROM release_tmp._org_content_trg_off;
 END
 $$;
 
@@ -3525,9 +3526,9 @@ BEGIN
 
   -- 2. A person in both: the default company (else their oldest), and a copy
   --    for each other company they belong to.
-  DROP TABLE IF EXISTS _prefs_both;
-  CREATE TEMP TABLE _prefs_both (id uuid);
-  DELETE FROM _prefs_both;
+  DROP TABLE IF EXISTS release_tmp._prefs_both;
+  CREATE TABLE release_tmp._prefs_both (id uuid);
+  DELETE FROM release_tmp._prefs_both;
   WITH filled AS (
     UPDATE public.user_preferences p SET org_id = coalesce(
         (SELECT m.org_id FROM public.organization_members m WHERE m.user_id = p.user_id AND m.org_id = def LIMIT 1),
@@ -3537,11 +3538,11 @@ BEGIN
        AND EXISTS (SELECT 1 FROM public.organization_members m WHERE m.user_id = p.user_id)
     RETURNING p.id
   )
-  INSERT INTO _prefs_both SELECT id FROM filled;
+  INSERT INTO release_tmp._prefs_both SELECT id FROM filled;
 
   FOR rec IN
     SELECT DISTINCT p.id, p.user_id, p.org_id AS home, m.org_id AS other
-      FROM _prefs_both b
+      FROM release_tmp._prefs_both b
       JOIN public.user_preferences p ON p.id = b.id
       JOIN public.organization_members m ON m.user_id = p.user_id AND m.org_id <> p.org_id
      WHERE NOT EXISTS (SELECT 1 FROM public.user_preferences q WHERE q.user_id = p.user_id AND q.org_id = m.org_id)
@@ -3558,7 +3559,7 @@ BEGIN
   END LOOP;
   INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
   SELECT 'user_preferences', p.id::text, p.org_id, 'person in both companies — one row per company'
-    FROM _prefs_both b JOIN public.user_preferences p ON p.id = b.id
+    FROM release_tmp._prefs_both b JOIN public.user_preferences p ON p.id = b.id
   ON CONFLICT (table_name, row_id, reason) DO NOTHING;
 
   -- 3. No company at all.
@@ -3611,18 +3612,5 @@ COMMIT;
 
 INSERT INTO public.schema_migrations (name) VALUES ('20261209_tenancy_followups') ON CONFLICT DO NOTHING;
 
--- Tidy up the session's temporary tables.
-DROP TABLE IF EXISTS _org_content_placed;
-DROP TABLE IF EXISTS _org_content_trg_off;
-DROP TABLE IF EXISTS _org_content_use;
-DROP TABLE IF EXISTS _org_rate_use;
-DROP TABLE IF EXISTS _org_t_use;
-DROP TABLE IF EXISTS _org_trg_off;
-DROP TABLE IF EXISTS _prefs_both;
-DROP TABLE IF EXISTS _sup_plan;
-DROP TABLE IF EXISTS _sup_use;
-DROP TABLE IF EXISTS _tour_rate_home;
-DROP TABLE IF EXISTS _tour_rate_twin;
-DROP TABLE IF EXISTS _tour_t_use;
-DROP TABLE IF EXISTS _tour_trg_off;
-DROP TABLE IF EXISTS _tour_v_use;
+-- Remove the scratch schema.
+DROP SCHEMA IF EXISTS release_tmp CASCADE;
